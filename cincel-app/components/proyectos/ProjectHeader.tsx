@@ -4,6 +4,7 @@ type Props = {
   name: string;
   client: string;
   manager: string;
+  coordinator: string;
   phase: string;
   progress: number;
   status: string;
@@ -13,6 +14,7 @@ export default function ProjectHeader({
   name,
   client,
   manager,
+  coordinator,
   phase,
   progress,
   status,
@@ -46,7 +48,7 @@ export default function ProjectHeader({
 
       </div>
 
-      <div className="mt-8 grid grid-cols-3 gap-8">
+      <div className="mt-8 grid grid-cols-4 gap-8">
 
         <div>
 
@@ -70,6 +72,22 @@ export default function ProjectHeader({
 
             <Avatar
               name={manager}
+            />
+
+          </div>
+
+        </div>
+
+        <div>
+
+          <p className="text-sm text-slate-500">
+            Encargado
+          </p>
+
+          <div className="flex items-center gap-3 mt-2">
+
+            <Avatar
+              name={coordinator}
             />
 
           </div>

@@ -31,6 +31,8 @@ export const projects = [
 
     manager: "Juanma",
 
+    coordinator: "Aaron",
+
     team: [
       "Juanma",
       "Aaron",
@@ -40,10 +42,10 @@ export const projects = [
     progress: 92,
 
     drive: {
-      administrativo: "",
+      administrativo: "https://drive.google.com/drive/folders/ens-internos",
       planos: "",
       renders: "",
-      reportes: "",
+      reportes: "https://drive.google.com/drive/folders/ens-cliente",
     },
   },
 
@@ -77,6 +79,8 @@ export const projects = [
 
     manager: "Rafa",
 
+    coordinator: "Gabriel",
+
     team: [
       "Rafa",
       "Gabriel",
@@ -85,10 +89,10 @@ export const projects = [
     progress: 38,
 
     drive: {
-      administrativo: "",
+      administrativo: "https://drive.google.com/drive/folders/pla-internos",
       planos: "",
       renders: "",
-      reportes: "",
+      reportes: "https://drive.google.com/drive/folders/pla-cliente",
     },
   },
 ];

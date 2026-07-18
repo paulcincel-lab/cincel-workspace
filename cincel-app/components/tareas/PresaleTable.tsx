@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { Task, TaskStatus, TaskHistoryItem, WorkflowType } from "@/lib/types/task";
 import { presaleTasks } from "@/lib/data/presale";
@@ -126,10 +126,36 @@ export default function PresaleTable({
   templateName = "Presale",
   phaseOptions = presalePhaseOptions,
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const projectFromQuery = searchParams.get("project");
+  const projectFilter = projectFromQuery || "Todos los proyectos";
+  const tasksStorageKey = `cincel.actividades.${workflow}.tasks.v1`;
 
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    if (typeof window === "undefined") {
+      return initialTasks;
+    }
+
+    const stored = localStorage.getItem(tasksStorageKey);
+
+    if (!stored) {
+      return initialTasks;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as Task[];
+
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    } catch {
+      localStorage.removeItem(tasksStorageKey);
+    }
+
+    return initialTasks;
+  });
 
   const [search, setSearch] = useState("");
 
@@ -154,9 +180,24 @@ export default function PresaleTable({
   const [showProjectTemplateModal, setShowProjectTemplateModal] =
     useState(false);
 
-  const [projectFilter, setProjectFilter] =
-    useState(projectFromQuery || "Todos los proyectos");
   const [archiveView, setArchiveView] = useState<"activos" | "archivadas">("activos");
+
+  const updateProjectFilter = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (value === "Todos los proyectos") {
+      params.delete("project");
+    } else {
+      params.set("project", value);
+    }
+
+    const queryString = params.toString();
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname);
+  };
+
+  useEffect(() => {
+    localStorage.setItem(tasksStorageKey, JSON.stringify(tasks));
+  }, [tasks, tasksStorageKey]);
 
   const managers = [
     "Todos",
@@ -303,7 +344,7 @@ export default function PresaleTable({
 
   const clearFilters = () => {
     setSearch("");
-    setProjectFilter("Todos los proyectos");
+    updateProjectFilter("Todos los proyectos");
     setManagerFilter("Todos");
     setTeamFilter("Todos");
     setStatusFilter("Todos");
@@ -365,7 +406,7 @@ export default function PresaleTable({
 
         <select
           value={projectFilter}
-          onChange={(e) => setProjectFilter(e.target.value)}
+          onChange={(e) => updateProjectFilter(e.target.value)}
           className="border rounded-xl px-4 py-2"
         >
           <option value="Todos los proyectos">Proyecto</option>

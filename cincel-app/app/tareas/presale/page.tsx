@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 
@@ -13,7 +15,9 @@ export default function PresalePage() {
 
         <Header />
 
-        <PresaleTable />
+        <Suspense fallback={<div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Cargando actividades...</div>}>
+          <PresaleTable />
+        </Suspense>
 
       </section>
 
