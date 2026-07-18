@@ -1,8 +1,9 @@
 type Props = {
   name: string;
+  showName?: boolean;
 };
 
-export default function Avatar({ name }: Props) {
+export default function Avatar({ name, showName = true }: Props) {
   const initials = name
     .split(" ")
     .map((word) => word[0])
@@ -17,9 +18,11 @@ export default function Avatar({ name }: Props) {
         {initials}
       </div>
 
-      <span className="font-medium">
-        {name}
-      </span>
+      {showName ? (
+        <span className="font-medium">
+          {name}
+        </span>
+      ) : null}
 
     </div>
   );

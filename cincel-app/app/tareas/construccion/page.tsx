@@ -1,0 +1,29 @@
+import Sidebar from "@/components/layout/Sidebar";
+import Header from "@/components/layout/Header";
+
+import PresaleTable from "@/components/tareas/PresaleTable";
+import { operativasTasks } from "@/lib/data/operativas";
+import { operativasTemplate } from "@/lib/templates/operativas";
+import { construccionPhaseOptions } from "@/lib/templates/phase-options";
+
+export default function ConstruccionPage() {
+  return (
+    <main className="flex min-h-screen bg-slate-100">
+      <Sidebar />
+
+      <section className="flex-1 overflow-y-auto p-10">
+        <Header />
+
+        <PresaleTable
+          title="Construcción"
+          subtitle="Flujo operativo de ejecución"
+          workflow="Construcción"
+          initialTasks={operativasTasks}
+          templateItems={operativasTemplate}
+          templateName="Construcción"
+          phaseOptions={construccionPhaseOptions}
+        />
+      </section>
+    </main>
+  );
+}

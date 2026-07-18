@@ -1,15 +1,15 @@
 export const presaleTemplate = [
   {
     phase: "Inicial",
-    description: 'Presentación "Quiénes somos"',
+    description: 'Presentación "Quienes somos"',
   },
   {
     phase: "Presentación",
-    description: "Reporte Estado Actual",
+    description: "Resporte Estado Actual",
   },
   {
     phase: "Presentación",
-    description: "Imágenes de referencia",
+    description: "Imagenes de Referencia",
   },
   {
     phase: "Presentación",
@@ -17,11 +17,11 @@ export const presaleTemplate = [
   },
   {
     phase: "Presentación",
-    description: "Primeras visualizaciones",
+    description: "Primeras Visualizaciones",
   },
   {
     phase: "Presentación",
-    description: "Rango de precios",
+    description: "Rango de Precios",
   },
   {
     phase: "Presentación",
@@ -37,6 +37,6 @@ export const presaleTemplate = [
   },
   {
     phase: "Cobro",
-    description: "Cobrar inicio de proyecto",
+    description: "Cobrar Inicio de proyecto",
   },
 ];

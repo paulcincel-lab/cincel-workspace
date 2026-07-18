@@ -9,7 +9,7 @@ export default function Sidebar() {
   const menu = [
     { label: "Dashboard", href: "/dashboard" },
     { label: "Proyectos", href: "/proyectos" },
-    { label: "Tareas", href: "/tareas" },
+    { label: "Actividades", href: "/tareas" },
     { label: "Equipo", href: "/equipo" },
     { label: "Recursos", href: "/recursos" },
     { label: "Clientes", href: "/clientes" },

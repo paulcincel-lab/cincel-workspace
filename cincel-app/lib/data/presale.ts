@@ -53,6 +53,7 @@ export const presaleTasks: Task[] = [
         completed: false,
       },
     ],
+    archived: false,
   },
 
   {
@@ -84,6 +85,7 @@ export const presaleTasks: Task[] = [
     history: [],
 
     checklist: [],
+    archived: false,
   },
 
   {
@@ -115,6 +117,7 @@ export const presaleTasks: Task[] = [
     history: [],
 
     checklist: [],
+    archived: false,
   },  {
     id: 4,
     project: "Neo Gen",
@@ -144,6 +147,7 @@ export const presaleTasks: Task[] = [
     history: [],
 
     checklist: [],
+    archived: false,
   },
 
   {
@@ -175,6 +179,7 @@ export const presaleTasks: Task[] = [
     history: [],
 
     checklist: [],
+    archived: false,
   },
 
   {
@@ -206,5 +211,6 @@ export const presaleTasks: Task[] = [
     history: [],
 
     checklist: [],
+    archived: false,
   },
 ];

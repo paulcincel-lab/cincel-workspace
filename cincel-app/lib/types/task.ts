@@ -57,6 +57,8 @@ export interface Task {
 
   reviewDate: string;
 
+  deliveryDate?: string;
+
   updatedAt: string;
 
   createdAt: string;
@@ -64,4 +66,5 @@ export interface Task {
   history: TaskHistoryItem[];
 
   checklist: TaskChecklistItem[];
+  archived: boolean;
 }

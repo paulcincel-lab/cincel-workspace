@@ -69,12 +69,8 @@ export default function ProjectHeader({
           <div className="flex items-center gap-3 mt-2">
 
             <Avatar
-              initials={manager.substring(0, 2).toUpperCase()}
+              name={manager}
             />
-
-            <span className="font-semibold">
-              {manager}
-            </span>
 
           </div>
 

@@ -2,7 +2,6 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 
 import KpiCard from "@/components/dashboard/KpiCard";
-import TasksToday from "@/components/dashboard/TasksToday";
 import TasksTable from "@/components/dashboard/TasksTable";
 import AgendaToday from "@/components/dashboard/AgendaToday";
 import ProjectsOverview from "@/components/dashboard/ProjectsOverview";
