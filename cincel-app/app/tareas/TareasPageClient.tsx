@@ -1,17 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/ui/Avatar";
 import InlineEditableField from "@/components/ui/InlineEditableField";
+import { projects as baseProjects } from "@/lib/data/projects";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import type { Task, TaskStatus, WorkflowType } from "@/lib/types/task";
 import { formatDateDMY } from "@/lib/utils/date";
+import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 
 const TASK_STATUSES: TaskStatus[] = ["Pendiente", "En proceso", "Completado", "Bloqueado"];
 const TEAM_MEMBERS = [
@@ -25,29 +27,49 @@ const TEAM_MEMBERS = [
   "Rodrigo",
 ];
 
+const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
+
 function getProjects(projects: string[]) {
   return Array.from(new Set(projects)).sort((a, b) => a.localeCompare(b));
 }
 
 function loadPersistedTasks(workflow: WorkflowType, fallback: Task[]): Task[] {
+  return loadLinkedTasks(workflow, fallback);
+}
+
+function loadPersistedProjects() {
   if (typeof window === "undefined") {
-    return fallback;
+    return baseProjects;
   }
 
-  const storageKey = `cincel.actividades.${workflow}.tasks.v1`;
-  const stored = localStorage.getItem(storageKey);
+  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
 
   if (!stored) {
-    return fallback;
+    return baseProjects;
   }
 
   try {
-    const parsed = JSON.parse(stored) as Task[];
-    return Array.isArray(parsed) ? parsed : fallback;
+    const parsed = JSON.parse(stored) as typeof baseProjects;
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : baseProjects;
   } catch {
-    localStorage.removeItem(storageKey);
-    return fallback;
+    return baseProjects;
   }
+}
+
+function workflowInProjectStage(projectStage: string, workflow: WorkflowType): boolean {
+  const stages = projectStage
+    .split("/")
+    .map((value) => value.trim().toLowerCase());
+
+  if (workflow === "Presale") {
+    return stages.some((stage) => stage === "presale");
+  }
+
+  if (workflow === "Diseño") {
+    return stages.some((stage) => stage === "diseño" || stage === "diseno" || stage === "taller de diseño" || stage === "taller de diseno");
+  }
+
+  return stages.some((stage) => stage === "construcción" || stage === "construccion");
 }
 
 function getFallbackTasks(workflow: WorkflowType): Task[] {
@@ -70,7 +92,7 @@ function statusBadgeClass(status: TaskStatus): string {
   if (status === "Completado") return "bg-emerald-100 text-emerald-700 border-emerald-200";
   if (status === "Bloqueado") return "bg-red-100 text-red-700 border-red-200";
   if (status === "En proceso") return "bg-blue-100 text-blue-700 border-blue-200";
-  return "bg-slate-100 text-slate-700 border-slate-200";
+  return "bg-slate-100 text-slate-800 border-slate-200";
 }
 
 function stageBadgeClass(stageTitle: string): string {
@@ -101,6 +123,19 @@ export default function TareasPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [responsableFilter, setResponsableFilter] = useState("Todos");
   const [, setTasksVersion] = useState(0);
+  const [projectsData, setProjectsData] = useState(() => loadPersistedProjects());
+
+  useEffect(() => {
+    const refreshProjects = () => setProjectsData(loadPersistedProjects());
+
+    window.addEventListener("focus", refreshProjects);
+    window.addEventListener("storage", refreshProjects);
+
+    return () => {
+      window.removeEventListener("focus", refreshProjects);
+      window.removeEventListener("storage", refreshProjects);
+    };
+  }, []);
 
   const toggleSort = (field: "etapa" | "compromiso" | "estatus") => {
     if (sortBy === field) {
@@ -180,10 +215,35 @@ export default function TareasPage() {
     };
   });
 
+  const stageProjectsFromData = useMemo(() => {
+    return {
+      Presale: getProjects(
+        projectsData
+          .filter((project) => workflowInProjectStage(project.stage, "Presale"))
+          .map((project) => project.name)
+      ),
+      Diseño: getProjects(
+        projectsData
+          .filter((project) => workflowInProjectStage(project.stage, "Diseño"))
+          .map((project) => project.name)
+      ),
+      Construcción: getProjects(
+        projectsData
+          .filter((project) => workflowInProjectStage(project.stage, "Construcción"))
+          .map((project) => project.name)
+      ),
+    };
+  }, [projectsData]);
+
   const projectOptions = useMemo(() => {
-    const allProjects = unifiedStageData.flatMap((stage) => stage.tasks.map((task) => task.project));
+    const allProjects = [
+      ...unifiedStageData.flatMap((stage) => stage.tasks.map((task) => task.project)),
+      ...stageProjectsFromData.Presale,
+      ...stageProjectsFromData.Diseño,
+      ...stageProjectsFromData.Construcción,
+    ];
     return Array.from(new Set(allProjects)).sort((a, b) => a.localeCompare(b));
-  }, [unifiedStageData]);
+  }, [unifiedStageData, stageProjectsFromData]);
 
   const updateProjectFromMenu = (nextProject: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -268,19 +328,19 @@ export default function TareasPage() {
     {
       title: "Presale",
       href: "/tareas/presale",
-      projects: getProjects(presaleTasks.map((task) => task.project)),
+      projects: stageProjectsFromData.Presale,
       toneClassName: "border-blue-100 bg-blue-50/40",
     },
     {
       title: "Taller de Diseño",
       href: "/tareas/diseno",
-      projects: getProjects(disenoTasks.map((task) => task.project)),
+      projects: stageProjectsFromData.Diseño,
       toneClassName: "border-emerald-100 bg-emerald-50/40",
     },
     {
       title: "Construcción",
       href: "/tareas/construccion",
-      projects: getProjects(operativasTasks.map((task) => task.project)),
+      projects: stageProjectsFromData.Construcción,
       toneClassName: "border-amber-100 bg-amber-50/40",
     },
   ];
@@ -300,11 +360,11 @@ export default function TareasPage() {
             Actividades
           </h1>
 
-          <p className="text-slate-500 mt-2">
+          <p className="text-slate-800 mt-2">
             Selecciona una etapa y revisa los proyectos activos.
           </p>
 
-          <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700">
+          <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-800">
             <span>Proyecto:</span>
             <select
               value={projectFromQuery ?? ""}
@@ -329,24 +389,24 @@ export default function TareasPage() {
 
               <div className="grid gap-3 md:grid-cols-4">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">Total actividades</p>
+                  <p className="text-xs text-slate-800">Total actividades</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">{unifiedTotal}</p>
                 </div>
                 {unifiedStageData.map((stage) => (
                   <div key={`count-${stage.title}`} className={`rounded-xl border p-3 ${stage.toneClassName}`}>
-                    <p className="text-xs text-slate-500">{stage.title}</p>
+                    <p className="text-xs text-slate-800">{stage.title}</p>
                     <p className="mt-1 text-2xl font-bold text-slate-900">{stage.totalCount}</p>
                   </div>
                 ))}
               </div>
 
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-sm font-medium text-slate-700">Ordenar por</p>
+                <p className="text-sm font-medium text-slate-800">Ordenar por</p>
 
                 <select
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value as "etapa" | "compromiso" | "estatus")}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
                 >
                   <option value="etapa">Etapa</option>
                   <option value="compromiso">Compromiso</option>
@@ -356,17 +416,17 @@ export default function TareasPage() {
                 <select
                   value={sortDirection}
                   onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
                 >
                   <option value="asc">Ascendente</option>
                   <option value="desc">Descendente</option>
                 </select>
 
-                <span className="ml-2 text-sm font-medium text-slate-700">Responsable</span>
+                <span className="ml-2 text-sm font-medium text-slate-800">Responsable</span>
                 <select
                   value={responsableFilter}
                   onChange={(event) => setResponsableFilter(event.target.value)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
                 >
                   {responsibleOptions.map((manager) => (
                     <option key={`responsable-filter-${manager}`} value={manager}>
@@ -378,16 +438,16 @@ export default function TareasPage() {
 
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="min-w-[980px] w-full bg-white">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-700">
+                  <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-800">
                     <tr>
                       <th className="px-4 py-3">
                         <button
                           type="button"
                           onClick={() => toggleSort("etapa")}
-                          className="inline-flex items-center gap-1 font-semibold text-slate-700 hover:text-blue-700"
+                          className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-blue-700"
                         >
                           Etapa
-                          <span className="text-[11px] normal-case text-slate-500">{getSortLabel("etapa")}</span>
+                          <span className="text-[11px] normal-case text-slate-800">{getSortLabel("etapa")}</span>
                         </button>
                       </th>
                       <th className="px-4 py-3">Fase</th>
@@ -397,20 +457,20 @@ export default function TareasPage() {
                         <button
                           type="button"
                           onClick={() => toggleSort("compromiso")}
-                          className="inline-flex items-center gap-1 font-semibold text-slate-700 hover:text-blue-700"
+                          className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-blue-700"
                         >
                           Compromiso
-                          <span className="text-[11px] normal-case text-slate-500">{getSortLabel("compromiso")}</span>
+                          <span className="text-[11px] normal-case text-slate-800">{getSortLabel("compromiso")}</span>
                         </button>
                       </th>
                       <th className="px-4 py-3">
                         <button
                           type="button"
                           onClick={() => toggleSort("estatus")}
-                          className="inline-flex items-center gap-1 font-semibold text-slate-700 hover:text-blue-700"
+                          className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-blue-700"
                         >
                           Estatus
-                          <span className="text-[11px] normal-case text-slate-500">{getSortLabel("estatus")}</span>
+                          <span className="text-[11px] normal-case text-slate-800">{getSortLabel("estatus")}</span>
                         </button>
                       </th>
                       <th className="px-4 py-3">Acción</th>
@@ -419,7 +479,7 @@ export default function TareasPage() {
                   <tbody>
                     {unifiedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                        <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-800">
                           No hay actividades registradas para este proyecto.
                         </td>
                       </tr>
@@ -443,7 +503,7 @@ export default function TareasPage() {
                                     manager: event.target.value,
                                   })
                                 }
-                                className="rounded-xl border border-transparent bg-transparent px-2 py-1 text-sm text-slate-700 focus:border-slate-200 focus:bg-white"
+                                className="rounded-xl border border-transparent bg-transparent px-2 py-1 text-sm text-slate-800 focus:border-slate-200 focus:bg-white"
                                 aria-label={`Responsable de ${task.description}`}
                               >
                                 {TEAM_MEMBERS.map((member) => (
@@ -497,7 +557,7 @@ export default function TareasPage() {
                           <td className="px-4 py-3">
                             <Link
                               href={{ pathname: stageHref, query: { project: projectFromQuery } }}
-                              className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                              className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-800 hover:bg-slate-50"
                             >
                               Abrir etapa
                             </Link>
@@ -523,7 +583,7 @@ export default function TareasPage() {
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   {stage.projects.length === 0 ? (
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-500">
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800">
                       Sin proyectos
                     </span>
                   ) : (
@@ -536,7 +596,7 @@ export default function TareasPage() {
                             pathname: stage.href,
                             query: { project },
                           }}
-                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
                         >
                           {project}
                         </Link>

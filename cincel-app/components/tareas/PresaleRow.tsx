@@ -8,6 +8,7 @@ import { formatDateDMY } from "@/lib/utils/date";
 type Props = {
   task: Task;
   onSave: (updatedTask: Task) => void;
+  onDelete: (taskId: number) => void;
   teamMembers: string[];
   onOpenDetail: (task: Task) => void;
   availableProjects: string[];
@@ -53,11 +54,19 @@ function statusColor(
 export default function PresaleRow({
   task,
   onSave,
+  onDelete,
   teamMembers,
   onOpenDetail,
   availableProjects,
   phaseOptions,
 }: Props) {
+  const selectableProjects = Array.from(
+    new Set([
+      ...availableProjects,
+      ...(task.project && !availableProjects.includes(task.project) ? [task.project] : []),
+    ])
+  ).sort((a, b) => a.localeCompare(b));
+
   const stagePhaseOptions = [...phaseOptions, "Otro..."];
   const selectablePhaseOptions = Array.from(
     new Set([...stagePhaseOptions, ...(task.phase && !stagePhaseOptions.includes(task.phase) ? [task.phase] : [])])
@@ -83,9 +92,21 @@ export default function PresaleRow({
     });
   };
 
+  const handleDelete = () => {
+    const confirmed = window.confirm(
+      `Se eliminara la tarea "${task.description}" del proyecto "${task.project}". Esta accion no se puede deshacer. Deseas continuar?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    onDelete(task.id);
+  };
+
   return (
-    <tr className={`border-b border-slate-100 transition-all duration-150 ${task.archived ? "bg-slate-50 opacity-80" : "hover:bg-blue-50"}`}>
-      <td className="w-[7%] px-4 py-3 font-medium">
+    <tr className={`border-b border-slate-100 text-black transition-all duration-150 ${task.archived ? "bg-slate-50 opacity-80" : "hover:bg-blue-50"}`}>
+      <td className="w-[7%] px-4 py-3 font-medium text-black">
         <InlineEditableField
           value={task.project}
           onCommit={(value) => updateField("project", value)}
@@ -99,7 +120,7 @@ export default function PresaleRow({
               onKeyDown={onKeyDown}
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
             >
-              {availableProjects.map((project) => (
+              {selectableProjects.map((project) => (
                 <option key={project} value={project}>
                   {project}
                 </option>
@@ -109,7 +130,7 @@ export default function PresaleRow({
         />
       </td>
 
-      <td className="w-[6%] px-4 py-3 align-middle overflow-hidden">
+      <td className="w-[6%] px-4 py-3 align-middle overflow-hidden text-black">
         <InlineEditableField
           value={task.phase}
           onCommit={(value) => updateField("phase", value)}
@@ -155,7 +176,7 @@ export default function PresaleRow({
         />
       </td>
 
-      <td className="w-[23%] px-4 py-3 align-middle font-medium">
+      <td className="w-[23%] px-4 py-3 align-middle font-medium text-black">
         <InlineEditableField
           value={task.description}
           onCommit={(value) => updateField("description", value)}
@@ -177,15 +198,15 @@ export default function PresaleRow({
         />
       </td>
 
-      <td className="w-[14%] px-4 py-3 align-middle">
+      <td className="w-[14%] px-4 py-3 align-middle text-black">
         <div className="flex items-center justify-between gap-2 text-sm">
-          <span className="truncate text-slate-700" title={latestNote || "Sin seguimiento"}>
+          <span className="truncate text-black" title={latestNote || "Sin seguimiento"}>
             {latestNote || "Sin seguimiento"}
           </span>
           <button
             type="button"
             onClick={() => onOpenDetail(task)}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-xs text-slate-600 hover:bg-slate-100"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-xs text-black hover:bg-slate-100"
             aria-label="Abrir detalle"
             title="Ver detalle"
           >
@@ -194,7 +215,7 @@ export default function PresaleRow({
         </div>
       </td>
 
-      <td className="w-[12%] px-4 py-3 align-middle">
+      <td className="w-[12%] px-4 py-3 align-middle text-black">
         <InlineEditableField
           value={task.manager}
           onCommit={(value) => updateField("manager", value)}
@@ -219,7 +240,7 @@ export default function PresaleRow({
         />
       </td>
 
-      <td className="w-[12%] px-4 py-3 align-middle">
+      <td className="w-[12%] px-4 py-3 align-middle text-black">
         <InlineEditableField
           value={task.support.join("||")}
           onCommit={(value) =>
@@ -250,7 +271,7 @@ export default function PresaleRow({
         />
       </td>
 
-      <td className="w-[11%] min-w-[150px] whitespace-nowrap px-4 py-3 align-middle">
+      <td className="w-[11%] min-w-[150px] whitespace-nowrap px-4 py-3 align-middle text-black">
         <InlineEditableField
           value={task.status}
           onCommit={(value) => updateField("status", value as TaskStatus)}
@@ -274,7 +295,7 @@ export default function PresaleRow({
         />
       </td>
 
-      <td className="w-[12%] min-w-[165px] whitespace-nowrap px-4 py-3 align-middle text-sm">
+      <td className="w-[12%] min-w-[165px] whitespace-nowrap px-4 py-3 align-middle text-sm text-black">
         <InlineEditableField
           value={task.commitmentDate || ""}
           onCommit={(value) => updateField("commitmentDate", value)}
@@ -293,7 +314,7 @@ export default function PresaleRow({
         />
       </td>
 
-      <td className="w-[13%] min-w-[180px] whitespace-nowrap px-4 py-3 align-middle text-sm">
+      <td className="w-[13%] min-w-[180px] whitespace-nowrap px-4 py-3 align-middle text-sm text-black">
         <InlineEditableField
           value={task.reviewDate || ""}
           onCommit={(value) => updateField("reviewDate", value)}
@@ -312,7 +333,7 @@ export default function PresaleRow({
         />
       </td>
 
-      <td className="w-[12%] min-w-[165px] whitespace-nowrap px-4 py-3 align-middle text-sm">
+      <td className="w-[12%] min-w-[165px] whitespace-nowrap px-4 py-3 align-middle text-sm text-black">
         <InlineEditableField
           value={task.deliveryDate || ""}
           onCommit={(value) => updateField("deliveryDate", value)}
@@ -331,25 +352,32 @@ export default function PresaleRow({
         />
       </td>
 
-      <td className="px-4 py-3 align-middle text-sm text-slate-600">
+      <td className="px-4 py-3 align-middle text-sm text-black">
         {task.updatedAt || "—"}
       </td>
 
-      <td className="px-4 py-3 align-middle text-sm">
+      <td className="px-4 py-3 align-middle text-sm text-black">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => onOpenDetail(task)}
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-black hover:bg-slate-100"
           >
             Detalle
           </button>
           <button
             type="button"
             onClick={handleArchive}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${task.archived ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-600 hover:bg-slate-100"}`}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${task.archived ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 text-black hover:bg-slate-100"}`}
           >
             {task.archived ? "Desarchivar" : "Archivar"}
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-100"
+          >
+            Eliminar
           </button>
         </div>
       </td>

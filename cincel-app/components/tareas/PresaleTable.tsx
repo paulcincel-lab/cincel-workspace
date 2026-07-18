@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 import type { Task, TaskStatus, TaskHistoryItem, WorkflowType } from "@/lib/types/task";
 import { presaleTasks } from "@/lib/data/presale";
@@ -13,6 +14,8 @@ import NewProjectTemplateModal from "./NewProjectTemplateModal";
 import GroupSection from "@/components/ui/GroupSection";
 import { presaleTemplate } from "@/lib/templates/presale";
 import { presalePhaseOptions } from "@/lib/templates/phase-options";
+import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
+import { projects as baseProjects } from "@/lib/data/projects";
 
 type TaskFormValues = {
   project: string;
@@ -78,6 +81,43 @@ const PROJECT_TONES = [
   },
 ];
 
+const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
+
+function loadPersistedProjects() {
+  if (typeof window === "undefined") {
+    return baseProjects;
+  }
+
+  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
+
+  if (!stored) {
+    return baseProjects;
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as typeof baseProjects;
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : baseProjects;
+  } catch {
+    return baseProjects;
+  }
+}
+
+function workflowInProjectStage(projectStage: string, workflow: WorkflowType): boolean {
+  const stages = projectStage
+    .split("/")
+    .map((value) => value.trim().toLowerCase());
+
+  if (workflow === "Presale") {
+    return stages.some((stage) => stage === "presale");
+  }
+
+  if (workflow === "Diseño") {
+    return stages.some((stage) => stage === "diseño" || stage === "diseno" || stage === "taller de diseño" || stage === "taller de diseno");
+  }
+
+  return stages.some((stage) => stage === "construcción" || stage === "construccion");
+}
+
 function createTaskFromValues(
   values: TaskFormValues,
   id: number,
@@ -141,20 +181,20 @@ export default function PresaleTable({
     const stored = localStorage.getItem(tasksStorageKey);
 
     if (!stored) {
-      return initialTasks;
+      return loadLinkedTasks(workflow, initialTasks);
     }
 
     try {
       const parsed = JSON.parse(stored) as Task[];
 
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        return loadLinkedTasks(workflow, parsed);
       }
     } catch {
       localStorage.removeItem(tasksStorageKey);
     }
 
-    return initialTasks;
+    return loadLinkedTasks(workflow, initialTasks);
   });
 
   const [search, setSearch] = useState("");
@@ -180,6 +220,8 @@ export default function PresaleTable({
   const [showProjectTemplateModal, setShowProjectTemplateModal] =
     useState(false);
 
+  const [projectsData, setProjectsData] = useState(() => loadPersistedProjects());
+
   const [archiveView, setArchiveView] = useState<"activos" | "archivadas">("activos");
 
   const updateProjectFilter = (value: string) => {
@@ -199,15 +241,39 @@ export default function PresaleTable({
     localStorage.setItem(tasksStorageKey, JSON.stringify(tasks));
   }, [tasks, tasksStorageKey]);
 
+  useEffect(() => {
+    const refreshProjects = () => setProjectsData(loadPersistedProjects());
+
+    window.addEventListener("focus", refreshProjects);
+    window.addEventListener("storage", refreshProjects);
+
+    return () => {
+      window.removeEventListener("focus", refreshProjects);
+      window.removeEventListener("storage", refreshProjects);
+    };
+  }, []);
+
   const managers = [
     "Todos",
     ...new Set(tasks.map((task) => task.manager)),
   ];
 
+  const activeProjects = useMemo(() => {
+    const activeNames = projectsData
+      .filter((project) => project.active)
+      .map((project) => (typeof project.name === "string" ? project.name.trim() : ""))
+      .filter(Boolean);
+
+    return Array.from(new Set(activeNames)).sort((a, b) => a.localeCompare(b));
+  }, [projectsData]);
+
   const projects = useMemo(() => {
-    const values = Array.from(new Set(tasks.map((task) => task.project)));
-    return ["Todos los proyectos", ...values];
-  }, [tasks]);
+    return ["Todos los proyectos", ...activeProjects];
+  }, [activeProjects]);
+
+  const activeProjectsForTemplate = useMemo(() => {
+    return activeProjects;
+  }, [activeProjects]);
 
   const teams = [
     "Todos",
@@ -352,11 +418,45 @@ export default function PresaleTable({
     setArchiveView("activos");
   };
 
+  const stageNavigation = useMemo(() => {
+    const query = searchParams.toString();
+
+    return [
+      {
+        label: "Presale",
+        href: query ? `/tareas/presale?${query}` : "/tareas/presale",
+        isActive: workflow === "Presale",
+      },
+      {
+        label: "Taller de Diseño",
+        href: query ? `/tareas/diseno?${query}` : "/tareas/diseno",
+        isActive: workflow === "Diseño",
+      },
+      {
+        label: "Construcción",
+        href: query ? `/tareas/construccion?${query}` : "/tareas/construccion",
+        isActive: workflow === "Construcción",
+      },
+    ];
+  }, [searchParams, workflow]);
+
   return (
 
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
 
       <div className="p-6 border-b border-slate-200">
+
+        <div className="mb-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {stageNavigation.map((stage) => (
+            <Link
+              key={stage.label}
+              href={stage.href}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${stage.isActive ? "bg-white text-slate-900 shadow-sm" : "text-slate-800 hover:bg-white hover:text-slate-900"}`}
+            >
+              {stage.label}
+            </Link>
+          ))}
+        </div>
 
         <div className="flex justify-between items-center">
 
@@ -366,7 +466,7 @@ export default function PresaleTable({
               {title}
             </h1>
 
-            <p className="text-slate-500 mt-1">
+            <p className="text-slate-800 mt-1">
               {subtitle}
             </p>
 
@@ -376,7 +476,7 @@ export default function PresaleTable({
             <button
               type="button"
               onClick={() => setShowProjectTemplateModal(true)}
-              className="rounded-xl border border-slate-200 px-5 py-3 text-slate-700 hover:bg-slate-50 transition"
+              className="rounded-xl border border-slate-200 px-5 py-3 text-slate-800 hover:bg-slate-50 transition"
             >
               Iniciar plantilla de {templateName}
             </button>
@@ -412,8 +512,8 @@ export default function PresaleTable({
           <option value="Todos los proyectos">Proyecto</option>
           {projects
             .filter((project) => project !== "Todos los proyectos")
-            .map((project) => (
-              <option key={project} value={project}>
+            .map((project, index) => (
+              <option key={`project-option-${index}-${project}`} value={project}>
                 {project}
               </option>
             ))}
@@ -478,7 +578,7 @@ export default function PresaleTable({
             onClick={() => {
               setArchiveView("activos");
             }}
-            className={`rounded-lg px-3 py-2 ${archiveView === "activos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            className={`rounded-lg px-3 py-2 ${archiveView === "activos" ? "bg-blue-600 text-white" : "text-slate-800 hover:bg-slate-100"}`}
           >
             Activas
           </button>
@@ -487,16 +587,16 @@ export default function PresaleTable({
             onClick={() => {
               setArchiveView("archivadas");
             }}
-            className={`rounded-lg px-3 py-2 ${archiveView === "archivadas" ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            className={`rounded-lg px-3 py-2 ${archiveView === "archivadas" ? "bg-slate-800 text-white" : "text-slate-800 hover:bg-slate-100"}`}
           >
             Archivadas
           </button>
         </div>
 
-        <button
+          <button
           type="button"
           onClick={clearFilters}
-          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100"
         >
           Limpiar filtros
         </button>
@@ -505,7 +605,7 @@ export default function PresaleTable({
 
       <div className="overflow-x-auto">
         {groupedTasks.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-500">
+          <div className="p-8 text-center text-sm text-slate-800">
             No hay tareas que coincidan con los filtros actuales.
           </div>
         ) : (
@@ -522,9 +622,9 @@ export default function PresaleTable({
               titleClassName={`${tone.titleClassName} inline-flex rounded-lg px-3 py-1`}
             >
               <div className="overflow-x-auto rounded-b-xl border border-slate-200">
-                <table className="w-full min-w-[1800px]">
+                <table className="w-full min-w-[1800px] text-black">
                 <thead className="bg-slate-50 border-b">
-                  <tr className="text-left text-sm text-slate-600">
+                  <tr className="text-left text-sm text-black">
                     <th className="px-4 py-3 w-[7%]">Proyecto</th>
                     <th className="px-4 py-3 w-[6%]">Fase</th>
                     <th className="px-4 py-3 w-[23%]">Descripción</th>
@@ -554,7 +654,18 @@ export default function PresaleTable({
                           );
                         }}
                         onOpenDetail={(nextTask) => setSelectedTask(nextTask)}
-                        availableProjects={projects.filter((project) => project !== "Todos los proyectos")}
+                        onDelete={(taskId) => {
+                          setTasks((current) => current.filter((currentTask) => currentTask.id !== taskId));
+
+                          setSelectedTask((current) => {
+                            if (!current) {
+                              return null;
+                            }
+
+                            return current.id === taskId ? null : current;
+                          });
+                        }}
+                        availableProjects={activeProjects}
                       />
                     ))}
                   </tbody>
@@ -565,7 +676,7 @@ export default function PresaleTable({
                 <button
                   type="button"
                   onClick={() => addQuickTaskToProject(project)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-black hover:bg-slate-50"
                 >
                   + Agregar fila
                 </button>
@@ -599,7 +710,7 @@ export default function PresaleTable({
       <NewTaskModal
         key={showNewTask ? "new-task-open" : "new-task-closed"}
         open={showNewTask}
-        projects={projects.filter((project) => project !== "Todos los proyectos")}
+        projects={activeProjects}
         teamMembers={availableTeamMembers}
         phaseOptions={phaseOptions}
         onClose={() => setShowNewTask(false)}
@@ -615,6 +726,7 @@ export default function PresaleTable({
         key={showProjectTemplateModal ? "project-template-open" : "project-template-closed"}
         open={showProjectTemplateModal}
         templateItems={templateItems}
+        projectOptions={activeProjectsForTemplate}
         onClose={() => setShowProjectTemplateModal(false)}
         onCreate={({ project, items }) => {
           addProjectTemplateTasks(project, items);

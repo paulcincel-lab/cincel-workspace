@@ -12,6 +12,7 @@ import type { Task } from "@/lib/types/task";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
+import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 
 type MemberDraft = {
   name: string;
@@ -105,24 +106,11 @@ function normalizeTeamMember(raw: TeamMember): TeamMember {
 }
 
 function loadPersistedTasks(workflow: string, fallback: Task[]): Task[] {
-  if (typeof window === "undefined") {
-    return fallback;
+  if (workflow === "Presale" || workflow === "Diseño" || workflow === "Construcción") {
+    return loadLinkedTasks(workflow, fallback);
   }
 
-  const storageKey = `cincel.actividades.${workflow}.tasks.v1`;
-  const stored = localStorage.getItem(storageKey);
-
-  if (!stored) {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Task[];
-    return Array.isArray(parsed) ? parsed : fallback;
-  } catch {
-    localStorage.removeItem(storageKey);
-    return fallback;
-  }
+  return fallback;
 }
 
 function loadPersistedProjects() {

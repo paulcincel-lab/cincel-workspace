@@ -21,7 +21,7 @@ export function getPersonInitials(name: string): string {
 
 export function TeamMembersCompact({ members }: { members: string[] }) {
   if (members.length === 0) {
-    return <span className="text-slate-400">Sin equipo</span>;
+    return <span className="text-black">Sin equipo</span>;
   }
 
   const visibleMembers = members.slice(0, 2);

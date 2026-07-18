@@ -1,6 +1,25 @@
+"use client";
+
+import { useMemo } from "react";
+
 import Avatar from "@/components/ui/Avatar";
 
 export default function Header() {
+  const todayLabel = useMemo(() => {
+    const now = new Date();
+
+    const formatted = new Intl.DateTimeFormat("es-MX", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }).format(now);
+
+    return formatted
+      .split(" ")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }, []);
+
   return (
     <header className="mb-10">
 
@@ -12,8 +31,8 @@ export default function Header() {
         </h1>
       </div>
 
-      <p className="text-slate-500 mt-2">
-        Martes · 14 Julio
+      <p className="mt-2 text-slate-800">
+        {todayLabel}
       </p>
 
     </header>

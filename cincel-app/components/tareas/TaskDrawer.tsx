@@ -63,19 +63,19 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
         <div className="border-b p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-800">
                 Detalle de tarea
               </p>
               <h2 className="mt-2 text-2xl font-bold text-slate-900">
                 {task.description}
               </h2>
             </div>
-            <button type="button" onClick={onClose} className="text-2xl text-slate-500 hover:text-slate-800">
+            <button type="button" onClick={onClose} className="text-2xl text-slate-800 hover:text-slate-800">
               ✕
             </button>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2 text-sm text-slate-600">
+          <div className="mt-4 flex flex-wrap gap-2 text-sm text-slate-800">
             <span className="rounded-full bg-slate-100 px-3 py-1">{task.project}</span>
             <span className="rounded-full bg-slate-100 px-3 py-1">{task.phase}</span>
             <span className="rounded-full bg-slate-100 px-3 py-1">{task.status}</span>
@@ -85,25 +85,25 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
         <div className="space-y-6 p-6">
           <section>
             <h3 className="text-lg font-semibold text-slate-900">Resumen</h3>
-            <div className="mt-3 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <div className="mt-3 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-slate-500">Responsable</span>
+                <span className="text-slate-800">Responsable</span>
                 <span className="font-medium">{task.manager}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-slate-500">Equipo</span>
+                <span className="text-slate-800">Equipo</span>
                 <span className="font-medium text-right">{task.support.length > 0 ? task.support.join(", ") : "Sin apoyo"}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-slate-500">Compromiso</span>
+                <span className="text-slate-800">Compromiso</span>
                 <span className="font-medium">{formatDateDMY(task.commitmentDate)}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-slate-500">Próxima revisión</span>
+                <span className="text-slate-800">Próxima revisión</span>
                 <span className="font-medium">{formatDateDMY(task.reviewDate)}</span>
               </div>
               <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
-                <span className="text-slate-500">Estado</span>
+                <span className="text-slate-800">Estado</span>
                 <span className="font-medium">{task.status}</span>
               </div>
             </div>
@@ -115,8 +115,8 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
               {sortedHistory.length > 0 ? (
                 <div className="space-y-2">
                   {sortedHistory.map((item) => (
-                    <div key={item.id} className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-                      <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-500">
+                    <div key={item.id} className="rounded-xl bg-slate-50 p-3 text-sm text-slate-800">
+                      <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-800">
                         <span>{formatDateDMY(item.date)}</span>
                         <span>{item.author}</span>
                       </div>
@@ -125,7 +125,7 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">No hay notas de seguimiento registradas.</p>
+                <p className="text-sm text-slate-800">No hay notas de seguimiento registradas.</p>
               )}
 
               <div className="space-y-2 rounded-xl border border-dashed border-slate-200 p-3">
@@ -152,13 +152,13 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
           <section>
             <h3 className="text-lg font-semibold text-slate-900">Checklist</h3>
             <div className="mt-3 space-y-2 rounded-2xl border border-slate-200 p-4">
-              <p className="text-sm text-slate-500">Placeholder de checklist.</p>
+              <p className="text-sm text-slate-800">Placeholder de checklist.</p>
             </div>
           </section>
 
           <section>
             <h3 className="text-lg font-semibold text-slate-900">Archivos</h3>
-            <div className="mt-3 rounded-2xl border border-slate-200 p-4 text-sm text-slate-500">
+            <div className="mt-3 rounded-2xl border border-slate-200 p-4 text-sm text-slate-800">
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
                 <span>Sin archivos adjuntos</span>
                 <span className="text-xs uppercase tracking-[0.2em] text-slate-400">Próximamente</span>
@@ -168,7 +168,7 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
         </div>
 
         <div className="border-t p-6">
-          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-800 hover:bg-slate-50">
             Cerrar
           </button>
         </div>

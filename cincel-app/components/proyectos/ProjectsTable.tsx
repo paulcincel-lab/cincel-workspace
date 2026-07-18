@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { projects } from "@/lib/data/projects";
 import { teamMembers } from "@/lib/data/team";
@@ -9,6 +10,7 @@ import type { Task } from "@/lib/types/task";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
+import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 
 type RiskLevel = "Alto" | "Medio" | "Bajo";
 
@@ -20,8 +22,34 @@ type ProjectNote = {
 };
 
 type ProjectItem = (typeof projects)[number];
+type NewProjectDraft = {
+  name: string;
+  clientId: string;
+  type: string;
+  stages: string[];
+  coordinator: string;
+  docsUrl: string;
+  startDate: string;
+};
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
+const MANUAL_CLIENTS_STORAGE_KEY = "cincel.clients.manual.v1";
+const STAGE_OPTIONS = ["Presale", "Diseño", "Construcción"];
+const emptyNewProjectDraft: NewProjectDraft = {
+  name: "",
+  clientId: "",
+  type: "Habitacional",
+  stages: ["Presale"],
+  coordinator: "Sin responsable",
+  docsUrl: "",
+  startDate: "",
+};
+
+type ActiveClientOption = {
+  id: number;
+  name: string;
+  kind: "Empresa" | "Particular";
+};
 
 function normalizeName(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -33,30 +61,29 @@ function normalizeName(value: unknown): string | null {
 }
 
 function loadPersistedTasks(workflow: string, fallback: Task[]): Task[] {
-  if (typeof window === "undefined") {
-    return fallback;
+  if (workflow === "Presale" || workflow === "Diseño" || workflow === "Construcción") {
+    return loadLinkedTasks(workflow, fallback);
   }
 
-  const storageKey = `cincel.actividades.${workflow}.tasks.v1`;
-  const stored = localStorage.getItem(storageKey);
-
-  if (!stored) {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Task[];
-    return Array.isArray(parsed) ? parsed : fallback;
-  } catch {
-    localStorage.removeItem(storageKey);
-    return fallback;
-  }
+  return fallback;
 }
 
 function riskBadgeClasses(risk: RiskLevel): string {
-  if (risk === "Alto") return "bg-red-100 text-red-700 border-red-200";
-  if (risk === "Medio") return "bg-amber-100 text-amber-700 border-amber-200";
+  if (risk === "Alto") return "bg-amber-100 text-amber-800 border-amber-200";
+  if (risk === "Medio") return "bg-blue-100 text-blue-800 border-blue-200";
   return "bg-emerald-100 text-emerald-700 border-emerald-200";
+}
+
+function projectStatusSelectClasses(active: boolean): string {
+  if (active) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+
+  return "border-red-200 bg-red-50 text-red-800";
+}
+
+function projectStatusDotClasses(active: boolean): string {
+  return active ? "bg-emerald-500" : "bg-red-500";
 }
 
 function parseDate(input: string): Date | null {
@@ -124,7 +151,69 @@ function loadPersistedProjects(): ProjectItem[] {
         );
 
         if (!fallback) {
-          return null;
+          const rawId = item.id;
+          const numericId = typeof rawId === "number"
+            ? rawId
+            : typeof rawId === "string"
+              ? Number(rawId)
+              : Number.NaN;
+          const safeId = Number.isFinite(numericId) ? numericId : Date.now();
+          const incomingClient = item.client as Partial<ProjectItem["client"]> | undefined;
+          const safeCoordinator = normalizeName(item.coordinator) || "Sin responsable";
+
+          return {
+            id: safeId,
+            code: typeof item.code === "string" && item.code ? item.code : `PRJ-${safeId}`,
+            name: typeof item.name === "string" && item.name ? item.name : `Proyecto ${safeId}`,
+            active: Boolean(item.active),
+            status: typeof item.status === "string" && item.status ? item.status : (item.active ? "Activo" : "Inactivo"),
+            client: {
+              id: typeof incomingClient?.id === "number" ? incomingClient.id : safeId,
+              name: normalizeName(incomingClient?.name) || "Cliente",
+              emails: Array.isArray(incomingClient?.emails)
+                ? incomingClient.emails.filter((email): email is string => typeof email === "string" && email.trim().length > 0)
+                : [],
+              phone: normalizeName(incomingClient?.phone) || "",
+              kind: incomingClient?.kind === "Empresa" || incomingClient?.kind === "Particular"
+                ? incomingClient.kind
+                : "Particular",
+              contacts: Array.isArray(incomingClient?.contacts)
+                ? incomingClient.contacts.filter((contact): contact is { name: string; role: string; phone: string; email: string } =>
+                  Boolean(contact)
+                  && typeof contact.name === "string"
+                  && typeof contact.role === "string"
+                  && typeof contact.phone === "string"
+                  && typeof contact.email === "string"
+                )
+                : [],
+              completedProjects: Array.isArray(incomingClient?.completedProjects)
+                ? incomingClient.completedProjects.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+                : [],
+              acquisitionChannel: typeof incomingClient?.acquisitionChannel === "string"
+                ? incomingClient.acquisitionChannel
+                : "Sin registro",
+              totalSpent: typeof incomingClient?.totalSpent === "number" ? incomingClient.totalSpent : 0,
+            },
+            type: typeof item.type === "string" && item.type ? item.type : "Otro",
+            stage: typeof item.stage === "string" && item.stage ? item.stage : "Presale",
+            phase: typeof item.phase === "string" && item.phase ? item.phase : "Inicial",
+            address: {
+              street: item.address && typeof item.address.street === "string" ? item.address.street : "",
+              city: item.address && typeof item.address.city === "string" ? item.address.city : "",
+              state: item.address && typeof item.address.state === "string" ? item.address.state : "",
+            },
+            manager: normalizeName(item.manager) || "Sin responsable",
+            coordinator: safeCoordinator,
+            team: Array.isArray(item.team) ? item.team.filter((member): member is string => typeof member === "string") : [],
+            progress: typeof item.progress === "number" ? item.progress : 0,
+            drive: {
+              administrativo: item.drive && typeof item.drive.administrativo === "string" ? item.drive.administrativo : "",
+              planos: item.drive && typeof item.drive.planos === "string" ? item.drive.planos : "",
+              renders: item.drive && typeof item.drive.renders === "string" ? item.drive.renders : "",
+              reportes: item.drive && typeof item.drive.reportes === "string" ? item.drive.reportes : "",
+            },
+            startDate: typeof item.startDate === "string" ? item.startDate : "",
+          } as ProjectItem;
         }
 
         const rawId = item.id;
@@ -136,12 +225,48 @@ function loadPersistedProjects(): ProjectItem[] {
 
         const safeId = Number.isFinite(numericId) ? numericId : fallback.id;
         const safeCoordinator = normalizeName(item.coordinator) || fallback.coordinator || "Sin responsable";
+        const incomingClient = item.client as Partial<ProjectItem["client"]> | undefined;
+
+        const safeClient = {
+          ...fallback.client,
+          ...incomingClient,
+          emails: Array.isArray(incomingClient?.emails)
+            ? incomingClient.emails.filter((email): email is string => typeof email === "string" && email.trim().length > 0)
+            : fallback.client.emails,
+          phone: normalizeName(incomingClient?.phone) || fallback.client.phone || "",
+          kind: incomingClient?.kind === "Empresa" || incomingClient?.kind === "Particular"
+            ? incomingClient.kind
+            : fallback.client.kind,
+          contacts: Array.isArray(incomingClient?.contacts)
+            ? incomingClient.contacts.filter((contact): contact is { name: string; role: string; phone: string; email: string } =>
+              Boolean(contact)
+              && typeof contact.name === "string"
+              && typeof contact.role === "string"
+              && typeof contact.phone === "string"
+              && typeof contact.email === "string"
+            )
+            : Array.isArray(fallback.client.contacts)
+              ? fallback.client.contacts
+              : [],
+          completedProjects: Array.isArray(incomingClient?.completedProjects)
+            ? incomingClient.completedProjects.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+            : Array.isArray(fallback.client.completedProjects)
+              ? fallback.client.completedProjects
+              : [],
+          acquisitionChannel: typeof incomingClient?.acquisitionChannel === "string"
+            ? incomingClient.acquisitionChannel
+            : fallback.client.acquisitionChannel,
+          totalSpent: typeof incomingClient?.totalSpent === "number"
+            ? incomingClient.totalSpent
+            : fallback.client.totalSpent,
+        };
 
         return {
           ...fallback,
           ...item,
           id: safeId,
           coordinator: safeCoordinator,
+          client: safeClient,
         } as ProjectItem;
       })
       .filter((item): item is ProjectItem => item !== null);
@@ -181,12 +306,16 @@ function loadActiveTeamNames(): string[] {
 }
 
 export default function ProjectsTable() {
+  const router = useRouter();
   const [projectsData, setProjectsData] = useState<ProjectItem[]>(() => loadPersistedProjects());
   const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
+  const [statusViewFilter, setStatusViewFilter] = useState<"Activos" | "Archivados">("Activos");
   const [search, setSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState("Todas");
-  const [managerFilter, setManagerFilter] = useState("Todos");
+  const [coordinatorFilter, setCoordinatorFilter] = useState("Todos");
   const [riskFilter, setRiskFilter] = useState<RiskLevel | "Todos">("Todos");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [newProjectDraft, setNewProjectDraft] = useState<NewProjectDraft>(emptyNewProjectDraft);
   const [notesByProject, setNotesByProject] = useState<Record<number, ProjectNote[]>>(() => loadProjectNotes());
   const [activeNoteProjectId, setActiveNoteProjectId] = useState<number | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -269,32 +398,171 @@ export default function ProjectsTable() {
     });
   }, [allTasks, projectsData]);
 
-  const stages = ["Todas", ...Array.from(new Set(projectsData.map((project) => project.stage)))];
-  const managers = ["Todos", ...Array.from(new Set(projectsData.map((project) => project.manager)))];
+  const coordinators = [
+    "Todos",
+    ...Array.from(
+      new Set(
+        projectsData
+          .map((project) => normalizeName(project.coordinator) || "Sin encargado")
+      )
+    ),
+  ];
 
   const filteredProjects = enrichedProjects.filter((project) => {
     const value = search.trim().toLowerCase();
 
     const matchesSearch = !value
-      || project.name.toLowerCase().includes(value)
-      || project.client.name.toLowerCase().includes(value)
-      || project.code.toLowerCase().includes(value);
+      || project.name.toLowerCase().includes(value);
 
-    const matchesStage = stageFilter === "Todas" || project.stage === stageFilter;
-    const matchesManager = managerFilter === "Todos" || project.manager === managerFilter;
+    const projectCoordinator = normalizeName(project.coordinator) || "Sin encargado";
+    const matchesCoordinator = coordinatorFilter === "Todos" || projectCoordinator === coordinatorFilter;
     const matchesRisk = riskFilter === "Todos" || project.risk === riskFilter;
 
-    return matchesSearch && matchesStage && matchesManager && matchesRisk;
+    return matchesSearch && matchesCoordinator && matchesRisk;
   });
 
-  const kpiAtRisk = filteredProjects.filter((project) => project.risk === "Alto").length;
-  const kpiOnTrack = filteredProjects.filter((project) => project.risk === "Bajo").length;
-  const kpiBlocked = filteredProjects.reduce((acc, project) => acc + project.blockedCount, 0);
-  const kpiDueThisWeek = filteredProjects.reduce((acc, project) => acc + project.dueThisWeek, 0);
+  const visibleProjects = filteredProjects.filter((project) => {
+    if (statusViewFilter === "Activos") {
+      return project.active;
+    }
 
-  const alerts = filteredProjects
+    return !project.active;
+  });
+
+  const kpiAtRisk = visibleProjects.filter((project) => project.risk === "Alto").length;
+  const kpiOnTrack = visibleProjects.filter((project) => project.risk === "Bajo").length;
+  const kpiActiveProjects = visibleProjects.filter((project) => project.active).length;
+
+  const stageStats = visibleProjects.reduce<Record<string, number>>((acc, project) => {
+    const stages = project.stage
+      .split("/")
+      .map((stage) => stage.trim())
+      .filter(Boolean);
+
+    for (const stage of stages) {
+      acc[stage] = (acc[stage] ?? 0) + 1;
+    }
+
+    return acc;
+  }, {});
+
+  const orderedStageStats = Object.entries(stageStats)
+    .sort((a, b) => b[1] - a[1]);
+
+  const totalStageAssignments = orderedStageStats.reduce((acc, [, count]) => acc + count, 0);
+
+  const coordinatorStats = visibleProjects.reduce<Record<string, number>>((acc, project) => {
+    const coordinator = normalizeName(project.coordinator) || "Sin encargado";
+    acc[coordinator] = (acc[coordinator] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const orderedCoordinatorStats = Object.entries(coordinatorStats)
+    .sort((a, b) => b[1] - a[1]);
+
+  const alerts = visibleProjects
     .filter((project) => project.mainAlert !== "Sin alertas criticas")
     .slice(0, 6);
+
+  const activeClientOptions = useMemo<ActiveClientOption[]>(() => {
+    const fromProjects = projectsData
+      .filter((project) => project.active)
+      .map((project) => ({
+        id: project.client.id,
+        name: project.client.name,
+        kind: project.client.kind,
+      }));
+
+    const fromManual = (() => {
+      if (typeof window === "undefined") {
+        return [] as ActiveClientOption[];
+      }
+
+      const stored = localStorage.getItem(MANUAL_CLIENTS_STORAGE_KEY);
+
+      if (!stored) {
+        return [] as ActiveClientOption[];
+      }
+
+      try {
+        const parsed = JSON.parse(stored) as Array<{
+          id?: unknown;
+          name?: unknown;
+          kind?: unknown;
+          hasActiveProject?: unknown;
+        }>;
+
+        if (!Array.isArray(parsed)) {
+          return [] as ActiveClientOption[];
+        }
+
+        return parsed
+          .filter((item) => Boolean(item.hasActiveProject))
+          .map((item) => {
+            const id = typeof item.id === "number" ? item.id : Number(item.id);
+            const name = typeof item.name === "string" ? item.name.trim() : "";
+
+            if (!Number.isFinite(id) || !name) {
+              return null;
+            }
+
+            return {
+              id,
+              name,
+              kind: item.kind === "Empresa" ? "Empresa" : "Particular",
+            };
+          })
+          .filter((item): item is ActiveClientOption => item !== null);
+      } catch {
+        return [] as ActiveClientOption[];
+      }
+    })();
+
+    const deduped = new Map<string, ActiveClientOption>();
+
+    for (const client of [...fromProjects, ...fromManual]) {
+      const key = client.name.toLowerCase();
+      if (!deduped.has(key)) {
+        deduped.set(key, client);
+      }
+    }
+
+    return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [projectsData]);
+
+  const manualClientProjectTypes = useMemo<string[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    const stored = localStorage.getItem(MANUAL_CLIENTS_STORAGE_KEY);
+
+    if (!stored) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as Array<{ projectType?: unknown }>;
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .map((item) => (typeof item.projectType === "string" ? item.projectType.trim() : ""))
+        .filter((type) => Boolean(type));
+    } catch {
+      return [];
+    }
+  }, [projectsData]);
+
+  const projectTypeOptions = Array.from(new Set([
+    ...projectsData.map((project) => project.type),
+    ...manualClientProjectTypes,
+  ])).filter(Boolean);
+  if (projectTypeOptions.length === 0) {
+    projectTypeOptions.push("Habitacional", "Oficina", "Mobiliario", "Comercial", "Mantenimiento", "Otro");
+  }
 
   const activeNoteProject = activeNoteProjectId === null
     ? null
@@ -312,6 +580,77 @@ export default function ProjectsTable() {
   const closeNotesModal = () => {
     setActiveNoteProjectId(null);
     setNoteDraft("");
+  };
+
+  const openCreateModal = () => {
+    setCreateError("");
+    setNewProjectDraft({
+      ...emptyNewProjectDraft,
+      type: projectTypeOptions[0] ?? "Habitacional",
+      clientId: "",
+      coordinator: activeTeamNames[0] ?? "Sin responsable",
+    });
+    setShowCreateModal(true);
+  };
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    setCreateError("");
+  };
+
+  const createProject = () => {
+    const projectName = newProjectDraft.name.trim();
+    const selectedClient = activeClientOptions.find((client) => String(client.id) === newProjectDraft.clientId);
+
+    const nextProjectId = Math.max(0, ...projectsData.map((project) => project.id)) + 1;
+    const nextClientId = Math.max(0, ...projectsData.map((project) => project.client.id)) + 1;
+    const safeProjectName = projectName || `Proyecto ${nextProjectId}`;
+    const stageLabel = newProjectDraft.stages.length > 0 ? newProjectDraft.stages.join(" / ") : "Sin etapa";
+
+    const createdProject: ProjectItem = {
+      id: nextProjectId,
+      code: `PRJ-${String(nextProjectId).padStart(3, "0")}`,
+      name: safeProjectName,
+      active: true,
+      status: "Activo",
+      client: {
+        id: selectedClient?.id ?? nextClientId,
+        name: selectedClient?.name ?? "Sin cliente vinculado",
+        emails: [],
+        phone: "",
+        kind: selectedClient?.kind ?? "Particular",
+        contacts: [],
+        completedProjects: [],
+        acquisitionChannel: "Sin registro",
+        totalSpent: 0,
+      },
+      type: newProjectDraft.type || "Otro",
+      stage: stageLabel,
+      phase: "Inicial",
+      address: {
+        street: "",
+        city: "",
+        state: "",
+      },
+      manager: "Sin responsable",
+      coordinator: newProjectDraft.coordinator || "Sin responsable",
+      team: [],
+      progress: 0,
+      drive: {
+        administrativo: newProjectDraft.docsUrl.trim(),
+        planos: "",
+        renders: "",
+        reportes: "",
+      },
+      startDate: newProjectDraft.startDate || new Date().toISOString().split("T")[0],
+    };
+
+    const nextProjects = [createdProject, ...projectsData];
+    setProjectsData(nextProjects);
+    localStorage.setItem("cincel.projects.data.v1", JSON.stringify(nextProjects));
+    setShowCreateModal(false);
+    setCreateError("");
+    router.push(`/proyectos/${createdProject.id}/ficha`);
   };
 
   const saveNote = () => {
@@ -351,6 +690,50 @@ export default function ProjectsTable() {
     );
   };
 
+  const updateProjectActive = (projectId: number, active: boolean) => {
+    setProjectsData((current) =>
+      current.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              active,
+              status: active ? "Activo" : "Archivado",
+            }
+          : project
+      )
+    );
+  };
+
+  const deleteProject = (projectId: number) => {
+    const project = projectsData.find((item) => item.id === projectId);
+
+    if (!project) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Se eliminara el proyecto "${project.name}". Esta accion no se puede deshacer. Deseas continuar?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setProjectsData((current) => current.filter((item) => item.id !== projectId));
+
+    setNotesByProject((current) => {
+      const next = { ...current };
+      delete next[projectId];
+      localStorage.setItem("cincel.projects.notes.v1", JSON.stringify(next));
+      return next;
+    });
+
+    if (activeNoteProjectId === projectId) {
+      setActiveNoteProjectId(null);
+      setNoteDraft("");
+    }
+  };
+
   const getCoordinatorOptions = (project: ProjectItem): string[] => {
     const options = [
       ...activeTeamNames.map((name) => normalizeName(name)),
@@ -369,9 +752,32 @@ export default function ProjectsTable() {
             <p className="mt-1 text-slate-600">Vista operativa para riesgo, entregas y carga por proyecto.</p>
           </div>
 
-          <button className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700">
-            + Nuevo proyecto
-          </button>
+          <div className="flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              + Nuevo proyecto
+            </button>
+
+            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setStatusViewFilter("Activos")}
+                className={`rounded-lg px-3 py-1 text-xs font-medium ${statusViewFilter === "Activos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              >
+                Activos
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusViewFilter("Archivados")}
+                className={`rounded-lg px-3 py-1 text-xs font-medium ${statusViewFilter === "Archivados" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              >
+                Archivados
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -379,27 +785,19 @@ export default function ProjectsTable() {
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar proyecto, cliente o codigo..."
+            placeholder="Filtrar por nombre de proyecto..."
             className="w-72 rounded-xl border border-slate-200 px-4 py-2 text-sm"
           />
 
           <select
-            value={stageFilter}
-            onChange={(event) => setStageFilter(event.target.value)}
+            value={coordinatorFilter}
+            onChange={(event) => setCoordinatorFilter(event.target.value)}
             className="rounded-xl border border-slate-200 px-4 py-2 text-sm"
           >
-            {stages.map((stage) => (
-              <option key={stage} value={stage}>{stage}</option>
-            ))}
-          </select>
-
-          <select
-            value={managerFilter}
-            onChange={(event) => setManagerFilter(event.target.value)}
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm"
-          >
-            {managers.map((manager) => (
-              <option key={manager} value={manager}>{manager}</option>
+            {coordinators.map((coordinator) => (
+              <option key={coordinator} value={coordinator}>
+                Encargado: {coordinator}
+              </option>
             ))}
           </select>
 
@@ -417,98 +815,211 @@ export default function ProjectsTable() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-xl border border-red-100 bg-red-50/70 p-4">
+        <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-4">
           <p className="text-sm text-slate-700">En riesgo</p>
-          <p className="mt-1 text-3xl font-bold text-red-700">{kpiAtRisk}</p>
+          <p className="mt-1 text-3xl font-bold text-amber-800">{kpiAtRisk}</p>
         </div>
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
           <p className="text-sm text-slate-700">A tiempo</p>
           <p className="mt-1 text-3xl font-bold text-emerald-700">{kpiOnTrack}</p>
         </div>
-        <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-4">
-          <p className="text-sm text-slate-700">Bloqueadas</p>
-          <p className="mt-1 text-3xl font-bold text-amber-700">{kpiBlocked}</p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm text-slate-700">Proyectos activos</p>
+          <p className="mt-1 text-3xl font-bold text-slate-700">{kpiActiveProjects}</p>
         </div>
-        <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
-          <p className="text-sm text-slate-700">Entregas semana</p>
-          <p className="mt-1 text-3xl font-bold text-blue-700">{kpiDueThisWeek}</p>
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+          <p className="text-sm text-slate-700">Encargados activos</p>
+          <p className="mt-1 text-3xl font-bold text-indigo-700">{orderedCoordinatorStats.length}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-slate-800">Etapas globales</p>
+            <span className="text-xs text-slate-600">{totalStageAssignments} vinculaciones</span>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {orderedStageStats.length > 0 ? orderedStageStats.map(([stage, count]) => {
+              const width = totalStageAssignments > 0 ? Math.round((count / totalStageAssignments) * 100) : 0;
+
+              return (
+                <div key={`stage-stat-${stage}`} className="rounded-lg border border-blue-100 bg-white p-2">
+                  <div className="flex items-center justify-between text-xs text-slate-700">
+                    <span className="font-medium">{stage}</span>
+                    <span>{count} proyecto(s)</span>
+                  </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-blue-100">
+                    <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${width}%` }} />
+                  </div>
+                </div>
+              );
+            }) : (
+              <p className="rounded-lg border border-blue-100 bg-white p-3 text-sm text-slate-600">Sin etapas registradas.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-slate-800">Carga por encargado</p>
+            <span className="text-xs text-slate-600">{orderedCoordinatorStats.length} persona(s)</span>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {orderedCoordinatorStats.length > 0 ? orderedCoordinatorStats.map(([name, count]) => (
+              <div key={`coordinator-stat-${name}`} className="flex items-center justify-between rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm">
+                <span className="font-medium text-slate-800">{name}</span>
+                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">{count} proyecto(s)</span>
+              </div>
+            )) : (
+              <p className="rounded-lg border border-indigo-100 bg-white p-3 text-sm text-slate-600">Sin encargados registrados.</p>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
-          {filteredProjects.map((project) => (
-            <div key={project.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">{project.code}</p>
-                  <h3 className="text-xl font-bold text-slate-900">{project.name}</h3>
-                  <p className="text-sm text-slate-600">{project.client.name} · {project.stage}</p>
-                </div>
-
-                <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${riskBadgeClasses(project.risk)}`}>
-                  Riesgo {project.risk}
-                </span>
+          {[
+            {
+              key: "activos",
+              title: "Proyectos activos",
+              items: visibleProjects.filter((project) => project.active),
+            },
+            {
+              key: "archivados",
+              title: "Proyectos archivados",
+              items: visibleProjects.filter((project) => !project.active),
+            },
+          ].map((section) => (
+            <div key={section.key} className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{section.title}</h3>
+                <span className="text-xs text-slate-500">{section.items.length}</span>
               </div>
 
-              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-slate-700">Encargado cliente</p>
-                  <select
-                    value={normalizeName(project.coordinator) || "Sin responsable"}
-                    onChange={(event) => updateCoordinator(project.id, event.target.value)}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
-                    aria-label={`Encargado de ${project.name}`}
-                  >
-                    <option value="Sin responsable">Sin encargado</option>
-                    {getCoordinatorOptions(project).map((member) => (
-                      <option key={`card-coordinator-${project.id}-${member}`} value={member}>
-                        {member}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {section.items.length > 0 ? section.items.map((project) => (
+                <div key={project.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">{project.code}</p>
+                      <h3 className="text-xl font-bold text-slate-900">{project.name}</h3>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <p className="text-base font-semibold text-slate-800">{project.client.name}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {project.stage
+                            .split("/")
+                            .map((stage) => stage.trim())
+                            .filter(Boolean)
+                            .map((stage) => (
+                              <span key={`card-stage-${project.id}-${stage}`} className="rounded-full border border-blue-200 bg-blue-100/70 px-2 py-0.5 text-xs font-medium text-blue-800">
+                                {stage}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">{project.type}</p>
+                    </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link href={projectTasksPath(project.name)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-                    Ver tareas
-                  </Link>
-                  <Link href={`/proyectos/${project.id}`} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                    Abrir proyecto
-                  </Link>
-                  <Link href={`/proyectos/${project.id}/ficha`} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                    Abrir ficha del proyecto
-                  </Link>
-                </div>
-              </div>
+                    <div className="inline-flex items-center gap-2 rounded-lg px-2 py-1">
+                      <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
+                      <select
+                        value={project.active ? "activo" : "archivado"}
+                        onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
+                        aria-label={`Estado de ${project.name}`}
+                      >
+                        <option value="activo">Proyecto activo</option>
+                        <option value="archivado">Proyecto archivado</option>
+                      </select>
+                    </div>
+                  </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-600">
-                <div>
-                  <span className="text-slate-500">Avance:</span> <span className="font-medium text-slate-700">{project.progress}%</span>
-                </div>
-                <div>
-                  <span className="text-slate-500">Proxima fecha:</span> <span className="font-medium text-slate-700">{project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500">Carga equipo:</span> <span className="font-medium text-slate-700">{project.teamLoad}%</span>
-                </div>
-              </div>
+                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                    <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                        Fase: {project.phase}
+                      </span>
+                    </div>
 
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-slate-700">Alerta principal: {project.mainAlert}</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => openNotesModal(project.id)}
-                    className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-                  >
-                    Registrar nota
-                  </button>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Link href={projectTasksPath(project.name)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                        Actividades
+                      </Link>
+                      <Link href={`/proyectos/${project.id}/ficha`} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                        Ficha del proyecto
+                      </Link>
+                      <a
+                        href={project.drive.administrativo || "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`rounded-lg border px-4 py-2 text-sm font-medium ${project.drive.administrativo ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+                      >
+                        Google Doc
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Avance</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">{project.progress}%</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Proxima fecha</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">{project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Carga de equipo</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">{project.teamLoad}%</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-slate-700">Alerta principal: {project.mainAlert}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-slate-700">Encargado cliente</p>
+                      <select
+                        value={normalizeName(project.coordinator) || "Sin responsable"}
+                        onChange={(event) => updateCoordinator(project.id, event.target.value)}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                        aria-label={`Encargado de ${project.name}`}
+                      >
+                        <option value="Sin responsable">Sin encargado</option>
+                        {getCoordinatorOptions(project).map((member) => (
+                          <option key={`card-coordinator-${project.id}-${member}`} value={member}>
+                            {member}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => openNotesModal(project.id)}
+                        className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        Registrar nota
+                      </button>
+                      {section.key === "archivados" ? (
+                        <button
+                          onClick={() => deleteProject(project.id)}
+                          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-100"
+                        >
+                          Eliminar proyecto
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  No hay proyectos en esta seccion.
+                </div>
+              )}
             </div>
           ))}
 
-          {filteredProjects.length === 0 ? (
+          {visibleProjects.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
               No hay proyectos con los filtros actuales.
             </div>
@@ -543,23 +1054,33 @@ export default function ProjectsTable() {
               <th className="px-4 py-3">Proyecto</th>
               <th className="px-4 py-3">Cliente</th>
               <th className="px-4 py-3">Etapa</th>
-              <th className="px-4 py-3">Responsable</th>
               <th className="px-4 py-3">Encargado</th>
               <th className="px-4 py-3">Carga equipo</th>
               <th className="px-4 py-3">Proxima entrega</th>
-              <th className="px-4 py-3">Riesgo</th>
+              <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {filteredProjects.map((project) => (
+            {visibleProjects.map((project) => (
               <tr key={`table-${project.id}`} className="border-b border-slate-100 text-sm text-slate-800 hover:bg-slate-50">
                 <td className="px-4 py-3 font-semibold text-blue-700">
-                  <Link href={`/proyectos/${project.id}`}>{project.name}</Link>
+                  <Link href={projectTasksPath(project.name)}>{project.name}</Link>
                 </td>
                 <td className="px-4 py-3">{project.client.name}</td>
-                <td className="px-4 py-3">{project.stage}</td>
-                <td className="px-4 py-3">{project.manager}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {project.stage
+                      .split("/")
+                      .map((stage) => stage.trim())
+                      .filter(Boolean)
+                      .map((stage) => (
+                        <span key={`${project.id}-${stage}`} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700">
+                          {stage}
+                        </span>
+                      ))}
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <select
                     value={normalizeName(project.coordinator) || "Sin responsable"}
@@ -578,17 +1099,26 @@ export default function ProjectsTable() {
                 <td className="px-4 py-3">{project.teamLoad}%</td>
                 <td className="px-4 py-3">{project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${riskBadgeClasses(project.risk)}`}>
-                    {project.risk}
-                  </span>
+                  <div className="inline-flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
+                    <select
+                      value={project.active ? "activo" : "archivado"}
+                      onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
+                      className={`rounded-lg border px-2 py-1 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
+                      aria-label={`Estado en tabla de ${project.name}`}
+                    >
+                      <option value="activo">Proyecto activo</option>
+                      <option value="archivado">Proyecto archivado</option>
+                    </select>
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
-                    <Link href={`/proyectos/${project.id}`} className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                      Abrir
+                    <Link href={`/proyectos/${project.id}/ficha`} className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">
+                      Ficha
                     </Link>
                     <Link href={projectTasksPath(project.name)} className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                      Tareas
+                      Actividades
                     </Link>
                     <button
                       onClick={() => openNotesModal(project.id)}
@@ -657,6 +1187,154 @@ export default function ProjectsTable() {
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showCreateModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h4 className="text-lg font-bold text-slate-900">Nuevo proyecto</h4>
+                <p className="text-sm text-slate-600">Crea un proyecto operativo y abre su ficha.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeCreateModal}
+                className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm text-slate-700">
+                  Nombre del proyecto
+                  <input
+                    value={newProjectDraft.name}
+                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, name: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  />
+                </label>
+
+                <label className="text-sm text-slate-700">
+                  Cliente (activos existentes)
+                  <select
+                    value={newProjectDraft.clientId}
+                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, clientId: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">Vincular mas adelante</option>
+                    {activeClientOptions.length === 0 ? <option value="">No hay clientes activos</option> : null}
+                    {activeClientOptions.map((client) => (
+                      <option key={`active-client-${client.id}`} value={String(client.id)}>
+                        {client.name} ({client.kind})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm text-slate-700">
+                  Tipo de proyecto
+                  <select
+                    value={newProjectDraft.type}
+                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, type: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  >
+                    {projectTypeOptions.map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm text-slate-700">
+                  Etapas (seleccion multiple)
+                  <div className="mt-1 grid gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2">
+                    {STAGE_OPTIONS.map((stage) => (
+                      <label key={`stage-${stage}`} className="flex items-center gap-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={newProjectDraft.stages.includes(stage)}
+                          onChange={(event) => {
+                            setNewProjectDraft((prev) => {
+                              const hasStage = prev.stages.includes(stage);
+
+                              if (event.target.checked && !hasStage) {
+                                return { ...prev, stages: [...prev.stages, stage] };
+                              }
+
+                              if (!event.target.checked && hasStage) {
+                                return { ...prev, stages: prev.stages.filter((item) => item !== stage) };
+                              }
+
+                              return prev;
+                            });
+                          }}
+                        />
+                        {stage}
+                      </label>
+                    ))}
+                  </div>
+                </label>
+
+                <label className="text-sm text-slate-700">
+                  Encargado
+                  <select
+                    value={newProjectDraft.coordinator}
+                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, coordinator: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="Sin responsable">Sin encargado</option>
+                    {activeTeamNames.map((name) => (
+                      <option key={`new-coordinator-${name}`} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm text-slate-700 sm:col-span-2">
+                  Vinculo Google Doc del proyecto
+                  <input
+                    value={newProjectDraft.docsUrl}
+                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, docsUrl: event.target.value }))}
+                    placeholder="https://docs.google.com/..."
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  />
+                </label>
+
+                <label className="text-sm text-slate-700 sm:col-span-2">
+                  Fecha de inicio
+                  <input
+                    type="date"
+                    value={newProjectDraft.startDate}
+                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, startDate: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  />
+                </label>
+              </div>
+
+              {createError ? (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{createError}</p>
+              ) : null}
+
+              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+                <button
+                  type="button"
+                  onClick={closeCreateModal}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={createProject}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  Crear proyecto
+                </button>
               </div>
             </div>
           </div>

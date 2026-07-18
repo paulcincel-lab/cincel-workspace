@@ -16,7 +16,7 @@ export default function ConstruccionPage() {
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
 
-        <Suspense fallback={<div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Cargando actividades...</div>}>
+        <Suspense fallback={<div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-800">Cargando actividades...</div>}>
           <PresaleTable
             title="Construcción"
             subtitle="Flujo operativo de ejecución"

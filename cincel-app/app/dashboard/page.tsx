@@ -1,13 +1,6 @@
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-
-import KpiCard from "@/components/dashboard/KpiCard";
-import TasksTable from "@/components/dashboard/TasksTable";
-import AgendaToday from "@/components/dashboard/AgendaToday";
-import ProjectsOverview from "@/components/dashboard/ProjectsOverview";
-import DirectorSummary from "@/components/dashboard/DirectorSummary";
-
-import { dashboardData } from "@/lib/data/dashboard";
+import InteractiveDashboard from "@/components/dashboard/InteractiveDashboard";
 
 export default function Home() {
   return (
@@ -19,41 +12,7 @@ export default function Home() {
 
         <Header />
 
-        {/* KPIs */}
-
-        <div className="grid grid-cols-4 gap-6 mb-8">
-
-          {dashboardData.kpis.map((kpi) => (
-           <KpiCard
-             key={kpi.title}
-             title={kpi.title}
-             value={String(kpi.value)}
-            />
-          ))}
-
-        </div>
-
-        {/* Contenido */}
-
-        <div className="grid grid-cols-3 gap-6">
-
-          <div className="col-span-2 space-y-6">
-
-            <TasksTable />
-
-            <ProjectsOverview />
-
-          </div>
-
-          <div className="space-y-6">
-
-            <AgendaToday />
-
-            <DirectorSummary />
-
-          </div>
-
-        </div>
+        <InteractiveDashboard />
 
       </section>
 

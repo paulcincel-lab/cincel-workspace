@@ -74,36 +74,36 @@ export default function NewTaskModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-[700px] shadow-xl">
+      <div className="bg-white rounded-2xl w-[700px] shadow-xl text-black">
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">Nueva tarea</h2>
-            <button type="button" onClick={onClose} className="text-slate-500 hover:text-black text-xl">
+            <h2 className="text-2xl font-bold text-black">Nueva tarea</h2>
+            <button type="button" onClick={onClose} className="text-black hover:text-slate-700 text-xl">
               ✕
             </button>
           </div>
         </div>
 
         <div className="p-6 space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
             Se creará como tarea activa y aparecerá en el grupo del proyecto seleccionado.
           </div>
 
           <div>
-            <label className="block mb-2 font-medium">Descripción</label>
+            <label className="block mb-2 font-medium text-black">Descripción</label>
             <input
               ref={descriptionRef}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe la tarea..."
-              className="w-full border rounded-xl px-4 py-3"
+              className="w-full border rounded-xl px-4 py-3 text-black placeholder:text-slate-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-5">
             <div>
-              <label className="block mb-2 font-medium">Proyecto</label>
-              <select ref={projectRef} value={project} onChange={(e) => setProject(e.target.value)} className="w-full border rounded-xl px-4 py-3">
+              <label className="block mb-2 font-medium text-black">Proyecto</label>
+              <select ref={projectRef} value={project} onChange={(e) => setProject(e.target.value)} className="w-full border rounded-xl bg-white px-4 py-3 text-black">
                 {projects.map((item) => (
                   <option key={item} value={item}>
                     {item}
@@ -113,8 +113,8 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <label className="block mb-2 font-medium">Responsable</label>
-              <select ref={managerRef} value={manager} onChange={(e) => setManager(e.target.value)} className="w-full border rounded-xl px-4 py-3">
+              <label className="block mb-2 font-medium text-black">Responsable</label>
+              <select ref={managerRef} value={manager} onChange={(e) => setManager(e.target.value)} className="w-full border rounded-xl bg-white px-4 py-3 text-black">
                 {teamMembers.map((member) => (
                   <option key={member} value={member}>
                     {member}
@@ -124,7 +124,7 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <label className="block mb-2 font-medium">Fase</label>
+              <label className="block mb-2 font-medium text-black">Fase</label>
               <select
                 ref={phaseRef}
                 value={phase}
@@ -144,7 +144,7 @@ export default function NewTaskModal({
 
                   setPhase(selected);
                 }}
-                className="w-full border rounded-xl px-4 py-3"
+                className="w-full border rounded-xl bg-white px-4 py-3 text-black"
               >
                 {[...phaseOptions, "Otro..."].map((phaseOption) => (
                   <option key={phaseOption} value={phaseOption}>
@@ -155,8 +155,8 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <label className="block mb-2 font-medium">Estado</label>
-              <select ref={statusRef} value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)} className="w-full border rounded-xl px-4 py-3">
+              <label className="block mb-2 font-medium text-black">Estado</label>
+              <select ref={statusRef} value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)} className="w-full border rounded-xl bg-white px-4 py-3 text-black">
                 <option>Pendiente</option>
                 <option>En proceso</option>
                 <option>Completado</option>
@@ -166,32 +166,32 @@ export default function NewTaskModal({
           </div>
 
           <div>
-            <label className="block mb-2 font-medium">Seguimiento</label>
+            <label className="block mb-2 font-medium text-black">Seguimiento</label>
             <textarea
               ref={notesRef}
               rows={5}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Escribe el seguimiento inicial..."
-              className="w-full border rounded-xl p-4"
+              className="w-full border rounded-xl p-4 text-black placeholder:text-slate-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-5">
             <div>
-              <label className="block mb-2 font-medium">Fecha compromiso</label>
-              <input ref={commitmentDateRef} type="date" value={commitmentDate} onChange={(e) => setCommitmentDate(e.target.value)} className="w-full border rounded-xl px-4 py-3" />
+              <label className="block mb-2 font-medium text-black">Fecha compromiso</label>
+              <input ref={commitmentDateRef} type="date" value={commitmentDate} onChange={(e) => setCommitmentDate(e.target.value)} className="w-full border rounded-xl bg-white px-4 py-3 text-black" />
             </div>
 
             <div>
-              <label className="block mb-2 font-medium">Próxima revisión</label>
-              <input ref={reviewDateRef} type="date" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} className="w-full border rounded-xl px-4 py-3" />
+              <label className="block mb-2 font-medium text-black">Próxima revisión</label>
+              <input ref={reviewDateRef} type="date" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} className="w-full border rounded-xl bg-white px-4 py-3 text-black" />
             </div>
           </div>
         </div>
 
         <div className="p-6 border-t flex justify-end gap-3">
-          <button type="button" onClick={onClose} className="border px-5 py-3 rounded-xl hover:bg-slate-50">
+          <button type="button" onClick={onClose} className="border px-5 py-3 rounded-xl text-black hover:bg-slate-50">
             Cancelar
           </button>
 
