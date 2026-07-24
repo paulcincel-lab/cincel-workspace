@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import type { Task, TaskStatus, TaskHistoryItem, WorkflowType } from "@/lib/types/task";
 import { presaleTasks } from "@/lib/data/presale";
 
@@ -205,6 +207,7 @@ export default function PresaleTable({
     useState(false);
 
   const [projectsData, setProjectsData] = useState(() => loadPersistedProjects());
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
 
   const [archiveView, setArchiveView] = useState<"activos" | "archivadas">("activos");
 
@@ -226,7 +229,10 @@ export default function PresaleTable({
   }, [tasks, tasksStorageKey]);
 
   useEffect(() => {
-    const refreshProjects = () => setProjectsData(loadPersistedProjects());
+    const refreshProjects = () => {
+      setProjectsData(loadPersistedProjects());
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
+    };
 
     window.addEventListener("focus", refreshProjects);
     window.addEventListener("storage", refreshProjects);
@@ -236,6 +242,12 @@ export default function PresaleTable({
       window.removeEventListener("storage", refreshProjects);
     };
   }, []);
+
+  const activitiesCapabilities = useMemo(() => {
+    return resolveActivitiesCapabilities(authenticatedUser);
+  }, [authenticatedUser]);
+
+  const viewerName = authenticatedUser?.member.name || "";
 
   const managers = [
     "Todos",
@@ -633,6 +645,14 @@ export default function PresaleTable({
                         task={task}
                         phaseOptions={phaseOptions}
                         teamMembers={availableTeamMembers}
+                        canChangeResponsible={activitiesCapabilities.canChangeResponsible}
+                        canReorderPhases={activitiesCapabilities.canReorderPhases}
+                        canDeleteActivity={activitiesCapabilities.canDeleteActivity}
+                        canChangeStatus={canChangeActivityStatus({
+                          capabilities: activitiesCapabilities,
+                          task,
+                          viewerName,
+                        })}
                         onSave={(updatedTask) => {
                           setTasks((current) =>
                             current.map((currentTask) =>

@@ -11,6 +11,8 @@ import { projects as baseProjects } from "@/lib/data/projects";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import type { Task, TaskStatus, WorkflowType } from "@/lib/types/task";
 import { formatDateDMY } from "@/lib/utils/date";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
@@ -124,9 +126,13 @@ export default function TareasPage() {
   const [responsableFilter, setResponsableFilter] = useState("Todos");
   const [, setTasksVersion] = useState(0);
   const [projectsData, setProjectsData] = useState(() => loadPersistedProjects());
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
 
   useEffect(() => {
-    const refreshProjects = () => setProjectsData(loadPersistedProjects());
+    const refreshProjects = () => {
+      setProjectsData(loadPersistedProjects());
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
+    };
 
     window.addEventListener("focus", refreshProjects);
     window.addEventListener("storage", refreshProjects);
@@ -136,6 +142,12 @@ export default function TareasPage() {
       window.removeEventListener("storage", refreshProjects);
     };
   }, []);
+
+  const activitiesCapabilities = useMemo(() => {
+    return resolveActivitiesCapabilities(authenticatedUser);
+  }, [authenticatedUser]);
+
+  const viewerName = authenticatedUser?.member.name || "";
 
   const toggleSort = (field: "etapa" | "compromiso" | "estatus") => {
     if (sortBy === field) {
@@ -587,22 +599,26 @@ export default function TareasPage() {
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <Avatar name={task.manager || "Sin responsable"} showName={false} />
-                              <select
-                                value={task.manager || "Sin responsable"}
-                                onChange={(event) =>
-                                  updateTaskInline(workflow, task.id, {
-                                    manager: event.target.value,
-                                  })
-                                }
-                                className="rounded-xl border border-transparent bg-transparent px-2 py-1 text-sm text-slate-800 focus:border-slate-200 focus:bg-white"
-                                aria-label={`Responsable de ${task.description}`}
-                              >
-                                {TEAM_MEMBERS.map((member) => (
-                                  <option key={`manager-${task.id}-${member}`} value={member}>
-                                    {member}
-                                  </option>
-                                ))}
-                              </select>
+                              {activitiesCapabilities.canChangeResponsible ? (
+                                <select
+                                  value={task.manager || "Sin responsable"}
+                                  onChange={(event) =>
+                                    updateTaskInline(workflow, task.id, {
+                                      manager: event.target.value,
+                                    })
+                                  }
+                                  className="rounded-xl border border-transparent bg-transparent px-2 py-1 text-sm text-slate-800 focus:border-slate-200 focus:bg-white"
+                                  aria-label={`Responsable de ${task.description}`}
+                                >
+                                  {TEAM_MEMBERS.map((member) => (
+                                    <option key={`manager-${task.id}-${member}`} value={member}>
+                                      {member}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="px-2 py-1 text-sm text-slate-800">{task.manager || "Sin responsable"}</span>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -653,21 +669,31 @@ export default function TareasPage() {
                             />
                           </td>
                           <td className="px-4 py-3">
-                            <select
-                              value={task.status}
-                              onChange={(event) =>
-                                updateTaskInline(workflow, task.id, {
-                                  status: event.target.value as TaskStatus,
-                                })
-                              }
-                              className={`rounded-full border px-3 py-1 text-xs font-medium ${statusBadgeClass(task.status)}`}
-                            >
-                              {TASK_STATUSES.map((status) => (
-                                <option key={`status-${task.id}-${status}`} value={status}>
-                                  {status}
-                                </option>
-                              ))}
-                            </select>
+                            {canChangeActivityStatus({
+                              capabilities: activitiesCapabilities,
+                              task,
+                              viewerName,
+                            }) ? (
+                              <select
+                                value={task.status}
+                                onChange={(event) =>
+                                  updateTaskInline(workflow, task.id, {
+                                    status: event.target.value as TaskStatus,
+                                  })
+                                }
+                                className={`rounded-full border px-3 py-1 text-xs font-medium ${statusBadgeClass(task.status)}`}
+                              >
+                                {TASK_STATUSES.map((status) => (
+                                  <option key={`status-${task.id}-${status}`} value={status}>
+                                    {status}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${statusBadgeClass(task.status)}`}>
+                                {task.status}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <Link

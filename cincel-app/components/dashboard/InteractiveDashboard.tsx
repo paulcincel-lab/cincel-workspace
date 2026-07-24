@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
@@ -175,6 +177,7 @@ function getMexicoCityToday(): Date {
 export default function InteractiveDashboard() {
   const [projectsData, setProjectsData] = useState<ProjectData[]>(() => loadPersistedProjects());
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [tasksData, setTasksData] = useState<DashboardTasksState>(() => ({
     presale: loadLinkedTasks("Presale", presaleTasks),
     diseno: loadLinkedTasks("Diseño", disenoTasks),
@@ -211,6 +214,7 @@ export default function InteractiveDashboard() {
     const refreshAll = () => {
       setProjectsData(loadPersistedProjects());
       setSecondaryCoordinatorByProject(loadSecondaryCoordinatorMap());
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
       setTasksData({
         presale: loadLinkedTasks("Presale", presaleTasks),
         diseno: loadLinkedTasks("Diseño", disenoTasks),
@@ -236,6 +240,29 @@ export default function InteractiveDashboard() {
     ...tasksData.operativas,
   ].filter((task) => !task.archived);
 
+  const dashboardCapabilities = useMemo(() => {
+    return resolveDashboardCapabilities(authenticatedUser);
+  }, [authenticatedUser]);
+
+  const scopedProjectsData = useMemo(() => {
+    return scopeDashboardProjects({
+      projects: projectsData,
+      tasks: allTasks,
+      viewerName: authenticatedUser?.member.name || "",
+      dataScope: dashboardCapabilities.dataScope,
+      secondaryCoordinatorByProject,
+    });
+  }, [allTasks, authenticatedUser, dashboardCapabilities.dataScope, projectsData, secondaryCoordinatorByProject]);
+
+  const scopedAllTasks = useMemo(() => {
+    return scopeDashboardTasks({
+      tasks: allTasks,
+      viewerName: authenticatedUser?.member.name || "",
+      dataScope: dashboardCapabilities.dataScope,
+      allowedProjectNames: new Set(scopedProjectsData.map((project) => project.name)),
+    });
+  }, [allTasks, authenticatedUser, dashboardCapabilities.dataScope, scopedProjectsData]);
+
   const rangeEnd = useMemo(() => {
     const end = new Date(today);
 
@@ -255,27 +282,27 @@ export default function InteractiveDashboard() {
 
   const projectOptions = useMemo(() => {
     const values = new Set(
-      projectsData
+      scopedProjectsData
         .filter((project) => project.active)
         .map((project) => project.name)
         .filter(Boolean)
     );
 
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [projectsData]);
+  }, [scopedProjectsData]);
 
   const managerOptions = useMemo(() => {
     const values = new Set(
-      allTasks
+      scopedAllTasks
         .map((task) => task.manager)
         .filter((manager) => manager && manager.trim().length > 0)
     );
 
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [allTasks]);
+  }, [scopedAllTasks]);
 
   const filteredTasks = useMemo(() => {
-    return allTasks.filter((task) => {
+    return scopedAllTasks.filter((task) => {
       const matchesStage = stageFilter === "Todas" || task.workflow === stageFilter;
       const matchesProject = projectFilter === "Todos" || task.project === projectFilter;
       const matchesManager = managerFilter === "Todos" || task.manager === managerFilter;
@@ -285,10 +312,10 @@ export default function InteractiveDashboard() {
 
       return matchesStage && matchesProject && matchesManager && matchesStatus && hasDateInRange;
     });
-  }, [allTasks, managerFilter, projectFilter, rangeEnd, stageFilter, statusFilter, today]);
+  }, [managerFilter, projectFilter, rangeEnd, scopedAllTasks, stageFilter, statusFilter, today]);
 
   const kpis = useMemo(() => {
-    const activeProjects = projectsData.filter((project) => project.active).length;
+    const activeProjects = scopedProjectsData.filter((project) => project.active).length;
 
     const overdueTasks = filteredTasks.filter((task) => {
       const dueDate = toDate(getTaskEffectiveDueDate(task));
@@ -314,14 +341,14 @@ export default function InteractiveDashboard() {
       blockedTasks,
       reviewsThisWeek,
     };
-  }, [filteredTasks, projectsData, today]);
+  }, [filteredTasks, scopedProjectsData, today]);
 
   const riskByProject = useMemo(() => {
-    const activeProjects = projectsData.filter((project) => project.active);
+    const activeProjects = scopedProjectsData.filter((project) => project.active);
 
     return activeProjects
       .map((project) => {
-        const projectTasks = allTasks.filter((task) => task.project === project.name);
+        const projectTasks = scopedAllTasks.filter((task) => task.project === project.name);
 
         if (projectTasks.length === 0) {
           return {
@@ -363,7 +390,7 @@ export default function InteractiveDashboard() {
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 8);
-  }, [allTasks, projectsData, today]);
+  }, [scopedAllTasks, scopedProjectsData, today]);
 
   const agenda = useMemo(() => {
     const nextItems = filteredTasks
@@ -393,7 +420,7 @@ export default function InteractiveDashboard() {
 
   const workload = useMemo(() => {
     const rows = managerOptions.map((manager) => {
-      const managerTasks = allTasks.filter((task) => task.manager === manager);
+      const managerTasks = scopedAllTasks.filter((task) => task.manager === manager);
       const total = managerTasks.length;
       const inProgress = managerTasks.filter((task) => task.status === "En proceso").length;
       const blocked = managerTasks.filter((task) => task.status === "Bloqueado").length;
@@ -415,7 +442,7 @@ export default function InteractiveDashboard() {
     });
 
     return rows.sort((a, b) => b.saturation - a.saturation);
-  }, [allTasks, managerOptions, today]);
+  }, [managerOptions, scopedAllTasks, today]);
 
   const flow = useMemo(() => {
     const stages: WorkflowType[] = ["Presale", "Diseño", "Construcción"];
@@ -504,13 +531,13 @@ export default function InteractiveDashboard() {
       return matchesStage && matchesProject && matchesManager;
     };
 
-    const currentWeekTasks = allTasks.filter((task) => {
+    const currentWeekTasks = scopedAllTasks.filter((task) => {
       const hasDateInCurrentWeek = hasTaskDateInRange(task, currentWeekStart, currentWeekEnd);
 
       return matchesContextFilters(task) && hasDateInCurrentWeek;
     });
 
-    const previousWeekTasks = allTasks.filter((task) => {
+    const previousWeekTasks = scopedAllTasks.filter((task) => {
       const hasDateInPreviousWeek = hasTaskDateInRange(task, previousWeekStart, previousWeekEnd);
 
       return matchesContextFilters(task) && hasDateInPreviousWeek;
@@ -529,10 +556,10 @@ export default function InteractiveDashboard() {
       completionRate,
       deltaRate,
     };
-  }, [allTasks, managerFilter, projectFilter, stageFilter, today]);
+  }, [managerFilter, projectFilter, scopedAllTasks, stageFilter, today]);
 
   const projectAssignments = useMemo(() => {
-    const tasksInContext = allTasks.filter((task) => {
+    const tasksInContext = scopedAllTasks.filter((task) => {
       const matchesStage = stageFilter === "Todas" || task.workflow === stageFilter;
       const matchesProject = projectFilter === "Todos" || task.project === projectFilter;
       const matchesManager = managerFilter === "Todos" || task.manager === managerFilter;
@@ -540,7 +567,7 @@ export default function InteractiveDashboard() {
       return matchesStage && matchesProject && matchesManager;
     });
 
-    const activeProjectsInContext = projectsData
+    const activeProjectsInContext = scopedProjectsData
       .filter((project) => project.active)
       .filter((project) => projectFilter === "Todos" || project.name === projectFilter)
       .filter((project) => {
@@ -589,7 +616,7 @@ export default function InteractiveDashboard() {
         support: support.length > 0 ? support.join(", ") : "Sin equipo",
       };
     });
-  }, [allTasks, managerFilter, projectFilter, projectsData, secondaryCoordinatorByProject, stageFilter]);
+  }, [managerFilter, projectFilter, scopedAllTasks, scopedProjectsData, secondaryCoordinatorByProject, stageFilter]);
 
   const statusPieGradient = useMemo(() => {
     if (statusTotal === 0) {
@@ -861,6 +888,7 @@ export default function InteractiveDashboard() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-4">
+        {dashboardCapabilities.sections.showProjectAssignments ? (
         <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
           <h2 className="text-lg font-semibold text-slate-900">Asignacion por proyecto</h2>
           <p className="mt-1 text-sm text-slate-700">Lideres y colaboracion activa por proyecto.</p>
@@ -896,6 +924,7 @@ export default function InteractiveDashboard() {
             </div>
           )}
         </article>
+        ) : null}
 
         <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
           <h2 className="text-lg font-semibold text-slate-900">Progreso semanal</h2>
@@ -1133,6 +1162,7 @@ export default function InteractiveDashboard() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
+        {dashboardCapabilities.sections.showProjectRisk ? (
         <article className="xl:col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-semibold text-slate-900">Riesgo por proyecto</h2>
@@ -1172,8 +1202,9 @@ export default function InteractiveDashboard() {
             </table>
           </div>
         </article>
+        ) : null}
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${dashboardCapabilities.sections.showProjectRisk ? "" : "xl:col-span-3"}`}>
           <h2 className="text-xl font-semibold text-slate-900">Agenda operativa</h2>
           <div className="mt-4 space-y-3">
             {agenda.length === 0 ? (
@@ -1197,6 +1228,7 @@ export default function InteractiveDashboard() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
+        {dashboardCapabilities.sections.showTeamWorkload ? (
         <article className="xl:col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold text-slate-900">Carga del equipo</h2>
           <div className="mt-4 overflow-x-auto">
@@ -1234,8 +1266,9 @@ export default function InteractiveDashboard() {
             </table>
           </div>
         </article>
+        ) : null}
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${dashboardCapabilities.sections.showTeamWorkload ? "" : "xl:col-span-3"}`}>
           <h2 className="text-xl font-semibold text-slate-900">Flujo por etapa</h2>
           <div className="mt-4 space-y-4">
             {flow.map((item) => {

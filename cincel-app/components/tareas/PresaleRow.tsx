@@ -10,6 +10,10 @@ type Props = {
   onSave: (updatedTask: Task) => void;
   onDelete: (taskId: number) => void;
   teamMembers: string[];
+  canChangeResponsible: boolean;
+  canChangeStatus: boolean;
+  canDeleteActivity: boolean;
+  canReorderPhases: boolean;
   onOpenDetail: (task: Task) => void;
   availableProjects: string[];
   phaseOptions: string[];
@@ -56,6 +60,10 @@ export default function PresaleRow({
   onSave,
   onDelete,
   teamMembers,
+  canChangeResponsible,
+  canChangeStatus,
+  canDeleteActivity,
+  canReorderPhases,
   onOpenDetail,
   availableProjects,
   phaseOptions,
@@ -131,49 +139,55 @@ export default function PresaleRow({
       </td>
 
       <td className="w-[6%] px-4 py-3 align-middle overflow-hidden text-black">
-        <InlineEditableField
-          value={task.phase}
-          onCommit={(value) => updateField("phase", value)}
-          commitOnChange
-          renderDisplay={(value) => (
-            <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-              <Badge label={value} color={phaseColor(value)} />
-            </span>
-          )}
-          renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-            <select
-              autoFocus
-              value={value}
-              onChange={(event) => {
-                const selected = event.target.value;
+        {canReorderPhases ? (
+          <InlineEditableField
+            value={task.phase}
+            onCommit={(value) => updateField("phase", value)}
+            commitOnChange
+            renderDisplay={(value) => (
+              <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                <Badge label={value} color={phaseColor(value)} />
+              </span>
+            )}
+            renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
+              <select
+                autoFocus
+                value={value}
+                onChange={(event) => {
+                  const selected = event.target.value;
 
-                if (selected === "Otro...") {
-                  const customPhase = window.prompt("Nueva fase", "");
-                  const trimmed = customPhase?.trim();
+                  if (selected === "Otro...") {
+                    const customPhase = window.prompt("Nueva fase", "");
+                    const trimmed = customPhase?.trim();
 
-                  if (trimmed) {
-                    onChange(trimmed);
-                  } else {
-                    onBlur();
+                    if (trimmed) {
+                      onChange(trimmed);
+                    } else {
+                      onBlur();
+                    }
+
+                    return;
                   }
 
-                  return;
-                }
-
-                onChange(selected);
-              }}
-              onBlur={onBlur}
-              onKeyDown={onKeyDown}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              {selectablePhaseOptions.map((phaseOption) => (
-                <option key={phaseOption} value={phaseOption}>
-                  {phaseOption}
-                </option>
-              ))}
-            </select>
-          )}
-        />
+                  onChange(selected);
+                }}
+                onBlur={onBlur}
+                onKeyDown={onKeyDown}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                {selectablePhaseOptions.map((phaseOption) => (
+                  <option key={phaseOption} value={phaseOption}>
+                    {phaseOption}
+                  </option>
+                ))}
+              </select>
+            )}
+          />
+        ) : (
+          <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+            <Badge label={task.phase} color={phaseColor(task.phase)} />
+          </span>
+        )}
       </td>
 
       <td className="w-[23%] px-4 py-3 align-middle font-medium text-black">
@@ -216,28 +230,32 @@ export default function PresaleRow({
       </td>
 
       <td className="w-[12%] px-4 py-3 align-middle text-black">
-        <InlineEditableField
-          value={task.manager}
-          onCommit={(value) => updateField("manager", value)}
-          commitOnChange
-          renderDisplay={(value) => <Avatar name={value} />}
-          renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-            <select
-              autoFocus
-              value={value}
-              onChange={(event) => onChange(event.target.value)}
-              onBlur={onBlur}
-              onKeyDown={onKeyDown}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              {teamMembers.map((member) => (
-                <option key={member} value={member}>
-                  {member}
-                </option>
-              ))}
-            </select>
-          )}
-        />
+        {canChangeResponsible ? (
+          <InlineEditableField
+            value={task.manager}
+            onCommit={(value) => updateField("manager", value)}
+            commitOnChange
+            renderDisplay={(value) => <Avatar name={value} />}
+            renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
+              <select
+                autoFocus
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                onBlur={onBlur}
+                onKeyDown={onKeyDown}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                {teamMembers.map((member) => (
+                  <option key={member} value={member}>
+                    {member}
+                  </option>
+                ))}
+              </select>
+            )}
+          />
+        ) : (
+          <Avatar name={task.manager} />
+        )}
       </td>
 
       <td className="w-[12%] px-4 py-3 align-middle text-black">
@@ -272,27 +290,31 @@ export default function PresaleRow({
       </td>
 
       <td className="w-[11%] min-w-[150px] whitespace-nowrap px-4 py-3 align-middle text-black">
-        <InlineEditableField
-          value={task.status}
-          onCommit={(value) => updateField("status", value as TaskStatus)}
-          commitOnChange
-          renderDisplay={(value) => <Badge label={value} color={statusColor(value)} />}
-          renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-            <select
-              autoFocus
-              value={value}
-              onChange={(event) => onChange(event.target.value)}
-              onBlur={onBlur}
-              onKeyDown={onKeyDown}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="Pendiente">Pendiente</option>
-              <option value="En proceso">En proceso</option>
-              <option value="Completado">Completado</option>
-              <option value="Bloqueado">Bloqueado</option>
-            </select>
-          )}
-        />
+        {canChangeStatus ? (
+          <InlineEditableField
+            value={task.status}
+            onCommit={(value) => updateField("status", value as TaskStatus)}
+            commitOnChange
+            renderDisplay={(value) => <Badge label={value} color={statusColor(value)} />}
+            renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
+              <select
+                autoFocus
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                onBlur={onBlur}
+                onKeyDown={onKeyDown}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="Pendiente">Pendiente</option>
+                <option value="En proceso">En proceso</option>
+                <option value="Completado">Completado</option>
+                <option value="Bloqueado">Bloqueado</option>
+              </select>
+            )}
+          />
+        ) : (
+          <Badge label={task.status} color={statusColor(task.status)} />
+        )}
       </td>
 
       <td className="w-[12%] min-w-[165px] whitespace-nowrap px-4 py-3 align-middle text-sm text-black">
@@ -375,7 +397,9 @@ export default function PresaleRow({
           <button
             type="button"
             onClick={handleDelete}
-            className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-100"
+            disabled={!canDeleteActivity}
+            title={canDeleteActivity ? "" : "No tienes permiso para eliminar actividades"}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${canDeleteActivity ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
             Eliminar
           </button>
