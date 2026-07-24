@@ -1,3 +1,5 @@
+"use client";
+
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import InteractiveDashboard from "@/components/dashboard/InteractiveDashboard";
@@ -10,7 +12,7 @@ export default function Home() {
 
       <section className="flex-1 p-10 overflow-y-auto">
 
-        <Header />
+        <Header variant="profile" />
 
         <InteractiveDashboard />
 

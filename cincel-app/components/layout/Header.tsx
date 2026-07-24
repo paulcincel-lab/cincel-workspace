@@ -1,39 +1,492 @@
 "use client";
 
-import { useMemo } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import Avatar from "@/components/ui/Avatar";
+import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
+import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { isAdministratorRole } from "@/lib/data/roles";
 
-export default function Header() {
-  const todayLabel = useMemo(() => {
-    const now = new Date();
+type HeaderProps = {
+  variant?: "default" | "profile";
+};
 
-    const formatted = new Intl.DateTimeFormat("es-MX", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-    }).format(now);
+type HeaderLinks = {
+  instagram: string;
+  website: string;
+  email: string;
+};
 
-    return formatted
-      .split(" ")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
+const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
+const DASHBOARD_PROFILE_PHOTO_STORAGE_KEY = "cincel.dashboard.profile.photo.v1";
+const HEADER_LINKS_STORAGE_KEY = "cincel.header.links.v1";
+const FALLBACK_USER_ID = 2;
+const ADMIN_USER_IDS = new Set([2]);
+const DEFAULT_HEADER_LINKS: HeaderLinks = {
+  instagram: "https://www.instagram.com/cincel.mx/",
+  website: "https://www.cincel.mx/",
+  email: "https://mail.google.com",
+};
+const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
+
+function DevelopmentMenu() {
+  if (!IS_DEVELOPMENT) {
+    return null;
+  }
+
+  return (
+    <details className="relative">
+      <summary className="list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-slate-300 hover:text-slate-800">
+        Desarrollo
+      </summary>
+
+      <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+        <p className="px-2 pb-1 text-[10px] uppercase tracking-wide text-slate-500">Accesos temporales</p>
+
+        <nav className="space-y-1">
+          <Link
+            href="/login"
+            className="block rounded-lg px-2 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Login
+          </Link>
+          <Link
+            href="/change-password"
+            className="block rounded-lg px-2 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Cambio obligatorio de contrasena
+          </Link>
+          <Link
+            href="/profile"
+            className="block rounded-lg px-2 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Perfil
+          </Link>
+        </nav>
+      </div>
+    </details>
+  );
+}
+
+function HeaderActions({ links }: { links: HeaderLinks }) {
+  const actionClassName = "inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700";
+  const iconClassName = "h-[18px] w-[18px]";
+
+  return (
+    <div className="flex items-center gap-3">
+      <a
+        href={links.instagram}
+        target="_blank"
+        rel="noreferrer"
+        className={actionClassName}
+        aria-label="Abrir Instagram"
+        title="Instagram"
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={iconClassName}>
+          <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="2" />
+          <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
+          <circle cx="17.2" cy="6.8" r="1.2" fill="currentColor" />
+        </svg>
+      </a>
+
+      <a
+        href={links.website}
+        target="_blank"
+        rel="noreferrer"
+        className={actionClassName}
+        aria-label="Abrir pagina web"
+        title="Pagina web"
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={iconClassName}>
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+          <path d="M3 12h18" stroke="currentColor" strokeWidth="2" />
+          <path d="M12 3c2.5 2.7 4 5.8 4 9s-1.5 6.3-4 9" stroke="currentColor" strokeWidth="2" />
+          <path d="M12 3c-2.5 2.7-4 5.8-4 9s1.5 6.3 4 9" stroke="currentColor" strokeWidth="2" />
+        </svg>
+      </a>
+
+      <a
+        href={links.email.startsWith("http") ? links.email : `mailto:${links.email}`}
+        target="_blank"
+        rel="noreferrer"
+        className={actionClassName}
+        aria-label="Enviar correo"
+        title="Correo"
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={iconClassName}>
+          <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="2" />
+          <path d="M4 7l8 6 8-6" stroke="currentColor" strokeWidth="2" />
+        </svg>
+      </a>
+    </div>
+  );
+}
+
+function formatTodayLabel(): string {
+  return new Intl.DateTimeFormat("es-MX", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "America/Mexico_City",
+  }).format(new Date())
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function normalizeTeamMember(raw: TeamMember): TeamMember {
+  return {
+    ...raw,
+    role: raw.role ?? "",
+    area: raw.area ?? "",
+  };
+}
+
+function loadTeamMembers(): TeamMember[] {
+  if (typeof window === "undefined") {
+    return teamMembers;
+  }
+
+  const stored = localStorage.getItem(TEAM_MEMBERS_STORAGE_KEY);
+  if (!stored) {
+    return teamMembers;
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as TeamMember[];
+    if (!Array.isArray(parsed)) {
+      return teamMembers;
+    }
+
+    return parsed.map((member) => normalizeTeamMember(member));
+  } catch {
+    return teamMembers;
+  }
+}
+
+function loadHeaderLinks(): HeaderLinks {
+  if (typeof window === "undefined") {
+    return DEFAULT_HEADER_LINKS;
+  }
+
+  const stored = localStorage.getItem(HEADER_LINKS_STORAGE_KEY);
+  if (!stored) {
+    return DEFAULT_HEADER_LINKS;
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as Partial<HeaderLinks>;
+    return {
+      instagram: typeof parsed.instagram === "string" && parsed.instagram.trim() ? parsed.instagram.trim() : DEFAULT_HEADER_LINKS.instagram,
+      website: typeof parsed.website === "string" && parsed.website.trim() ? parsed.website.trim() : DEFAULT_HEADER_LINKS.website,
+      email: typeof parsed.email === "string" && parsed.email.trim() ? parsed.email.trim() : DEFAULT_HEADER_LINKS.email,
+    };
+  } catch {
+    return DEFAULT_HEADER_LINKS;
+  }
+}
+
+export default function Header({ variant = "default" }: HeaderProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isMounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  );
+  const todayLabel = useMemo(() => (isMounted ? formatTodayLabel() : ""), [isMounted]);
+  const [members, setMembers] = useState<TeamMember[]>(() => loadTeamMembers());
+  const [profileImage, setProfileImage] = useState<string>("");
+  const [headerLinks, setHeaderLinks] = useState<HeaderLinks>(() => loadHeaderLinks());
+  const [isLinksEditorOpen, setIsLinksEditorOpen] = useState(false);
+  const [linksDraft, setLinksDraft] = useState<HeaderLinks>(() => loadHeaderLinks());
+  const [authenticatedMemberId, setAuthenticatedMemberId] = useState<number | null>(null);
+  const profileImageInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const refreshMembers = () => {
+      const authUser = getCurrentAuthenticatedUser();
+      setMembers(loadTeamMembers());
+      setProfileImage(localStorage.getItem(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY) ?? "");
+      setHeaderLinks(loadHeaderLinks());
+      setAuthenticatedMemberId(authUser?.member.id ?? null);
+    };
+
+    refreshMembers();
+
+    window.addEventListener("focus", refreshMembers);
+    window.addEventListener("storage", refreshMembers);
+
+    return () => {
+      window.removeEventListener("focus", refreshMembers);
+      window.removeEventListener("storage", refreshMembers);
+    };
   }, []);
+
+  const currentMember = useMemo(() => {
+    if (!isMounted) {
+      return null;
+    }
+
+    const byAuth = authenticatedMemberId
+      ? members.find((member) => member.id === authenticatedMemberId && member.active)
+      : null;
+
+    if (byAuth) {
+      return byAuth;
+    }
+
+    const byId = members.find((member) => member.id === FALLBACK_USER_ID && member.active);
+    if (byId) {
+      return byId;
+    }
+
+    return members.find((member) => member.active) ?? teamMembers[0];
+  }, [authenticatedMemberId, isMounted, members]);
+
+  const profileSubtitle = useMemo(() => {
+    if (!currentMember) {
+      return "";
+    }
+
+    const role = currentMember.role?.trim();
+    const area = currentMember.area?.trim();
+
+    if (role && area) {
+      return `${role} • ${area}`;
+    }
+
+    return role || area || "";
+  }, [currentMember]);
+
+  const currentInitial = currentMember?.name?.trim().charAt(0).toUpperCase() || "P";
+  const currentName = currentMember?.name?.trim() || "Usuario";
+  const isAdminProfile = Boolean(
+    currentMember && (ADMIN_USER_IDS.has(currentMember.id) || isAdministratorRole(currentMember.role))
+  );
+  const hasAuthenticatedSession = authenticatedMemberId !== null;
+  const canEditLinksInThisPage = isAdminProfile && pathname.startsWith("/configuracion");
+
+  const handleProfileImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) {
+        return;
+      }
+
+      setProfileImage(result);
+      localStorage.setItem(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY, result);
+    };
+
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const handleEditLinksClick = () => {
+    setLinksDraft(headerLinks);
+    setIsLinksEditorOpen((previous) => !previous);
+  };
+
+  const handleDraftLinkChange = (key: keyof HeaderLinks, value: string) => {
+    setLinksDraft((previous) => ({ ...previous, [key]: value }));
+  };
+
+  const handleSaveLinks = () => {
+    const nextLinks: HeaderLinks = {
+      instagram: linksDraft.instagram.trim() || DEFAULT_HEADER_LINKS.instagram,
+      website: linksDraft.website.trim() || DEFAULT_HEADER_LINKS.website,
+      email: linksDraft.email.trim() || DEFAULT_HEADER_LINKS.email,
+    };
+
+    setHeaderLinks(nextLinks);
+    setLinksDraft(nextLinks);
+    localStorage.setItem(HEADER_LINKS_STORAGE_KEY, JSON.stringify(nextLinks));
+    setIsLinksEditorOpen(false);
+  };
+
+  const handleLogout = () => {
+    logout();
+    setAuthenticatedMemberId(null);
+    setMembers(loadTeamMembers());
+    router.push("/login");
+  };
+
+  if (variant === "profile") {
+    return (
+      <header className="mb-10 px-1 py-2 sm:px-2 sm:py-3">
+
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="group flex flex-col items-center">
+              <input
+                ref={profileImageInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleProfileImageChange}
+                className="sr-only"
+              />
+              <div className="h-25 w-25 overflow-hidden rounded-full border-2 border-slate-200 bg-slate-200 sm:h-30 sm:w-30">
+                {profileImage ? (
+                  <img
+                    src={profileImage}
+                    alt={`Foto de ${currentMember?.name ?? "usuario"}`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-blue-600 text-3xl font-semibold text-white">
+                    {currentInitial}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => profileImageInputRef.current?.click()}
+                className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500 transition-colors hover:text-slate-700"
+              >
+                Cambiar
+              </button>
+            </div>
+
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">
+                {currentMember?.name ?? "Nombre del Usuario"}
+              </h1>
+              <p className="mt-1 text-base text-slate-600 sm:text-xl">
+                {profileSubtitle || "Puesto • Area"}
+              </p>
+            </div>
+          </div>
+
+          <div className="self-end sm:self-auto">
+            <div className="flex items-center gap-2">
+              <DevelopmentMenu />
+              <HeaderActions links={headerLinks} />
+              {hasAuthenticatedSession ? (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+                >
+                  Cerrar sesión
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+      </header>
+    );
+  }
 
   return (
     <header className="mb-10">
 
-      <div className="flex items-center gap-4">
-        <Avatar name="Paul" showName={false} />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-4">
+          <Avatar name={currentName} showName={false} />
 
-        <h1 className="text-xl font-bold text-slate-900">
-          Bienvenido, Paul
-        </h1>
+          <h1 className="text-xl font-bold text-slate-900">
+            {`Bienvenido, ${currentName}`}
+          </h1>
+        </div>
+
+        <div className="self-end sm:self-auto">
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
+              <DevelopmentMenu />
+              <HeaderActions links={headerLinks} />
+              {hasAuthenticatedSession ? (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+                >
+                  Cerrar sesión
+                </button>
+              ) : null}
+            </div>
+            {canEditLinksInThisPage ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleEditLinksClick}
+                  className="text-[10px] font-medium uppercase tracking-wide text-slate-500 transition-colors hover:text-slate-700"
+                >
+                  Editar links
+                </button>
+
+                {isLinksEditorOpen ? (
+                  <div className="w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="space-y-2">
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-medium text-slate-600">Instagram</span>
+                        <input
+                          value={linksDraft.instagram}
+                          onChange={(event) => handleDraftLinkChange("instagram", event.target.value)}
+                          className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-medium text-slate-600">Pagina web</span>
+                        <input
+                          value={linksDraft.website}
+                          onChange={(event) => handleDraftLinkChange("website", event.target.value)}
+                          className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-medium text-slate-600">E-mail (URL o correo)</span>
+                        <input
+                          value={linksDraft.email}
+                          onChange={(event) => handleDraftLinkChange("email", event.target.value)}
+                          className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="mt-3 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLinksEditorOpen(false);
+                          setLinksDraft(headerLinks);
+                        }}
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveLinks}
+                        className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
+                      >
+                        Guardar
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </div>
       </div>
 
-      <p className="mt-2 text-slate-800">
-        {todayLabel}
-      </p>
+      <p className="mt-2 text-slate-800" suppressHydrationWarning>{todayLabel || "Cargando fecha..."}</p>
 
     </header>
   );

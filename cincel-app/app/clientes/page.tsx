@@ -763,40 +763,6 @@ export default function ClientesPage() {
     closeCreateClient();
   };
 
-  const updateClientKindInline = (clientId: number, kind: ClientKind) => {
-    const isManual = manualClients.some((client) => client.id === clientId);
-
-    if (isManual) {
-      const updatedManual = manualClients.map((client) => (
-        client.id === clientId
-          ? {
-              ...client,
-              kind,
-            }
-          : client
-      ));
-
-      setManualClients(updatedManual);
-      updateManualClientsStorage(updatedManual);
-      return;
-    }
-
-    const updatedProjects = projects.map((project) => (
-      project.client.id === clientId
-        ? {
-            ...project,
-            client: {
-              ...project.client,
-              kind,
-            },
-          }
-        : project
-    ));
-
-    setProjects(updatedProjects);
-    updateProjectsStorage(updatedProjects);
-  };
-
   const updateClientActiveInline = (clientId: number, active: boolean) => {
     const isManual = manualClients.some((client) => client.id === clientId);
 

@@ -158,7 +158,7 @@ export default function TareasPage() {
   const updateTaskInline = (
     workflow: WorkflowType,
     taskId: number,
-    changes: Partial<Pick<Task, "status" | "manager" | "commitmentDate">>
+    changes: Partial<Pick<Task, "status" | "manager" | "commitmentDate" | "reviewDate" | "deliveryDate">>
   ) => {
     if (typeof window === "undefined") {
       return;
@@ -179,6 +179,10 @@ export default function TareasPage() {
 
     localStorage.setItem(getTasksStorageKey(workflow), JSON.stringify(updatedTasks));
     setTasksVersion((value) => value + 1);
+  };
+
+  const getDeliveryDate = (task: Task): string => {
+    return task.deliveryDate || task.commitmentDate || "";
   };
 
   const unifiedStageData = [
@@ -219,16 +223,19 @@ export default function TareasPage() {
     return {
       Presale: getProjects(
         projectsData
+          .filter((project) => project.active)
           .filter((project) => workflowInProjectStage(project.stage, "Presale"))
           .map((project) => project.name)
       ),
       Diseño: getProjects(
         projectsData
+          .filter((project) => project.active)
           .filter((project) => workflowInProjectStage(project.stage, "Diseño"))
           .map((project) => project.name)
       ),
       Construcción: getProjects(
         projectsData
+          .filter((project) => project.active)
           .filter((project) => workflowInProjectStage(project.stage, "Construcción"))
           .map((project) => project.name)
       ),
@@ -236,14 +243,19 @@ export default function TareasPage() {
   }, [projectsData]);
 
   const projectOptions = useMemo(() => {
-    const allProjects = [
-      ...unifiedStageData.flatMap((stage) => stage.tasks.map((task) => task.project)),
-      ...stageProjectsFromData.Presale,
-      ...stageProjectsFromData.Diseño,
-      ...stageProjectsFromData.Construcción,
-    ];
-    return Array.from(new Set(allProjects)).sort((a, b) => a.localeCompare(b));
-  }, [unifiedStageData, stageProjectsFromData]);
+    const activeProjects = projectsData
+      .filter((project) => project.active)
+      .map((project) => project.name)
+      .filter(Boolean);
+
+    const options = Array.from(new Set(activeProjects)).sort((a, b) => a.localeCompare(b));
+
+    if (projectFromQuery && !options.includes(projectFromQuery)) {
+      return [projectFromQuery, ...options];
+    }
+
+    return options;
+  }, [projectFromQuery, projectsData]);
 
   const updateProjectFromMenu = (nextProject: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -287,8 +299,10 @@ export default function TareasPage() {
           return sortDirection === "asc" ? stageDiff : -stageDiff;
         }
 
-        const aDate = a.task.commitmentDate ? new Date(a.task.commitmentDate).getTime() : Number.MAX_SAFE_INTEGER;
-        const bDate = b.task.commitmentDate ? new Date(b.task.commitmentDate).getTime() : Number.MAX_SAFE_INTEGER;
+        const aDeliveryDate = getDeliveryDate(a.task);
+        const bDeliveryDate = getDeliveryDate(b.task);
+        const aDate = aDeliveryDate ? new Date(aDeliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
+        const bDate = bDeliveryDate ? new Date(bDeliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
         const dateDiff = aDate - bDate;
         return sortDirection === "asc" ? dateDiff : -dateDiff;
       }
@@ -299,14 +313,18 @@ export default function TareasPage() {
           return sortDirection === "asc" ? statusDiff : -statusDiff;
         }
 
-        const aDate = a.task.commitmentDate ? new Date(a.task.commitmentDate).getTime() : Number.MAX_SAFE_INTEGER;
-        const bDate = b.task.commitmentDate ? new Date(b.task.commitmentDate).getTime() : Number.MAX_SAFE_INTEGER;
+        const aDeliveryDate = getDeliveryDate(a.task);
+        const bDeliveryDate = getDeliveryDate(b.task);
+        const aDate = aDeliveryDate ? new Date(aDeliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
+        const bDate = bDeliveryDate ? new Date(bDeliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
         const dateDiff = aDate - bDate;
         return sortDirection === "asc" ? dateDiff : -dateDiff;
       }
 
-      const aDate = a.task.commitmentDate ? new Date(a.task.commitmentDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const bDate = b.task.commitmentDate ? new Date(b.task.commitmentDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const aDeliveryDate = getDeliveryDate(a.task);
+      const bDeliveryDate = getDeliveryDate(b.task);
+      const aDate = aDeliveryDate ? new Date(aDeliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const bDate = bDeliveryDate ? new Date(bDeliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
       const dateDiff = aDate - bDate;
 
       if (dateDiff !== 0) {
@@ -345,6 +363,11 @@ export default function TareasPage() {
     },
   ];
 
+  const selectedProject = projectFromQuery ? projectsData.find((p) => p.name === projectFromQuery) : null;
+  const driveInternalUrl = selectedProject?.drive?.administrativo || "";
+  const driveClientUrl = selectedProject?.drive?.reportes || "";
+  const docsSetupHref = selectedProject ? `/proyectos/${selectedProject.id}/ficha?edit=docs` : "/proyectos";
+
   return (
     <main className="flex min-h-screen bg-slate-100">
 
@@ -364,28 +387,95 @@ export default function TareasPage() {
             Selecciona una etapa y revisa los proyectos activos.
           </p>
 
-          <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-800">
-            <span>Proyecto:</span>
-            <select
-              value={projectFromQuery ?? ""}
-              onChange={(event) => updateProjectFromMenu(event.target.value)}
-              className="rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-medium text-slate-800 focus:border-slate-200 focus:bg-white"
-              aria-label="Cambiar proyecto seleccionado"
-            >
-              <option value="">Todos los proyectos</option>
-              {projectOptions.map((project) => (
-                <option key={`selected-project-${project}`} value={project}>
-                  {project}
-                </option>
-              ))}
-            </select>
+          <div className="mt-6 rounded-2xl border-2 border-blue-200 bg-gradient-to-r from-blue-50 via-white to-cyan-50 p-5 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">Filtro principal</p>
+                <h2 className="mt-1 text-xl font-bold text-slate-900">Proyecto</h2>
+                <p className="mt-1 text-sm text-slate-700">Elige un proyecto para enfocar toda la ventana de actividades.</p>
+              </div>
+
+              <div className="w-full lg:max-w-md">
+                <label htmlFor="project-filter" className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">
+                  Proyectos
+                </label>
+                <select
+                  id="project-filter"
+                  value={projectFromQuery ?? ""}
+                  onChange={(event) => updateProjectFromMenu(event.target.value)}
+                  className="w-full rounded-xl border border-blue-300 bg-white px-4 py-3 text-base font-semibold text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                  aria-label="Cambiar proyecto seleccionado"
+                >
+                  <option value="">Todos los proyectos</option>
+                  {projectOptions.map((project) => (
+                    <option key={`selected-project-${project}`} value={project}>
+                      {project}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {projectFromQuery ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+                  Proyecto activo: {projectFromQuery}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateProjectFromMenu("")}
+                  className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Ver todos
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {projectFromQuery ? (
             <div className="mt-8 space-y-4">
-              <h2 className="text-xl font-semibold text-slate-900">
-                Vista unificada en una sola ventana
-              </h2>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Vista unificada en una sola ventana
+                </h2>
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/70 px-2 py-2">
+                  {driveInternalUrl ? (
+                    <a
+                      href={driveInternalUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                    >
+                      Docs del proyecto
+                    </a>
+                  ) : (
+                    <Link
+                      href={docsSetupHref}
+                      className="rounded-lg border border-blue-600 bg-white px-4 py-2 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
+                    >
+                      (+) Docs del proyecto
+                    </Link>
+                  )}
+
+                  {driveClientUrl ? (
+                    <a
+                      href={driveClientUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-cyan-600 bg-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700"
+                    >
+                      Docs del cliente
+                    </a>
+                  ) : (
+                    <Link
+                      href={docsSetupHref}
+                      className="rounded-lg border border-cyan-600 bg-white px-4 py-2 text-sm font-semibold text-cyan-700 shadow-sm transition hover:bg-cyan-50"
+                    >
+                      (+) Docs del cliente
+                    </Link>
+                  )}
+                </div>
+              </div>
 
               <div className="grid gap-3 md:grid-cols-4">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -437,7 +527,7 @@ export default function TareasPage() {
               </div>
 
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="min-w-[980px] w-full bg-white">
+                <table className="min-w-[1120px] w-full bg-white">
                   <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-800">
                     <tr>
                       <th className="px-4 py-3">
@@ -453,13 +543,14 @@ export default function TareasPage() {
                       <th className="px-4 py-3">Fase</th>
                       <th className="px-4 py-3">Actividad</th>
                       <th className="px-4 py-3">Responsable</th>
+                      <th className="px-4 py-3">Próxima revisión</th>
                       <th className="px-4 py-3">
                         <button
                           type="button"
                           onClick={() => toggleSort("compromiso")}
                           className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-blue-700"
                         >
-                          Compromiso
+                          Fecha de entrega
                           <span className="text-[11px] normal-case text-slate-800">{getSortLabel("compromiso")}</span>
                         </button>
                       </th>
@@ -479,7 +570,7 @@ export default function TareasPage() {
                   <tbody>
                     {unifiedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-800">
+                        <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-800">
                           No hay actividades registradas para este proyecto.
                         </td>
                       </tr>
@@ -487,7 +578,7 @@ export default function TareasPage() {
                       unifiedRows.map(({ stageTitle, workflow, stageHref, task }) => (
                         <tr key={`${stageTitle}-${task.id}`} className="border-b border-slate-100 text-sm text-slate-800 hover:bg-slate-50">
                           <td className="px-4 py-3">
-                            <span className={`rounded-full border px-2 py-1 text-xs font-medium ${stageBadgeClass(stageTitle)}`}>
+                            <span className={`inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium ${stageBadgeClass(stageTitle)}`}>
                               {stageTitle}
                             </span>
                           </td>
@@ -516,9 +607,33 @@ export default function TareasPage() {
                           </td>
                           <td className="px-4 py-3">
                             <InlineEditableField
-                              value={task.commitmentDate || ""}
+                              value={task.reviewDate || ""}
                               onCommit={(value) =>
                                 updateTaskInline(workflow, task.id, {
+                                  reviewDate: value,
+                                })
+                              }
+                              renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
+                              renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
+                                <input
+                                  autoFocus
+                                  type="date"
+                                  value={value}
+                                  onChange={(event) => onChange(event.target.value)}
+                                  onBlur={onBlur}
+                                  onKeyDown={onKeyDown}
+                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                  aria-label={`Próxima revisión de ${task.description}`}
+                                />
+                              )}
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <InlineEditableField
+                              value={getDeliveryDate(task)}
+                              onCommit={(value) =>
+                                updateTaskInline(workflow, task.id, {
+                                  deliveryDate: value,
                                   commitmentDate: value,
                                 })
                               }
@@ -532,7 +647,7 @@ export default function TareasPage() {
                                   onBlur={onBlur}
                                   onKeyDown={onKeyDown}
                                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                                  aria-label={`Compromiso de ${task.description}`}
+                                  aria-label={`Fecha de entrega de ${task.description}`}
                                 />
                               )}
                             />

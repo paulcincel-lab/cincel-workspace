@@ -34,8 +34,10 @@ export default function NewProjectTemplateModal({
       return;
     }
 
-    setProject(projectOptions[0] ?? "");
-    setSelectedKeys(templateItems.map((item) => itemKey(item)));
+    queueMicrotask(() => {
+      setProject(projectOptions[0] ?? "");
+      setSelectedKeys(templateItems.map((item) => itemKey(item)));
+    });
   }, [open, projectOptions, templateItems]);
 
   const groupedTemplateItems = useMemo(() => {

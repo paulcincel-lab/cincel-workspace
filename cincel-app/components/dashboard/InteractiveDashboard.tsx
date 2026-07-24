@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { projects as baseProjects } from "@/lib/data/projects";
 import { disenoTasks } from "@/lib/data/diseno";
@@ -11,12 +11,39 @@ import type { Task, TaskStatus, WorkflowType } from "@/lib/types/task";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 
 const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
+const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
 
 type ProjectData = (typeof baseProjects)[number];
 
-type DateRangeFilter = "7d" | "30d" | "90d";
+type DashboardTasksState = {
+  presale: Task[];
+  diseno: Task[];
+  operativas: Task[];
+};
 
-const WEEKDAY_LABELS = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
+type DateRangeFilter = "7d" | "30d" | "90d";
+type CalendarEventType = "Compromiso" | "Proxima revision" | "Fecha de entrega";
+
+const WEEKDAY_LABELS = ["lun.", "mar.", "mie.", "jue.", "vie.", "sab.", "dom."];
+const PROJECT_EVENT_COLORS = ["#0e7490", "#db2777", "#f59e0b", "#2563eb", "#7c3aed", "#dc2626", "#059669"];
+
+function eventTypePrefix(type: CalendarEventType): string {
+  if (type === "Compromiso") return "C";
+  if (type === "Proxima revision") return "R";
+  return "E";
+}
+
+function eventTypeClassName(type: CalendarEventType): string {
+  if (type === "Compromiso") {
+    return "bg-blue-100 text-blue-800";
+  }
+
+  if (type === "Proxima revision") {
+    return "bg-emerald-100 text-emerald-800";
+  }
+
+  return "bg-amber-100 text-amber-800";
+}
 
 function loadPersistedProjects(): ProjectData[] {
   if (typeof window === "undefined") {
@@ -37,8 +64,23 @@ function loadPersistedProjects(): ProjectData[] {
   }
 }
 
-function loadPersistedTasks(workflow: WorkflowType, fallback: Task[]): Task[] {
-  return loadLinkedTasks(workflow, fallback);
+function loadSecondaryCoordinatorMap(): Record<number, string> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const stored = localStorage.getItem(SECONDARY_COORDINATOR_STORAGE_KEY);
+
+  if (!stored) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as Record<number, string>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function toDate(value: string): Date | null {
@@ -61,6 +103,18 @@ function isDateInRange(value: string, from: Date, to: Date): boolean {
   }
 
   return current >= from && current <= to;
+}
+
+function getTaskEffectiveDueDate(task: Task): string {
+  return task.deliveryDate || task.commitmentDate || "";
+}
+
+function hasTaskDateInRange(task: Task, from: Date, to: Date): boolean {
+  return (
+    isDateInRange(task.commitmentDate, from, to) ||
+    isDateInRange(task.reviewDate, from, to) ||
+    isDateInRange(task.deliveryDate || "", from, to)
+  );
 }
 
 function formatStageLabel(workflow: WorkflowType): string {
@@ -99,11 +153,35 @@ function dateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+function getMexicoCityToday(): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "America/Mexico_City",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return new Date();
+  }
+
+  return new Date(`${year}-${month}-${day}T00:00:00`);
+}
+
 export default function InteractiveDashboard() {
   const [projectsData, setProjectsData] = useState<ProjectData[]>(() => loadPersistedProjects());
-  const [tasksVersion, setTasksVersion] = useState(0);
+  const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
+  const [tasksData, setTasksData] = useState<DashboardTasksState>(() => ({
+    presale: loadLinkedTasks("Presale", presaleTasks),
+    diseno: loadLinkedTasks("Diseño", disenoTasks),
+    operativas: loadLinkedTasks("Construcción", operativasTasks),
+  }));
   const [calendarCursor, setCalendarCursor] = useState(() => {
-    const now = new Date();
+    const now = getMexicoCityToday();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
@@ -114,11 +192,34 @@ export default function InteractiveDashboard() {
   const [managerFilter, setManagerFilter] = useState("Todos");
   const [statusFilter, setStatusFilter] = useState<"Todos" | TaskStatus>("Todos");
 
+  const resetFilters = () => {
+    setRangeFilter("30d");
+    setStageFilter("Todas");
+    setProjectFilter("Todos");
+    setManagerFilter("Todos");
+    setStatusFilter("Todos");
+  };
+
+  const today = useMemo(() => getMexicoCityToday(), []);
+  const isMounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  );
+
   useEffect(() => {
     const refreshAll = () => {
       setProjectsData(loadPersistedProjects());
-      setTasksVersion((current) => current + 1);
+      setSecondaryCoordinatorByProject(loadSecondaryCoordinatorMap());
+      setTasksData({
+        presale: loadLinkedTasks("Presale", presaleTasks),
+        diseno: loadLinkedTasks("Diseño", disenoTasks),
+        operativas: loadLinkedTasks("Construcción", operativasTasks),
+      });
     };
+
+    // Ensure Dashboard starts with the latest local changes immediately.
+    refreshAll();
 
     window.addEventListener("focus", refreshAll);
     window.addEventListener("storage", refreshAll);
@@ -129,18 +230,11 @@ export default function InteractiveDashboard() {
     };
   }, []);
 
-  const allTasks = useMemo(() => {
-    const presale = loadPersistedTasks("Presale", presaleTasks);
-    const diseno = loadPersistedTasks("Diseño", disenoTasks);
-    const construccion = loadPersistedTasks("Construcción", operativasTasks);
-
-    return [...presale, ...diseno, ...construccion].filter((task) => !task.archived);
-  }, [tasksVersion]);
-
-  const today = useMemo(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  }, []);
+  const allTasks = [
+    ...tasksData.presale,
+    ...tasksData.diseno,
+    ...tasksData.operativas,
+  ].filter((task) => !task.archived);
 
   const rangeEnd = useMemo(() => {
     const end = new Date(today);
@@ -187,9 +281,7 @@ export default function InteractiveDashboard() {
       const matchesManager = managerFilter === "Todos" || task.manager === managerFilter;
       const matchesStatus = statusFilter === "Todos" || task.status === statusFilter;
 
-      const hasDateInRange =
-        isDateInRange(task.commitmentDate, today, rangeEnd) ||
-        isDateInRange(task.reviewDate, today, rangeEnd);
+      const hasDateInRange = hasTaskDateInRange(task, today, rangeEnd);
 
       return matchesStage && matchesProject && matchesManager && matchesStatus && hasDateInRange;
     });
@@ -199,8 +291,8 @@ export default function InteractiveDashboard() {
     const activeProjects = projectsData.filter((project) => project.active).length;
 
     const overdueTasks = filteredTasks.filter((task) => {
-      const commitment = toDate(task.commitmentDate);
-      return !!commitment && commitment < today && task.status !== "Completado";
+      const dueDate = toDate(getTaskEffectiveDueDate(task));
+      return !!dueDate && dueDate < today && task.status !== "Completado";
     }).length;
 
     const blockedTasks = filteredTasks.filter((task) => task.status === "Bloqueado").length;
@@ -245,8 +337,8 @@ export default function InteractiveDashboard() {
         }
 
         const overdue = projectTasks.filter((task) => {
-          const commitment = toDate(task.commitmentDate);
-          return !!commitment && commitment < today && task.status !== "Completado";
+          const dueDate = toDate(getTaskEffectiveDueDate(task));
+          return !!dueDate && dueDate < today && task.status !== "Completado";
         }).length;
 
         const blocked = projectTasks.filter((task) => task.status === "Bloqueado").length;
@@ -276,7 +368,7 @@ export default function InteractiveDashboard() {
   const agenda = useMemo(() => {
     const nextItems = filteredTasks
       .flatMap((task) => {
-        const entries: Array<{ type: "Compromiso" | "Revisión"; date: string; task: Task }> = [];
+        const entries: Array<{ type: "Compromiso" | "Revisión" | "Entrega"; date: string; task: Task }> = [];
 
         if (task.commitmentDate) {
           entries.push({ type: "Compromiso", date: task.commitmentDate, task });
@@ -284,6 +376,10 @@ export default function InteractiveDashboard() {
 
         if (task.reviewDate) {
           entries.push({ type: "Revisión", date: task.reviewDate, task });
+        }
+
+        if (task.deliveryDate) {
+          entries.push({ type: "Entrega", date: task.deliveryDate, task });
         }
 
         return entries;
@@ -302,8 +398,8 @@ export default function InteractiveDashboard() {
       const inProgress = managerTasks.filter((task) => task.status === "En proceso").length;
       const blocked = managerTasks.filter((task) => task.status === "Bloqueado").length;
       const overdue = managerTasks.filter((task) => {
-        const commitment = toDate(task.commitmentDate);
-        return !!commitment && commitment < today && task.status !== "Completado";
+        const dueDate = toDate(getTaskEffectiveDueDate(task));
+        return !!dueDate && dueDate < today && task.status !== "Completado";
       }).length;
 
       const saturation = Math.min(100, Math.round((inProgress * 20 + blocked * 25 + overdue * 25) / Math.max(total, 1)));
@@ -336,8 +432,8 @@ export default function InteractiveDashboard() {
 
   const alerts = useMemo(() => {
     const overdue = filteredTasks.filter((task) => {
-      const commitment = toDate(task.commitmentDate);
-      return !!commitment && commitment < today && task.status !== "Completado";
+      const dueDate = toDate(getTaskEffectiveDueDate(task));
+      return !!dueDate && dueDate < today && task.status !== "Completado";
     });
 
     const blocked = filteredTasks.filter((task) => task.status === "Bloqueado");
@@ -362,29 +458,6 @@ export default function InteractiveDashboard() {
     ];
   }, [filteredTasks, today]);
 
-  const weeklyTrend = useMemo(() => {
-    const buckets: Array<{ label: string; commitments: number; reviews: number }> = [];
-
-    for (let index = 0; index < 6; index += 1) {
-      const start = new Date(today);
-      start.setDate(today.getDate() + index * 7);
-
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-
-      const commitments = filteredTasks.filter((task) => isDateInRange(task.commitmentDate, start, end)).length;
-      const reviews = filteredTasks.filter((task) => isDateInRange(task.reviewDate, start, end)).length;
-
-      buckets.push({
-        label: `S${index + 1}`,
-        commitments,
-        reviews,
-      });
-    }
-
-    return buckets;
-  }, [filteredTasks, today]);
-
   const statusDistribution = useMemo(() => {
     const counts: Record<TaskStatus, number> = {
       Pendiente: 0,
@@ -398,12 +471,153 @@ export default function InteractiveDashboard() {
     });
 
     return [
-      { status: "Pendiente", count: counts.Pendiente, tone: "bg-amber-500" },
-      { status: "En proceso", count: counts["En proceso"], tone: "bg-blue-500" },
-      { status: "Completado", count: counts.Completado, tone: "bg-emerald-500" },
-      { status: "Bloqueado", count: counts.Bloqueado, tone: "bg-rose-500" },
+      { status: "Pendiente", count: counts.Pendiente, tone: "bg-amber-500", color: "#f59e0b" },
+      { status: "En proceso", count: counts["En proceso"], tone: "bg-orange-500", color: "#f97316" },
+      { status: "Completado", count: counts.Completado, tone: "bg-cyan-500", color: "#06b6d4" },
+      { status: "Bloqueado", count: counts.Bloqueado, tone: "bg-rose-500", color: "#ef4444" },
     ];
   }, [filteredTasks]);
+
+  const statusTotal = useMemo(() => {
+    return statusDistribution.reduce((acc, row) => acc + row.count, 0);
+  }, [statusDistribution]);
+
+  const statusProgress = useMemo(() => {
+    const currentWeekStart = new Date(today);
+    const currentWeekDay = (today.getDay() + 6) % 7;
+    currentWeekStart.setDate(today.getDate() - currentWeekDay);
+
+    const currentWeekEnd = new Date(currentWeekStart);
+    currentWeekEnd.setDate(currentWeekStart.getDate() + 6);
+
+    const previousWeekStart = new Date(currentWeekStart);
+    previousWeekStart.setDate(currentWeekStart.getDate() - 7);
+
+    const previousWeekEnd = new Date(currentWeekStart);
+    previousWeekEnd.setDate(currentWeekStart.getDate() - 1);
+
+    const matchesContextFilters = (task: Task) => {
+      const matchesStage = stageFilter === "Todas" || task.workflow === stageFilter;
+      const matchesProject = projectFilter === "Todos" || task.project === projectFilter;
+      const matchesManager = managerFilter === "Todos" || task.manager === managerFilter;
+
+      return matchesStage && matchesProject && matchesManager;
+    };
+
+    const currentWeekTasks = allTasks.filter((task) => {
+      const hasDateInCurrentWeek = hasTaskDateInRange(task, currentWeekStart, currentWeekEnd);
+
+      return matchesContextFilters(task) && hasDateInCurrentWeek;
+    });
+
+    const previousWeekTasks = allTasks.filter((task) => {
+      const hasDateInPreviousWeek = hasTaskDateInRange(task, previousWeekStart, previousWeekEnd);
+
+      return matchesContextFilters(task) && hasDateInPreviousWeek;
+    });
+
+    const completedCount = currentWeekTasks.filter((task) => task.status === "Completado").length;
+    const completionRate = currentWeekTasks.length > 0 ? Math.round((completedCount / currentWeekTasks.length) * 100) : 0;
+
+    const previousCompleted = previousWeekTasks.filter((task) => task.status === "Completado").length;
+    const previousRate = previousWeekTasks.length > 0 ? Math.round((previousCompleted / previousWeekTasks.length) * 100) : 0;
+    const deltaRate = completionRate - previousRate;
+
+    return {
+      completedCount,
+      totalCount: currentWeekTasks.length,
+      completionRate,
+      deltaRate,
+    };
+  }, [allTasks, managerFilter, projectFilter, stageFilter, today]);
+
+  const projectAssignments = useMemo(() => {
+    const tasksInContext = allTasks.filter((task) => {
+      const matchesStage = stageFilter === "Todas" || task.workflow === stageFilter;
+      const matchesProject = projectFilter === "Todos" || task.project === projectFilter;
+      const matchesManager = managerFilter === "Todos" || task.manager === managerFilter;
+
+      return matchesStage && matchesProject && matchesManager;
+    });
+
+    const activeProjectsInContext = projectsData
+      .filter((project) => project.active)
+      .filter((project) => projectFilter === "Todos" || project.name === projectFilter)
+      .filter((project) => {
+        if (stageFilter === "Todas") {
+          return true;
+        }
+
+        const stageText = project.stage.toLowerCase();
+
+        if (stageFilter === "Diseño") {
+          return stageText.includes("dise") || stageText.includes("taller");
+        }
+
+        if (stageFilter === "Construcción") {
+          return stageText.includes("constru");
+        }
+
+        return stageText.includes("presale");
+      });
+
+    return activeProjectsInContext.map((project) => {
+      const projectTasks = tasksInContext.filter((task) => task.project === project.name);
+
+      const responsables = Array.from(
+        new Set(
+          projectTasks
+            .map((task) => task.manager)
+            .filter((manager) => manager && manager !== "Sin responsable")
+        )
+      );
+
+      const support = Array.from(
+        new Set(
+          projectTasks.flatMap((task) =>
+            (task.support || []).filter((member) => member && member !== "Sin responsable")
+          )
+        )
+      );
+
+      return {
+        id: project.id,
+        project: project.name,
+        projectLeader: project.manager || "Sin líder",
+        constructionLeader: secondaryCoordinatorByProject[project.id] || "Sin líder",
+        responsables: responsables.length > 0 ? responsables.join(", ") : "Sin responsable",
+        support: support.length > 0 ? support.join(", ") : "Sin equipo",
+      };
+    });
+  }, [allTasks, managerFilter, projectFilter, projectsData, secondaryCoordinatorByProject, stageFilter]);
+
+  const statusPieGradient = useMemo(() => {
+    if (statusTotal === 0) {
+      return "conic-gradient(#e2e8f0 0deg 360deg)";
+    }
+
+    let cursor = 0;
+    const gapDeg = 2;
+
+    const segments = statusDistribution.flatMap((row) => {
+      if (row.count === 0) {
+        return [];
+      }
+
+      const sweep = (row.count / statusTotal) * 360;
+      const start = cursor;
+      const colorEnd = start + Math.max(0, sweep - gapDeg);
+      const gapEnd = start + sweep;
+      cursor = gapEnd;
+
+      return [
+        `${row.color} ${start}deg ${colorEnd}deg`,
+        `#f8fafc ${colorEnd}deg ${gapEnd}deg`,
+      ];
+    });
+
+    return `conic-gradient(${segments.join(", ")})`;
+  }, [statusDistribution, statusTotal]);
 
   const monthlyCalendar = useMemo(() => {
     const monthStart = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
@@ -413,53 +627,88 @@ export default function InteractiveDashboard() {
     const daysInMonth = monthEnd.getDate();
     const totalCells = Math.ceil((leadingEmpty + daysInMonth) / 7) * 7;
 
-    const eventsByDate = new Map<string, { commitments: number; reviews: number }>();
+    const projectColorMap = new Map<string, string>();
+    let colorCursor = 0;
+
+    const resolveProjectColor = (projectName: string) => {
+      const existing = projectColorMap.get(projectName);
+      if (existing) {
+        return existing;
+      }
+
+      const next = PROJECT_EVENT_COLORS[colorCursor % PROJECT_EVENT_COLORS.length];
+      projectColorMap.set(projectName, next);
+      colorCursor += 1;
+      return next;
+    };
+
+    const eventsByDate = new Map<string, Array<{
+      id: string;
+      type: CalendarEventType;
+      task: Task;
+      href: string;
+      projectColor: string;
+      date: string;
+    }>>();
 
     filteredTasks.forEach((task) => {
-      if (task.commitmentDate) {
-        const current = eventsByDate.get(task.commitmentDate) ?? { commitments: 0, reviews: 0 };
-        current.commitments += 1;
-        eventsByDate.set(task.commitmentDate, current);
-      }
+      const href = `${workflowHref(task.workflow)}?project=${encodeURIComponent(task.project)}`;
+      const projectColor = resolveProjectColor(task.project);
 
-      if (task.reviewDate) {
-        const current = eventsByDate.get(task.reviewDate) ?? { commitments: 0, reviews: 0 };
-        current.reviews += 1;
-        eventsByDate.set(task.reviewDate, current);
-      }
+      const registerEvent = (date: string, type: CalendarEventType, idPrefix: string) => {
+        if (!date) {
+          return;
+        }
+
+        const list = eventsByDate.get(date) ?? [];
+        list.push({
+          id: `${idPrefix}-${task.id}-${date}`,
+          type,
+          task,
+          href,
+          projectColor,
+          date,
+        });
+        eventsByDate.set(date, list);
+      };
+
+      registerEvent(task.commitmentDate, "Compromiso", "c");
+      registerEvent(task.reviewDate, "Proxima revision", "r");
+      registerEvent(task.deliveryDate || "", "Fecha de entrega", "e");
     });
 
+    const gridStart = new Date(monthStart);
+    gridStart.setDate(monthStart.getDate() - leadingEmpty);
+
     const cells = Array.from({ length: totalCells }).map((_, index) => {
-      const dayNumber = index - leadingEmpty + 1;
+      const currentDate = new Date(gridStart);
+      currentDate.setDate(gridStart.getDate() + index);
 
-      if (dayNumber < 1 || dayNumber > daysInMonth) {
-        return {
-          key: `empty-${index}`,
-          isCurrentMonth: false,
-          isToday: false,
-          dayNumber: 0,
-          commitments: 0,
-          reviews: 0,
-        };
-      }
-
-      const currentDate = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), dayNumber);
       const key = dateKey(currentDate);
-      const eventCount = eventsByDate.get(key) ?? { commitments: 0, reviews: 0 };
+      const dayEvents = (eventsByDate.get(key) ?? []).sort((a, b) => {
+        const projectDiff = a.task.project.localeCompare(b.task.project);
+        if (projectDiff !== 0) {
+          return projectDiff;
+        }
+
+        return a.task.description.localeCompare(b.task.description);
+      });
 
       return {
         key,
-        isCurrentMonth: true,
+        isCurrentMonth: currentDate.getMonth() === monthStart.getMonth(),
         isToday: key === dateKey(today),
-        dayNumber,
-        commitments: eventCount.commitments,
-        reviews: eventCount.reviews,
+        dayNumber: currentDate.getDate(),
+        events: dayEvents,
       };
     });
+
+    const legend = Array.from(projectColorMap.entries()).map(([project, color]) => ({ project, color }));
 
     return {
       monthLabel: monthStart.toLocaleDateString("es-MX", { month: "long", year: "numeric" }),
       cells,
+      legend,
     };
   }, [calendarCursor, filteredTasks, today]);
 
@@ -477,22 +726,9 @@ export default function InteractiveDashboard() {
   const activeCalendarDateKey = selectedCalendarDate ?? defaultCalendarDateKey;
 
   const selectedDayEvents = useMemo(() => {
-    return filteredTasks
-      .flatMap((task) => {
-        const entries: Array<{ id: string; type: "Compromiso" | "Revisión"; task: Task; href: string }> = [];
-
-        if (task.commitmentDate === activeCalendarDateKey) {
-          entries.push({ id: `c-${task.id}`, type: "Compromiso", task, href: `${workflowHref(task.workflow)}?project=${encodeURIComponent(task.project)}` });
-        }
-
-        if (task.reviewDate === activeCalendarDateKey) {
-          entries.push({ id: `r-${task.id}`, type: "Revisión", task, href: `${workflowHref(task.workflow)}?project=${encodeURIComponent(task.project)}` });
-        }
-
-        return entries;
-      })
-      .sort((a, b) => a.task.project.localeCompare(b.task.project));
-  }, [activeCalendarDateKey, filteredTasks]);
+    const selectedCell = monthlyCalendar.cells.find((cell) => cell.key === activeCalendarDateKey);
+    return selectedCell?.events ?? [];
+  }, [activeCalendarDateKey, monthlyCalendar.cells]);
 
   const selectedDayLabel = useMemo(() => {
     const date = toDate(activeCalendarDateKey);
@@ -509,32 +745,48 @@ export default function InteractiveDashboard() {
     });
   }, [activeCalendarDateKey]);
 
+  if (!isMounted) {
+    return (
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="h-7 w-64 rounded bg-slate-200" />
+          <div className="mt-3 h-4 w-96 max-w-full rounded bg-slate-100" />
+        </section>
+        <section className="grid gap-6 xl:grid-cols-3">
+          <div className="h-72 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" />
+          <div className="h-72 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" />
+          <div className="h-72 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" />
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Dashboard Ejecutivo</h1>
+            <h1 className="whitespace-nowrap text-3xl font-bold text-slate-900">Dashboard Ejecutivo</h1>
             <p className="mt-2 text-slate-700">Vista unificada de riesgo, agenda y carga operativa.</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-3 lg:max-w-[1040px] xl:grid-cols-6">
             <select
               value={rangeFilter}
               onChange={(event) => setRangeFilter(event.target.value as DateRangeFilter)}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
             >
-              <option value="7d">Proximos 7 dias</option>
-              <option value="30d">Proximos 30 dias</option>
-              <option value="90d">Proximos 90 dias</option>
+              <option value="7d">Prox. 7 dias</option>
+              <option value="30d">Prox. 30 dias</option>
+              <option value="90d">Prox. 90 dias</option>
             </select>
 
             <select
               value={stageFilter}
               onChange={(event) => setStageFilter(event.target.value as "Todas" | WorkflowType)}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
             >
-              <option value="Todas">Todas las etapas</option>
+              <option value="Todas">Todas etapas</option>
               <option value="Presale">Presale</option>
               <option value="Diseño">Taller de Diseño</option>
               <option value="Construcción">Construccion</option>
@@ -543,9 +795,9 @@ export default function InteractiveDashboard() {
             <select
               value={projectFilter}
               onChange={(event) => setProjectFilter(event.target.value)}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
             >
-              <option value="Todos">Todos los proyectos</option>
+              <option value="Todos">Todos proyectos</option>
               {projectOptions.map((project) => (
                 <option key={project} value={project}>
                   {project}
@@ -556,9 +808,9 @@ export default function InteractiveDashboard() {
             <select
               value={managerFilter}
               onChange={(event) => setManagerFilter(event.target.value)}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
             >
-              <option value="Todos">Todos los responsables</option>
+              <option value="Todos">Todos responsables</option>
               {managerOptions.map((manager) => (
                 <option key={manager} value={manager}>
                   {manager}
@@ -569,14 +821,22 @@ export default function InteractiveDashboard() {
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as "Todos" | TaskStatus)}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
             >
-              <option value="Todos">Todos los estatus</option>
+              <option value="Todos">Todos estatus</option>
               <option value="Pendiente">Pendiente</option>
               <option value="En proceso">En proceso</option>
               <option value="Completado">Completado</option>
               <option value="Bloqueado">Bloqueado</option>
             </select>
+
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="h-11 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Restablecer
+            </button>
           </div>
         </div>
       </section>
@@ -600,64 +860,126 @@ export default function InteractiveDashboard() {
         </article>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Mini grafica semanal</h2>
-          <p className="mt-1 text-sm text-slate-700">Compromisos y revisiones proximas por semana.</p>
-          <div className="mt-4 flex items-end gap-3">
-            {weeklyTrend.map((bucket) => {
-              const total = bucket.commitments + bucket.reviews;
-              const scaled = Math.max(6, total * 10);
+      <section className="grid gap-6 xl:grid-cols-4">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
+          <h2 className="text-lg font-semibold text-slate-900">Asignacion por proyecto</h2>
+          <p className="mt-1 text-sm text-slate-700">Lideres y colaboracion activa por proyecto.</p>
 
-              return (
-                <div key={bucket.label} className="flex w-full flex-col items-center gap-2">
-                  <div className="flex h-28 w-full items-end gap-1">
-                    <div className="w-1/2 rounded-t bg-blue-500" style={{ height: `${Math.max(6, bucket.commitments * 10)}px` }} />
-                    <div className="w-1/2 rounded-t bg-emerald-500" style={{ height: `${Math.max(6, bucket.reviews * 10)}px` }} />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700">{bucket.label}</span>
-                  <span className="text-xs text-slate-700">{scaled > 6 ? total : 0}</span>
-                </div>
-              );
-            })}
+          {projectAssignments.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              No hay proyectos en el contexto de filtros actual.
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[720px] bg-white">
+                <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-700">
+                  <tr>
+                    <th className="px-3 py-2">Proyecto</th>
+                    <th className="px-3 py-2">Lider de proyecto</th>
+                    <th className="px-3 py-2">Lider de construccion</th>
+                    <th className="px-3 py-2">Responsable</th>
+                    <th className="px-3 py-2">Equipo de apoyo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectAssignments.map((row) => (
+                    <tr key={`assign-${row.id}`} className="border-b border-slate-100 text-sm text-slate-800 last:border-b-0">
+                      <td className="px-3 py-2 font-semibold text-slate-900">{row.project}</td>
+                      <td className="px-3 py-2">{row.projectLeader}</td>
+                      <td className="px-3 py-2">{row.constructionLeader}</td>
+                      <td className="px-3 py-2">{row.responsables}</td>
+                      <td className="px-3 py-2">{row.support}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
+          <h2 className="text-lg font-semibold text-slate-900">Progreso semanal</h2>
+          <p className="mt-3 text-3xl font-bold leading-none text-blue-600 md:text-4xl">
+            {statusProgress.completedCount}
+            <span className="ml-2 text-lg font-semibold text-slate-700 md:text-2xl">/ {statusProgress.totalCount} completadas</span>
+          </p>
+          <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">Tareas realizadas esta semana</p>
+
+          <div className="mt-3 h-3 rounded-full bg-blue-100">
+            <div
+              className="h-3 rounded-full bg-blue-600 transition-all"
+              style={{ width: `${statusProgress.completionRate}%` }}
+            />
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <span className={`text-sm font-semibold md:text-base ${statusProgress.deltaRate >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {statusProgress.deltaRate >= 0 ? "+" : ""}
+              {statusProgress.deltaRate}% vs semana anterior
+            </span>
+            <span className="text-xl font-bold text-slate-700 md:text-2xl">{statusProgress.completionRate}%</span>
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Mini grafica de estatus</h2>
-          <p className="mt-1 text-sm text-slate-700">Distribucion actual del backlog filtrado.</p>
-          <div className="mt-4 space-y-3">
-            {statusDistribution.map((row) => {
-              const max = Math.max(...statusDistribution.map((item) => item.count), 1);
-              const width = Math.max(8, Math.round((row.count / max) * 100));
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+          <h2 className="text-lg font-semibold text-slate-900">Estatus de actividades</h2>
+          <p className="mt-1 text-sm text-slate-700">Distribucion del backlog filtrado actual por estatus.</p>
 
-              return (
-                <div key={row.status}>
-                  <div className="mb-1 flex items-center justify-between text-sm text-slate-800">
-                    <span>{row.status}</span>
-                    <span className="font-semibold text-slate-900">{row.count}</span>
+          <div className="mt-5 grid gap-4 md:grid-cols-[minmax(230px,280px)_1fr] md:items-center">
+            <div className="relative mx-auto h-56 w-56 rounded-full bg-slate-100 p-2 shadow-[0_12px_28px_rgba(15,23,42,0.12)] md:h-64 md:w-64">
+              <div
+                className="h-full w-full rounded-full"
+                style={{
+                  background: statusPieGradient,
+                  transform: "rotate(-90deg)",
+                }}
+              />
+              <div className="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full bg-white text-slate-900 shadow-inner ring-1 ring-slate-200 md:h-32 md:w-32">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Total</span>
+                <span className="text-3xl font-bold leading-none">{statusTotal}</span>
+                <span className="mt-1 text-[11px] text-slate-500">actividades</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {statusDistribution.map((row) => {
+                const percentage = statusTotal === 0 ? 0 : Math.round((row.count / statusTotal) * 100);
+
+                return (
+                  <div key={`status-resume-${row.status}`} className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="inline-flex items-center gap-2 font-medium text-slate-800">
+                        <span className={`h-2.5 w-2.5 rounded-full ${row.tone}`} />
+                        {row.status}
+                      </span>
+                      <span className="font-semibold text-slate-900">{row.count} ({percentage}%)</span>
+                    </div>
+                    <div className="mt-2 h-1.5 rounded-full bg-slate-200">
+                      <div className={`h-1.5 rounded-full ${row.tone}`} style={{ width: `${percentage}%` }} />
+                    </div>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-200">
-                    <div className={`h-2 rounded-full ${row.tone}`} style={{ width: `${row.count === 0 ? 0 : width}%` }} />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Calendario operativo</h2>
-            <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+        <article className="rounded-2xl border border-slate-200 bg-white p-0 shadow-sm xl:col-span-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-slate-900">Calendario</h2>
+              <span className="text-sm text-slate-500">⌄</span>
+            </div>
+
+            <div className="flex items-center gap-2 text-sm">
               <button
                 type="button"
                 onClick={() => {
-                  const now = new Date();
+                  const now = getMexicoCityToday();
                   setCalendarCursor(new Date(now.getFullYear(), now.getMonth(), 1));
                   setSelectedCalendarDate(dateKey(now));
                 }}
-                className="rounded px-2 py-1 text-sm font-medium text-slate-800 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-800 hover:bg-slate-50"
                 aria-label="Ir a hoy"
               >
                 Hoy
@@ -668,10 +990,10 @@ export default function InteractiveDashboard() {
                   setCalendarCursor((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1));
                   setSelectedCalendarDate(null);
                 }}
-                className="rounded px-2 py-1 text-sm text-slate-800 hover:bg-slate-100"
+                className="rounded px-2 py-1 text-2xl leading-none text-slate-700 hover:bg-slate-100"
                 aria-label="Mes anterior"
               >
-                ←
+                ‹
               </button>
               <button
                 type="button"
@@ -679,74 +1001,131 @@ export default function InteractiveDashboard() {
                   setCalendarCursor((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1));
                   setSelectedCalendarDate(null);
                 }}
-                className="rounded px-2 py-1 text-sm text-slate-800 hover:bg-slate-100"
+                className="rounded px-2 py-1 text-2xl leading-none text-slate-700 hover:bg-slate-100"
                 aria-label="Mes siguiente"
               >
-                →
+                ›
               </button>
+              <p className="min-w-32 text-center text-base font-semibold capitalize text-slate-800 md:text-lg">{monthlyCalendar.monthLabel}</p>
+              <div className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700">Mes</div>
             </div>
           </div>
-          <p className="mt-1 text-sm capitalize text-slate-700">{monthlyCalendar.monthLabel}</p>
 
-          <div className="mt-4 grid grid-cols-7 gap-1">
-            {WEEKDAY_LABELS.map((label) => (
-              <div key={label} className="rounded bg-slate-100 py-1 text-center text-[11px] font-semibold text-slate-700">
-                {label}
+          <div className="overflow-x-auto">
+            <div className="min-w-[980px]">
+              <div className="grid grid-cols-7 border-b border-slate-200 bg-white text-center text-sm font-semibold text-slate-700 md:text-base">
+                {WEEKDAY_LABELS.map((label) => (
+                  <div key={label} className="border-r border-slate-200 py-2 last:border-r-0">
+                    {label}
+                  </div>
+                ))}
               </div>
-            ))}
-            {monthlyCalendar.cells.map((cell) => (
-              <button
-                key={cell.key}
-                type="button"
-                onClick={() => {
-                  if (!cell.isCurrentMonth) {
-                    return;
-                  }
 
-                  setSelectedCalendarDate(cell.key);
-                }}
-                className={`min-h-14 rounded border p-1 text-left ${cell.isCurrentMonth ? "border-slate-200 bg-white hover:border-blue-300" : "border-transparent bg-slate-50"} ${cell.key === activeCalendarDateKey ? "ring-2 ring-blue-500" : ""}`}
-              >
-                {cell.isCurrentMonth ? (
-                  <>
-                    <div className={`text-xs font-semibold ${cell.isToday ? "text-blue-700" : "text-slate-800"}`}>{cell.dayNumber}</div>
-                    <div className="mt-1 space-y-1">
-                      {cell.commitments > 0 ? (
-                        <div className="rounded bg-blue-100 px-1 text-[10px] font-medium text-blue-800">C {cell.commitments}</div>
-                      ) : null}
-                      {cell.reviews > 0 ? (
-                        <div className="rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-800">R {cell.reviews}</div>
-                      ) : null}
-                      {cell.commitments + cell.reviews > 0 ? (
-                        <div className="rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-800">{cell.commitments + cell.reviews} act.</div>
-                      ) : null}
-                    </div>
-                  </>
-                ) : null}
-              </button>
+              <div className="grid grid-cols-7">
+                {monthlyCalendar.cells.map((cell) => {
+                  const visibleEvents = cell.events.slice(0, 2);
+                  const hiddenCount = Math.max(0, cell.events.length - visibleEvents.length);
+
+                  return (
+                    <button
+                      key={cell.key}
+                      type="button"
+                      onClick={() => setSelectedCalendarDate(cell.key)}
+                      className={`min-h-[96px] border-b border-r border-slate-200 p-1 text-left align-top transition ${cell.isCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-slate-50 text-slate-400"} ${cell.key === activeCalendarDateKey ? "ring-2 ring-inset ring-blue-500" : ""}`}
+                    >
+                      <div className="flex justify-end">
+                        <span className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold ${cell.isToday ? "bg-blue-600 text-white" : "text-slate-700"}`}>
+                          {String(cell.dayNumber).padStart(2, "0")}
+                        </span>
+                      </div>
+
+                      <div className="mt-1 space-y-1">
+                        {visibleEvents.map((entry) => (
+                          <Link
+                            key={entry.id}
+                            href={entry.href}
+                            onClick={(event) => event.stopPropagation()}
+                            className={`block truncate rounded border-l-4 px-2 py-1 text-[11px] font-semibold md:text-xs ${eventTypeClassName(entry.type)}`}
+                            style={{ borderLeftColor: entry.projectColor }}
+                            title={`${eventTypePrefix(entry.type)}. ${entry.task.description} · ${entry.task.project}`}
+                          >
+                            {eventTypePrefix(entry.type)}. {entry.task.description}
+                          </Link>
+                        ))}
+
+                        {hiddenCount > 0 ? (
+                          <p className="px-1 text-xs font-medium text-slate-500">+{hiddenCount} más</p>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-5 border-t border-slate-200 px-4 py-3 text-xs text-slate-700 md:text-sm">
+            {monthlyCalendar.legend.map((item) => (
+              <span key={`legend-${item.project}`} className="inline-flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                {item.project}
+              </span>
             ))}
           </div>
 
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">Actividades del dia</p>
-            <p className="mt-1 text-sm font-semibold capitalize text-slate-900">{selectedDayLabel}</p>
+          <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-2 text-xs text-slate-600">
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-800">C: Compromiso</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">R: Proxima revision</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">E: Fecha de entrega</span>
+            {selectedDayEvents.length > 0 ? (
+              <span className="ml-auto text-slate-700">{selectedDayEvents.length} evento(s) en el dia seleccionado</span>
+            ) : null}
+          </div>
+
+          <div className="border-t border-slate-200 px-4 py-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">Detalle del dia seleccionado</p>
+              <p className="text-sm font-semibold capitalize text-slate-900">{selectedDayLabel}</p>
+            </div>
 
             {selectedDayEvents.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-700">No hay actividades marcadas para este dia.</p>
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                No hay actividades registradas para este dia.
+              </p>
             ) : (
-              <div className="mt-2 space-y-2">
-                {selectedDayEvents.map((entry) => (
-                  <Link key={entry.id} href={entry.href} className="block rounded-lg border border-slate-200 bg-white px-2 py-2 hover:border-blue-300 hover:bg-blue-50/40">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${entry.type === "Compromiso" ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"}`}>
-                        {entry.type}
-                      </span>
-                      <span className="text-xs text-slate-700">{formatStageLabel(entry.task.workflow)}</span>
-                    </div>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{entry.task.project}</p>
-                    <p className="text-sm text-slate-800">{entry.task.description}</p>
-                  </Link>
-                ))}
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full min-w-[820px] bg-white">
+                  <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-700">
+                    <tr>
+                      <th className="px-3 py-2">Tipo</th>
+                      <th className="px-3 py-2">Fecha</th>
+                      <th className="px-3 py-2">Proyecto</th>
+                      <th className="px-3 py-2">Etapa</th>
+                      <th className="px-3 py-2">Responsable</th>
+                      <th className="px-3 py-2">Actividad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedDayEvents.map((entry) => (
+                      <tr key={`detail-${entry.id}`} className="border-b border-slate-100 text-sm text-slate-800 last:border-b-0">
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${eventTypeClassName(entry.type)}`}>
+                            {entry.type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">{entry.date}</td>
+                        <td className="px-3 py-2 font-semibold">
+                          <Link href={entry.href} className="hover:text-blue-700 hover:underline">
+                            {entry.task.project}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2">{formatStageLabel(entry.task.workflow)}</td>
+                        <td className="px-3 py-2">{entry.task.manager || "Sin responsable"}</td>
+                        <td className="px-3 py-2">{entry.task.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -799,7 +1178,7 @@ export default function InteractiveDashboard() {
           <div className="mt-4 space-y-3">
             {agenda.length === 0 ? (
               <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                No hay compromisos o revisiones en el rango seleccionado.
+                No hay compromisos, revisiones o entregas en el rango seleccionado.
               </p>
             ) : (
               agenda.map((item) => (

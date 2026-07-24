@@ -102,22 +102,6 @@ function loadPersistedProjects() {
   }
 }
 
-function workflowInProjectStage(projectStage: string, workflow: WorkflowType): boolean {
-  const stages = projectStage
-    .split("/")
-    .map((value) => value.trim().toLowerCase());
-
-  if (workflow === "Presale") {
-    return stages.some((stage) => stage === "presale");
-  }
-
-  if (workflow === "Diseño") {
-    return stages.some((stage) => stage === "diseño" || stage === "diseno" || stage === "taller de diseño" || stage === "taller de diseno");
-  }
-
-  return stages.some((stage) => stage === "construcción" || stage === "construccion");
-}
-
 function createTaskFromValues(
   values: TaskFormValues,
   id: number,
@@ -632,7 +616,10 @@ export default function PresaleTable({
                     <th className="px-4 py-3 w-[12%]">Responsable</th>
                     <th className="px-4 py-3 w-[12%]">Equipo</th>
                     <th className="px-4 py-3 w-[11%] min-w-[150px] whitespace-nowrap">Estatus</th>
-                    <th className="px-4 py-3 w-[12%] min-w-[165px] whitespace-nowrap">Compromiso</th>
+                    <th className="px-4 py-3 w-[12%] min-w-[165px]">
+                      <span className="block leading-none">Compromiso</span>
+                      <span className="mt-1 block text-[11px] font-medium normal-case text-slate-600">(no mover fecha)</span>
+                    </th>
                     <th className="px-4 py-3 w-[13%] min-w-[180px] whitespace-nowrap">Próxima revisión</th>
                     <th className="px-4 py-3 w-[12%] min-w-[165px] whitespace-nowrap">Fecha entrega</th>
                     <th className="px-4 py-3">Fecha actualizada</th>

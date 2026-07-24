@@ -34,6 +34,7 @@ type NewProjectDraft = {
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const MANUAL_CLIENTS_STORAGE_KEY = "cincel.clients.manual.v1";
+const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
 const STAGE_OPTIONS = ["Presale", "Diseño", "Construcción"];
 const emptyNewProjectDraft: NewProjectDraft = {
   name: "",
@@ -68,12 +69,6 @@ function loadPersistedTasks(workflow: string, fallback: Task[]): Task[] {
   return fallback;
 }
 
-function riskBadgeClasses(risk: RiskLevel): string {
-  if (risk === "Alto") return "bg-amber-100 text-amber-800 border-amber-200";
-  if (risk === "Medio") return "bg-blue-100 text-blue-800 border-blue-200";
-  return "bg-emerald-100 text-emerald-700 border-emerald-200";
-}
-
 function projectStatusSelectClasses(active: boolean): string {
   if (active) {
     return "border-emerald-200 bg-emerald-50 text-emerald-800";
@@ -88,6 +83,12 @@ function projectStatusDotClasses(active: boolean): string {
 
 function parseDate(input: string): Date | null {
   if (!input) return null;
+  // For date-only strings (YYYY-MM-DD), parse as local date to avoid UTC timezone offset issues
+  const dateOnlyMatch = input.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch.map(Number);
+    return new Date(year, month - 1, day, 12, 0, 0);
+  }
   const parsed = new Date(input);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
@@ -305,10 +306,30 @@ function loadActiveTeamNames(): string[] {
   }
 }
 
+function loadSecondaryCoordinatorMap(): Record<number, string> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const stored = localStorage.getItem(SECONDARY_COORDINATOR_STORAGE_KEY);
+
+  if (!stored) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as Record<number, string>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function ProjectsTable() {
   const router = useRouter();
   const [projectsData, setProjectsData] = useState<ProjectItem[]>(() => loadPersistedProjects());
   const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
+  const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
   const [statusViewFilter, setStatusViewFilter] = useState<"Activos" | "Archivados">("Activos");
   const [search, setSearch] = useState("");
   const [coordinatorFilter, setCoordinatorFilter] = useState("Todos");
@@ -319,10 +340,15 @@ export default function ProjectsTable() {
   const [notesByProject, setNotesByProject] = useState<Record<number, ProjectNote[]>>(() => loadProjectNotes());
   const [activeNoteProjectId, setActiveNoteProjectId] = useState<number | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [inlineEditingCell, setInlineEditingCell] = useState<{ projectId: number; field: "design" | "construction" } | null>(null);
 
   useEffect(() => {
     localStorage.setItem("cincel.projects.data.v1", JSON.stringify(projectsData));
   }, [projectsData]);
+
+  useEffect(() => {
+    localStorage.setItem(SECONDARY_COORDINATOR_STORAGE_KEY, JSON.stringify(secondaryCoordinatorByProject));
+  }, [secondaryCoordinatorByProject]);
 
   useEffect(() => {
     const refreshTeam = () => setActiveTeamNames(loadActiveTeamNames());
@@ -429,8 +455,6 @@ export default function ProjectsTable() {
     return !project.active;
   });
 
-  const kpiAtRisk = visibleProjects.filter((project) => project.risk === "Alto").length;
-  const kpiOnTrack = visibleProjects.filter((project) => project.risk === "Bajo").length;
   const kpiActiveProjects = visibleProjects.filter((project) => project.active).length;
 
   const stageStats = visibleProjects.reduce<Record<string, number>>((acc, project) => {
@@ -451,27 +475,43 @@ export default function ProjectsTable() {
 
   const totalStageAssignments = orderedStageStats.reduce((acc, [, count]) => acc + count, 0);
 
-  const coordinatorStats = visibleProjects.reduce<Record<string, number>>((acc, project) => {
-    const coordinator = normalizeName(project.coordinator) || "Sin encargado";
-    acc[coordinator] = (acc[coordinator] ?? 0) + 1;
+  const coordinatorStats = visibleProjects.reduce<Record<string, { design: number; construction: number; total: number }>>((acc, project) => {
+    const designer = normalizeName(project.coordinator) || "Sin encargado";
+    const constructor = normalizeName(secondaryCoordinatorByProject[project.id]) || "Sin encargado";
+
+    if (!acc[designer]) acc[designer] = { design: 0, construction: 0, total: 0 };
+    acc[designer].design += 1;
+    acc[designer].total += 1;
+
+    if (constructor !== designer) {
+      if (!acc[constructor]) acc[constructor] = { design: 0, construction: 0, total: 0 };
+      acc[constructor].construction += 1;
+      acc[constructor].total += 1;
+    } else {
+      acc[designer].construction += 1;
+    }
+
     return acc;
   }, {});
 
   const orderedCoordinatorStats = Object.entries(coordinatorStats)
-    .sort((a, b) => b[1] - a[1]);
+    .sort((a, b) => b[1].total - a[1].total);
 
   const alerts = visibleProjects
     .filter((project) => project.mainAlert !== "Sin alertas criticas")
     .slice(0, 6);
 
   const activeClientOptions = useMemo<ActiveClientOption[]>(() => {
-    const fromProjects = projectsData
+    const fromProjects: ActiveClientOption[] = projectsData
       .filter((project) => project.active)
-      .map((project) => ({
-        id: project.client.id,
-        name: project.client.name,
-        kind: project.client.kind,
-      }));
+      .map((project) => {
+        const kind: "Empresa" | "Particular" = project.client.kind === "Empresa" ? "Empresa" : "Particular";
+        return {
+          id: project.client.id,
+          name: project.client.name,
+          kind,
+        };
+      });
 
     const fromManual = (() => {
       if (typeof window === "undefined") {
@@ -530,39 +570,7 @@ export default function ProjectsTable() {
     return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [projectsData]);
 
-  const manualClientProjectTypes = useMemo<string[]>(() => {
-    if (typeof window === "undefined") {
-      return [];
-    }
-
-    const stored = localStorage.getItem(MANUAL_CLIENTS_STORAGE_KEY);
-
-    if (!stored) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(stored) as Array<{ projectType?: unknown }>;
-
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-
-      return parsed
-        .map((item) => (typeof item.projectType === "string" ? item.projectType.trim() : ""))
-        .filter((type) => Boolean(type));
-    } catch {
-      return [];
-    }
-  }, [projectsData]);
-
-  const projectTypeOptions = Array.from(new Set([
-    ...projectsData.map((project) => project.type),
-    ...manualClientProjectTypes,
-  ])).filter(Boolean);
-  if (projectTypeOptions.length === 0) {
-    projectTypeOptions.push("Habitacional", "Oficina", "Mobiliario", "Comercial", "Mantenimiento", "Otro");
-  }
+  const projectTypeOptions = ["Habitacional", "Oficinas", "Comercial", "Mobiliario", "Mantenimiento", "Otro"];
 
   const activeNoteProject = activeNoteProjectId === null
     ? null
@@ -794,11 +802,13 @@ export default function ProjectsTable() {
             onChange={(event) => setCoordinatorFilter(event.target.value)}
             className="rounded-xl border border-slate-200 px-4 py-2 text-sm"
           >
-            {coordinators.map((coordinator) => (
-              <option key={coordinator} value={coordinator}>
-                Encargado: {coordinator}
-              </option>
-            ))}
+            {coordinators.map((coordinator) => {
+              return (
+                <option key={coordinator} value={coordinator}>
+                  Encargado: {coordinator}
+                </option>
+              );
+            })}
           </select>
 
           <select
@@ -814,15 +824,7 @@ export default function ProjectsTable() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-4">
-          <p className="text-sm text-slate-700">En riesgo</p>
-          <p className="mt-1 text-3xl font-bold text-amber-800">{kpiAtRisk}</p>
-        </div>
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
-          <p className="text-sm text-slate-700">A tiempo</p>
-          <p className="mt-1 text-3xl font-bold text-emerald-700">{kpiOnTrack}</p>
-        </div>
+      <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-sm text-slate-700">Proyectos activos</p>
           <p className="mt-1 text-3xl font-bold text-slate-700">{kpiActiveProjects}</p>
@@ -834,217 +836,95 @@ export default function ProjectsTable() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-slate-800">Etapas globales</p>
-            <span className="text-xs text-slate-600">{totalStageAssignments} vinculaciones</span>
+            <span className="text-xs text-slate-500">{totalStageAssignments} proyectos</span>
           </div>
 
-          <div className="mt-3 space-y-2">
-            {orderedStageStats.length > 0 ? orderedStageStats.map(([stage, count]) => {
-              const width = totalStageAssignments > 0 ? Math.round((count / totalStageAssignments) * 100) : 0;
+          {orderedStageStats.length > 0 ? (() => {
+            const COLORS = ["#6366f1", "#0ea5e9", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"];
+            const SIZE = 200;
+            const RADIUS = 76;
+            const STROKE = 28;
+            const CX = SIZE / 2;
+            const CY = SIZE / 2;
+            const circumference = 2 * Math.PI * RADIUS;
 
-              return (
-                <div key={`stage-stat-${stage}`} className="rounded-lg border border-blue-100 bg-white p-2">
-                  <div className="flex items-center justify-between text-xs text-slate-700">
-                    <span className="font-medium">{stage}</span>
-                    <span>{count} proyecto(s)</span>
-                  </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-blue-100">
-                    <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${width}%` }} />
-                  </div>
+            let cumulativePercent = 0;
+            const slices = orderedStageStats.map(([stage, count], i) => {
+              const pct = totalStageAssignments > 0 ? count / totalStageAssignments : 0;
+              const offset = circumference * (1 - cumulativePercent);
+              const dashLen = circumference * pct;
+              cumulativePercent += pct;
+              return { stage, count, pct, offset, dashLen, color: COLORS[i % COLORS.length] };
+            });
+
+            return (
+              <div className="mt-5 flex items-center gap-8">
+                <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="shrink-0" style={{ transform: "rotate(-90deg)" }}>
+                  <circle cx={CX} cy={CY} r={RADIUS} fill="none" stroke="#f1f5f9" strokeWidth={STROKE} />
+                  {slices.map((slice) => (
+                    <circle
+                      key={`donut-${slice.stage}`}
+                      cx={CX} cy={CY} r={RADIUS}
+                      fill="none"
+                      stroke={slice.color}
+                      strokeWidth={STROKE}
+                      strokeDasharray={`${slice.dashLen} ${circumference - slice.dashLen}`}
+                      strokeDashoffset={slice.offset}
+                    />
+                  ))}
+                </svg>
+                <div className="flex flex-1 flex-col gap-3">
+                  {slices.map((slice) => (
+                    <div key={`legend-${slice.stage}`} className="flex items-center gap-3">
+                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                      <span className="flex-1 text-sm font-medium text-slate-700">{slice.stage}</span>
+                      <span className="text-xs text-slate-500">{slice.count} · {Math.round(slice.pct * 100)}%</span>
+                    </div>
+                  ))}
                 </div>
-              );
-            }) : (
-              <p className="rounded-lg border border-blue-100 bg-white p-3 text-sm text-slate-600">Sin etapas registradas.</p>
-            )}
-          </div>
+              </div>
+            );
+          })() : (
+            <p className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-500">Sin etapas registradas.</p>
+          )}
         </div>
 
-        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-slate-800">Carga por encargado</p>
-            <span className="text-xs text-slate-600">{orderedCoordinatorStats.length} persona(s)</span>
+            <span className="text-xs text-slate-500">{orderedCoordinatorStats.length} persona(s)</span>
           </div>
 
           <div className="mt-3 space-y-2">
-            {orderedCoordinatorStats.length > 0 ? orderedCoordinatorStats.map(([name, count]) => (
-              <div key={`coordinator-stat-${name}`} className="flex items-center justify-between rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm">
-                <span className="font-medium text-slate-800">{name}</span>
-                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">{count} proyecto(s)</span>
+            {orderedCoordinatorStats.length > 0 ? orderedCoordinatorStats.map(([name, stats]) => (
+              <div key={`coordinator-stat-${name}`} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-800">{name}</span>
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">{stats.total} proyecto(s)</span>
+                </div>
+                <div className="mt-1.5 flex gap-3">
+                  {stats.design > 0 && (
+                    <span className="flex items-center gap-1 text-xs text-indigo-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                      Diseño: {stats.design}
+                    </span>
+                  )}
+                  {stats.construction > 0 && (
+                    <span className="flex items-center gap-1 text-xs text-amber-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      Construcción: {stats.construction}
+                    </span>
+                  )}
+                </div>
               </div>
             )) : (
-              <p className="rounded-lg border border-indigo-100 bg-white p-3 text-sm text-slate-600">Sin encargados registrados.</p>
+              <p className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-500">Sin encargados registrados.</p>
             )}
           </div>
         </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-4 xl:col-span-2">
-          {[
-            {
-              key: "activos",
-              title: "Proyectos activos",
-              items: visibleProjects.filter((project) => project.active),
-            },
-            {
-              key: "archivados",
-              title: "Proyectos archivados",
-              items: visibleProjects.filter((project) => !project.active),
-            },
-          ].map((section) => (
-            <div key={section.key} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{section.title}</h3>
-                <span className="text-xs text-slate-500">{section.items.length}</span>
-              </div>
-
-              {section.items.length > 0 ? section.items.map((project) => (
-                <div key={project.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-500">{project.code}</p>
-                      <h3 className="text-xl font-bold text-slate-900">{project.name}</h3>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <p className="text-base font-semibold text-slate-800">{project.client.name}</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {project.stage
-                            .split("/")
-                            .map((stage) => stage.trim())
-                            .filter(Boolean)
-                            .map((stage) => (
-                              <span key={`card-stage-${project.id}-${stage}`} className="rounded-full border border-blue-200 bg-blue-100/70 px-2 py-0.5 text-xs font-medium text-blue-800">
-                                {stage}
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                      <p className="mt-1 text-sm text-slate-600">{project.type}</p>
-                    </div>
-
-                    <div className="inline-flex items-center gap-2 rounded-lg px-2 py-1">
-                      <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
-                      <select
-                        value={project.active ? "activo" : "archivado"}
-                        onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
-                        className={`rounded-lg border px-3 py-2 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
-                        aria-label={`Estado de ${project.name}`}
-                      >
-                        <option value="activo">Proyecto activo</option>
-                        <option value="archivado">Proyecto archivado</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-                    <div className="mb-3 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                        Fase: {project.phase}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Link href={projectTasksPath(project.name)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-                        Actividades
-                      </Link>
-                      <Link href={`/proyectos/${project.id}/ficha`} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                        Ficha del proyecto
-                      </Link>
-                      <a
-                        href={project.drive.administrativo || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`rounded-lg border px-4 py-2 text-sm font-medium ${project.drive.administrativo ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-                      >
-                        Google Doc
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Avance</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">{project.progress}%</p>
-                    </div>
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Proxima fecha</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">{project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}</p>
-                    </div>
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Carga de equipo</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">{project.teamLoad}%</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-slate-700">Alerta principal: {project.mainAlert}</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-slate-700">Encargado cliente</p>
-                      <select
-                        value={normalizeName(project.coordinator) || "Sin responsable"}
-                        onChange={(event) => updateCoordinator(project.id, event.target.value)}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
-                        aria-label={`Encargado de ${project.name}`}
-                      >
-                        <option value="Sin responsable">Sin encargado</option>
-                        {getCoordinatorOptions(project).map((member) => (
-                          <option key={`card-coordinator-${project.id}-${member}`} value={member}>
-                            {member}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => openNotesModal(project.id)}
-                        className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-                      >
-                        Registrar nota
-                      </button>
-                      {section.key === "archivados" ? (
-                        <button
-                          onClick={() => deleteProject(project.id)}
-                          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-100"
-                        >
-                          Eliminar proyecto
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              )) : (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                  No hay proyectos en esta seccion.
-                </div>
-              )}
-            </div>
-          ))}
-
-          {visibleProjects.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-              No hay proyectos con los filtros actuales.
-            </div>
-          ) : null}
-        </div>
-
-        <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-900">Atencion inmediata</h3>
-          <p className="mt-1 text-sm text-slate-600">Proyectos que requieren accion hoy.</p>
-
-          <div className="mt-4 space-y-3">
-            {alerts.map((project) => (
-              <div key={`alert-${project.id}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="font-semibold text-slate-800">{project.name}</p>
-                <p className="mt-1 text-xs text-slate-600">{project.mainAlert}</p>
-              </div>
-            ))}
-
-            {alerts.length === 0 ? (
-              <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
-                No hay alertas criticas por ahora.
-              </p>
-            ) : null}
-          </div>
-        </aside>
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1054,8 +934,8 @@ export default function ProjectsTable() {
               <th className="px-4 py-3">Proyecto</th>
               <th className="px-4 py-3">Cliente</th>
               <th className="px-4 py-3">Etapa</th>
-              <th className="px-4 py-3">Encargado</th>
-              <th className="px-4 py-3">Carga equipo</th>
+              <th className="px-4 py-3">Líder de diseño</th>
+              <th className="px-4 py-3">Líder de construcción</th>
               <th className="px-4 py-3">Proxima entrega</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Acciones</th>
@@ -1082,22 +962,58 @@ export default function ProjectsTable() {
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <select
-                    value={normalizeName(project.coordinator) || "Sin responsable"}
-                    onChange={(event) => updateCoordinator(project.id, event.target.value)}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700"
-                    aria-label={`Encargado de ${project.name}`}
-                  >
-                    <option value="Sin responsable">Sin encargado</option>
-                    {getCoordinatorOptions(project).map((member) => (
-                      <option key={`table-coordinator-${project.id}-${member}`} value={member}>
-                        {member}
-                      </option>
-                    ))}
-                  </select>
+                  {inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "design" ? (
+                    <select
+                      value={normalizeName(project.coordinator) || "Sin encargado"}
+                      onChange={(event) => {
+                        updateCoordinator(project.id, event.target.value);
+                        setInlineEditingCell(null);
+                      }}
+                      onBlur={() => setInlineEditingCell(null)}
+                      autoFocus
+                      className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
+                    >
+                      <option value="Sin encargado">Sin encargado</option>
+                      {getCoordinatorOptions(project).map((member) => (
+                        <option key={`table-design-${project.id}-${member}`} value={member}>{member}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span
+                      className="cursor-pointer text-sm text-slate-800 hover:text-blue-600"
+                      onClick={() => setInlineEditingCell({ projectId: project.id, field: "design" })}
+                    >
+                      {normalizeName(project.coordinator) || "Sin encargado"}
+                    </span>
+                  )}
                 </td>
-                <td className="px-4 py-3">{project.teamLoad}%</td>
-                <td className="px-4 py-3">{project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}</td>
+                <td className="px-4 py-3">
+                  {inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "construction" ? (
+                    <select
+                      value={secondaryCoordinatorByProject[project.id] || "Sin encargado"}
+                      onChange={(event) => {
+                        setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: event.target.value }));
+                        setInlineEditingCell(null);
+                      }}
+                      onBlur={() => setInlineEditingCell(null)}
+                      autoFocus
+                      className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
+                    >
+                      <option value="Sin encargado">Sin encargado</option>
+                      {getCoordinatorOptions(project).map((member) => (
+                        <option key={`table-construction-${project.id}-${member}`} value={member}>{member}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span
+                      className="cursor-pointer text-sm text-slate-800 hover:text-blue-600"
+                      onClick={() => setInlineEditingCell({ projectId: project.id, field: "construction" })}
+                    >
+                      {secondaryCoordinatorByProject[project.id] || "Sin encargado"}
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3" suppressHydrationWarning>{project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}</td>
                 <td className="px-4 py-3">
                   <div className="inline-flex items-center gap-2">
                     <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
@@ -1132,6 +1048,207 @@ export default function ProjectsTable() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-4 xl:col-span-2">
+          {[
+            {
+              key: "activos",
+              title: "Proyectos activos",
+              items: visibleProjects.filter((project) => project.active),
+            },
+            {
+              key: "archivados",
+              title: "Proyectos archivados",
+              items: visibleProjects.filter((project) => !project.active),
+            },
+          ].map((section) => (
+            <div key={section.key} className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{section.title}</h3>
+                <span className="text-xs text-slate-500">{section.items.length}</span>
+              </div>
+
+              {section.items.length > 0 ? section.items.map((project) => (
+                <div key={project.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+
+                {/* Nombre + estado */}
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{project.code}</p>
+                    <h3 className="text-xl font-bold text-slate-900">{project.name}</h3>
+                  </div>
+                  <div className="inline-flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
+                    <select
+                      value={project.active ? "activo" : "archivado"}
+                      onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
+                      aria-label={`Estado de ${project.name}`}
+                    >
+                      <option value="activo">Proyecto activo</option>
+                      <option value="archivado">Proyecto archivado</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Cliente + Equipo Asignado */}
+                <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-slate-500">Cliente</p>
+                    <p className="font-semibold text-slate-800">{project.client.name}</p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-slate-600">Líder de diseño</p>
+                      <select
+                        value={normalizeName(project.coordinator) || "Sin responsable"}
+                        onChange={(event) => updateCoordinator(project.id, event.target.value)}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                        aria-label={`Líder de diseño de ${project.name}`}
+                      >
+                        <option value="Sin responsable">Sin encargado</option>
+                        {getCoordinatorOptions(project).map((member) => (
+                          <option key={`card-coordinator-${project.id}-${member}`} value={member}>
+                            {member}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-slate-600">Líder de construcción</p>
+                      <select
+                        value={secondaryCoordinatorByProject[project.id] || "Sin responsable"}
+                        onChange={(event) => setSecondaryCoordinatorByProject((current) => ({
+                          ...current,
+                          [project.id]: event.target.value,
+                        }))}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                        aria-label={`Líder de construcción de ${project.name}`}
+                      >
+                        <option value="Sin responsable">Sin encargado</option>
+                        {getCoordinatorOptions(project).map((member) => (
+                          <option key={`card-construction-coordinator-${project.id}-${member}`} value={member}>
+                            {member}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actividad + tipo */}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {project.stage
+                    .split("/")
+                    .map((stage) => stage.trim())
+                    .filter(Boolean)
+                    .map((stage) => (
+                      <span key={`card-stage-${project.id}-${stage}`} className="rounded-full border border-blue-200 bg-blue-100/70 px-2 py-0.5 text-xs font-medium text-blue-800">
+                        {stage}
+                      </span>
+                    ))}
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">{project.type}</span>
+                </div>
+
+                {/* Avance + Próxima entrega */}
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Avance</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{project.progress}%</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Próxima entrega</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800" suppressHydrationWarning>{project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}</p>
+                  </div>
+                </div>
+
+                {/* Links */}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link href={projectTasksPath(project.name)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                    Actividades
+                  </Link>
+                  <a
+                    href={project.drive?.administrativo || "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`rounded-lg border px-4 py-2 text-sm font-medium ${project.drive?.administrativo ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"}`}
+                  >
+                    Docs del proyecto
+                  </a>
+                  <a
+                    href={project.drive?.reportes || "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`rounded-lg border px-4 py-2 text-sm font-medium ${project.drive?.reportes ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"}`}
+                  >
+                    Docs del cliente
+                  </a>
+                </div>
+
+                {/* Pie: alerta + acciones */}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                  <p className="text-xs text-slate-500" suppressHydrationWarning>
+                    {project.startDate ? `Inicio: ${formatDate(project.startDate)} · ` : ""}
+                    Alerta: {project.mainAlert}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openNotesModal(project.id)}
+                      className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Registrar nota
+                    </button>
+                    <Link href={`/proyectos/${project.id}/ficha`} className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                      Ficha del proyecto
+                    </Link>
+                    {section.key === "archivados" ? (
+                      <button
+                        onClick={() => deleteProject(project.id)}
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-100"
+                      >
+                        Eliminar proyecto
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+              </div>
+              )) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  No hay proyectos en esta seccion.
+                </div>
+              )}
+            </div>
+          ))}
+
+          {visibleProjects.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+              No hay proyectos con los filtros actuales.
+            </div>
+          ) : null}
+        </div>
+
+        <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-900">Atencion inmediata</h3>
+          <p className="mt-1 text-sm text-slate-600">Proyectos que requieren accion hoy.</p>
+
+          <div className="mt-4 space-y-3">
+            {alerts.map((project) => (
+              <div key={`alert-${project.id}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="font-semibold text-slate-800">{project.name}</p>
+                <p className="mt-1 text-xs text-slate-600">{project.mainAlert}</p>
+              </div>
+            ))}
+
+            {alerts.length === 0 ? (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+                No hay alertas criticas por ahora.
+              </p>
+            ) : null}
+          </div>
+        </aside>
       </div>
 
       {activeNoteProject ? (

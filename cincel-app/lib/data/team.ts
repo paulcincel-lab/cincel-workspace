@@ -24,6 +24,13 @@ export type TeamMember = {
   capacity: number;
   availability: TeamAvailability;
   active: boolean;
+  auth?: {
+    passwordHash: string;
+    authEnabled: boolean;
+    mustChangePassword?: boolean;
+    passwordUpdatedAt: string | null;
+    lastLoginAt: string | null;
+  };
 };
 
 export const teamMembers: TeamMember[] = [
