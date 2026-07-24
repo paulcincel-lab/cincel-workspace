@@ -40,6 +40,16 @@ export type ActivitiesCapabilities = {
   statusScope: ActivityStatusScope;
 };
 
+export type ProjectsCapabilities = {
+  canViewProjects: boolean;
+  canCreateProject: boolean;
+  canEditProjectGeneral: boolean;
+  canChangeProjectStage: boolean;
+  canArchiveProject: boolean;
+  canDeleteProject: boolean;
+  canEditProtectedProjectData: boolean;
+};
+
 const DASHBOARD_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, DashboardCapabilities> = {
   Administrador: {
     dataScope: "global",
@@ -142,6 +152,63 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
   },
 };
 
+const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabilities> = {
+  Administrador: {
+    canViewProjects: true,
+    canCreateProject: true,
+    canEditProjectGeneral: true,
+    canChangeProjectStage: true,
+    canArchiveProject: true,
+    canDeleteProject: true,
+    canEditProtectedProjectData: true,
+  },
+  "Dirección": {
+    canViewProjects: true,
+    canCreateProject: true,
+    canEditProjectGeneral: true,
+    canChangeProjectStage: true,
+    canArchiveProject: true,
+    canDeleteProject: true,
+    canEditProtectedProjectData: true,
+  },
+  "Responsable de Proyecto": {
+    canViewProjects: true,
+    canCreateProject: true,
+    canEditProjectGeneral: true,
+    canChangeProjectStage: true,
+    canArchiveProject: true,
+    canDeleteProject: false,
+    canEditProtectedProjectData: false,
+  },
+  Colaborador: {
+    canViewProjects: true,
+    canCreateProject: false,
+    canEditProjectGeneral: false,
+    canChangeProjectStage: false,
+    canArchiveProject: false,
+    canDeleteProject: false,
+    canEditProtectedProjectData: false,
+  },
+  "Pasante / Servicio Social": {
+    canViewProjects: true,
+    canCreateProject: false,
+    canEditProjectGeneral: false,
+    canChangeProjectStage: false,
+    canArchiveProject: false,
+    canDeleteProject: false,
+    canEditProtectedProjectData: false,
+  },
+  Cliente: {
+    canViewProjects: false,
+    canCreateProject: false,
+    canEditProjectGeneral: false,
+    canChangeProjectStage: false,
+    canArchiveProject: false,
+    canDeleteProject: false,
+    canEditProtectedProjectData: false,
+  },
+};
+
 function normalizeName(value: string | null | undefined): string {
   return (value || "").trim().toLowerCase();
 }
@@ -183,6 +250,11 @@ export function resolveDashboardCapabilities(user: AuthenticatedUser | null): Da
 export function resolveActivitiesCapabilities(user: AuthenticatedUser | null): ActivitiesCapabilities {
   const access = user?.access ?? "Colaborador";
   return ACTIVITIES_CAPABILITIES_BY_ROLE[access];
+}
+
+export function resolveProjectsCapabilities(user: AuthenticatedUser | null): ProjectsCapabilities {
+  const access = user?.access ?? "Colaborador";
+  return PROJECTS_CAPABILITIES_BY_ROLE[access];
 }
 
 export function canChangeActivityStatus<TTask extends ActivityTaskScopeShape>({

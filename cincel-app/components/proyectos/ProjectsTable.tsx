@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { projects } from "@/lib/data/projects";
 import { teamMembers } from "@/lib/data/team";
 import type { Task } from "@/lib/types/task";
@@ -328,6 +330,7 @@ function loadSecondaryCoordinatorMap(): Record<number, string> {
 export default function ProjectsTable() {
   const router = useRouter();
   const [projectsData, setProjectsData] = useState<ProjectItem[]>(() => loadPersistedProjects());
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
   const [statusViewFilter, setStatusViewFilter] = useState<"Activos" | "Archivados">("Activos");
@@ -351,7 +354,10 @@ export default function ProjectsTable() {
   }, [secondaryCoordinatorByProject]);
 
   useEffect(() => {
-    const refreshTeam = () => setActiveTeamNames(loadActiveTeamNames());
+    const refreshTeam = () => {
+      setActiveTeamNames(loadActiveTeamNames());
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
+    };
 
     window.addEventListener("focus", refreshTeam);
     window.addEventListener("storage", refreshTeam);
@@ -361,6 +367,10 @@ export default function ProjectsTable() {
       window.removeEventListener("storage", refreshTeam);
     };
   }, []);
+
+  const projectsCapabilities = useMemo(() => {
+    return resolveProjectsCapabilities(authenticatedUser);
+  }, [authenticatedUser]);
 
   const allTasks = useMemo(() => {
     return [
@@ -591,6 +601,10 @@ export default function ProjectsTable() {
   };
 
   const openCreateModal = () => {
+    if (!projectsCapabilities.canCreateProject) {
+      return;
+    }
+
     setCreateError("");
     setNewProjectDraft({
       ...emptyNewProjectDraft,
@@ -607,6 +621,10 @@ export default function ProjectsTable() {
   };
 
   const createProject = () => {
+    if (!projectsCapabilities.canCreateProject) {
+      return;
+    }
+
     const projectName = newProjectDraft.name.trim();
     const selectedClient = activeClientOptions.find((client) => String(client.id) === newProjectDraft.clientId);
 
@@ -686,6 +704,10 @@ export default function ProjectsTable() {
   };
 
   const updateCoordinator = (projectId: number, coordinator: string) => {
+    if (!projectsCapabilities.canEditProjectGeneral) {
+      return;
+    }
+
     setProjectsData((current) =>
       current.map((project) =>
         project.id === projectId
@@ -699,6 +721,10 @@ export default function ProjectsTable() {
   };
 
   const updateProjectActive = (projectId: number, active: boolean) => {
+    if (!projectsCapabilities.canArchiveProject) {
+      return;
+    }
+
     setProjectsData((current) =>
       current.map((project) =>
         project.id === projectId
@@ -713,6 +739,10 @@ export default function ProjectsTable() {
   };
 
   const deleteProject = (projectId: number) => {
+    if (!projectsCapabilities.canDeleteProject) {
+      return;
+    }
+
     const project = projectsData.find((item) => item.id === projectId);
 
     if (!project) {
@@ -764,7 +794,9 @@ export default function ProjectsTable() {
             <button
               type="button"
               onClick={openCreateModal}
-              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              disabled={!projectsCapabilities.canCreateProject}
+              title={projectsCapabilities.canCreateProject ? "" : "No tienes permiso para crear proyectos"}
+              className={`rounded-xl px-5 py-2 text-sm font-medium text-white ${projectsCapabilities.canCreateProject ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
             >
               + Nuevo proyecto
             </button>
@@ -962,7 +994,7 @@ export default function ProjectsTable() {
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  {inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "design" ? (
+                  {projectsCapabilities.canEditProjectGeneral && inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "design" ? (
                     <select
                       value={normalizeName(project.coordinator) || "Sin encargado"}
                       onChange={(event) => {
@@ -980,15 +1012,21 @@ export default function ProjectsTable() {
                     </select>
                   ) : (
                     <span
-                      className="cursor-pointer text-sm text-slate-800 hover:text-blue-600"
-                      onClick={() => setInlineEditingCell({ projectId: project.id, field: "design" })}
+                      className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
+                      onClick={() => {
+                        if (!projectsCapabilities.canEditProjectGeneral) {
+                          return;
+                        }
+
+                        setInlineEditingCell({ projectId: project.id, field: "design" });
+                      }}
                     >
                       {normalizeName(project.coordinator) || "Sin encargado"}
                     </span>
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  {inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "construction" ? (
+                  {projectsCapabilities.canEditProjectGeneral && inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "construction" ? (
                     <select
                       value={secondaryCoordinatorByProject[project.id] || "Sin encargado"}
                       onChange={(event) => {
@@ -1006,8 +1044,14 @@ export default function ProjectsTable() {
                     </select>
                   ) : (
                     <span
-                      className="cursor-pointer text-sm text-slate-800 hover:text-blue-600"
-                      onClick={() => setInlineEditingCell({ projectId: project.id, field: "construction" })}
+                      className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
+                      onClick={() => {
+                        if (!projectsCapabilities.canEditProjectGeneral) {
+                          return;
+                        }
+
+                        setInlineEditingCell({ projectId: project.id, field: "construction" });
+                      }}
                     >
                       {secondaryCoordinatorByProject[project.id] || "Sin encargado"}
                     </span>
@@ -1020,6 +1064,7 @@ export default function ProjectsTable() {
                     <select
                       value={project.active ? "activo" : "archivado"}
                       onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
+                      disabled={!projectsCapabilities.canArchiveProject}
                       className={`rounded-lg border px-2 py-1 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
                       aria-label={`Estado en tabla de ${project.name}`}
                     >
@@ -1084,6 +1129,7 @@ export default function ProjectsTable() {
                     <select
                       value={project.active ? "activo" : "archivado"}
                       onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
+                      disabled={!projectsCapabilities.canArchiveProject}
                       className={`rounded-lg border px-3 py-2 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
                       aria-label={`Estado de ${project.name}`}
                     >
@@ -1105,6 +1151,7 @@ export default function ProjectsTable() {
                       <select
                         value={normalizeName(project.coordinator) || "Sin responsable"}
                         onChange={(event) => updateCoordinator(project.id, event.target.value)}
+                        disabled={!projectsCapabilities.canEditProjectGeneral}
                         className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
                         aria-label={`Líder de diseño de ${project.name}`}
                       >
@@ -1120,10 +1167,17 @@ export default function ProjectsTable() {
                       <p className="text-sm text-slate-600">Líder de construcción</p>
                       <select
                         value={secondaryCoordinatorByProject[project.id] || "Sin responsable"}
-                        onChange={(event) => setSecondaryCoordinatorByProject((current) => ({
-                          ...current,
-                          [project.id]: event.target.value,
-                        }))}
+                        onChange={(event) => {
+                          if (!projectsCapabilities.canEditProjectGeneral) {
+                            return;
+                          }
+
+                          setSecondaryCoordinatorByProject((current) => ({
+                            ...current,
+                            [project.id]: event.target.value,
+                          }));
+                        }}
+                        disabled={!projectsCapabilities.canEditProjectGeneral}
                         className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
                         aria-label={`Líder de construcción de ${project.name}`}
                       >
@@ -1206,7 +1260,9 @@ export default function ProjectsTable() {
                     {section.key === "archivados" ? (
                       <button
                         onClick={() => deleteProject(project.id)}
-                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-100"
+                        disabled={!projectsCapabilities.canDeleteProject}
+                        title={projectsCapabilities.canDeleteProject ? "" : "No tienes permiso para eliminar proyectos"}
+                        className={`rounded-lg border px-3 py-1 text-sm font-medium ${projectsCapabilities.canDeleteProject ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                       >
                         Eliminar proyecto
                       </button>
@@ -1448,6 +1504,7 @@ export default function ProjectsTable() {
                 <button
                   type="button"
                   onClick={createProject}
+                  disabled={!projectsCapabilities.canCreateProject}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                 >
                   Crear proyecto

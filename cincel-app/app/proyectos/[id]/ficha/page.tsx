@@ -8,6 +8,8 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Avatar from "@/components/ui/Avatar";
 
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { projects } from "@/lib/data/projects";
 import { teamMembers } from "@/lib/data/team";
 import { presaleTasks } from "@/lib/data/presale";
@@ -196,6 +198,7 @@ export default function ProjectFichaPage() {
   const projectId = Number(params.id);
 
   const [projectsData, setProjectsData] = useState<ProjectItem[]>(() => loadPersistedProjects());
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
   const [isEditing, setIsEditing] = useState(false);
@@ -214,7 +217,10 @@ export default function ProjectFichaPage() {
   }, [secondaryCoordinatorByProject]);
 
   useEffect(() => {
-    const refreshTeam = () => setActiveTeamNames(loadActiveTeamNames());
+    const refreshTeam = () => {
+      setActiveTeamNames(loadActiveTeamNames());
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
+    };
 
     window.addEventListener("focus", refreshTeam);
     window.addEventListener("storage", refreshTeam);
@@ -225,13 +231,17 @@ export default function ProjectFichaPage() {
     };
   }, []);
 
+  const projectsCapabilities = useMemo(() => {
+    return resolveProjectsCapabilities(authenticatedUser);
+  }, [authenticatedUser]);
+
   const project = projectsData.find((item) => item.id === projectId) ?? null;
   const activeClients = useMemo(() => loadActiveClients(projectsData), [projectsData]);
   const constructionCoordinator = project ? secondaryCoordinatorByProject[project.id] || "Sin encargado" : "Sin encargado";
   const shouldAutoEditDocs = searchParams.get("edit") === "docs";
 
   useEffect(() => {
-    if (!project || !shouldAutoEditDocs || isEditing) {
+    if (!project || !shouldAutoEditDocs || isEditing || !projectsCapabilities.canEditProjectGeneral) {
       return;
     }
 
@@ -243,7 +253,7 @@ export default function ProjectFichaPage() {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [constructionCoordinator, isEditing, project, shouldAutoEditDocs]);
+  }, [constructionCoordinator, isEditing, project, projectsCapabilities.canEditProjectGeneral, shouldAutoEditDocs]);
 
   if (!project) {
     return (
@@ -275,6 +285,10 @@ export default function ProjectFichaPage() {
   const clientDocsUrl = project.drive?.reportes ?? "";
 
   const startEditing = () => {
+    if (!projectsCapabilities.canEditProjectGeneral) {
+      return;
+    }
+
     setEditDraft(buildEditDraft(project, constructionCoordinator));
     setIsEditing(true);
   };
@@ -295,11 +309,11 @@ export default function ProjectFichaPage() {
         return {
           ...item,
           type: editDraft.type,
-          stage: editDraft.stages.join(" / "),
+          stage: projectsCapabilities.canChangeProjectStage ? editDraft.stages.join(" / ") : item.stage,
           phase: editDraft.phase,
           startDate: editDraft.startDate,
           coordinator: editDraft.coordinator,
-          client: selectedClient
+          client: projectsCapabilities.canEditProtectedProjectData && selectedClient
             ? { ...item.client, id: selectedClient.id, name: selectedClient.name, kind: selectedClient.kind }
             : item.client,
           address: {
@@ -374,6 +388,8 @@ export default function ProjectFichaPage() {
                     <button
                       type="button"
                       onClick={startEditing}
+                      disabled={!projectsCapabilities.canEditProjectGeneral}
+                      title={projectsCapabilities.canEditProjectGeneral ? "" : "No tienes permiso para editar información general"}
                       className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
                       Editar ficha
@@ -471,6 +487,7 @@ export default function ProjectFichaPage() {
                     <select
                       value={d.clientName}
                       onChange={(e) => setEditDraft({ ...d, clientName: e.target.value })}
+                      disabled={!projectsCapabilities.canEditProtectedProjectData}
                       className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     >
                       {activeClients.map((c) => (
@@ -496,6 +513,7 @@ export default function ProjectFichaPage() {
                           <input
                             type="checkbox"
                             checked={d.stages.includes(stage)}
+                            disabled={!projectsCapabilities.canChangeProjectStage}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setEditDraft({ ...d, stages: [...d.stages, stage] });
@@ -617,6 +635,10 @@ export default function ProjectFichaPage() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
+                              if (!projectsCapabilities.canEditProjectGeneral) {
+                                return;
+                              }
+
                               setProjectsData((current) =>
                                 current.map((item) =>
                                   item.id === project.id
@@ -647,7 +669,11 @@ export default function ProjectFichaPage() {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-1 cursor-pointer font-medium text-slate-800 hover:text-blue-600" onClick={() => {
+                      <p className={`mt-1 font-medium text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`} onClick={() => {
+                        if (!projectsCapabilities.canEditProjectGeneral) {
+                          return;
+                        }
+
                         setInlineAddressValue({
                           street: project.address.street || "",
                           city: project.address.city,
@@ -686,6 +712,10 @@ export default function ProjectFichaPage() {
                     <select
                       value={project.coordinator || ""}
                       onChange={(e) => {
+                        if (!projectsCapabilities.canEditProjectGeneral) {
+                          return;
+                        }
+
                         setProjectsData((current) =>
                           current.map((item) =>
                             item.id === project.id ? { ...item, coordinator: e.target.value } : item
@@ -703,7 +733,13 @@ export default function ProjectFichaPage() {
                       ))}
                     </select>
                   ) : (
-                    <div className="mt-2 cursor-pointer" onClick={() => setInlineEditingCoordinator(true)}>
+                    <div className={`mt-2 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer" : ""}`} onClick={() => {
+                      if (!projectsCapabilities.canEditProjectGeneral) {
+                        return;
+                      }
+
+                      setInlineEditingCoordinator(true);
+                    }}>
                       <Avatar name={project.coordinator || "Sin encargado"} />
                     </div>
                   )}
@@ -726,6 +762,10 @@ export default function ProjectFichaPage() {
                     <select
                       value={constructionCoordinator}
                       onChange={(e) => {
+                        if (!projectsCapabilities.canEditProjectGeneral) {
+                          return;
+                        }
+
                         setSecondaryCoordinatorByProject((current) => ({
                           ...current,
                           [project.id]: e.target.value,
@@ -742,7 +782,13 @@ export default function ProjectFichaPage() {
                       ))}
                     </select>
                   ) : (
-                    <div className="mt-2 cursor-pointer" onClick={() => setInlineEditingConstructionCoordinator(true)}>
+                    <div className={`mt-2 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer" : ""}`} onClick={() => {
+                      if (!projectsCapabilities.canEditProjectGeneral) {
+                        return;
+                      }
+
+                      setInlineEditingConstructionCoordinator(true);
+                    }}>
                       <Avatar name={constructionCoordinator} />
                     </div>
                   )}
