@@ -1,4 +1,4 @@
-import { DEFAULT_SYSTEM_ACCESS_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, normalizeSystemAccessRole, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, type SystemAccessRole } from "@/lib/data/roles";
+import { DEFAULT_SYSTEM_ACCESS_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, isLegacyBlockedAccessRole, normalizeSystemAccessRole, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, type SystemAccessRole } from "@/lib/data/roles";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
 
 export const AUTH_SESSION_STORAGE_KEY = "cincel.auth.session.v1";
@@ -115,7 +115,7 @@ function persistMembers(members: TeamMember[]): void {
   localStorage.setItem(TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(members));
 }
 
-function loadSystemAccessMap(): Record<number, SystemAccessRole> {
+function loadSystemAccessMap(): PersistedSystemRoleMap {
   if (!canUseStorage()) {
     return {};
   }
@@ -131,27 +131,30 @@ function loadSystemAccessMap(): Record<number, SystemAccessRole> {
       return {};
     }
 
-    return Object.entries(parsed).reduce<Record<number, SystemAccessRole>>((accumulator, [memberId, role]) => {
-      const normalized = normalizeSystemAccessRole(role);
-      if (normalized) {
-        accumulator[Number(memberId)] = normalized;
-      }
-
-      return accumulator;
-    }, {});
+    return parsed;
   } catch {
     return {};
   }
 }
 
-function resolveAccess(member: TeamMember, roleByMemberId: Record<number, SystemAccessRole>): SystemAccessRole {
-  const configured = roleByMemberId[member.id];
+function resolveAccess(member: TeamMember, roleByMemberId: PersistedSystemRoleMap): SystemAccessRole | null {
+  const configuredRaw = roleByMemberId[member.id];
+
+  if (isLegacyBlockedAccessRole(configuredRaw)) {
+    return null;
+  }
+
+  const configured = normalizeSystemAccessRole(configuredRaw);
   if (configured && SYSTEM_ACCESS_ROLES.includes(configured)) {
     return configured;
   }
 
   if (isAdministratorRole(member.role) || hasDefaultSystemAdministratorAccess(member.institutionalEmail)) {
     return SYSTEM_ADMIN_ROLE;
+  }
+
+  if (isLegacyBlockedAccessRole(member.role)) {
+    return null;
   }
 
   return DEFAULT_SYSTEM_ACCESS_ROLE;
@@ -274,7 +277,7 @@ export function getCurrentAuthenticatedUser(): AuthenticatedUser | null {
   }
 
   const access = resolveAccess(member, roleByMemberId);
-  if (access === "Cliente") {
+  if (!access) {
     logout();
     return null;
   }
@@ -315,7 +318,7 @@ export function resolveCurrentSessionAccess(): SessionAccessResolution {
   }
 
   const access = resolveAccess(member, roleByMemberId);
-  if (access === "Cliente") {
+  if (!access) {
     logout();
     return { status: "no_system_access", user: null };
   }
@@ -380,7 +383,7 @@ export function loginWithEmailAndPassword(email: string, password: string): Logi
   }
 
   const access = resolveAccess(member, roleByMemberId);
-  if (access === "Cliente") {
+  if (!access) {
     return { ok: false, reason: "access_not_allowed" };
   }
 

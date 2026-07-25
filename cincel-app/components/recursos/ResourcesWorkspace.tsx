@@ -6,8 +6,8 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { canCreateResourceInSection, canDeleteResourceInSection, resolveResourcesCapabilities } from "@/lib/auth/permissions";
 import { RESOURCE_STORAGE_KEY, RESOURCE_TEMPLATES } from "@/lib/data/resources";
-import { isAdministratorRole } from "@/lib/data/roles";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
 import type {
   ResourceAppliesTo,
@@ -21,7 +21,7 @@ import type {
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const RECENT_DOCS_STORAGE_KEY = "cincel.resources.recent-docs.v1";
-const SYSTEM_ROLE_STORAGE_KEY = "cincel.team.system-roles.v1";
+const RESOURCE_ID_PATTERN = /^resource_(\d+)(?:_.+)?$/;
 
 const SECTION_ORDER: ResourceSection[] = [
   "mis-documentos",
@@ -354,27 +354,24 @@ function loadRecentDocuments(): RecentDocument[] {
   }
 }
 
-function loadSystemRolesMap(): Record<number, string> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  const stored = localStorage.getItem(SYSTEM_ROLE_STORAGE_KEY);
-  if (!stored) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Record<number, string>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    localStorage.removeItem(SYSTEM_ROLE_STORAGE_KEY);
-    return {};
-  }
-}
-
 function saveRecentDocuments(next: RecentDocument[]): void {
   localStorage.setItem(RECENT_DOCS_STORAGE_KEY, JSON.stringify(next.slice(0, 8)));
+}
+
+function buildNextResourceId(resources: ResourceLink[]): string {
+  let maxId = 0;
+
+  resources.forEach((resource) => {
+    const match = RESOURCE_ID_PATTERN.exec(resource.id);
+    if (!match) return;
+
+    const numericId = Number(match[1]);
+    if (Number.isFinite(numericId) && numericId > maxId) {
+      maxId = numericId;
+    }
+  });
+
+  return `resource_${maxId + 1}`;
 }
 
 function FolderGlyph({ accent = "bg-slate-500" }: { accent?: string }) {
@@ -491,7 +488,6 @@ export default function ResourcesWorkspace({
   const [members] = useState<TeamMember[]>(() => loadTeamMembers());
   const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>(() => loadResourceLinks(loadTeamMembers()));
   const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>(() => loadRecentDocuments());
-  const [systemRoleByMemberId] = useState<Record<number, string>>(() => loadSystemRolesMap());
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [search, setSearch] = useState("");
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
@@ -560,7 +556,7 @@ export default function ResourcesWorkspace({
     const now = new Date().toISOString();
 
     const newItem: ResourceLink = {
-      id: `resource_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: buildNextResourceId(resourceLinks),
       templateKey: draft.personalForTeamMemberId ? "personal_mis_documentos_custom" : "custom",
       title: draft.title.trim(),
       section: draft.section,
@@ -643,6 +639,12 @@ export default function ResourcesWorkspace({
   }, [filteredLinks]);
 
   const openCreator = (seed: Partial<CreateDraft>) => {
+    const targetSection = seed.section ?? (mode === "overview" ? "empresa" : mode);
+
+    if (!canCreateResourceInSection({ capabilities: resourcesCapabilities, section: targetSection })) {
+      return;
+    }
+
     setCreating({
       ...EMPTY_CREATE_DRAFT,
       ownerTeamMemberId: effectiveSelectedMemberId,
@@ -653,6 +655,7 @@ export default function ResourcesWorkspace({
   const saveCreate = () => {
     if (!creating) return;
     if (!creating.title.trim() || !creating.url.trim()) return;
+    if (!canCreateResourceInSection({ capabilities: resourcesCapabilities, section: creating.section })) return;
 
     createResource({
       ...creating,
@@ -664,13 +667,18 @@ export default function ResourcesWorkspace({
   const pageMode = mode === "overview" ? null : mode;
   const pageLabel = titleOverride ?? (pageMode ? SECTION_LABEL[pageMode] : "Recursos");
   const pageDescription = descriptionOverride ?? (pageMode ? SECTION_DESCRIPTION[pageMode] : "Acceso rápido a las áreas de recursos del despacho.");
-  const currentUser = authenticatedUser?.member ?? members.find((member) => member.active) ?? null;
-  const currentSystemRole = authenticatedUser?.access || (currentUser ? systemRoleByMemberId[currentUser.id] : null);
-  const isAdministrator = !!currentUser && (
-    isAdministratorRole(currentSystemRole)
-    || isAdministratorRole(currentUser.role)
-  );
-  const canManageAccess = pageMode === "mis-favoritos" || isAdministrator;
+  const resourcesCapabilities = resolveResourcesCapabilities(authenticatedUser);
+  const createActionSection: ResourceSection = mode === "overview" ? "empresa" : mode;
+  const canCreateInCurrentSection = canCreateResourceInSection({
+    capabilities: resourcesCapabilities,
+    section: createActionSection,
+  });
+  const canDeleteInCurrentSection = pageMode
+    ? canDeleteResourceInSection({
+      capabilities: resourcesCapabilities,
+      section: pageMode,
+    })
+    : false;
 
   const totalResources = filteredLinks.length;
   const folderCount = filteredLinks.filter((link) => link.linkType === "drive_folder").length;
@@ -752,6 +760,8 @@ export default function ResourcesWorkspace({
 
   const removePageResource = () => {
     if (pageDocuments.length === 0) return;
+    if (!pageMode) return;
+    if (!canDeleteInCurrentSection) return;
 
     setRemoveDraft({
       scope: pageMode as ResourceSection,
@@ -761,6 +771,7 @@ export default function ResourcesWorkspace({
 
   const confirmRemoveDraft = () => {
     if (!removeDraft) return;
+    if (!canDeleteResourceInSection({ capabilities: resourcesCapabilities, section: removeDraft.scope })) return;
     deleteResource(removeDraft.selectedId);
     setRemoveDraft(null);
   };
@@ -813,7 +824,7 @@ export default function ResourcesWorkspace({
 
                 <button
                   type="button"
-                  disabled={!canManageAccess}
+                  disabled={!canCreateInCurrentSection}
                   onClick={() => openCreator({
                     title: "Nuevo recurso",
                     section: mode === "overview" ? "empresa" : mode,
@@ -821,8 +832,8 @@ export default function ResourcesWorkspace({
                     linkType: mode === "mis-favoritos" ? "web" : mode === "mis-documentos" ? "drive_folder" : mode === "formacion" ? "drive_folder" : "drive_file",
                     appliesTo: "general",
                   })}
-                  title={canManageAccess ? "" : "Solo Administrador puede agregar accesos en esta sección"}
-                  className={`rounded-2xl px-4 py-3 text-sm font-semibold shadow-sm ${canManageAccess ? "bg-slate-900 text-white hover:bg-slate-800" : "cursor-not-allowed bg-slate-300 text-slate-100"}`}
+                  title={canCreateInCurrentSection ? "" : "No tienes permiso para agregar recursos en esta sección"}
+                  className={`rounded-2xl px-4 py-3 text-sm font-semibold shadow-sm ${canCreateInCurrentSection ? "bg-slate-900 text-white hover:bg-slate-800" : "cursor-not-allowed bg-slate-300 text-slate-100"}`}
                 >
                   + Nuevo acceso
                 </button>
@@ -980,16 +991,18 @@ export default function ResourcesWorkspace({
                         <button
                           type="button"
                           onClick={removePageResource}
+                          disabled={!canDeleteInCurrentSection}
+                          title={canDeleteInCurrentSection ? "" : "No tienes permiso para eliminar recursos en esta sección"}
                           className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-rose-100"
                         >
                           Quitar
                         </button>
                         <button
                           type="button"
-                          disabled={!canManageAccess}
+                          disabled={!canCreateInCurrentSection}
                           onClick={openPageCreator}
-                          title={canManageAccess ? "" : "Solo Administrador puede agregar accesos en esta sección"}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${canManageAccess ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+                          title={canCreateInCurrentSection ? "" : "No tienes permiso para agregar recursos en esta sección"}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${canCreateInCurrentSection ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                         >
                           Agregar
                         </button>
@@ -997,10 +1010,10 @@ export default function ResourcesWorkspace({
                     ) : (
                       <button
                         type="button"
-                        disabled={!canManageAccess}
+                        disabled={!canCreateInCurrentSection}
                         onClick={openPageCreator}
-                        title={canManageAccess ? "" : "Solo Administrador puede agregar accesos en esta sección"}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${canManageAccess ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+                        title={canCreateInCurrentSection ? "" : "No tienes permiso para agregar recursos en esta sección"}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${canCreateInCurrentSection ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                       >
                         Agregar
                       </button>
@@ -1161,6 +1174,7 @@ export default function ResourcesWorkspace({
               <button
                 type="button"
                 onClick={confirmRemoveDraft}
+                disabled={!canDeleteInCurrentSection}
                 className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-rose-100"
               >
                 Quitar recurso

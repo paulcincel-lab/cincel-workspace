@@ -1,13 +1,17 @@
 export const OFFICIAL_CINCEL_ROLES = [
   "Administrador",
   "Dirección",
-  "Responsable de Proyecto",
+  "Jefe de Taller",
+  "Jefe de Construcción",
+  "Arquitecto Senior",
+  "Arquitecto Junior",
   "Colaborador",
   "Pasante / Servicio Social",
-  "Cliente",
+  "Otros",
 ] as const;
 
 export type OfficialCincelRole = (typeof OFFICIAL_CINCEL_ROLES)[number];
+type LegacyBlockedAccessRole = "Cliente";
 
 export const SYSTEM_ADMIN_ROLE = "Administrador" as const;
 export const DEFAULT_SYSTEM_ACCESS_ROLE: OfficialCincelRole = "Colaborador";
@@ -19,10 +23,20 @@ export type SystemAccessRole = (typeof SYSTEM_ACCESS_ROLES)[number];
 export const ROLE_PERMISSIONS_TEMPLATE: Record<OfficialCincelRole, string[]> = {
   Administrador: [],
   "Dirección": [],
-  "Responsable de Proyecto": [],
+  "Jefe de Taller": [],
+  "Jefe de Construcción": [],
+  "Arquitecto Senior": [],
+  "Arquitecto Junior": [],
   Colaborador: [],
   "Pasante / Servicio Social": [],
-  Cliente: [],
+  Otros: [],
+};
+
+const LEGACY_BLOCKED_ACCESS_ROLES: readonly LegacyBlockedAccessRole[] = ["Cliente"];
+
+const LEGACY_ACCESS_ROLE_ALIASES: Readonly<Record<string, SystemAccessRole>> = {
+  "responsable de proyecto": "Jefe de Taller",
+  usuario: DEFAULT_SYSTEM_ACCESS_ROLE,
 };
 
 export function isAdministratorRole(role: string | null | undefined): boolean {
@@ -47,6 +61,15 @@ export function isOfficialCincelRole(role: string | null | undefined): role is O
   return OFFICIAL_CINCEL_ROLES.includes(role.trim() as OfficialCincelRole);
 }
 
+export function isLegacyBlockedAccessRole(role: string | null | undefined): role is LegacyBlockedAccessRole {
+  if (!role) {
+    return false;
+  }
+
+  const normalized = role.trim().toLowerCase();
+  return LEGACY_BLOCKED_ACCESS_ROLES.some((blockedRole) => blockedRole.toLowerCase() === normalized);
+}
+
 export function normalizeSystemAccessRole(role: string | null | undefined): SystemAccessRole | null {
   const normalized = role?.trim();
 
@@ -54,8 +77,15 @@ export function normalizeSystemAccessRole(role: string | null | undefined): Syst
     return null;
   }
 
-  if (normalized.toLowerCase() === "usuario") {
-    return DEFAULT_SYSTEM_ACCESS_ROLE;
+  const normalizedLower = normalized.toLowerCase();
+
+  if (isLegacyBlockedAccessRole(normalized)) {
+    return null;
+  }
+
+  const aliasedRole = LEGACY_ACCESS_ROLE_ALIASES[normalizedLower];
+  if (aliasedRole) {
+    return aliasedRole;
   }
 
   return isOfficialCincelRole(normalized) ? normalized : null;

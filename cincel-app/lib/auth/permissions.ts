@@ -1,5 +1,6 @@
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import type { SystemAccessRole } from "@/lib/data/roles";
+import type { ResourceSection } from "@/lib/types/resource";
 
 export type DashboardDataScope = "global" | "managed_projects" | "assigned_tasks";
 
@@ -50,6 +51,27 @@ export type ProjectsCapabilities = {
   canEditProtectedProjectData: boolean;
 };
 
+type ResourceEditScope = "all" | "owned_or_personal" | "none";
+
+export type ResourcesCapabilities = {
+  canViewResources: boolean;
+  canManageFavoritesSection: boolean;
+  canManageEnterpriseSection: boolean;
+  corporate: {
+    canCreate: boolean;
+    canDelete: boolean;
+    editScope: ResourceEditScope;
+  };
+};
+
+export const CORPORATE_RESOURCES_SECTIONS: ReadonlyArray<ResourceSection> = [
+  "mis-documentos",
+  "plantillas-diseno",
+  "formatos-obra",
+  "mis-vacaciones",
+  "formacion",
+];
+
 const DASHBOARD_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, DashboardCapabilities> = {
   Administrador: {
     dataScope: "global",
@@ -67,12 +89,36 @@ const DASHBOARD_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, DashboardCapabili
       showTeamWorkload: true,
     },
   },
-  "Responsable de Proyecto": {
+  "Jefe de Taller": {
     dataScope: "managed_projects",
     sections: {
       showProjectAssignments: true,
       showProjectRisk: true,
       showTeamWorkload: true,
+    },
+  },
+  "Jefe de Construcción": {
+    dataScope: "managed_projects",
+    sections: {
+      showProjectAssignments: true,
+      showProjectRisk: true,
+      showTeamWorkload: true,
+    },
+  },
+  "Arquitecto Senior": {
+    dataScope: "managed_projects",
+    sections: {
+      showProjectAssignments: true,
+      showProjectRisk: true,
+      showTeamWorkload: true,
+    },
+  },
+  "Arquitecto Junior": {
+    dataScope: "assigned_tasks",
+    sections: {
+      showProjectAssignments: false,
+      showProjectRisk: false,
+      showTeamWorkload: false,
     },
   },
   Colaborador: {
@@ -91,7 +137,7 @@ const DASHBOARD_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, DashboardCapabili
       showTeamWorkload: false,
     },
   },
-  Cliente: {
+  Otros: {
     dataScope: "assigned_tasks",
     sections: {
       showProjectAssignments: false,
@@ -118,13 +164,37 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canReorderPhases: true,
     statusScope: "all",
   },
-  "Responsable de Proyecto": {
+  "Jefe de Taller": {
     canViewActivities: true,
     canCreateActivity: true,
     canChangeResponsible: true,
     canDeleteActivity: false,
     canReorderPhases: true,
     statusScope: "all",
+  },
+  "Jefe de Construcción": {
+    canViewActivities: true,
+    canCreateActivity: true,
+    canChangeResponsible: true,
+    canDeleteActivity: false,
+    canReorderPhases: true,
+    statusScope: "all",
+  },
+  "Arquitecto Senior": {
+    canViewActivities: true,
+    canCreateActivity: true,
+    canChangeResponsible: true,
+    canDeleteActivity: false,
+    canReorderPhases: true,
+    statusScope: "all",
+  },
+  "Arquitecto Junior": {
+    canViewActivities: true,
+    canCreateActivity: true,
+    canChangeResponsible: false,
+    canDeleteActivity: false,
+    canReorderPhases: false,
+    statusScope: "assigned_or_participant",
   },
   Colaborador: {
     canViewActivities: true,
@@ -142,13 +212,13 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canReorderPhases: false,
     statusScope: "assigned_or_participant",
   },
-  Cliente: {
-    canViewActivities: false,
-    canCreateActivity: false,
+  Otros: {
+    canViewActivities: true,
+    canCreateActivity: true,
     canChangeResponsible: false,
     canDeleteActivity: false,
     canReorderPhases: false,
-    statusScope: "none",
+    statusScope: "assigned_or_participant",
   },
 };
 
@@ -171,12 +241,39 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canDeleteProject: true,
     canEditProtectedProjectData: true,
   },
-  "Responsable de Proyecto": {
+  "Jefe de Taller": {
     canViewProjects: true,
     canCreateProject: true,
     canEditProjectGeneral: true,
     canChangeProjectStage: true,
     canArchiveProject: true,
+    canDeleteProject: false,
+    canEditProtectedProjectData: false,
+  },
+  "Jefe de Construcción": {
+    canViewProjects: true,
+    canCreateProject: true,
+    canEditProjectGeneral: true,
+    canChangeProjectStage: true,
+    canArchiveProject: true,
+    canDeleteProject: false,
+    canEditProtectedProjectData: false,
+  },
+  "Arquitecto Senior": {
+    canViewProjects: true,
+    canCreateProject: true,
+    canEditProjectGeneral: true,
+    canChangeProjectStage: true,
+    canArchiveProject: true,
+    canDeleteProject: false,
+    canEditProtectedProjectData: false,
+  },
+  "Arquitecto Junior": {
+    canViewProjects: true,
+    canCreateProject: false,
+    canEditProjectGeneral: false,
+    canChangeProjectStage: false,
+    canArchiveProject: false,
     canDeleteProject: false,
     canEditProtectedProjectData: false,
   },
@@ -198,14 +295,107 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canDeleteProject: false,
     canEditProtectedProjectData: false,
   },
-  Cliente: {
-    canViewProjects: false,
+  Otros: {
+    canViewProjects: true,
     canCreateProject: false,
     canEditProjectGeneral: false,
     canChangeProjectStage: false,
     canArchiveProject: false,
     canDeleteProject: false,
     canEditProtectedProjectData: false,
+  },
+};
+
+const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabilities> = {
+  Administrador: {
+    canViewResources: true,
+    canManageFavoritesSection: true,
+    canManageEnterpriseSection: true,
+    corporate: {
+      canCreate: true,
+      canDelete: true,
+      editScope: "all",
+    },
+  },
+  "Dirección": {
+    canViewResources: true,
+    canManageFavoritesSection: true,
+    canManageEnterpriseSection: false,
+    corporate: {
+      canCreate: true,
+      canDelete: true,
+      editScope: "all",
+    },
+  },
+  "Jefe de Taller": {
+    canViewResources: true,
+    canManageFavoritesSection: true,
+    canManageEnterpriseSection: false,
+    corporate: {
+      canCreate: true,
+      canDelete: false,
+      editScope: "all",
+    },
+  },
+  "Jefe de Construcción": {
+    canViewResources: true,
+    canManageFavoritesSection: true,
+    canManageEnterpriseSection: false,
+    corporate: {
+      canCreate: true,
+      canDelete: false,
+      editScope: "all",
+    },
+  },
+  "Arquitecto Senior": {
+    canViewResources: true,
+    canManageFavoritesSection: true,
+    canManageEnterpriseSection: false,
+    corporate: {
+      canCreate: true,
+      canDelete: false,
+      editScope: "all",
+    },
+  },
+  "Arquitecto Junior": {
+    canViewResources: true,
+    canManageFavoritesSection: true,
+    canManageEnterpriseSection: false,
+    corporate: {
+      canCreate: true,
+      canDelete: false,
+      editScope: "owned_or_personal",
+    },
+  },
+  Colaborador: {
+    canViewResources: true,
+    canManageFavoritesSection: true,
+    canManageEnterpriseSection: false,
+    corporate: {
+      canCreate: true,
+      canDelete: false,
+      editScope: "owned_or_personal",
+    },
+  },
+  "Pasante / Servicio Social": {
+    canViewResources: true,
+    canManageFavoritesSection: true,
+    canManageEnterpriseSection: false,
+    corporate: {
+      canCreate: true,
+      canDelete: false,
+      editScope: "owned_or_personal",
+    },
+  },
+  Otros: {
+    canViewResources: true,
+    canManageFavoritesSection: true,
+    canManageEnterpriseSection: false,
+    corporate: {
+      canCreate: true,
+      canDelete: false,
+      editScope: "owned_or_personal",
+    },
   },
 };
 
@@ -255,6 +445,99 @@ export function resolveActivitiesCapabilities(user: AuthenticatedUser | null): A
 export function resolveProjectsCapabilities(user: AuthenticatedUser | null): ProjectsCapabilities {
   const access = user?.access ?? "Colaborador";
   return PROJECTS_CAPABILITIES_BY_ROLE[access];
+}
+
+export function resolveResourcesCapabilities(user: AuthenticatedUser | null): ResourcesCapabilities {
+  const access = user?.access ?? "Colaborador";
+  return RESOURCES_CAPABILITIES_BY_ROLE[access];
+}
+
+export function isCorporateResourcesSection(section: ResourceSection): boolean {
+  return CORPORATE_RESOURCES_SECTIONS.includes(section);
+}
+
+export function canCreateResourceInSection({
+  capabilities,
+  section,
+}: {
+  capabilities: ResourcesCapabilities;
+  section: ResourceSection;
+}): boolean {
+  if (isCorporateResourcesSection(section)) {
+    return capabilities.corporate.canCreate;
+  }
+
+  if (section === "mis-favoritos") {
+    return capabilities.canManageFavoritesSection;
+  }
+
+  if (section === "empresa") {
+    return capabilities.canManageEnterpriseSection;
+  }
+
+  return false;
+}
+
+export function canDeleteResourceInSection({
+  capabilities,
+  section,
+}: {
+  capabilities: ResourcesCapabilities;
+  section: ResourceSection;
+}): boolean {
+  if (isCorporateResourcesSection(section)) {
+    return capabilities.corporate.canDelete;
+  }
+
+  if (section === "mis-favoritos") {
+    return capabilities.canManageFavoritesSection;
+  }
+
+  if (section === "empresa") {
+    return capabilities.canManageEnterpriseSection;
+  }
+
+  return false;
+}
+
+export function canEditResourceInSection({
+  capabilities,
+  section,
+  viewerMemberId,
+  ownerTeamMemberId,
+  personalForTeamMemberId,
+}: {
+  capabilities: ResourcesCapabilities;
+  section: ResourceSection;
+  viewerMemberId: number | null;
+  ownerTeamMemberId: number | null;
+  personalForTeamMemberId: number | null;
+}): boolean {
+  if (isCorporateResourcesSection(section)) {
+    if (capabilities.corporate.editScope === "all") {
+      return true;
+    }
+
+    if (capabilities.corporate.editScope === "none") {
+      return false;
+    }
+
+    if (viewerMemberId === null) {
+      return false;
+    }
+
+    return ownerTeamMemberId === viewerMemberId || personalForTeamMemberId === viewerMemberId;
+  }
+
+  if (section === "mis-favoritos") {
+    return capabilities.canManageFavoritesSection;
+  }
+
+  if (section === "empresa") {
+    return capabilities.canManageEnterpriseSection;
+  }
+
+  return false;
 }
 
 export function canChangeActivityStatus<TTask extends ActivityTaskScopeShape>({
