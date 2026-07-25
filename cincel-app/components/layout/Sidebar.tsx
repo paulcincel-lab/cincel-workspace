@@ -125,6 +125,8 @@ export default function Sidebar() {
       ? "Proveedores"
       : pathname.startsWith("/tareas")
         ? "Actividades"
+        : pathname.startsWith("/configuracion")
+          ? "Configuración"
         : null,
   );
 
@@ -175,7 +177,13 @@ export default function Sidebar() {
     { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
     { label: "Clientes", href: "/clientes", icon: ClientsIcon },
     { label: "Equipo", href: "/equipo", icon: TeamIcon },
-    { label: "Configuración", href: "/configuracion", icon: SettingsIcon },
+    {
+      label: "Configuración",
+      icon: SettingsIcon,
+      submenu: [
+        { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
+      ],
+    },
   ];
 
   const isActivePath = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
