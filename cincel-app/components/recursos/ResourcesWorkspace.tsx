@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { canCreateResourceInSection, canDeleteResourceInSection, resolveResourcesCapabilities } from "@/lib/auth/permissions";
+import { canCreateResourceInSection, canDeleteResourceInSection, canViewResourceSection, resolveResourcesCapabilities } from "@/lib/auth/permissions";
 import { RESOURCE_STORAGE_KEY, RESOURCE_TEMPLATES } from "@/lib/data/resources";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
 import type {
@@ -668,6 +668,12 @@ export default function ResourcesWorkspace({
   const pageLabel = titleOverride ?? (pageMode ? SECTION_LABEL[pageMode] : "Recursos");
   const pageDescription = descriptionOverride ?? (pageMode ? SECTION_DESCRIPTION[pageMode] : "Acceso rápido a las áreas de recursos del despacho.");
   const resourcesCapabilities = resolveResourcesCapabilities(authenticatedUser);
+  const canViewCurrentSection = pageMode
+    ? canViewResourceSection({
+      capabilities: resourcesCapabilities,
+      section: pageMode,
+    })
+    : resourcesCapabilities.canViewResources;
   const createActionSection: ResourceSection = mode === "overview" ? "empresa" : mode;
   const canCreateInCurrentSection = canCreateResourceInSection({
     capabilities: resourcesCapabilities,
@@ -782,6 +788,24 @@ export default function ResourcesWorkspace({
         <Sidebar />
         <section className="flex-1 overflow-y-auto p-6 lg:p-10">
           <Header />
+        </section>
+      </main>
+    );
+  }
+
+  if (!canViewCurrentSection) {
+    return (
+      <main className="flex min-h-screen bg-[#f3f4f6]">
+        <Sidebar />
+        <section className="flex-1 overflow-y-auto p-6 lg:p-10">
+          <Header />
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h1 className="text-2xl font-bold text-slate-900">Sin acceso al modulo Empresa</h1>
+            <p className="mt-2 text-sm text-slate-600">Tu acceso actual no permite visualizar la biblioteca institucional.</p>
+            <Link href="/dashboard" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              Volver al dashboard
+            </Link>
+          </div>
         </section>
       </main>
     );

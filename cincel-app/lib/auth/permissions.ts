@@ -72,7 +72,13 @@ type ResourceEditScope = "all" | "owned_or_personal" | "none";
 export type ResourcesCapabilities = {
   canViewResources: boolean;
   canManageFavoritesSection: boolean;
-  canManageEnterpriseSection: boolean;
+  enterprise: {
+    canView: boolean;
+    canCreate: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
+    canCreateCategory: boolean;
+  };
   corporate: {
     canCreate: boolean;
     canDelete: boolean;
@@ -326,7 +332,13 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   Administrador: {
     canViewResources: true,
     canManageFavoritesSection: true,
-    canManageEnterpriseSection: true,
+    enterprise: {
+      canView: true,
+      canCreate: true,
+      canEdit: true,
+      canDelete: true,
+      canCreateCategory: true,
+    },
     corporate: {
       canCreate: true,
       canDelete: true,
@@ -336,7 +348,13 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   "Dirección": {
     canViewResources: true,
     canManageFavoritesSection: true,
-    canManageEnterpriseSection: false,
+    enterprise: {
+      canView: true,
+      canCreate: true,
+      canEdit: true,
+      canDelete: true,
+      canCreateCategory: false,
+    },
     corporate: {
       canCreate: true,
       canDelete: true,
@@ -346,7 +364,13 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   "Jefe de Taller": {
     canViewResources: true,
     canManageFavoritesSection: true,
-    canManageEnterpriseSection: false,
+    enterprise: {
+      canView: true,
+      canCreate: false,
+      canEdit: false,
+      canDelete: false,
+      canCreateCategory: false,
+    },
     corporate: {
       canCreate: true,
       canDelete: false,
@@ -356,7 +380,13 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   "Jefe de Construcción": {
     canViewResources: true,
     canManageFavoritesSection: true,
-    canManageEnterpriseSection: false,
+    enterprise: {
+      canView: true,
+      canCreate: false,
+      canEdit: false,
+      canDelete: false,
+      canCreateCategory: false,
+    },
     corporate: {
       canCreate: true,
       canDelete: false,
@@ -366,7 +396,13 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   "Arquitecto Senior": {
     canViewResources: true,
     canManageFavoritesSection: true,
-    canManageEnterpriseSection: false,
+    enterprise: {
+      canView: true,
+      canCreate: false,
+      canEdit: false,
+      canDelete: false,
+      canCreateCategory: false,
+    },
     corporate: {
       canCreate: true,
       canDelete: false,
@@ -376,7 +412,13 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   "Arquitecto Junior": {
     canViewResources: true,
     canManageFavoritesSection: true,
-    canManageEnterpriseSection: false,
+    enterprise: {
+      canView: true,
+      canCreate: false,
+      canEdit: false,
+      canDelete: false,
+      canCreateCategory: false,
+    },
     corporate: {
       canCreate: true,
       canDelete: false,
@@ -386,7 +428,13 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   Colaborador: {
     canViewResources: true,
     canManageFavoritesSection: true,
-    canManageEnterpriseSection: false,
+    enterprise: {
+      canView: false,
+      canCreate: false,
+      canEdit: false,
+      canDelete: false,
+      canCreateCategory: false,
+    },
     corporate: {
       canCreate: true,
       canDelete: false,
@@ -396,7 +444,13 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   "Pasante / Servicio Social": {
     canViewResources: true,
     canManageFavoritesSection: true,
-    canManageEnterpriseSection: false,
+    enterprise: {
+      canView: true,
+      canCreate: false,
+      canEdit: false,
+      canDelete: false,
+      canCreateCategory: false,
+    },
     corporate: {
       canCreate: true,
       canDelete: false,
@@ -406,7 +460,13 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   Otros: {
     canViewResources: true,
     canManageFavoritesSection: true,
-    canManageEnterpriseSection: false,
+    enterprise: {
+      canView: false,
+      canCreate: false,
+      canEdit: false,
+      canDelete: false,
+      canCreateCategory: false,
+    },
     corporate: {
       canCreate: true,
       canDelete: false,
@@ -600,6 +660,34 @@ export function resolveResourcesCapabilities(user: AuthenticatedUser | null): Re
   return RESOURCES_CAPABILITIES_BY_ROLE[access];
 }
 
+export function canViewResourceSection({
+  capabilities,
+  section,
+}: {
+  capabilities: ResourcesCapabilities;
+  section: ResourceSection;
+}): boolean {
+  if (section === "empresa") {
+    return capabilities.enterprise.canView;
+  }
+
+  return capabilities.canViewResources;
+}
+
+export function canCreateResourceCategoryInSection({
+  capabilities,
+  section,
+}: {
+  capabilities: ResourcesCapabilities;
+  section: ResourceSection;
+}): boolean {
+  if (section === "empresa") {
+    return capabilities.enterprise.canCreateCategory;
+  }
+
+  return false;
+}
+
 export function resolveClientsCapabilities(user: AuthenticatedUser | null): ClientsCapabilities {
   const access = user?.access ?? "Colaborador";
   return CLIENTS_CAPABILITIES_BY_ROLE[access];
@@ -630,7 +718,7 @@ export function canCreateResourceInSection({
   }
 
   if (section === "empresa") {
-    return capabilities.canManageEnterpriseSection;
+    return capabilities.enterprise.canCreate;
   }
 
   return false;
@@ -652,7 +740,7 @@ export function canDeleteResourceInSection({
   }
 
   if (section === "empresa") {
-    return capabilities.canManageEnterpriseSection;
+    return capabilities.enterprise.canDelete;
   }
 
   return false;
@@ -692,7 +780,7 @@ export function canEditResourceInSection({
   }
 
   if (section === "empresa") {
-    return capabilities.canManageEnterpriseSection;
+    return capabilities.enterprise.canEdit;
   }
 
   return false;
