@@ -58,6 +58,15 @@ export type ClientsCapabilities = {
   canDeleteClient: boolean;
 };
 
+export type TeamCapabilities = {
+  canViewTeam: boolean;
+  canCreateCollaborator: boolean;
+  canEditCollaborator: boolean;
+  canChangeCollaboratorAccess: boolean;
+  canToggleCollaboratorActive: boolean;
+  canDeleteCollaborator: boolean;
+};
+
 type ResourceEditScope = "all" | "owned_or_personal" | "none";
 
 export type ResourcesCapabilities = {
@@ -463,6 +472,81 @@ const CLIENTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ClientsCapabilities
   },
 };
 
+const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
+  Administrador: {
+    canViewTeam: true,
+    canCreateCollaborator: true,
+    canEditCollaborator: true,
+    canChangeCollaboratorAccess: true,
+    canToggleCollaboratorActive: true,
+    canDeleteCollaborator: true,
+  },
+  "Dirección": {
+    canViewTeam: true,
+    canCreateCollaborator: true,
+    canEditCollaborator: true,
+    canChangeCollaboratorAccess: true,
+    canToggleCollaboratorActive: true,
+    canDeleteCollaborator: false,
+  },
+  "Jefe de Taller": {
+    canViewTeam: true,
+    canCreateCollaborator: false,
+    canEditCollaborator: false,
+    canChangeCollaboratorAccess: false,
+    canToggleCollaboratorActive: false,
+    canDeleteCollaborator: false,
+  },
+  "Jefe de Construcción": {
+    canViewTeam: true,
+    canCreateCollaborator: false,
+    canEditCollaborator: false,
+    canChangeCollaboratorAccess: false,
+    canToggleCollaboratorActive: false,
+    canDeleteCollaborator: false,
+  },
+  "Arquitecto Senior": {
+    canViewTeam: true,
+    canCreateCollaborator: false,
+    canEditCollaborator: false,
+    canChangeCollaboratorAccess: false,
+    canToggleCollaboratorActive: false,
+    canDeleteCollaborator: false,
+  },
+  "Arquitecto Junior": {
+    canViewTeam: true,
+    canCreateCollaborator: false,
+    canEditCollaborator: false,
+    canChangeCollaboratorAccess: false,
+    canToggleCollaboratorActive: false,
+    canDeleteCollaborator: false,
+  },
+  Colaborador: {
+    canViewTeam: true,
+    canCreateCollaborator: false,
+    canEditCollaborator: false,
+    canChangeCollaboratorAccess: false,
+    canToggleCollaboratorActive: false,
+    canDeleteCollaborator: false,
+  },
+  "Pasante / Servicio Social": {
+    canViewTeam: true,
+    canCreateCollaborator: false,
+    canEditCollaborator: false,
+    canChangeCollaboratorAccess: false,
+    canToggleCollaboratorActive: false,
+    canDeleteCollaborator: false,
+  },
+  Otros: {
+    canViewTeam: true,
+    canCreateCollaborator: false,
+    canEditCollaborator: false,
+    canChangeCollaboratorAccess: false,
+    canToggleCollaboratorActive: false,
+    canDeleteCollaborator: false,
+  },
+};
+
 function normalizeName(value: string | null | undefined): string {
   return (value || "").trim().toLowerCase();
 }
@@ -519,6 +603,11 @@ export function resolveResourcesCapabilities(user: AuthenticatedUser | null): Re
 export function resolveClientsCapabilities(user: AuthenticatedUser | null): ClientsCapabilities {
   const access = user?.access ?? "Colaborador";
   return CLIENTS_CAPABILITIES_BY_ROLE[access];
+}
+
+export function resolveTeamCapabilities(user: AuthenticatedUser | null): TeamCapabilities {
+  const access = user?.access ?? "Colaborador";
+  return TEAM_CAPABILITIES_BY_ROLE[access];
 }
 
 export function isCorporateResourcesSection(section: ResourceSection): boolean {

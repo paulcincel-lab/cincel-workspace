@@ -1,12 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
-import { getCollaboratorAccessState, hashPassword, normalizeEmail } from "@/lib/auth/auth-service";
+import { getCollaboratorAccessState, getCurrentAuthenticatedUser, hashPassword, normalizeEmail } from "@/lib/auth/auth-service";
+import { resolveTeamCapabilities } from "@/lib/auth/permissions";
 import { teamMembers, type TeamAvailability, type TeamMember } from "@/lib/data/team";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, normalizeSystemAccessRole, type SystemAccessRole } from "@/lib/data/roles";
@@ -432,6 +434,7 @@ export default function EquipoPage() {
   const [projectsData, setProjectsData] = useState(() => loadPersistedProjects());
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
   const [systemRoleByMemberId, setSystemRoleByMemberId] = useState<Record<number, SystemAccessRole>>(() => loadSystemRolesMap());
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [activeColumnOrder, setActiveColumnOrder] = useState<ActiveColumnKey[]>(() =>
     loadColumnOrder(ACTIVE_COLUMN_ORDER_STORAGE_KEY, ACTIVE_COLUMN_DEFAULT_ORDER)
   );
@@ -475,6 +478,7 @@ export default function EquipoPage() {
       setActivityTasks(loadAllActivityTasks());
       setProjectsData(loadPersistedProjects());
       setSecondaryCoordinatorByProject(loadSecondaryCoordinatorMap());
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
     };
 
     const onVisibility = () => {
@@ -495,6 +499,10 @@ export default function EquipoPage() {
   }, []);
 
   const activeTasks = activityTasks.filter((task) => !task.archived && task.status !== "Completado");
+
+  const teamCapabilities = useMemo(() => {
+    return resolveTeamCapabilities(authenticatedUser);
+  }, [authenticatedUser]);
 
   const membersWithWorkload = useMemo<TeamMemberWithWorkload[]>(() => {
     return members.map((member) => {
@@ -628,6 +636,10 @@ export default function EquipoPage() {
   };
 
   const openAddEditor = () => {
+    if (!teamCapabilities.canCreateCollaborator) {
+      return;
+    }
+
     setEditingId(null);
     setDraft(emptyDraft);
     setFormError("");
@@ -635,6 +647,10 @@ export default function EquipoPage() {
   };
 
   const openEditEditor = (member: TeamMember) => {
+    if (!teamCapabilities.canEditCollaborator) {
+      return;
+    }
+
     const resolvedAccess = normalizeSystemAccessRole(resolveSystemRole(member)) ?? DEFAULT_SYSTEM_ACCESS_ROLE;
     const accessState = getCollaboratorAccessState(member);
 
@@ -669,6 +685,14 @@ export default function EquipoPage() {
   };
 
   const saveMember = () => {
+    if (editingId === null && !teamCapabilities.canCreateCollaborator) {
+      return;
+    }
+
+    if (editingId !== null && !teamCapabilities.canEditCollaborator) {
+      return;
+    }
+
     const name = draft.name.trim();
     const birthDate = draft.birthDate.trim();
     const nationality = draft.nationality.trim();
@@ -785,10 +809,12 @@ export default function EquipoPage() {
       };
 
       setMembers((current) => [...current, newMember]);
-      setSystemRoleByMemberId((current) => ({
-        ...current,
-        [nextId]: access,
-      }));
+      if (teamCapabilities.canChangeCollaboratorAccess) {
+        setSystemRoleByMemberId((current) => ({
+          ...current,
+          [nextId]: access,
+        }));
+      }
     } else {
       setMembers((current) =>
         current.map((member) =>
@@ -843,10 +869,12 @@ export default function EquipoPage() {
         )
       );
 
-      setSystemRoleByMemberId((current) => ({
-        ...current,
-        [editingId]: access,
-      }));
+      if (teamCapabilities.canChangeCollaboratorAccess) {
+        setSystemRoleByMemberId((current) => ({
+          ...current,
+          [editingId]: access,
+        }));
+      }
     }
 
     setFormError("");
@@ -854,6 +882,10 @@ export default function EquipoPage() {
   };
 
   const toggleMemberActive = (id: number) => {
+    if (!teamCapabilities.canToggleCollaboratorActive) {
+      return;
+    }
+
     setMembers((current) =>
       current.map((member) => {
         if (member.id !== id) {
@@ -903,10 +935,31 @@ export default function EquipoPage() {
   };
 
   const updateSystemRole = (memberId: number, nextRole: SystemAccessRole) => {
+    if (!teamCapabilities.canChangeCollaboratorAccess) {
+      return;
+    }
+
     setSystemRoleByMemberId((current) => ({
       ...current,
       [memberId]: nextRole,
     }));
+  };
+
+  const deleteMember = (memberId: number) => {
+    if (!teamCapabilities.canDeleteCollaborator) {
+      return;
+    }
+
+    setMembers((current) => current.filter((member) => member.id !== memberId));
+    setSystemRoleByMemberId((current) => {
+      const next = { ...current };
+      delete next[memberId];
+      return next;
+    });
+
+    setSelectedProfileMemberId((current) => (current === memberId ? null : current));
+    setSelectedCoordinatorMemberId((current) => (current === memberId ? null : current));
+    setEditingId((current) => (current === memberId ? null : current));
   };
 
   const onDropActiveColumn = (target: ActiveColumnKey, sourceFromEvent?: string) => {
@@ -978,6 +1031,8 @@ export default function EquipoPage() {
           <select
             value={resolveSystemRole(member)}
             onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
+            disabled={!teamCapabilities.canChangeCollaboratorAccess}
+            title={teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
             className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
           >
             {systemRoleOptions.map((roleOption) => (
@@ -1089,7 +1144,9 @@ export default function EquipoPage() {
           <button
             type="button"
             onClick={() => openEditEditor(member)}
-            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            disabled={!teamCapabilities.canEditCollaborator}
+            title={teamCapabilities.canEditCollaborator ? "" : "No tienes permiso para editar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canEditCollaborator ? "border-slate-200 text-slate-600 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
             Editar
           </button>
@@ -1097,9 +1154,25 @@ export default function EquipoPage() {
           <button
             type="button"
             onClick={() => toggleMemberActive(member.id)}
-            className="rounded-lg border border-amber-200 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50"
+            disabled={!teamCapabilities.canToggleCollaboratorActive}
+            title={teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canToggleCollaboratorActive ? "border-amber-200 text-amber-700 hover:bg-amber-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
             Desactivar
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
+                deleteMember(member.id);
+              }
+            }}
+            disabled={!teamCapabilities.canDeleteCollaborator}
+            title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canDeleteCollaborator ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+          >
+            Eliminar
           </button>
         </div>
       </td>
@@ -1133,6 +1206,8 @@ export default function EquipoPage() {
           <select
             value={resolveSystemRole(member)}
             onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
+            disabled={!teamCapabilities.canChangeCollaboratorAccess}
+            title={teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
             className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
           >
             {systemRoleOptions.map((roleOption) => (
@@ -1217,21 +1292,57 @@ export default function EquipoPage() {
           <button
             type="button"
             onClick={() => openEditEditor(member)}
-            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-white"
+            disabled={!teamCapabilities.canEditCollaborator}
+            title={teamCapabilities.canEditCollaborator ? "" : "No tienes permiso para editar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canEditCollaborator ? "border-slate-200 text-slate-600 hover:bg-white" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
             Editar
           </button>
           <button
             type="button"
             onClick={() => toggleMemberActive(member.id)}
-            className="rounded-lg border border-emerald-200 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+            disabled={!teamCapabilities.canToggleCollaboratorActive}
+            title={teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canToggleCollaboratorActive ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
             Reactivar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
+                deleteMember(member.id);
+              }
+            }}
+            disabled={!teamCapabilities.canDeleteCollaborator}
+            title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canDeleteCollaborator ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+          >
+            Eliminar
           </button>
         </div>
       </td>
     );
   };
+
+  if (!teamCapabilities.canViewTeam) {
+    return (
+      <main className="flex min-h-screen bg-slate-100">
+        <Sidebar />
+
+        <section className="flex-1 overflow-y-auto p-10">
+          <Header />
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h1 className="text-2xl font-bold text-slate-900">Sin acceso al modulo Equipo</h1>
+            <p className="mt-2 text-sm text-slate-600">Tu acceso actual no permite visualizar la información del equipo.</p>
+            <Link href="/dashboard" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              Volver al dashboard
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen bg-slate-100">
@@ -1251,7 +1362,9 @@ export default function EquipoPage() {
               <button
                 type="button"
                 onClick={openAddEditor}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                disabled={!teamCapabilities.canCreateCollaborator}
+                title={teamCapabilities.canCreateCollaborator ? "" : "No tienes permiso para crear colaboradores"}
+                className={`rounded-xl px-4 py-2 text-sm font-medium text-white ${teamCapabilities.canCreateCollaborator ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
               >
                 + Agregar colaborador
               </button>
@@ -1552,6 +1665,8 @@ export default function EquipoPage() {
                           const normalized = normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE;
                           setDraft((current) => ({ ...current, access: normalized }));
                         }}
+                        disabled={!teamCapabilities.canChangeCollaboratorAccess}
+                        title={teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
                         className="w-full rounded-xl border px-4 py-2"
                       >
                         {SYSTEM_ACCESS_ROLES.map((option) => (
@@ -1889,7 +2004,9 @@ export default function EquipoPage() {
                 <button
                   type="button"
                   onClick={saveMember}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  disabled={editingId === null ? !teamCapabilities.canCreateCollaborator : !teamCapabilities.canEditCollaborator}
+                  title={(editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator) ? "" : "No tienes permiso para guardar cambios"}
+                  className={`rounded-xl px-4 py-2 text-sm font-medium text-white ${(editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator) ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
                 >
                   Guardar
                 </button>
