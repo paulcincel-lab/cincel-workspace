@@ -52,21 +52,21 @@ const ActivityIcon = ({ className = "h-5 w-5" }: IconProps) => (
   </svg>
 );
 
+const CalendarIcon = ({ className = "h-5 w-5" }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
+    <rect x="3" y="5" width="18" height="16" rx="2" />
+    <path d="M16 3v4" />
+    <path d="M8 3v4" />
+    <path d="M3 10h18" />
+  </svg>
+);
+
 const TeamIcon = ({ className = "h-5 w-5" }: IconProps) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
     <circle cx="9" cy="8" r="3" />
     <circle cx="17" cy="9" r="2" />
     <path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6" />
     <path d="M15 19c0-2.2 1.8-4 4-4 1 0 1.9.4 2.6 1" />
-  </svg>
-);
-
-const ProviderIcon = ({ className = "h-5 w-5" }: IconProps) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
-    <path d="M4 7h16" />
-    <rect x="3" y="5" width="18" height="14" rx="2" />
-    <path d="M8 11h8" />
-    <path d="M8 15h5" />
   </svg>
 );
 
@@ -134,6 +134,7 @@ export default function Sidebar() {
 
   const menu: MenuItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
+    { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
     {
       label: "Actividades",
       icon: ActivityIcon,
@@ -144,6 +145,9 @@ export default function Sidebar() {
         { label: "Construccion", href: "/tareas/construccion", icon: ActivityIcon },
       ],
     },
+    { label: "Calendario", href: "/calendario", icon: CalendarIcon },
+    { label: "Equipo", href: "/equipo", icon: TeamIcon },
+    { label: "Clientes", href: "/clientes", icon: ClientsIcon },
     {
       label: "Recursos",
       icon: ResourcesIcon,
@@ -167,18 +171,6 @@ export default function Sidebar() {
         { label: "Politicas de la empresa", href: "/recursos/empresa/politicas-de-la-empresa", icon: ResourcesIcon },
       ],
     },
-    {
-      label: "Proveedores",
-      icon: ProviderIcon,
-      submenu: [
-        { label: "Contratistas", href: "/proveedores/contratistas", icon: ProviderIcon },
-        { label: "Tiendas", href: "/proveedores/tiendas", icon: ProviderIcon },
-        { label: "Colaboradores", href: "/proveedores/colaboradores", icon: ProviderIcon },
-      ],
-    },
-    { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
-    { label: "Clientes", href: "/clientes", icon: ClientsIcon },
-    { label: "Equipo", href: "/equipo", icon: TeamIcon },
     {
       label: "Configuración",
       icon: SettingsIcon,

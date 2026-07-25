@@ -2,6 +2,8 @@ import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import {
   resolveActivitiesCapabilitiesFromDefaults,
   type ActivitiesCapabilities,
+  resolveCalendarCapabilitiesFromDefaults,
+  type CalendarCapabilities,
   resolveClientsCapabilitiesFromDefaults,
   type ClientsCapabilities,
   resolveDashboardCapabilitiesFromDefaults,
@@ -149,9 +151,36 @@ export const PERMISSIONS_MODULES_REGISTRY = ([
     isEnabled: (values) => values.canViewActivities === true,
   },
   {
+    id: "calendar",
+    name: "Calendario",
+    order: 3,
+    resolver: resolveCalendarCapabilitiesFromDefaults,
+    actions: [
+      {
+        id: "canViewCalendar",
+        label: "Ver calendario",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as CalendarCapabilities).canViewCalendar,
+      },
+      {
+        id: "canViewDailyAgenda",
+        label: "Ver agenda diaria",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as CalendarCapabilities).canViewDailyAgenda,
+      },
+      {
+        id: "canViewTeamCalendar",
+        label: "Ver calendario del equipo",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as CalendarCapabilities).canViewTeamCalendar,
+      },
+    ],
+    isEnabled: (values) => values.canViewCalendar === true,
+  },
+  {
     id: "resources",
     name: "Recursos",
-    order: 3,
+    order: 4,
     resolver: resolveResourcesCapabilitiesFromDefaults,
     detailsLabel: "Edición corporativa",
     detailsValueLabel: (values) => {
@@ -207,7 +236,7 @@ export const PERMISSIONS_MODULES_REGISTRY = ([
   {
     id: "enterprise",
     name: "Empresa",
-    order: 4,
+    order: 5,
     resolver: resolveResourcesCapabilitiesFromDefaults,
     actions: [
       {
@@ -246,7 +275,7 @@ export const PERMISSIONS_MODULES_REGISTRY = ([
   {
     id: "projects",
     name: "Proyectos",
-    order: 5,
+    order: 6,
     resolver: resolveProjectsCapabilitiesFromDefaults,
     actions: [
       {
@@ -297,7 +326,7 @@ export const PERMISSIONS_MODULES_REGISTRY = ([
   {
     id: "clients",
     name: "Clientes",
-    order: 6,
+    order: 7,
     resolver: resolveClientsCapabilitiesFromDefaults,
     actions: [
       {
@@ -330,7 +359,7 @@ export const PERMISSIONS_MODULES_REGISTRY = ([
   {
     id: "team",
     name: "Equipo",
-    order: 7,
+    order: 8,
     resolver: resolveTeamCapabilitiesFromDefaults,
     actions: [
       {

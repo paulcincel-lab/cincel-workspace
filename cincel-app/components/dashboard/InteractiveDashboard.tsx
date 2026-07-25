@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+import UnifiedCalendar from "@/components/calendario/UnifiedCalendar";
+import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
@@ -24,28 +26,6 @@ type DashboardTasksState = {
 };
 
 type DateRangeFilter = "7d" | "30d" | "90d";
-type CalendarEventType = "Compromiso" | "Proxima revision" | "Fecha de entrega";
-
-const WEEKDAY_LABELS = ["lun.", "mar.", "mie.", "jue.", "vie.", "sab.", "dom."];
-const PROJECT_EVENT_COLORS = ["#0e7490", "#db2777", "#f59e0b", "#2563eb", "#7c3aed", "#dc2626", "#059669"];
-
-function eventTypePrefix(type: CalendarEventType): string {
-  if (type === "Compromiso") return "C";
-  if (type === "Proxima revision") return "R";
-  return "E";
-}
-
-function eventTypeClassName(type: CalendarEventType): string {
-  if (type === "Compromiso") {
-    return "bg-blue-100 text-blue-800";
-  }
-
-  if (type === "Proxima revision") {
-    return "bg-emerald-100 text-emerald-800";
-  }
-
-  return "bg-amber-100 text-amber-800";
-}
 
 function loadPersistedProjects(): ProjectData[] {
   if (typeof window === "undefined") {
@@ -127,18 +107,6 @@ function formatStageLabel(workflow: WorkflowType): string {
   return workflow;
 }
 
-function workflowHref(workflow: WorkflowType): string {
-  if (workflow === "Presale") {
-    return "/tareas/presale";
-  }
-
-  if (workflow === "Diseño") {
-    return "/tareas/diseno";
-  }
-
-  return "/tareas/construccion";
-}
-
 function riskTone(score: number): string {
   if (score >= 60) {
     return "bg-red-100 text-red-800";
@@ -149,10 +117,6 @@ function riskTone(score: number): string {
   }
 
   return "bg-emerald-100 text-emerald-800";
-}
-
-function dateKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
 }
 
 function getMexicoCityToday(): Date {
@@ -183,11 +147,6 @@ export default function InteractiveDashboard() {
     diseno: loadLinkedTasks("Diseño", disenoTasks),
     operativas: loadLinkedTasks("Construcción", operativasTasks),
   }));
-  const [calendarCursor, setCalendarCursor] = useState(() => {
-    const now = getMexicoCityToday();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
   const [rangeFilter, setRangeFilter] = useState<DateRangeFilter>("30d");
   const [stageFilter, setStageFilter] = useState<"Todas" | WorkflowType>("Todas");
@@ -646,131 +605,7 @@ export default function InteractiveDashboard() {
     return `conic-gradient(${segments.join(", ")})`;
   }, [statusDistribution, statusTotal]);
 
-  const monthlyCalendar = useMemo(() => {
-    const monthStart = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
-    const monthEnd = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + 1, 0);
-
-    const leadingEmpty = (monthStart.getDay() + 6) % 7;
-    const daysInMonth = monthEnd.getDate();
-    const totalCells = Math.ceil((leadingEmpty + daysInMonth) / 7) * 7;
-
-    const projectColorMap = new Map<string, string>();
-    let colorCursor = 0;
-
-    const resolveProjectColor = (projectName: string) => {
-      const existing = projectColorMap.get(projectName);
-      if (existing) {
-        return existing;
-      }
-
-      const next = PROJECT_EVENT_COLORS[colorCursor % PROJECT_EVENT_COLORS.length];
-      projectColorMap.set(projectName, next);
-      colorCursor += 1;
-      return next;
-    };
-
-    const eventsByDate = new Map<string, Array<{
-      id: string;
-      type: CalendarEventType;
-      task: Task;
-      href: string;
-      projectColor: string;
-      date: string;
-    }>>();
-
-    filteredTasks.forEach((task) => {
-      const href = `${workflowHref(task.workflow)}?project=${encodeURIComponent(task.project)}`;
-      const projectColor = resolveProjectColor(task.project);
-
-      const registerEvent = (date: string, type: CalendarEventType, idPrefix: string) => {
-        if (!date) {
-          return;
-        }
-
-        const list = eventsByDate.get(date) ?? [];
-        list.push({
-          id: `${idPrefix}-${task.id}-${date}`,
-          type,
-          task,
-          href,
-          projectColor,
-          date,
-        });
-        eventsByDate.set(date, list);
-      };
-
-      registerEvent(task.commitmentDate, "Compromiso", "c");
-      registerEvent(task.reviewDate, "Proxima revision", "r");
-      registerEvent(task.deliveryDate || "", "Fecha de entrega", "e");
-    });
-
-    const gridStart = new Date(monthStart);
-    gridStart.setDate(monthStart.getDate() - leadingEmpty);
-
-    const cells = Array.from({ length: totalCells }).map((_, index) => {
-      const currentDate = new Date(gridStart);
-      currentDate.setDate(gridStart.getDate() + index);
-
-      const key = dateKey(currentDate);
-      const dayEvents = (eventsByDate.get(key) ?? []).sort((a, b) => {
-        const projectDiff = a.task.project.localeCompare(b.task.project);
-        if (projectDiff !== 0) {
-          return projectDiff;
-        }
-
-        return a.task.description.localeCompare(b.task.description);
-      });
-
-      return {
-        key,
-        isCurrentMonth: currentDate.getMonth() === monthStart.getMonth(),
-        isToday: key === dateKey(today),
-        dayNumber: currentDate.getDate(),
-        events: dayEvents,
-      };
-    });
-
-    const legend = Array.from(projectColorMap.entries()).map(([project, color]) => ({ project, color }));
-
-    return {
-      monthLabel: monthStart.toLocaleDateString("es-MX", { month: "long", year: "numeric" }),
-      cells,
-      legend,
-    };
-  }, [calendarCursor, filteredTasks, today]);
-
-  const defaultCalendarDateKey = useMemo(() => {
-    if (
-      calendarCursor.getFullYear() === today.getFullYear() &&
-      calendarCursor.getMonth() === today.getMonth()
-    ) {
-      return dateKey(today);
-    }
-
-    return dateKey(new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1));
-  }, [calendarCursor, today]);
-
-  const activeCalendarDateKey = selectedCalendarDate ?? defaultCalendarDateKey;
-
-  const selectedDayEvents = useMemo(() => {
-    const selectedCell = monthlyCalendar.cells.find((cell) => cell.key === activeCalendarDateKey);
-    return selectedCell?.events ?? [];
-  }, [activeCalendarDateKey, monthlyCalendar.cells]);
-
-  const selectedDayLabel = useMemo(() => {
-    const date = toDate(activeCalendarDateKey);
-
-    if (!date) {
-      return activeCalendarDateKey;
-    }
-
-    return date.toLocaleDateString("es-MX", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  }, [activeCalendarDateKey]);
+  const calendarEvents = useMemo(() => buildCalendarEvents(filteredTasks), [filteredTasks]);
 
   if (!isMounted) {
     return (
@@ -993,172 +828,7 @@ export default function InteractiveDashboard() {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-0 shadow-sm xl:col-span-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-semibold text-slate-900">Calendario</h2>
-              <span className="text-sm text-slate-500">⌄</span>
-            </div>
-
-            <div className="flex items-center gap-2 text-sm">
-              <button
-                type="button"
-                onClick={() => {
-                  const now = getMexicoCityToday();
-                  setCalendarCursor(new Date(now.getFullYear(), now.getMonth(), 1));
-                  setSelectedCalendarDate(dateKey(now));
-                }}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-800 hover:bg-slate-50"
-                aria-label="Ir a hoy"
-              >
-                Hoy
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCalendarCursor((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1));
-                  setSelectedCalendarDate(null);
-                }}
-                className="rounded px-2 py-1 text-2xl leading-none text-slate-700 hover:bg-slate-100"
-                aria-label="Mes anterior"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCalendarCursor((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1));
-                  setSelectedCalendarDate(null);
-                }}
-                className="rounded px-2 py-1 text-2xl leading-none text-slate-700 hover:bg-slate-100"
-                aria-label="Mes siguiente"
-              >
-                ›
-              </button>
-              <p className="min-w-32 text-center text-base font-semibold capitalize text-slate-800 md:text-lg">{monthlyCalendar.monthLabel}</p>
-              <div className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700">Mes</div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <div className="min-w-[980px]">
-              <div className="grid grid-cols-7 border-b border-slate-200 bg-white text-center text-sm font-semibold text-slate-700 md:text-base">
-                {WEEKDAY_LABELS.map((label) => (
-                  <div key={label} className="border-r border-slate-200 py-2 last:border-r-0">
-                    {label}
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-7">
-                {monthlyCalendar.cells.map((cell) => {
-                  const visibleEvents = cell.events.slice(0, 2);
-                  const hiddenCount = Math.max(0, cell.events.length - visibleEvents.length);
-
-                  return (
-                    <button
-                      key={cell.key}
-                      type="button"
-                      onClick={() => setSelectedCalendarDate(cell.key)}
-                      className={`min-h-[96px] border-b border-r border-slate-200 p-1 text-left align-top transition ${cell.isCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-slate-50 text-slate-400"} ${cell.key === activeCalendarDateKey ? "ring-2 ring-inset ring-blue-500" : ""}`}
-                    >
-                      <div className="flex justify-end">
-                        <span className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold ${cell.isToday ? "bg-blue-600 text-white" : "text-slate-700"}`}>
-                          {String(cell.dayNumber).padStart(2, "0")}
-                        </span>
-                      </div>
-
-                      <div className="mt-1 space-y-1">
-                        {visibleEvents.map((entry) => (
-                          <Link
-                            key={entry.id}
-                            href={entry.href}
-                            onClick={(event) => event.stopPropagation()}
-                            className={`block truncate rounded border-l-4 px-2 py-1 text-[11px] font-semibold md:text-xs ${eventTypeClassName(entry.type)}`}
-                            style={{ borderLeftColor: entry.projectColor }}
-                            title={`${eventTypePrefix(entry.type)}. ${entry.task.description} · ${entry.task.project}`}
-                          >
-                            {eventTypePrefix(entry.type)}. {entry.task.description}
-                          </Link>
-                        ))}
-
-                        {hiddenCount > 0 ? (
-                          <p className="px-1 text-xs font-medium text-slate-500">+{hiddenCount} más</p>
-                        ) : null}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-5 border-t border-slate-200 px-4 py-3 text-xs text-slate-700 md:text-sm">
-            {monthlyCalendar.legend.map((item) => (
-              <span key={`legend-${item.project}`} className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                {item.project}
-              </span>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-2 text-xs text-slate-600">
-            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-800">C: Compromiso</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">R: Proxima revision</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">E: Fecha de entrega</span>
-            {selectedDayEvents.length > 0 ? (
-              <span className="ml-auto text-slate-700">{selectedDayEvents.length} evento(s) en el dia seleccionado</span>
-            ) : null}
-          </div>
-
-          <div className="border-t border-slate-200 px-4 py-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">Detalle del dia seleccionado</p>
-              <p className="text-sm font-semibold capitalize text-slate-900">{selectedDayLabel}</p>
-            </div>
-
-            {selectedDayEvents.length === 0 ? (
-              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
-                No hay actividades registradas para este dia.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full min-w-[820px] bg-white">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-700">
-                    <tr>
-                      <th className="px-3 py-2">Tipo</th>
-                      <th className="px-3 py-2">Fecha</th>
-                      <th className="px-3 py-2">Proyecto</th>
-                      <th className="px-3 py-2">Etapa</th>
-                      <th className="px-3 py-2">Responsable</th>
-                      <th className="px-3 py-2">Actividad</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedDayEvents.map((entry) => (
-                      <tr key={`detail-${entry.id}`} className="border-b border-slate-100 text-sm text-slate-800 last:border-b-0">
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${eventTypeClassName(entry.type)}`}>
-                            {entry.type}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">{entry.date}</td>
-                        <td className="px-3 py-2 font-semibold">
-                          <Link href={entry.href} className="hover:text-blue-700 hover:underline">
-                            {entry.task.project}
-                          </Link>
-                        </td>
-                        <td className="px-3 py-2">{formatStageLabel(entry.task.workflow)}</td>
-                        <td className="px-3 py-2">{entry.task.manager || "Sin responsable"}</td>
-                        <td className="px-3 py-2">{entry.task.description}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </article>
+        <UnifiedCalendar events={calendarEvents} mode="summary" />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">

@@ -15,6 +15,12 @@ export type DashboardCapabilities = {
   };
 };
 
+export type CalendarCapabilities = {
+  canViewCalendar: boolean;
+  canViewDailyAgenda: boolean;
+  canViewTeamCalendar: boolean;
+};
+
 type DashboardProjectShape = {
   id: number;
   name: string;
@@ -168,6 +174,54 @@ const DASHBOARD_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, DashboardCapabili
       showProjectRisk: false,
       showTeamWorkload: false,
     },
+  },
+};
+
+const CALENDAR_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, CalendarCapabilities> = {
+  Administrador: {
+    canViewCalendar: true,
+    canViewDailyAgenda: true,
+    canViewTeamCalendar: true,
+  },
+  "Dirección": {
+    canViewCalendar: true,
+    canViewDailyAgenda: true,
+    canViewTeamCalendar: true,
+  },
+  "Jefe de Taller": {
+    canViewCalendar: true,
+    canViewDailyAgenda: true,
+    canViewTeamCalendar: true,
+  },
+  "Jefe de Construcción": {
+    canViewCalendar: true,
+    canViewDailyAgenda: true,
+    canViewTeamCalendar: true,
+  },
+  "Arquitecto Senior": {
+    canViewCalendar: true,
+    canViewDailyAgenda: true,
+    canViewTeamCalendar: true,
+  },
+  "Arquitecto Junior": {
+    canViewCalendar: true,
+    canViewDailyAgenda: true,
+    canViewTeamCalendar: false,
+  },
+  Colaborador: {
+    canViewCalendar: true,
+    canViewDailyAgenda: true,
+    canViewTeamCalendar: false,
+  },
+  "Pasante / Servicio Social": {
+    canViewCalendar: true,
+    canViewDailyAgenda: true,
+    canViewTeamCalendar: false,
+  },
+  Otros: {
+    canViewCalendar: true,
+    canViewDailyAgenda: true,
+    canViewTeamCalendar: false,
   },
 };
 
@@ -731,6 +785,11 @@ export function resolveDashboardCapabilitiesFromDefaults(user: AuthenticatedUser
   return DASHBOARD_CAPABILITIES_BY_ROLE[access];
 }
 
+export function resolveCalendarCapabilitiesFromDefaults(user: AuthenticatedUser | null): CalendarCapabilities {
+  const access = resolveAccess(user);
+  return CALENDAR_CAPABILITIES_BY_ROLE[access];
+}
+
 export function resolveActivitiesCapabilitiesFromDefaults(user: AuthenticatedUser | null): ActivitiesCapabilities {
   const access = resolveAccess(user);
   return ACTIVITIES_CAPABILITIES_BY_ROLE[access];
@@ -777,6 +836,22 @@ export function resolveDashboardCapabilities(user: AuthenticatedUser | null): Da
       showProjectRisk: readBooleanOverride(moduleOverrides, "showProjectRisk", defaults.sections.showProjectRisk),
       showTeamWorkload: readBooleanOverride(moduleOverrides, "showTeamWorkload", defaults.sections.showTeamWorkload),
     },
+  };
+}
+
+export function resolveCalendarCapabilities(user: AuthenticatedUser | null): CalendarCapabilities {
+  const access = resolveAccess(user);
+  const defaults = resolveCalendarCapabilitiesFromDefaults(user);
+  const moduleOverrides = readRoleModuleOverrides(access, "calendar");
+
+  if (!moduleOverrides) {
+    return defaults;
+  }
+
+  return {
+    canViewCalendar: readBooleanOverride(moduleOverrides, "canViewCalendar", defaults.canViewCalendar),
+    canViewDailyAgenda: readBooleanOverride(moduleOverrides, "canViewDailyAgenda", defaults.canViewDailyAgenda),
+    canViewTeamCalendar: readBooleanOverride(moduleOverrides, "canViewTeamCalendar", defaults.canViewTeamCalendar),
   };
 }
 
