@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import Header from "@/components/layout/Header";
@@ -42,9 +43,9 @@ type StoredPermissionsState = {
   roles: PermissionsState;
 };
 
-const CONFIG_NAV_ITEMS: Array<{ key: string; label: string; enabled: boolean }> = [
-  { key: "permisos", label: "Permisos", enabled: true },
-  { key: "general", label: "General", enabled: false },
+const CONFIG_NAV_ITEMS: Array<{ key: string; label: string; href?: string; enabled: boolean }> = [
+  { key: "permisos", label: "Permisos", href: "/configuracion/permisos", enabled: true },
+  { key: "general", label: "General", href: "/configuracion/general", enabled: true },
   { key: "catalogos", label: "Catalogos", enabled: false },
   { key: "seguridad", label: "Seguridad", enabled: false },
   { key: "integraciones", label: "Integraciones", enabled: false },
@@ -353,17 +354,33 @@ export default function PermissionsWorkspace() {
           <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Configuracion</h2>
             <nav className="mt-4 space-y-1.5">
-              {CONFIG_NAV_ITEMS.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  disabled={!item.enabled}
-                  className={`w-full rounded-xl px-3 py-2 text-left text-sm font-medium ${item.enabled ? "bg-blue-50 text-blue-700" : "cursor-not-allowed text-slate-400"}`}
-                >
-                  {item.label}
-                  {!item.enabled ? <span className="ml-2 text-xs text-slate-400">Proximamente</span> : null}
-                </button>
-              ))}
+              {CONFIG_NAV_ITEMS.map((item) => {
+                const isActive = item.key === "permisos";
+
+                if (item.enabled && item.href) {
+                  return (
+                    <Link
+                      key={item.key}
+                      href={item.href}
+                      className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-medium ${isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                }
+
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    disabled
+                    className="w-full cursor-not-allowed rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-400"
+                  >
+                    {item.label}
+                    <span className="ml-2 text-xs text-slate-400">Proximamente</span>
+                  </button>
+                );
+              })}
             </nav>
           </aside>
 

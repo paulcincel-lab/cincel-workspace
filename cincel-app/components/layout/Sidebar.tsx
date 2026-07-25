@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import Avatar from "@/components/ui/Avatar";
+import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 
 type IconProps = {
   className?: string;
@@ -115,6 +116,7 @@ const ChevronIcon = ({ className = "h-4 w-4" }: IconProps) => (
 const isGroup = (item: MenuItem): item is MenuGroupItem => "submenu" in item;
 
 export default function Sidebar() {
+  const generalSettings = useGeneralSettings();
   const pathname = usePathname();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(
     pathname.startsWith("/recursos/empresa")
@@ -181,6 +183,7 @@ export default function Sidebar() {
       label: "Configuración",
       icon: SettingsIcon,
       submenu: [
+        { label: "General", href: "/configuracion/general", icon: SettingsIcon },
         { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
       ],
     },
@@ -199,11 +202,29 @@ export default function Sidebar() {
     return "Perfil";
   })();
 
+  const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
+  const systemLogoUrl = generalSettings.appearance.systemLogoUrl.trim();
+  const [systemNamePrimary, ...systemNameRest] = systemName.split(" ");
+  const systemNameSecondary = systemNameRest.join(" ");
+
   return (
     <aside className="w-64 h-screen bg-[#ECEFF6] border-r border-[#D9DEEA] text-slate-700 flex flex-col">
       <div className="px-5 pt-5 pb-3">
-        <h1 className="text-[34px] leading-[0.95] font-extrabold tracking-tight text-black">Cincel</h1>
-        <p className="text-[20px] leading-tight font-semibold text-black">Workspace</p>
+        {systemLogoUrl ? (
+          <div className="mb-2 h-10 w-full overflow-hidden rounded-lg border border-[#D9DEEA] bg-white">
+            <div
+              aria-label={systemName}
+              role="img"
+              className="h-full w-full bg-contain bg-center bg-no-repeat"
+              style={{ backgroundImage: `url(${systemLogoUrl})` }}
+            />
+          </div>
+        ) : null}
+
+        <h1 className="text-[34px] leading-[0.95] font-extrabold tracking-tight text-black">{systemNamePrimary || "Cincel"}</h1>
+        {systemNameSecondary ? (
+          <p className="text-[20px] leading-tight font-semibold text-black">{systemNameSecondary}</p>
+        ) : null}
       </div>
 
       <div className="px-5 pb-4 border-b border-[#D9DEEA]">
