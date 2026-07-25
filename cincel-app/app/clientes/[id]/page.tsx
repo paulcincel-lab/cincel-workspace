@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Badge from "@/components/ui/Badge";
 import Avatar from "@/components/ui/Avatar";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
 
 type ClientKind = "Empresa" | "Particular";
@@ -296,6 +298,7 @@ export default function ClienteFichaPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editorError, setEditorError] = useState("");
   const [historyByClient, setHistoryByClient] = useState<Record<number, ClientHistoryEntry[]>>(() => loadClientHistory());
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [draft, setDraft] = useState<ClientDraft>({
     name: "",
     emailsText: "",
@@ -311,6 +314,42 @@ export default function ClienteFichaPage() {
     completedProjectsText: "",
     contacts: [],
   });
+
+  useEffect(() => {
+    const refreshAuthenticatedUser = () => {
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
+    };
+
+    window.addEventListener("focus", refreshAuthenticatedUser);
+    window.addEventListener("storage", refreshAuthenticatedUser);
+
+    return () => {
+      window.removeEventListener("focus", refreshAuthenticatedUser);
+      window.removeEventListener("storage", refreshAuthenticatedUser);
+    };
+  }, []);
+
+  const clientsCapabilities = useMemo(() => {
+    return resolveClientsCapabilities(authenticatedUser);
+  }, [authenticatedUser]);
+
+  if (!clientsCapabilities.canViewClients) {
+    return (
+      <main className="flex min-h-screen bg-slate-100">
+        <Sidebar />
+        <section className="flex-1 overflow-y-auto p-10">
+          <Header />
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h1 className="text-2xl font-bold text-slate-900">Sin acceso al modulo Clientes</h1>
+            <p className="mt-2 text-sm text-slate-600">Tu acceso actual no permite visualizar informacion comercial de clientes.</p>
+            <Link href="/dashboard" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              Volver al dashboard
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   const linkedProjects = projects.filter((project) => project.client.id === clientId);
   const manualClient = manualClients.find((client) => client.id === clientId) ?? null;
@@ -381,6 +420,10 @@ export default function ClienteFichaPage() {
   };
 
   const openEditor = () => {
+    if (!clientsCapabilities.canEditClient) {
+      return;
+    }
+
     setEditorError("");
     setDraft({
       name: sourceClient.name,
@@ -431,6 +474,10 @@ export default function ClienteFichaPage() {
   };
 
   const saveClient = () => {
+    if (!clientsCapabilities.canEditClient) {
+      return;
+    }
+
     const trimmedName = draft.name.trim();
 
     if (!trimmedName) {
@@ -546,6 +593,10 @@ export default function ClienteFichaPage() {
   };
 
   const deleteClient = () => {
+    if (!clientsCapabilities.canDeleteClient) {
+      return;
+    }
+
     const confirmed = window.confirm(
       `Se eliminara el cliente "${sourceClient.name}". Esta accion no se puede deshacer. Deseas continuar?`
     );
@@ -583,7 +634,9 @@ export default function ClienteFichaPage() {
               <button
                 type="button"
                 onClick={openEditor}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                disabled={!clientsCapabilities.canEditClient}
+                title={clientsCapabilities.canEditClient ? "" : "No tienes permiso para editar clientes"}
+                className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${clientsCapabilities.canEditClient ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
               >
                 Editar cliente
               </button>
@@ -591,7 +644,9 @@ export default function ClienteFichaPage() {
               <button
                 type="button"
                 onClick={deleteClient}
-                className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+                disabled={!clientsCapabilities.canDeleteClient}
+                title={clientsCapabilities.canDeleteClient ? "" : "No tienes permiso para eliminar clientes"}
+                className={`rounded-lg border px-4 py-2 text-sm font-medium ${clientsCapabilities.canDeleteClient ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
               >
                 Eliminar cliente
               </button>

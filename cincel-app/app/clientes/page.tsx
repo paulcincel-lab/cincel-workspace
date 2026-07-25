@@ -8,6 +8,8 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
@@ -361,6 +363,7 @@ export default function ClientesPage() {
   const [projects, setProjects] = useState<typeof baseProjects>(baseProjects);
   const [manualClients, setManualClients] = useState<ManualClient[]>([]);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
 
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<"Todos" | "Activos" | "Inactivos">("Todos");
@@ -385,6 +388,7 @@ export default function ClientesPage() {
 
   useEffect(() => {
     const refresh = () => {
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
       setProjects(loadPersistedProjects());
       setManualClients(loadManualClients());
       setAllTasks([
@@ -412,6 +416,10 @@ export default function ClientesPage() {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
+
+  const clientsCapabilities = useMemo(() => {
+    return resolveClientsCapabilities(authenticatedUser);
+  }, [authenticatedUser]);
 
   const clientSummaries = useMemo<ClientSummary[]>(() => {
     const taskMapByProject = new Map<string, Task[]>();
@@ -582,6 +590,10 @@ export default function ClientesPage() {
   const totalActiveProjects = clientSummaries.reduce((sum, client) => sum + client.activeProjects, 0);
 
   const openCreateClient = () => {
+    if (!clientsCapabilities.canCreateClient) {
+      return;
+    }
+
     setCreateError("");
     setNewClientDraft(emptyNewClientDraft);
     setShowCreateModal(true);
@@ -593,6 +605,10 @@ export default function ClientesPage() {
   };
 
   const openEditor = (client: ClientSummary) => {
+    if (!clientsCapabilities.canEditClient) {
+      return;
+    }
+
     setEditingClientId(client.id);
     setEditorError("");
     setDraft({
@@ -632,6 +648,10 @@ export default function ClientesPage() {
   };
 
   const saveClientChanges = () => {
+    if (!clientsCapabilities.canEditClient) {
+      return;
+    }
+
     if (editingManualClientId !== null) {
       const trimmedName = draft.name.trim();
       if (!trimmedName) {
@@ -717,6 +737,10 @@ export default function ClientesPage() {
   };
 
   const createClient = () => {
+    if (!clientsCapabilities.canCreateClient) {
+      return;
+    }
+
     const trimmedName = newClientDraft.name.trim();
 
     if (!trimmedName) {
@@ -764,6 +788,10 @@ export default function ClientesPage() {
   };
 
   const updateClientActiveInline = (clientId: number, active: boolean) => {
+    if (!clientsCapabilities.canEditClient) {
+      return;
+    }
+
     const isManual = manualClients.some((client) => client.id === clientId);
 
     if (isManual) {
@@ -796,6 +824,10 @@ export default function ClientesPage() {
   };
 
   const convertManualClientToProject = () => {
+    if (!clientsCapabilities.canEditClient) {
+      return;
+    }
+
     if (!selectedClient) {
       return;
     }
@@ -863,6 +895,25 @@ export default function ClientesPage() {
     router.push(`/proyectos/${createdProject.id}/ficha`);
   };
 
+  if (!clientsCapabilities.canViewClients) {
+    return (
+      <main className="flex min-h-screen bg-slate-100">
+        <Sidebar />
+
+        <section className="flex-1 overflow-y-auto p-10">
+          <Header />
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h1 className="text-2xl font-bold text-slate-900">Sin acceso al modulo Clientes</h1>
+            <p className="mt-2 text-sm text-slate-600">Tu acceso actual no permite visualizar informacion comercial de clientes.</p>
+            <Link href="/dashboard" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              Volver al dashboard
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen bg-slate-100">
       <Sidebar />
@@ -884,7 +935,9 @@ export default function ClientesPage() {
               <button
                 type="button"
                 onClick={openCreateClient}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                disabled={!clientsCapabilities.canCreateClient}
+                title={clientsCapabilities.canCreateClient ? "" : "No tienes permiso para crear clientes"}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${clientsCapabilities.canCreateClient ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
               >
                 Nuevo cliente
               </button>
@@ -1008,6 +1061,7 @@ export default function ClientesPage() {
                                 <select
                                   value={client.hasActiveProject ? "si" : "no"}
                                   onChange={(event) => updateClientActiveInline(client.id, event.target.value === "si")}
+                                  disabled={!clientsCapabilities.canEditClient}
                                   className="bg-transparent px-1 py-1 text-xs text-slate-700 focus:outline-none"
                                   aria-label={`Proyecto activo ${client.name}`}
                                 >
@@ -1081,6 +1135,7 @@ export default function ClientesPage() {
                                 <select
                                   value={client.hasActiveProject ? "si" : "no"}
                                   onChange={(event) => updateClientActiveInline(client.id, event.target.value === "si")}
+                                  disabled={!clientsCapabilities.canEditClient}
                                   className="bg-transparent px-1 py-1 text-xs text-slate-700 focus:outline-none"
                                   aria-label={`Proyecto activo ${client.name}`}
                                 >
@@ -1135,6 +1190,10 @@ export default function ClientesPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        if (!clientsCapabilities.canEditClient) {
+                          return;
+                        }
+
                         const manualMatch = manualClients.find((item) => item.id === selectedClient.id);
 
                         if (manualMatch) {
@@ -1154,7 +1213,9 @@ export default function ClientesPage() {
 
                         openEditor(selectedClient);
                       }}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      disabled={!clientsCapabilities.canEditClient}
+                      title={clientsCapabilities.canEditClient ? "" : "No tienes permiso para editar clientes"}
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${clientsCapabilities.canEditClient ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                     >
                       Editar cliente
                     </button>
@@ -1219,7 +1280,9 @@ export default function ClientesPage() {
                           <button
                             type="button"
                             onClick={convertManualClientToProject}
-                            className="mt-3 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                            disabled={!clientsCapabilities.canEditClient}
+                            title={clientsCapabilities.canEditClient ? "" : "No tienes permiso para editar clientes"}
+                            className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold text-white ${clientsCapabilities.canEditClient ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
                           >
                             Convertir a proyecto
                           </button>

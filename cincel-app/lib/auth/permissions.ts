@@ -51,6 +51,13 @@ export type ProjectsCapabilities = {
   canEditProtectedProjectData: boolean;
 };
 
+export type ClientsCapabilities = {
+  canViewClients: boolean;
+  canCreateClient: boolean;
+  canEditClient: boolean;
+  canDeleteClient: boolean;
+};
+
 type ResourceEditScope = "all" | "owned_or_personal" | "none";
 
 export type ResourcesCapabilities = {
@@ -399,6 +406,63 @@ const RESOURCES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ResourcesCapabili
   },
 };
 
+const CLIENTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ClientsCapabilities> = {
+  Administrador: {
+    canViewClients: true,
+    canCreateClient: true,
+    canEditClient: true,
+    canDeleteClient: true,
+  },
+  "Dirección": {
+    canViewClients: true,
+    canCreateClient: true,
+    canEditClient: true,
+    canDeleteClient: true,
+  },
+  "Jefe de Taller": {
+    canViewClients: true,
+    canCreateClient: true,
+    canEditClient: true,
+    canDeleteClient: false,
+  },
+  "Jefe de Construcción": {
+    canViewClients: true,
+    canCreateClient: true,
+    canEditClient: true,
+    canDeleteClient: false,
+  },
+  "Arquitecto Senior": {
+    canViewClients: true,
+    canCreateClient: true,
+    canEditClient: true,
+    canDeleteClient: false,
+  },
+  "Arquitecto Junior": {
+    canViewClients: false,
+    canCreateClient: false,
+    canEditClient: false,
+    canDeleteClient: false,
+  },
+  Colaborador: {
+    canViewClients: false,
+    canCreateClient: false,
+    canEditClient: false,
+    canDeleteClient: false,
+  },
+  "Pasante / Servicio Social": {
+    canViewClients: false,
+    canCreateClient: false,
+    canEditClient: false,
+    canDeleteClient: false,
+  },
+  Otros: {
+    canViewClients: false,
+    canCreateClient: false,
+    canEditClient: false,
+    canDeleteClient: false,
+  },
+};
+
 function normalizeName(value: string | null | undefined): string {
   return (value || "").trim().toLowerCase();
 }
@@ -450,6 +514,11 @@ export function resolveProjectsCapabilities(user: AuthenticatedUser | null): Pro
 export function resolveResourcesCapabilities(user: AuthenticatedUser | null): ResourcesCapabilities {
   const access = user?.access ?? "Colaborador";
   return RESOURCES_CAPABILITIES_BY_ROLE[access];
+}
+
+export function resolveClientsCapabilities(user: AuthenticatedUser | null): ClientsCapabilities {
+  const access = user?.access ?? "Colaborador";
+  return CLIENTS_CAPABILITIES_BY_ROLE[access];
 }
 
 export function isCorporateResourcesSection(section: ResourceSection): boolean {
