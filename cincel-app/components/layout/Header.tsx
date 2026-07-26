@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -344,11 +345,13 @@ export default function Header({ variant = "default" }: HeaderProps) {
                 onChange={handleProfileImageChange}
                 className="sr-only"
               />
-              <div className="h-25 w-25 overflow-hidden rounded-full border-2 border-slate-200 bg-slate-200 sm:h-30 sm:w-30">
+              <div className="relative h-25 w-25 overflow-hidden rounded-full border-2 border-slate-200 bg-slate-200 sm:h-30 sm:w-30">
                 {profileImage ? (
-                  <img
+                  <Image
                     src={profileImage}
                     alt={`Foto de ${currentMember?.name ?? "usuario"}`}
+                    fill
+                    unoptimized
                     className="h-full w-full object-cover"
                   />
                 ) : (
