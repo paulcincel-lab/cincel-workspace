@@ -36,6 +36,8 @@ const LEGACY_BLOCKED_ACCESS_ROLES: readonly LegacyBlockedAccessRole[] = ["Client
 
 const LEGACY_ACCESS_ROLE_ALIASES: Readonly<Record<string, SystemAccessRole>> = {
   "responsable de proyecto": "Jefe de Taller",
+  director: "Dirección",
+  direccion: "Dirección",
   usuario: DEFAULT_SYSTEM_ACCESS_ROLE,
 };
 

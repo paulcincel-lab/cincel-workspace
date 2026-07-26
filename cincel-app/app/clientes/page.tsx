@@ -8,13 +8,16 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
+import ExportMenu from "@/components/ui/ExportMenu";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
+import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import type { Task } from "@/lib/types/task";
+import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 
 type RiskLevel = "Alto" | "Medio" | "Bajo";
@@ -358,6 +361,13 @@ function updateProjectsStorage(next: (typeof baseProjects)) {
   localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(next));
 }
 
+function buildTimestampLabel(): string {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
+  return `${date}-${time}`;
+}
+
 export default function ClientesPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<typeof baseProjects>(baseProjects);
@@ -588,6 +598,34 @@ export default function ClientesPage() {
 
   const totalClients = clientSummaries.length;
   const totalActiveProjects = clientSummaries.reduce((sum, client) => sum + client.activeProjects, 0);
+
+  const clientsExportColumns = useMemo<Array<ExportColumn<ClientSummary>>>(() => {
+    return [
+      { key: "name", header: "Cliente", getValue: (client) => client.name },
+      { key: "emails", header: "Email(s)", getValue: (client) => client.emails.join(", ") || "Sin correo" },
+      { key: "phone", header: "Numero de contacto", getValue: (client) => client.phone || "Sin numero" },
+      { key: "projectTypes", header: "Tipo de proyecto", getValue: (client) => client.projectTypes.join(" / ") },
+      { key: "kind", header: "Empresa o Particular", getValue: (client) => client.kind },
+      { key: "hasActiveProject", header: "Proyecto activo", getValue: (client) => (client.hasActiveProject ? "Si" : "No") },
+      { key: "projectNames", header: "Nombre del proyecto", getValue: (client) => client.projectNames.join(" / ") },
+      { key: "totalProjects", header: "# proyectos con nosotros", getValue: (client) => client.totalProjectsWorked },
+      { key: "firstWorkDate", header: "Fecha de primer trabajo", isDate: true, getValue: (client) => client.firstWorkDate },
+    ];
+  }, []);
+
+  const exportClientsTable = async (rows: ClientSummary[], scope: "activos" | "inactivos", format: "xlsx" | "pdf") => {
+    const { settings } = loadGeneralSettings();
+
+    await exportTableData({
+      moduleName: `Clientes (${scope === "activos" ? "Activos" : "Inactivos"})`,
+      fileName: `clientes-${scope}-${buildTimestampLabel()}`,
+      format,
+      companyName: settings.company.tradeName || settings.company.legalName,
+      columns: clientsExportColumns,
+      rows,
+      landscape: true,
+    });
+  };
 
   const openCreateClient = () => {
     if (!clientsCapabilities.canCreateClient) {
@@ -1020,7 +1058,12 @@ export default function ClientesPage() {
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-900">Clientes con proyecto activo</h3>
-                    <span className="text-xs text-slate-500">{activeProjectClients.length}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">{activeProjectClients.length}</span>
+                      {clientsCapabilities.canExportData ? (
+                        <ExportMenu onExport={(format) => exportClientsTable(activeProjectClients, "activos", format)} />
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto">
@@ -1094,7 +1137,12 @@ export default function ClientesPage() {
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-900">Clientes con proyectos inactivos</h3>
-                    <span className="text-xs text-slate-500">{inactiveProjectClients.length}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">{inactiveProjectClients.length}</span>
+                      {clientsCapabilities.canExportData ? (
+                        <ExportMenu onExport={(format) => exportClientsTable(inactiveProjectClients, "inactivos", format)} />
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto">

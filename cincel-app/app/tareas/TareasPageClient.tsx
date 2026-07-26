@@ -6,6 +6,7 @@ import Header from "@/components/layout/Header";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/ui/Avatar";
+import ExportMenu from "@/components/ui/ExportMenu";
 import InlineEditableField from "@/components/ui/InlineEditableField";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { presaleTasks } from "@/lib/data/presale";
@@ -13,8 +14,10 @@ import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import type { Task, TaskStatus, WorkflowType } from "@/lib/types/task";
 import { formatDateDMY } from "@/lib/utils/date";
+import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 
 const TASK_STATUSES: TaskStatus[] = ["Pendiente", "En proceso", "Completado", "Bloqueado"];
@@ -114,6 +117,13 @@ function stageRank(stageTitle: string): number {
   if (stageTitle === "Presale") return 0;
   if (stageTitle === "Taller de Diseño") return 1;
   return 2;
+}
+
+function buildTimestampLabel(): string {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
+  return `${date}-${time}`;
 }
 
 export default function TareasPage() {
@@ -354,6 +364,62 @@ export default function TareasPage() {
     return unifiedStageData.reduce((acc, stage) => acc + stage.totalCount, 0);
   }, [unifiedStageData]);
 
+  const activitiesExportColumns = useMemo<Array<ExportColumn<(typeof unifiedRows)[number]>>>(() => {
+    return [
+      {
+        key: "stage",
+        header: "Etapa",
+        getValue: (row) => row.stageTitle,
+      },
+      {
+        key: "phase",
+        header: "Fase",
+        getValue: (row) => row.task.phase,
+      },
+      {
+        key: "description",
+        header: "Actividad",
+        getValue: (row) => row.task.description,
+      },
+      {
+        key: "manager",
+        header: "Responsable",
+        getValue: (row) => row.task.manager || "Sin responsable",
+      },
+      {
+        key: "reviewDate",
+        header: "Proxima revision",
+        isDate: true,
+        getValue: (row) => row.task.reviewDate || "",
+      },
+      {
+        key: "deliveryDate",
+        header: "Fecha de entrega",
+        isDate: true,
+        getValue: (row) => getDeliveryDate(row.task),
+      },
+      {
+        key: "status",
+        header: "Estatus",
+        getValue: (row) => row.task.status,
+      },
+    ];
+  }, []);
+
+  const exportActivities = async (format: "xlsx" | "pdf") => {
+    const { settings } = loadGeneralSettings();
+
+    await exportTableData({
+      moduleName: "Actividades",
+      fileName: `actividades-${buildTimestampLabel()}`,
+      format,
+      companyName: settings.company.tradeName || settings.company.legalName,
+      columns: activitiesExportColumns,
+      rows: unifiedRows,
+      landscape: true,
+    });
+  };
+
   const stageCards = [
     {
       title: "Presale",
@@ -502,40 +568,46 @@ export default function TareasPage() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-sm font-medium text-slate-800">Ordenar por</p>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-sm font-medium text-slate-800">Ordenar por</p>
 
-                <select
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value as "etapa" | "compromiso" | "estatus")}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
-                >
-                  <option value="etapa">Etapa</option>
-                  <option value="compromiso">Compromiso</option>
-                  <option value="estatus">Estatus</option>
-                </select>
+                  <select
+                    value={sortBy}
+                    onChange={(event) => setSortBy(event.target.value as "etapa" | "compromiso" | "estatus")}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
+                  >
+                    <option value="etapa">Etapa</option>
+                    <option value="compromiso">Compromiso</option>
+                    <option value="estatus">Estatus</option>
+                  </select>
 
-                <select
-                  value={sortDirection}
-                  onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
-                >
-                  <option value="asc">Ascendente</option>
-                  <option value="desc">Descendente</option>
-                </select>
+                  <select
+                    value={sortDirection}
+                    onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
+                  >
+                    <option value="asc">Ascendente</option>
+                    <option value="desc">Descendente</option>
+                  </select>
 
-                <span className="ml-2 text-sm font-medium text-slate-800">Responsable</span>
-                <select
-                  value={responsableFilter}
-                  onChange={(event) => setResponsableFilter(event.target.value)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
-                >
-                  {responsibleOptions.map((manager) => (
-                    <option key={`responsable-filter-${manager}`} value={manager}>
-                      {manager}
-                    </option>
-                  ))}
-                </select>
+                  <span className="ml-2 text-sm font-medium text-slate-800">Responsable</span>
+                  <select
+                    value={responsableFilter}
+                    onChange={(event) => setResponsableFilter(event.target.value)}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
+                  >
+                    {responsibleOptions.map((manager) => (
+                      <option key={`responsable-filter-${manager}`} value={manager}>
+                        {manager}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {activitiesCapabilities.canExportData ? (
+                  <ExportMenu onExport={exportActivities} />
+                ) : null}
               </div>
 
               <div className="overflow-x-auto rounded-2xl border border-slate-200">

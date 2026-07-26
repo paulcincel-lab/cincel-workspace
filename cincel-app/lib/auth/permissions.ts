@@ -46,6 +46,7 @@ export type ActivitiesCapabilities = {
   canChangeResponsible: boolean;
   canDeleteActivity: boolean;
   canReorderPhases: boolean;
+  canExportData: boolean;
   statusScope: ActivityStatusScope;
 };
 
@@ -57,6 +58,7 @@ export type ProjectsCapabilities = {
   canArchiveProject: boolean;
   canDeleteProject: boolean;
   canEditProtectedProjectData: boolean;
+  canExportData: boolean;
 };
 
 export type ClientsCapabilities = {
@@ -64,6 +66,7 @@ export type ClientsCapabilities = {
   canCreateClient: boolean;
   canEditClient: boolean;
   canDeleteClient: boolean;
+  canExportData: boolean;
 };
 
 export type TeamCapabilities = {
@@ -73,6 +76,7 @@ export type TeamCapabilities = {
   canChangeCollaboratorAccess: boolean;
   canToggleCollaboratorActive: boolean;
   canDeleteCollaborator: boolean;
+  canExportData: boolean;
 };
 
 type ResourceEditScope = "all" | "owned_or_personal" | "none";
@@ -232,6 +236,7 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canChangeResponsible: true,
     canDeleteActivity: true,
     canReorderPhases: true,
+    canExportData: true,
     statusScope: "all",
   },
   "Dirección": {
@@ -240,6 +245,7 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canChangeResponsible: true,
     canDeleteActivity: true,
     canReorderPhases: true,
+    canExportData: true,
     statusScope: "all",
   },
   "Jefe de Taller": {
@@ -248,6 +254,7 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canChangeResponsible: true,
     canDeleteActivity: false,
     canReorderPhases: true,
+    canExportData: false,
     statusScope: "all",
   },
   "Jefe de Construcción": {
@@ -256,6 +263,7 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canChangeResponsible: true,
     canDeleteActivity: false,
     canReorderPhases: true,
+    canExportData: false,
     statusScope: "all",
   },
   "Arquitecto Senior": {
@@ -264,6 +272,7 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canChangeResponsible: true,
     canDeleteActivity: false,
     canReorderPhases: true,
+    canExportData: false,
     statusScope: "all",
   },
   "Arquitecto Junior": {
@@ -272,6 +281,7 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canChangeResponsible: false,
     canDeleteActivity: false,
     canReorderPhases: false,
+    canExportData: false,
     statusScope: "assigned_or_participant",
   },
   Colaborador: {
@@ -280,6 +290,7 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canChangeResponsible: false,
     canDeleteActivity: false,
     canReorderPhases: false,
+    canExportData: false,
     statusScope: "assigned_or_participant",
   },
   "Pasante / Servicio Social": {
@@ -288,6 +299,7 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canChangeResponsible: false,
     canDeleteActivity: false,
     canReorderPhases: false,
+    canExportData: false,
     statusScope: "assigned_or_participant",
   },
   Otros: {
@@ -296,6 +308,7 @@ const ACTIVITIES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ActivitiesCapabi
     canChangeResponsible: false,
     canDeleteActivity: false,
     canReorderPhases: false,
+    canExportData: false,
     statusScope: "assigned_or_participant",
   },
 };
@@ -309,6 +322,7 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canArchiveProject: true,
     canDeleteProject: true,
     canEditProtectedProjectData: true,
+    canExportData: true,
   },
   "Dirección": {
     canViewProjects: true,
@@ -318,6 +332,7 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canArchiveProject: true,
     canDeleteProject: true,
     canEditProtectedProjectData: true,
+    canExportData: true,
   },
   "Jefe de Taller": {
     canViewProjects: true,
@@ -327,6 +342,7 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canArchiveProject: true,
     canDeleteProject: false,
     canEditProtectedProjectData: false,
+    canExportData: false,
   },
   "Jefe de Construcción": {
     canViewProjects: true,
@@ -336,6 +352,7 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canArchiveProject: true,
     canDeleteProject: false,
     canEditProtectedProjectData: false,
+    canExportData: false,
   },
   "Arquitecto Senior": {
     canViewProjects: true,
@@ -345,6 +362,7 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canArchiveProject: true,
     canDeleteProject: false,
     canEditProtectedProjectData: false,
+    canExportData: false,
   },
   "Arquitecto Junior": {
     canViewProjects: true,
@@ -354,6 +372,7 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canArchiveProject: false,
     canDeleteProject: false,
     canEditProtectedProjectData: false,
+    canExportData: false,
   },
   Colaborador: {
     canViewProjects: true,
@@ -363,6 +382,7 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canArchiveProject: false,
     canDeleteProject: false,
     canEditProtectedProjectData: false,
+    canExportData: false,
   },
   "Pasante / Servicio Social": {
     canViewProjects: true,
@@ -372,6 +392,7 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canArchiveProject: false,
     canDeleteProject: false,
     canEditProtectedProjectData: false,
+    canExportData: false,
   },
   Otros: {
     canViewProjects: true,
@@ -381,6 +402,7 @@ const PROJECTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ProjectsCapabiliti
     canArchiveProject: false,
     canDeleteProject: false,
     canEditProtectedProjectData: false,
+    canExportData: false,
   },
 };
 
@@ -537,54 +559,63 @@ const CLIENTS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, ClientsCapabilities
     canCreateClient: true,
     canEditClient: true,
     canDeleteClient: true,
+    canExportData: true,
   },
   "Dirección": {
     canViewClients: true,
     canCreateClient: true,
     canEditClient: true,
     canDeleteClient: true,
+    canExportData: true,
   },
   "Jefe de Taller": {
     canViewClients: true,
     canCreateClient: true,
     canEditClient: true,
     canDeleteClient: false,
+    canExportData: false,
   },
   "Jefe de Construcción": {
     canViewClients: true,
     canCreateClient: true,
     canEditClient: true,
     canDeleteClient: false,
+    canExportData: false,
   },
   "Arquitecto Senior": {
     canViewClients: true,
     canCreateClient: true,
     canEditClient: true,
     canDeleteClient: false,
+    canExportData: false,
   },
   "Arquitecto Junior": {
     canViewClients: false,
     canCreateClient: false,
     canEditClient: false,
     canDeleteClient: false,
+    canExportData: false,
   },
   Colaborador: {
     canViewClients: false,
     canCreateClient: false,
     canEditClient: false,
     canDeleteClient: false,
+    canExportData: false,
   },
   "Pasante / Servicio Social": {
     canViewClients: false,
     canCreateClient: false,
     canEditClient: false,
     canDeleteClient: false,
+    canExportData: false,
   },
   Otros: {
     canViewClients: false,
     canCreateClient: false,
     canEditClient: false,
     canDeleteClient: false,
+    canExportData: false,
   },
 };
 
@@ -596,6 +627,7 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
     canChangeCollaboratorAccess: true,
     canToggleCollaboratorActive: true,
     canDeleteCollaborator: true,
+    canExportData: true,
   },
   "Dirección": {
     canViewTeam: true,
@@ -604,6 +636,7 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
     canChangeCollaboratorAccess: true,
     canToggleCollaboratorActive: true,
     canDeleteCollaborator: false,
+    canExportData: true,
   },
   "Jefe de Taller": {
     canViewTeam: true,
@@ -612,6 +645,7 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
     canChangeCollaboratorAccess: false,
     canToggleCollaboratorActive: false,
     canDeleteCollaborator: false,
+    canExportData: false,
   },
   "Jefe de Construcción": {
     canViewTeam: true,
@@ -620,6 +654,7 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
     canChangeCollaboratorAccess: false,
     canToggleCollaboratorActive: false,
     canDeleteCollaborator: false,
+    canExportData: false,
   },
   "Arquitecto Senior": {
     canViewTeam: true,
@@ -628,6 +663,7 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
     canChangeCollaboratorAccess: false,
     canToggleCollaboratorActive: false,
     canDeleteCollaborator: false,
+    canExportData: false,
   },
   "Arquitecto Junior": {
     canViewTeam: true,
@@ -636,6 +672,7 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
     canChangeCollaboratorAccess: false,
     canToggleCollaboratorActive: false,
     canDeleteCollaborator: false,
+    canExportData: false,
   },
   Colaborador: {
     canViewTeam: true,
@@ -644,6 +681,7 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
     canChangeCollaboratorAccess: false,
     canToggleCollaboratorActive: false,
     canDeleteCollaborator: false,
+    canExportData: false,
   },
   "Pasante / Servicio Social": {
     canViewTeam: true,
@@ -652,6 +690,7 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
     canChangeCollaboratorAccess: false,
     canToggleCollaboratorActive: false,
     canDeleteCollaborator: false,
+    canExportData: false,
   },
   Otros: {
     canViewTeam: true,
@@ -660,6 +699,7 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
     canChangeCollaboratorAccess: false,
     canToggleCollaboratorActive: false,
     canDeleteCollaborator: false,
+    canExportData: false,
   },
 };
 
@@ -707,6 +747,10 @@ function projectIsManagedByViewer(
 
 function resolveAccess(user: AuthenticatedUser | null): SystemAccessRole {
   return user?.access ?? "Colaborador";
+}
+
+function canExportByRole(access: SystemAccessRole): boolean {
+  return access === "Administrador" || access === "Dirección";
 }
 
 function readCustomPermissionsPayload(): StoredPermissionsState | null {
@@ -861,7 +905,10 @@ export function resolveActivitiesCapabilities(user: AuthenticatedUser | null): A
   const moduleOverrides = readRoleModuleOverrides(access, "activities");
 
   if (!moduleOverrides) {
-    return defaults;
+    return {
+      ...defaults,
+      canExportData: defaults.canExportData && canExportByRole(access),
+    };
   }
 
   return {
@@ -870,6 +917,7 @@ export function resolveActivitiesCapabilities(user: AuthenticatedUser | null): A
     canChangeResponsible: readBooleanOverride(moduleOverrides, "canChangeResponsible", defaults.canChangeResponsible),
     canDeleteActivity: readBooleanOverride(moduleOverrides, "canDeleteActivity", defaults.canDeleteActivity),
     canReorderPhases: readBooleanOverride(moduleOverrides, "canReorderPhases", defaults.canReorderPhases),
+    canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
     statusScope: readEnumOverride({
       moduleState: moduleOverrides,
       key: "statusScope",
@@ -885,7 +933,10 @@ export function resolveProjectsCapabilities(user: AuthenticatedUser | null): Pro
   const moduleOverrides = readRoleModuleOverrides(access, "projects");
 
   if (!moduleOverrides) {
-    return defaults;
+    return {
+      ...defaults,
+      canExportData: defaults.canExportData && canExportByRole(access),
+    };
   }
 
   return {
@@ -896,6 +947,7 @@ export function resolveProjectsCapabilities(user: AuthenticatedUser | null): Pro
     canArchiveProject: readBooleanOverride(moduleOverrides, "canArchiveProject", defaults.canArchiveProject),
     canDeleteProject: readBooleanOverride(moduleOverrides, "canDeleteProject", defaults.canDeleteProject),
     canEditProtectedProjectData: readBooleanOverride(moduleOverrides, "canEditProtectedProjectData", defaults.canEditProtectedProjectData),
+    canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
   };
 }
 
@@ -966,7 +1018,10 @@ export function resolveClientsCapabilities(user: AuthenticatedUser | null): Clie
   const moduleOverrides = readRoleModuleOverrides(access, "clients");
 
   if (!moduleOverrides) {
-    return defaults;
+    return {
+      ...defaults,
+      canExportData: defaults.canExportData && canExportByRole(access),
+    };
   }
 
   return {
@@ -974,6 +1029,7 @@ export function resolveClientsCapabilities(user: AuthenticatedUser | null): Clie
     canCreateClient: readBooleanOverride(moduleOverrides, "canCreateClient", defaults.canCreateClient),
     canEditClient: readBooleanOverride(moduleOverrides, "canEditClient", defaults.canEditClient),
     canDeleteClient: readBooleanOverride(moduleOverrides, "canDeleteClient", defaults.canDeleteClient),
+    canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
   };
 }
 
@@ -983,7 +1039,10 @@ export function resolveTeamCapabilities(user: AuthenticatedUser | null): TeamCap
   const moduleOverrides = readRoleModuleOverrides(access, "team");
 
   if (!moduleOverrides) {
-    return defaults;
+    return {
+      ...defaults,
+      canExportData: defaults.canExportData && canExportByRole(access),
+    };
   }
 
   return {
@@ -997,6 +1056,7 @@ export function resolveTeamCapabilities(user: AuthenticatedUser | null): TeamCap
     ),
     canToggleCollaboratorActive: readBooleanOverride(moduleOverrides, "canToggleCollaboratorActive", defaults.canToggleCollaboratorActive),
     canDeleteCollaborator: readBooleanOverride(moduleOverrides, "canDeleteCollaborator", defaults.canDeleteCollaborator),
+    canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
   };
 }
 

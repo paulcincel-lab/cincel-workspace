@@ -7,12 +7,15 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
+import ExportMenu from "@/components/ui/ExportMenu";
 import { getCollaboratorAccessState, getCurrentAuthenticatedUser, hashPassword, normalizeEmail } from "@/lib/auth/auth-service";
 import { resolveTeamCapabilities } from "@/lib/auth/permissions";
 import { teamMembers, type TeamAvailability, type TeamMember } from "@/lib/data/team";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, normalizeSystemAccessRole, type SystemAccessRole } from "@/lib/data/roles";
+import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import type { Task } from "@/lib/types/task";
+import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
@@ -264,6 +267,13 @@ function reorderColumns<T extends string>(columns: T[], source: T, target: T): T
   const [moved] = next.splice(sourceIndex, 1);
   next.splice(targetIndex, 0, moved);
   return next;
+}
+
+function buildTimestampLabel(): string {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
+  return `${date}-${time}`;
 }
 
 function loadSecondaryCoordinatorMap(): Record<number, string> {
@@ -1000,6 +1010,103 @@ export default function EquipoPage() {
     setDraggingInactiveColumn(target);
   };
 
+  type TeamExportRow = {
+    member: TeamMemberWithWorkload;
+    rowOrder: number;
+  };
+
+  const resolveActiveExportValue = (row: TeamExportRow, column: ActiveColumnKey): string | number => {
+    const member = row.member;
+
+    if (column === "order") return row.rowOrder;
+    if (column === "colaborador") return member.name;
+    if (column === "institutionalEmail") return member.institutionalEmail || "-";
+    if (column === "puesto") return member.role;
+    if (column === "rol") return resolveSystemRole(member);
+    if (column === "area") return member.area;
+    if (column === "estado") return member.active ? "Activo" : "Inactivo";
+    if (column === "disponibilidad") return member.availability;
+    if (column === "liderDiseno") return member.coordinatorProjectsCount;
+    if (column === "liderConstruccion") return member.constructionProjectsCount;
+    if (column === "responsable") return member.assigned;
+    if (column === "soporte") return member.support;
+    if (column === "carga") return `${member.occupancy}%`;
+    if (column === "proyectos") return member.projects.join(" / ") || "Sin proyectos";
+
+    return "";
+  };
+
+  const resolveInactiveExportValue = (row: TeamExportRow, column: InactiveColumnKey): string | number => {
+    const member = row.member;
+
+    if (column === "order") return row.rowOrder;
+    if (column === "colaborador") return member.name;
+    if (column === "institutionalEmail") return member.institutionalEmail || "-";
+    if (column === "puesto") return member.role;
+    if (column === "rol") return resolveSystemRole(member);
+    if (column === "area") return member.area;
+    if (column === "disponibilidad") return member.availability;
+    if (column === "liderDiseno") return member.coordinatorProjectsCount;
+    if (column === "liderConstruccion") return member.constructionProjectsCount;
+    if (column === "proyectos") return member.projects.join(" / ") || "Sin proyectos";
+
+    return "";
+  };
+
+  const activeExportRows: TeamExportRow[] = activeVisibleMembers.map((member, index) => ({
+    member,
+    rowOrder: index + 1,
+  }));
+
+  const inactiveExportRows: TeamExportRow[] = inactiveVisibleMembers.map((member, index) => ({
+    member,
+    rowOrder: index + 1,
+  }));
+
+  const activeExportColumns: Array<ExportColumn<TeamExportRow>> = activeColumnOrder
+    .filter((column) => column !== "acciones")
+    .map((column) => ({
+      key: column,
+      header: ACTIVE_COLUMN_LABEL[column],
+      getValue: (row: TeamExportRow) => resolveActiveExportValue(row, column),
+    }));
+
+  const inactiveExportColumns: Array<ExportColumn<TeamExportRow>> = inactiveColumnOrder
+    .filter((column) => column !== "acciones")
+    .map((column) => ({
+      key: column,
+      header: INACTIVE_COLUMN_LABEL[column],
+      getValue: (row: TeamExportRow) => resolveInactiveExportValue(row, column),
+    }));
+
+  const exportActiveTeam = async (format: "xlsx" | "pdf") => {
+    const { settings } = loadGeneralSettings();
+
+    await exportTableData({
+      moduleName: "Equipo (Activos)",
+      fileName: `equipo-activos-${buildTimestampLabel()}`,
+      format,
+      companyName: settings.company.tradeName || settings.company.legalName,
+      columns: activeExportColumns,
+      rows: activeExportRows,
+      landscape: true,
+    });
+  };
+
+  const exportInactiveTeam = async (format: "xlsx" | "pdf") => {
+    const { settings } = loadGeneralSettings();
+
+    await exportTableData({
+      moduleName: "Equipo (Desactivados)",
+      fileName: `equipo-desactivados-${buildTimestampLabel()}`,
+      format,
+      companyName: settings.company.tradeName || settings.company.legalName,
+      columns: inactiveExportColumns,
+      rows: inactiveExportRows,
+      landscape: true,
+    });
+  };
+
   const renderActiveCell = (member: TeamMemberWithWorkload, column: ActiveColumnKey) => {
     if (column === "order") {
       return (
@@ -1436,6 +1543,12 @@ export default function EquipoPage() {
           </div>
 
           <div className="overflow-x-auto p-6">
+            <div className="mb-4 flex items-center justify-end">
+              {teamCapabilities.canExportData ? (
+                <ExportMenu onExport={exportActiveTeam} />
+              ) : null}
+            </div>
+
             <table className="min-w-[1320px] w-full text-slate-800">
               <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-800">
                 <tr>
@@ -1503,7 +1616,12 @@ export default function EquipoPage() {
           <div className="border-t border-slate-200 px-6 pb-6">
             <div className="mb-4 mt-2 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-800">Desactivados</h2>
-              <span className="text-sm text-slate-700">{inactiveVisibleMembers.length} visibles</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-700">{inactiveVisibleMembers.length} visibles</span>
+                {teamCapabilities.canExportData ? (
+                  <ExportMenu onExport={exportInactiveTeam} />
+                ) : null}
+              </div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-slate-200">

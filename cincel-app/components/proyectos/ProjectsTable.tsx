@@ -4,14 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import ExportMenu from "@/components/ui/ExportMenu";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { projects } from "@/lib/data/projects";
+import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { teamMembers } from "@/lib/data/team";
 import type { Task } from "@/lib/types/task";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
+import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 
 type RiskLevel = "Alto" | "Medio" | "Bajo";
@@ -327,6 +330,13 @@ function loadSecondaryCoordinatorMap(): Record<number, string> {
   }
 }
 
+function buildTimestampLabel(): string {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
+  return `${date}-${time}`;
+}
+
 export default function ProjectsTable() {
   const router = useRouter();
   const [projectsData, setProjectsData] = useState<ProjectItem[]>(() => loadPersistedProjects());
@@ -510,6 +520,61 @@ export default function ProjectsTable() {
   const alerts = visibleProjects
     .filter((project) => project.mainAlert !== "Sin alertas criticas")
     .slice(0, 6);
+
+  const projectsExportColumns = useMemo<Array<ExportColumn<(typeof visibleProjects)[number]>>>(() => {
+    return [
+      {
+        key: "project",
+        header: "Proyecto",
+        getValue: (project) => project.name,
+      },
+      {
+        key: "client",
+        header: "Cliente",
+        getValue: (project) => project.client.name,
+      },
+      {
+        key: "stage",
+        header: "Etapa",
+        getValue: (project) => project.stage,
+      },
+      {
+        key: "designLeader",
+        header: "Lider de diseño",
+        getValue: (project) => normalizeName(project.coordinator) || "Sin encargado",
+      },
+      {
+        key: "constructionLeader",
+        header: "Lider de construcción",
+        getValue: (project) => secondaryCoordinatorByProject[project.id] || "Sin encargado",
+      },
+      {
+        key: "nextDelivery",
+        header: "Proxima entrega",
+        isDate: true,
+        getValue: (project) => (project.nextDelivery ? project.nextDelivery : ""),
+      },
+      {
+        key: "status",
+        header: "Estado",
+        getValue: (project) => (project.active ? "Proyecto activo" : "Proyecto archivado"),
+      },
+    ];
+  }, [secondaryCoordinatorByProject]);
+
+  const exportProjects = async (format: "xlsx" | "pdf") => {
+    const { settings } = loadGeneralSettings();
+
+    await exportTableData({
+      moduleName: "Proyectos",
+      fileName: `proyectos-${statusViewFilter.toLowerCase()}-${buildTimestampLabel()}`,
+      format,
+      companyName: settings.company.tradeName || settings.company.legalName,
+      columns: projectsExportColumns,
+      rows: visibleProjects,
+      landscape: true,
+    });
+  };
 
   const activeClientOptions = useMemo<ActiveClientOption[]>(() => {
     const fromProjects: ActiveClientOption[] = projectsData
@@ -817,6 +882,10 @@ export default function ProjectsTable() {
                 Archivados
               </button>
             </div>
+
+            {projectsCapabilities.canExportData ? (
+              <ExportMenu onExport={exportProjects} />
+            ) : null}
           </div>
         </div>
 
