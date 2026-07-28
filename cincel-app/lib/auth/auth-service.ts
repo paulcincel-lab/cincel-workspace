@@ -1,5 +1,6 @@
 import { DEFAULT_SYSTEM_ACCESS_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, isLegacyBlockedAccessRole, normalizeSystemAccessRole, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, type SystemAccessRole } from "@/lib/data/roles";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 
 export const AUTH_SESSION_STORAGE_KEY = "cincel.auth.session.v1";
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
@@ -94,7 +95,7 @@ function loadMembers(): TeamMember[] {
     return teamMembers;
   }
 
-  const stored = localStorage.getItem(TEAM_MEMBERS_STORAGE_KEY);
+  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
   if (!stored) {
     return teamMembers;
   }
@@ -112,7 +113,7 @@ function persistMembers(members: TeamMember[]): void {
     return;
   }
 
-  localStorage.setItem(TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(members));
+  writeStorage(TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(members));
 }
 
 function loadSystemAccessMap(): PersistedSystemRoleMap {
@@ -120,7 +121,7 @@ function loadSystemAccessMap(): PersistedSystemRoleMap {
     return {};
   }
 
-  const stored = localStorage.getItem(SYSTEM_ROLE_STORAGE_KEY);
+  const stored = readStorage(SYSTEM_ROLE_STORAGE_KEY);
   if (!stored) {
     return {};
   }
@@ -244,7 +245,7 @@ export function getCurrentSession(): AuthSession | null {
     return null;
   }
 
-  const stored = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+  const stored = readStorage(AUTH_SESSION_STORAGE_KEY);
   if (!stored) {
     return null;
   }
@@ -410,7 +411,7 @@ export function loginWithEmailAndPassword(email: string, password: string): Logi
     loggedAt: now,
   };
 
-  localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
+  writeStorage(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
 
   const nextMembers = members.map((item) => {
     if (item.id !== member.id) {
@@ -530,7 +531,7 @@ export function logout(): void {
     return;
   }
 
-  localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+  removeStorage(AUTH_SESSION_STORAGE_KEY);
 }
 
 export function setCollaboratorSystemAccess(collaboratorId: number, enabled: boolean): boolean {

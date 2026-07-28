@@ -5,8 +5,10 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { tiendas as baseTiendas } from "@/lib/data/tiendas";
 import type { Tienda, TiendaStatus, TiendaType, TiendaPriceLevel } from "@/lib/types/tienda";
+import { getTiendasSnapshot, saveTiendas, fetchTiendas } from "@/lib/repositories/providers-repository";
+import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
-const STORAGE_KEY = "cincel.tiendas.data.v2";
 const OPTIONS_STORAGE_KEY = "cincel.tiendas.options.v2";
 const COLUMN_ORDER_STORAGE_KEY = "cincel.tiendas.column.order.v2";
 const COLORS_STORAGE_KEY = "cincel.tiendas.colors.v1";
@@ -411,12 +413,12 @@ export default function TiendasPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
-    const hydrate = () => {
+    const hydrate = async () => {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        setTiendas(stored ? JSON.parse(stored) : baseTiendas);
+        const snapshot = getTiendasSnapshot();
+        setTiendas(snapshot.length > 0 ? snapshot : baseTiendas);
 
-        const storedOpts = localStorage.getItem(OPTIONS_STORAGE_KEY);
+        const storedOpts = readStorage(OPTIONS_STORAGE_KEY);
         if (storedOpts) {
           const o = JSON.parse(storedOpts) as Partial<{
             statusOptions: TiendaStatus[];
@@ -431,32 +433,40 @@ export default function TiendasPage() {
           if (o.priceOptions) setPriceOptions(o.priceOptions);
         }
 
-        const storedColors = localStorage.getItem(COLORS_STORAGE_KEY);
+        const storedColors = readStorage(COLORS_STORAGE_KEY);
         if (storedColors) setOptionColors(JSON.parse(storedColors));
 
-        const storedColumnOrder = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+        const storedColumnOrder = readStorage(COLUMN_ORDER_STORAGE_KEY);
         if (storedColumnOrder) setColumnOrder(JSON.parse(storedColumnOrder));
-      } catch {
-        /* ignore */
+
+        // Hidratación async desde Supabase (cuando está habilitado)
+        const remote = await fetchTiendas();
+        setTiendas(remote.length > 0 ? remote : baseTiendas);
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) {
+          reportSupabaseError(err);
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    queueMicrotask(hydrate);
+    void hydrate();
   }, []);
 
   const save = (next: Tienda[]) => {
     setTiendas(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    saveTiendas(next).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    });
   };
 
   const saveOptions = () => {
-    localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify({ statusOptions, typeOptions, specialtyOptions, priceOptions }));
+    writeStorage(OPTIONS_STORAGE_KEY, JSON.stringify({ statusOptions, typeOptions, specialtyOptions, priceOptions }));
   };
 
   const saveColors = () => {
-    localStorage.setItem(COLORS_STORAGE_KEY, JSON.stringify(optionColors));
+    writeStorage(COLORS_STORAGE_KEY, JSON.stringify(optionColors));
   };
 
   const update = (id: number, field: keyof Tienda, value: unknown) =>
@@ -534,7 +544,7 @@ export default function TiendasPage() {
     newOrder.splice(adjustedTargetIdx, 0, sourceKey);
     
     setColumnOrder(newOrder);
-    localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+    writeStorage(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
   };
 
   const columnLabel = (key: ColumnKey): string => {

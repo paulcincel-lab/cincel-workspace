@@ -10,8 +10,7 @@ import Badge from "@/components/ui/Badge";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { getCollaboratorAccessState, getCurrentAuthenticatedUser, hashPassword, normalizeEmail } from "@/lib/auth/auth-service";
 import { resolveTeamCapabilities } from "@/lib/auth/permissions";
-import { teamMembers, type TeamAvailability, type TeamMember } from "@/lib/data/team";
-import { projects as baseProjects } from "@/lib/data/projects";
+import { type TeamAvailability, type TeamMember } from "@/lib/data/team";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, normalizeSystemAccessRole, type SystemAccessRole } from "@/lib/data/roles";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import type { Task } from "@/lib/types/task";
@@ -20,6 +19,10 @@ import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
+import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers } from "@/lib/repositories/team-repository";
+import { getProjectsSnapshot, fetchProjects } from "@/lib/repositories/projects-repository";
+import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
 type MemberDraft = {
   name: string;
@@ -108,8 +111,6 @@ const availabilityOptions: TeamAvailability[] = [
   "Home Office",
 ];
 
-const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
-const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
 const SYSTEM_ROLE_STORAGE_KEY = "cincel.team.system-roles.v1";
 const ACTIVE_COLUMN_ORDER_STORAGE_KEY = "cincel.team.active-column-order.v1";
@@ -226,7 +227,7 @@ function loadColumnOrder<T extends string>(storageKey: string, defaults: T[]): T
     return defaults;
   }
 
-  const stored = localStorage.getItem(storageKey);
+  const stored = readStorage(storageKey);
   if (!stored) {
     return defaults;
   }
@@ -278,7 +279,7 @@ function buildTimestampLabel(): string {
 
 function loadSecondaryCoordinatorMap(): Record<number, string> {
   if (typeof window === "undefined") return {};
-  const stored = localStorage.getItem(SECONDARY_COORDINATOR_STORAGE_KEY);
+  const stored = readStorage(SECONDARY_COORDINATOR_STORAGE_KEY);
   if (!stored) return {};
   try {
     const parsed = JSON.parse(stored) as Record<number, string>;
@@ -319,23 +320,7 @@ function loadPersistedTasks(workflow: string, fallback: Task[]): Task[] {
 }
 
 function loadPersistedProjects() {
-  if (typeof window === "undefined") {
-    return baseProjects;
-  }
-
-  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
-
-  if (!stored) {
-    return baseProjects;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as typeof baseProjects;
-    return Array.isArray(parsed) ? parsed : baseProjects;
-  } catch {
-    localStorage.removeItem(PROJECTS_STORAGE_KEY);
-    return baseProjects;
-  }
+  return getProjectsSnapshot();
 }
 
 function loadAllActivityTasks(): Task[] {
@@ -382,7 +367,7 @@ function loadSystemRolesMap(): Record<number, SystemAccessRole> {
     return {};
   }
 
-  const stored = localStorage.getItem(SYSTEM_ROLE_STORAGE_KEY);
+  const stored = readStorage(SYSTEM_ROLE_STORAGE_KEY);
   if (!stored) {
     return {};
   }
@@ -402,33 +387,15 @@ function loadSystemRolesMap(): Record<number, SystemAccessRole> {
       return accumulator;
     }, {});
   } catch {
-    localStorage.removeItem(SYSTEM_ROLE_STORAGE_KEY);
+    removeStorage(SYSTEM_ROLE_STORAGE_KEY);
     return {};
   }
 }
 
 export default function EquipoPage() {
   const [members, setMembers] = useState<TeamMember[]>(() => {
-    if (typeof window === "undefined") {
-      return teamMembers;
-    }
-
-    const stored = localStorage.getItem(TEAM_MEMBERS_STORAGE_KEY);
-
-    if (!stored) {
-      return teamMembers;
-    }
-
-    try {
-      const parsed = JSON.parse(stored) as TeamMember[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((member) => normalizeTeamMember(member));
-      }
-    } catch {
-      localStorage.removeItem(TEAM_MEMBERS_STORAGE_KEY);
-    }
-
-    return teamMembers.map((member) => normalizeTeamMember(member));
+    const snapshot = getTeamMembersSnapshot();
+    return snapshot.map((member) => normalizeTeamMember(member));
   });
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -455,20 +422,48 @@ export default function EquipoPage() {
   const [draggingInactiveColumn, setDraggingInactiveColumn] = useState<InactiveColumnKey | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(members));
+    saveTeamMembers(members).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    });
   }, [members]);
 
   useEffect(() => {
-    localStorage.setItem(SYSTEM_ROLE_STORAGE_KEY, JSON.stringify(systemRoleByMemberId));
+    writeStorage(SYSTEM_ROLE_STORAGE_KEY, JSON.stringify(systemRoleByMemberId));
   }, [systemRoleByMemberId]);
 
   useEffect(() => {
-    localStorage.setItem(ACTIVE_COLUMN_ORDER_STORAGE_KEY, JSON.stringify(activeColumnOrder));
+    writeStorage(ACTIVE_COLUMN_ORDER_STORAGE_KEY, JSON.stringify(activeColumnOrder));
   }, [activeColumnOrder]);
 
   useEffect(() => {
-    localStorage.setItem(INACTIVE_COLUMN_ORDER_STORAGE_KEY, JSON.stringify(inactiveColumnOrder));
+    writeStorage(INACTIVE_COLUMN_ORDER_STORAGE_KEY, JSON.stringify(inactiveColumnOrder));
   }, [inactiveColumnOrder]);
+
+  // Hidratación async desde Supabase al montar
+  useEffect(() => {
+    const hydrate = async () => {
+      try {
+        const [remoteMembers, remoteProjects] = await Promise.all([
+          fetchTeamMembers(),
+          fetchProjects(),
+        ]);
+
+        if (remoteMembers.length > 0) {
+          setMembers(remoteMembers.map((m) => normalizeTeamMember(m)));
+        }
+
+        if (remoteProjects.length > 0) {
+          setProjectsData(remoteProjects);
+        }
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) {
+          reportSupabaseError(err);
+        }
+      }
+    };
+
+    void hydrate();
+  }, []);
 
   useEffect(() => {
     const releaseDrag = () => {

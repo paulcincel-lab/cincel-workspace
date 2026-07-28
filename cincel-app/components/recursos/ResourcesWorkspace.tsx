@@ -7,8 +7,12 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canCreateResourceInSection, canDeleteResourceInSection, canViewResourceSection, resolveResourcesCapabilities } from "@/lib/auth/permissions";
-import { RESOURCE_STORAGE_KEY, RESOURCE_TEMPLATES } from "@/lib/data/resources";
+import { RESOURCE_TEMPLATES } from "@/lib/data/resources";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { getTeamMembersSnapshot } from "@/lib/repositories/team-repository";
+import { fetchResourceLinks, saveResourceLinks, deleteResourceLink as deleteResourceLinkInDb } from "@/lib/repositories/resources-repository";
+import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 import type {
   ResourceAppliesTo,
   ResourceHistoryItem,
@@ -19,7 +23,6 @@ import type {
   ResourceSubsection,
 } from "@/lib/types/resource";
 
-const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const RECENT_DOCS_STORAGE_KEY = "cincel.resources.recent-docs.v1";
 const RESOURCE_ID_PATTERN = /^resource_(\d+)(?:_.+)?$/;
 
@@ -127,23 +130,9 @@ const EMPTY_CREATE_DRAFT: CreateDraft = {
 };
 
 function loadTeamMembers(): TeamMember[] {
-  if (typeof window === "undefined") {
-    return teamMembers;
-  }
-
-  const stored = localStorage.getItem(TEAM_MEMBERS_STORAGE_KEY);
-
-  if (!stored) {
-    return teamMembers;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as TeamMember[];
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-  } catch {
-    localStorage.removeItem(TEAM_MEMBERS_STORAGE_KEY);
+  const snapshot = getTeamMembersSnapshot();
+  if (Array.isArray(snapshot) && snapshot.length > 0) {
+    return snapshot;
   }
 
   return teamMembers;
@@ -224,44 +213,16 @@ function buildDefaultResourceLinks(members: TeamMember[]): ResourceLink[] {
   return [...personalDocs, ...globalLinks];
 }
 
-function loadResourceLinks(members: TeamMember[]): ResourceLink[] {
+function loadResourceLinks(members: TeamMember[], persisted: ResourceLink[] = []): ResourceLink[] {
   const defaults = buildDefaultResourceLinks(members);
 
-  if (typeof window === "undefined") {
-    return defaults;
-  }
+  const mergedMap = new Map<string, ResourceLink>();
+  defaults.forEach((item) => mergedMap.set(item.id, normalizeResourceLink(item)));
+  persisted.forEach((item) => {
+    mergedMap.set(item.id, normalizeResourceLink({ ...item, section: inferResourceSection(item) }));
+  });
 
-  const stored = localStorage.getItem(RESOURCE_STORAGE_KEY);
-
-  if (!stored) {
-    return defaults;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as ResourceLink[];
-
-    if (!Array.isArray(parsed)) {
-      return defaults;
-    }
-
-    const mergedMap = new Map<string, ResourceLink>();
-    defaults.forEach((item) => mergedMap.set(item.id, normalizeResourceLink(item)));
-    parsed.forEach((item) => {
-      mergedMap.set(item.id, normalizeResourceLink({ ...item, section: inferResourceSection(item) }));
-    });
-
-    const withUrl = Array.from(mergedMap.values()).filter((item) => hasResourceUrl(item.url));
-
-    // Keep storage clean: remove seeded placeholders or links without URL.
-    if (withUrl.length !== mergedMap.size) {
-      localStorage.setItem(RESOURCE_STORAGE_KEY, JSON.stringify(withUrl));
-    }
-
-    return withUrl;
-  } catch {
-    localStorage.removeItem(RESOURCE_STORAGE_KEY);
-    return defaults.filter((item) => hasResourceUrl(item.url));
-  }
+  return Array.from(mergedMap.values()).filter((item) => hasResourceUrl(item.url));
 }
 
 function normalizeDriveUrl(url: string): string {
@@ -324,11 +285,7 @@ function inferLinkTypeFromUrl(url: string, currentType: ResourceLinkType): Resou
 }
 
 function loadRecentDocuments(): RecentDocument[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  const stored = localStorage.getItem(RECENT_DOCS_STORAGE_KEY);
+  const stored = readStorage(RECENT_DOCS_STORAGE_KEY);
 
   if (!stored) {
     return [];
@@ -349,13 +306,13 @@ function loadRecentDocuments(): RecentDocument[] {
       .filter((item) => hasResourceUrl(item.url))
       .slice(0, 8);
   } catch {
-    localStorage.removeItem(RECENT_DOCS_STORAGE_KEY);
+    removeStorage(RECENT_DOCS_STORAGE_KEY);
     return [];
   }
 }
 
 function saveRecentDocuments(next: RecentDocument[]): void {
-  localStorage.setItem(RECENT_DOCS_STORAGE_KEY, JSON.stringify(next.slice(0, 8)));
+  writeStorage(RECENT_DOCS_STORAGE_KEY, JSON.stringify(next.slice(0, 8)));
 }
 
 function buildNextResourceId(resources: ResourceLink[]): string {
@@ -516,6 +473,21 @@ export default function ResourcesWorkspace({
     };
   }, []);
 
+  useEffect(() => {
+    const hydrateResources = async () => {
+      try {
+        const remote = await fetchResourceLinks();
+        setResourceLinks(loadResourceLinks(loadTeamMembers(), remote));
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) {
+          reportSupabaseError(err);
+        }
+      }
+    };
+
+    void hydrateResources();
+  }, []);
+
   const activeMembers = useMemo(() => members.filter((member) => member.active), [members]);
 
   const effectiveSelectedMemberId = useMemo(() => {
@@ -534,12 +506,21 @@ export default function ResourcesWorkspace({
 
   const persistLinks = (next: ResourceLink[]) => {
     setResourceLinks(next);
-    localStorage.setItem(RESOURCE_STORAGE_KEY, JSON.stringify(next));
+    saveResourceLinks(next).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) {
+        reportSupabaseError(err);
+      }
+    });
   };
 
   const deleteResource = (id: string) => {
     const next = resourceLinks.filter((link) => link.id !== id);
     persistLinks(next);
+    deleteResourceLinkInDb(id).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) {
+        reportSupabaseError(err);
+      }
+    });
 
     setRecentDocuments((current) => {
       const cleaned = current.filter((item) => item.id !== id);

@@ -22,14 +22,17 @@ export default function LoginPage() {
   const router = useRouter();
   const [draft, setDraft] = useState<LoginDraft>(DEFAULT_DRAFT);
   const [error, setError] = useState<string>("");
-  const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
-  const systemLogoUrl = generalSettings.appearance.systemLogoUrl.trim();
+  const [supportNotice, setSupportNotice] = useState<string>("");
   const shouldShowVersion = generalSettings.system.showVersionInInterface;
   const versionLabel = generalSettings.system.version.trim();
 
   const canSubmit = useMemo(() => {
     return Boolean(draft.email.trim() && draft.password.trim());
   }, [draft.email, draft.password]);
+
+  const showDirectorNotice = () => {
+    setSupportNotice("Contacta a tu Director");
+  };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -76,21 +79,10 @@ export default function LoginPage() {
           <div className="absolute inset-0 opacity-25" aria-hidden="true" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.18) 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
           <div className="relative z-10 flex w-full flex-col justify-between">
             <div>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-white/85">{systemName}</p>
-              <div className="mt-2 h-[2px] w-12 rounded-full bg-white/90" aria-hidden="true" />
+              <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Cincel Despacho de Arquitectura</h2>
+              <div className="mt-3 h-[3px] w-14 rounded-full bg-white/90" aria-hidden="true" />
 
-              {systemLogoUrl ? (
-                <div className="mt-4 h-10 w-40 overflow-hidden rounded-lg border border-white/30 bg-white/10">
-                  <div
-                    aria-label={systemName}
-                    role="img"
-                    className="h-full w-full bg-contain bg-center bg-no-repeat"
-                    style={{ backgroundImage: `url(${systemLogoUrl})` }}
-                  />
-                </div>
-              ) : null}
-
-              <div className="mt-16 max-w-lg">
+              <div className="mt-8 max-w-lg">
                 <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">Bienvenido a Workspace</h1>
                 <p className="mt-4 max-w-md text-sm leading-6 text-white/80 sm:text-[15px]">
                   El centro operativo inteligente para la gestión corporativa de alto impacto. Accede a tus proyectos,
@@ -152,9 +144,13 @@ export default function LoginPage() {
                   <label className="block flex-1">
                     <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">Contraseña</span>
                   </label>
-                  <Link href="/change-password" className="text-[11px] font-semibold uppercase tracking-[0.1em] text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2">
+                  <button
+                    type="button"
+                    onClick={showDirectorNotice}
+                    className="text-[11px] font-semibold uppercase tracking-[0.1em] text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2"
+                  >
                     ¿Olvidaste tu contraseña?
-                  </Link>
+                  </button>
                 </div>
 
                 <input
@@ -167,6 +163,11 @@ export default function LoginPage() {
                 />
               </div>
               <p id="login-password-help" className="-mt-2 text-[11px] leading-5 text-slate-500">Si es tu primer acceso, usa la contraseña temporal asignada por el Administrador.</p>
+              {supportNotice ? (
+                <p className="-mt-2 text-[11px] font-semibold leading-5 text-blue-700" role="status" aria-live="polite">
+                  {supportNotice}
+                </p>
+              ) : null}
 
               <label className="flex items-center gap-2 pt-1 text-[13px] text-slate-600">
                 <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200" />
@@ -193,9 +194,13 @@ export default function LoginPage() {
 
             <div className="grid gap-2 text-center text-[13px] text-slate-600">
               <p>¿Problemas para acceder?</p>
-              <Link href="/change-password" className="font-semibold text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2">
+              <button
+                type="button"
+                onClick={showDirectorNotice}
+                className="font-semibold text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2"
+              >
                 Contactar a Soporte IT
-              </Link>
+              </button>
 
               <div className="mt-4 flex items-center justify-center gap-6 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 <span className="inline-flex items-center gap-2">

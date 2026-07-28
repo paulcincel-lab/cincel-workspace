@@ -1,0 +1,97 @@
+{
+  "generatedAt": "2026-07-28T00:41:13.166Z",
+  "baseUrl": "http://127.0.0.1:3000",
+  "auth": {
+    "loginOk": true,
+    "loginError": null
+  },
+  "modules": [
+    {
+      "module": "Dashboard",
+      "route": "/dashboard",
+      "ok": true,
+      "headingMatched": true,
+      "runtimeSupabaseErrors": [],
+      "restErrors": [],
+      "notes": []
+    },
+    {
+      "module": "Clientes",
+      "route": "/clientes",
+      "ok": true,
+      "headingMatched": true,
+      "runtimeSupabaseErrors": [],
+      "restErrors": [],
+      "notes": []
+    },
+    {
+      "module": "Proyectos",
+      "route": "/proyectos",
+      "ok": true,
+      "headingMatched": true,
+      "runtimeSupabaseErrors": [],
+      "restErrors": [],
+      "notes": []
+    },
+    {
+      "module": "Recursos",
+      "route": "/recursos",
+      "ok": true,
+      "headingMatched": true,
+      "runtimeSupabaseErrors": [],
+      "restErrors": [],
+      "notes": []
+    },
+    {
+      "module": "Equipo",
+      "route": "/equipo",
+      "ok": true,
+      "headingMatched": true,
+      "runtimeSupabaseErrors": [],
+      "restErrors": [],
+      "notes": []
+    },
+    {
+      "module": "Actividades",
+      "route": "/tareas",
+      "ok": true,
+      "headingMatched": true,
+      "runtimeSupabaseErrors": [],
+      "restErrors": [],
+      "notes": []
+    },
+    {
+      "module": "Calendario",
+      "route": "/calendario",
+      "ok": true,
+      "headingMatched": true,
+      "runtimeSupabaseErrors": [],
+      "restErrors": [],
+      "notes": []
+    },
+    {
+      "module": "Configuración",
+      "route": "/configuracion/general",
+      "ok": true,
+      "headingMatched": true,
+      "runtimeSupabaseErrors": [],
+      "restErrors": [],
+      "notes": []
+    },
+    {
+      "module": "Permisos",
+      "route": "/configuracion/permisos",
+      "ok": true,
+      "headingMatched": true,
+      "runtimeSupabaseErrors": [],
+      "restErrors": [],
+      "notes": []
+    }
+  ],
+  "clientesCrud": {
+    "ok": true,
+    "code": 0,
+    "out": "E2E OK: login+CRUD clientes completado\n",
+    "err": ""
+  }
+}

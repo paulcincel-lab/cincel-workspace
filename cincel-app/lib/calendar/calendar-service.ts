@@ -1,6 +1,7 @@
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { presaleTasks } from "@/lib/data/presale";
+import { readStorage } from "@/lib/repositories/browser-state-repository";
 import type { CalendarEvent, CalendarEventType, CalendarFilterOptions, CalendarFilters, CalendarTypeSummaryRow } from "@/lib/types/calendar";
 import type { Task, WorkflowType } from "@/lib/types/task";
 
@@ -238,7 +239,7 @@ function readWorkflowTasks(workflow: WorkflowType, fallback: Task[]): Task[] {
     return fallback;
   }
 
-  const stored = window.localStorage.getItem(tasksStorageKey(workflow));
+    const stored = readStorage(tasksStorageKey(workflow));
 
   if (!stored) {
     return fallback;

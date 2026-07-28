@@ -11,6 +11,11 @@ import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
+import { getProjectsSnapshot, PROJECTS_STORAGE_KEY, saveProjects } from "@/lib/repositories/projects-repository";
+import { getClientsSnapshot, MANUAL_CLIENTS_STORAGE_KEY, saveClients, deleteClientAndLinkedProjects } from "@/lib/repositories/clients-repository";
+import { getClientHistoryByClientId, saveClientHistoryByClientId, type ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
+import { writeStorage } from "@/lib/repositories/browser-state-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
 type ClientKind = "Empresa" | "Particular";
 
@@ -59,19 +64,6 @@ type ClientDraft = {
   contacts: ClientContact[];
 };
 
-type ClientHistoryEntry = {
-  id: string;
-  clientId: number;
-  field: string;
-  before: string;
-  after: string;
-  author: string;
-  date: string;
-};
-
-const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
-const MANUAL_CLIENTS_STORAGE_KEY = "cincel.clients.manual.v1";
-const CLIENT_HISTORY_STORAGE_KEY = "cincel.clients.history.v1";
 const projectTypeOptions = ["Habitacional", "Oficina", "Mobiliario", "Comercial", "Mantenimiento", "Otro"];
 
 function statusBadgeColor(active: boolean): "yellow" | "green" | "blue" | "red" | "gray" | "purple" {
@@ -87,22 +79,11 @@ function formatCurrency(value: number): string {
 }
 
 function loadPersistedProjects() {
-  if (typeof window === "undefined") {
+  const parsed = getProjectsSnapshot() as Array<Partial<(typeof baseProjects)[number]>>;
+
+  if (!Array.isArray(parsed)) {
     return baseProjects;
   }
-
-  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
-
-  if (!stored) {
-    return baseProjects;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Array<Partial<(typeof baseProjects)[number]>>;
-
-    if (!Array.isArray(parsed)) {
-      return baseProjects;
-    }
 
     return parsed
       .map((item) => {
@@ -215,24 +196,10 @@ function loadPersistedProjects() {
         };
       })
       .filter((item): item is (typeof baseProjects)[number] => item !== null);
-  } catch {
-    return baseProjects;
-  }
 }
 
 function loadManualClients(): ManualClient[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  const stored = localStorage.getItem(MANUAL_CLIENTS_STORAGE_KEY);
-
-  if (!stored) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as ManualClient[];
+  const parsed = getClientsSnapshot() as ManualClient[];
     if (!Array.isArray(parsed)) {
       return [];
     }
@@ -263,29 +230,10 @@ function loadManualClients(): ManualClient[] {
       totalProjectsWorked: Number.isFinite(Number(item.totalProjectsWorked)) ? Number(item.totalProjectsWorked) : 1,
       firstWorkDate: item.firstWorkDate || "",
     }));
-  } catch {
-    return [];
-  }
 }
 
 function loadClientHistory(): Record<number, ClientHistoryEntry[]> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  const stored = localStorage.getItem(CLIENT_HISTORY_STORAGE_KEY);
-
-  if (!stored) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Record<number, ClientHistoryEntry[]>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    localStorage.removeItem(CLIENT_HISTORY_STORAGE_KEY);
-    return {};
-  }
+  return getClientHistoryByClientId();
 }
 
 export default function ClienteFichaPage() {
@@ -416,7 +364,7 @@ export default function ClienteFichaPage() {
     };
 
     setHistoryByClient(nextHistory);
-    localStorage.setItem(CLIENT_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+    saveClientHistoryByClientId(nextHistory);
   };
 
   const openEditor = () => {
@@ -556,7 +504,7 @@ export default function ClienteFichaPage() {
       ));
 
       setProjects(updatedProjects);
-      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(updatedProjects));
+      void saveProjects(updatedProjects);
     } else if (manualClient) {
       registerChange("Nombre de proyecto", manualClient.projectName || "", draft.projectName.trim());
       registerChange("Tipo de proyecto", manualClient.projectType || "", draft.projectType);
@@ -584,7 +532,7 @@ export default function ClienteFichaPage() {
       ));
 
       setManualClients(updatedManualClients);
-      localStorage.setItem(MANUAL_CLIENTS_STORAGE_KEY, JSON.stringify(updatedManualClients));
+      void saveClients(updatedManualClients);
     }
 
     appendHistory(changeEntries);
@@ -592,7 +540,7 @@ export default function ClienteFichaPage() {
     closeEditor();
   };
 
-  const deleteClient = () => {
+  const deleteClient = async () => {
     if (!clientsCapabilities.canDeleteClient) {
       return;
     }
@@ -607,13 +555,40 @@ export default function ClienteFichaPage() {
 
     const updatedProjects = projects.filter((project) => project.client.id !== clientId);
     const updatedManualClients = manualClients.filter((client) => client.id !== clientId);
+    const removedProjectLegacyIds = projects
+      .filter((project) => project.client.id === clientId)
+      .map((project) => project.id);
 
+    const previousProjects = projects;
+    const previousManualClients = manualClients;
+
+    // Refleja el cambio de inmediato en UI y snapshot local.
     setProjects(updatedProjects);
     setManualClients(updatedManualClients);
-    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(updatedProjects));
-    localStorage.setItem(MANUAL_CLIENTS_STORAGE_KEY, JSON.stringify(updatedManualClients));
+    writeStorage(PROJECTS_STORAGE_KEY, JSON.stringify(updatedProjects));
+    writeStorage(MANUAL_CLIENTS_STORAGE_KEY, JSON.stringify(updatedManualClients));
 
-    router.push("/clientes");
+    try {
+      await deleteClientAndLinkedProjects(clientId, removedProjectLegacyIds);
+
+      // Reafirma snapshots locales tras persistir en fuente de verdad.
+      void saveProjects(updatedProjects);
+      void saveClients(updatedManualClients);
+
+      router.push("/clientes");
+    } catch (error) {
+      // Revertimos el estado optimista si la persistencia falla.
+      setProjects(previousProjects);
+      setManualClients(previousManualClients);
+      writeStorage(PROJECTS_STORAGE_KEY, JSON.stringify(previousProjects));
+      writeStorage(MANUAL_CLIENTS_STORAGE_KEY, JSON.stringify(previousManualClients));
+
+      if (error instanceof SupabaseOperationError) {
+        reportSupabaseError(error);
+      }
+
+      return;
+    }
   };
 
   return (

@@ -1,11 +1,7 @@
-import { projects as baseProjects } from "@/lib/data/projects";
+import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
+import { activitiesStorageKey } from "@/lib/repositories/activities-repository";
+import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import type { Task, WorkflowType } from "@/lib/types/task";
-
-const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
-
-function tasksStorageKey(workflow: WorkflowType): string {
-  return `cincel.actividades.${workflow}.tasks.v1`;
-}
 
 function normalizeProjectKey(value: string): string {
   return value
@@ -16,22 +12,7 @@ function normalizeProjectKey(value: string): string {
 }
 
 function loadProjectsForLinking() {
-  if (typeof window === "undefined") {
-    return baseProjects;
-  }
-
-  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
-
-  if (!stored) {
-    return baseProjects;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as typeof baseProjects;
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : baseProjects;
-  } catch {
-    return baseProjects;
-  }
+  return getProjectsSnapshot();
 }
 
 function resolveProjectName(inputName: string, projectNames: string[]): string {
@@ -53,8 +34,8 @@ export function loadLinkedTasks(workflow: WorkflowType, fallback: Task[]): Task[
     return fallback;
   }
 
-  const storageKey = tasksStorageKey(workflow);
-  const stored = localStorage.getItem(storageKey);
+  const storageKey = activitiesStorageKey(workflow);
+  const stored = readStorage(storageKey);
 
   let sourceTasks: Task[] = fallback;
 
@@ -65,7 +46,7 @@ export function loadLinkedTasks(workflow: WorkflowType, fallback: Task[]): Task[
         sourceTasks = parsed;
       }
     } catch {
-      localStorage.removeItem(storageKey);
+      removeStorage(storageKey);
     }
   }
 
@@ -88,7 +69,7 @@ export function loadLinkedTasks(workflow: WorkflowType, fallback: Task[]): Task[
   });
 
   if (changed) {
-    localStorage.setItem(storageKey, JSON.stringify(linked));
+    writeStorage(storageKey, JSON.stringify(linked));
   }
 
   return linked;

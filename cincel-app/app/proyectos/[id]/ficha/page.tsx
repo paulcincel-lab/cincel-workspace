@@ -16,6 +16,7 @@ import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
+import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 
 type ProjectItem = (typeof projects)[number];
 type ActiveClientOption = {
@@ -34,7 +35,7 @@ function loadPersistedProjects(): ProjectItem[] {
     return projects;
   }
 
-  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
+  const stored = readStorage(PROJECTS_STORAGE_KEY);
 
   if (!stored) {
     return projects;
@@ -64,7 +65,7 @@ function loadActiveClients(projectsData: ProjectItem[]): ActiveClientOption[] {
     return fromProjects;
   }
 
-  const stored = localStorage.getItem(MANUAL_CLIENTS_STORAGE_KEY);
+  const stored = readStorage(MANUAL_CLIENTS_STORAGE_KEY);
   let fromManual: ActiveClientOption[] = [];
 
   if (stored) {
@@ -116,7 +117,7 @@ function loadActiveTeamNames(): string[] {
     return teamMembers.filter((member) => member.active).map((member) => member.name);
   }
 
-  const stored = localStorage.getItem(TEAM_MEMBERS_STORAGE_KEY);
+  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
 
   if (!stored) {
     return teamMembers.filter((member) => member.active).map((member) => member.name);
@@ -143,7 +144,7 @@ function loadSecondaryCoordinatorMap(): Record<number, string> {
     return {};
   }
 
-  const stored = localStorage.getItem(SECONDARY_COORDINATOR_STORAGE_KEY);
+  const stored = readStorage(SECONDARY_COORDINATOR_STORAGE_KEY);
 
   if (!stored) {
     return {};
@@ -209,11 +210,11 @@ export default function ProjectFichaPage() {
   const [inlineAddressValue, setInlineAddressValue] = useState<{ street: string; city: string; state: string }>({ street: "", city: "", state: "" });
 
   useEffect(() => {
-    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projectsData));
+    writeStorage(PROJECTS_STORAGE_KEY, JSON.stringify(projectsData));
   }, [projectsData]);
 
   useEffect(() => {
-    localStorage.setItem(SECONDARY_COORDINATOR_STORAGE_KEY, JSON.stringify(secondaryCoordinatorByProject));
+    writeStorage(SECONDARY_COORDINATOR_STORAGE_KEY, JSON.stringify(secondaryCoordinatorByProject));
   }, [secondaryCoordinatorByProject]);
 
   useEffect(() => {

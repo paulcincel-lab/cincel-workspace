@@ -19,6 +19,9 @@ import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import type { Task } from "@/lib/types/task";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
+import { saveClients, fetchClients, getClientsSnapshot } from "@/lib/repositories/clients-repository";
+import { saveProjects, fetchProjects, getProjectsSnapshot } from "@/lib/repositories/projects-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
 type RiskLevel = "Alto" | "Medio" | "Bajo";
 type ClientKind = "Empresa" | "Particular";
@@ -96,8 +99,6 @@ type ClientSummary = {
   nextReviewDate: string;
 };
 
-const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
-const MANUAL_CLIENTS_STORAGE_KEY = "cincel.clients.manual.v1";
 const projectTypeOptions: ProjectType[] = [
   "Habitacional",
   "Oficina",
@@ -120,25 +121,14 @@ const emptyNewClientDraft: NewClientDraft = {
 };
 
 function loadPersistedProjects() {
-  if (typeof window === "undefined") {
+  const parsed = getProjectsSnapshot() as Array<Partial<(typeof baseProjects)[number]>>;
+
+  if (!Array.isArray(parsed)) {
     return baseProjects;
   }
 
-  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
-
-  if (!stored) {
-    return baseProjects;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Array<Partial<(typeof baseProjects)[number]>>;
-
-    if (!Array.isArray(parsed)) {
-      return baseProjects;
-    }
-
-    const normalized = parsed
-      .map((item) => {
+  const normalized = parsed
+    .map((item) => {
         const fallback = baseProjects.find(
           (project) => project.id === item.id || project.code === item.code || project.name === item.name
         );
@@ -248,13 +238,9 @@ function loadPersistedProjects() {
           startDate: typeof item.startDate === "string" && item.startDate ? item.startDate : fallback.startDate,
         };
       })
-      .filter((item): item is (typeof baseProjects)[number] => item !== null);
+    .filter((item): item is (typeof baseProjects)[number] => item !== null);
 
-    return normalized.length > 0 ? normalized : baseProjects;
-  } catch {
-    localStorage.removeItem(PROJECTS_STORAGE_KEY);
-    return baseProjects;
-  }
+  return normalized.length > 0 ? normalized : baseProjects;
 }
 
 function loadPersistedTasks(workflow: "Presale" | "Diseño" | "Construcción", fallback: Task[]): Task[] {
@@ -262,53 +248,38 @@ function loadPersistedTasks(workflow: "Presale" | "Diseño" | "Construcción", f
 }
 
 function loadManualClients(): ManualClient[] {
-  if (typeof window === "undefined") {
+  const parsed = getClientsSnapshot() as ManualClient[];
+
+  if (!Array.isArray(parsed)) {
     return [];
   }
 
-  const stored = localStorage.getItem(MANUAL_CLIENTS_STORAGE_KEY);
-
-  if (!stored) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as ManualClient[];
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed.map((item) => ({
-      id: Number(item.id),
-      name: item.name || "",
-      emails: Array.isArray(item.emails) ? item.emails.filter(Boolean) : [],
-      phone: item.phone || "",
-      kind: item.kind === "Empresa" ? "Empresa" : "Particular",
-      contacts: Array.isArray(item.contacts)
-        ? item.contacts.filter((contact): contact is { name: string; role: string; phone: string; email: string } =>
-          Boolean(contact)
-          && typeof contact.name === "string"
-          && typeof contact.role === "string"
-          && typeof contact.phone === "string"
-          && typeof contact.email === "string"
-        )
-        : [],
-      completedProjects: Array.isArray(item.completedProjects)
-        ? item.completedProjects.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-        : [],
-      acquisitionChannel: typeof item.acquisitionChannel === "string" ? item.acquisitionChannel : "Sin registro",
-      totalSpent: typeof item.totalSpent === "number" ? item.totalSpent : 0,
-      hasActiveProject: Boolean(item.hasActiveProject),
-      projectName: item.projectName || "",
-      projectType: item.projectType || "Otro",
-      totalProjectsWorked: Number.isFinite(Number(item.totalProjectsWorked)) ? Number(item.totalProjectsWorked) : 1,
-      firstWorkDate: item.firstWorkDate || "",
-    }));
-  } catch {
-    localStorage.removeItem(MANUAL_CLIENTS_STORAGE_KEY);
-    return [];
-  }
+  return parsed.map((item) => ({
+    id: Number(item.id),
+    name: item.name || "",
+    emails: Array.isArray(item.emails) ? item.emails.filter(Boolean) : [],
+    phone: item.phone || "",
+    kind: item.kind === "Empresa" ? "Empresa" : "Particular",
+    contacts: Array.isArray(item.contacts)
+      ? item.contacts.filter((contact): contact is { name: string; role: string; phone: string; email: string } =>
+        Boolean(contact)
+        && typeof contact.name === "string"
+        && typeof contact.role === "string"
+        && typeof contact.phone === "string"
+        && typeof contact.email === "string"
+      )
+      : [],
+    completedProjects: Array.isArray(item.completedProjects)
+      ? item.completedProjects.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : [],
+    acquisitionChannel: typeof item.acquisitionChannel === "string" ? item.acquisitionChannel : "Sin registro",
+    totalSpent: typeof item.totalSpent === "number" ? item.totalSpent : 0,
+    hasActiveProject: Boolean(item.hasActiveProject),
+    projectName: item.projectName || "",
+    projectType: item.projectType || "Otro",
+    totalProjectsWorked: Number.isFinite(Number(item.totalProjectsWorked)) ? Number(item.totalProjectsWorked) : 1,
+    firstWorkDate: item.firstWorkDate || "",
+  }));
 }
 
 function getEarliestDate(dates: string[]): string {
@@ -354,11 +325,15 @@ function normalizeClientKind(value: unknown): ClientKind {
 }
 
 function updateManualClientsStorage(next: ManualClient[]) {
-  localStorage.setItem(MANUAL_CLIENTS_STORAGE_KEY, JSON.stringify(next));
+  saveClients(next).catch((err: unknown) => {
+    if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+  });
 }
 
 function updateProjectsStorage(next: (typeof baseProjects)) {
-  localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(next));
+  saveProjects(next).catch((err: unknown) => {
+    if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+  });
 }
 
 function buildTimestampLabel(): string {
@@ -409,6 +384,25 @@ export default function ClientesPage() {
     };
 
     refresh();
+
+    // Hidratación async desde Supabase (cuando está habilitado)
+    const hydrate = async () => {
+      try {
+        const [remoteProjects, remoteClients] = await Promise.all([
+          fetchProjects(),
+          fetchClients(),
+        ]);
+
+        setProjects(remoteProjects.length > 0 ? remoteProjects : loadPersistedProjects());
+        setManualClients(remoteClients);
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) {
+          reportSupabaseError(err);
+        }
+      }
+    };
+
+    void hydrate();
 
     const onVisibility = () => {
       if (!document.hidden) {
@@ -717,7 +711,7 @@ export default function ClientesPage() {
       });
 
       setManualClients(updatedManual);
-      localStorage.setItem(MANUAL_CLIENTS_STORAGE_KEY, JSON.stringify(updatedManual));
+      updateManualClientsStorage(updatedManual);
       closeEditor();
       return;
     }
@@ -770,7 +764,7 @@ export default function ClientesPage() {
     });
 
     setProjects(updatedProjects);
-    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(updatedProjects));
+    updateProjectsStorage(updatedProjects);
     closeEditor();
   };
 

@@ -14,6 +14,26 @@ import {
   saveGeneralSettings,
 } from "@/lib/settings/general-settings";
 
+function loadImageAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+
+      if (!result) {
+        reject(new Error("No se pudo leer la imagen seleccionada."));
+        return;
+      }
+
+      resolve(result);
+    };
+
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen seleccionada."));
+    reader.readAsDataURL(file);
+  });
+}
+
 const CONFIG_NAV_ITEMS: Array<{ key: string; label: string; href?: string; enabled: boolean }> = [
   { key: "permisos", label: "Permisos", href: "/configuracion/permisos", enabled: true },
   { key: "general", label: "General", href: "/configuracion/general", enabled: true },
@@ -94,6 +114,36 @@ export default function GeneralSettingsWorkspace() {
         [key]: value,
       },
     }));
+  };
+
+  const handleLogoUpload = async (
+    scope: "company" | "appearance",
+    field: "logoUrl" | "systemLogoUrl",
+    file: File | null,
+  ) => {
+    if (!file) {
+      return;
+    }
+
+    if (file.type !== "image/png" && file.type !== "image/jpeg") {
+      window.alert("Solo se permiten imágenes PNG o JPG.");
+      return;
+    }
+
+    try {
+      const dataUrl = await loadImageAsDataUrl(file);
+
+      if (scope === "company" && field === "logoUrl") {
+        updateCompanyField("logoUrl", dataUrl);
+        return;
+      }
+
+      if (scope === "appearance" && field === "systemLogoUrl") {
+        updateAppearanceField("systemLogoUrl", dataUrl);
+      }
+    } catch {
+      window.alert("No se pudo cargar la imagen. Intenta de nuevo.");
+    }
   };
 
   const updateSystemField = <TKey extends keyof GeneralSettings["system"]>(key: TKey, value: GeneralSettings["system"][TKey]) => {
@@ -271,13 +321,26 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1 md:col-span-2">
-                      <span className="text-xs font-medium text-slate-600">Logotipo de la empresa (URL)</span>
+                      <span className="text-xs font-medium text-slate-600">Logotipo de la empresa</span>
                       <input
-                        type="text"
-                        value={settings.company.logoUrl}
-                        onChange={(event) => updateCompanyField("logoUrl", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        onChange={(event) => handleLogoUpload("company", "logoUrl", event.target.files?.[0] ?? null)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
                       />
+                      {settings.company.logoUrl ? (
+                        <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                          <img
+                            src={settings.company.logoUrl}
+                            alt="Vista previa del logotipo de la empresa"
+                            className="h-12 w-12 rounded-md object-contain"
+                          />
+                          <div>
+                            <p className="text-xs font-semibold text-slate-700">Imagen cargada</p>
+                            <p className="text-[11px] text-slate-500">PNG o JPG guardado en la configuración.</p>
+                          </div>
+                        </div>
+                      ) : null}
                     </label>
                   </div>
                 </article>
@@ -339,13 +402,26 @@ export default function GeneralSettingsWorkspace() {
 
                   <div className="mt-4 space-y-3">
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Logo del sistema (URL)</span>
+                      <span className="text-xs font-medium text-slate-600">Logo del sistema</span>
                       <input
-                        type="text"
-                        value={settings.appearance.systemLogoUrl}
-                        onChange={(event) => updateAppearanceField("systemLogoUrl", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        onChange={(event) => handleLogoUpload("appearance", "systemLogoUrl", event.target.files?.[0] ?? null)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
                       />
+                      {settings.appearance.systemLogoUrl ? (
+                        <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                          <img
+                            src={settings.appearance.systemLogoUrl}
+                            alt="Vista previa del logo del sistema"
+                            className="h-12 w-12 rounded-md object-contain"
+                          />
+                          <div>
+                            <p className="text-xs font-semibold text-slate-700">Imagen cargada</p>
+                            <p className="text-[11px] text-slate-500">PNG o JPG guardado en la configuración.</p>
+                          </div>
+                        </div>
+                      ) : null}
                     </label>
 
                     <label className="space-y-1">

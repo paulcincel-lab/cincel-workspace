@@ -22,6 +22,7 @@ import {
   type SystemAccessRole,
 } from "@/lib/data/roles";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const SYSTEM_ROLE_STORAGE_KEY = "cincel.team.system-roles.v1";
@@ -70,7 +71,7 @@ function loadTeamMembers(): TeamMember[] {
     return teamMembers;
   }
 
-  const stored = localStorage.getItem(TEAM_MEMBERS_STORAGE_KEY);
+  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
   if (!stored) {
     return teamMembers;
   }
@@ -88,7 +89,7 @@ function loadSystemRoleMap(): Record<number, string> {
     return {};
   }
 
-  const stored = localStorage.getItem(SYSTEM_ROLE_STORAGE_KEY);
+  const stored = readStorage(SYSTEM_ROLE_STORAGE_KEY);
   if (!stored) {
     return {};
   }
@@ -205,7 +206,7 @@ function loadPermissionsState(defaultState: PermissionsState): { state: Permissi
     return { state: defaultState, hasCustom: false };
   }
 
-  const stored = localStorage.getItem(PERMISSIONS_CUSTOM_STORAGE_KEY);
+  const stored = readStorage(PERMISSIONS_CUSTOM_STORAGE_KEY);
   if (!stored) {
     return { state: defaultState, hasCustom: false };
   }
@@ -227,7 +228,7 @@ function savePermissionsState(state: PermissionsState): void {
     roles: state,
   };
 
-  localStorage.setItem(PERMISSIONS_CUSTOM_STORAGE_KEY, JSON.stringify(payload));
+  writeStorage(PERMISSIONS_CUSTOM_STORAGE_KEY, JSON.stringify(payload));
 }
 
 function getModuleDetails(moduleDefinition: PermissionsModuleDefinition, moduleState: ModulePermissionsState): string | null {
@@ -338,7 +339,7 @@ export default function PermissionsWorkspace() {
   };
 
   const restoreDefaults = () => {
-    localStorage.removeItem(PERMISSIONS_CUSTOM_STORAGE_KEY);
+    removeStorage(PERMISSIONS_CUSTOM_STORAGE_KEY);
     setPermissionsState(defaultPermissionsState);
     setHasCustomConfig(false);
   };

@@ -5,8 +5,10 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { contractors as baseContractors } from "@/lib/data/contractors";
 import type { Contractor, ContractorStatus, ContractorSeniority, PriceLevel } from "@/lib/types/contractor";
+import { getContractorsSnapshot, saveContractors, fetchContractors } from "@/lib/repositories/providers-repository";
+import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
-const STORAGE_KEY = "cincel.contractors.data.v2";
 const OPTIONS_STORAGE_KEY = "cincel.contractors.options.v2";
 
 const DEFAULT_STATUS_OPTIONS: string[] = [
@@ -55,22 +57,9 @@ function normalizeBaseContractors(): Contractor[] {
 }
 
 function loadStoredContractors(): Contractor[] {
-  if (typeof window === "undefined") {
-    return normalizeBaseContractors();
-  }
-
-  const stored = localStorage.getItem(STORAGE_KEY);
-
-  if (!stored) {
-    return normalizeBaseContractors();
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Contractor[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : normalizeBaseContractors();
-  } catch {
-    return normalizeBaseContractors();
-  }
+  const snapshot = getContractorsSnapshot();
+  if (snapshot.length === 0) return normalizeBaseContractors();
+  return snapshot;
 }
 
 // Paleta de colores predefinidos para opciones de menú
@@ -672,11 +661,11 @@ export default function ContratistasPage() {
   const [draggedColumn, setDraggedColumn] = useState<ColumnKey | null>(null);
 
   useEffect(() => {
-    const hydrate = () => {
+    const hydrate = async () => {
       try {
         setContractors(loadStoredContractors());
 
-        const storedOpts = localStorage.getItem(OPTIONS_STORAGE_KEY);
+        const storedOpts = readStorage(OPTIONS_STORAGE_KEY);
         if (storedOpts) {
           const o = JSON.parse(storedOpts) as Partial<{
             statusOptions: string[];
@@ -691,24 +680,32 @@ export default function ContratistasPage() {
           if (o.priceOptions) setPriceOptions(o.priceOptions);
         }
 
-        const storedColors = localStorage.getItem(COLORS_STORAGE_KEY);
+        const storedColors = readStorage(COLORS_STORAGE_KEY);
         if (storedColors) setOptionColors(JSON.parse(storedColors));
 
-        const storedColumnOrder = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+        const storedColumnOrder = readStorage(COLUMN_ORDER_STORAGE_KEY);
         if (storedColumnOrder) setColumnOrder(JSON.parse(storedColumnOrder));
-      } catch {
-        /* ignore */
+
+        // Hidratación async desde Supabase (cuando está habilitado)
+        const remote = await fetchContractors();
+        setContractors(remote);
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) {
+          reportSupabaseError(err);
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    queueMicrotask(hydrate);
+    void hydrate();
   }, []);
 
   const save = (next: Contractor[]) => {
     setContractors(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    saveContractors(next).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    });
   };
 
   const saveOpts = (patch: Partial<{ statusOptions: string[]; categoryOptions: string[]; seniorityOptions: string[]; priceOptions: string[] }>) => {
@@ -717,7 +714,7 @@ export default function ContratistasPage() {
     if (patch.categoryOptions) setCategoryOptions(patch.categoryOptions);
     if (patch.seniorityOptions) setSeniorityOptions(patch.seniorityOptions);
     if (patch.priceOptions) setPriceOptions(patch.priceOptions);
-    localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(merged));
+    writeStorage(OPTIONS_STORAGE_KEY, JSON.stringify(merged));
   };
 
   const deleteOption = (arrayName: "statusOptions" | "categoryOptions" | "seniorityOptions" | "priceOptions", option: string) => {
@@ -755,7 +752,7 @@ export default function ContratistasPage() {
   const setColor = (option: string, color: { bg: string; text: string }) => {
     const next = { ...optionColors, [option]: color };
     setOptionColors(next);
-    localStorage.setItem(COLORS_STORAGE_KEY, JSON.stringify(next));
+    writeStorage(COLORS_STORAGE_KEY, JSON.stringify(next));
   };
 
   const reorderColumn = (sourceKey: ColumnKey, targetKey: ColumnKey) => {
@@ -771,7 +768,7 @@ export default function ContratistasPage() {
     newOrder.splice(adjustedTargetIdx, 0, sourceKey);
     
     setColumnOrder(newOrder);
-    localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+    writeStorage(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
   };
 
   const columnLabel = (key: ColumnKey): string => {

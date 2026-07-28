@@ -5,8 +5,10 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { colaboradores as baseColaboradores } from "@/lib/data/colaboradores";
 import type { Colaborador, ColaboradorRole, ColaboradorStatus, ColaboradorSeniority, ColaboradorPriceLevel } from "@/lib/types/colaborador";
+import { getColaboradoresSnapshot, saveColaboradores, fetchColaboradores } from "@/lib/repositories/providers-repository";
+import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
-const STORAGE_KEY = "cincel.colaboradores.data.v2";
 const OPTIONS_STORAGE_KEY = "cincel.colaboradores.options.v2";
 const COLUMN_ORDER_STORAGE_KEY = "cincel.colaboradores.column.order.v2";
 const COLORS_STORAGE_KEY = "cincel.colaboradores.colors.v1";
@@ -424,12 +426,12 @@ export default function ColaboradoresPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
-    const hydrate = () => {
+    const hydrate = async () => {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        setColaboradores(stored ? JSON.parse(stored) : baseColaboradores);
+        const snapshot = getColaboradoresSnapshot();
+        setColaboradores(snapshot.length > 0 ? snapshot : baseColaboradores);
 
-        const storedOpts = localStorage.getItem(OPTIONS_STORAGE_KEY);
+        const storedOpts = readStorage(OPTIONS_STORAGE_KEY);
         if (storedOpts) {
           const o = JSON.parse(storedOpts) as Partial<{
             statusOptions: ColaboradorStatus[];
@@ -442,32 +444,40 @@ export default function ColaboradoresPage() {
           if (o.priceOptions) setPriceOptions(o.priceOptions);
         }
 
-        const storedColors = localStorage.getItem(COLORS_STORAGE_KEY);
+        const storedColors = readStorage(COLORS_STORAGE_KEY);
         if (storedColors) setOptionColors(JSON.parse(storedColors));
 
-        const storedColumnOrder = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+        const storedColumnOrder = readStorage(COLUMN_ORDER_STORAGE_KEY);
         if (storedColumnOrder) setColumnOrder(JSON.parse(storedColumnOrder));
-      } catch {
-        /* ignore */
+
+        // Hidratación async desde Supabase (cuando está habilitado)
+        const remote = await fetchColaboradores();
+        setColaboradores(remote.length > 0 ? remote : baseColaboradores);
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) {
+          reportSupabaseError(err);
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    queueMicrotask(hydrate);
+    void hydrate();
   }, []);
 
   const save = (next: Colaborador[]) => {
     setColaboradores(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    saveColaboradores(next).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    });
   };
 
   const saveOptions = () => {
-    localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify({ statusOptions, seniorityOptions, priceOptions }));
+    writeStorage(OPTIONS_STORAGE_KEY, JSON.stringify({ statusOptions, seniorityOptions, priceOptions }));
   };
 
   const saveColors = () => {
-    localStorage.setItem(COLORS_STORAGE_KEY, JSON.stringify(optionColors));
+    writeStorage(COLORS_STORAGE_KEY, JSON.stringify(optionColors));
   };
 
   const update = (id: number, field: keyof Colaborador, value: unknown) =>
@@ -553,7 +563,7 @@ export default function ColaboradoresPage() {
     newOrder.splice(adjustedTargetIdx, 0, sourceKey);
     
     setColumnOrder(newOrder);
-    localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+    writeStorage(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
   };
 
   const columnLabel = (key: ColumnKey): string => {

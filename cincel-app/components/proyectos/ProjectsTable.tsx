@@ -16,6 +16,10 @@ import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
+import { saveProjects, fetchProjects } from "@/lib/repositories/projects-repository";
+import { getClientsSnapshot } from "@/lib/repositories/clients-repository";
+import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
 type RiskLevel = "Alto" | "Medio" | "Bajo";
 
@@ -38,7 +42,6 @@ type NewProjectDraft = {
 };
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
-const MANUAL_CLIENTS_STORAGE_KEY = "cincel.clients.manual.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
 const STAGE_OPTIONS = ["Presale", "Diseño", "Construcción"];
 const emptyNewProjectDraft: NewProjectDraft = {
@@ -117,7 +120,7 @@ function loadProjectNotes(): Record<number, ProjectNote[]> {
     return {};
   }
 
-  const stored = localStorage.getItem("cincel.projects.notes.v1");
+  const stored = readStorage("cincel.projects.notes.v1");
 
   if (!stored) {
     return {};
@@ -127,7 +130,7 @@ function loadProjectNotes(): Record<number, ProjectNote[]> {
     const parsed = JSON.parse(stored) as Record<number, ProjectNote[]>;
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
-    localStorage.removeItem("cincel.projects.notes.v1");
+    removeStorage("cincel.projects.notes.v1");
     return {};
   }
 }
@@ -137,7 +140,7 @@ function loadPersistedProjects(): ProjectItem[] {
     return projects;
   }
 
-  const stored = localStorage.getItem("cincel.projects.data.v1");
+  const stored = readStorage("cincel.projects.data.v1");
 
   if (!stored) {
     return projects;
@@ -279,7 +282,7 @@ function loadPersistedProjects(): ProjectItem[] {
 
     return normalized.length > 0 ? normalized : projects;
   } catch {
-    localStorage.removeItem("cincel.projects.data.v1");
+    removeStorage("cincel.projects.data.v1");
     return projects;
   }
 }
@@ -289,7 +292,7 @@ function loadActiveTeamNames(): string[] {
     return teamMembers.filter((member) => member.active).map((member) => member.name);
   }
 
-  const stored = localStorage.getItem(TEAM_MEMBERS_STORAGE_KEY);
+  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
 
   if (!stored) {
     return teamMembers.filter((member) => member.active).map((member) => member.name);
@@ -316,7 +319,7 @@ function loadSecondaryCoordinatorMap(): Record<number, string> {
     return {};
   }
 
-  const stored = localStorage.getItem(SECONDARY_COORDINATOR_STORAGE_KEY);
+  const stored = readStorage(SECONDARY_COORDINATOR_STORAGE_KEY);
 
   if (!stored) {
     return {};
@@ -356,11 +359,13 @@ export default function ProjectsTable() {
   const [inlineEditingCell, setInlineEditingCell] = useState<{ projectId: number; field: "design" | "construction" } | null>(null);
 
   useEffect(() => {
-    localStorage.setItem("cincel.projects.data.v1", JSON.stringify(projectsData));
+    saveProjects(projectsData).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    });
   }, [projectsData]);
 
   useEffect(() => {
-    localStorage.setItem(SECONDARY_COORDINATOR_STORAGE_KEY, JSON.stringify(secondaryCoordinatorByProject));
+    writeStorage(SECONDARY_COORDINATOR_STORAGE_KEY, JSON.stringify(secondaryCoordinatorByProject));
   }, [secondaryCoordinatorByProject]);
 
   useEffect(() => {
@@ -368,6 +373,21 @@ export default function ProjectsTable() {
       setActiveTeamNames(loadActiveTeamNames());
       setAuthenticatedUser(getCurrentAuthenticatedUser());
     };
+
+    // Hidratación async desde Supabase al montar
+    const hydrate = async () => {
+      try {
+        const remote = await fetchProjects();
+        if (remote.length > 0) {
+          setProjectsData(remote);
+        }
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) {
+          reportSupabaseError(err);
+        }
+      }
+    };
+    void hydrate();
 
     window.addEventListener("focus", refreshTeam);
     window.addEventListener("storage", refreshTeam);
@@ -589,48 +609,15 @@ export default function ProjectsTable() {
       });
 
     const fromManual = (() => {
-      if (typeof window === "undefined") {
-        return [] as ActiveClientOption[];
-      }
+      const manualClients = getClientsSnapshot();
 
-      const stored = localStorage.getItem(MANUAL_CLIENTS_STORAGE_KEY);
-
-      if (!stored) {
-        return [] as ActiveClientOption[];
-      }
-
-      try {
-        const parsed = JSON.parse(stored) as Array<{
-          id?: unknown;
-          name?: unknown;
-          kind?: unknown;
-          hasActiveProject?: unknown;
-        }>;
-
-        if (!Array.isArray(parsed)) {
-          return [] as ActiveClientOption[];
-        }
-
-        return parsed
-          .filter((item) => Boolean(item.hasActiveProject))
-          .map((item) => {
-            const id = typeof item.id === "number" ? item.id : Number(item.id);
-            const name = typeof item.name === "string" ? item.name.trim() : "";
-
-            if (!Number.isFinite(id) || !name) {
-              return null;
-            }
-
-            return {
-              id,
-              name,
-              kind: item.kind === "Empresa" ? "Empresa" : "Particular",
-            };
-          })
-          .filter((item): item is ActiveClientOption => item !== null);
-      } catch {
-        return [] as ActiveClientOption[];
-      }
+      return manualClients
+        .filter((item) => Boolean(item.hasActiveProject))
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          kind: item.kind as "Empresa" | "Particular",
+        }));
     })();
 
     const deduped = new Map<string, ActiveClientOption>();
@@ -738,7 +725,9 @@ export default function ProjectsTable() {
 
     const nextProjects = [createdProject, ...projectsData];
     setProjectsData(nextProjects);
-    localStorage.setItem("cincel.projects.data.v1", JSON.stringify(nextProjects));
+    saveProjects(nextProjects).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    });
     setShowCreateModal(false);
     setCreateError("");
     router.push(`/proyectos/${createdProject.id}/ficha`);
@@ -764,7 +753,7 @@ export default function ProjectsTable() {
     };
 
     setNotesByProject(next);
-    localStorage.setItem("cincel.projects.notes.v1", JSON.stringify(next));
+    writeStorage("cincel.projects.notes.v1", JSON.stringify(next));
     setNoteDraft("");
   };
 
@@ -827,7 +816,7 @@ export default function ProjectsTable() {
     setNotesByProject((current) => {
       const next = { ...current };
       delete next[projectId];
-      localStorage.setItem("cincel.projects.notes.v1", JSON.stringify(next));
+      writeStorage("cincel.projects.notes.v1", JSON.stringify(next));
       return next;
     });
 

@@ -1,6 +1,7 @@
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import type { SystemAccessRole } from "@/lib/data/roles";
 import type { ResourceSection } from "@/lib/types/resource";
+import { readStorage } from "@/lib/repositories/browser-state-repository";
 
 export const PERMISSIONS_CUSTOM_STORAGE_KEY = "cincel.permissions.custom.v1";
 
@@ -758,7 +759,7 @@ function readCustomPermissionsPayload(): StoredPermissionsState | null {
     return null;
   }
 
-  const stored = window.localStorage.getItem(PERMISSIONS_CUSTOM_STORAGE_KEY);
+  const stored = readStorage(PERMISSIONS_CUSTOM_STORAGE_KEY);
 
   if (!stored) {
     return null;

@@ -8,7 +8,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/ui/Avatar";
 import ExportMenu from "@/components/ui/ExportMenu";
 import InlineEditableField from "@/components/ui/InlineEditableField";
-import { projects as baseProjects } from "@/lib/data/projects";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
@@ -19,6 +18,9 @@ import type { Task, TaskStatus, WorkflowType } from "@/lib/types/task";
 import { formatDateDMY } from "@/lib/utils/date";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
+import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
+import { saveActivities } from "@/lib/repositories/activities-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
 const TASK_STATUSES: TaskStatus[] = ["Pendiente", "En proceso", "Completado", "Bloqueado"];
 const TEAM_MEMBERS = [
@@ -32,8 +34,6 @@ const TEAM_MEMBERS = [
   "Rodrigo",
 ];
 
-const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
-
 function getProjects(projects: string[]) {
   return Array.from(new Set(projects)).sort((a, b) => a.localeCompare(b));
 }
@@ -43,22 +43,7 @@ function loadPersistedTasks(workflow: WorkflowType, fallback: Task[]): Task[] {
 }
 
 function loadPersistedProjects() {
-  if (typeof window === "undefined") {
-    return baseProjects;
-  }
-
-  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
-
-  if (!stored) {
-    return baseProjects;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as typeof baseProjects;
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : baseProjects;
-  } catch {
-    return baseProjects;
-  }
+  return getProjectsSnapshot();
 }
 
 function workflowInProjectStage(projectStage: string, workflow: WorkflowType): boolean {
@@ -87,10 +72,6 @@ function getFallbackTasks(workflow: WorkflowType): Task[] {
   }
 
   return operativasTasks;
-}
-
-function getTasksStorageKey(workflow: WorkflowType): string {
-  return `cincel.actividades.${workflow}.tasks.v1`;
 }
 
 function statusBadgeClass(status: TaskStatus): string {
@@ -182,10 +163,6 @@ export default function TareasPage() {
     taskId: number,
     changes: Partial<Pick<Task, "status" | "manager" | "commitmentDate" | "reviewDate" | "deliveryDate">>
   ) => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
     const fallbackTasks = getFallbackTasks(workflow);
     const currentTasks = loadPersistedTasks(workflow, fallbackTasks);
 
@@ -199,7 +176,9 @@ export default function TareasPage() {
         : task
     );
 
-    localStorage.setItem(getTasksStorageKey(workflow), JSON.stringify(updatedTasks));
+    saveActivities(workflow, updatedTasks).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    });
     setTasksVersion((value) => value + 1);
   };
 

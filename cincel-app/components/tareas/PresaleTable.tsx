@@ -18,6 +18,9 @@ import { presaleTemplate } from "@/lib/templates/presale";
 import { presalePhaseOptions } from "@/lib/templates/phase-options";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { projects as baseProjects } from "@/lib/data/projects";
+import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
+import { fetchActivities, saveActivities } from "@/lib/repositories/activities-repository";
+import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
 type TaskFormValues = {
   project: string;
@@ -83,25 +86,9 @@ const PROJECT_TONES = [
   },
 ];
 
-const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
-
 function loadPersistedProjects() {
-  if (typeof window === "undefined") {
-    return baseProjects;
-  }
-
-  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
-
-  if (!stored) {
-    return baseProjects;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as typeof baseProjects;
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : baseProjects;
-  } catch {
-    return baseProjects;
-  }
+  const snapshot = getProjectsSnapshot();
+  return snapshot.length > 0 ? snapshot : baseProjects;
 }
 
 function createTaskFromValues(
@@ -157,31 +144,8 @@ export default function PresaleTable({
   const searchParams = useSearchParams();
   const projectFromQuery = searchParams.get("project");
   const projectFilter = projectFromQuery || "Todos los proyectos";
-  const tasksStorageKey = `cincel.actividades.${workflow}.tasks.v1`;
 
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    if (typeof window === "undefined") {
-      return initialTasks;
-    }
-
-    const stored = localStorage.getItem(tasksStorageKey);
-
-    if (!stored) {
-      return loadLinkedTasks(workflow, initialTasks);
-    }
-
-    try {
-      const parsed = JSON.parse(stored) as Task[];
-
-      if (Array.isArray(parsed)) {
-        return loadLinkedTasks(workflow, parsed);
-      }
-    } catch {
-      localStorage.removeItem(tasksStorageKey);
-    }
-
-    return loadLinkedTasks(workflow, initialTasks);
-  });
+  const [tasks, setTasks] = useState<Task[]>(() => loadLinkedTasks(workflow, initialTasks));
 
   const [search, setSearch] = useState("");
 
@@ -225,8 +189,27 @@ export default function PresaleTable({
   };
 
   useEffect(() => {
-    localStorage.setItem(tasksStorageKey, JSON.stringify(tasks));
-  }, [tasks, tasksStorageKey]);
+    saveActivities(workflow, tasks).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    });
+  }, [tasks, workflow]);
+
+  useEffect(() => {
+    const hydrateTasks = async () => {
+      try {
+        const remote = await fetchActivities(workflow);
+        if (remote.length > 0) {
+          setTasks(loadLinkedTasks(workflow, remote));
+        }
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) {
+          reportSupabaseError(err);
+        }
+      }
+    };
+
+    void hydrateTasks();
+  }, [workflow]);
 
   useEffect(() => {
     const refreshProjects = () => {

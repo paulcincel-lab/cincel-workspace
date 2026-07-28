@@ -6,13 +6,14 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import UnifiedCalendar from "@/components/calendario/UnifiedCalendar";
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
+import { resolveCalendarCapabilities, resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { presaleTasks } from "@/lib/data/presale";
 import type { Task, TaskStatus, WorkflowType } from "@/lib/types/task";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
+import { readStorage } from "@/lib/repositories/browser-state-repository";
 
 const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
@@ -32,7 +33,7 @@ function loadPersistedProjects(): ProjectData[] {
     return baseProjects;
   }
 
-  const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
+  const stored = readStorage(PROJECTS_STORAGE_KEY);
 
   if (!stored) {
     return baseProjects;
@@ -51,7 +52,7 @@ function loadSecondaryCoordinatorMap(): Record<number, string> {
     return {};
   }
 
-  const stored = localStorage.getItem(SECONDARY_COORDINATOR_STORAGE_KEY);
+  const stored = readStorage(SECONDARY_COORDINATOR_STORAGE_KEY);
 
   if (!stored) {
     return {};
@@ -201,6 +202,10 @@ export default function InteractiveDashboard() {
 
   const dashboardCapabilities = useMemo(() => {
     return resolveDashboardCapabilities(authenticatedUser);
+  }, [authenticatedUser]);
+
+  const calendarCapabilities = useMemo(() => {
+    return resolveCalendarCapabilities(authenticatedUser);
   }, [authenticatedUser]);
 
   const scopedProjectsData = useMemo(() => {
@@ -415,6 +420,9 @@ export default function InteractiveDashboard() {
       };
     });
   }, [filteredTasks]);
+
+  const flowMax = useMemo(() => Math.max(...flow.map((entry) => entry.count), 1), [flow]);
+  const flowTotal = useMemo(() => flow.reduce((total, entry) => total + entry.count, 0), [flow]);
 
   const alerts = useMemo(() => {
     const overdue = filteredTasks.filter((task) => {
@@ -828,7 +836,80 @@ export default function InteractiveDashboard() {
           </div>
         </article>
 
-        <UnifiedCalendar events={calendarEvents} mode="summary" />
+        <div className="xl:col-span-4 grid gap-6 xl:grid-cols-3">
+          <div className="xl:col-span-2">
+            {calendarCapabilities.canViewCalendar ? (
+              <UnifiedCalendar
+                events={calendarEvents}
+                mode="summary"
+                canViewDailyAgenda={calendarCapabilities.canViewDailyAgenda}
+                canViewTeamCalendar={calendarCapabilities.canViewTeamCalendar}
+                viewerName={authenticatedUser?.member.name || ""}
+              />
+            ) : (
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900">Calendario</h2>
+                <p className="mt-2 text-sm text-slate-700">No tienes permiso para ver el calendario.</p>
+              </article>
+            )}
+          </div>
+
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Flujo por etapa</h2>
+                <p className="mt-1 text-sm text-slate-600">Distribucion actual de actividades por workflow.</p>
+              </div>
+              <span className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.1em] text-slate-700">
+                {flowTotal} tareas
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {flow.map((item) => {
+                const width = Math.round((item.count / flowMax) * 100);
+                const stageShare = flowTotal > 0 ? Math.round((item.count / flowTotal) * 100) : 0;
+
+                const dotTone =
+                  item.workflow === "Presale"
+                    ? "bg-[#0e7490]"
+                    : item.workflow === "Diseño"
+                    ? "bg-[#db2777]"
+                    : "bg-[#f59e0b]";
+
+                const barTone =
+                  item.workflow === "Presale"
+                    ? "bg-[#0e7490]"
+                    : item.workflow === "Diseño"
+                    ? "bg-[#db2777]"
+                    : "bg-[#f59e0b]";
+
+                return (
+                  <div key={item.workflow} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+                        <span className={`h-2.5 w-2.5 rounded-full ${dotTone}`} />
+                        {item.label}
+                      </span>
+                      <span className="text-sm font-bold text-slate-900">{item.count}</span>
+                    </div>
+
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className={`h-full rounded-full ${barTone} transition-all duration-300`}
+                        style={{ width: `${item.count === 0 ? 6 : Math.max(14, width)}%` }}
+                      />
+                    </div>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {flowTotal === 0 ? "Sin actividades en el contexto actual." : `${stageShare}% del total`}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </article>
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
@@ -899,7 +980,7 @@ export default function InteractiveDashboard() {
 
       <section className="grid gap-6 xl:grid-cols-3">
         {dashboardCapabilities.sections.showTeamWorkload ? (
-        <article className="xl:col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="xl:col-span-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold text-slate-900">Carga del equipo</h2>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[680px]">
@@ -937,28 +1018,6 @@ export default function InteractiveDashboard() {
           </div>
         </article>
         ) : null}
-
-        <article className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${dashboardCapabilities.sections.showTeamWorkload ? "" : "xl:col-span-3"}`}>
-          <h2 className="text-xl font-semibold text-slate-900">Flujo por etapa</h2>
-          <div className="mt-4 space-y-4">
-            {flow.map((item) => {
-              const max = Math.max(...flow.map((entry) => entry.count), 1);
-              const width = Math.max(10, Math.round((item.count / max) * 100));
-
-              return (
-                <div key={item.workflow}>
-                  <div className="mb-1 flex items-center justify-between text-sm text-slate-800">
-                    <span>{item.label}</span>
-                    <span className="font-semibold text-slate-900">{item.count}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-200">
-                    <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${width}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </article>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

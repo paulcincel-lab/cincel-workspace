@@ -1,3 +1,5 @@
+import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+
 export const GENERAL_SETTINGS_STORAGE_KEY = "cincel.settings.general.v1";
 export const GENERAL_SETTINGS_CHANGED_EVENT = "cincel:general-settings-changed";
 
@@ -179,7 +181,7 @@ export function loadGeneralSettings(): { settings: GeneralSettings; hasCustom: b
     return { settings: deepCloneDefaults(), hasCustom: false };
   }
 
-  const stored = window.localStorage.getItem(GENERAL_SETTINGS_STORAGE_KEY);
+  const stored = readStorage(GENERAL_SETTINGS_STORAGE_KEY);
 
   if (!stored) {
     return { settings: deepCloneDefaults(), hasCustom: false };
@@ -206,7 +208,7 @@ export function saveGeneralSettings(settings: GeneralSettings): void {
     data: settings,
   };
 
-  window.localStorage.setItem(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+  writeStorage(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
   window.dispatchEvent(new Event(GENERAL_SETTINGS_CHANGED_EVENT));
 }
 
@@ -215,7 +217,7 @@ export function restoreDefaultGeneralSettings(): void {
     return;
   }
 
-  window.localStorage.removeItem(GENERAL_SETTINGS_STORAGE_KEY);
+  removeStorage(GENERAL_SETTINGS_STORAGE_KEY);
   window.dispatchEvent(new Event(GENERAL_SETTINGS_CHANGED_EVENT));
 }
 

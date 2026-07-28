@@ -11,6 +11,7 @@ import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
 import { isAdministratorRole } from "@/lib/data/roles";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
+import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 
 type HeaderProps = {
   variant?: "default" | "profile";
@@ -152,7 +153,7 @@ function loadTeamMembers(): TeamMember[] {
     return teamMembers;
   }
 
-  const stored = localStorage.getItem(TEAM_MEMBERS_STORAGE_KEY);
+  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
   if (!stored) {
     return teamMembers;
   }
@@ -174,7 +175,7 @@ function loadHeaderLinks(): HeaderLinks {
     return DEFAULT_HEADER_LINKS;
   }
 
-  const stored = localStorage.getItem(HEADER_LINKS_STORAGE_KEY);
+  const stored = readStorage(HEADER_LINKS_STORAGE_KEY);
   if (!stored) {
     return DEFAULT_HEADER_LINKS;
   }
@@ -217,7 +218,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
     const refreshMembers = () => {
       const authUser = getCurrentAuthenticatedUser();
       setMembers(loadTeamMembers());
-      setProfileImage(localStorage.getItem(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY) ?? "");
+      setProfileImage(readStorage(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY) ?? "");
       setHeaderLinks(loadHeaderLinks());
       setAuthenticatedMemberId(authUser?.member.id ?? null);
     };
@@ -276,8 +277,6 @@ export default function Header({ variant = "default" }: HeaderProps) {
   );
   const hasAuthenticatedSession = authenticatedMemberId !== null;
   const canEditLinksInThisPage = isAdminProfile && pathname.startsWith("/configuracion");
-  const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
-  const systemLogoUrl = generalSettings.appearance.systemLogoUrl.trim();
   const shouldShowVersion = generalSettings.system.showVersionInInterface;
   const versionLabel = generalSettings.system.version.trim();
 
@@ -295,7 +294,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
       }
 
       setProfileImage(result);
-      localStorage.setItem(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY, result);
+      writeStorage(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY, result);
     };
 
     reader.readAsDataURL(file);
@@ -320,7 +319,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
     setHeaderLinks(nextLinks);
     setLinksDraft(nextLinks);
-    localStorage.setItem(HEADER_LINKS_STORAGE_KEY, JSON.stringify(nextLinks));
+    writeStorage(HEADER_LINKS_STORAGE_KEY, JSON.stringify(nextLinks));
     setIsLinksEditorOpen(false);
   };
 
@@ -380,16 +379,22 @@ export default function Header({ variant = "default" }: HeaderProps) {
           </div>
 
           <div className="self-end sm:self-auto">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-3">
               <DevelopmentMenu />
               <HeaderActions links={headerLinks} />
               {hasAuthenticatedSession ? (
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Cerrar sesion"
+                  title="Cerrar sesion"
                 >
-                  Cerrar sesión
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-[18px] w-[18px]">
+                    <path d="M14 7l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M19 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M11 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
                 </button>
               ) : null}
             </div>
@@ -405,17 +410,6 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-4">
-          {systemLogoUrl ? (
-            <div className="h-10 w-10 overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <div
-                aria-label={systemName}
-                role="img"
-                className="h-full w-full bg-contain bg-center bg-no-repeat"
-                style={{ backgroundImage: `url(${systemLogoUrl})` }}
-              />
-            </div>
-          ) : null}
-
           <Avatar name={currentName} showName={false} />
 
           <h1 className="text-xl font-bold text-slate-900">
@@ -425,16 +419,22 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
         <div className="self-end sm:self-auto">
           <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-3">
               <DevelopmentMenu />
               <HeaderActions links={headerLinks} />
               {hasAuthenticatedSession ? (
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Cerrar sesion"
+                  title="Cerrar sesion"
                 >
-                  Cerrar sesión
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-[18px] w-[18px]">
+                    <path d="M14 7l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M19 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M11 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
                 </button>
               ) : null}
             </div>

@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "health:check": "node scripts/health-check.mjs",
+    "health:check:authenticated": "node scripts/health-check-authenticated.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.9",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "next": "16.2.10",
@@ -23,6 +26,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "playwright": "^1.62.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

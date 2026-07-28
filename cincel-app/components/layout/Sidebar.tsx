@@ -91,6 +91,16 @@ const CompanyIcon = ({ className = "h-5 w-5" }: IconProps) => (
   </svg>
 );
 
+const SuppliersIcon = ({ className = "h-5 w-5" }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
+    <path d="M3 9h18" />
+    <path d="M5 9V6h14v3" />
+    <path d="M6 9v11h12V9" />
+    <path d="M9 13h6" />
+    <path d="M9 16h6" />
+  </svg>
+);
+
 const ClientsIcon = ({ className = "h-5 w-5" }: IconProps) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
     <circle cx="8" cy="9" r="3" />
@@ -134,7 +144,6 @@ export default function Sidebar() {
 
   const menu: MenuItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
-    { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
     {
       label: "Actividades",
       icon: ActivityIcon,
@@ -146,8 +155,6 @@ export default function Sidebar() {
       ],
     },
     { label: "Calendario", href: "/calendario", icon: CalendarIcon },
-    { label: "Equipo", href: "/equipo", icon: TeamIcon },
-    { label: "Clientes", href: "/clientes", icon: ClientsIcon },
     {
       label: "Recursos",
       icon: ResourcesIcon,
@@ -171,6 +178,18 @@ export default function Sidebar() {
         { label: "Politicas de la empresa", href: "/recursos/empresa/politicas-de-la-empresa", icon: ResourcesIcon },
       ],
     },
+    { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
+    {
+      label: "Proveedores",
+      icon: SuppliersIcon,
+      submenu: [
+        { label: "Contratistas", href: "/proveedores/contratistas", icon: SuppliersIcon },
+        { label: "Colaboradores", href: "/proveedores/colaboradores", icon: SuppliersIcon },
+        { label: "Tiendas", href: "/proveedores/tiendas", icon: SuppliersIcon },
+      ],
+    },
+    { label: "Clientes", href: "/clientes", icon: ClientsIcon },
+    { label: "Equipo", href: "/equipo", icon: TeamIcon },
     {
       label: "Configuración",
       icon: SettingsIcon,
@@ -203,7 +222,7 @@ export default function Sidebar() {
     <aside className="w-64 h-screen bg-[#ECEFF6] border-r border-[#D9DEEA] text-slate-700 flex flex-col">
       <div className="px-5 pt-5 pb-3">
         {systemLogoUrl ? (
-          <div className="mb-2 h-10 w-full overflow-hidden rounded-lg border border-[#D9DEEA] bg-white">
+          <div className="mb-2 h-10 w-full overflow-hidden rounded-lg">
             <div
               aria-label={systemName}
               role="img"
@@ -221,9 +240,8 @@ export default function Sidebar() {
 
       <div className="px-5 pb-4 border-b border-[#D9DEEA]">
         <div className="flex items-center gap-2.5">
-          <Avatar name="nombre" showName={false} />
+          <Avatar name={currentProfileRole} showName={false} />
           <div>
-            <p className="text-[15px] font-semibold text-slate-800 leading-tight">nombre</p>
             <p className="text-[10px] uppercase tracking-[0.1em] font-semibold text-slate-500">{currentProfileRole}</p>
           </div>
         </div>
