@@ -7,9 +7,10 @@ import type { ExportFormat } from "@/lib/utils/export-service";
 type ExportMenuProps = {
   disabled?: boolean;
   onExport: (format: ExportFormat) => void | Promise<void>;
+  scaleClassName?: string;
 };
 
-export default function ExportMenu({ disabled = false, onExport }: ExportMenuProps) {
+export default function ExportMenu({ disabled = false, onExport, scaleClassName = "scale-[0.84]" }: ExportMenuProps) {
   const [open, setOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -42,12 +43,12 @@ export default function ExportMenu({ disabled = false, onExport }: ExportMenuPro
   };
 
   return (
-    <div ref={containerRef} className="relative origin-top-right scale-[0.84]">
+    <div ref={containerRef} className={`relative origin-top-right ${scaleClassName}`}>
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
         disabled={disabled || isExporting}
-        className={`rounded-lg border px-4 py-2 text-sm font-semibold ${disabled || isExporting ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
+        className={`rounded-lg border px-4 py-2 text-sm font-medium ${disabled || isExporting ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
       >
         {isExporting ? "Exportando..." : "Exportar ▼"}
       </button>

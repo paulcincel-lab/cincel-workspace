@@ -23,9 +23,10 @@ export default function Avatar({ name, showName = true, imageSrc = "", imageAlt 
           <Image
             src={imageSrc}
             alt={imageAlt || `Foto de ${name}`}
-            fill
+            width={36}
+            height={36}
             unoptimized
-            className="object-cover"
+            className="h-9 w-9 object-cover"
           />
         ) : (
           initials

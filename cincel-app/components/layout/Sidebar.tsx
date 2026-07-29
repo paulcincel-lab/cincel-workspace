@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 
 type IconProps = {
@@ -117,6 +118,7 @@ const isGroup = (item: MenuItem): item is MenuGroupItem => "submenu" in item;
 export default function Sidebar() {
   const generalSettings = useGeneralSettings();
   const pathname = usePathname();
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [expandedMenu, setExpandedMenu] = useState<string | null>(
     pathname.startsWith("/recursos/empresa")
       ? "Empresa"
@@ -130,6 +132,23 @@ export default function Sidebar() {
           ? "Configuración"
         : null,
   );
+
+  useEffect(() => {
+    const refreshUser = () => {
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
+    };
+
+    refreshUser();
+    window.addEventListener("focus", refreshUser);
+    window.addEventListener("storage", refreshUser);
+
+    return () => {
+      window.removeEventListener("focus", refreshUser);
+      window.removeEventListener("storage", refreshUser);
+    };
+  }, []);
+
+  const canViewConfiguration = authenticatedUser?.access === "Administrador";
 
   const menu: MenuItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
@@ -170,14 +189,18 @@ export default function Sidebar() {
     },
     { label: "Equipo", href: "/equipo", icon: TeamIcon },
     { label: "Clientes", href: "/clientes", icon: ClientsIcon },
-    {
-      label: "Configuración",
-      icon: SettingsIcon,
-      submenu: [
-        { label: "General", href: "/configuracion/general", icon: SettingsIcon },
-        { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
-      ],
-    },
+    ...(canViewConfiguration
+      ? [
+          {
+            label: "Configuración",
+            icon: SettingsIcon,
+            submenu: [
+              { label: "General", href: "/configuracion/general", icon: SettingsIcon },
+              { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
+            ],
+          } satisfies MenuGroupItem,
+        ]
+      : []),
   ];
 
   const isActivePath = (href: string) => pathname === href || pathname.startsWith(`${href}/`);

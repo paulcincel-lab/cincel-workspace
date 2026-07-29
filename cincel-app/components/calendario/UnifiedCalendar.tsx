@@ -65,6 +65,7 @@ export default function UnifiedCalendar({
   canViewTeamCalendar = true,
   viewerName = "",
 }: UnifiedCalendarProps) {
+  const normalizedViewerName = viewerName.trim();
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -82,17 +83,35 @@ export default function UnifiedCalendar({
   });
 
   const options = useMemo(() => buildCalendarFilterOptions(events), [events]);
+  const responsibleOptions = useMemo(() => {
+    if (!canViewTeamCalendar && normalizedViewerName) {
+      return [normalizedViewerName];
+    }
+
+    return options.responsibles;
+  }, [canViewTeamCalendar, normalizedViewerName, options.responsibles]);
+  const effectiveResponsibleFilter = !canViewTeamCalendar && normalizedViewerName
+    ? normalizedViewerName
+    : filters.responsible;
+  const effectiveFilters = useMemo(
+    () => ({
+      ...filters,
+      responsible: effectiveResponsibleFilter,
+    }),
+    [effectiveResponsibleFilter, filters]
+  );
+
   const scopedEvents = useMemo(() => {
     const source = canViewTeamCalendar
       ? events
-      : events.filter((event) => event.responsible.toLowerCase() === viewerName.trim().toLowerCase());
+      : events.filter((event) => event.responsible.toLowerCase() === normalizedViewerName.toLowerCase());
 
     if (mode === "summary") {
       return source;
     }
 
-    return applyCalendarFilters(source, filters);
-  }, [canViewTeamCalendar, events, filters, mode, viewerName]);
+    return applyCalendarFilters(source, effectiveFilters);
+  }, [canViewTeamCalendar, effectiveFilters, events, mode, normalizedViewerName]);
 
   const groupedByDate = useMemo(() => groupEventsByDate(scopedEvents), [scopedEvents]);
   const selectedDayEvents = groupedByDate.get(selectedDate) ?? [];
@@ -238,11 +257,12 @@ export default function UnifiedCalendar({
                 ))}
               </select>
               <select
-                value={filters.responsible}
+                value={effectiveResponsibleFilter}
                 onChange={(event) => setFilters((current) => ({ ...current, responsible: event.target.value }))}
+                disabled={!canViewTeamCalendar}
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900"
               >
-                {options.responsibles.map((value) => (
+                {responsibleOptions.map((value) => (
                   <option key={`resp-${value}`} value={value}>{value === "Todos" ? "Responsable: Todos" : value}</option>
                 ))}
               </select>
@@ -492,6 +512,36 @@ export default function UnifiedCalendar({
                 })}
               </div>
             </div>
+          </div>
+
+          <div className="border-t border-slate-200 px-4 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-600">Agenda del dia seleccionado</h3>
+              <p className="text-sm font-semibold capitalize text-slate-900">{selectedDayLabel}</p>
+            </div>
+
+            {!canViewDailyAgenda ? (
+              <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">No tienes permiso para ver la agenda diaria.</p>
+            ) : selectedDayEvents.length === 0 ? (
+              <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">No hay actividades para este dia.</p>
+            ) : (
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {selectedDayEvents.map((entry) => (
+                  <Link
+                    key={`summary-selected-${entry.id}`}
+                    href={entry.href}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-semibold text-slate-500">{entry.time}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${typeClassName(entry.type)}`}>{entry.type}</span>
+                    </div>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{entry.title}</p>
+                    <p className="text-xs text-slate-700">{entry.project} · {entry.responsible}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-5 border-t border-slate-200 px-4 py-3 text-xs text-slate-700 md:text-sm">

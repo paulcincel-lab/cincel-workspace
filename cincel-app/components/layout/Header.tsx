@@ -11,7 +11,6 @@ import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
 import { clearDashboardProfilePhoto, loadDashboardProfilePhoto, saveDashboardProfilePhoto } from "@/lib/auth/profile-photo";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
 import { isAdministratorRole } from "@/lib/data/roles";
-import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 
 type HeaderProps = {
   variant?: "default" | "profile";
@@ -47,8 +46,8 @@ function SignOutIcon({ className = headerActionIconClassName }: { className?: st
   );
 }
 
-function DevelopmentMenu() {
-  if (!IS_DEVELOPMENT) {
+function DevelopmentMenu({ isVisible }: { isVisible: boolean }) {
+  if (!isVisible) {
     return null;
   }
 
@@ -219,7 +218,6 @@ function resolveCurrentMember(members: TeamMember[], authenticatedMemberId: numb
 }
 
 export default function Header({ variant = "default" }: HeaderProps) {
-  const generalSettings = useGeneralSettings();
   const pathname = usePathname();
   const router = useRouter();
   const isMounted = useSyncExternalStore(
@@ -295,8 +293,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
   );
   const hasAuthenticatedSession = authenticatedMemberId !== null;
   const canEditLinksInThisPage = isAdminProfile && pathname.startsWith("/configuracion");
-  const shouldShowVersion = generalSettings.system.showVersionInInterface;
-  const versionLabel = generalSettings.system.version.trim();
+  const shouldShowDevelopmentMenu = IS_DEVELOPMENT && pathname.startsWith("/configuracion");
 
   const handleProfileImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -323,6 +320,13 @@ export default function Header({ variant = "default" }: HeaderProps) {
   const handleEditLinksClick = () => {
     setLinksDraft(headerLinks);
     setIsLinksEditorOpen((previous) => !previous);
+  };
+
+  const handleDraftLinkChange = (field: keyof HeaderLinks, value: string) => {
+    setLinksDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
   };
 
   const handleSaveLinks = () => {
@@ -425,7 +429,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
           <div className="self-end sm:self-auto">
             <div className="flex items-center gap-2">
-              <DevelopmentMenu />
+              <DevelopmentMenu isVisible={shouldShowDevelopmentMenu} />
               <HeaderActions links={headerLinks} />
               {hasAuthenticatedSession ? (
                 <button
@@ -461,7 +465,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
         <div className="self-end sm:self-auto">
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
-              <DevelopmentMenu />
+              <DevelopmentMenu isVisible={shouldShowDevelopmentMenu} />
               <HeaderActions links={headerLinks} />
               {hasAuthenticatedSession ? (
                 <button
@@ -545,7 +549,6 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
       <p className="mt-2 text-slate-800" suppressHydrationWarning>
         {todayLabel || "Cargando fecha..."}
-        {shouldShowVersion && versionLabel ? ` · ${versionLabel}` : ""}
       </p>
 
     </header>

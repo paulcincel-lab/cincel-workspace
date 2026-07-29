@@ -153,6 +153,9 @@ export default function InteractiveDashboard() {
   const [projectFilter, setProjectFilter] = useState("Todos");
   const [managerFilter, setManagerFilter] = useState("Todos");
   const [statusFilter, setStatusFilter] = useState<"Todos" | TaskStatus>("Todos");
+  const viewerName = authenticatedUser?.member.name?.trim() || "Usuario";
+  const canViewAllProfiles = Boolean(authenticatedUser && (authenticatedUser.access === "Administrador" || authenticatedUser.access === "Dirección"));
+  const managerScope = canViewAllProfiles ? managerFilter : viewerName;
 
   const resetFilters = () => {
     setRangeFilter("30d");
@@ -251,6 +254,10 @@ export default function InteractiveDashboard() {
   }, [scopedProjectsData]);
 
   const managerOptions = useMemo(() => {
+    if (!canViewAllProfiles) {
+      return [viewerName];
+    }
+
     const values = new Set(
       scopedAllTasks
         .map((task) => task.manager)
@@ -258,20 +265,20 @@ export default function InteractiveDashboard() {
     );
 
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [scopedAllTasks]);
+  }, [canViewAllProfiles, scopedAllTasks, viewerName]);
 
   const filteredTasks = useMemo(() => {
     return scopedAllTasks.filter((task) => {
       const matchesStage = stageFilter === "Todas" || task.workflow === stageFilter;
       const matchesProject = projectFilter === "Todos" || task.project === projectFilter;
-      const matchesManager = managerFilter === "Todos" || task.manager === managerFilter;
+      const matchesManager = managerScope === "Todos" || task.manager === managerScope;
       const matchesStatus = statusFilter === "Todos" || task.status === statusFilter;
 
       const hasDateInRange = hasTaskDateInRange(task, today, rangeEnd);
 
       return matchesStage && matchesProject && matchesManager && matchesStatus && hasDateInRange;
     });
-  }, [managerFilter, projectFilter, rangeEnd, scopedAllTasks, stageFilter, statusFilter, today]);
+  }, [managerScope, projectFilter, rangeEnd, scopedAllTasks, stageFilter, statusFilter, today]);
 
   const kpis = useMemo(() => {
     const activeProjects = scopedProjectsData.filter((project) => project.active).length;
@@ -485,7 +492,7 @@ export default function InteractiveDashboard() {
     const matchesContextFilters = (task: Task) => {
       const matchesStage = stageFilter === "Todas" || task.workflow === stageFilter;
       const matchesProject = projectFilter === "Todos" || task.project === projectFilter;
-      const matchesManager = managerFilter === "Todos" || task.manager === managerFilter;
+      const matchesManager = managerScope === "Todos" || task.manager === managerScope;
 
       return matchesStage && matchesProject && matchesManager;
     };
@@ -515,13 +522,13 @@ export default function InteractiveDashboard() {
       completionRate,
       deltaRate,
     };
-  }, [managerFilter, projectFilter, scopedAllTasks, stageFilter, today]);
+  }, [managerScope, projectFilter, scopedAllTasks, stageFilter, today]);
 
   const projectAssignments = useMemo(() => {
     const tasksInContext = scopedAllTasks.filter((task) => {
       const matchesStage = stageFilter === "Todas" || task.workflow === stageFilter;
       const matchesProject = projectFilter === "Todos" || task.project === projectFilter;
-      const matchesManager = managerFilter === "Todos" || task.manager === managerFilter;
+      const matchesManager = managerScope === "Todos" || task.manager === managerScope;
 
       return matchesStage && matchesProject && matchesManager;
     });
@@ -575,7 +582,7 @@ export default function InteractiveDashboard() {
         support: support.length > 0 ? support.join(", ") : "Sin equipo",
       };
     });
-  }, [managerFilter, projectFilter, scopedAllTasks, scopedProjectsData, secondaryCoordinatorByProject, stageFilter]);
+  }, [managerScope, projectFilter, scopedAllTasks, scopedProjectsData, secondaryCoordinatorByProject, stageFilter]);
 
   const statusPieGradient = useMemo(() => {
     if (statusTotal === 0) {
@@ -606,6 +613,7 @@ export default function InteractiveDashboard() {
   }, [statusDistribution, statusTotal]);
 
   const calendarEvents = useMemo(() => buildCalendarEvents(filteredTasks), [filteredTasks]);
+  const flowMax = Math.max(...flow.map((entry) => entry.count), 1);
 
   if (!isMounted) {
     return (
@@ -668,11 +676,12 @@ export default function InteractiveDashboard() {
             </select>
 
             <select
-              value={managerFilter}
+              value={canViewAllProfiles ? managerFilter : viewerName}
               onChange={(event) => setManagerFilter(event.target.value)}
               className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
+              disabled={!canViewAllProfiles}
             >
-              <option value="Todos">Todos responsables</option>
+              {canViewAllProfiles ? <option value="Todos">Todos responsables</option> : null}
               {managerOptions.map((manager) => (
                 <option key={manager} value={manager}>
                   {manager}
@@ -724,41 +733,41 @@ export default function InteractiveDashboard() {
 
       <section className="grid gap-6 xl:grid-cols-4">
         {dashboardCapabilities.sections.showProjectAssignments ? (
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
-          <h2 className="text-lg font-semibold text-slate-900">Asignacion por proyecto</h2>
-          <p className="mt-1 text-sm text-slate-700">Lideres y colaboracion activa por proyecto.</p>
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
+            <h2 className="text-lg font-semibold text-slate-900">Asignacion por proyecto</h2>
+            <p className="mt-1 text-sm text-slate-700">Lideres y colaboracion activa por proyecto.</p>
 
-          {projectAssignments.length === 0 ? (
-            <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              No hay proyectos en el contexto de filtros actual.
-            </p>
-          ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[720px] bg-white">
-                <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-700">
-                  <tr>
-                    <th className="px-3 py-2">Proyecto</th>
-                    <th className="px-3 py-2">Lider de proyecto</th>
-                    <th className="px-3 py-2">Lider de construccion</th>
-                    <th className="px-3 py-2">Responsable</th>
-                    <th className="px-3 py-2">Equipo de apoyo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {projectAssignments.map((row) => (
-                    <tr key={`assign-${row.id}`} className="border-b border-slate-100 text-sm text-slate-800 last:border-b-0">
-                      <td className="px-3 py-2 font-semibold text-slate-900">{row.project}</td>
-                      <td className="px-3 py-2">{row.projectLeader}</td>
-                      <td className="px-3 py-2">{row.constructionLeader}</td>
-                      <td className="px-3 py-2">{row.responsables}</td>
-                      <td className="px-3 py-2">{row.support}</td>
+            {projectAssignments.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                No hay proyectos en el contexto de filtros actual.
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full min-w-[720px] bg-white">
+                  <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-700">
+                    <tr>
+                      <th className="px-3 py-2">Proyecto</th>
+                      <th className="px-3 py-2">Lider de proyecto</th>
+                      <th className="px-3 py-2">Lider de construccion</th>
+                      <th className="px-3 py-2">Responsable</th>
+                      <th className="px-3 py-2">Equipo de apoyo</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </article>
+                  </thead>
+                  <tbody>
+                    {projectAssignments.map((row) => (
+                      <tr key={`assign-${row.id}`} className="border-b border-slate-100 text-sm text-slate-800 last:border-b-0">
+                        <td className="px-3 py-2 font-semibold text-slate-900">{row.project}</td>
+                        <td className="px-3 py-2">{row.projectLeader}</td>
+                        <td className="px-3 py-2">{row.constructionLeader}</td>
+                        <td className="px-3 py-2">{row.responsables}</td>
+                        <td className="px-3 py-2">{row.support}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </article>
         ) : null}
 
         <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
@@ -827,8 +836,62 @@ export default function InteractiveDashboard() {
             </div>
           </div>
         </article>
+      </section>
 
-        <UnifiedCalendar events={calendarEvents} mode="summary" />
+      <section className="grid gap-6 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <UnifiedCalendar
+            events={calendarEvents}
+            mode="summary"
+            canViewDailyAgenda
+            canViewTeamCalendar={canViewAllProfiles}
+            viewerName={viewerName}
+          />
+        </div>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-1">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Flujo por etapa</h2>
+              <p className="mt-1 text-sm text-slate-700">Distribucion del trabajo en el contexto actual.</p>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">
+              En vivo
+            </span>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {flow.map((item) => {
+              const width = Math.max(8, Math.round((item.count / flowMax) * 100));
+
+              return (
+                <div key={item.workflow} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{item.workflow}</p>
+                      <p className="text-base font-semibold text-slate-900">{item.label}</p>
+                    </div>
+                    <span className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-bold text-slate-900">
+                      {item.count}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 h-2 rounded-full bg-slate-200">
+                    <div
+                      className="h-2 rounded-full bg-blue-600"
+                      style={{ width: `${width}%` }}
+                    />
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
+                    <span>Participacion relativa</span>
+                    <span className="font-semibold text-slate-800">{width}%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </article>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
@@ -899,66 +962,44 @@ export default function InteractiveDashboard() {
 
       <section className="grid gap-6 xl:grid-cols-3">
         {dashboardCapabilities.sections.showTeamWorkload ? (
-        <article className="xl:col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-xl font-semibold text-slate-900">Carga del equipo</h2>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[680px]">
-              <thead className="border-b border-slate-200 text-left text-sm text-slate-800">
-                <tr>
-                  <th className="px-3 py-2">Responsable</th>
-                  <th className="px-3 py-2">Activas</th>
-                  <th className="px-3 py-2">En proceso</th>
-                  <th className="px-3 py-2">Vencidas</th>
-                  <th className="px-3 py-2">Bloqueadas</th>
-                  <th className="px-3 py-2">Saturacion</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workload.map((item) => (
-                  <tr key={item.manager} className="border-b border-slate-100 text-sm text-slate-900">
-                    <td className="px-3 py-3 font-semibold">{item.manager}</td>
-                    <td className="px-3 py-3">{item.total}</td>
-                    <td className="px-3 py-3">{item.inProgress}</td>
-                    <td className="px-3 py-3">{item.overdue}</td>
-                    <td className="px-3 py-3">{item.blocked}</td>
-                    <td className="px-3 py-3">
-                      <div className="h-2 w-full rounded-full bg-slate-200">
-                        <div
-                          className="h-2 rounded-full bg-blue-600"
-                          style={{ width: `${item.saturation}%` }}
-                        />
-                      </div>
-                      <span className="mt-1 inline-block text-xs font-semibold text-slate-700">{item.saturation}%</span>
-                    </td>
+          <article className="xl:col-span-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-900">Carga del equipo</h2>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[680px]">
+                <thead className="border-b border-slate-200 text-left text-sm text-slate-800">
+                  <tr>
+                    <th className="px-3 py-2">Responsable</th>
+                    <th className="px-3 py-2">Activas</th>
+                    <th className="px-3 py-2">En proceso</th>
+                    <th className="px-3 py-2">Vencidas</th>
+                    <th className="px-3 py-2">Bloqueadas</th>
+                    <th className="px-3 py-2">Saturacion</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
+                </thead>
+                <tbody>
+                  {workload.map((item) => (
+                    <tr key={item.manager} className="border-b border-slate-100 text-sm text-slate-900">
+                      <td className="px-3 py-3 font-semibold">{item.manager}</td>
+                      <td className="px-3 py-3">{item.total}</td>
+                      <td className="px-3 py-3">{item.inProgress}</td>
+                      <td className="px-3 py-3">{item.overdue}</td>
+                      <td className="px-3 py-3">{item.blocked}</td>
+                      <td className="px-3 py-3">
+                        <div className="h-2 w-full rounded-full bg-slate-200">
+                          <div
+                            className="h-2 rounded-full bg-blue-600"
+                            style={{ width: `${item.saturation}%` }}
+                          />
+                        </div>
+                        <span className="mt-1 inline-block text-xs font-semibold text-slate-700">{item.saturation}%</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
         ) : null}
-
-        <article className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${dashboardCapabilities.sections.showTeamWorkload ? "" : "xl:col-span-3"}`}>
-          <h2 className="text-xl font-semibold text-slate-900">Flujo por etapa</h2>
-          <div className="mt-4 space-y-4">
-            {flow.map((item) => {
-              const max = Math.max(...flow.map((entry) => entry.count), 1);
-              const width = Math.max(10, Math.round((item.count / max) * 100));
-
-              return (
-                <div key={item.workflow}>
-                  <div className="mb-1 flex items-center justify-between text-sm text-slate-800">
-                    <span>{item.label}</span>
-                    <span className="font-semibold text-slate-900">{item.count}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-200">
-                    <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${width}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </article>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

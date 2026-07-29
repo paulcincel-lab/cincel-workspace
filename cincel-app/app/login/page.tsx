@@ -1,11 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { loginWithEmailAndPassword } from "@/lib/auth/auth-service";
-import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 
 type LoginDraft = {
   email: string;
@@ -18,14 +16,10 @@ const DEFAULT_DRAFT: LoginDraft = {
 };
 
 export default function LoginPage() {
-  const generalSettings = useGeneralSettings();
   const router = useRouter();
   const [draft, setDraft] = useState<LoginDraft>(DEFAULT_DRAFT);
   const [error, setError] = useState<string>("");
-  const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
-  const systemLogoUrl = generalSettings.appearance.systemLogoUrl.trim();
-  const shouldShowVersion = generalSettings.system.showVersionInInterface;
-  const versionLabel = generalSettings.system.version.trim();
+  const [helpMessage, setHelpMessage] = useState<string>("");
 
   const canSubmit = useMemo(() => {
     return Boolean(draft.email.trim() && draft.password.trim());
@@ -34,6 +28,7 @@ export default function LoginPage() {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    setHelpMessage("");
 
     const result = loginWithEmailAndPassword(draft.email, draft.password);
     if (!result.ok) {
@@ -76,31 +71,14 @@ export default function LoginPage() {
           <div className="absolute inset-0 opacity-25" aria-hidden="true" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.18) 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
           <div className="relative z-10 flex w-full flex-col justify-between">
             <div>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-white/85">{systemName}</p>
-              <div className="mt-2 h-[2px] w-12 rounded-full bg-white/90" aria-hidden="true" />
-
-              {systemLogoUrl ? (
-                <div className="mt-4 h-10 w-40 overflow-hidden rounded-lg border border-white/30 bg-white/10">
-                  <div
-                    aria-label={systemName}
-                    role="img"
-                    className="h-full w-full bg-contain bg-center bg-no-repeat"
-                    style={{ backgroundImage: `url(${systemLogoUrl})` }}
-                  />
-                </div>
-              ) : null}
-
-              <div className="mt-16 max-w-lg">
+              <div className="mt-20 max-w-lg lg:mt-24">
+                <p className="text-[18px] font-semibold tracking-tight text-white sm:text-[24px]">Cincel Despacho de Arquitectura</p>
+                <div className="mt-3 h-[3px] w-10 rounded-full bg-white/90" aria-hidden="true" />
                 <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">Bienvenido a Workspace</h1>
                 <p className="mt-4 max-w-md text-sm leading-6 text-white/80 sm:text-[15px]">
                   El centro operativo inteligente para la gestión corporativa de alto impacto. Accede a tus proyectos,
                   recursos y equipo en una sola plataforma unificada.
                 </p>
-                {shouldShowVersion && versionLabel ? (
-                  <p className="mt-4 inline-flex rounded-full border border-white/35 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/90">
-                    {versionLabel}
-                  </p>
-                ) : null}
               </div>
             </div>
 
@@ -152,9 +130,13 @@ export default function LoginPage() {
                   <label className="block flex-1">
                     <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">Contraseña</span>
                   </label>
-                  <Link href="/change-password" className="text-[11px] font-semibold uppercase tracking-[0.1em] text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2">
+                  <button
+                    type="button"
+                    onClick={() => setHelpMessage("Contacta a tu director")}
+                    className="text-[11px] font-semibold uppercase tracking-[0.1em] text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2"
+                  >
                     ¿Olvidaste tu contraseña?
-                  </Link>
+                  </button>
                 </div>
 
                 <input
@@ -179,6 +161,12 @@ export default function LoginPage() {
                 </p>
               ) : null}
 
+              {helpMessage ? (
+                <p role="status" aria-live="polite" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-800">
+                  {helpMessage}
+                </p>
+              ) : null}
+
               <button
                 type="submit"
                 disabled={!canSubmit}
@@ -193,9 +181,13 @@ export default function LoginPage() {
 
             <div className="grid gap-2 text-center text-[13px] text-slate-600">
               <p>¿Problemas para acceder?</p>
-              <Link href="/change-password" className="font-semibold text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2">
+              <button
+                type="button"
+                onClick={() => setHelpMessage("Contacta a tu director")}
+                className="font-semibold text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2"
+              >
                 Contactar a Soporte IT
-              </Link>
+              </button>
 
               <div className="mt-4 flex items-center justify-center gap-6 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 <span className="inline-flex items-center gap-2">
@@ -209,15 +201,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="mt-6 grid gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-              <p className="font-semibold text-slate-700">Revisar pantallas</p>
-              <Link href="/change-password" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-center font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2">
-                Abrir cambio obligatorio de contraseña
-              </Link>
-              <Link href="/profile" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-center font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2">
-                Abrir perfil de colaborador
-              </Link>
-            </div>
           </div>
         </section>
       </div>

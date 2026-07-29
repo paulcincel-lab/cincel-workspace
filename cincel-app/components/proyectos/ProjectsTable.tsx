@@ -837,6 +837,12 @@ export default function ProjectsTable() {
     }
   };
 
+  const clearFilters = () => {
+    setSearch("");
+    setCoordinatorFilter("Todos");
+    setRiskFilter("Todos");
+  };
+
   const getCoordinatorOptions = (project: ProjectItem): string[] => {
     const options = [
       ...activeTeamNames.map((name) => normalizeName(name)),
@@ -883,25 +889,22 @@ export default function ProjectsTable() {
               </button>
             </div>
 
-            {projectsCapabilities.canExportData ? (
-              <ExportMenu onExport={exportProjects} />
-            ) : null}
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <input
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Filtrar por nombre de proyecto..."
-            className="w-72 rounded-xl border border-slate-200 px-4 py-2 text-sm"
+            className="h-10 w-72 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 placeholder:text-slate-500"
           />
 
           <select
             value={coordinatorFilter}
             onChange={(event) => setCoordinatorFilter(event.target.value)}
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm"
+            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700"
           >
             {coordinators.map((coordinator) => {
               return (
@@ -915,13 +918,25 @@ export default function ProjectsTable() {
           <select
             value={riskFilter}
             onChange={(event) => setRiskFilter(event.target.value as RiskLevel | "Todos")}
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm"
+            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700"
           >
             <option value="Todos">Riesgo: todos</option>
             <option value="Alto">Riesgo alto</option>
             <option value="Medio">Riesgo medio</option>
             <option value="Bajo">Riesgo bajo</option>
           </select>
+
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Limpiar filtros
+          </button>
+
+          {projectsCapabilities.canExportData ? (
+            <ExportMenu onExport={exportProjects} scaleClassName="scale-100" />
+          ) : null}
         </div>
       </div>
 
@@ -944,45 +959,84 @@ export default function ProjectsTable() {
           </div>
 
           {orderedStageStats.length > 0 ? (() => {
-            const COLORS = ["#6366f1", "#0ea5e9", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"];
-            const SIZE = 200;
-            const RADIUS = 76;
-            const STROKE = 28;
-            const CX = SIZE / 2;
-            const CY = SIZE / 2;
-            const circumference = 2 * Math.PI * RADIUS;
+            const defaultColors = ["#6366f1", "#0ea5e9", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"];
+            const stageColorMap: Record<string, string> = {
+              "Presale": "#f59e0b",
+              "Diseño": "#6366f1",
+              "Construcción": "#0ea5e9",
+            };
 
-            let cumulativePercent = 0;
             const slices = orderedStageStats.map(([stage, count], i) => {
               const pct = totalStageAssignments > 0 ? count / totalStageAssignments : 0;
-              const offset = circumference * (1 - cumulativePercent);
-              const dashLen = circumference * pct;
-              cumulativePercent += pct;
-              return { stage, count, pct, offset, dashLen, color: COLORS[i % COLORS.length] };
+              const percentage = Math.round(pct * 100);
+
+              return {
+                stage,
+                count,
+                pct,
+                percentage,
+                color: stageColorMap[stage] ?? defaultColors[i % defaultColors.length],
+              };
             });
 
+            const donutGradient = (() => {
+              let cursor = 0;
+              const gapDeg = 2;
+
+              const segments = slices.flatMap((slice) => {
+                if (slice.count === 0) {
+                  return [];
+                }
+
+                const sweep = slice.pct * 360;
+                const start = cursor;
+                const colorEnd = start + Math.max(0, sweep - gapDeg);
+                const gapEnd = start + sweep;
+                cursor = gapEnd;
+
+                return [
+                  `${slice.color} ${start}deg ${colorEnd}deg`,
+                  `#f8fafc ${colorEnd}deg ${gapEnd}deg`,
+                ];
+              });
+
+              if (segments.length === 0) {
+                return "conic-gradient(#e2e8f0 0deg 360deg)";
+              }
+
+              return `conic-gradient(${segments.join(", ")})`;
+            })();
+
             return (
-              <div className="mt-5 flex items-center gap-8">
-                <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="shrink-0" style={{ transform: "rotate(-90deg)" }}>
-                  <circle cx={CX} cy={CY} r={RADIUS} fill="none" stroke="#f1f5f9" strokeWidth={STROKE} />
+              <div className="mt-5 grid gap-4 md:grid-cols-[minmax(230px,280px)_1fr] md:items-center">
+                <div className="relative mx-auto h-56 w-56 rounded-full bg-slate-100 p-2 shadow-[0_12px_28px_rgba(15,23,42,0.12)] md:h-64 md:w-64">
+                  <div
+                    className="h-full w-full rounded-full"
+                    style={{
+                      background: donutGradient,
+                      transform: "rotate(-90deg)",
+                    }}
+                  />
+                  <div className="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full bg-white text-slate-900 shadow-inner ring-1 ring-slate-200 md:h-32 md:w-32">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Total</span>
+                    <span className="text-3xl font-bold leading-none">{totalStageAssignments}</span>
+                    <span className="mt-1 text-[11px] text-slate-500">proyectos</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   {slices.map((slice) => (
-                    <circle
-                      key={`donut-${slice.stage}`}
-                      cx={CX} cy={CY} r={RADIUS}
-                      fill="none"
-                      stroke={slice.color}
-                      strokeWidth={STROKE}
-                      strokeDasharray={`${slice.dashLen} ${circumference - slice.dashLen}`}
-                      strokeDashoffset={slice.offset}
-                    />
-                  ))}
-                </svg>
-                <div className="flex flex-1 flex-col gap-3">
-                  {slices.map((slice) => (
-                    <div key={`legend-${slice.stage}`} className="flex items-center gap-3">
-                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
-                      <span className="flex-1 text-sm font-medium text-slate-700">{slice.stage}</span>
-                      <span className="text-xs text-slate-500">{slice.count} · {Math.round(slice.pct * 100)}%</span>
+                    <div key={`legend-${slice.stage}`} className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="inline-flex items-center gap-2 font-medium text-slate-800">
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: slice.color }} />
+                          {slice.stage}
+                        </span>
+                        <span className="font-semibold text-slate-900">{slice.count} ({slice.percentage}%)</span>
+                      </div>
+                      <div className="mt-2 h-1.5 rounded-full bg-slate-200">
+                        <div className="h-1.5 rounded-full" style={{ width: `${slice.percentage}%`, backgroundColor: slice.color }} />
+                      </div>
                     </div>
                   ))}
                 </div>
