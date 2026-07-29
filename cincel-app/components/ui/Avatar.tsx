@@ -1,9 +1,13 @@
+import Image from "next/image";
+
 type Props = {
   name: string;
   showName?: boolean;
+  imageSrc?: string;
+  imageAlt?: string;
 };
 
-export default function Avatar({ name, showName = true }: Props) {
+export default function Avatar({ name, showName = true, imageSrc = "", imageAlt }: Props) {
   const initials = name
     .split(" ")
     .map((word) => word[0])
@@ -14,8 +18,18 @@ export default function Avatar({ name, showName = true }: Props) {
   return (
     <div className="flex items-center gap-3">
 
-      <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">
-        {initials}
+      <div className="relative w-9 h-9 overflow-hidden rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">
+        {imageSrc ? (
+          <Image
+            src={imageSrc}
+            alt={imageAlt || `Foto de ${name}`}
+            fill
+            unoptimized
+            className="object-cover"
+          />
+        ) : (
+          initials
+        )}
       </div>
 
       {showName ? (

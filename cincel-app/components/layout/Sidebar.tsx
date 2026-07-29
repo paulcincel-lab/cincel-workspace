@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Avatar from "@/components/ui/Avatar";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { loadDashboardProfilePhoto } from "@/lib/auth/profile-photo";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 
 type IconProps = {
@@ -118,6 +120,8 @@ const isGroup = (item: MenuItem): item is MenuGroupItem => "submenu" in item;
 export default function Sidebar() {
   const generalSettings = useGeneralSettings();
   const pathname = usePathname();
+  const [currentName, setCurrentName] = useState("Usuario");
+  const [currentPhoto, setCurrentPhoto] = useState("");
   const [expandedMenu, setExpandedMenu] = useState<string | null>(
     pathname.startsWith("/recursos/empresa")
       ? "Empresa"
@@ -131,6 +135,28 @@ export default function Sidebar() {
           ? "Configuración"
         : null,
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const refreshAuthenticatedUser = () => {
+      const authUser = getCurrentAuthenticatedUser();
+      setCurrentName(authUser?.member.name?.trim() || "Usuario");
+      setCurrentPhoto(loadDashboardProfilePhoto(authUser?.member.id ?? null));
+    };
+
+    refreshAuthenticatedUser();
+
+    window.addEventListener("focus", refreshAuthenticatedUser);
+    window.addEventListener("storage", refreshAuthenticatedUser);
+
+    return () => {
+      window.removeEventListener("focus", refreshAuthenticatedUser);
+      window.removeEventListener("storage", refreshAuthenticatedUser);
+    };
+  }, []);
 
   const menu: MenuItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
@@ -194,6 +220,8 @@ export default function Sidebar() {
     return "Perfil";
   })();
 
+  const currentProfileLabel = currentProfileRole.toUpperCase();
+
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
   const systemLogoUrl = generalSettings.appearance.systemLogoUrl.trim();
   const [systemNamePrimary, ...systemNameRest] = systemName.split(" ");
@@ -221,10 +249,10 @@ export default function Sidebar() {
 
       <div className="px-5 pb-4 border-b border-[#D9DEEA]">
         <div className="flex items-center gap-2.5">
-          <Avatar name="nombre" showName={false} />
+          <Avatar name={currentName} imageSrc={currentPhoto} showName={false} />
           <div>
-            <p className="text-[15px] font-semibold text-slate-800 leading-tight">nombre</p>
-            <p className="text-[10px] uppercase tracking-[0.1em] font-semibold text-slate-500">{currentProfileRole}</p>
+            <p className="text-[15px] font-semibold text-slate-800 leading-tight">{currentName}</p>
+            <p className="text-[10px] uppercase tracking-[0.1em] font-semibold text-slate-500">{currentProfileLabel}</p>
           </div>
         </div>
       </div>

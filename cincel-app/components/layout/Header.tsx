@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 
 import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
+import { clearDashboardProfilePhoto, loadDashboardProfilePhoto, saveDashboardProfilePhoto } from "@/lib/auth/profile-photo";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
 import { isAdministratorRole } from "@/lib/data/roles";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
@@ -23,7 +24,6 @@ type HeaderLinks = {
 };
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
-const DASHBOARD_PROFILE_PHOTO_STORAGE_KEY = "cincel.dashboard.profile.photo.v1";
 const HEADER_LINKS_STORAGE_KEY = "cincel.header.links.v1";
 const FALLBACK_USER_ID = 2;
 const ADMIN_USER_IDS = new Set([2]);
@@ -33,6 +33,19 @@ const DEFAULT_HEADER_LINKS: HeaderLinks = {
   email: "https://mail.google.com",
 };
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
+
+const headerActionClassName = "inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700";
+const headerActionIconClassName = "h-[18px] w-[18px]";
+
+function SignOutIcon({ className = headerActionIconClassName }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M13 7l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function DevelopmentMenu() {
   if (!IS_DEVELOPMENT) {
@@ -74,20 +87,17 @@ function DevelopmentMenu() {
 }
 
 function HeaderActions({ links }: { links: HeaderLinks }) {
-  const actionClassName = "inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700";
-  const iconClassName = "h-[18px] w-[18px]";
-
   return (
     <div className="flex items-center gap-3">
       <a
         href={links.instagram}
         target="_blank"
         rel="noreferrer"
-        className={actionClassName}
+        className={headerActionClassName}
         aria-label="Abrir Instagram"
         title="Instagram"
       >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={iconClassName}>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={headerActionIconClassName}>
           <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="2" />
           <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
           <circle cx="17.2" cy="6.8" r="1.2" fill="currentColor" />
@@ -98,11 +108,11 @@ function HeaderActions({ links }: { links: HeaderLinks }) {
         href={links.website}
         target="_blank"
         rel="noreferrer"
-        className={actionClassName}
+        className={headerActionClassName}
         aria-label="Abrir pagina web"
         title="Pagina web"
       >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={iconClassName}>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={headerActionIconClassName}>
           <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
           <path d="M3 12h18" stroke="currentColor" strokeWidth="2" />
           <path d="M12 3c2.5 2.7 4 5.8 4 9s-1.5 6.3-4 9" stroke="currentColor" strokeWidth="2" />
@@ -114,11 +124,11 @@ function HeaderActions({ links }: { links: HeaderLinks }) {
         href={links.email.startsWith("http") ? links.email : `mailto:${links.email}`}
         target="_blank"
         rel="noreferrer"
-        className={actionClassName}
+        className={headerActionClassName}
         aria-label="Enviar correo"
         title="Correo"
       >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={iconClassName}>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={headerActionIconClassName}>
           <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="2" />
           <path d="M4 7l8 6 8-6" stroke="currentColor" strokeWidth="2" />
         </svg>
@@ -191,6 +201,23 @@ function loadHeaderLinks(): HeaderLinks {
   }
 }
 
+function resolveCurrentMember(members: TeamMember[], authenticatedMemberId: number | null): TeamMember {
+  const byAuth = authenticatedMemberId
+    ? members.find((member) => member.id === authenticatedMemberId && member.active)
+    : null;
+
+  if (byAuth) {
+    return byAuth;
+  }
+
+  const byId = members.find((member) => member.id === FALLBACK_USER_ID && member.active);
+  if (byId) {
+    return byId;
+  }
+
+  return members.find((member) => member.active) ?? teamMembers[0];
+}
+
 export default function Header({ variant = "default" }: HeaderProps) {
   const generalSettings = useGeneralSettings();
   const pathname = usePathname();
@@ -216,10 +243,14 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
     const refreshMembers = () => {
       const authUser = getCurrentAuthenticatedUser();
-      setMembers(loadTeamMembers());
-      setProfileImage(localStorage.getItem(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY) ?? "");
+      const nextMemberId = authUser?.member.id ?? null;
+      const nextMembers = loadTeamMembers();
+      const nextCurrentMember = resolveCurrentMember(nextMembers, nextMemberId);
+
+      setMembers(nextMembers);
+      setProfileImage(loadDashboardProfilePhoto(nextCurrentMember.id));
       setHeaderLinks(loadHeaderLinks());
-      setAuthenticatedMemberId(authUser?.member.id ?? null);
+      setAuthenticatedMemberId(nextMemberId);
     };
 
     refreshMembers();
@@ -238,20 +269,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
       return null;
     }
 
-    const byAuth = authenticatedMemberId
-      ? members.find((member) => member.id === authenticatedMemberId && member.active)
-      : null;
-
-    if (byAuth) {
-      return byAuth;
-    }
-
-    const byId = members.find((member) => member.id === FALLBACK_USER_ID && member.active);
-    if (byId) {
-      return byId;
-    }
-
-    return members.find((member) => member.active) ?? teamMembers[0];
+    return resolveCurrentMember(members, authenticatedMemberId);
   }, [authenticatedMemberId, isMounted, members]);
 
   const profileSubtitle = useMemo(() => {
@@ -295,7 +313,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
       }
 
       setProfileImage(result);
-      localStorage.setItem(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY, result);
+      saveDashboardProfilePhoto(currentMember?.id ?? null, result);
     };
 
     reader.readAsDataURL(file);
@@ -305,10 +323,6 @@ export default function Header({ variant = "default" }: HeaderProps) {
   const handleEditLinksClick = () => {
     setLinksDraft(headerLinks);
     setIsLinksEditorOpen((previous) => !previous);
-  };
-
-  const handleDraftLinkChange = (key: keyof HeaderLinks, value: string) => {
-    setLinksDraft((previous) => ({ ...previous, [key]: value }));
   };
 
   const handleSaveLinks = () => {
@@ -324,9 +338,15 @@ export default function Header({ variant = "default" }: HeaderProps) {
     setIsLinksEditorOpen(false);
   };
 
+  const handleRemoveProfileImage = () => {
+    clearDashboardProfilePhoto(currentMember?.id ?? null);
+    setProfileImage("");
+  };
+
   const handleLogout = () => {
     logout();
     setAuthenticatedMemberId(null);
+    setProfileImage("");
     setMembers(loadTeamMembers());
     router.push("/login");
   };
@@ -367,6 +387,15 @@ export default function Header({ variant = "default" }: HeaderProps) {
               >
                 Cambiar
               </button>
+              {profileImage ? (
+                <button
+                  type="button"
+                  onClick={handleRemoveProfileImage}
+                  className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 transition-colors hover:text-slate-700"
+                >
+                  Quitar
+                </button>
+              ) : null}
             </div>
 
             <div>
@@ -387,9 +416,11 @@ export default function Header({ variant = "default" }: HeaderProps) {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Cerrar sesion"
+                  title="Cerrar sesion"
                 >
-                  Cerrar sesión
+                  <SignOutIcon />
                 </button>
               ) : null}
             </div>
@@ -416,7 +447,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
             </div>
           ) : null}
 
-          <Avatar name={currentName} showName={false} />
+          <Avatar name={currentName} imageSrc={profileImage} showName={false} />
 
           <h1 className="text-xl font-bold text-slate-900">
             {`Bienvenido, ${currentName}`}
@@ -432,9 +463,11 @@ export default function Header({ variant = "default" }: HeaderProps) {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Cerrar sesion"
+                  title="Cerrar sesion"
                 >
-                  Cerrar sesión
+                  <SignOutIcon />
                 </button>
               ) : null}
             </div>
