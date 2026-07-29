@@ -197,6 +197,7 @@ export default function Sidebar() {
   const currentProfileInitial = currentProfileRole.charAt(0).toUpperCase();
 
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
+  const versionLabel = generalSettings.system.version.trim();
   const [systemNamePrimary, ...systemNameRest] = systemName.split(" ");
   const systemNameSecondary = systemNameRest.join(" ");
 
@@ -287,6 +288,17 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="border-t border-[#D9DEEA] px-5 py-4 text-center">
+        <p className="text-[11px] font-medium leading-5 text-slate-600">
+          Software desarrollado por: Cincel despacho de Arquitectura
+        </p>
+        {versionLabel ? (
+          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            {versionLabel}
+          </p>
+        ) : null}
+      </div>
     </aside>
   );
 }
