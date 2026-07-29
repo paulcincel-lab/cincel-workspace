@@ -295,8 +295,6 @@ export default function Header({ variant = "default" }: HeaderProps) {
   );
   const hasAuthenticatedSession = authenticatedMemberId !== null;
   const canEditLinksInThisPage = isAdminProfile && pathname.startsWith("/configuracion");
-  const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
-  const systemLogoUrl = generalSettings.appearance.systemLogoUrl.trim();
   const shouldShowVersion = generalSettings.system.showVersionInInterface;
   const versionLabel = generalSettings.system.version.trim();
 
@@ -452,19 +450,8 @@ export default function Header({ variant = "default" }: HeaderProps) {
     <header className="mb-10">
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-center gap-4">
-          {systemLogoUrl ? (
-            <div className="h-10 w-10 overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <div
-                aria-label={systemName}
-                role="img"
-                className="h-full w-full bg-contain bg-center bg-no-repeat"
-                style={{ backgroundImage: `url(${systemLogoUrl})` }}
-              />
-            </div>
-          ) : null}
-
-          <Avatar name={currentName} imageSrc={profileImage} showName={false} />
+          <div className="flex items-center gap-4">
+          <Avatar name={currentName} showName={false} />
 
           <h1 className="text-xl font-bold text-slate-900">
             {`Bienvenido, ${currentName}`}

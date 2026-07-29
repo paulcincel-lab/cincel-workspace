@@ -193,7 +193,7 @@ export default function Sidebar() {
     return "Perfil";
   })();
 
-  const currentProfileLabel = currentProfileRole.toUpperCase();
+  const currentProfileLabel = "Pagina";
   const currentProfileInitial = currentProfileRole.charAt(0).toUpperCase();
 
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
