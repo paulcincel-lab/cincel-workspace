@@ -232,6 +232,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
   const [profileImage, setProfileImage] = useState<string>("");
   const [headerLinks, setHeaderLinks] = useState<HeaderLinks>(() => loadHeaderLinks());
   const [isLinksEditorOpen, setIsLinksEditorOpen] = useState(false);
+  const [isProfileImageMenuOpen, setIsProfileImageMenuOpen] = useState(false);
   const [linksDraft, setLinksDraft] = useState<HeaderLinks>(() => loadHeaderLinks());
   const [authenticatedMemberId, setAuthenticatedMemberId] = useState<number | null>(null);
   const profileImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -318,6 +319,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
     reader.readAsDataURL(file);
     event.target.value = "";
+    setIsProfileImageMenuOpen(false);
   };
 
   const handleEditLinksClick = () => {
@@ -341,6 +343,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
   const handleRemoveProfileImage = () => {
     clearDashboardProfilePhoto(currentMember?.id ?? null);
     setProfileImage("");
+    setIsProfileImageMenuOpen(false);
   };
 
   const handleLogout = () => {
@@ -380,22 +383,36 @@ export default function Header({ variant = "default" }: HeaderProps) {
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => profileImageInputRef.current?.click()}
-                className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500 transition-colors hover:text-slate-700"
-              >
-                Cambiar
-              </button>
-              {profileImage ? (
+              <div className="relative mt-1">
                 <button
                   type="button"
-                  onClick={handleRemoveProfileImage}
-                  className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 transition-colors hover:text-slate-700"
+                  onClick={() => setIsProfileImageMenuOpen((previous) => !previous)}
+                  className="text-[10px] font-medium uppercase tracking-wide text-slate-500 transition-colors hover:text-slate-700"
+                  aria-expanded={isProfileImageMenuOpen}
+                  aria-haspopup="menu"
                 >
-                  Quitar
+                  Editar
                 </button>
-              ) : null}
+
+                {isProfileImageMenuOpen ? (
+                  <div className="absolute left-1/2 z-20 mt-2 w-28 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => profileImageInputRef.current?.click()}
+                      className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Cambiar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveProfileImage}
+                      className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div>

@@ -198,12 +198,14 @@ export default function Sidebar() {
 
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
   const versionLabel = generalSettings.system.version.trim();
+  const companyName = "Cincel Despacho de Arquitectura";
   const [systemNamePrimary, ...systemNameRest] = systemName.split(" ");
   const systemNameSecondary = systemNameRest.join(" ");
 
   return (
     <aside className="w-64 h-screen bg-[#ECEFF6] border-r border-[#D9DEEA] text-slate-700 flex flex-col">
       <div className="px-5 pt-5 pb-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{companyName}</p>
         <h1 className="text-[34px] leading-[0.95] font-extrabold tracking-tight text-black">{systemNamePrimary || "Cincel"}</h1>
         {systemNameSecondary ? (
           <p className="text-[20px] leading-tight font-semibold text-black">{systemNameSecondary}</p>
