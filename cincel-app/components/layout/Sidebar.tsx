@@ -198,7 +198,7 @@ export default function Sidebar() {
 
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
   const versionLabel = generalSettings.system.version.trim();
-  const companyName = "Cincel Despacho de Arquitectura";
+  const companyName = "Cincel";
   const [systemNamePrimary, ...systemNameRest] = systemName.split(" ");
   const systemNameSecondary = systemNameRest.join(" ");
 
