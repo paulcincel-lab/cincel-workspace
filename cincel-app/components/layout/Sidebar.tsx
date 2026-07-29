@@ -2,10 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import Avatar from "@/components/ui/Avatar";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { loadDashboardProfilePhoto } from "@/lib/auth/profile-photo";
+import { useState } from "react";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 
 type IconProps = {
@@ -120,8 +117,6 @@ const isGroup = (item: MenuItem): item is MenuGroupItem => "submenu" in item;
 export default function Sidebar() {
   const generalSettings = useGeneralSettings();
   const pathname = usePathname();
-  const [currentName, setCurrentName] = useState("Usuario");
-  const [currentPhoto, setCurrentPhoto] = useState("");
   const [expandedMenu, setExpandedMenu] = useState<string | null>(
     pathname.startsWith("/recursos/empresa")
       ? "Empresa"
@@ -136,31 +131,8 @@ export default function Sidebar() {
         : null,
   );
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const refreshAuthenticatedUser = () => {
-      const authUser = getCurrentAuthenticatedUser();
-      setCurrentName(authUser?.member.name?.trim() || "Usuario");
-      setCurrentPhoto(loadDashboardProfilePhoto(authUser?.member.id ?? null));
-    };
-
-    refreshAuthenticatedUser();
-
-    window.addEventListener("focus", refreshAuthenticatedUser);
-    window.addEventListener("storage", refreshAuthenticatedUser);
-
-    return () => {
-      window.removeEventListener("focus", refreshAuthenticatedUser);
-      window.removeEventListener("storage", refreshAuthenticatedUser);
-    };
-  }, []);
-
   const menu: MenuItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
-    { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
     {
       label: "Actividades",
       icon: ActivityIcon,
@@ -172,8 +144,7 @@ export default function Sidebar() {
       ],
     },
     { label: "Calendario", href: "/calendario", icon: CalendarIcon },
-    { label: "Equipo", href: "/equipo", icon: TeamIcon },
-    { label: "Clientes", href: "/clientes", icon: ClientsIcon },
+    { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
     {
       label: "Recursos",
       icon: ResourcesIcon,
@@ -197,6 +168,8 @@ export default function Sidebar() {
         { label: "Politicas de la empresa", href: "/recursos/empresa/politicas-de-la-empresa", icon: ResourcesIcon },
       ],
     },
+    { label: "Equipo", href: "/equipo", icon: TeamIcon },
+    { label: "Clientes", href: "/clientes", icon: ClientsIcon },
     {
       label: "Configuración",
       icon: SettingsIcon,
@@ -221,40 +194,33 @@ export default function Sidebar() {
   })();
 
   const currentProfileLabel = currentProfileRole.toUpperCase();
+  const currentProfileInitial = currentProfileRole.charAt(0).toUpperCase();
 
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
-  const systemLogoUrl = generalSettings.appearance.systemLogoUrl.trim();
   const [systemNamePrimary, ...systemNameRest] = systemName.split(" ");
   const systemNameSecondary = systemNameRest.join(" ");
 
   return (
     <aside className="w-64 h-screen bg-[#ECEFF6] border-r border-[#D9DEEA] text-slate-700 flex flex-col">
       <div className="px-5 pt-5 pb-3">
-        {systemLogoUrl ? (
-          <div className="mb-2 h-10 w-full overflow-hidden rounded-lg border border-[#D9DEEA] bg-white">
-            <div
-              aria-label={systemName}
-              role="img"
-              className="h-full w-full bg-contain bg-center bg-no-repeat"
-              style={{ backgroundImage: `url(${systemLogoUrl})` }}
-            />
-          </div>
-        ) : null}
-
         <h1 className="text-[34px] leading-[0.95] font-extrabold tracking-tight text-black">{systemNamePrimary || "Cincel"}</h1>
         {systemNameSecondary ? (
           <p className="text-[20px] leading-tight font-semibold text-black">{systemNameSecondary}</p>
         ) : null}
-      </div>
 
-      <div className="px-5 pb-4 border-b border-[#D9DEEA]">
-        <div className="flex items-center gap-2.5">
-          <Avatar name={currentName} imageSrc={currentPhoto} showName={false} />
+        <div className="mt-6 flex items-center gap-3">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#2F63E7] text-[22px] font-bold text-white shadow-sm">
+            {currentProfileInitial || "D"}
+          </div>
           <div>
-            <p className="text-[15px] font-semibold text-slate-800 leading-tight">{currentName}</p>
+            <p className="text-[15px] font-semibold text-slate-800 leading-tight">{currentProfileRole}</p>
             <p className="text-[10px] uppercase tracking-[0.1em] font-semibold text-slate-500">{currentProfileLabel}</p>
           </div>
         </div>
+      </div>
+
+      <div className="px-5 pb-4 border-b border-[#D9DEEA]">
+        <div className="h-px w-full bg-transparent" />
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
