@@ -83,6 +83,13 @@ export const teamMembers: TeamMember[] = [
     capacity: 8,
     availability: "Disponible",
     active: true,
+    auth: {
+      passwordHash: "f12f16d3",
+      authEnabled: true,
+      mustChangePassword: true,
+      passwordUpdatedAt: null,
+      lastLoginAt: null,
+    },
   },
   {
     id: 3,

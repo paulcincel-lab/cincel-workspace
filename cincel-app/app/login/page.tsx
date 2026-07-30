@@ -148,7 +148,7 @@ export default function LoginPage() {
                   className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-[14px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
-              <p id="login-password-help" className="-mt-2 text-[11px] leading-5 text-slate-500">Si es tu primer acceso, usa la contraseña temporal asignada por el Administrador.</p>
+              <p id="login-password-help" className="-mt-2 text-[11px] leading-5 text-slate-500">Si es tu primer acceso, usa la contraseña temporal inicial del administrador: CincelAdmin2026!.</p>
 
               <label className="flex items-center gap-2 pt-1 text-[13px] text-slate-600">
                 <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200" />
