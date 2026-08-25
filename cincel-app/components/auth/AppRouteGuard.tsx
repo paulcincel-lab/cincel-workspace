@@ -7,6 +7,7 @@ import { resolveCurrentSessionAccess } from "@/lib/auth/auth-service";
 
 const PUBLIC_LOGIN_ROUTE = "/login";
 const PUBLIC_FIRST_ACCESS_ROUTE = "/change-password";
+const CONFIG_ROUTE_PREFIX = "/configuracion";
 
 function isPublicRoute(pathname: string): boolean {
   return pathname === PUBLIC_LOGIN_ROUTE || pathname === PUBLIC_FIRST_ACCESS_ROUTE;
@@ -24,10 +25,11 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
   const route = pathname || "/";
   const resolution = isMounted ? resolveCurrentSessionAccess() : { status: "guest" as const, user: null };
   const isPublic = isPublicRoute(route);
+  const isConfigurationRoute = route === CONFIG_ROUTE_PREFIX || route.startsWith(`${CONFIG_ROUTE_PREFIX}/`);
 
   const canRender = useMemo(() => {
     if (!isMounted) {
-      return false;
+      return isPublic;
     }
 
     if (route === PUBLIC_LOGIN_ROUTE) {
@@ -39,11 +41,15 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
     }
 
     if (!isPublic) {
+      if (isConfigurationRoute) {
+        return resolution.status === "active" && resolution.user?.access === "Administrador";
+      }
+
       return resolution.status === "active";
     }
 
     return true;
-  }, [isMounted, isPublic, resolution.status, route]);
+  }, [isConfigurationRoute, isMounted, isPublic, resolution.status, resolution.user?.access, route]);
 
   useEffect(() => {
     if (!isMounted || canRender) {
@@ -56,14 +62,23 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
     }
 
     if (resolution.status === "active") {
+      if (isConfigurationRoute && resolution.user?.access !== "Administrador") {
+        router.replace("/dashboard");
+        return;
+      }
+
       router.replace("/dashboard");
       return;
     }
 
     router.replace(PUBLIC_LOGIN_ROUTE);
-  }, [canRender, isMounted, resolution.status, router]);
+  }, [canRender, isConfigurationRoute, isMounted, resolution.status, resolution.user?.access, router]);
 
   if (!canRender) {
+    if (!isMounted && isPublic) {
+      return <>{children}</>;
+    }
+
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100">
         <p className="text-sm text-slate-500">Validando acceso...</p>

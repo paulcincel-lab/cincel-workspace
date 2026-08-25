@@ -65,6 +65,7 @@ export default function UnifiedCalendar({
   canViewTeamCalendar = true,
   viewerName = "",
 }: UnifiedCalendarProps) {
+  const normalizedViewerName = viewerName.trim();
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -82,17 +83,35 @@ export default function UnifiedCalendar({
   });
 
   const options = useMemo(() => buildCalendarFilterOptions(events), [events]);
+  const responsibleOptions = useMemo(() => {
+    if (!canViewTeamCalendar && normalizedViewerName) {
+      return [normalizedViewerName];
+    }
+
+    return options.responsibles;
+  }, [canViewTeamCalendar, normalizedViewerName, options.responsibles]);
+  const effectiveResponsibleFilter = !canViewTeamCalendar && normalizedViewerName
+    ? normalizedViewerName
+    : filters.responsible;
+  const effectiveFilters = useMemo(
+    () => ({
+      ...filters,
+      responsible: effectiveResponsibleFilter,
+    }),
+    [effectiveResponsibleFilter, filters]
+  );
+
   const scopedEvents = useMemo(() => {
     const source = canViewTeamCalendar
       ? events
-      : events.filter((event) => event.responsible.toLowerCase() === viewerName.trim().toLowerCase());
+      : events.filter((event) => event.responsible.toLowerCase() === normalizedViewerName.toLowerCase());
 
     if (mode === "summary") {
       return source;
     }
 
-    return applyCalendarFilters(source, filters);
-  }, [canViewTeamCalendar, events, filters, mode, viewerName]);
+    return applyCalendarFilters(source, effectiveFilters);
+  }, [canViewTeamCalendar, effectiveFilters, events, mode, normalizedViewerName]);
 
   const groupedByDate = useMemo(() => groupEventsByDate(scopedEvents), [scopedEvents]);
   const selectedDayEvents = groupedByDate.get(selectedDate) ?? [];
@@ -238,11 +257,12 @@ export default function UnifiedCalendar({
                 ))}
               </select>
               <select
-                value={filters.responsible}
+                value={effectiveResponsibleFilter}
                 onChange={(event) => setFilters((current) => ({ ...current, responsible: event.target.value }))}
+                disabled={!canViewTeamCalendar}
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900"
               >
-                {options.responsibles.map((value) => (
+                {responsibleOptions.map((value) => (
                   <option key={`resp-${value}`} value={value}>{value === "Todos" ? "Responsable: Todos" : value}</option>
                 ))}
               </select>
@@ -264,15 +284,6 @@ export default function UnifiedCalendar({
                   <option key={`stage-${value}`} value={value}>{value === "Todas" ? "Etapa: Todas" : value}</option>
                 ))}
               </select>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-4 border-b border-slate-200 px-4 py-2 text-xs text-slate-700 md:text-sm">
-              {legend.map((item) => (
-                <span key={`full-legend-${item.project}`} className="inline-flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  {item.project}
-                </span>
-              ))}
             </div>
 
             {view === "month" ? (
@@ -334,12 +345,7 @@ export default function UnifiedCalendar({
                       <div className="mt-2 space-y-2">
                         {day.events.length === 0 ? <p className="text-xs text-slate-500">Sin eventos</p> : null}
                         {day.events.map((entry) => (
-                          <Link
-                            key={entry.id}
-                            href={entry.href}
-                            className={`block rounded-lg border-l-4 px-2 py-1 text-xs font-semibold ${typeClassName(entry.type)}`}
-                            style={{ borderLeftColor: projectColorMap.get(entry.project) || "#64748b" }}
-                          >
+                          <Link key={entry.id} href={entry.href} className={`block rounded-lg px-2 py-1 text-xs font-semibold ${typeClassName(entry.type)}`}>
                             {entry.time} · {entry.title}
                           </Link>
                         ))}
@@ -360,12 +366,7 @@ export default function UnifiedCalendar({
                 ) : (
                   <div className="space-y-2">
                     {selectedDayEvents.map((entry) => (
-                      <Link
-                        key={entry.id}
-                        href={entry.href}
-                        className="flex items-start justify-between rounded-xl border border-slate-200 border-l-4 px-3 py-2 hover:bg-slate-50"
-                        style={{ borderLeftColor: projectColorMap.get(entry.project) || "#64748b" }}
-                      >
+                      <Link key={entry.id} href={entry.href} className="flex items-start justify-between rounded-xl border border-slate-200 px-3 py-2 hover:bg-slate-50">
                         <div>
                           <p className="text-xs font-semibold text-slate-500">{entry.time}</p>
                           <p className="text-sm font-semibold text-slate-900">{entry.title}</p>
@@ -437,7 +438,6 @@ export default function UnifiedCalendar({
                     <th className="px-3 py-2">Hora</th>
                     <th className="px-3 py-2">Actividad</th>
                     <th className="px-3 py-2">Proyecto</th>
-                    <th className="px-3 py-2">Color</th>
                     <th className="px-3 py-2">Etapa</th>
                     <th className="px-3 py-2">Responsable</th>
                     <th className="px-3 py-2">Tipo</th>
@@ -452,14 +452,6 @@ export default function UnifiedCalendar({
                         <Link href={entry.href} className="hover:text-blue-700 hover:underline">{entry.title}</Link>
                       </td>
                       <td className="px-3 py-2">{entry.project}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className="inline-flex h-3 w-3 rounded-full"
-                          style={{ backgroundColor: projectColorMap.get(entry.project) || "#64748b" }}
-                          aria-label={`Color del proyecto ${entry.project}`}
-                          title={`Color del proyecto ${entry.project}`}
-                        />
-                      </td>
                       <td className="px-3 py-2">{entry.stageLabel}</td>
                       <td className="px-3 py-2">{entry.responsible}</td>
                       <td className="px-3 py-2">
@@ -469,7 +461,7 @@ export default function UnifiedCalendar({
                   ))}
                   {upcomingEvents.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-600">No hay eventos en los filtros seleccionados.</td>
+                      <td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-600">No hay eventos en los filtros seleccionados.</td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -480,7 +472,7 @@ export default function UnifiedCalendar({
       ) : (
         <>
           <div className="overflow-x-auto">
-            <div className="min-w-[760px]">
+            <div className="min-w-[900px]">
               <div className="grid grid-cols-7 border-b border-slate-200 text-center text-sm font-semibold text-slate-700">
                 {getWeekdayLabels().map((label) => (
                   <div key={label} className="border-r border-slate-200 py-2 last:border-r-0">{label}</div>
@@ -488,29 +480,32 @@ export default function UnifiedCalendar({
               </div>
               <div className="grid grid-cols-7">
                 {monthGrid.map((cell) => {
+                  const visibleEvents = cell.events.slice(0, 2);
+                  const hiddenCount = Math.max(0, cell.events.length - visibleEvents.length);
+
                   return (
                     <button
                       key={cell.key}
                       type="button"
                       onClick={() => setSelectedDate(cell.key)}
-                      className={`min-h-[84px] border-b border-r border-slate-200 p-2 text-left align-top transition ${cell.isCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-slate-50 text-slate-400"} ${cell.key === selectedDate ? "ring-2 ring-inset ring-blue-500" : ""}`}
+                      className={`min-h-[96px] border-b border-r border-slate-200 p-1 text-left align-top transition ${cell.isCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-slate-50 text-slate-400"} ${cell.key === selectedDate ? "ring-2 ring-inset ring-blue-500" : ""}`}
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex justify-end">
                         <span className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold ${cell.isToday ? "bg-blue-600 text-white" : "text-slate-700"}`}>{String(cell.dayNumber).padStart(2, "0")}</span>
-                        {cell.events.length > 0 ? (
-                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">{cell.events.length}</span>
-                        ) : null}
                       </div>
-
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {cell.events.slice(0, 3).map((entry) => (
-                          <span
-                            key={`dot-${entry.id}`}
-                            className="h-2 w-2 rounded-full"
-                            style={{ backgroundColor: projectColorMap.get(entry.project) || "#64748b" }}
-                            aria-hidden="true"
-                          />
+                      <div className="mt-1 space-y-1">
+                        {visibleEvents.map((entry) => (
+                          <Link
+                            key={entry.id}
+                            href={entry.href}
+                            onClick={(event) => event.stopPropagation()}
+                            className={`block truncate rounded border-l-4 px-2 py-1 text-[11px] font-semibold md:text-xs ${typeClassName(entry.type)}`}
+                            style={{ borderLeftColor: projectColorMap.get(entry.project) || "#64748b" }}
+                          >
+                            {typePrefix(entry.type)}. {entry.title}
+                          </Link>
                         ))}
+                        {hiddenCount > 0 ? <p className="px-1 text-xs font-medium text-slate-500">+{hiddenCount} mas</p> : null}
                       </div>
                     </button>
                   );
@@ -520,25 +515,29 @@ export default function UnifiedCalendar({
           </div>
 
           <div className="border-t border-slate-200 px-4 py-4">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">Detalle del dia seleccionado</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-600">Agenda del dia seleccionado</h3>
               <p className="text-sm font-semibold capitalize text-slate-900">{selectedDayLabel}</p>
             </div>
 
             {!canViewDailyAgenda ? (
-              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">No tienes permiso para ver la agenda diaria.</p>
+              <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">No tienes permiso para ver la agenda diaria.</p>
             ) : selectedDayEvents.length === 0 ? (
-              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">No hay actividades registradas para este dia.</p>
+              <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">No hay actividades para este dia.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
                 {selectedDayEvents.map((entry) => (
-                  <Link key={`summary-day-${entry.id}`} href={entry.href} className="flex items-start justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500">{entry.time}</p>
-                      <p className="text-sm font-semibold text-slate-900">{entry.title}</p>
-                      <p className="text-xs text-slate-700">{entry.project} · {entry.responsible}</p>
+                  <Link
+                    key={`summary-selected-${entry.id}`}
+                    href={entry.href}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-semibold text-slate-500">{entry.time}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${typeClassName(entry.type)}`}>{entry.type}</span>
                     </div>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${typeClassName(entry.type)}`}>{entry.type}</span>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{entry.title}</p>
+                    <p className="text-xs text-slate-700">{entry.project} · {entry.responsible}</p>
                   </Link>
                 ))}
               </div>
@@ -552,6 +551,7 @@ export default function UnifiedCalendar({
                 {item.project}
               </span>
             ))}
+            <Link href="/calendario" className="ml-auto inline-flex rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">Abrir modulo Calendario</Link>
           </div>
         </>
       )}

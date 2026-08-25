@@ -1,0 +1,37 @@
+{
+  "source": "docs/review-2026-08-11/",
+  "generated": "2026-08-11",
+  "context": "Roadmap para alpha release de Cincel Workspace, derivado de una auditoría técnica independiente (docs/review-2026-08-11/). No es un proyecto greenfield: es una app existente en rama release/v1.0. No existen docs/specs/frontend.md ni backend.md — cada issue en las fases trae su propio criterio de aceptación autocontenido, no depende de specs externas.",
+  "milestones": [
+    {
+      "number": 0,
+      "title": "Alpha M0 — Seguridad y Persistencia Real (Bloqueante)",
+      "phase_file": "phase-0-seguridad-persistencia.md",
+      "description": "Bloqueantes de release: sin esto, el proyecto no tiene autenticación, autorización ni persistencia de servidor reales aptas para datos de clientes. Debe cerrarse antes de considerar el proyecto apto para alpha con usuarios/datos reales."
+    },
+    {
+      "number": 1,
+      "title": "Alpha M1 — Autorización en Capa de Datos y Persistencia de Tareas",
+      "phase_file": "phase-1-autorizacion-datos.md",
+      "description": "Alto impacto, depende parcialmente de M0: mover la autorización de la UI a la capa de datos, y dar persistencia real al módulo de Tareas."
+    },
+    {
+      "number": 2,
+      "title": "Alpha M2 — Testing Automatizado y CI",
+      "phase_file": "phase-2-testing-ci.md",
+      "description": "Hoy no hay framework de pruebas unitarias, no hay CI, y la cobertura E2E es mínima. Necesario para poder iterar sobre M0/M1 con confianza."
+    },
+    {
+      "number": 3,
+      "title": "Alpha M3 — Calidad de Código y Deuda Técnica",
+      "phase_file": "phase-3-calidad-codigo.md",
+      "description": "Duplicación de código, archivos monolíticos, accesibilidad y deuda técnica ya identificada (incluye DT-12-001)."
+    },
+    {
+      "number": 4,
+      "title": "Alpha M4 — Documentación y Operaciones",
+      "phase_file": "phase-4-docs-operaciones.md",
+      "description": "Actualizar documentación desactualizada (AGENTS.md, ERD, diccionario de datos) y formalizar backups reales de base de datos."
+    }
+  ]
+}
