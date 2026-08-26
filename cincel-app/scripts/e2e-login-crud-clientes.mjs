@@ -1,5 +1,12 @@
 /**
+ * @deprecated Use `npm run test:e2e -- --grep "Clientes"` (tests/e2e/clientes.spec.ts) instead.
+ *
  * E2E script: login + full CRUD cycle for Clientes.
+ *
+ * This script has been superseded by the Playwright spec at
+ * `tests/e2e/clientes.spec.ts`, which uses the shared `seedAuth` / `loginAsAdmin`
+ * helpers and integrates with `npm run test:e2e`. This file is kept only for
+ * historical reference and will be removed in a future cleanup pass.
  *
  * ⚠️  ISOLATION REQUIREMENT
  * This script MUST only be executed against an ephemeral or fully local Supabase

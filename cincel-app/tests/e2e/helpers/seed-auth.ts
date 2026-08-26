@@ -1,8 +1,38 @@
 import type { Page } from "@playwright/test";
 
 /**
- * Injects a test admin member and session credentials into the browser's
- * localStorage before the page loads. Uses the same FNV-1a hash as the app.
+ * Test authentication helpers for E2E specs running in `localstorage` data-source mode.
+ *
+ * ## What IS verified by these helpers
+ *
+ * When `NEXT_PUBLIC_CINCEL_DATA_SOURCE` is unset (default) the app uses
+ * `loginWithEmailAndPassword` in `lib/auth/auth-service.ts`, which:
+ *   1. Looks up the member by email in the `cincel.team.members.v1` localStorage key.
+ *   2. Compares the submitted password against the stored FNV-1a hash.
+ *   3. Writes a real `cincel.auth.session.v1` session on success.
+ *
+ * `seedAuth` + `loginAsAdmin` together exercise this real credential-verification
+ * path end-to-end: the login page component renders, the form is filled and
+ * submitted, and the app's own `loginWithEmailAndPassword` performs the hash
+ * comparison and emits (or rejects) the session — none of this is bypassed.
+ *
+ * ## What is NOT verified without a live Supabase project
+ *
+ * When `NEXT_PUBLIC_CINCEL_DATA_SOURCE=supabase` the app calls
+ * `supabase.auth.signInWithPassword` (see `lib/auth/supabase-auth.ts`).
+ * Because there is no live Supabase project in the sandbox/CI environment,
+ * the Supabase auth path (`isSupabaseEnabled() === true`) is not exercised
+ * by these specs. A separate test environment with real Supabase credentials
+ * would be required to cover that branch.
+ *
+ * ## Why fixture data is seeded
+ *
+ * In `localstorage` mode there is no backend server to register users against.
+ * `seedAuth` is therefore required to write a member record (with its hashed
+ * password) into localStorage so that `loginWithEmailAndPassword` has something
+ * to compare against. This is unavoidable without a live backend. Critically,
+ * `seedAuth` does NOT inject a pre-authenticated session — it clears
+ * `cincel.auth.session.v1` so the form submission must succeed on its own.
  *
  * IMPORTANT: Only run E2E specs against an ephemeral or local environment —
  * never against a shared staging project, to avoid polluting real data.
