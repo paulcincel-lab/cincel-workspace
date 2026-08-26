@@ -963,24 +963,89 @@ export default function ClientesPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={openCreateClient}
-                disabled={!clientsCapabilities.canCreateClient}
-                title={clientsCapabilities.canCreateClient ? "" : "No tienes permiso para crear clientes"}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${clientsCapabilities.canCreateClient ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
-              >
-                Nuevo cliente
-              </button>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/proyectos"
+                  className="rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                >
+                  Ver todos los proyectos
+                </Link>
 
-              <Link
-                href="/proyectos"
-                className="rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
-              >
-                Ver todos los proyectos
-              </Link>
+                <button
+                  type="button"
+                  onClick={openCreateClient}
+                  disabled={!clientsCapabilities.canCreateClient}
+                  title={clientsCapabilities.canCreateClient ? "" : "No tienes permiso para crear clientes"}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${clientsCapabilities.canCreateClient ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
+                >
+                  Nuevo cliente
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveFilter("Activos")}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium ${activeFilter === "Activos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                >
+                  Activos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveFilter("Inactivos")}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium ${activeFilter === "Inactivos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                >
+                  Desactivados
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveFilter("Todos")}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium ${activeFilter === "Todos" ? "bg-slate-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                >
+                  Todos
+                </button>
+              </div>
             </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por cliente, proyecto o tipo"
+              className="min-w-[220px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+            />
+
+            <select
+              value={kindFilter}
+              onChange={(event) => setKindFilter(event.target.value as "Todos" | ClientKind)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="Todos">Empresa / Particular: Todos</option>
+              <option value="Empresa">Empresa</option>
+              <option value="Particular">Particular</option>
+            </select>
+
+            <select
+              value={projectTypeFilter}
+              onChange={(event) => setProjectTypeFilter(event.target.value as "Todos" | ProjectType)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="Todos">Tipo de proyecto: Todos</option>
+              {projectTypeOptions.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+
+            <select
+              value={firstWorkDateSort}
+              onChange={(event) => setFirstWorkDateSort(event.target.value as "reciente" | "antigua")}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="reciente">Fecha primer trabajo: Mas reciente</option>
+              <option value="antigua">Fecha primer trabajo: Mas antigua</option>
+            </select>
           </div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
@@ -999,56 +1064,7 @@ export default function ClientesPage() {
         <div className="mt-6 grid gap-6 xl:grid-cols-3">
           <section className="space-y-4 xl:col-span-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap gap-3">
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Buscar por cliente, proyecto o tipo"
-                  className="min-w-[220px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
-                />
-
-                <select
-                  value={activeFilter}
-                  onChange={(event) => setActiveFilter(event.target.value as "Todos" | "Activos" | "Inactivos")}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="Todos">Activo / Inactivo: Todos</option>
-                  <option value="Activos">Solo activos</option>
-                  <option value="Inactivos">Solo inactivos</option>
-                </select>
-
-                <select
-                  value={kindFilter}
-                  onChange={(event) => setKindFilter(event.target.value as "Todos" | ClientKind)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="Todos">Empresa / Particular: Todos</option>
-                  <option value="Empresa">Empresa</option>
-                  <option value="Particular">Particular</option>
-                </select>
-
-                <select
-                  value={projectTypeFilter}
-                  onChange={(event) => setProjectTypeFilter(event.target.value as "Todos" | ProjectType)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="Todos">Tipo de proyecto: Todos</option>
-                  {projectTypeOptions.map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={firstWorkDateSort}
-                  onChange={(event) => setFirstWorkDateSort(event.target.value as "reciente" | "antigua")}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="reciente">Fecha primer trabajo: Mas reciente</option>
-                  <option value="antigua">Fecha primer trabajo: Mas antigua</option>
-                </select>
-              </div>
-
-              <div className="mt-4 space-y-6">
+              <div className="space-y-6">
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-900">Clientes con proyecto activo</h3>
@@ -1223,12 +1239,6 @@ export default function ClientesPage() {
               {selectedClient ? (
                 <div className="mt-4 space-y-4">
                   <div className="flex flex-wrap justify-end gap-2">
-                    <Link
-                      href={`/clientes/${selectedClient.id}`}
-                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                    >
-                      Abrir ficha del cliente
-                    </Link>
                     <button
                       type="button"
                       onClick={() => {
@@ -1261,6 +1271,12 @@ export default function ClientesPage() {
                     >
                       Editar cliente
                     </button>
+                    <Link
+                      href={`/clientes/${selectedClient.id}`}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                    >
+                      Abrir ficha del cliente
+                    </Link>
                   </div>
 
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">

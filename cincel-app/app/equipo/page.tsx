@@ -401,6 +401,7 @@ export default function EquipoPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<MemberDraft>(emptyDraft);
   const [formError, setFormError] = useState("");
+  const [statusViewFilter, setStatusViewFilter] = useState<"Activos" | "Desactivados">("Activos");
   const [search, setSearch] = useState("");
   const [areaFilter, setAreaFilter] = useState("Todas");
   const [availabilityFilter, setAvailabilityFilter] = useState("Todas");
@@ -587,6 +588,12 @@ export default function EquipoPage() {
   const selectedProfileMember = membersWithWorkload.find((member) => member.id === selectedProfileMemberId) ?? null;
   const selectedCoordinatorMember = membersWithWorkload.find((member) => member.id === selectedCoordinatorMemberId) ?? null;
   const editorMember = editingId === null ? null : membersWithWorkload.find((member) => member.id === editingId) ?? null;
+  const isEditingSelfProtectedAdmin = Boolean(
+    editorMember
+    && authenticatedUser
+    && authenticatedUser.member.id === editorMember.id
+    && hasDefaultSystemAdministratorAccess(editorMember.institutionalEmail)
+  );
   const editorAccessState = editorMember ? getCollaboratorAccessState(editorMember) : null;
   const accessPreviewState = useMemo(() => {
     if (!draft.systemAccessEnabled) {
@@ -776,6 +783,14 @@ export default function EquipoPage() {
       return;
     }
 
+    if (existingMember && isSelfProtectedAdmin(existingMember)) {
+      const currentEmail = normalizeEmail(existingMember.institutionalEmail || "");
+      if (normalizedInstitutionalEmail !== currentEmail) {
+        setFormError("Tu correo administrador principal esta protegido y no puede modificarse.");
+        return;
+      }
+    }
+
     if (editingId === null) {
       const nextId = members.reduce((max, member) => Math.max(max, member.id), 0) + 1;
       const newMember: TeamMember = {
@@ -891,6 +906,11 @@ export default function EquipoPage() {
       return;
     }
 
+    const targetMember = members.find((member) => member.id === id);
+    if (targetMember && isPrimaryAdminMember(targetMember)) {
+      return;
+    }
+
     setMembers((current) =>
       current.map((member) => {
         if (member.id !== id) {
@@ -916,6 +936,31 @@ export default function EquipoPage() {
     setSearch("");
     setAreaFilter("Todas");
     setAvailabilityFilter("Todas");
+  };
+
+  const isPrimaryAdminMember = (member: TeamMember): boolean => {
+    return hasDefaultSystemAdministratorAccess(member.institutionalEmail);
+  };
+
+  const isSelfProtectedAdmin = (member: TeamMember): boolean => {
+    if (!authenticatedUser) {
+      return false;
+    }
+
+    return authenticatedUser.member.id === member.id && isPrimaryAdminMember(member);
+  };
+
+  const isSelfAdminAccessLocked = (member: TeamMember): boolean => {
+    if (!authenticatedUser) {
+      return false;
+    }
+
+    const isSelf = authenticatedUser.member.id === member.id;
+    if (!isSelf) {
+      return false;
+    }
+
+    return resolveSystemRole(member) === SYSTEM_ADMIN_ROLE;
   };
 
   const reorderMembers = (sourceId: number, targetId: number) => {
@@ -944,6 +989,11 @@ export default function EquipoPage() {
       return;
     }
 
+    const targetMember = members.find((member) => member.id === memberId);
+    if (targetMember && isSelfAdminAccessLocked(targetMember)) {
+      return;
+    }
+
     setSystemRoleByMemberId((current) => ({
       ...current,
       [memberId]: nextRole,
@@ -952,6 +1002,11 @@ export default function EquipoPage() {
 
   const deleteMember = (memberId: number) => {
     if (!teamCapabilities.canDeleteCollaborator) {
+      return;
+    }
+
+    const targetMember = members.find((member) => member.id === memberId);
+    if (targetMember && isPrimaryAdminMember(targetMember)) {
       return;
     }
 
@@ -1128,13 +1183,16 @@ export default function EquipoPage() {
     }
 
     if (column === "rol") {
+      const isLocked = isSelfAdminAccessLocked(member);
+      const canEditAccess = teamCapabilities.canChangeCollaboratorAccess && !isLocked;
+
       return (
         <td className="px-4 py-3 text-sm">
           <select
             value={resolveSystemRole(member)}
             onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
-            disabled={!teamCapabilities.canChangeCollaboratorAccess}
-            title={teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
+            disabled={!canEditAccess}
+            title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
             className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
           >
             {systemRoleOptions.map((roleOption) => (
@@ -1232,6 +1290,11 @@ export default function EquipoPage() {
       );
     }
 
+    const isProtectedSelf = isSelfProtectedAdmin(member);
+    const isPrimaryAdmin = isPrimaryAdminMember(member);
+    const canToggle = teamCapabilities.canToggleCollaboratorActive && !isProtectedSelf;
+    const canDelete = teamCapabilities.canDeleteCollaborator && !isPrimaryAdmin;
+
     return (
       <td className="px-4 py-3">
         <div className="flex flex-wrap gap-2">
@@ -1256,26 +1319,28 @@ export default function EquipoPage() {
           <button
             type="button"
             onClick={() => toggleMemberActive(member.id)}
-            disabled={!teamCapabilities.canToggleCollaboratorActive}
-            title={teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canToggleCollaboratorActive ? "border-amber-200 text-amber-700 hover:bg-amber-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+            disabled={!canToggle}
+            title={isProtectedSelf ? "No puedes desactivar tu cuenta administradora principal" : teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${canToggle ? "border-amber-200 text-amber-700 hover:bg-amber-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
             Desactivar
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
-                deleteMember(member.id);
-              }
-            }}
-            disabled={!teamCapabilities.canDeleteCollaborator}
-            title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canDeleteCollaborator ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-          >
-            Eliminar
-          </button>
+          {!isPrimaryAdmin ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
+                  deleteMember(member.id);
+                }
+              }}
+              disabled={!canDelete}
+              title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
+              className={`rounded-lg border px-3 py-1 text-xs font-medium ${canDelete ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+            >
+              Eliminar
+            </button>
+          ) : null}
         </div>
       </td>
     );
@@ -1303,13 +1368,16 @@ export default function EquipoPage() {
     }
 
     if (column === "rol") {
+      const isLocked = isSelfAdminAccessLocked(member);
+      const canEditAccess = teamCapabilities.canChangeCollaboratorAccess && !isLocked;
+
       return (
         <td className="px-4 py-3 text-sm">
           <select
             value={resolveSystemRole(member)}
             onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
-            disabled={!teamCapabilities.canChangeCollaboratorAccess}
-            title={teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
+            disabled={!canEditAccess}
+            title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
             className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
           >
             {systemRoleOptions.map((roleOption) => (
@@ -1380,6 +1448,11 @@ export default function EquipoPage() {
       );
     }
 
+    const isProtectedSelf = isSelfProtectedAdmin(member);
+    const isPrimaryAdmin = isPrimaryAdminMember(member);
+    const canToggle = teamCapabilities.canToggleCollaboratorActive && !isProtectedSelf;
+    const canDelete = teamCapabilities.canDeleteCollaborator && !isPrimaryAdmin;
+
     return (
       <td className="px-4 py-3">
         <div className="flex flex-wrap gap-2">
@@ -1403,25 +1476,27 @@ export default function EquipoPage() {
           <button
             type="button"
             onClick={() => toggleMemberActive(member.id)}
-            disabled={!teamCapabilities.canToggleCollaboratorActive}
-            title={teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canToggleCollaboratorActive ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+            disabled={!canToggle}
+            title={isProtectedSelf ? "No puedes desactivar tu cuenta administradora principal" : teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${canToggle ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
             Reactivar
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
-                deleteMember(member.id);
-              }
-            }}
-            disabled={!teamCapabilities.canDeleteCollaborator}
-            title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canDeleteCollaborator ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-          >
-            Eliminar
-          </button>
+          {!isPrimaryAdmin ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
+                  deleteMember(member.id);
+                }
+              }}
+              disabled={!canDelete}
+              title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
+              className={`rounded-lg border px-3 py-1 text-xs font-medium ${canDelete ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+            >
+              Eliminar
+            </button>
+          ) : null}
         </div>
       </td>
     );
@@ -1457,19 +1532,87 @@ export default function EquipoPage() {
           <div className="border-b border-slate-200 p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 className="text-3xl font-bold">Equipo</h1>
+                <h1 className="text-3xl font-bold text-slate-900">Equipo</h1>
                 <p className="mt-1 text-slate-700">Avatares, capacidad y carga actual de colaboradores.</p>
               </div>
 
+              <div className="flex flex-col items-end gap-2">
+                <button
+                  type="button"
+                  onClick={openAddEditor}
+                  disabled={!teamCapabilities.canCreateCollaborator}
+                  title={teamCapabilities.canCreateCollaborator ? "" : "No tienes permiso para crear colaboradores"}
+                  className={`rounded-xl px-4 py-2 text-sm font-medium text-white ${teamCapabilities.canCreateCollaborator ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
+                >
+                  + Agregar colaborador
+                </button>
+
+                <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
+                  <button
+                    type="button"
+                    onClick={() => setStatusViewFilter("Activos")}
+                    className={`rounded-lg px-3 py-1 text-xs font-medium ${statusViewFilter === "Activos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                  >
+                    Activos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusViewFilter("Desactivados")}
+                    className={`rounded-lg px-3 py-1 text-xs font-medium ${statusViewFilter === "Desactivados" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                  >
+                    Desactivados
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-b border-slate-200 px-6 py-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar colaborador, acceso o area..."
+                className="h-10 w-72 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 placeholder:text-slate-500"
+              />
+
+              <select
+                value={areaFilter}
+                onChange={(event) => setAreaFilter(event.target.value)}
+                className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
+              >
+                {areaOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={availabilityFilter}
+                onChange={(event) => setAvailabilityFilter(event.target.value)}
+                className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
+              >
+                <option value="Todas">Todas las disponibilidades</option>
+                {availabilityOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+
               <button
                 type="button"
-                onClick={openAddEditor}
-                disabled={!teamCapabilities.canCreateCollaborator}
-                title={teamCapabilities.canCreateCollaborator ? "" : "No tienes permiso para crear colaboradores"}
-                className={`rounded-xl px-4 py-2 text-sm font-medium text-white ${teamCapabilities.canCreateCollaborator ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
+                onClick={clearFilters}
+                className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
-                + Agregar colaborador
+                Limpiar filtros
               </button>
+
+              {teamCapabilities.canExportData ? (
+                <ExportMenu onExport={statusViewFilter === "Activos" ? exportActiveTeam : exportInactiveTeam} scaleClassName="scale-100" />
+              ) : null}
             </div>
           </div>
 
@@ -1492,58 +1635,8 @@ export default function EquipoPage() {
             </div>
           </div>
 
-          <div className="border-b border-slate-200 px-6 py-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar colaborador, acceso o area..."
-                className="w-72 rounded-xl border border-slate-200 px-4 py-2 text-sm"
-              />
-
-              <select
-                value={areaFilter}
-                onChange={(event) => setAreaFilter(event.target.value)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm"
-              >
-                {areaOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={availabilityFilter}
-                onChange={(event) => setAvailabilityFilter(event.target.value)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm"
-              >
-                <option value="Todas">Todas las disponibilidades</option>
-                {availabilityOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-              >
-                Limpiar filtros
-              </button>
-            </div>
-          </div>
-
+          {statusViewFilter === "Activos" ? (
           <div className="overflow-x-auto p-6">
-            <div className="mb-4 flex items-center justify-end">
-              {teamCapabilities.canExportData ? (
-                <ExportMenu onExport={exportActiveTeam} />
-              ) : null}
-            </div>
-
             <table className="min-w-[1320px] w-full text-slate-800">
               <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-800">
                 <tr>
@@ -1607,15 +1700,14 @@ export default function EquipoPage() {
               </tbody>
             </table>
           </div>
+          ) : null}
 
+          {statusViewFilter === "Desactivados" ? (
           <div className="border-t border-slate-200 px-6 pb-6">
             <div className="mb-4 mt-2 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-800">Desactivados</h2>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-700">{inactiveVisibleMembers.length} visibles</span>
-                {teamCapabilities.canExportData ? (
-                  <ExportMenu onExport={exportInactiveTeam} />
-                ) : null}
               </div>
             </div>
 
@@ -1670,6 +1762,7 @@ export default function EquipoPage() {
               </table>
             </div>
           </div>
+          ) : null}
 
           <div className="border-t border-slate-200 px-6 py-6">
             <h2 className="mb-4 text-lg font-semibold text-slate-800">Fichas personales</h2>
@@ -2020,7 +2113,9 @@ export default function EquipoPage() {
                         type="email"
                         value={draft.institutionalEmail}
                         onChange={(event) => setDraft((current) => ({ ...current, institutionalEmail: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
+                        disabled={isEditingSelfProtectedAdmin}
+                        title={isEditingSelfProtectedAdmin ? "Tu correo administrador principal esta protegido" : ""}
+                        className={`w-full rounded-xl border px-4 py-2 ${isEditingSelfProtectedAdmin ? "cursor-not-allowed bg-slate-100 text-slate-500" : ""}`}
                       />
                     </div>
 

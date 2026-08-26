@@ -96,7 +96,7 @@ export function buildCalendarEvents(tasks: Task[]): CalendarEvent[] {
       }
 
       events.push({
-        id: `${suffix}-${task.id}-${date}`,
+        id: `${suffix}-${task.workflow}-${task.id}-${date}`,
         taskId: task.id,
         date,
         time: defaultTimeByType(type),

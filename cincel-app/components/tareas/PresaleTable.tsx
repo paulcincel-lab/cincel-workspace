@@ -14,6 +14,7 @@ import TaskDrawer from "./TaskDrawer";
 import NewTaskModal from "./NewTaskModal";
 import NewProjectTemplateModal from "./NewProjectTemplateModal";
 import GroupSection from "@/components/ui/GroupSection";
+import ExportMenu from "@/components/ui/ExportMenu";
 import { presaleTemplate } from "@/lib/templates/presale";
 import { presalePhaseOptions } from "@/lib/templates/phase-options";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
@@ -21,6 +22,8 @@ import { projects as baseProjects } from "@/lib/data/projects";
 import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
 import { fetchActivities, saveActivities } from "@/lib/repositories/activities-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { loadGeneralSettings } from "@/lib/settings/general-settings";
+import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 
 type TaskFormValues = {
   project: string;
@@ -128,6 +131,13 @@ function createTaskFromValues(
     checklist: [],
     archived: false,
   };
+}
+
+function buildTimestampLabel(): string {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
+  return `${date}-${time}`;
 }
 
 export default function PresaleTable({
@@ -337,6 +347,62 @@ export default function PresaleTable({
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredTasks]);
 
+  const activitiesExportColumns = useMemo<Array<ExportColumn<Task>>>(() => {
+    return [
+      {
+        key: "project",
+        header: "Proyecto",
+        getValue: (row) => row.project,
+      },
+      {
+        key: "phase",
+        header: "Fase",
+        getValue: (row) => row.phase,
+      },
+      {
+        key: "description",
+        header: "Actividad",
+        getValue: (row) => row.description,
+      },
+      {
+        key: "manager",
+        header: "Responsable",
+        getValue: (row) => row.manager || "Sin responsable",
+      },
+      {
+        key: "reviewDate",
+        header: "Proxima revision",
+        isDate: true,
+        getValue: (row) => row.reviewDate || "",
+      },
+      {
+        key: "deliveryDate",
+        header: "Fecha de entrega",
+        isDate: true,
+        getValue: (row) => row.deliveryDate || "",
+      },
+      {
+        key: "status",
+        header: "Estatus",
+        getValue: (row) => row.status,
+      },
+    ];
+  }, []);
+
+  const exportActivities = async (format: "xlsx" | "pdf") => {
+    const { settings } = loadGeneralSettings();
+
+    await exportTableData({
+      moduleName: `Actividades ${workflow}`,
+      fileName: `actividades-${workflow.toLowerCase()}-${buildTimestampLabel()}`,
+      format,
+      companyName: settings.company.tradeName || settings.company.legalName,
+      columns: activitiesExportColumns,
+      rows: filteredTasks,
+      landscape: true,
+    });
+  };
+
   const getNextTaskId = () => {
     return tasks.reduce((maxId, task) => Math.max(maxId, task.id), 0) + 1;
   };
@@ -441,11 +507,11 @@ export default function PresaleTable({
 
           <div>
 
-            <h1 className="text-3xl font-bold">
+            <h1 className="text-3xl font-bold text-slate-900">
               {title}
             </h1>
 
-            <p className="text-slate-800 mt-1">
+            <p className="mt-1 text-slate-700">
               {subtitle}
             </p>
 
@@ -455,7 +521,7 @@ export default function PresaleTable({
             <button
               type="button"
               onClick={() => setShowProjectTemplateModal(true)}
-              className="rounded-xl border border-slate-200 px-5 py-3 text-slate-800 hover:bg-slate-50 transition"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
               Iniciar plantilla de {templateName}
             </button>
@@ -463,7 +529,7 @@ export default function PresaleTable({
             <button
               type="button"
               onClick={() => setShowNewTask(true)}
-              className="bg-blue-600 text-white px-5 py-3 rounded-xl hover:bg-blue-700 transition"
+              className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
             >
               + Nueva tarea
             </button>
@@ -473,20 +539,20 @@ export default function PresaleTable({
 
       </div>
 
-      <div className="p-6 border-b border-slate-200 flex flex-wrap gap-4">
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 p-6">
 
         <input
           type="text"
           placeholder="Buscar tarea..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border rounded-xl px-4 py-2 w-72"
+          className="h-10 w-64 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 placeholder:text-slate-500"
         />
 
         <select
           value={projectFilter}
           onChange={(e) => updateProjectFilter(e.target.value)}
-          className="border rounded-xl px-4 py-2"
+          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
         >
           <option value="Todos los proyectos">Proyecto</option>
           {projects
@@ -501,7 +567,7 @@ export default function PresaleTable({
         <select
           value={managerFilter}
           onChange={(e) => setManagerFilter(e.target.value)}
-          className="border rounded-xl px-4 py-2"
+          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
         >
           <option value="Todos">Responsable</option>
           {managers
@@ -516,7 +582,7 @@ export default function PresaleTable({
         <select
           value={teamFilter}
           onChange={(e) => setTeamFilter(e.target.value)}
-          className="border rounded-xl px-4 py-2"
+          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
         >
           <option value="Todos">Equipo</option>
           {teams
@@ -531,7 +597,7 @@ export default function PresaleTable({
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="border rounded-xl px-4 py-2"
+          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
         >
           <option value="Todos">Estatus</option>
           {statuses
@@ -548,16 +614,16 @@ export default function PresaleTable({
           value={deliveryDateFilter}
           onChange={(e) => setDeliveryDateFilter(e.target.value)}
           aria-label="Filtrar por fecha entrega"
-          className="border rounded-xl px-4 py-2 text-sm"
+          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
         />
 
-        <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 px-2 text-sm">
           <button
             type="button"
             onClick={() => {
               setArchiveView("activos");
             }}
-            className={`rounded-lg px-3 py-2 ${archiveView === "activos" ? "bg-blue-600 text-white" : "text-slate-800 hover:bg-slate-100"}`}
+            className={`rounded-md px-2.5 py-1.5 text-sm ${archiveView === "activos" ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}
           >
             Activas
           </button>
@@ -566,19 +632,23 @@ export default function PresaleTable({
             onClick={() => {
               setArchiveView("archivadas");
             }}
-            className={`rounded-lg px-3 py-2 ${archiveView === "archivadas" ? "bg-slate-800 text-white" : "text-slate-800 hover:bg-slate-100"}`}
+            className={`rounded-md px-2.5 py-1.5 text-sm ${archiveView === "archivadas" ? "bg-slate-800 text-white" : "text-slate-700 hover:bg-slate-100"}`}
           >
             Archivadas
           </button>
         </div>
 
-          <button
+        <button
           type="button"
           onClick={clearFilters}
-          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100"
+          className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
         >
           Limpiar filtros
         </button>
+
+        {activitiesCapabilities.canExportData ? (
+          <ExportMenu onExport={exportActivities} scaleClassName="scale-100" />
+        ) : null}
 
       </div>
 

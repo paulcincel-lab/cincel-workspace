@@ -8,9 +8,9 @@ import { useRouter } from "next/navigation";
 
 import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
+import { clearDashboardProfilePhoto, loadDashboardProfilePhoto, saveDashboardProfilePhoto } from "@/lib/auth/profile-photo";
 import { teamMembers, type TeamMember } from "@/lib/data/team";
 import { isAdministratorRole } from "@/lib/data/roles";
-import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 
 type HeaderProps = {
@@ -24,7 +24,6 @@ type HeaderLinks = {
 };
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
-const DASHBOARD_PROFILE_PHOTO_STORAGE_KEY = "cincel.dashboard.profile.photo.v1";
 const HEADER_LINKS_STORAGE_KEY = "cincel.header.links.v1";
 const FALLBACK_USER_ID = 2;
 const ADMIN_USER_IDS = new Set([2]);
@@ -35,8 +34,21 @@ const DEFAULT_HEADER_LINKS: HeaderLinks = {
 };
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 
-function DevelopmentMenu() {
-  if (!IS_DEVELOPMENT) {
+const headerActionClassName = "inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700";
+const headerActionIconClassName = "h-[18px] w-[18px]";
+
+function SignOutIcon({ className = headerActionIconClassName }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M13 7l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DevelopmentMenu({ isVisible }: { isVisible: boolean }) {
+  if (!isVisible) {
     return null;
   }
 
@@ -75,20 +87,17 @@ function DevelopmentMenu() {
 }
 
 function HeaderActions({ links }: { links: HeaderLinks }) {
-  const actionClassName = "inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700";
-  const iconClassName = "h-[18px] w-[18px]";
-
   return (
     <div className="flex items-center gap-3">
       <a
         href={links.instagram}
         target="_blank"
         rel="noreferrer"
-        className={actionClassName}
+        className={headerActionClassName}
         aria-label="Abrir Instagram"
         title="Instagram"
       >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={iconClassName}>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={headerActionIconClassName}>
           <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="2" />
           <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
           <circle cx="17.2" cy="6.8" r="1.2" fill="currentColor" />
@@ -99,11 +108,11 @@ function HeaderActions({ links }: { links: HeaderLinks }) {
         href={links.website}
         target="_blank"
         rel="noreferrer"
-        className={actionClassName}
+        className={headerActionClassName}
         aria-label="Abrir pagina web"
         title="Pagina web"
       >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={iconClassName}>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={headerActionIconClassName}>
           <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
           <path d="M3 12h18" stroke="currentColor" strokeWidth="2" />
           <path d="M12 3c2.5 2.7 4 5.8 4 9s-1.5 6.3-4 9" stroke="currentColor" strokeWidth="2" />
@@ -115,11 +124,11 @@ function HeaderActions({ links }: { links: HeaderLinks }) {
         href={links.email.startsWith("http") ? links.email : `mailto:${links.email}`}
         target="_blank"
         rel="noreferrer"
-        className={actionClassName}
+        className={headerActionClassName}
         aria-label="Enviar correo"
         title="Correo"
       >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={iconClassName}>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={headerActionIconClassName}>
           <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="2" />
           <path d="M4 7l8 6 8-6" stroke="currentColor" strokeWidth="2" />
         </svg>
@@ -192,8 +201,24 @@ function loadHeaderLinks(): HeaderLinks {
   }
 }
 
+function resolveCurrentMember(members: TeamMember[], authenticatedMemberId: number | null): TeamMember {
+  const byAuth = authenticatedMemberId
+    ? members.find((member) => member.id === authenticatedMemberId && member.active)
+    : null;
+
+  if (byAuth) {
+    return byAuth;
+  }
+
+  const byId = members.find((member) => member.id === FALLBACK_USER_ID && member.active);
+  if (byId) {
+    return byId;
+  }
+
+  return members.find((member) => member.active) ?? teamMembers[0];
+}
+
 export default function Header({ variant = "default" }: HeaderProps) {
-  const generalSettings = useGeneralSettings();
   const pathname = usePathname();
   const router = useRouter();
   const isMounted = useSyncExternalStore(
@@ -206,6 +231,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
   const [profileImage, setProfileImage] = useState<string>("");
   const [headerLinks, setHeaderLinks] = useState<HeaderLinks>(() => loadHeaderLinks());
   const [isLinksEditorOpen, setIsLinksEditorOpen] = useState(false);
+  const [isProfileImageMenuOpen, setIsProfileImageMenuOpen] = useState(false);
   const [linksDraft, setLinksDraft] = useState<HeaderLinks>(() => loadHeaderLinks());
   const [authenticatedMemberId, setAuthenticatedMemberId] = useState<number | null>(null);
   const profileImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -217,10 +243,14 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
     const refreshMembers = () => {
       const authUser = getCurrentAuthenticatedUser();
-      setMembers(loadTeamMembers());
-      setProfileImage(readStorage(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY) ?? "");
+      const nextMemberId = authUser?.member.id ?? null;
+      const nextMembers = loadTeamMembers();
+      const nextCurrentMember = resolveCurrentMember(nextMembers, nextMemberId);
+
+      setMembers(nextMembers);
+      setProfileImage(loadDashboardProfilePhoto(nextCurrentMember.id));
       setHeaderLinks(loadHeaderLinks());
-      setAuthenticatedMemberId(authUser?.member.id ?? null);
+      setAuthenticatedMemberId(nextMemberId);
     };
 
     refreshMembers();
@@ -239,20 +269,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
       return null;
     }
 
-    const byAuth = authenticatedMemberId
-      ? members.find((member) => member.id === authenticatedMemberId && member.active)
-      : null;
-
-    if (byAuth) {
-      return byAuth;
-    }
-
-    const byId = members.find((member) => member.id === FALLBACK_USER_ID && member.active);
-    if (byId) {
-      return byId;
-    }
-
-    return members.find((member) => member.active) ?? teamMembers[0];
+    return resolveCurrentMember(members, authenticatedMemberId);
   }, [authenticatedMemberId, isMounted, members]);
 
   const profileSubtitle = useMemo(() => {
@@ -277,8 +294,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
   );
   const hasAuthenticatedSession = authenticatedMemberId !== null;
   const canEditLinksInThisPage = isAdminProfile && pathname.startsWith("/configuracion");
-  const shouldShowVersion = generalSettings.system.showVersionInInterface;
-  const versionLabel = generalSettings.system.version.trim();
+  const shouldShowDevelopmentMenu = IS_DEVELOPMENT && pathname.startsWith("/configuracion");
 
   const handleProfileImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -294,11 +310,12 @@ export default function Header({ variant = "default" }: HeaderProps) {
       }
 
       setProfileImage(result);
-      writeStorage(DASHBOARD_PROFILE_PHOTO_STORAGE_KEY, result);
+      saveDashboardProfilePhoto(currentMember?.id ?? null, result);
     };
 
     reader.readAsDataURL(file);
     event.target.value = "";
+    setIsProfileImageMenuOpen(false);
   };
 
   const handleEditLinksClick = () => {
@@ -306,8 +323,11 @@ export default function Header({ variant = "default" }: HeaderProps) {
     setIsLinksEditorOpen((previous) => !previous);
   };
 
-  const handleDraftLinkChange = (key: keyof HeaderLinks, value: string) => {
-    setLinksDraft((previous) => ({ ...previous, [key]: value }));
+  const handleDraftLinkChange = (field: keyof HeaderLinks, value: string) => {
+    setLinksDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
   };
 
   const handleSaveLinks = () => {
@@ -323,9 +343,16 @@ export default function Header({ variant = "default" }: HeaderProps) {
     setIsLinksEditorOpen(false);
   };
 
+  const handleRemoveProfileImage = () => {
+    clearDashboardProfilePhoto(currentMember?.id ?? null);
+    setProfileImage("");
+    setIsProfileImageMenuOpen(false);
+  };
+
   const handleLogout = () => {
     logout();
     setAuthenticatedMemberId(null);
+    setProfileImage("");
     setMembers(loadTeamMembers());
     router.push("/login");
   };
@@ -359,13 +386,36 @@ export default function Header({ variant = "default" }: HeaderProps) {
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => profileImageInputRef.current?.click()}
-                className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500 transition-colors hover:text-slate-700"
-              >
-                Cambiar
-              </button>
+              <div className="relative mt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileImageMenuOpen((previous) => !previous)}
+                  className="text-[10px] font-medium uppercase tracking-wide text-slate-500 transition-colors hover:text-slate-700"
+                  aria-expanded={isProfileImageMenuOpen}
+                  aria-haspopup="menu"
+                >
+                  Editar
+                </button>
+
+                {isProfileImageMenuOpen ? (
+                  <div className="absolute left-1/2 z-20 mt-2 w-28 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => profileImageInputRef.current?.click()}
+                      className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Cambiar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveProfileImage}
+                      className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div>
@@ -379,22 +429,18 @@ export default function Header({ variant = "default" }: HeaderProps) {
           </div>
 
           <div className="self-end sm:self-auto">
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <DevelopmentMenu />
+            <div className="flex items-center gap-2">
+              <DevelopmentMenu isVisible={shouldShowDevelopmentMenu} />
               <HeaderActions links={headerLinks} />
               {hasAuthenticatedSession ? (
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
+                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
                   aria-label="Cerrar sesion"
                   title="Cerrar sesion"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-[18px] w-[18px]">
-                    <path d="M14 7l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M19 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    <path d="M11 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
+                  <SignOutIcon />
                 </button>
               ) : null}
             </div>
@@ -409,7 +455,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
     <header className="mb-10">
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4">
           <Avatar name={currentName} showName={false} />
 
           <h1 className="text-xl font-bold text-slate-900">
@@ -419,22 +465,18 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
         <div className="self-end sm:self-auto">
           <div className="flex flex-col items-end gap-1">
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <DevelopmentMenu />
+            <div className="flex items-center gap-2">
+              <DevelopmentMenu isVisible={shouldShowDevelopmentMenu} />
               <HeaderActions links={headerLinks} />
               {hasAuthenticatedSession ? (
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
+                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
                   aria-label="Cerrar sesion"
                   title="Cerrar sesion"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-[18px] w-[18px]">
-                    <path d="M14 7l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M19 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    <path d="M11 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
+                  <SignOutIcon />
                 </button>
               ) : null}
             </div>
@@ -508,7 +550,6 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
       <p className="mt-2 text-slate-800" suppressHydrationWarning>
         {todayLabel || "Cargando fecha..."}
-        {shouldShowVersion && versionLabel ? ` · ${versionLabel}` : ""}
       </p>
 
     </header>

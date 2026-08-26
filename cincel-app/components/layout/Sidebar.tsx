@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import Avatar from "@/components/ui/Avatar";
+import { useEffect, useState } from "react";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 
 type IconProps = {
@@ -128,6 +128,7 @@ const isGroup = (item: MenuItem): item is MenuGroupItem => "submenu" in item;
 export default function Sidebar() {
   const generalSettings = useGeneralSettings();
   const pathname = usePathname();
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [expandedMenu, setExpandedMenu] = useState<string | null>(
     pathname.startsWith("/recursos/empresa")
       ? "Empresa"
@@ -142,6 +143,23 @@ export default function Sidebar() {
         : null,
   );
 
+  useEffect(() => {
+    const refreshUser = () => {
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
+    };
+
+    refreshUser();
+    window.addEventListener("focus", refreshUser);
+    window.addEventListener("storage", refreshUser);
+
+    return () => {
+      window.removeEventListener("focus", refreshUser);
+      window.removeEventListener("storage", refreshUser);
+    };
+  }, []);
+
+  const canViewConfiguration = authenticatedUser?.access === "Administrador";
+
   const menu: MenuItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
     {
@@ -155,6 +173,7 @@ export default function Sidebar() {
       ],
     },
     { label: "Calendario", href: "/calendario", icon: CalendarIcon },
+    { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
     {
       label: "Recursos",
       icon: ResourcesIcon,
@@ -178,7 +197,6 @@ export default function Sidebar() {
         { label: "Politicas de la empresa", href: "/recursos/empresa/politicas-de-la-empresa", icon: ResourcesIcon },
       ],
     },
-    { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
     {
       label: "Proveedores",
       icon: SuppliersIcon,
@@ -188,16 +206,20 @@ export default function Sidebar() {
         { label: "Tiendas", href: "/proveedores/tiendas", icon: SuppliersIcon },
       ],
     },
-    { label: "Clientes", href: "/clientes", icon: ClientsIcon },
     { label: "Equipo", href: "/equipo", icon: TeamIcon },
-    {
-      label: "Configuración",
-      icon: SettingsIcon,
-      submenu: [
-        { label: "General", href: "/configuracion/general", icon: SettingsIcon },
-        { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
-      ],
-    },
+    { label: "Clientes", href: "/clientes", icon: ClientsIcon },
+    ...(canViewConfiguration
+      ? [
+          {
+            label: "Configuración",
+            icon: SettingsIcon,
+            submenu: [
+              { label: "General", href: "/configuracion/general", icon: SettingsIcon },
+              { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
+            ],
+          } satisfies MenuGroupItem,
+        ]
+      : []),
   ];
 
   const isActivePath = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -213,38 +235,37 @@ export default function Sidebar() {
     return "Perfil";
   })();
 
+  const currentProfileLabel = "Pagina";
+  const currentProfileInitial = currentProfileRole.charAt(0).toUpperCase();
+
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
-  const systemLogoUrl = generalSettings.appearance.systemLogoUrl.trim();
+  const versionLabel = generalSettings.system.version.trim();
+  const companyName = "Cincel";
   const [systemNamePrimary, ...systemNameRest] = systemName.split(" ");
   const systemNameSecondary = systemNameRest.join(" ");
 
   return (
     <aside className="w-64 h-screen bg-[#ECEFF6] border-r border-[#D9DEEA] text-slate-700 flex flex-col">
       <div className="px-5 pt-5 pb-3">
-        {systemLogoUrl ? (
-          <div className="mb-2 h-10 w-full overflow-hidden rounded-lg">
-            <div
-              aria-label={systemName}
-              role="img"
-              className="h-full w-full bg-contain bg-center bg-no-repeat"
-              style={{ backgroundImage: `url(${systemLogoUrl})` }}
-            />
-          </div>
-        ) : null}
-
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{companyName}</p>
         <h1 className="text-[34px] leading-[0.95] font-extrabold tracking-tight text-black">{systemNamePrimary || "Cincel"}</h1>
         {systemNameSecondary ? (
           <p className="text-[20px] leading-tight font-semibold text-black">{systemNameSecondary}</p>
         ) : null}
+
+        <div className="mt-6 flex items-center gap-3">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#2F63E7] text-[22px] font-bold text-white shadow-sm">
+            {currentProfileInitial || "D"}
+          </div>
+          <div>
+            <p className="text-[15px] font-semibold text-slate-800 leading-tight">{currentProfileRole}</p>
+            <p className="text-[10px] uppercase tracking-[0.1em] font-semibold text-slate-500">{currentProfileLabel}</p>
+          </div>
+        </div>
       </div>
 
       <div className="px-5 pb-4 border-b border-[#D9DEEA]">
-        <div className="flex items-center gap-2.5">
-          <Avatar name={currentProfileRole} showName={false} />
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.1em] font-semibold text-slate-500">{currentProfileRole}</p>
-          </div>
-        </div>
+        <div className="h-px w-full bg-transparent" />
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
@@ -311,6 +332,17 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="border-t border-[#D9DEEA] px-5 py-4 text-center">
+        <p className="text-[11px] font-medium leading-5 text-slate-600">
+          Software desarrollado por: Cincel despacho de Arquitectura
+        </p>
+        {versionLabel ? (
+          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            {versionLabel}
+          </p>
+        ) : null}
+      </div>
     </aside>
   );
 }

@@ -196,17 +196,17 @@ const CALENDAR_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, CalendarCapabiliti
   "Jefe de Taller": {
     canViewCalendar: true,
     canViewDailyAgenda: true,
-    canViewTeamCalendar: true,
+    canViewTeamCalendar: false,
   },
   "Jefe de Construcción": {
     canViewCalendar: true,
     canViewDailyAgenda: true,
-    canViewTeamCalendar: true,
+    canViewTeamCalendar: false,
   },
   "Arquitecto Senior": {
     canViewCalendar: true,
     canViewDailyAgenda: true,
-    canViewTeamCalendar: true,
+    canViewTeamCalendar: false,
   },
   "Arquitecto Junior": {
     canViewCalendar: true,
