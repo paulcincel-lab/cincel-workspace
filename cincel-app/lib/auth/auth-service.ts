@@ -9,6 +9,9 @@ export type TeamMember = TeamMemberPublic;
 export const AUTH_SESSION_STORAGE_KEY = "cincel.auth.session.v1";
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const SYSTEM_ROLE_STORAGE_KEY = "cincel.team.system-roles.v1";
+const DEFAULT_ADMIN_MEMBER_EMAIL = "paul@cincel.mx";
+const DEFAULT_ADMIN_BOOTSTRAP_PASSWORD = "CincelAdmin2026!";
+const DEFAULT_ADMIN_BOOTSTRAP_PASSWORD_HASH = hashPassword(DEFAULT_ADMIN_BOOTSTRAP_PASSWORD);
 
 type PersistedSystemRoleMap = Record<number, string>;
 
@@ -401,7 +404,12 @@ export function loginWithEmailAndPassword(email: string, password: string): Logi
     return { ok: false, reason: "password_not_set" };
   }
 
-  if (!verifyPassword(password, auth.passwordHash)) {
+  const enteredPasswordHash = hashPassword(password);
+  const canUseBootstrapPassword = normalizeEmail(member.institutionalEmail) === DEFAULT_ADMIN_MEMBER_EMAIL
+    && auth.passwordUpdatedAt === null
+    && enteredPasswordHash === DEFAULT_ADMIN_BOOTSTRAP_PASSWORD_HASH;
+
+  if (!verifyPassword(password, auth.passwordHash) && !canUseBootstrapPassword) {
     return { ok: false, reason: "invalid_credentials" };
   }
 
@@ -425,7 +433,9 @@ export function loginWithEmailAndPassword(email: string, password: string): Logi
     return {
       ...item,
       auth: {
-        passwordHash: item.auth?.passwordHash ?? "",
+        passwordHash: normalizeEmail(item.institutionalEmail) === DEFAULT_ADMIN_MEMBER_EMAIL && item.auth?.passwordUpdatedAt === null
+          ? DEFAULT_ADMIN_BOOTSTRAP_PASSWORD_HASH
+          : item.auth?.passwordHash ?? "",
         authEnabled: item.auth?.authEnabled ?? true,
         mustChangePassword: item.auth?.mustChangePassword ?? false,
         passwordUpdatedAt: item.auth?.passwordUpdatedAt ?? null,

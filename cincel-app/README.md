@@ -14,6 +14,8 @@ pnpm dev
 bun dev
 ```
 
+Note for GitHub Codespaces: `npm run dev` is intentionally configured to run `next dev --webpack` instead of Turbopack. Turbopack proved unstable in this remote container setup and caused intermittent development outages, so do not switch it back without re-validating Codespaces stability.
+
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
