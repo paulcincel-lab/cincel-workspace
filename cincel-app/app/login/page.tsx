@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { loginWithEmailAndPassword } from "@/lib/auth/auth-service";
 import { signInWithSupabase } from "@/lib/auth/supabase-auth";
 import { isSupabaseEnabled } from "@/lib/supabase/data-source";
-import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 
 type LoginDraft = {
   email: string;
@@ -27,10 +26,6 @@ export default function LoginPage() {
   const canSubmit = useMemo(() => {
     return Boolean(draft.email.trim() && draft.password.trim());
   }, [draft.email, draft.password]);
-
-  const showDirectorNotice = () => {
-    setSupportNotice("Contacta a tu Director");
-  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

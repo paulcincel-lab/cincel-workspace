@@ -10,6 +10,7 @@ import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
 import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
 import { isAdministratorRole } from "@/lib/data/roles";
+import { clearDashboardProfilePhoto, loadDashboardProfilePhoto, saveDashboardProfilePhoto } from "@/lib/auth/profile-photo";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 
 type HeaderProps = {
@@ -214,7 +215,7 @@ function resolveCurrentMember(members: TeamMember[], authenticatedMemberId: numb
     return byId;
   }
 
-  return members.find((member) => member.active) ?? teamMembers[0];
+  return members.find((member) => member.active) ?? teamMembersPublic[0];
 }
 
 export default function Header({ variant = "default" }: HeaderProps) {
