@@ -8,7 +8,7 @@ import Header from "@/components/layout/Header";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canCreateResourceInSection, canDeleteResourceInSection, canViewResourceSection, resolveResourcesCapabilities } from "@/lib/auth/permissions";
 import { RESOURCE_TEMPLATES } from "@/lib/data/resources";
-import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
 import { getTeamMembersSnapshot } from "@/lib/repositories/team-repository";
 import { fetchResourceLinks, saveResourceLinks, deleteResourceLink as deleteResourceLinkInDb } from "@/lib/repositories/resources-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
@@ -135,7 +135,7 @@ function loadTeamMembers(): TeamMember[] {
     return snapshot;
   }
 
-  return teamMembers;
+  return teamMembersPublic;
 }
 
 function createHistoryEntry(action: ResourceHistoryItem["action"], note: string): ResourceHistoryItem {

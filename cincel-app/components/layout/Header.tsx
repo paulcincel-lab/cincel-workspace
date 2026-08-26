@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 
 import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
-import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
 import { isAdministratorRole } from "@/lib/data/roles";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
@@ -150,23 +150,23 @@ function normalizeTeamMember(raw: TeamMember): TeamMember {
 
 function loadTeamMembers(): TeamMember[] {
   if (typeof window === "undefined") {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
   if (!stored) {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   try {
     const parsed = JSON.parse(stored) as TeamMember[];
     if (!Array.isArray(parsed)) {
-      return teamMembers;
+      return teamMembersPublic;
     }
 
     return parsed.map((member) => normalizeTeamMember(member));
   } catch {
-    return teamMembers;
+    return teamMembersPublic;
   }
 }
 
@@ -252,7 +252,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
       return byId;
     }
 
-    return members.find((member) => member.active) ?? teamMembers[0];
+    return members.find((member) => member.active) ?? teamMembersPublic[0];
   }, [authenticatedMemberId, isMounted, members]);
 
   const profileSubtitle = useMemo(() => {

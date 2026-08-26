@@ -1,6 +1,10 @@
 import { DEFAULT_SYSTEM_ACCESS_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, isLegacyBlockedAccessRole, normalizeSystemAccessRole, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, type SystemAccessRole } from "@/lib/data/roles";
-import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { teamMembersPublic, type TeamMemberPublic } from "@/lib/data/team-public";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+
+// TeamMember alias for backward-compatibility with callers that import this type
+// from auth-service. The auth layer only needs the public (non-PII) fields.
+export type TeamMember = TeamMemberPublic;
 
 export const AUTH_SESSION_STORAGE_KEY = "cincel.auth.session.v1";
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
@@ -90,25 +94,25 @@ export function hashPassword(password: string): string {
   return simpleHash(password.trim());
 }
 
-function loadMembers(): TeamMember[] {
+function loadMembers(): TeamMemberPublic[] {
   if (!canUseStorage()) {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
   if (!stored) {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   try {
-    const parsed = JSON.parse(stored) as TeamMember[];
-    return Array.isArray(parsed) ? parsed : teamMembers;
+    const parsed = JSON.parse(stored) as TeamMemberPublic[];
+    return Array.isArray(parsed) ? parsed : teamMembersPublic;
   } catch {
-    return teamMembers;
+    return teamMembersPublic;
   }
 }
 
-function persistMembers(members: TeamMember[]): void {
+function persistMembers(members: TeamMemberPublic[]): void {
   if (!canUseStorage()) {
     return;
   }
@@ -138,7 +142,7 @@ function loadSystemAccessMap(): PersistedSystemRoleMap {
   }
 }
 
-function resolveAccess(member: TeamMember, roleByMemberId: PersistedSystemRoleMap): SystemAccessRole | null {
+function resolveAccess(member: TeamMemberPublic, roleByMemberId: PersistedSystemRoleMap): SystemAccessRole | null {
   const configuredRaw = roleByMemberId[member.id];
 
   if (isLegacyBlockedAccessRole(configuredRaw)) {
@@ -174,7 +178,7 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export function getCollaboratorAccessState(member: TeamMember): CollaboratorAccessState {
+export function getCollaboratorAccessState(member: TeamMemberPublic): CollaboratorAccessState {
   const auth = member.auth;
   const hasPasswordHash = Boolean(auth?.passwordHash);
   const authEnabled = Boolean(auth?.authEnabled);
@@ -219,7 +223,7 @@ export function getCollaboratorAccessState(member: TeamMember): CollaboratorAcce
   };
 }
 
-function updateMemberAuth(memberId: number, updater: (current: TeamMember) => TeamMember): boolean {
+function updateMemberAuth(memberId: number, updater: (current: TeamMemberPublic) => TeamMemberPublic): boolean {
   const members = loadMembers();
   let updated = false;
 

@@ -21,7 +21,7 @@ import {
   SYSTEM_ADMIN_ROLE,
   type SystemAccessRole,
 } from "@/lib/data/roles";
-import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
@@ -68,19 +68,19 @@ const ACCESS_DESCRIPTIONS: Record<SystemAccessRole, string> = {
 
 function loadTeamMembers(): TeamMember[] {
   if (typeof window === "undefined") {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
   if (!stored) {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   try {
     const parsed = JSON.parse(stored) as TeamMember[];
-    return Array.isArray(parsed) ? parsed : teamMembers;
+    return Array.isArray(parsed) ? parsed : teamMembersPublic;
   } catch {
-    return teamMembers;
+    return teamMembersPublic;
   }
 }
 
@@ -119,7 +119,7 @@ function resolveMemberAccess(member: TeamMember, roleMap: Record<number, string>
 
 function toMockUser(access: SystemAccessRole): AuthenticatedUser {
   return {
-    member: teamMembers[0],
+    member: teamMembersPublic[0],
     email: "configuracion@cincel.mx",
     access,
   };

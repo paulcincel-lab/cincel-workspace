@@ -11,6 +11,7 @@
     "health:check:authenticated": "node scripts/health-check-authenticated.mjs"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.110.9",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",

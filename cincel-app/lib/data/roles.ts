@@ -16,7 +16,23 @@ type LegacyBlockedAccessRole = "Cliente";
 export const SYSTEM_ADMIN_ROLE = "Administrador" as const;
 export const DEFAULT_SYSTEM_ACCESS_ROLE: OfficialCincelRole = "Colaborador";
 export const SYSTEM_ACCESS_ROLES = OFFICIAL_CINCEL_ROLES;
-export const SYSTEM_ADMIN_MEMBER_EMAILS = ["paul@cincel.mx"] as const;
+/**
+ * Emails that receive automatic Administrador role escalation.
+ * Populated from the CINCEL_ADMIN_EMAILS environment variable
+ * (comma-separated, case-insensitive). Defaults to empty when unset.
+ *
+ * Example: CINCEL_ADMIN_EMAILS=paul@cincel.mx,juanma@cincel.mx
+ *
+ * This value is server-side only (no NEXT_PUBLIC_ prefix). Client code must not
+ * rely on this list directly — role resolution happens in auth-service.ts using
+ * the session data returned by Supabase Auth or the localstorage path.
+ */
+export const SYSTEM_ADMIN_MEMBER_EMAILS: readonly string[] = (
+  process.env.CINCEL_ADMIN_EMAILS ?? ""
+)
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 
 export type SystemAccessRole = (typeof SYSTEM_ACCESS_ROLES)[number];
 
@@ -52,7 +68,7 @@ export function hasDefaultSystemAdministratorAccess(email: string | null | undef
     return false;
   }
 
-  return SYSTEM_ADMIN_MEMBER_EMAILS.includes(normalized as (typeof SYSTEM_ADMIN_MEMBER_EMAILS)[number]);
+  return SYSTEM_ADMIN_MEMBER_EMAILS.includes(normalized);
 }
 
 export function isOfficialCincelRole(role: string | null | undefined): role is OfficialCincelRole {
