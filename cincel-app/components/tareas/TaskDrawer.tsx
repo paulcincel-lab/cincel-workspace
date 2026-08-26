@@ -1,19 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { Task } from "@/lib/types/task";
 import { formatDateDMY } from "@/lib/utils/date";
+import DialogOverlay from "@/components/ui/DialogOverlay";
 
 type Props = {
   task: Task | null;
   teamMembers: string[];
   onClose: () => void;
   onSave: (task: Task) => void;
+  /** Ref to the trigger element so focus returns on close. */
+  triggerRef?: React.RefObject<HTMLElement | null>;
 };
 
-export default function TaskDrawer({ task, onClose, onSave }: Props) {
+export default function TaskDrawer({ task, onClose, onSave, triggerRef }: Props) {
   const [newNote, setNewNote] = useState("");
+  const ownTriggerRef = useRef<HTMLElement | null>(null);
 
   const sortedHistory = useMemo(() => {
     if (!task) {
@@ -59,7 +63,12 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-end z-50">
-      <div className="w-[560px] h-full bg-white overflow-y-auto shadow-xl">
+      <DialogOverlay
+        label={`Detalle de tarea: ${task.description}`}
+        onClose={onClose}
+        triggerRef={triggerRef ?? ownTriggerRef}
+        className="w-[560px] h-full bg-white overflow-y-auto shadow-xl"
+      >
         <div className="border-b p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -172,7 +181,7 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
             Cerrar
           </button>
         </div>
-      </div>
+      </DialogOverlay>
     </div>
   );
 }

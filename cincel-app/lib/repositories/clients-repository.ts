@@ -50,7 +50,12 @@ export function getClientsSnapshot(): ManualClient[] {
 
 // ── Fetch (async) ─────────────────────────────────────────────────────────────
 
-export async function fetchClients(): Promise<ManualClient[]> {
+type PaginationParams = {
+  limit?: number;
+  offset?: number;
+};
+
+export async function fetchClients(pagination?: PaginationParams): Promise<ManualClient[]> {
   if (!isSupabaseEnabled()) {
     return getClientsSnapshot();
   }
@@ -61,7 +66,7 @@ export async function fetchClients(): Promise<ManualClient[]> {
     return getClientsSnapshot();
   }
 
-  const { data, error } = await client
+  let query = client
     .schema("core")
     .from("clients")
     .select(
@@ -74,6 +79,14 @@ export async function fetchClients(): Promise<ManualClient[]> {
     )
     .is("deleted_at", null)
     .order("name");
+
+  if (pagination?.limit !== undefined && pagination?.offset !== undefined) {
+    query = query.range(pagination.offset, pagination.offset + pagination.limit - 1);
+  } else if (pagination?.limit !== undefined) {
+    query = query.limit(pagination.limit);
+  }
+
+  const { data, error } = await query;
 
   if (error || !data) {
     throw new SupabaseOperationError(

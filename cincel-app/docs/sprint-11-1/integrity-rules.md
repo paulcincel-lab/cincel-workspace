@@ -39,6 +39,11 @@
 3. `collaborator_skills.collaborator_id` debe existir en `collaborator_providers.id`.
 4. `store_categories.store_id` debe existir en `stores.id`.
 
+### Recursos (resource_links)
+1. `resource_links.id` usa `text primary key` en vez del UUID convencional — excepción documentada e intencional.
+   - **Razón**: los IDs son claves naturales estables generadas por la aplicación a partir de la plantilla que los origina (e.g. `"documentos_mis_documentos"`, `"personal_mis_documentos_<legacyId>"`). Esto permite hacer `upsert({ onConflict: "id" })` de forma idempotente sin necesidad de consultar primero la DB, y mantiene la correspondencia 1:1 entre plantilla y registro de forma legible.
+   - **No se migra a UUID**: cambiar a UUID rompería la lógica de instanciación de plantillas y el upsert idempotente del repositorio. Si en el futuro se necesita un identificador opaco se puede agregar una columna `uid uuid default gen_random_uuid()` sin tocar la PK.
+
 ## RLS inicial
 1. Todas las tablas del modelo activan RLS.
 2. Politica inicial: lectura/escritura para rol autenticado.
