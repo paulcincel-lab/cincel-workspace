@@ -127,12 +127,16 @@ export default function TareasPage() {
   const [construccionTasksState, setConstruccionTasksState] = useState<Task[]>(() =>
     loadPersistedTasks("Construcción", getFallbackTasks("Construcción"))
   );
+  const [isLoadingData, setIsLoadingData] = useState(() => isSupabaseEnabled());
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     // Async hydration from Supabase when the data source is configured for it.
     // The individual workflow pages (PresaleTable) do their own per-page fetch;
     // this aggregate view needs its own hydration so it shows live data too.
     const hydrateFromSupabase = async () => {
+      setIsLoadingData(true);
+      setFetchError(null);
       try {
         const [presale, diseno, construccion] = await Promise.all([
           fetchActivities("Presale"),
@@ -143,7 +147,12 @@ export default function TareasPage() {
         setDisenoTasksState(diseno);
         setConstruccionTasksState(construccion);
       } catch (err) {
-        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+        if (err instanceof SupabaseOperationError) {
+          reportSupabaseError(err);
+          setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
+        }
+      } finally {
+        setIsLoadingData(false);
       }
     };
 
@@ -487,6 +496,22 @@ export default function TareasPage() {
       <section className="flex-1 overflow-y-auto p-10">
 
         <Header />
+
+        {isLoadingData && (
+          <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            Sincronizando actividades con el servidor...
+          </div>
+        )}
+        {fetchError && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 shrink-0">&#9888;</span>
+            {fetchError}
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
 
