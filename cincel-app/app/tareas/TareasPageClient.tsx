@@ -129,30 +129,43 @@ export default function TareasPage() {
   );
 
   useEffect(() => {
-    const refreshProjects = () => {
-      setProjectsData(loadPersistedProjects());
-      setAuthenticatedUser(getCurrentAuthenticatedUser());
-    };
-
     // Async hydration from Supabase when the data source is configured for it.
     // The individual workflow pages (PresaleTable) do their own per-page fetch;
     // this aggregate view needs its own hydration so it shows live data too.
+    const hydrateFromSupabase = async () => {
+      try {
+        const [presale, diseno, construccion] = await Promise.all([
+          fetchActivities("Presale"),
+          fetchActivities("Diseño"),
+          fetchActivities("Construcción"),
+        ]);
+        setPresaleTasksState(presale);
+        setDisenoTasksState(diseno);
+        setConstruccionTasksState(construccion);
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      }
+    };
+
+    const refreshProjects = () => {
+      setProjectsData(loadPersistedProjects());
+      setAuthenticatedUser(getCurrentAuthenticatedUser());
+
+      if (isSupabaseEnabled()) {
+        void hydrateFromSupabase();
+      } else {
+        // localStorage mode: task state is now cached in React state rather
+        // than re-read inline on every render, so cross-tab/focus changes
+        // need an explicit re-read to stay in sync (matches the previous
+        // behavior, which re-read localStorage on every render).
+        setPresaleTasksState(loadPersistedTasks("Presale", getFallbackTasks("Presale")));
+        setDisenoTasksState(loadPersistedTasks("Diseño", getFallbackTasks("Diseño")));
+        setConstruccionTasksState(loadPersistedTasks("Construcción", getFallbackTasks("Construcción")));
+      }
+    };
+
     if (isSupabaseEnabled()) {
-      const hydrate = async () => {
-        try {
-          const [presale, diseno, construccion] = await Promise.all([
-            fetchActivities("Presale"),
-            fetchActivities("Diseño"),
-            fetchActivities("Construcción"),
-          ]);
-          setPresaleTasksState(presale);
-          setDisenoTasksState(diseno);
-          setConstruccionTasksState(construccion);
-        } catch (err) {
-          if (err instanceof SupabaseOperationError) reportSupabaseError(err);
-        }
-      };
-      void hydrate();
+      void hydrateFromSupabase();
     }
 
     window.addEventListener("focus", refreshProjects);

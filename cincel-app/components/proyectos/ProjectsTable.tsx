@@ -386,7 +386,11 @@ export default function ProjectsTable() {
 
     saveTimerRef.current = setTimeout(() => {
       lastSavedRef.current = projectsData;
-      saveProjects(projectsData).catch((err: unknown) => {
+      // Supabase upserts by legacy_id, so only the rows that actually changed
+      // need to go out. localStorage has no partial-write semantics, though —
+      // it's a single JSON snapshot — so it always needs the full array.
+      const payload = isSupabaseEnabled() ? changed : projectsData;
+      saveProjects(payload).catch((err: unknown) => {
         if (err instanceof SupabaseOperationError) reportSupabaseError(err);
       });
     }, 800);
