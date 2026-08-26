@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { TaskStatus } from "@/lib/types/task";
+import DialogOverlay from "@/components/ui/DialogOverlay";
 
 type TaskFormValues = {
   project: string;
@@ -21,6 +22,8 @@ type Props = {
   phaseOptions: string[];
   onClose: () => void;
   onSave: (task: TaskFormValues) => void;
+  /** Ref to the trigger element so focus returns on close. */
+  triggerRef?: React.RefObject<HTMLElement | null>;
 };
 
 export default function NewTaskModal({
@@ -30,6 +33,7 @@ export default function NewTaskModal({
   phaseOptions,
   onClose,
   onSave,
+  triggerRef,
 }: Props) {
   const [project, setProject] = useState(projects[0] ?? "Ensenada");
   const [phase, setPhase] = useState(phaseOptions[0] ?? "Inicial");
@@ -74,7 +78,12 @@ export default function NewTaskModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-[700px] shadow-xl text-black">
+      <DialogOverlay
+        label="Nueva tarea"
+        onClose={onClose}
+        triggerRef={triggerRef}
+        className="bg-white rounded-2xl w-[700px] shadow-xl text-black"
+      >
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold text-black">Nueva tarea</h2>
@@ -199,7 +208,7 @@ export default function NewTaskModal({
             Guardar
           </button>
         </div>
-      </div>
+      </DialogOverlay>
     </div>
   );
 }

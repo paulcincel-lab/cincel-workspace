@@ -96,7 +96,12 @@ export function getTeamMembersSnapshot(): TeamMember[] {
 
 // ── Fetch (async) ─────────────────────────────────────────────────────────────
 
-export async function fetchTeamMembers(): Promise<TeamMember[]> {
+type PaginationParams = {
+  limit?: number;
+  offset?: number;
+};
+
+export async function fetchTeamMembers(pagination?: PaginationParams): Promise<TeamMember[]> {
   if (!isSupabaseEnabled()) {
     return getTeamMembersSnapshot();
   }
@@ -107,7 +112,7 @@ export async function fetchTeamMembers(): Promise<TeamMember[]> {
     return getTeamMembersSnapshot();
   }
 
-  const { data, error } = await client
+  let query = client
     .schema("core")
     .from("team_members")
     .select(
@@ -119,6 +124,14 @@ export async function fetchTeamMembers(): Promise<TeamMember[]> {
     )
     .is("deleted_at", null)
     .order("name");
+
+  if (pagination?.limit !== undefined && pagination?.offset !== undefined) {
+    query = query.range(pagination.offset, pagination.offset + pagination.limit - 1);
+  } else if (pagination?.limit !== undefined) {
+    query = query.limit(pagination.limit);
+  }
+
+  const { data, error } = await query;
 
   if (error || !data) {
     throw new SupabaseOperationError(

@@ -133,7 +133,12 @@ export function getProjectsSnapshot(): Project[] {
 
 // ── Fetch (async, Supabase primary / localStorage solo si no configurado) ────
 
-export async function fetchProjects(): Promise<Project[]> {
+type PaginationParams = {
+  limit?: number;
+  offset?: number;
+};
+
+export async function fetchProjects(pagination?: PaginationParams): Promise<Project[]> {
   if (!isSupabaseEnabled()) {
     return getProjectsSnapshot();
   }
@@ -145,7 +150,7 @@ export async function fetchProjects(): Promise<Project[]> {
     return getProjectsSnapshot();
   }
 
-  const { data, error } = await client
+  let query = client
     .schema("core")
     .from("projects")
     .select(
@@ -166,6 +171,14 @@ export async function fetchProjects(): Promise<Project[]> {
     )
     .is("deleted_at", null)
     .order("name");
+
+  if (pagination?.limit !== undefined && pagination?.offset !== undefined) {
+    query = query.range(pagination.offset, pagination.offset + pagination.limit - 1);
+  } else if (pagination?.limit !== undefined) {
+    query = query.limit(pagination.limit);
+  }
+
+  const { data, error } = await query;
 
   // Supabase habilitado pero falla → error explícito, sin fallback silencioso
   if (error || !data) {

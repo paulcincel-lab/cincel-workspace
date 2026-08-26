@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# backups — binary archives must live in external storage (Drive/bucket), not git
+backups/*.tar.gz

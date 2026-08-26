@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -330,9 +331,12 @@ export default function GeneralSettingsWorkspace() {
                       />
                       {settings.company.logoUrl ? (
                         <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                          <img
+                          <Image
                             src={settings.company.logoUrl}
                             alt="Vista previa del logotipo de la empresa"
+                            width={48}
+                            height={48}
+                            unoptimized
                             className="h-12 w-12 rounded-md object-contain"
                           />
                           <div>
@@ -411,9 +415,12 @@ export default function GeneralSettingsWorkspace() {
                       />
                       {settings.appearance.systemLogoUrl ? (
                         <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                          <img
+                          <Image
                             src={settings.appearance.systemLogoUrl}
                             alt="Vista previa del logo del sistema"
+                            width={48}
+                            height={48}
+                            unoptimized
                             className="h-12 w-12 rounded-md object-contain"
                           />
                           <div>
