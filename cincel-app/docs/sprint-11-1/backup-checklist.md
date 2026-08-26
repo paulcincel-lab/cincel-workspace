@@ -27,4 +27,10 @@ Estos archivos son solo respaldo. NO se importan automaticamente a PostgreSQL en
 5. Registrar checksum SHA256 en backups/sprint-11-1/manifest.md.
 
 ## Nota
-Este respaldo es control operativo previo a la migracion tecnica de 11.2 y 11.3.
+Este respaldo es control operativo previo a la migración técnica de 11.2 y 11.3.
+
+**Este procedimiento es una red de seguridad suplementaria, no el plan primario de recuperación ante desastres.**
+No captura datos en tiempo real, no permite restauración automatizada y no cubre tablas sin exportación en la UI.
+
+Una vez que el proyecto de Supabase de producción esté aprovisionado, se debe activar Point-in-Time Recovery (PITR)
+o un `pg_dump` programado como estrategia principal de backup. Ver `docs/backup-recovery.md` para el runbook completo.

@@ -190,3 +190,23 @@ Categorias multivalor de tiendas.
 - category (text)
 - sort_order (int)
 - created_at, updated_at, deleted_at
+
+### resource_links
+Links de recursos por plantilla y sección (módulo Recursos). Agregado en Sprint 11.2.
+
+> **Excepción de PK:** `id` es `text primary key` en lugar de `uuid`. Los IDs son claves naturales estables generadas por la aplicación a partir de la plantilla que los origina (p. ej. `"documentos_mis_documentos"`, `"personal_mis_documentos_<legacyId>"`). Esto permite hacer `upsert({ onConflict: "id" })` de forma idempotente sin necesidad de consultar primero la base de datos. Ver `docs/sprint-11-1/integrity-rules.md` §Recursos para la justificación completa.
+
+- id (text, pk) — clave natural generada por la app
+- template_key (text, not null) — identificador de la plantilla que originó el registro
+- title (text, not null) — título visible del link
+- section (text, not null) — sección del módulo; valores permitidos: `mis-documentos`, `mis-favoritos`, `plantillas-diseno`, `formatos-obra`, `mis-vacaciones`, `formacion`, `empresa`
+- subsection (text, nullable) — subsección opcional; valores permitidos: `diseno`, `construccion`
+- link_type (text, not null) — tipo de enlace; valores permitidos: `drive_folder`, `drive_file`, `web`
+- applies_to (text, not null) — ámbito de aplicación; valores permitidos: `general`, `diseno`, `construccion`, `ambos`
+- url (text, not null) — URL del recurso
+- status (text, not null, default `'vigente'`) — valores permitidos: `vigente`, `obsoleto`
+- owner_team_member_legacy_id (bigint, nullable) — legacy_id del miembro propietario del recurso
+- personal_for_team_member_legacy_id (bigint, nullable) — legacy_id del miembro cuando el recurso es personal
+- updated_at_label (text, nullable) — etiqueta legible de última actualización (p. ej. "Hoy")
+- history (jsonb, not null, default `'[]'`) — bitácora de cambios del link
+- created_at, updated_at, deleted_at
