@@ -364,6 +364,8 @@ export default function ProjectsTable() {
   const [activeNoteProjectId, setActiveNoteProjectId] = useState<number | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [inlineEditingCell, setInlineEditingCell] = useState<{ projectId: number; field: "design" | "construction" } | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState(() => isSupabaseEnabled());
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Tracks the last version that was actually persisted so we only send rows
   // that have genuinely changed (diff) and can skip no-op renders.
@@ -417,6 +419,8 @@ export default function ProjectsTable() {
     // the freshly-fetched data as the baseline and does not immediately re-save
     // it back to Supabase.
     const hydrate = async () => {
+      setIsLoadingData(true);
+      setFetchError(null);
       try {
         const remote = await fetchProjects();
         if (remote.length > 0) {
@@ -426,7 +430,10 @@ export default function ProjectsTable() {
       } catch (err) {
         if (err instanceof SupabaseOperationError) {
           reportSupabaseError(err);
+          setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
         }
+      } finally {
+        setIsLoadingData(false);
       }
     };
     void hydrate();
@@ -886,6 +893,21 @@ export default function ProjectsTable() {
 
   return (
     <div className="space-y-6">
+      {isLoadingData && (
+        <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          Sincronizando proyectos con el servidor...
+        </div>
+      )}
+      {fetchError && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span className="mt-0.5 shrink-0">&#9888;</span>
+          {fetchError}
+        </div>
+      )}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
