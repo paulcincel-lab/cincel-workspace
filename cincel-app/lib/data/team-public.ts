@@ -44,7 +44,9 @@ export const teamMembersPublic: TeamMemberPublic[] = [
   {
     id: 2,
     name: "Paul",
-    role: "Lider Comercial",
+    // TEMPORARY test-only account: Administrador access for manual/QA testing.
+    // Remove this override once real Supabase Auth + role management is in place.
+    role: "Administrador",
     area: "Presale",
     capacity: 8,
     availability: "Disponible",
@@ -53,10 +55,12 @@ export const teamMembersPublic: TeamMemberPublic[] = [
     phone: "+52 646 222 3344",
     auth: {
       // FNV-1a hash of "Temporal123" (see simpleHash in lib/auth/auth-service.ts).
+      // TEMPORARY test credential — do not use in a real production dataset.
       passwordHash: "7ea376fd",
       authEnabled: true,
-      mustChangePassword: true,
-      passwordUpdatedAt: null,
+      // TEMPORARY: forced first-access password change disabled for QA convenience.
+      mustChangePassword: false,
+      passwordUpdatedAt: "2026-01-01T00:00:00.000Z",
       lastLoginAt: null,
     },
   },
