@@ -19,8 +19,9 @@ import { formatDateDMY } from "@/lib/utils/date";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
-import { saveActivities } from "@/lib/repositories/activities-repository";
+import { fetchActivities, saveActivities } from "@/lib/repositories/activities-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { isSupabaseEnabled } from "@/lib/supabase/data-source";
 
 const TASK_STATUSES: TaskStatus[] = ["Pendiente", "En proceso", "Completado", "Bloqueado"];
 const TEAM_MEMBERS = [
@@ -115,15 +116,57 @@ export default function TareasPage() {
   const [sortBy, setSortBy] = useState<"etapa" | "compromiso" | "estatus">("compromiso");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [responsableFilter, setResponsableFilter] = useState("Todos");
-  const [, setTasksVersion] = useState(0);
   const [projectsData, setProjectsData] = useState(() => loadPersistedProjects());
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const [presaleTasksState, setPresaleTasksState] = useState<Task[]>(() =>
+    loadPersistedTasks("Presale", getFallbackTasks("Presale"))
+  );
+  const [disenoTasksState, setDisenoTasksState] = useState<Task[]>(() =>
+    loadPersistedTasks("Diseño", getFallbackTasks("Diseño"))
+  );
+  const [construccionTasksState, setConstruccionTasksState] = useState<Task[]>(() =>
+    loadPersistedTasks("Construcción", getFallbackTasks("Construcción"))
+  );
 
   useEffect(() => {
+    // Async hydration from Supabase when the data source is configured for it.
+    // The individual workflow pages (PresaleTable) do their own per-page fetch;
+    // this aggregate view needs its own hydration so it shows live data too.
+    const hydrateFromSupabase = async () => {
+      try {
+        const [presale, diseno, construccion] = await Promise.all([
+          fetchActivities("Presale"),
+          fetchActivities("Diseño"),
+          fetchActivities("Construcción"),
+        ]);
+        setPresaleTasksState(presale);
+        setDisenoTasksState(diseno);
+        setConstruccionTasksState(construccion);
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      }
+    };
+
     const refreshProjects = () => {
       setProjectsData(loadPersistedProjects());
       setAuthenticatedUser(getCurrentAuthenticatedUser());
+
+      if (isSupabaseEnabled()) {
+        void hydrateFromSupabase();
+      } else {
+        // localStorage mode: task state is now cached in React state rather
+        // than re-read inline on every render, so cross-tab/focus changes
+        // need an explicit re-read to stay in sync (matches the previous
+        // behavior, which re-read localStorage on every render).
+        setPresaleTasksState(loadPersistedTasks("Presale", getFallbackTasks("Presale")));
+        setDisenoTasksState(loadPersistedTasks("Diseño", getFallbackTasks("Diseño")));
+        setConstruccionTasksState(loadPersistedTasks("Construcción", getFallbackTasks("Construcción")));
+      }
     };
+
+    if (isSupabaseEnabled()) {
+      void hydrateFromSupabase();
+    }
 
     window.addEventListener("focus", refreshProjects);
     window.addEventListener("storage", refreshProjects);
@@ -158,13 +201,24 @@ export default function TareasPage() {
     return sortDirection === "asc" ? "(asc)" : "(desc)";
   };
 
+  function getTasksForWorkflow(workflow: WorkflowType): Task[] {
+    if (workflow === "Presale") return presaleTasksState;
+    if (workflow === "Diseño") return disenoTasksState;
+    return construccionTasksState;
+  }
+
+  function setTasksForWorkflow(workflow: WorkflowType, tasks: Task[]): void {
+    if (workflow === "Presale") setPresaleTasksState(tasks);
+    else if (workflow === "Diseño") setDisenoTasksState(tasks);
+    else setConstruccionTasksState(tasks);
+  }
+
   const updateTaskInline = (
     workflow: WorkflowType,
     taskId: number,
     changes: Partial<Pick<Task, "status" | "manager" | "commitmentDate" | "reviewDate" | "deliveryDate">>
   ) => {
-    const fallbackTasks = getFallbackTasks(workflow);
-    const currentTasks = loadPersistedTasks(workflow, fallbackTasks);
+    const currentTasks = getTasksForWorkflow(workflow);
 
     const updatedTasks = currentTasks.map((task) =>
       task.id === taskId
@@ -176,10 +230,10 @@ export default function TareasPage() {
         : task
     );
 
+    setTasksForWorkflow(workflow, updatedTasks);
     saveActivities(workflow, updatedTasks).catch((err: unknown) => {
       if (err instanceof SupabaseOperationError) reportSupabaseError(err);
     });
-    setTasksVersion((value) => value + 1);
   };
 
   const getDeliveryDate = (task: Task): string => {
@@ -191,21 +245,21 @@ export default function TareasPage() {
       title: "Presale",
       workflow: "Presale" as WorkflowType,
       href: "/tareas/presale",
-      tasks: loadPersistedTasks("Presale", getFallbackTasks("Presale")),
+      tasks: presaleTasksState,
       toneClassName: "border-blue-100 bg-blue-50/40",
     },
     {
       title: "Taller de Diseño",
       workflow: "Diseño" as WorkflowType,
       href: "/tareas/diseno",
-      tasks: loadPersistedTasks("Diseño", getFallbackTasks("Diseño")),
+      tasks: disenoTasksState,
       toneClassName: "border-emerald-100 bg-emerald-50/40",
     },
     {
       title: "Construcción",
       workflow: "Construcción" as WorkflowType,
       href: "/tareas/construccion",
-      tasks: loadPersistedTasks("Construcción", getFallbackTasks("Construcción")),
+      tasks: construccionTasksState,
       toneClassName: "border-amber-100 bg-amber-50/40",
     },
   ].map((stage) => {
