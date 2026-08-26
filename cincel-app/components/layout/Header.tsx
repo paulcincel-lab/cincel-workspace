@@ -8,9 +8,9 @@ import { useRouter } from "next/navigation";
 
 import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
-import { clearDashboardProfilePhoto, loadDashboardProfilePhoto, saveDashboardProfilePhoto } from "@/lib/auth/profile-photo";
-import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
 import { isAdministratorRole } from "@/lib/data/roles";
+import { clearDashboardProfilePhoto, loadDashboardProfilePhoto, saveDashboardProfilePhoto } from "@/lib/auth/profile-photo";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 
 type HeaderProps = {
@@ -159,23 +159,23 @@ function normalizeTeamMember(raw: TeamMember): TeamMember {
 
 function loadTeamMembers(): TeamMember[] {
   if (typeof window === "undefined") {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
   if (!stored) {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   try {
     const parsed = JSON.parse(stored) as TeamMember[];
     if (!Array.isArray(parsed)) {
-      return teamMembers;
+      return teamMembersPublic;
     }
 
     return parsed.map((member) => normalizeTeamMember(member));
   } catch {
-    return teamMembers;
+    return teamMembersPublic;
   }
 }
 
@@ -215,7 +215,7 @@ function resolveCurrentMember(members: TeamMember[], authenticatedMemberId: numb
     return byId;
   }
 
-  return members.find((member) => member.active) ?? teamMembers[0];
+  return members.find((member) => member.active) ?? teamMembersPublic[0];
 }
 
 export default function Header({ variant = "default" }: HeaderProps) {
@@ -269,7 +269,20 @@ export default function Header({ variant = "default" }: HeaderProps) {
       return null;
     }
 
-    return resolveCurrentMember(members, authenticatedMemberId);
+    const byAuth = authenticatedMemberId
+      ? members.find((member) => member.id === authenticatedMemberId && member.active)
+      : null;
+
+    if (byAuth) {
+      return byAuth;
+    }
+
+    const byId = members.find((member) => member.id === FALLBACK_USER_ID && member.active);
+    if (byId) {
+      return byId;
+    }
+
+    return members.find((member) => member.active) ?? teamMembersPublic[0];
   }, [authenticatedMemberId, isMounted, members]);
 
   const profileSubtitle = useMemo(() => {

@@ -11,7 +11,7 @@ import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { projects } from "@/lib/data/projects";
-import { teamMembers } from "@/lib/data/team";
+import { teamMembersPublic as teamMembers } from "@/lib/data/team-public";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";

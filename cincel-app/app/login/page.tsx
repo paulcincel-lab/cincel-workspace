@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { loginWithEmailAndPassword } from "@/lib/auth/auth-service";
+import { signInWithSupabase } from "@/lib/auth/supabase-auth";
+import { isSupabaseEnabled } from "@/lib/supabase/data-source";
 
 type LoginDraft = {
   email: string;
@@ -25,11 +27,27 @@ export default function LoginPage() {
     return Boolean(draft.email.trim() && draft.password.trim());
   }, [draft.email, draft.password]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setHelpMessage("");
 
+    // Production path: delegate authentication to Supabase Auth.
+    if (isSupabaseEnabled()) {
+      const result = await signInWithSupabase(draft.email, draft.password);
+      if (!result.ok) {
+        if (result.reason === "supabase_not_configured") {
+          setError("El servicio de autenticación no está configurado. Contacta a soporte.");
+          return;
+        }
+        setError("Correo o contraseña incorrectos.");
+        return;
+      }
+      router.replace("/dashboard");
+      return;
+    }
+
+    // Development / localstorage path: local hash-based authentication.
     const result = loginWithEmailAndPassword(draft.email, draft.password);
     if (!result.ok) {
       if (result.reason === "inactive_member") {

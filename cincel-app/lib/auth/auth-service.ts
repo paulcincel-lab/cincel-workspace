@@ -1,6 +1,13 @@
 import { DEFAULT_SYSTEM_ACCESS_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, isLegacyBlockedAccessRole, normalizeSystemAccessRole, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, type SystemAccessRole } from "@/lib/data/roles";
-import { teamMembers, type TeamMember } from "@/lib/data/team";
+import { teamMembersPublic, type TeamMemberPublic } from "@/lib/data/team-public";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+import { signOutFromSupabase } from "@/lib/auth/supabase-auth";
+import { getCachedSupabaseUser } from "@/lib/supabase/client";
+import { isSupabaseEnabled } from "@/lib/supabase/data-source";
+
+// TeamMember alias for backward-compatibility with callers that import this type
+// from auth-service. The auth layer only needs the public (non-PII) fields.
+export type TeamMember = TeamMemberPublic;
 
 export const AUTH_SESSION_STORAGE_KEY = "cincel.auth.session.v1";
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
@@ -93,25 +100,25 @@ export function hashPassword(password: string): string {
   return simpleHash(password.trim());
 }
 
-function loadMembers(): TeamMember[] {
+function loadMembers(): TeamMemberPublic[] {
   if (!canUseStorage()) {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
   if (!stored) {
-    return teamMembers;
+    return teamMembersPublic;
   }
 
   try {
-    const parsed = JSON.parse(stored) as TeamMember[];
-    return Array.isArray(parsed) ? parsed : teamMembers;
+    const parsed = JSON.parse(stored) as TeamMemberPublic[];
+    return Array.isArray(parsed) ? parsed : teamMembersPublic;
   } catch {
-    return teamMembers;
+    return teamMembersPublic;
   }
 }
 
-function persistMembers(members: TeamMember[]): void {
+function persistMembers(members: TeamMemberPublic[]): void {
   if (!canUseStorage()) {
     return;
   }
@@ -141,7 +148,7 @@ function loadSystemAccessMap(): PersistedSystemRoleMap {
   }
 }
 
-function resolveAccess(member: TeamMember, roleByMemberId: PersistedSystemRoleMap): SystemAccessRole | null {
+function resolveAccess(member: TeamMemberPublic, roleByMemberId: PersistedSystemRoleMap): SystemAccessRole | null {
   const configuredRaw = roleByMemberId[member.id];
 
   if (isLegacyBlockedAccessRole(configuredRaw)) {
@@ -177,7 +184,7 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export function getCollaboratorAccessState(member: TeamMember): CollaboratorAccessState {
+export function getCollaboratorAccessState(member: TeamMemberPublic): CollaboratorAccessState {
   const auth = member.auth;
   const hasPasswordHash = Boolean(auth?.passwordHash);
   const authEnabled = Boolean(auth?.authEnabled);
@@ -222,7 +229,7 @@ export function getCollaboratorAccessState(member: TeamMember): CollaboratorAcce
   };
 }
 
-function updateMemberAuth(memberId: number, updater: (current: TeamMember) => TeamMember): boolean {
+function updateMemberAuth(memberId: number, updater: (current: TeamMemberPublic) => TeamMemberPublic): boolean {
   const members = loadMembers();
   let updated = false;
 
@@ -265,7 +272,49 @@ export function getCurrentSession(): AuthSession | null {
   }
 }
 
+// Resolves the authenticated user from the real Supabase Auth session
+// (client-side cached, see lib/supabase/client.ts) instead of the
+// localStorage-based AuthSession. The Supabase user's email is matched
+// against teamMembersPublic (institutionalEmail) the same way the
+// localstorage path matches by collaboratorId, and access is resolved via
+// the same resolveAccess() logic so permissions behave identically in both
+// data-source modes.
+function resolveSupabaseSessionAccess(): SessionAccessResolution {
+  const supabaseUser = getCachedSupabaseUser();
+  const email = supabaseUser?.email;
+  if (!email) {
+    return { status: "guest", user: null };
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const members = loadMembers();
+  const roleByMemberId = loadSystemAccessMap();
+  const member = members.find((item) => normalizeEmail(item.institutionalEmail || "") === normalizedEmail);
+
+  if (!member) {
+    return { status: "guest", user: null };
+  }
+
+  if (!member.active) {
+    return { status: "inactive_member", user: null };
+  }
+
+  const access = resolveAccess(member, roleByMemberId);
+  if (!access) {
+    return { status: "no_system_access", user: null };
+  }
+
+  return {
+    status: "active",
+    user: { member, email: normalizedEmail, access },
+  };
+}
+
 export function getCurrentAuthenticatedUser(): AuthenticatedUser | null {
+  if (isSupabaseEnabled()) {
+    return resolveSupabaseSessionAccess().user;
+  }
+
   const session = getCurrentSession();
   if (!session) {
     return null;
@@ -298,6 +347,10 @@ export function getCurrentAuthenticatedMember(): TeamMember | null {
 }
 
 export function resolveCurrentSessionAccess(): SessionAccessResolution {
+  if (isSupabaseEnabled()) {
+    return resolveSupabaseSessionAccess();
+  }
+
   if (!canUseStorage()) {
     return { status: "guest", user: null };
   }
@@ -537,6 +590,15 @@ export function changeCurrentUserPassword(currentPassword: string, newPassword: 
 }
 
 export function logout(): void {
+  if (isSupabaseEnabled()) {
+    // Fire-and-forget: signOutFromSupabase() clears the cached Supabase user
+    // synchronously before awaiting the network sign-out call, so callers
+    // that call logout() synchronously (e.g. a header button's onClick) see
+    // the logged-out state immediately.
+    void signOutFromSupabase();
+    return;
+  }
+
   if (!canUseStorage()) {
     return;
   }
