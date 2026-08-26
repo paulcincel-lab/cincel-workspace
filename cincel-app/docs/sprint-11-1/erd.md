@@ -273,4 +273,25 @@ erDiagram
     timestamptz updated_at
     timestamptz deleted_at
   }
+
+  resource_links {
+    text id PK
+    text template_key
+    text title
+    text section
+    text subsection
+    text link_type
+    text applies_to
+    text url
+    text status
+    bigint owner_team_member_legacy_id
+    bigint personal_for_team_member_legacy_id
+    text updated_at_label
+    jsonb history
+    timestamptz created_at
+    timestamptz updated_at
+    timestamptz deleted_at
+  }
 ```
+
+> Nota: `resource_links.id` es `text primary key` en lugar de `uuid` — excepción intencional. Ver `docs/sprint-11-1/integrity-rules.md` §Recursos para la justificación completa.

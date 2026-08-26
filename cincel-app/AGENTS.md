@@ -23,10 +23,16 @@ Este proyecto está basado en Next.js con React y sigue una estructura simple y 
   - proyectos/: componentes relacionados con proyectos.
   - tareas/: componentes para tareas y flujos operativos.
   - ui/: elementos de interfaz reutilizables como Avatar y Badge.
-- lib/: lógica de datos, mocks y utilidades.
-  - data/: datos mock utilizados por la aplicación.
-  - templates/: plantillas auxiliares.
-  - types/: tipos de TypeScript.
+- lib/: lógica de negocio, acceso a datos y utilidades.
+  - auth/: servicio de autenticación (`auth-service.ts`), permisos y roles por módulo (`permissions.ts`, `permissionsRegistry.ts`), y gestión de foto de perfil.
+  - calendar/: servicio de calendario para cálculo de fechas y disponibilidad de colaboradores.
+  - data/: datos mock utilizados por la aplicación en modo `localstorage`.
+  - repositories/: repositorios de acceso a datos (uno por entidad). Abstraen la fuente activa (Supabase o localStorage) y exponen una interfaz uniforme a los componentes.
+  - settings/: configuración general de la aplicación (hook `use-general-settings` y lógica de persistencia).
+  - supabase/: cliente de Supabase (`client.ts`, `server.ts`), detección de fuente de datos (`data-source.ts`), manejo de errores y health check.
+  - templates/: plantillas auxiliares para generación de registros iniciales (p. ej. resource_links por equipo).
+  - types/: tipos de TypeScript compartidos por toda la aplicación.
+  - utils/: utilidades transversales — formateo de fechas (`date.ts`), exportación a xlsx/csv (`export-service.ts`) y vinculación de tareas (`tasks-linking.ts`).
 - public/: archivos estáticos.
 - package.json: dependencias y scripts del proyecto.
 
