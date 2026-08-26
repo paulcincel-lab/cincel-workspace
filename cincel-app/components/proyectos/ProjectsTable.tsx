@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -20,6 +20,7 @@ import { saveProjects, fetchProjects } from "@/lib/repositories/projects-reposit
 import { getClientsSnapshot } from "@/lib/repositories/clients-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { isSupabaseEnabled } from "@/lib/supabase/data-source";
 
 type RiskLevel = "Alto" | "Medio" | "Bajo";
 
@@ -137,6 +138,12 @@ function loadProjectNotes(): Record<number, ProjectNote[]> {
 
 function loadPersistedProjects(): ProjectItem[] {
   if (typeof window === "undefined") {
+    return projects;
+  }
+
+  // When Supabase is active it is the authoritative source — skip the
+  // localStorage seed to avoid briefly showing stale data before hydration.
+  if (isSupabaseEnabled()) {
     return projects;
   }
 
@@ -358,10 +365,37 @@ export default function ProjectsTable() {
   const [noteDraft, setNoteDraft] = useState("");
   const [inlineEditingCell, setInlineEditingCell] = useState<{ projectId: number; field: "design" | "construction" } | null>(null);
 
+  // Tracks the last version that was actually persisted so we only send rows
+  // that have genuinely changed (diff) and can skip no-op renders.
+  const lastSavedRef = useRef<ProjectItem[]>(projectsData);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    saveProjects(projectsData).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    const changed = projectsData.filter((project) => {
+      const saved = lastSavedRef.current.find((p) => p.id === project.id);
+      return !saved || JSON.stringify(project) !== JSON.stringify(saved);
     });
+
+    if (changed.length === 0) {
+      return;
+    }
+
+    if (saveTimerRef.current !== null) {
+      clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = setTimeout(() => {
+      lastSavedRef.current = projectsData;
+      saveProjects(projectsData).catch((err: unknown) => {
+        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      });
+    }, 800);
+
+    return () => {
+      if (saveTimerRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
   }, [projectsData]);
 
   useEffect(() => {
@@ -374,11 +408,15 @@ export default function ProjectsTable() {
       setAuthenticatedUser(getCurrentAuthenticatedUser());
     };
 
-    // Hidratación async desde Supabase al montar
+    // Hidratación async desde Supabase al montar.
+    // After the fetch we sync lastSavedRef so the debounced save effect treats
+    // the freshly-fetched data as the baseline and does not immediately re-save
+    // it back to Supabase.
     const hydrate = async () => {
       try {
         const remote = await fetchProjects();
         if (remote.length > 0) {
+          lastSavedRef.current = remote;
           setProjectsData(remote);
         }
       } catch (err) {
@@ -724,6 +762,7 @@ export default function ProjectsTable() {
     };
 
     const nextProjects = [createdProject, ...projectsData];
+    lastSavedRef.current = nextProjects;
     setProjectsData(nextProjects);
     saveProjects(nextProjects).catch((err: unknown) => {
       if (err instanceof SupabaseOperationError) reportSupabaseError(err);

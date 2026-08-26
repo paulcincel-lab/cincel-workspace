@@ -24,6 +24,8 @@
 3. `activities.status` restringido a: Pendiente, En proceso, Completado, Bloqueado.
 4. `activities.priority` restringido a: Alta, Media, Baja.
 5. Si existe `activities.manager_member_id`, debe existir en `team_members.id`.
+6. `activities.review_date >= activities.commitment_date` cuando ambos son no nulos (CHECK constraint `activities_review_after_commitment`, migración `202608250002`).
+7. `activities.delivery_date >= activities.commitment_date` cuando ambos son no nulos (CHECK constraint `activities_delivery_after_commitment`, migración `202608250002`).
 
 ### Soportes, historial y checklist
 1. `activity_support_members.activity_id` debe existir en `activities.id`.
