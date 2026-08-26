@@ -8,6 +8,10 @@ import Header from "@/components/layout/Header";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
 import ExportMenu from "@/components/ui/ExportMenu";
+import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
+import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
+import { MemberProfileModal } from "@/components/equipo/MemberProfileModal";
+import type { AccessPreviewState, MemberDraft, TeamMemberWithWorkload } from "@/lib/equipo/types";
 import { getCollaboratorAccessState, getCurrentAuthenticatedUser, hashPassword, normalizeEmail } from "@/lib/auth/auth-service";
 import { resolveTeamCapabilities } from "@/lib/auth/permissions";
 import { type TeamAvailability, type TeamMember } from "@/lib/data/team";
@@ -24,44 +28,6 @@ import { getProjectsSnapshot, fetchProjects } from "@/lib/repositories/projects-
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
-type MemberDraft = {
-  name: string;
-  access: SystemAccessRole;
-  systemAccessEnabled: boolean;
-  temporaryPassword: string;
-  temporaryPasswordConfirmation: string;
-  birthDate: string;
-  nationality: string;
-  phone: string;
-  institutionalEmail: string;
-  address: string;
-  maritalStatus: string;
-  homePhone: string;
-  personalEmail: string;
-  curp: string;
-  rfc: string;
-  emergencyContactName: string;
-  emergencyContactRelation: string;
-  emergencyContactPhone: string;
-  emergencyContactAddress: string;
-  role: string;
-  area: string;
-  capacity: number;
-  availability: TeamAvailability;
-};
-
-type TeamMemberWithWorkload = TeamMember & {
-  assigned: number;
-  support: number;
-  total: number;
-  projects: string[];
-  coordinatorProjects: string[];
-  coordinatorProjectsCount: number;
-  constructionProjects: string[];
-  constructionProjectsCount: number;
-  occupancy: number;
-  loadLabel: string;
-};
 
 const emptyDraft: MemberDraft = {
   name: "",
@@ -89,16 +55,6 @@ const emptyDraft: MemberDraft = {
   availability: "Disponible",
 };
 
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) {
-    return "Sin registro";
-  }
-
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
 
 const availabilityOptions: TeamAvailability[] = [
   "Disponible",
@@ -595,7 +551,7 @@ export default function EquipoPage() {
     && hasDefaultSystemAdministratorAccess(editorMember.institutionalEmail)
   );
   const editorAccessState = editorMember ? getCollaboratorAccessState(editorMember) : null;
-  const accessPreviewState = useMemo(() => {
+  const accessPreviewState = useMemo<AccessPreviewState>(() => {
     if (!draft.systemAccessEnabled) {
       return {
         hasSystemAccess: false,
@@ -1803,518 +1759,32 @@ export default function EquipoPage() {
           </div>
         </div>
 
-        {showEditor ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white text-slate-800 shadow-xl">
-              <div className="border-b p-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold">{editingId === null ? "Agregar colaborador" : "Editar colaborador"}</h2>
-                  <button
-                    type="button"
-                    onClick={() => setShowEditor(false)}
-                    className="text-xl text-slate-400 hover:text-slate-700"
-                    aria-label="Cerrar"
-                  >
-                    x
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-6 p-6">
-                {formError ? (
-                  <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {formError}
-                  </div>
-                ) : null}
-
-                <section className="rounded-xl border border-slate-200 bg-white p-4">
-                  <h3 className="text-sm font-semibold text-slate-900">Información laboral</h3>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div className="md:col-span-2">
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Nombre</label>
-                      <input
-                        type="text"
-                        value={draft.name}
-                        onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Puesto</label>
-                      <input
-                        type="text"
-                        value={draft.role}
-                        onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                      <p className="mt-1 text-xs text-slate-500">Cargo que desempeña dentro de la empresa.</p>
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Area</label>
-                      <input
-                        type="text"
-                        value={draft.area}
-                        onChange={(event) => setDraft((current) => ({ ...current, area: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                      <p className="mt-1 text-xs text-slate-500">Departamento al que pertenece.</p>
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Acceso</label>
-                      <select
-                        value={draft.access}
-                        onChange={(event) => {
-                          const normalized = normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE;
-                          setDraft((current) => ({ ...current, access: normalized }));
-                        }}
-                        disabled={!teamCapabilities.canChangeCollaboratorAccess}
-                        title={teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
-                        className="w-full rounded-xl border px-4 py-2"
-                      >
-                        {SYSTEM_ACCESS_ROLES.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="mt-1 text-xs text-slate-500">Nivel de acceso dentro de Cincel.</p>
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Capacidad</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={draft.capacity}
-                        onChange={(event) => {
-                          const parsed = Number(event.target.value);
-                          setDraft((current) => ({ ...current, capacity: Number.isNaN(parsed) ? 1 : parsed }));
-                        }}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Disponibilidad</label>
-                      <select
-                        value={draft.availability}
-                        onChange={(event) => {
-                          const selected = event.target.value;
-
-                          if (selected === "Otros...") {
-                            const customAvailability = window.prompt("Nueva disponibilidad", "");
-                            const trimmed = customAvailability?.trim();
-
-                            if (trimmed) {
-                              setDraft((current) => ({ ...current, availability: trimmed }));
-                            }
-
-                            return;
-                          }
-
-                          setDraft((current) => ({ ...current, availability: selected as TeamAvailability }));
-                        }}
-                        className="w-full rounded-xl border px-4 py-2"
-                      >
-                        {availabilityOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                        <option value="Otros...">Otros...</option>
-                      </select>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">Acceso al sistema</h3>
-                      <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                        Administra aquí el acceso, la contraseña temporal y el historial de uso del colaborador.
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Badge
-                        label={accessPreviewState.status}
-                        color={accessPreviewState.status === "Acceso activo"
-                          ? "blue"
-                          : accessPreviewState.status === "Pendiente de primer acceso"
-                            ? "yellow"
-                            : accessPreviewState.status === "Sin contraseña temporal"
-                              ? "red"
-                              : "gray"}
-                      />
-                      <Badge
-                        label={accessPreviewState.hasSystemAccess ? "Tiene acceso al sistema" : "Sin acceso al sistema"}
-                        color={accessPreviewState.hasSystemAccess ? "blue" : "gray"}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <label className="flex items-center justify-between gap-4">
-                        <div>
-                          <span className="block text-sm font-medium text-slate-800">Tiene acceso al sistema</span>
-                          <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                            Si lo activas, el colaborador podrá iniciar sesión y ver el ERP según su acceso.
-                          </p>
-                        </div>
-
-                        <input
-                          type="checkbox"
-                          checked={draft.systemAccessEnabled}
-                          onChange={(event) =>
-                            setDraft((current) => ({
-                              ...current,
-                              systemAccessEnabled: event.target.checked,
-                              temporaryPassword: event.target.checked ? current.temporaryPassword : "",
-                              temporaryPasswordConfirmation: event.target.checked ? current.temporaryPasswordConfirmation : "",
-                            }))
-                          }
-                          className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-200"
-                        />
-                      </label>
-                    </div>
-
-                    {draft.systemAccessEnabled ? (
-                      <>
-                        <div>
-                          <label className="mb-2 block text-sm font-medium text-slate-800">Contraseña temporal</label>
-                          <input
-                            type="password"
-                            value={draft.temporaryPassword}
-                            onChange={(event) =>
-                              setDraft((current) => ({ ...current, temporaryPassword: event.target.value }))
-                            }
-                            placeholder={editingId === null ? "Asignar contraseña temporal" : "Solo si vas a restablecer"}
-                            className="w-full rounded-xl border px-4 py-2"
-                          />
-                          <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                            {editingId === null
-                              ? "Obligatoria al crear una cuenta con acceso al sistema."
-                              : "Rellena este campo solo si vas a restablecer la contraseña."}
-                          </p>
-                        </div>
-
-                        <div>
-                          <label className="mb-2 block text-sm font-medium text-slate-800">Confirmar contraseña temporal</label>
-                          <input
-                            type="password"
-                            value={draft.temporaryPasswordConfirmation}
-                            onChange={(event) =>
-                              setDraft((current) => ({ ...current, temporaryPasswordConfirmation: event.target.value }))
-                            }
-                            placeholder="Repetir contraseña temporal"
-                            className="w-full rounded-xl border px-4 py-2"
-                          />
-                          <p className="mt-1 text-xs leading-relaxed text-slate-500">Debe coincidir con la contraseña temporal.</p>
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-medium text-slate-800">Último acceso</p>
-                          <p className="mt-1 text-sm text-slate-600">{formatDateTime(accessPreviewState.lastLoginAt)}</p>
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-medium text-slate-800">Último cambio de contraseña</p>
-                          <p className="mt-1 text-sm text-slate-600">{formatDateTime(accessPreviewState.passwordUpdatedAt)}</p>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-600">
-                        Este colaborador no tendrá acceso al sistema ni podrá iniciar sesión. Podrá seguir asignado a proyectos,
-                        tareas y recursos.
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-slate-200 bg-white p-4">
-                  <h3 className="text-sm font-semibold text-slate-900">Información personal</h3>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Fecha nacimiento</label>
-                      <input
-                        type="date"
-                        value={draft.birthDate}
-                        onChange={(event) => setDraft((current) => ({ ...current, birthDate: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Nacionalidad</label>
-                      <input
-                        type="text"
-                        value={draft.nationality}
-                        onChange={(event) => setDraft((current) => ({ ...current, nationality: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Estado civil</label>
-                      <input
-                        type="text"
-                        value={draft.maritalStatus}
-                        onChange={(event) => setDraft((current) => ({ ...current, maritalStatus: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">CURP</label>
-                      <input
-                        type="text"
-                        value={draft.curp}
-                        onChange={(event) => setDraft((current) => ({ ...current, curp: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">RFC</label>
-                      <input
-                        type="text"
-                        value={draft.rfc}
-                        onChange={(event) => setDraft((current) => ({ ...current, rfc: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-slate-200 bg-white p-4">
-                  <h3 className="text-sm font-semibold text-slate-900">Contacto</h3>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Celular</label>
-                      <input
-                        type="text"
-                        value={draft.phone}
-                        onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Correo institucional</label>
-                      <input
-                        type="email"
-                        value={draft.institutionalEmail}
-                        onChange={(event) => setDraft((current) => ({ ...current, institutionalEmail: event.target.value }))}
-                        disabled={isEditingSelfProtectedAdmin}
-                        title={isEditingSelfProtectedAdmin ? "Tu correo administrador principal esta protegido" : ""}
-                        className={`w-full rounded-xl border px-4 py-2 ${isEditingSelfProtectedAdmin ? "cursor-not-allowed bg-slate-100 text-slate-500" : ""}`}
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Direccion</label>
-                      <input
-                        type="text"
-                        value={draft.address}
-                        onChange={(event) => setDraft((current) => ({ ...current, address: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Telefono de casa</label>
-                      <input
-                        type="text"
-                        value={draft.homePhone}
-                        onChange={(event) => setDraft((current) => ({ ...current, homePhone: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Correo electronico personal</label>
-                      <input
-                        type="email"
-                        value={draft.personalEmail}
-                        onChange={(event) => setDraft((current) => ({ ...current, personalEmail: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-slate-200 bg-white p-4">
-                  <h3 className="text-sm font-semibold text-slate-900">Contacto de emergencia</h3>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Nombre</label>
-                      <input
-                        type="text"
-                        value={draft.emergencyContactName}
-                        onChange={(event) => setDraft((current) => ({ ...current, emergencyContactName: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Relacion</label>
-                      <input
-                        type="text"
-                        value={draft.emergencyContactRelation}
-                        onChange={(event) => setDraft((current) => ({ ...current, emergencyContactRelation: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Telefono</label>
-                      <input
-                        type="text"
-                        value={draft.emergencyContactPhone}
-                        onChange={(event) => setDraft((current) => ({ ...current, emergencyContactPhone: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-800">Direccion</label>
-                      <input
-                        type="text"
-                        value={draft.emergencyContactAddress}
-                        onChange={(event) => setDraft((current) => ({ ...current, emergencyContactAddress: event.target.value }))}
-                        className="w-full rounded-xl border px-4 py-2"
-                      />
-                    </div>
-                  </div>
-                </section>
-              </div>
-
-              <div className="flex justify-end gap-3 border-t p-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormError("");
-                    setShowEditor(false);
-                  }}
-                  className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={saveMember}
-                  disabled={editingId === null ? !teamCapabilities.canCreateCollaborator : !teamCapabilities.canEditCollaborator}
-                  title={(editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator) ? "" : "No tienes permiso para guardar cambios"}
-                  className={`rounded-xl px-4 py-2 text-sm font-medium text-white ${(editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator) ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
-                >
-                  Guardar
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <MemberEditorDrawer
+          show={showEditor}
+          onClose={() => { setFormError(""); setShowEditor(false); }}
+          editingId={editingId}
+          draft={draft}
+          onChangeDraft={setDraft}
+          formError={formError}
+          onSave={saveMember}
+          accessPreviewState={accessPreviewState}
+          isEditingSelfProtectedAdmin={isEditingSelfProtectedAdmin}
+          teamCapabilities={teamCapabilities}
+          availabilityOptions={availabilityOptions}
+        />
 
         {selectedCoordinatorMember ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
-              <div className="border-b p-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold">Proyectos como Encargado</h2>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCoordinatorMemberId(null)}
-                    className="text-xl text-slate-400 hover:text-slate-700"
-                    aria-label="Cerrar"
-                  >
-                    x
-                  </button>
-                </div>
-                <p className="mt-1 text-sm text-slate-600">{selectedCoordinatorMember.name}</p>
-              </div>
-
-              <div className="space-y-3 p-6">
-                {selectedCoordinatorMember.coordinatorProjects.length === 0 ? (
-                  <p className="text-sm text-slate-500">No hay proyectos asignados como encargado.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedCoordinatorMember.coordinatorProjects.map((project) => (
-                      <span
-                        key={`coordinator-project-${selectedCoordinatorMember.id}-${project}`}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700"
-                      >
-                        {project}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <CoordinatorProjectsModal
+            member={selectedCoordinatorMember}
+            onClose={() => setSelectedCoordinatorMemberId(null)}
+          />
         ) : null}
 
         {selectedProfileMember ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
-              <div className="border-b p-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold">Ficha personal</h2>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProfileMemberId(null)}
-                    className="text-xl text-slate-400 hover:text-slate-700"
-                    aria-label="Cerrar"
-                  >
-                    x
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-4 p-6">
-                <div className="flex items-center justify-between gap-4">
-                  <Avatar name={selectedProfileMember.name} />
-                  <Badge label={selectedProfileMember.active ? "Activo" : "Desactivado"} color={selectedProfileMember.active ? "blue" : "gray"} />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-sm text-slate-800">
-                  <p><span className="font-medium">Fecha nacimiento:</span> {selectedProfileMember.birthDate || "-"}</p>
-                  <p><span className="font-medium">Nacionalidad:</span> {selectedProfileMember.nationality || "-"}</p>
-                  <p><span className="font-medium">Celular:</span> {selectedProfileMember.phone || "-"}</p>
-                  <p><span className="font-medium">Correo institucional:</span> {selectedProfileMember.institutionalEmail || "-"}</p>
-                  <p><span className="font-medium">Direccion:</span> {selectedProfileMember.address || "-"}</p>
-                  <p><span className="font-medium">Estado civil:</span> {selectedProfileMember.maritalStatus || "-"}</p>
-                  <p><span className="font-medium">Telefono de casa:</span> {selectedProfileMember.homePhone || "-"}</p>
-                  <p><span className="font-medium">Correo personal:</span> {selectedProfileMember.personalEmail || "-"}</p>
-                  <p><span className="font-medium">CURP:</span> {selectedProfileMember.curp || "-"}</p>
-                  <p><span className="font-medium">RFC:</span> {selectedProfileMember.rfc || "-"}</p>
-                  <p><span className="font-medium">Puesto:</span> {selectedProfileMember.role}</p>
-                  <p><span className="font-medium">Area:</span> {selectedProfileMember.area}</p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800">
-                  <p className="font-medium">Contacto de emergencia</p>
-                  <p className="mt-1"><span className="font-medium">Nombre:</span> {selectedProfileMember.emergencyContact.name || "-"}</p>
-                  <p className="mt-1"><span className="font-medium">Relacion:</span> {selectedProfileMember.emergencyContact.relation || "-"}</p>
-                  <p className="mt-1"><span className="font-medium">Telefono:</span> {selectedProfileMember.emergencyContact.phone || "-"}</p>
-                  <p className="mt-1"><span className="font-medium">Direccion:</span> {selectedProfileMember.emergencyContact.address || "-"}</p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
-                  <p className="font-medium">Carga actual</p>
-                  <p className="mt-1">Asignadas: {selectedProfileMember.assigned} | Soporte: {selectedProfileMember.support} | Total: {selectedProfileMember.total}</p>
-                  <p className="mt-1">Ocupacion: {selectedProfileMember.occupancy}%</p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <MemberProfileModal
+            member={selectedProfileMember}
+            onClose={() => setSelectedProfileMemberId(null)}
+          />
         ) : null}
       </section>
     </main>
