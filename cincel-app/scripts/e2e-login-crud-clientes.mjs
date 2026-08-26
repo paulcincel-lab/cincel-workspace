@@ -1,3 +1,20 @@
+/**
+ * E2E script: login + full CRUD cycle for Clientes.
+ *
+ * ⚠️  ISOLATION REQUIREMENT
+ * This script MUST only be executed against an ephemeral or fully local Supabase
+ * project (e.g. `supabase start`). Never point it at a shared staging environment.
+ * It injects synthetic PII-shaped data (name, CURP, RFC, address) that, if left
+ * in a shared project, would pollute real data visible to other users.
+ *
+ * Environment variables:
+ *   E2E_BASE_URL         – app origin (default: http://127.0.0.1:3000)
+ *   E2E_SUPABASE_BEARER  – optional dev bearer token for Supabase auth bypass
+ *
+ * Teardown: the script deletes the synthetic client it creates as the last step
+ * of its CRUD flow, so no cleanup is left behind in localStorage or Supabase
+ * when the run completes successfully.
+ */
 import { chromium } from "playwright";
 
 const baseUrl = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
@@ -34,6 +51,7 @@ async function seedAuth(page) {
 
     const memberId = 2;
     const email = "paul@cincel.mx";
+    // NOTE: this password is synthetic test data — it is NOT a production credential.
     const password = "Temporal123";
 
     const membersRaw = window.localStorage.getItem("cincel.team.members.v1");
@@ -182,7 +200,9 @@ async function run() {
 
   await page.getByRole("heading", { name: editedClientName }).waitFor({ state: "visible", timeout: 15000 }).catch(() => fail("No se reflejo la edicion del cliente"));
 
-  // Eliminar y volver a lista
+  // Teardown: delete the synthetic client to leave no data behind.
+  // This is the final CRUD step and serves as cleanup — run it even on a local
+  // Supabase project so no test records accumulate between runs.
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Eliminar cliente" }).click();
 
@@ -200,7 +220,7 @@ async function run() {
     fail("El cliente eliminado sigue apareciendo");
   }
 
-  console.log("E2E OK: login+CRUD clientes completado");
+  console.log("E2E OK: login+CRUD clientes completado. Datos sinteticos eliminados.");
 
   await context.close();
   await browser.close();
