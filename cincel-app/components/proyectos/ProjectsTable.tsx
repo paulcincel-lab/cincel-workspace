@@ -1,59 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import ExportMenu from "@/components/ui/ExportMenu";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
-import { projects } from "@/lib/data/projects";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
-import { teamMembers } from "@/lib/data/team";
-import type { Task } from "@/lib/types/task";
-import { presaleTasks } from "@/lib/data/presale";
-import { disenoTasks } from "@/lib/data/diseno";
-import { operativasTasks } from "@/lib/data/operativas";
-import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
-import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { saveProjects, fetchProjects } from "@/lib/repositories/projects-repository";
 import { getClientsSnapshot } from "@/lib/repositories/clients-repository";
-import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
-import { isSupabaseEnabled } from "@/lib/supabase/data-source";
+import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
+import { useProjectsData, normalizeName, type ProjectItem } from "@/lib/proyectos/use-projects-data";
+import { ProjectNotesModal } from "@/components/proyectos/ProjectNotesModal";
+import { ProjectCreateModal } from "@/components/proyectos/ProjectCreateModal";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type RiskLevel = "Alto" | "Medio" | "Bajo";
-
-type ProjectNote = {
-  id: string;
-  projectId: number;
-  content: string;
-  createdAt: string;
-};
-
-type ProjectItem = (typeof projects)[number];
-type NewProjectDraft = {
-  name: string;
-  clientId: string;
-  type: string;
-  stages: string[];
-  coordinator: string;
-  docsUrl: string;
-  startDate: string;
-};
-
-const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
-const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
-const STAGE_OPTIONS = ["Presale", "Diseño", "Construcción"];
-const emptyNewProjectDraft: NewProjectDraft = {
-  name: "",
-  clientId: "",
-  type: "Habitacional",
-  stages: ["Presale"],
-  coordinator: "Sin responsable",
-  docsUrl: "",
-  startDate: "",
-};
 
 type ActiveClientOption = {
   id: number;
@@ -61,29 +23,12 @@ type ActiveClientOption = {
   kind: "Empresa" | "Particular";
 };
 
-function normalizeName(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function loadPersistedTasks(workflow: string, fallback: Task[]): Task[] {
-  if (workflow === "Presale" || workflow === "Diseño" || workflow === "Construcción") {
-    return loadLinkedTasks(workflow, fallback);
-  }
-
-  return fallback;
-}
+// ── Pure helpers ──────────────────────────────────────────────────────────────
 
 function projectStatusSelectClasses(active: boolean): string {
-  if (active) {
-    return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  }
-
-  return "border-red-200 bg-red-50 text-red-800";
+  return active
+    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+    : "border-red-200 bg-red-50 text-red-800";
 }
 
 function projectStatusDotClasses(active: boolean): string {
@@ -92,7 +37,6 @@ function projectStatusDotClasses(active: boolean): string {
 
 function parseDate(input: string): Date | null {
   if (!input) return null;
-  // For date-only strings (YYYY-MM-DD), parse as local date to avoid UTC timezone offset issues
   const dateOnlyMatch = input.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (dateOnlyMatch) {
     const [, year, month, day] = dateOnlyMatch.map(Number);
@@ -105,239 +49,11 @@ function parseDate(input: string): Date | null {
 function formatDate(input: string): string {
   const parsed = parseDate(input);
   if (!parsed) return "Sin fecha";
-  return parsed.toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return parsed.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function projectTasksPath(projectName: string): string {
   return `/tareas?project=${encodeURIComponent(projectName)}`;
-}
-
-function loadProjectNotes(): Record<number, ProjectNote[]> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  const stored = readStorage("cincel.projects.notes.v1");
-
-  if (!stored) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Record<number, ProjectNote[]>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    removeStorage("cincel.projects.notes.v1");
-    return {};
-  }
-}
-
-function loadPersistedProjects(): ProjectItem[] {
-  if (typeof window === "undefined") {
-    return projects;
-  }
-
-  // When Supabase is active it is the authoritative source — skip the
-  // localStorage seed to avoid briefly showing stale data before hydration.
-  if (isSupabaseEnabled()) {
-    return projects;
-  }
-
-  const stored = readStorage("cincel.projects.data.v1");
-
-  if (!stored) {
-    return projects;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Array<Partial<ProjectItem>>;
-
-    if (!Array.isArray(parsed)) {
-      return projects;
-    }
-
-    const normalized = parsed
-      .map((item) => {
-        const fallback = projects.find(
-          (project) => project.code === item.code || project.name === item.name
-        );
-
-        if (!fallback) {
-          const rawId = item.id;
-          const numericId = typeof rawId === "number"
-            ? rawId
-            : typeof rawId === "string"
-              ? Number(rawId)
-              : Number.NaN;
-          const safeId = Number.isFinite(numericId) ? numericId : Date.now();
-          const incomingClient = item.client as Partial<ProjectItem["client"]> | undefined;
-          const safeCoordinator = normalizeName(item.coordinator) || "Sin responsable";
-
-          return {
-            id: safeId,
-            code: typeof item.code === "string" && item.code ? item.code : `PRJ-${safeId}`,
-            name: typeof item.name === "string" && item.name ? item.name : `Proyecto ${safeId}`,
-            active: Boolean(item.active),
-            status: typeof item.status === "string" && item.status ? item.status : (item.active ? "Activo" : "Inactivo"),
-            client: {
-              id: typeof incomingClient?.id === "number" ? incomingClient.id : safeId,
-              name: normalizeName(incomingClient?.name) || "Cliente",
-              emails: Array.isArray(incomingClient?.emails)
-                ? incomingClient.emails.filter((email): email is string => typeof email === "string" && email.trim().length > 0)
-                : [],
-              phone: normalizeName(incomingClient?.phone) || "",
-              kind: incomingClient?.kind === "Empresa" || incomingClient?.kind === "Particular"
-                ? incomingClient.kind
-                : "Particular",
-              contacts: Array.isArray(incomingClient?.contacts)
-                ? incomingClient.contacts.filter((contact): contact is { name: string; role: string; phone: string; email: string } =>
-                  Boolean(contact)
-                  && typeof contact.name === "string"
-                  && typeof contact.role === "string"
-                  && typeof contact.phone === "string"
-                  && typeof contact.email === "string"
-                )
-                : [],
-              completedProjects: Array.isArray(incomingClient?.completedProjects)
-                ? incomingClient.completedProjects.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-                : [],
-              acquisitionChannel: typeof incomingClient?.acquisitionChannel === "string"
-                ? incomingClient.acquisitionChannel
-                : "Sin registro",
-              totalSpent: typeof incomingClient?.totalSpent === "number" ? incomingClient.totalSpent : 0,
-            },
-            type: typeof item.type === "string" && item.type ? item.type : "Otro",
-            stage: typeof item.stage === "string" && item.stage ? item.stage : "Presale",
-            phase: typeof item.phase === "string" && item.phase ? item.phase : "Inicial",
-            address: {
-              street: item.address && typeof item.address.street === "string" ? item.address.street : "",
-              city: item.address && typeof item.address.city === "string" ? item.address.city : "",
-              state: item.address && typeof item.address.state === "string" ? item.address.state : "",
-            },
-            manager: normalizeName(item.manager) || "Sin responsable",
-            coordinator: safeCoordinator,
-            team: Array.isArray(item.team) ? item.team.filter((member): member is string => typeof member === "string") : [],
-            progress: typeof item.progress === "number" ? item.progress : 0,
-            drive: {
-              administrativo: item.drive && typeof item.drive.administrativo === "string" ? item.drive.administrativo : "",
-              planos: item.drive && typeof item.drive.planos === "string" ? item.drive.planos : "",
-              renders: item.drive && typeof item.drive.renders === "string" ? item.drive.renders : "",
-              reportes: item.drive && typeof item.drive.reportes === "string" ? item.drive.reportes : "",
-            },
-            startDate: typeof item.startDate === "string" ? item.startDate : "",
-          } as ProjectItem;
-        }
-
-        const rawId = item.id;
-        const numericId = typeof rawId === "number"
-          ? rawId
-          : typeof rawId === "string"
-            ? Number(rawId)
-            : Number.NaN;
-
-        const safeId = Number.isFinite(numericId) ? numericId : fallback.id;
-        const safeCoordinator = normalizeName(item.coordinator) || fallback.coordinator || "Sin responsable";
-        const incomingClient = item.client as Partial<ProjectItem["client"]> | undefined;
-
-        const safeClient = {
-          ...fallback.client,
-          ...incomingClient,
-          emails: Array.isArray(incomingClient?.emails)
-            ? incomingClient.emails.filter((email): email is string => typeof email === "string" && email.trim().length > 0)
-            : fallback.client.emails,
-          phone: normalizeName(incomingClient?.phone) || fallback.client.phone || "",
-          kind: incomingClient?.kind === "Empresa" || incomingClient?.kind === "Particular"
-            ? incomingClient.kind
-            : fallback.client.kind,
-          contacts: Array.isArray(incomingClient?.contacts)
-            ? incomingClient.contacts.filter((contact): contact is { name: string; role: string; phone: string; email: string } =>
-              Boolean(contact)
-              && typeof contact.name === "string"
-              && typeof contact.role === "string"
-              && typeof contact.phone === "string"
-              && typeof contact.email === "string"
-            )
-            : Array.isArray(fallback.client.contacts)
-              ? fallback.client.contacts
-              : [],
-          completedProjects: Array.isArray(incomingClient?.completedProjects)
-            ? incomingClient.completedProjects.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-            : Array.isArray(fallback.client.completedProjects)
-              ? fallback.client.completedProjects
-              : [],
-          acquisitionChannel: typeof incomingClient?.acquisitionChannel === "string"
-            ? incomingClient.acquisitionChannel
-            : fallback.client.acquisitionChannel,
-          totalSpent: typeof incomingClient?.totalSpent === "number"
-            ? incomingClient.totalSpent
-            : fallback.client.totalSpent,
-        };
-
-        return {
-          ...fallback,
-          ...item,
-          id: safeId,
-          coordinator: safeCoordinator,
-          client: safeClient,
-        } as ProjectItem;
-      })
-      .filter((item): item is ProjectItem => item !== null);
-
-    return normalized.length > 0 ? normalized : projects;
-  } catch {
-    removeStorage("cincel.projects.data.v1");
-    return projects;
-  }
-}
-
-function loadActiveTeamNames(): string[] {
-  if (typeof window === "undefined") {
-    return teamMembers.filter((member) => member.active).map((member) => member.name);
-  }
-
-  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
-
-  if (!stored) {
-    return teamMembers.filter((member) => member.active).map((member) => member.name);
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Array<{ name?: unknown; active?: boolean }>;
-
-    if (!Array.isArray(parsed)) {
-      return teamMembers.filter((member) => member.active).map((member) => member.name);
-    }
-
-    return parsed
-      .filter((member) => member.active)
-      .map((member) => normalizeName(member.name))
-      .filter((name): name is string => name !== null);
-  } catch {
-    return teamMembers.filter((member) => member.active).map((member) => member.name);
-  }
-}
-
-function loadSecondaryCoordinatorMap(): Record<number, string> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  const stored = readStorage(SECONDARY_COORDINATOR_STORAGE_KEY);
-
-  if (!stored) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Record<number, string>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
 }
 
 function buildTimestampLabel(): string {
@@ -347,117 +63,42 @@ function buildTimestampLabel(): string {
   return `${date}-${time}`;
 }
 
+const PROJECT_TYPE_OPTIONS = ["Habitacional", "Oficinas", "Comercial", "Mobiliario", "Mantenimiento", "Otro"];
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function ProjectsTable() {
   const router = useRouter();
-  const [projectsData, setProjectsData] = useState<ProjectItem[]>(() => loadPersistedProjects());
-  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
-  const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
-  const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
+  const {
+    projectsData,
+    isLoadingData,
+    fetchError,
+    activeTeamNames,
+    authenticatedUser,
+    secondaryCoordinatorByProject,
+    setSecondaryCoordinatorByProject,
+    notesByProject,
+    allTasks,
+    addProject,
+    updateCoordinator,
+    updateProjectActive,
+    removeProject,
+    addNote,
+  } = useProjectsData();
+
+
   const [statusViewFilter, setStatusViewFilter] = useState<"Activos" | "Archivados">("Activos");
   const [search, setSearch] = useState("");
   const [coordinatorFilter, setCoordinatorFilter] = useState("Todos");
   const [riskFilter, setRiskFilter] = useState<RiskLevel | "Todos">("Todos");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createError, setCreateError] = useState("");
-  const [newProjectDraft, setNewProjectDraft] = useState<NewProjectDraft>(emptyNewProjectDraft);
-  const [notesByProject, setNotesByProject] = useState<Record<number, ProjectNote[]>>(() => loadProjectNotes());
   const [activeNoteProjectId, setActiveNoteProjectId] = useState<number | null>(null);
-  const [noteDraft, setNoteDraft] = useState("");
   const [inlineEditingCell, setInlineEditingCell] = useState<{ projectId: number; field: "design" | "construction" } | null>(null);
-  const [isLoadingData, setIsLoadingData] = useState(() => isSupabaseEnabled());
-  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Tracks the last version that was actually persisted so we only send rows
-  // that have genuinely changed (diff) and can skip no-op renders.
-  const lastSavedRef = useRef<ProjectItem[]>(projectsData);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const changed = projectsData.filter((project) => {
-      const saved = lastSavedRef.current.find((p) => p.id === project.id);
-      return !saved || JSON.stringify(project) !== JSON.stringify(saved);
-    });
-
-    if (changed.length === 0) {
-      return;
-    }
-
-    if (saveTimerRef.current !== null) {
-      clearTimeout(saveTimerRef.current);
-    }
-
-    saveTimerRef.current = setTimeout(() => {
-      lastSavedRef.current = projectsData;
-      // Supabase upserts by legacy_id, so only the rows that actually changed
-      // need to go out. localStorage has no partial-write semantics, though —
-      // it's a single JSON snapshot — so it always needs the full array.
-      const payload = isSupabaseEnabled() ? changed : projectsData;
-      saveProjects(payload).catch((err: unknown) => {
-        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
-      });
-    }, 800);
-
-    return () => {
-      if (saveTimerRef.current !== null) {
-        clearTimeout(saveTimerRef.current);
-      }
-    };
-  }, [projectsData]);
-
-  useEffect(() => {
-    writeStorage(SECONDARY_COORDINATOR_STORAGE_KEY, JSON.stringify(secondaryCoordinatorByProject));
-  }, [secondaryCoordinatorByProject]);
-
-  useEffect(() => {
-    const refreshTeam = () => {
-      setActiveTeamNames(loadActiveTeamNames());
-      setAuthenticatedUser(getCurrentAuthenticatedUser());
-    };
-
-    // Hidratación async desde Supabase al montar.
-    // After the fetch we sync lastSavedRef so the debounced save effect treats
-    // the freshly-fetched data as the baseline and does not immediately re-save
-    // it back to Supabase.
-    const hydrate = async () => {
-      setIsLoadingData(true);
-      setFetchError(null);
-      try {
-        const remote = await fetchProjects();
-        if (remote.length > 0) {
-          lastSavedRef.current = remote;
-          setProjectsData(remote);
-        }
-      } catch (err) {
-        if (err instanceof SupabaseOperationError) {
-          reportSupabaseError(err);
-          setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
-        }
-      } finally {
-        setIsLoadingData(false);
-      }
-    };
-    void hydrate();
-
-    window.addEventListener("focus", refreshTeam);
-    window.addEventListener("storage", refreshTeam);
-
-    return () => {
-      window.removeEventListener("focus", refreshTeam);
-      window.removeEventListener("storage", refreshTeam);
-    };
-  }, []);
-
-  const projectsCapabilities = useMemo(() => {
-    return resolveProjectsCapabilities(authenticatedUser);
-  }, [authenticatedUser]);
-
-  const allTasks = useMemo(() => {
-    return [
-      ...loadPersistedTasks("Presale", presaleTasks),
-      ...loadPersistedTasks("Diseño", disenoTasks),
-      ...loadPersistedTasks("Construcción", operativasTasks),
-    ];
-  }, []);
+  const projectsCapabilities = useMemo(
+    () => resolveProjectsCapabilities(authenticatedUser),
+    [authenticatedUser]
+  );
 
   const enrichedProjects = useMemo(() => {
     const today = new Date();
@@ -499,79 +140,45 @@ export default function ProjectsTable() {
             ? `${dueThisWeek} entrega(s) esta semana`
             : "Sin alertas criticas";
 
-      return {
-        ...project,
-        blockedCount,
-        dueThisWeek,
-        overdueCount,
-        activeTaskCount: activeTasks.length,
-        nextDelivery,
-        teamLoad,
-        risk,
-        mainAlert,
-      };
+      return { ...project, blockedCount, dueThisWeek, overdueCount, activeTaskCount: activeTasks.length, nextDelivery, teamLoad, risk, mainAlert };
     });
   }, [allTasks, projectsData]);
 
   const coordinators = [
     "Todos",
-    ...Array.from(
-      new Set(
-        projectsData
-          .map((project) => normalizeName(project.coordinator) || "Sin encargado")
-      )
-    ),
+    ...Array.from(new Set(projectsData.map((project) => normalizeName(project.coordinator) || "Sin encargado"))),
   ];
 
   const filteredProjects = enrichedProjects.filter((project) => {
     const value = search.trim().toLowerCase();
-
-    const matchesSearch = !value
-      || project.name.toLowerCase().includes(value);
-
+    const matchesSearch = !value || project.name.toLowerCase().includes(value);
     const projectCoordinator = normalizeName(project.coordinator) || "Sin encargado";
     const matchesCoordinator = coordinatorFilter === "Todos" || projectCoordinator === coordinatorFilter;
     const matchesRisk = riskFilter === "Todos" || project.risk === riskFilter;
-
     return matchesSearch && matchesCoordinator && matchesRisk;
   });
 
-  const visibleProjects = filteredProjects.filter((project) => {
-    if (statusViewFilter === "Activos") {
-      return project.active;
-    }
-
-    return !project.active;
-  });
+  const visibleProjects = filteredProjects.filter((project) =>
+    statusViewFilter === "Activos" ? project.active : !project.active
+  );
 
   const kpiActiveProjects = visibleProjects.filter((project) => project.active).length;
 
   const stageStats = visibleProjects.reduce<Record<string, number>>((acc, project) => {
-    const stages = project.stage
-      .split("/")
-      .map((stage) => stage.trim())
-      .filter(Boolean);
-
-    for (const stage of stages) {
-      acc[stage] = (acc[stage] ?? 0) + 1;
-    }
-
+    const stages = project.stage.split("/").map((s) => s.trim()).filter(Boolean);
+    for (const stage of stages) acc[stage] = (acc[stage] ?? 0) + 1;
     return acc;
   }, {});
 
-  const orderedStageStats = Object.entries(stageStats)
-    .sort((a, b) => b[1] - a[1]);
-
+  const orderedStageStats = Object.entries(stageStats).sort((a, b) => b[1] - a[1]);
   const totalStageAssignments = orderedStageStats.reduce((acc, [, count]) => acc + count, 0);
 
   const coordinatorStats = visibleProjects.reduce<Record<string, { design: number; construction: number; total: number }>>((acc, project) => {
     const designer = normalizeName(project.coordinator) || "Sin encargado";
     const constructor = normalizeName(secondaryCoordinatorByProject[project.id]) || "Sin encargado";
-
     if (!acc[designer]) acc[designer] = { design: 0, construction: 0, total: 0 };
     acc[designer].design += 1;
     acc[designer].total += 1;
-
     if (constructor !== designer) {
       if (!acc[constructor]) acc[constructor] = { design: 0, construction: 0, total: 0 };
       acc[constructor].construction += 1;
@@ -579,61 +186,25 @@ export default function ProjectsTable() {
     } else {
       acc[designer].construction += 1;
     }
-
     return acc;
   }, {});
 
-  const orderedCoordinatorStats = Object.entries(coordinatorStats)
-    .sort((a, b) => b[1].total - a[1].total);
+  const orderedCoordinatorStats = Object.entries(coordinatorStats).sort((a, b) => b[1].total - a[1].total);
 
-  const alerts = visibleProjects
-    .filter((project) => project.mainAlert !== "Sin alertas criticas")
-    .slice(0, 6);
+  const alerts = visibleProjects.filter((project) => project.mainAlert !== "Sin alertas criticas").slice(0, 6);
 
-  const projectsExportColumns = useMemo<Array<ExportColumn<(typeof visibleProjects)[number]>>>(() => {
-    return [
-      {
-        key: "project",
-        header: "Proyecto",
-        getValue: (project) => project.name,
-      },
-      {
-        key: "client",
-        header: "Cliente",
-        getValue: (project) => project.client.name,
-      },
-      {
-        key: "stage",
-        header: "Etapa",
-        getValue: (project) => project.stage,
-      },
-      {
-        key: "designLeader",
-        header: "Lider de diseño",
-        getValue: (project) => normalizeName(project.coordinator) || "Sin encargado",
-      },
-      {
-        key: "constructionLeader",
-        header: "Lider de construcción",
-        getValue: (project) => secondaryCoordinatorByProject[project.id] || "Sin encargado",
-      },
-      {
-        key: "nextDelivery",
-        header: "Proxima entrega",
-        isDate: true,
-        getValue: (project) => (project.nextDelivery ? project.nextDelivery : ""),
-      },
-      {
-        key: "status",
-        header: "Estado",
-        getValue: (project) => (project.active ? "Proyecto activo" : "Proyecto archivado"),
-      },
-    ];
-  }, [secondaryCoordinatorByProject]);
+  const projectsExportColumns = useMemo<Array<ExportColumn<(typeof visibleProjects)[number]>>>(() => [
+    { key: "project", header: "Proyecto", getValue: (project) => project.name },
+    { key: "client", header: "Cliente", getValue: (project) => project.client.name },
+    { key: "stage", header: "Etapa", getValue: (project) => project.stage },
+    { key: "designLeader", header: "Lider de diseño", getValue: (project) => normalizeName(project.coordinator) || "Sin encargado" },
+    { key: "constructionLeader", header: "Lider de construcción", getValue: (project) => secondaryCoordinatorByProject[project.id] || "Sin encargado" },
+    { key: "nextDelivery", header: "Proxima entrega", isDate: true, getValue: (project) => (project.nextDelivery ? project.nextDelivery : "") },
+    { key: "status", header: "Estado", getValue: (project) => (project.active ? "Proyecto activo" : "Proyecto archivado") },
+  ], [secondaryCoordinatorByProject]);
 
   const exportProjects = async (format: "xlsx" | "pdf") => {
     const { settings } = loadGeneralSettings();
-
     await exportTableData({
       moduleName: "Proyectos",
       fileName: `proyectos-${statusViewFilter.toLowerCase()}-${buildTimestampLabel()}`,
@@ -650,245 +221,59 @@ export default function ProjectsTable() {
       .filter((project) => project.active)
       .map((project) => {
         const kind: "Empresa" | "Particular" = project.client.kind === "Empresa" ? "Empresa" : "Particular";
-        return {
-          id: project.client.id,
-          name: project.client.name,
-          kind,
-        };
+        return { id: project.client.id, name: project.client.name, kind };
       });
 
-    const fromManual = (() => {
-      const manualClients = getClientsSnapshot();
-
-      return manualClients
-        .filter((item) => Boolean(item.hasActiveProject))
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          kind: item.kind as "Empresa" | "Particular",
-        }));
-    })();
+    const fromManual = getClientsSnapshot()
+      .filter((item) => Boolean(item.hasActiveProject))
+      .map((item) => ({ id: item.id, name: item.name, kind: item.kind as "Empresa" | "Particular" }));
 
     const deduped = new Map<string, ActiveClientOption>();
-
     for (const client of [...fromProjects, ...fromManual]) {
       const key = client.name.toLowerCase();
-      if (!deduped.has(key)) {
-        deduped.set(key, client);
-      }
+      if (!deduped.has(key)) deduped.set(key, client);
     }
-
     return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [projectsData]);
-
-  const projectTypeOptions = ["Habitacional", "Oficinas", "Comercial", "Mobiliario", "Mantenimiento", "Otro"];
-
-  const activeNoteProject = activeNoteProjectId === null
-    ? null
-    : projectsData.find((project) => project.id === activeNoteProjectId) ?? null;
-
-  const activeNotes = activeNoteProjectId === null
-    ? []
-    : notesByProject[activeNoteProjectId] ?? [];
-
-  const openNotesModal = (projectId: number) => {
-    setActiveNoteProjectId(projectId);
-    setNoteDraft("");
-  };
-
-  const closeNotesModal = () => {
-    setActiveNoteProjectId(null);
-    setNoteDraft("");
-  };
-
-  const openCreateModal = () => {
-    if (!projectsCapabilities.canCreateProject) {
-      return;
-    }
-
-    setCreateError("");
-    setNewProjectDraft({
-      ...emptyNewProjectDraft,
-      type: projectTypeOptions[0] ?? "Habitacional",
-      clientId: "",
-      coordinator: activeTeamNames[0] ?? "Sin responsable",
-    });
-    setShowCreateModal(true);
-  };
-
-  const closeCreateModal = () => {
-    setShowCreateModal(false);
-    setCreateError("");
-  };
-
-  const createProject = () => {
-    if (!projectsCapabilities.canCreateProject) {
-      return;
-    }
-
-    const projectName = newProjectDraft.name.trim();
-    const selectedClient = activeClientOptions.find((client) => String(client.id) === newProjectDraft.clientId);
-
-    const nextProjectId = Math.max(0, ...projectsData.map((project) => project.id)) + 1;
-    const nextClientId = Math.max(0, ...projectsData.map((project) => project.client.id)) + 1;
-    const safeProjectName = projectName || `Proyecto ${nextProjectId}`;
-    const stageLabel = newProjectDraft.stages.length > 0 ? newProjectDraft.stages.join(" / ") : "Sin etapa";
-
-    const createdProject: ProjectItem = {
-      id: nextProjectId,
-      code: `PRJ-${String(nextProjectId).padStart(3, "0")}`,
-      name: safeProjectName,
-      active: true,
-      status: "Activo",
-      client: {
-        id: selectedClient?.id ?? nextClientId,
-        name: selectedClient?.name ?? "Sin cliente vinculado",
-        emails: [],
-        phone: "",
-        kind: selectedClient?.kind ?? "Particular",
-        contacts: [],
-        completedProjects: [],
-        acquisitionChannel: "Sin registro",
-        totalSpent: 0,
-      },
-      type: newProjectDraft.type || "Otro",
-      stage: stageLabel,
-      phase: "Inicial",
-      address: {
-        street: "",
-        city: "",
-        state: "",
-      },
-      manager: "Sin responsable",
-      coordinator: newProjectDraft.coordinator || "Sin responsable",
-      team: [],
-      progress: 0,
-      drive: {
-        administrativo: newProjectDraft.docsUrl.trim(),
-        planos: "",
-        renders: "",
-        reportes: "",
-      },
-      startDate: newProjectDraft.startDate || new Date().toISOString().split("T")[0],
-    };
-
-    const nextProjects = [createdProject, ...projectsData];
-    lastSavedRef.current = nextProjects;
-    setProjectsData(nextProjects);
-    saveProjects(nextProjects).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
-    });
-    setShowCreateModal(false);
-    setCreateError("");
-    router.push(`/proyectos/${createdProject.id}/ficha`);
-  };
-
-  const saveNote = () => {
-    const content = noteDraft.trim();
-
-    if (!content || activeNoteProjectId === null) {
-      return;
-    }
-
-    const newNote: ProjectNote = {
-      id: `${activeNoteProjectId}-${Date.now()}`,
-      projectId: activeNoteProjectId,
-      content,
-      createdAt: new Date().toISOString(),
-    };
-
-    const next = {
-      ...notesByProject,
-      [activeNoteProjectId]: [newNote, ...(notesByProject[activeNoteProjectId] ?? [])],
-    };
-
-    setNotesByProject(next);
-    writeStorage("cincel.projects.notes.v1", JSON.stringify(next));
-    setNoteDraft("");
-  };
-
-  const updateCoordinator = (projectId: number, coordinator: string) => {
-    if (!projectsCapabilities.canEditProjectGeneral) {
-      return;
-    }
-
-    setProjectsData((current) =>
-      current.map((project) =>
-        project.id === projectId
-          ? {
-              ...project,
-              coordinator,
-            }
-          : project
-      )
-    );
-  };
-
-  const updateProjectActive = (projectId: number, active: boolean) => {
-    if (!projectsCapabilities.canArchiveProject) {
-      return;
-    }
-
-    setProjectsData((current) =>
-      current.map((project) =>
-        project.id === projectId
-          ? {
-              ...project,
-              active,
-              status: active ? "Activo" : "Archivado",
-            }
-          : project
-      )
-    );
-  };
-
-  const deleteProject = (projectId: number) => {
-    if (!projectsCapabilities.canDeleteProject) {
-      return;
-    }
-
-    const project = projectsData.find((item) => item.id === projectId);
-
-    if (!project) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Se eliminara el proyecto "${project.name}". Esta accion no se puede deshacer. Deseas continuar?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setProjectsData((current) => current.filter((item) => item.id !== projectId));
-
-    setNotesByProject((current) => {
-      const next = { ...current };
-      delete next[projectId];
-      writeStorage("cincel.projects.notes.v1", JSON.stringify(next));
-      return next;
-    });
-
-    if (activeNoteProjectId === projectId) {
-      setActiveNoteProjectId(null);
-      setNoteDraft("");
-    }
-  };
-
-  const clearFilters = () => {
-    setSearch("");
-    setCoordinatorFilter("Todos");
-    setRiskFilter("Todos");
-  };
 
   const getCoordinatorOptions = (project: ProjectItem): string[] => {
     const options = [
       ...activeTeamNames.map((name) => normalizeName(name)),
       normalizeName(project.coordinator),
     ].filter((name): name is string => name !== null);
-
     return Array.from(new Set(options)).sort((a, b) => a.localeCompare(b));
+  };
+
+  const activeNoteProject = activeNoteProjectId === null
+    ? null
+    : projectsData.find((project) => project.id === activeNoteProjectId) ?? null;
+
+  const activeNotes = activeNoteProjectId === null ? [] : notesByProject[activeNoteProjectId] ?? [];
+
+  const openNotesModal = (projectId: number) => setActiveNoteProjectId(projectId);
+  const closeNotesModal = () => setActiveNoteProjectId(null);
+
+  const openCreateModal = () => {
+    if (!projectsCapabilities.canCreateProject) return;
+    setShowCreateModal(true);
+  };
+
+  const deleteProject = (projectId: number) => {
+    if (!projectsCapabilities.canDeleteProject) return;
+    const project = projectsData.find((item) => item.id === projectId);
+    if (!project) return;
+    const confirmed = window.confirm(
+      `Se eliminara el proyecto "${project.name}". Esta accion no se puede deshacer. Deseas continuar?`
+    );
+    if (!confirmed) return;
+    removeProject(projectId);
+    if (activeNoteProjectId === projectId) closeNotesModal();
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setCoordinatorFilter("Todos");
+    setRiskFilter("Todos");
   };
 
   return (
@@ -942,7 +327,6 @@ export default function ProjectsTable() {
                 Archivados
               </button>
             </div>
-
           </div>
         </div>
 
@@ -954,21 +338,15 @@ export default function ProjectsTable() {
             placeholder="Filtrar por nombre de proyecto..."
             className="h-10 w-72 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 placeholder:text-slate-500"
           />
-
           <select
             value={coordinatorFilter}
             onChange={(event) => setCoordinatorFilter(event.target.value)}
             className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700"
           >
-            {coordinators.map((coordinator) => {
-              return (
-                <option key={coordinator} value={coordinator}>
-                  Encargado: {coordinator}
-                </option>
-              );
-            })}
+            {coordinators.map((coordinator) => (
+              <option key={coordinator} value={coordinator}>Encargado: {coordinator}</option>
+            ))}
           </select>
-
           <select
             value={riskFilter}
             onChange={(event) => setRiskFilter(event.target.value as RiskLevel | "Todos")}
@@ -979,7 +357,6 @@ export default function ProjectsTable() {
             <option value="Medio">Riesgo medio</option>
             <option value="Bajo">Riesgo bajo</option>
           </select>
-
           <button
             type="button"
             onClick={clearFilters}
@@ -987,7 +364,6 @@ export default function ProjectsTable() {
           >
             Limpiar filtros
           </button>
-
           {projectsCapabilities.canExportData ? (
             <ExportMenu onExport={exportProjects} scaleClassName="scale-100" />
           ) : null}
@@ -1014,70 +390,40 @@ export default function ProjectsTable() {
 
           {orderedStageStats.length > 0 ? (() => {
             const defaultColors = ["#6366f1", "#0ea5e9", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"];
-            const stageColorMap: Record<string, string> = {
-              "Presale": "#f59e0b",
-              "Diseño": "#6366f1",
-              "Construcción": "#0ea5e9",
-            };
+            const stageColorMap: Record<string, string> = { "Presale": "#f59e0b", "Diseño": "#6366f1", "Construcción": "#0ea5e9" };
 
             const slices = orderedStageStats.map(([stage, count], i) => {
               const pct = totalStageAssignments > 0 ? count / totalStageAssignments : 0;
               const percentage = Math.round(pct * 100);
-
-              return {
-                stage,
-                count,
-                pct,
-                percentage,
-                color: stageColorMap[stage] ?? defaultColors[i % defaultColors.length],
-              };
+              return { stage, count, pct, percentage, color: stageColorMap[stage] ?? defaultColors[i % defaultColors.length] };
             });
 
             const donutGradient = (() => {
               let cursor = 0;
               const gapDeg = 2;
-
               const segments = slices.flatMap((slice) => {
-                if (slice.count === 0) {
-                  return [];
-                }
-
+                if (slice.count === 0) return [];
                 const sweep = slice.pct * 360;
                 const start = cursor;
                 const colorEnd = start + Math.max(0, sweep - gapDeg);
                 const gapEnd = start + sweep;
                 cursor = gapEnd;
-
-                return [
-                  `${slice.color} ${start}deg ${colorEnd}deg`,
-                  `#f8fafc ${colorEnd}deg ${gapEnd}deg`,
-                ];
+                return [`${slice.color} ${start}deg ${colorEnd}deg`, `#f8fafc ${colorEnd}deg ${gapEnd}deg`];
               });
-
-              if (segments.length === 0) {
-                return "conic-gradient(#e2e8f0 0deg 360deg)";
-              }
-
+              if (segments.length === 0) return "conic-gradient(#e2e8f0 0deg 360deg)";
               return `conic-gradient(${segments.join(", ")})`;
             })();
 
             return (
               <div className="mt-5 grid gap-4 md:grid-cols-[minmax(230px,280px)_1fr] md:items-center">
                 <div className="relative mx-auto h-56 w-56 rounded-full bg-slate-100 p-2 shadow-[0_12px_28px_rgba(15,23,42,0.12)] md:h-64 md:w-64">
-                  <div
-                    className="h-full w-full rounded-full"
-                    style={{
-                      background: donutGradient,
-                      transform: "rotate(-90deg)",
-                    }}
-                  />
+                  <div className="h-full w-full rounded-full" style={{ background: donutGradient, transform: "rotate(-90deg)" }} />
                   <div className="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full bg-white text-slate-900 shadow-inner ring-1 ring-slate-200 md:h-32 md:w-32">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Total</span>
                     <span className="text-3xl font-bold leading-none">{totalStageAssignments}</span>
                     <span className="mt-1 text-[11px] text-slate-500">proyectos</span>
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   {slices.map((slice) => (
                     <div key={`legend-${slice.stage}`} className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
@@ -1106,7 +452,6 @@ export default function ProjectsTable() {
             <p className="text-sm font-semibold text-slate-800">Carga por encargado</p>
             <span className="text-xs text-slate-500">{orderedCoordinatorStats.length} persona(s)</span>
           </div>
-
           <div className="mt-3 space-y-2">
             {orderedCoordinatorStats.length > 0 ? orderedCoordinatorStats.map(([name, stats]) => (
               <div key={`coordinator-stat-${name}`} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
@@ -1159,25 +504,18 @@ export default function ProjectsTable() {
                 <td className="px-4 py-3">{project.client.name}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1.5">
-                    {project.stage
-                      .split("/")
-                      .map((stage) => stage.trim())
-                      .filter(Boolean)
-                      .map((stage) => (
-                        <span key={`${project.id}-${stage}`} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700">
-                          {stage}
-                        </span>
-                      ))}
+                    {project.stage.split("/").map((stage) => stage.trim()).filter(Boolean).map((stage) => (
+                      <span key={`${project.id}-${stage}`} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700">
+                        {stage}
+                      </span>
+                    ))}
                   </div>
                 </td>
                 <td className="px-4 py-3">
                   {projectsCapabilities.canEditProjectGeneral && inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "design" ? (
                     <select
                       value={normalizeName(project.coordinator) || "Sin encargado"}
-                      onChange={(event) => {
-                        updateCoordinator(project.id, event.target.value);
-                        setInlineEditingCell(null);
-                      }}
+                      onChange={(event) => { updateCoordinator(project.id, event.target.value); setInlineEditingCell(null); }}
                       onBlur={() => setInlineEditingCell(null)}
                       autoFocus
                       className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
@@ -1191,10 +529,7 @@ export default function ProjectsTable() {
                     <span
                       className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
                       onClick={() => {
-                        if (!projectsCapabilities.canEditProjectGeneral) {
-                          return;
-                        }
-
+                        if (!projectsCapabilities.canEditProjectGeneral) return;
                         setInlineEditingCell({ projectId: project.id, field: "design" });
                       }}
                     >
@@ -1206,10 +541,7 @@ export default function ProjectsTable() {
                   {projectsCapabilities.canEditProjectGeneral && inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "construction" ? (
                     <select
                       value={secondaryCoordinatorByProject[project.id] || "Sin encargado"}
-                      onChange={(event) => {
-                        setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: event.target.value }));
-                        setInlineEditingCell(null);
-                      }}
+                      onChange={(event) => { setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: event.target.value })); setInlineEditingCell(null); }}
                       onBlur={() => setInlineEditingCell(null)}
                       autoFocus
                       className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
@@ -1223,10 +555,7 @@ export default function ProjectsTable() {
                     <span
                       className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
                       onClick={() => {
-                        if (!projectsCapabilities.canEditProjectGeneral) {
-                          return;
-                        }
-
+                        if (!projectsCapabilities.canEditProjectGeneral) return;
                         setInlineEditingCell({ projectId: project.id, field: "construction" });
                       }}
                     >
@@ -1234,7 +563,9 @@ export default function ProjectsTable() {
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3" suppressHydrationWarning>{project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}</td>
+                <td className="px-4 py-3" suppressHydrationWarning>
+                  {project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}
+                </td>
                 <td className="px-4 py-3">
                   <div className="inline-flex items-center gap-2">
                     <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
@@ -1275,16 +606,8 @@ export default function ProjectsTable() {
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
           {[
-            {
-              key: "activos",
-              title: "Proyectos activos",
-              items: visibleProjects.filter((project) => project.active),
-            },
-            {
-              key: "archivados",
-              title: "Proyectos archivados",
-              items: visibleProjects.filter((project) => !project.active),
-            },
+            { key: "activos", title: "Proyectos activos", items: visibleProjects.filter((project) => project.active) },
+            { key: "archivados", title: "Proyectos archivados", items: visibleProjects.filter((project) => !project.active) },
           ].map((section) => (
             <div key={section.key} className="space-y-3">
               <div className="flex items-center justify-between">
@@ -1294,160 +617,140 @@ export default function ProjectsTable() {
 
               {section.items.length > 0 ? section.items.map((project) => (
                 <div key={project.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
-                {/* Nombre + estado */}
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">{project.code}</p>
-                    <h3 className="text-xl font-bold text-slate-900">{project.name}</h3>
-                  </div>
-                  <div className="inline-flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
-                    <select
-                      value={project.active ? "activo" : "archivado"}
-                      onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
-                      disabled={!projectsCapabilities.canArchiveProject}
-                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
-                      aria-label={`Estado de ${project.name}`}
-                    >
-                      <option value="activo">Proyecto activo</option>
-                      <option value="archivado">Proyecto archivado</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Cliente + Equipo Asignado */}
-                <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-slate-500">Cliente</p>
-                    <p className="font-semibold text-slate-800">{project.client.name}</p>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-slate-600">Líder de diseño</p>
-                      <select
-                        value={normalizeName(project.coordinator) || "Sin responsable"}
-                        onChange={(event) => updateCoordinator(project.id, event.target.value)}
-                        disabled={!projectsCapabilities.canEditProjectGeneral}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
-                        aria-label={`Líder de diseño de ${project.name}`}
-                      >
-                        <option value="Sin responsable">Sin encargado</option>
-                        {getCoordinatorOptions(project).map((member) => (
-                          <option key={`card-coordinator-${project.id}-${member}`} value={member}>
-                            {member}
-                          </option>
-                        ))}
-                      </select>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">{project.code}</p>
+                      <h3 className="text-xl font-bold text-slate-900">{project.name}</h3>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-slate-600">Líder de construcción</p>
+                    <div className="inline-flex items-center gap-2">
+                      <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
                       <select
-                        value={secondaryCoordinatorByProject[project.id] || "Sin responsable"}
-                        onChange={(event) => {
-                          if (!projectsCapabilities.canEditProjectGeneral) {
-                            return;
-                          }
-
-                          setSecondaryCoordinatorByProject((current) => ({
-                            ...current,
-                            [project.id]: event.target.value,
-                          }));
-                        }}
-                        disabled={!projectsCapabilities.canEditProjectGeneral}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
-                        aria-label={`Líder de construcción de ${project.name}`}
+                        value={project.active ? "activo" : "archivado"}
+                        onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
+                        disabled={!projectsCapabilities.canArchiveProject}
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
+                        aria-label={`Estado de ${project.name}`}
                       >
-                        <option value="Sin responsable">Sin encargado</option>
-                        {getCoordinatorOptions(project).map((member) => (
-                          <option key={`card-construction-coordinator-${project.id}-${member}`} value={member}>
-                            {member}
-                          </option>
-                        ))}
+                        <option value="activo">Proyecto activo</option>
+                        <option value="archivado">Proyecto archivado</option>
                       </select>
                     </div>
                   </div>
-                </div>
 
-                {/* Actividad + tipo */}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {project.stage
-                    .split("/")
-                    .map((stage) => stage.trim())
-                    .filter(Boolean)
-                    .map((stage) => (
+                  <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-slate-500">Cliente</p>
+                      <p className="font-semibold text-slate-800">{project.client.name}</p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-slate-600">Líder de diseño</p>
+                        <select
+                          value={normalizeName(project.coordinator) || "Sin responsable"}
+                          onChange={(event) => updateCoordinator(project.id, event.target.value)}
+                          disabled={!projectsCapabilities.canEditProjectGeneral}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                          aria-label={`Líder de diseño de ${project.name}`}
+                        >
+                          <option value="Sin responsable">Sin encargado</option>
+                          {getCoordinatorOptions(project).map((member) => (
+                            <option key={`card-coordinator-${project.id}-${member}`} value={member}>{member}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-slate-600">Líder de construcción</p>
+                        <select
+                          value={secondaryCoordinatorByProject[project.id] || "Sin responsable"}
+                          onChange={(event) => {
+                            if (!projectsCapabilities.canEditProjectGeneral) return;
+                            setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: event.target.value }));
+                          }}
+                          disabled={!projectsCapabilities.canEditProjectGeneral}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                          aria-label={`Líder de construcción de ${project.name}`}
+                        >
+                          <option value="Sin responsable">Sin encargado</option>
+                          {getCoordinatorOptions(project).map((member) => (
+                            <option key={`card-construction-coordinator-${project.id}-${member}`} value={member}>{member}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {project.stage.split("/").map((stage) => stage.trim()).filter(Boolean).map((stage) => (
                       <span key={`card-stage-${project.id}-${stage}`} className="rounded-full border border-blue-200 bg-blue-100/70 px-2 py-0.5 text-xs font-medium text-blue-800">
                         {stage}
                       </span>
                     ))}
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">{project.type}</span>
-                </div>
-
-                {/* Avance + Próxima entrega */}
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Avance</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">{project.progress}%</p>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">{project.type}</span>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Próxima entrega</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800" suppressHydrationWarning>{project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}</p>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Avance</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">{project.progress}%</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500">Próxima entrega</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800" suppressHydrationWarning>
+                        {project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                {/* Links */}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link href={projectTasksPath(project.name)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-                    Actividades
-                  </Link>
-                  <a
-                    href={project.drive?.administrativo || "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`rounded-lg border px-4 py-2 text-sm font-medium ${project.drive?.administrativo ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"}`}
-                  >
-                    Docs del proyecto
-                  </a>
-                  <a
-                    href={project.drive?.reportes || "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`rounded-lg border px-4 py-2 text-sm font-medium ${project.drive?.reportes ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"}`}
-                  >
-                    Docs del cliente
-                  </a>
-                </div>
-
-                {/* Pie: alerta + acciones */}
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                  <p className="text-xs text-slate-500" suppressHydrationWarning>
-                    {project.startDate ? `Inicio: ${formatDate(project.startDate)} · ` : ""}
-                    Alerta: {project.mainAlert}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openNotesModal(project.id)}
-                      className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      Registrar nota
-                    </button>
-                    <Link href={`/proyectos/${project.id}/ficha`} className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                      Ficha del proyecto
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Link href={projectTasksPath(project.name)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                      Actividades
                     </Link>
-                    {section.key === "archivados" ? (
+                    <a
+                      href={project.drive?.administrativo || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`rounded-lg border px-4 py-2 text-sm font-medium ${project.drive?.administrativo ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"}`}
+                    >
+                      Docs del proyecto
+                    </a>
+                    <a
+                      href={project.drive?.reportes || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`rounded-lg border px-4 py-2 text-sm font-medium ${project.drive?.reportes ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"}`}
+                    >
+                      Docs del cliente
+                    </a>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                    <p className="text-xs text-slate-500" suppressHydrationWarning>
+                      {project.startDate ? `Inicio: ${formatDate(project.startDate)} · ` : ""}
+                      Alerta: {project.mainAlert}
+                    </p>
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => deleteProject(project.id)}
-                        disabled={!projectsCapabilities.canDeleteProject}
-                        title={projectsCapabilities.canDeleteProject ? "" : "No tienes permiso para eliminar proyectos"}
-                        className={`rounded-lg border px-3 py-1 text-sm font-medium ${projectsCapabilities.canDeleteProject ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+                        onClick={() => openNotesModal(project.id)}
+                        className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
                       >
-                        Eliminar proyecto
+                        Registrar nota
                       </button>
-                    ) : null}
+                      <Link href={`/proyectos/${project.id}/ficha`} className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                        Ficha del proyecto
+                      </Link>
+                      {section.key === "archivados" ? (
+                        <button
+                          onClick={() => deleteProject(project.id)}
+                          disabled={!projectsCapabilities.canDeleteProject}
+                          title={projectsCapabilities.canDeleteProject ? "" : "No tienes permiso para eliminar proyectos"}
+                          className={`rounded-lg border px-3 py-1 text-sm font-medium ${projectsCapabilities.canDeleteProject ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+                        >
+                          Eliminar proyecto
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-
-              </div>
               )) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                   No hay proyectos en esta seccion.
@@ -1466,7 +769,6 @@ export default function ProjectsTable() {
         <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-lg font-bold text-slate-900">Atencion inmediata</h3>
           <p className="mt-1 text-sm text-slate-600">Proyectos que requieren accion hoy.</p>
-
           <div className="mt-4 space-y-3">
             {alerts.map((project) => (
               <div key={`alert-${project.id}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -1474,7 +776,6 @@ export default function ProjectsTable() {
                 <p className="mt-1 text-xs text-slate-600">{project.mainAlert}</p>
               </div>
             ))}
-
             {alerts.length === 0 ? (
               <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
                 No hay alertas criticas por ahora.
@@ -1485,211 +786,24 @@ export default function ProjectsTable() {
       </div>
 
       {activeNoteProject ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <div>
-                <h4 className="text-lg font-bold text-slate-900">Notas del proyecto</h4>
-                <p className="text-sm text-slate-600">{activeNoteProject.name}</p>
-              </div>
-              <button
-                onClick={closeNotesModal}
-                className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="space-y-4 px-5 py-4">
-              <textarea
-                value={noteDraft}
-                onChange={(event) => setNoteDraft(event.target.value)}
-                placeholder="Escribe una nota operativa..."
-                rows={4}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm"
-              />
-
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={closeNotesModal}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={saveNote}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Guardar nota
-                </button>
-              </div>
-
-              <div className="max-h-72 space-y-3 overflow-y-auto border-t border-slate-200 pt-4">
-                {activeNotes.length === 0 ? (
-                  <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
-                    Todavia no hay notas para este proyecto.
-                  </p>
-                ) : (
-                  activeNotes.map((note) => (
-                    <div key={note.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-sm text-slate-800">{note.content}</p>
-                      <p className="mt-2 text-xs text-slate-500">{formatDate(note.createdAt)}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <ProjectNotesModal
+          projectName={activeNoteProject.name}
+          notes={activeNotes}
+          onClose={closeNotesModal}
+          onSave={(content) => addNote(activeNoteProject.id, content)}
+        />
       ) : null}
 
       {showCreateModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <div>
-                <h4 className="text-lg font-bold text-slate-900">Nuevo proyecto</h4>
-                <p className="text-sm text-slate-600">Crea un proyecto operativo y abre su ficha.</p>
-              </div>
-              <button
-                type="button"
-                onClick={closeCreateModal}
-                className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="space-y-4 px-5 py-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm text-slate-700">
-                  Nombre del proyecto
-                  <input
-                    value={newProjectDraft.name}
-                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, name: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
-
-                <label className="text-sm text-slate-700">
-                  Cliente (activos existentes)
-                  <select
-                    value={newProjectDraft.clientId}
-                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, clientId: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="">Vincular mas adelante</option>
-                    {activeClientOptions.length === 0 ? <option value="">No hay clientes activos</option> : null}
-                    {activeClientOptions.map((client) => (
-                      <option key={`active-client-${client.id}`} value={String(client.id)}>
-                        {client.name} ({client.kind})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="text-sm text-slate-700">
-                  Tipo de proyecto
-                  <select
-                    value={newProjectDraft.type}
-                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, type: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  >
-                    {projectTypeOptions.map((type) => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="text-sm text-slate-700">
-                  Etapas (seleccion multiple)
-                  <div className="mt-1 grid gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2">
-                    {STAGE_OPTIONS.map((stage) => (
-                      <label key={`stage-${stage}`} className="flex items-center gap-2 text-sm text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={newProjectDraft.stages.includes(stage)}
-                          onChange={(event) => {
-                            setNewProjectDraft((prev) => {
-                              const hasStage = prev.stages.includes(stage);
-
-                              if (event.target.checked && !hasStage) {
-                                return { ...prev, stages: [...prev.stages, stage] };
-                              }
-
-                              if (!event.target.checked && hasStage) {
-                                return { ...prev, stages: prev.stages.filter((item) => item !== stage) };
-                              }
-
-                              return prev;
-                            });
-                          }}
-                        />
-                        {stage}
-                      </label>
-                    ))}
-                  </div>
-                </label>
-
-                <label className="text-sm text-slate-700">
-                  Encargado
-                  <select
-                    value={newProjectDraft.coordinator}
-                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, coordinator: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="Sin responsable">Sin encargado</option>
-                    {activeTeamNames.map((name) => (
-                      <option key={`new-coordinator-${name}`} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="text-sm text-slate-700 sm:col-span-2">
-                  Vinculo Google Doc del proyecto
-                  <input
-                    value={newProjectDraft.docsUrl}
-                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, docsUrl: event.target.value }))}
-                    placeholder="https://docs.google.com/..."
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
-
-                <label className="text-sm text-slate-700 sm:col-span-2">
-                  Fecha de inicio
-                  <input
-                    type="date"
-                    value={newProjectDraft.startDate}
-                    onChange={(event) => setNewProjectDraft((prev) => ({ ...prev, startDate: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
-              </div>
-
-              {createError ? (
-                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{createError}</p>
-              ) : null}
-
-              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
-                <button
-                  type="button"
-                  onClick={closeCreateModal}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={createProject}
-                  disabled={!projectsCapabilities.canCreateProject}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Crear proyecto
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ProjectCreateModal
+          activeClientOptions={activeClientOptions}
+          activeTeamNames={activeTeamNames}
+          projectTypeOptions={PROJECT_TYPE_OPTIONS}
+          existingProjectIds={projectsData.map((p) => p.id)}
+          existingClientIds={projectsData.map((p) => p.client.id)}
+          onClose={() => setShowCreateModal(false)}
+          onConfirm={(project) => { addProject(project); setShowCreateModal(false); router.push(`/proyectos/${project.id}/ficha`); }}
+        />
       ) : null}
     </div>
   );
