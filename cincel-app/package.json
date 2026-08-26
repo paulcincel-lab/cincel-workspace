@@ -7,8 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "health:check": "node scripts/health-check.mjs",
-    "health:check:authenticated": "node scripts/health-check-authenticated.mjs"
+    "health:check:authenticated": "node scripts/health-check-authenticated.mjs",
+    "e2e:clientes": "node scripts/e2e-login-crud-clientes.mjs",
+    "e2e:modules-smoke": "node scripts/e2e-sprint11-modules-review.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.9",
@@ -20,14 +26,18 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "happy-dom": "^20.11.6",
     "playwright": "^1.62.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   }
 }
