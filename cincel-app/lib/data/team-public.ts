@@ -51,6 +51,14 @@ export const teamMembersPublic: TeamMemberPublic[] = [
     active: true,
     institutionalEmail: "paul@cincel.mx",
     phone: "+52 646 222 3344",
+    auth: {
+      // FNV-1a hash of "Temporal123" (see simpleHash in lib/auth/auth-service.ts).
+      passwordHash: "7ea376fd",
+      authEnabled: true,
+      mustChangePassword: true,
+      passwordUpdatedAt: null,
+      lastLoginAt: null,
+    },
   },
   {
     id: 3,
