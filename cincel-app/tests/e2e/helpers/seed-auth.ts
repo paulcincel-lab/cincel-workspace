@@ -112,7 +112,12 @@ export async function seedAuth(page: Page): Promise<void> {
 
 /** Logs in as the seeded admin user. Call after seedAuth and page.goto. */
 export async function loginAsAdmin(page: Page, baseUrl: string): Promise<void> {
-  await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
+  // Use "load" (not "domcontentloaded") so all JS bundles are downloaded and
+  // React has completed hydration before we fill the controlled inputs.
+  // With "domcontentloaded" Playwright fills the inputs before React attaches
+  // its synthetic event listeners; React then resets the state on hydration,
+  // leaving canSubmit=false and the submit button permanently disabled.
+  await page.goto(`${baseUrl}/login`, { waitUntil: "load" });
   await page.getByLabel("Correo institucional").fill("paul@cincel.mx");
   await page.locator('input[type="password"]').first().fill("Temporal123");
   await page.getByRole("button", { name: "Entrar" }).click();
