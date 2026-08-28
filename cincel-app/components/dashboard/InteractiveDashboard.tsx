@@ -14,6 +14,9 @@ import { presaleTasks } from "@/lib/data/presale";
 import type { Task, TaskStatus, WorkflowType } from "@/lib/types/task";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { readStorage } from "@/lib/repositories/browser-state-repository";
+import { fetchProjects } from "@/lib/repositories/projects-repository";
+import { fetchActivities } from "@/lib/repositories/activities-repository";
+import { SupabaseOperationError } from "@/lib/supabase/errors";
 
 const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
@@ -187,6 +190,23 @@ export default function InteractiveDashboard() {
 
     // Ensure Dashboard starts with the latest local changes immediately.
     refreshAll();
+
+    // Pull live data from Postgres, then re-read (fetch* mirrors into the
+    // localStorage keys the dashboard reads synchronously).
+    const hydrateFromDb = async () => {
+      try {
+        await Promise.all([
+          fetchProjects(),
+          fetchActivities("Presale"),
+          fetchActivities("Diseño"),
+          fetchActivities("Construcción"),
+        ]);
+        refreshAll();
+      } catch (err) {
+        if (err instanceof SupabaseOperationError) return;
+      }
+    };
+    void hydrateFromDb();
 
     window.addEventListener("focus", refreshAll);
     window.addEventListener("storage", refreshAll);

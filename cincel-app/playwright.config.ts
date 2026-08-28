@@ -4,6 +4,7 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalSetup: "./tests/e2e/global-cleanup.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -35,6 +36,9 @@ export default defineConfig({
         timeout: process.env.CI ? 180_000 : 120_000,
         env: {
           PORT: "3000",
+          DATABASE_URL:
+            process.env.DATABASE_URL ??
+            "postgres://cincel:cincel@localhost:5432/cincel",
         },
       },
 });

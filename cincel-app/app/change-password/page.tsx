@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { completeFirstAccessPasswordChange } from "@/lib/auth/auth-service";
+import { completeFirstAccessAction } from "@/lib/auth/auth-actions";
 
 type Draft = {
   nextPassword: string;
@@ -21,40 +21,39 @@ export default function ChangePasswordPage() {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState<string>("");
+  const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setSuccess("");
 
-    const result = completeFirstAccessPasswordChange(draft.nextPassword, draft.confirmPassword);
-    if (!result.ok) {
-      if (result.reason === "password_too_short") {
-        setError("La nueva contrasena debe tener al menos 8 caracteres.");
+    startTransition(async () => {
+      const result = await completeFirstAccessAction(
+        draft.nextPassword,
+        draft.confirmPassword
+      );
+      if (!result.ok) {
+        if (result.reason === "password_too_short") {
+          setError("La nueva contrasena debe tener al menos 8 caracteres.");
+          return;
+        }
+        if (result.reason === "password_confirmation_mismatch") {
+          setError("La confirmacion no coincide con la nueva contrasena.");
+          return;
+        }
+        if (result.reason === "no_session") {
+          setError("Tu sesion expiro. Inicia sesion de nuevo.");
+          return;
+        }
+        setError("No fue posible completar el primer acceso.");
         return;
       }
 
-      if (result.reason === "password_confirmation_mismatch") {
-        setError("La confirmacion no coincide con la nueva contrasena.");
-        return;
-      }
-
-      if (result.reason === "inactive_member") {
-        setError("Tu cuenta esta inactiva. Contacta a un administrador.");
-        return;
-      }
-
-      if (result.reason === "no_system_access") {
-        setError("Tu cuenta no tiene acceso al sistema.");
-        return;
-      }
-
-      setError("No fue posible completar el primer acceso.");
-      return;
-    }
-
-    setSuccess("Contrasena actualizada. Redirigiendo al Dashboard...");
-    router.replace("/dashboard");
+      setSuccess("Contrasena actualizada. Redirigiendo al Dashboard...");
+      router.replace("/dashboard");
+      router.refresh();
+    });
   };
 
   return (
@@ -120,9 +119,10 @@ export default function ChangePasswordPage() {
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+              disabled={isPending}
+              className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              Guardar y continuar
+              {isPending ? "Guardando..." : "Guardar y continuar"}
             </button>
           </form>
         </section>

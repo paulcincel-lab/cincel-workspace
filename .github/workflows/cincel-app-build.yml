@@ -66,6 +66,27 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: cincel
+          POSTGRES_USER: cincel
+          POSTGRES_PASSWORD: cincel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cincel -d cincel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://cincel:cincel@localhost:5432/cincel
+      SEED_ADMIN_EMAIL: paul@cincel.mx
+      SEED_ADMIN_PASSWORD: CincelAdmin2026!
+      E2E_ADMIN_PASSWORD: CincelAdmin2026!
+
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
@@ -79,6 +100,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Apply database migrations
+        run: npm run db:migrate
+
+      - name: Seed database
+        run: npm run db:seed
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

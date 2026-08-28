@@ -4,23 +4,22 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error(
-    "DATABASE_URL is not set. Configure it in .env (see .env.example) — " +
-      "the local docker-compose default is postgres://cincel:cincel@localhost:5432/cincel"
-  );
-}
-
 /**
- * Reuse a single postgres.js connection pool across hot reloads in dev.
+ * postgres.js is lazy — no socket is opened until the first query — so
+ * constructing this at import time is safe during `next build` (which has no
+ * DATABASE_URL and never issues a query for a cookie-less request). A missing
+ * DATABASE_URL only surfaces as an error on the first real query.
  */
 const globalForDb = globalThis as unknown as {
   __cincelSql?: ReturnType<typeof postgres>;
 };
 
-const sql = globalForDb.__cincelSql ?? postgres(connectionString, { max: 10 });
+const sql =
+  globalForDb.__cincelSql ??
+  postgres(process.env.DATABASE_URL ?? "", {
+    max: 10,
+    onnotice: () => {},
+  });
 
 if (process.env.NODE_ENV !== "production") {
   globalForDb.__cincelSql = sql;

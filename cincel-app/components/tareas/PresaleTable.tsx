@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -20,7 +20,7 @@ import { presalePhaseOptions } from "@/lib/templates/phase-options";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
-import { fetchActivities, saveActivities } from "@/lib/repositories/activities-repository";
+import { fetchActivities, saveActivities, mirrorActivitiesToStorage } from "@/lib/repositories/activities-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
@@ -198,8 +198,21 @@ export default function PresaleTable({
     router.replace(queryString ? `${pathname}?${queryString}` : pathname);
   };
 
+  // Diffed autosave: only the tasks that actually changed since the last
+  // persisted state are sent (a full-array upsert on every keystroke was too
+  // heavy — dozens of queries per change). `lastSavedRef` is seeded from the
+  // initial state and reset on hydration so neither the mount value nor the
+  // hydration set counts as a user change.
+  const lastSavedRef = useRef<Task[]>(tasks);
   useEffect(() => {
-    saveActivities(workflow, tasks).catch((err: unknown) => {
+    const changed = tasks.filter((task) => {
+      const saved = lastSavedRef.current.find((t) => t.id === task.id);
+      return !saved || JSON.stringify(task) !== JSON.stringify(saved);
+    });
+    if (changed.length === 0) return;
+    lastSavedRef.current = tasks;
+    mirrorActivitiesToStorage(workflow, tasks);
+    saveActivities(workflow, changed).catch((err: unknown) => {
       if (err instanceof SupabaseOperationError) reportSupabaseError(err);
     });
   }, [tasks, workflow]);
@@ -209,7 +222,9 @@ export default function PresaleTable({
       try {
         const remote = await fetchActivities(workflow);
         if (remote.length > 0) {
-          setTasks(loadLinkedTasks(workflow, remote));
+          const linked = loadLinkedTasks(workflow, remote);
+          lastSavedRef.current = linked;
+          setTasks(linked);
         }
       } catch (err) {
         if (err instanceof SupabaseOperationError) {

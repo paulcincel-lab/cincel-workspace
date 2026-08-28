@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { resolveCurrentSessionAccess } from "@/lib/auth/auth-service";
+import { useSessionAccess } from "@/lib/auth/session-context";
 
 const PUBLIC_LOGIN_ROUTE = "/login";
 const PUBLIC_FIRST_ACCESS_ROUTE = "/change-password";
@@ -22,26 +22,14 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
     () => false
   );
 
-  // resolveCurrentSessionAccess() is recomputed on every render, but nothing
-  // triggers a render when the underlying auth state changes asynchronously
-  // (e.g. in Supabase mode, the initial getSession() check resolving after
-  // mount). Every other consumer of the auth session in this app refreshes
-  // on the "storage"/"focus" window events, so we subscribe to the same
-  // events here to force a re-render and re-evaluate access once the
-  // session state settles.
-  const [, forceRefresh] = useState(0);
-  useEffect(() => {
-    const handleAuthStateSignal = () => forceRefresh((count) => count + 1);
-    window.addEventListener("storage", handleAuthStateSignal);
-    window.addEventListener("focus", handleAuthStateSignal);
-    return () => {
-      window.removeEventListener("storage", handleAuthStateSignal);
-      window.removeEventListener("focus", handleAuthStateSignal);
-    };
-  }, []);
+  // Server-resolved access decision, hydrated by the root layout and refreshed
+  // via revalidatePath() after the login/logout Server Actions.
+  const serverResolution = useSessionAccess();
 
   const route = pathname || "/";
-  const resolution = isMounted ? resolveCurrentSessionAccess() : { status: "guest" as const, user: null };
+  const resolution = isMounted
+    ? serverResolution
+    : { status: "guest" as const, user: null };
   const isPublic = isPublicRoute(route);
   const isConfigurationRoute = route === CONFIG_ROUTE_PREFIX || route.startsWith(`${CONFIG_ROUTE_PREFIX}/`);
 

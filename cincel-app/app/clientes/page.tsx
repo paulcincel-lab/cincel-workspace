@@ -19,7 +19,7 @@ import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import type { Task } from "@/lib/types/task";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { saveClients, fetchClients, getClientsSnapshot } from "@/lib/repositories/clients-repository";
+import { saveClients, fetchClients } from "@/lib/repositories/clients-repository";
 import { saveProjects, fetchProjects, getProjectsSnapshot } from "@/lib/repositories/projects-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
@@ -247,41 +247,6 @@ function loadPersistedTasks(workflow: "Presale" | "Diseño" | "Construcción", f
   return loadLinkedTasks(workflow, fallback);
 }
 
-function loadManualClients(): ManualClient[] {
-  const parsed = getClientsSnapshot() as ManualClient[];
-
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-
-  return parsed.map((item) => ({
-    id: Number(item.id),
-    name: item.name || "",
-    emails: Array.isArray(item.emails) ? item.emails.filter(Boolean) : [],
-    phone: item.phone || "",
-    kind: item.kind === "Empresa" ? "Empresa" : "Particular",
-    contacts: Array.isArray(item.contacts)
-      ? item.contacts.filter((contact): contact is { name: string; role: string; phone: string; email: string } =>
-        Boolean(contact)
-        && typeof contact.name === "string"
-        && typeof contact.role === "string"
-        && typeof contact.phone === "string"
-        && typeof contact.email === "string"
-      )
-      : [],
-    completedProjects: Array.isArray(item.completedProjects)
-      ? item.completedProjects.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-      : [],
-    acquisitionChannel: typeof item.acquisitionChannel === "string" ? item.acquisitionChannel : "Sin registro",
-    totalSpent: typeof item.totalSpent === "number" ? item.totalSpent : 0,
-    hasActiveProject: Boolean(item.hasActiveProject),
-    projectName: item.projectName || "",
-    projectType: item.projectType || "Otro",
-    totalProjectsWorked: Number.isFinite(Number(item.totalProjectsWorked)) ? Number(item.totalProjectsWorked) : 1,
-    firstWorkDate: item.firstWorkDate || "",
-  }));
-}
-
 function getEarliestDate(dates: string[]): string {
   const validDates = dates
     .filter((value) => Boolean(value))
@@ -372,27 +337,21 @@ export default function ClientesPage() {
   const [newClientDraft, setNewClientDraft] = useState<NewClientDraft>(emptyNewClientDraft);
 
   useEffect(() => {
-    const refresh = () => {
+    // Clients now live in Postgres (fetched via a Server Action); projects and
+    // tasks are still on the mock/localStorage path.
+    const hydrate = async () => {
       setAuthenticatedUser(getCurrentAuthenticatedUser());
       setProjects(loadPersistedProjects());
-      setManualClients(loadManualClients());
       setAllTasks([
         ...loadPersistedTasks("Presale", presaleTasks),
         ...loadPersistedTasks("Diseño", disenoTasks),
         ...loadPersistedTasks("Construcción", operativasTasks),
       ]);
-    };
-
-    refresh();
-
-    // Hidratación async desde Supabase (cuando está habilitado)
-    const hydrate = async () => {
       try {
         const [remoteProjects, remoteClients] = await Promise.all([
           fetchProjects(),
           fetchClients(),
         ]);
-
         setProjects(remoteProjects.length > 0 ? remoteProjects : loadPersistedProjects());
         setManualClients(remoteClients);
       } catch (err) {
@@ -400,6 +359,10 @@ export default function ClientesPage() {
           reportSupabaseError(err);
         }
       }
+    };
+
+    const refresh = () => {
+      void hydrate();
     };
 
     void hydrate();
@@ -768,7 +731,7 @@ export default function ClientesPage() {
     closeEditor();
   };
 
-  const createClient = () => {
+  const createClient = async () => {
     if (!clientsCapabilities.canCreateClient) {
       return;
     }
@@ -814,8 +777,14 @@ export default function ClientesPage() {
 
     const updatedManual = [...manualClients, createdClient];
     setManualClients(updatedManual);
-    updateManualClientsStorage(updatedManual);
     setSelectedClientId(createdClient.id);
+    try {
+      await saveClients(updatedManual);
+    } catch {
+      setManualClients(manualClients);
+      setCreateError("No se pudo guardar el cliente. Intenta de nuevo.");
+      return;
+    }
     closeCreateClient();
   };
 

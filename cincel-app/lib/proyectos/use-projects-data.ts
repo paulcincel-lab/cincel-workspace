@@ -10,10 +10,9 @@ import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { saveProjects, fetchProjects } from "@/lib/repositories/projects-repository";
+import { saveProjects, fetchProjects, deleteProject, mirrorProjectsToStorage } from "@/lib/repositories/projects-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
-import { isSupabaseEnabled } from "@/lib/supabase/data-source";
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
@@ -55,87 +54,12 @@ function loadProjectNotes(): Record<number, ProjectNote[]> {
   }
 }
 
+/**
+ * Synchronous seed used for first paint. Projects live in Postgres now
+ * (Phase 2) — the hook replaces this with `fetchProjects()` on mount.
+ */
 function loadPersistedProjects(): ProjectItem[] {
-  if (typeof window === "undefined") return projects;
-  if (isSupabaseEnabled()) return projects;
-  const stored = readStorage("cincel.projects.data.v1");
-  if (!stored) return projects;
-  try {
-    const parsed = JSON.parse(stored) as Array<Partial<ProjectItem>>;
-    if (!Array.isArray(parsed)) return projects;
-    const normalized = parsed
-      .map((item) => {
-        const fallback = projects.find(
-          (project) => project.code === item.code || project.name === item.name
-        );
-        if (!fallback) {
-          const rawId = item.id;
-          const numericId = typeof rawId === "number" ? rawId : typeof rawId === "string" ? Number(rawId) : Number.NaN;
-          const safeId = Number.isFinite(numericId) ? numericId : Date.now();
-          const incomingClient = item.client as Partial<ProjectItem["client"]> | undefined;
-          const safeCoordinator = normalizeName(item.coordinator) || "Sin responsable";
-          return {
-            id: safeId,
-            code: typeof item.code === "string" && item.code ? item.code : `PRJ-${safeId}`,
-            name: typeof item.name === "string" && item.name ? item.name : `Proyecto ${safeId}`,
-            active: Boolean(item.active),
-            status: typeof item.status === "string" && item.status ? item.status : (item.active ? "Activo" : "Inactivo"),
-            client: {
-              id: typeof incomingClient?.id === "number" ? incomingClient.id : safeId,
-              name: normalizeName(incomingClient?.name) || "Cliente",
-              emails: Array.isArray(incomingClient?.emails) ? incomingClient.emails.filter((email): email is string => typeof email === "string" && email.trim().length > 0) : [],
-              phone: normalizeName(incomingClient?.phone) || "",
-              kind: incomingClient?.kind === "Empresa" || incomingClient?.kind === "Particular" ? incomingClient.kind : "Particular",
-              contacts: Array.isArray(incomingClient?.contacts) ? incomingClient.contacts.filter((contact): contact is { name: string; role: string; phone: string; email: string } => Boolean(contact) && typeof contact.name === "string" && typeof contact.role === "string" && typeof contact.phone === "string" && typeof contact.email === "string") : [],
-              completedProjects: Array.isArray(incomingClient?.completedProjects) ? incomingClient.completedProjects.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : [],
-              acquisitionChannel: typeof incomingClient?.acquisitionChannel === "string" ? incomingClient.acquisitionChannel : "Sin registro",
-              totalSpent: typeof incomingClient?.totalSpent === "number" ? incomingClient.totalSpent : 0,
-            },
-            type: typeof item.type === "string" && item.type ? item.type : "Otro",
-            stage: typeof item.stage === "string" && item.stage ? item.stage : "Presale",
-            phase: typeof item.phase === "string" && item.phase ? item.phase : "Inicial",
-            address: {
-              street: item.address && typeof item.address.street === "string" ? item.address.street : "",
-              city: item.address && typeof item.address.city === "string" ? item.address.city : "",
-              state: item.address && typeof item.address.state === "string" ? item.address.state : "",
-            },
-            manager: normalizeName(item.manager) || "Sin responsable",
-            coordinator: safeCoordinator,
-            team: Array.isArray(item.team) ? item.team.filter((member): member is string => typeof member === "string") : [],
-            progress: typeof item.progress === "number" ? item.progress : 0,
-            drive: {
-              administrativo: item.drive && typeof item.drive.administrativo === "string" ? item.drive.administrativo : "",
-              planos: item.drive && typeof item.drive.planos === "string" ? item.drive.planos : "",
-              renders: item.drive && typeof item.drive.renders === "string" ? item.drive.renders : "",
-              reportes: item.drive && typeof item.drive.reportes === "string" ? item.drive.reportes : "",
-            },
-            startDate: typeof item.startDate === "string" ? item.startDate : "",
-          } as ProjectItem;
-        }
-        const rawId = item.id;
-        const numericId = typeof rawId === "number" ? rawId : typeof rawId === "string" ? Number(rawId) : Number.NaN;
-        const safeId = Number.isFinite(numericId) ? numericId : fallback.id;
-        const safeCoordinator = normalizeName(item.coordinator) || fallback.coordinator || "Sin responsable";
-        const incomingClient = item.client as Partial<ProjectItem["client"]> | undefined;
-        const safeClient = {
-          ...fallback.client,
-          ...incomingClient,
-          emails: Array.isArray(incomingClient?.emails) ? incomingClient.emails.filter((email): email is string => typeof email === "string" && email.trim().length > 0) : fallback.client.emails,
-          phone: normalizeName(incomingClient?.phone) || fallback.client.phone || "",
-          kind: incomingClient?.kind === "Empresa" || incomingClient?.kind === "Particular" ? incomingClient.kind : fallback.client.kind,
-          contacts: Array.isArray(incomingClient?.contacts) ? incomingClient.contacts.filter((contact): contact is { name: string; role: string; phone: string; email: string } => Boolean(contact) && typeof contact.name === "string" && typeof contact.role === "string" && typeof contact.phone === "string" && typeof contact.email === "string") : Array.isArray(fallback.client.contacts) ? fallback.client.contacts : [],
-          completedProjects: Array.isArray(incomingClient?.completedProjects) ? incomingClient.completedProjects.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : Array.isArray(fallback.client.completedProjects) ? fallback.client.completedProjects : [],
-          acquisitionChannel: typeof incomingClient?.acquisitionChannel === "string" ? incomingClient.acquisitionChannel : fallback.client.acquisitionChannel,
-          totalSpent: typeof incomingClient?.totalSpent === "number" ? incomingClient.totalSpent : fallback.client.totalSpent,
-        };
-        return { ...fallback, ...item, id: safeId, coordinator: safeCoordinator, client: safeClient } as ProjectItem;
-      })
-      .filter((item): item is ProjectItem => item !== null);
-    return normalized.length > 0 ? normalized : projects;
-  } catch {
-    removeStorage("cincel.projects.data.v1");
-    return projects;
-  }
+  return projects;
 }
 
 function loadActiveTeamNames(): string[] {
@@ -197,7 +121,7 @@ export function useProjectsData(): UseProjectsDataReturn {
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
-  const [isLoadingData, setIsLoadingData] = useState(() => isSupabaseEnabled());
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [notesByProject, setNotesByProject] = useState<Record<number, ProjectNote[]>>(() => loadProjectNotes());
 
@@ -214,8 +138,8 @@ export function useProjectsData(): UseProjectsDataReturn {
     if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       lastSavedRef.current = projectsData;
-      const payload = isSupabaseEnabled() ? changed : projectsData;
-      saveProjects(payload).catch((err: unknown) => {
+      mirrorProjectsToStorage(projectsData);
+      saveProjects(changed).catch((err: unknown) => {
         if (err instanceof SupabaseOperationError) reportSupabaseError(err);
       });
     }, 800);
@@ -246,10 +170,8 @@ export function useProjectsData(): UseProjectsDataReturn {
           setProjectsData(remote);
         }
       } catch (err) {
-        if (err instanceof SupabaseOperationError) {
-          reportSupabaseError(err);
-          setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
-        }
+        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+        setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
       } finally {
         setIsLoadingData(false);
       }
@@ -274,7 +196,8 @@ export function useProjectsData(): UseProjectsDataReturn {
     const nextProjects = [project, ...projectsData];
     lastSavedRef.current = nextProjects;
     setProjectsData(nextProjects);
-    saveProjects(nextProjects).catch((err: unknown) => {
+    mirrorProjectsToStorage(nextProjects);
+    saveProjects([project]).catch((err: unknown) => {
       if (err instanceof SupabaseOperationError) reportSupabaseError(err);
     });
   };
@@ -298,7 +221,15 @@ export function useProjectsData(): UseProjectsDataReturn {
   };
 
   const removeProject = (projectId: number) => {
-    setProjectsData((current) => current.filter((item) => item.id !== projectId));
+    setProjectsData((current) => {
+      const next = current.filter((item) => item.id !== projectId);
+      mirrorProjectsToStorage(next);
+      return next;
+    });
+    lastSavedRef.current = lastSavedRef.current.filter((item) => item.id !== projectId);
+    deleteProject(projectId).catch((err: unknown) => {
+      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    });
     setNotesByProject((current) => {
       const next = { ...current };
       delete next[projectId];

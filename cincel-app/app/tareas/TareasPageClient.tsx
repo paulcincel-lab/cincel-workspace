@@ -19,9 +19,8 @@ import { formatDateDMY } from "@/lib/utils/date";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
-import { fetchActivities, saveActivities } from "@/lib/repositories/activities-repository";
+import { fetchActivities, saveActivities, mirrorActivitiesToStorage } from "@/lib/repositories/activities-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
-import { isSupabaseEnabled } from "@/lib/supabase/data-source";
 
 const TASK_STATUSES: TaskStatus[] = ["Pendiente", "En proceso", "Completado", "Bloqueado"];
 const TEAM_MEMBERS = [
@@ -127,7 +126,7 @@ export default function TareasPage() {
   const [construccionTasksState, setConstruccionTasksState] = useState<Task[]>(() =>
     loadPersistedTasks("Construcción", getFallbackTasks("Construcción"))
   );
-  const [isLoadingData, setIsLoadingData] = useState(() => isSupabaseEnabled());
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -143,14 +142,14 @@ export default function TareasPage() {
           fetchActivities("Diseño"),
           fetchActivities("Construcción"),
         ]);
-        setPresaleTasksState(presale);
-        setDisenoTasksState(diseno);
-        setConstruccionTasksState(construccion);
+        // Keep the mock fallback when a workflow has no DB rows yet, matching
+        // PresaleTable — a fresh database shouldn't render an empty board.
+        if (presale.length > 0) setPresaleTasksState(loadLinkedTasks("Presale", presale));
+        if (diseno.length > 0) setDisenoTasksState(loadLinkedTasks("Diseño", diseno));
+        if (construccion.length > 0) setConstruccionTasksState(loadLinkedTasks("Construcción", construccion));
       } catch (err) {
-        if (err instanceof SupabaseOperationError) {
-          reportSupabaseError(err);
-          setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
-        }
+        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+        setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
       } finally {
         setIsLoadingData(false);
       }
@@ -159,23 +158,10 @@ export default function TareasPage() {
     const refreshProjects = () => {
       setProjectsData(loadPersistedProjects());
       setAuthenticatedUser(getCurrentAuthenticatedUser());
-
-      if (isSupabaseEnabled()) {
-        void hydrateFromSupabase();
-      } else {
-        // localStorage mode: task state is now cached in React state rather
-        // than re-read inline on every render, so cross-tab/focus changes
-        // need an explicit re-read to stay in sync (matches the previous
-        // behavior, which re-read localStorage on every render).
-        setPresaleTasksState(loadPersistedTasks("Presale", getFallbackTasks("Presale")));
-        setDisenoTasksState(loadPersistedTasks("Diseño", getFallbackTasks("Diseño")));
-        setConstruccionTasksState(loadPersistedTasks("Construcción", getFallbackTasks("Construcción")));
-      }
+      void hydrateFromSupabase();
     };
 
-    if (isSupabaseEnabled()) {
-      void hydrateFromSupabase();
-    }
+    void hydrateFromSupabase();
 
     window.addEventListener("focus", refreshProjects);
     window.addEventListener("storage", refreshProjects);
@@ -240,7 +226,9 @@ export default function TareasPage() {
     );
 
     setTasksForWorkflow(workflow, updatedTasks);
-    saveActivities(workflow, updatedTasks).catch((err: unknown) => {
+    mirrorActivitiesToStorage(workflow, updatedTasks);
+    const changed = updatedTasks.filter((t) => t.id === taskId);
+    saveActivities(workflow, changed).catch((err: unknown) => {
       if (err instanceof SupabaseOperationError) reportSupabaseError(err);
     });
   };

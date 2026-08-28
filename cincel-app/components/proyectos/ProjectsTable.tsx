@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
 import ExportMenu from "@/components/ui/ExportMenu";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
-import { getClientsSnapshot } from "@/lib/repositories/clients-repository";
+import { fetchClients } from "@/lib/repositories/clients-repository";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { useProjectsData, normalizeName, type ProjectItem } from "@/lib/proyectos/use-projects-data";
 import { ProjectNotesModal } from "@/components/proyectos/ProjectNotesModal";
@@ -216,6 +217,11 @@ export default function ProjectsTable() {
     });
   };
 
+  const { data: manualClients = [] } = useQuery({
+    queryKey: ["clients"],
+    queryFn: () => fetchClients(),
+  });
+
   const activeClientOptions = useMemo<ActiveClientOption[]>(() => {
     const fromProjects: ActiveClientOption[] = projectsData
       .filter((project) => project.active)
@@ -224,7 +230,7 @@ export default function ProjectsTable() {
         return { id: project.client.id, name: project.client.name, kind };
       });
 
-    const fromManual = getClientsSnapshot()
+    const fromManual = manualClients
       .filter((item) => Boolean(item.hasActiveProject))
       .map((item) => ({ id: item.id, name: item.name, kind: item.kind as "Empresa" | "Particular" }));
 
@@ -234,7 +240,7 @@ export default function ProjectsTable() {
       if (!deduped.has(key)) deduped.set(key, client);
     }
     return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [projectsData]);
+  }, [projectsData, manualClients]);
 
   const getCoordinatorOptions = (project: ProjectItem): string[] => {
     const options = [
