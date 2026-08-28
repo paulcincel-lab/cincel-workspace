@@ -1,6 +1,4 @@
 import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
-import { activitiesStorageKey } from "@/lib/repositories/activities-repository";
-import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import type { Task, WorkflowType } from "@/lib/types/task";
 
 function normalizeProjectKey(value: string): string {
@@ -11,66 +9,33 @@ function normalizeProjectKey(value: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-function loadProjectsForLinking() {
-  return getProjectsSnapshot();
-}
-
 function resolveProjectName(inputName: string, projectNames: string[]): string {
   const normalizedInput = normalizeProjectKey(inputName);
-
   const exactByNormalized = projectNames.find(
     (name) => normalizeProjectKey(name) === normalizedInput
   );
-
-  if (exactByNormalized) {
-    return exactByNormalized;
-  }
-
-  return inputName;
+  return exactByNormalized ?? inputName;
 }
 
-export function loadLinkedTasks(workflow: WorkflowType, fallback: Task[]): Task[] {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
+/**
+ * Reconcile each task's `project` string to the canonical project name
+ * (accent/casing-insensitive). DB rows already carry canonical snapshots, so
+ * this is a no-op for them; it still normalises the built-in mock task data.
+ *
+ * `workflow` is retained for call-site compatibility; `projectNames` may be
+ * passed to reconcile against live project data instead of the mock set.
+ */
+export function loadLinkedTasks(
+  workflow: WorkflowType,
+  tasks: Task[],
+  projectNames?: string[]
+): Task[] {
+  void workflow;
+  const names =
+    projectNames ?? getProjectsSnapshot().map((project) => project.name);
 
-  const storageKey = activitiesStorageKey(workflow);
-  const stored = readStorage(storageKey);
-
-  let sourceTasks: Task[] = fallback;
-
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as Task[];
-      if (Array.isArray(parsed)) {
-        sourceTasks = parsed;
-      }
-    } catch {
-      removeStorage(storageKey);
-    }
-  }
-
-  const projectNames = loadProjectsForLinking().map((project) => project.name);
-
-  let changed = false;
-
-  const linked = sourceTasks.map((task) => {
-    const resolvedProjectName = resolveProjectName(task.project, projectNames);
-
-    if (resolvedProjectName !== task.project) {
-      changed = true;
-      return {
-        ...task,
-        project: resolvedProjectName,
-      };
-    }
-
-    return task;
+  return tasks.map((task) => {
+    const resolved = resolveProjectName(task.project, names);
+    return resolved !== task.project ? { ...task, project: resolved } : task;
   });
-
-  if (changed) {
-    writeStorage(storageKey, JSON.stringify(linked));
-  }
-
-  return linked;
 }

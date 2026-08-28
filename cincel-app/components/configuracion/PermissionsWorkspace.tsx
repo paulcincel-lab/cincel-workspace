@@ -22,9 +22,9 @@ import {
   type SystemAccessRole,
 } from "@/lib/data/roles";
 import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
+import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 
-const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const SYSTEM_ROLE_STORAGE_KEY = "cincel.team.system-roles.v1";
 
 type AccessSummary = {
@@ -66,22 +66,9 @@ const ACCESS_DESCRIPTIONS: Record<SystemAccessRole, string> = {
   Otros: "Acceso restringido para casos especiales de colaboración.",
 };
 
+/** Pre-hydration seed — real roster comes from `fetchTeamMembersPublic()`. */
 function loadTeamMembers(): TeamMember[] {
-  if (typeof window === "undefined") {
-    return teamMembersPublic;
-  }
-
-  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
-  if (!stored) {
-    return teamMembersPublic;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as TeamMember[];
-    return Array.isArray(parsed) ? parsed : teamMembersPublic;
-  } catch {
-    return teamMembersPublic;
-  }
+  return teamMembersPublic;
 }
 
 function loadSystemRoleMap(): Record<number, string> {
@@ -251,12 +238,17 @@ export default function PermissionsWorkspace() {
 
   useEffect(() => {
     const refresh = () => {
-      setMembers(loadTeamMembers());
       setSystemRoleMap(loadSystemRoleMap());
 
       const loaded = loadPermissionsState(defaultPermissionsState);
       setPermissionsState(loaded.state);
       setHasCustomConfig(loaded.hasCustom);
+
+      void fetchTeamMembersPublic()
+        .then((rows) => {
+          if (rows.length > 0) setMembers(rows);
+        })
+        .catch(() => undefined);
     };
 
     refresh();

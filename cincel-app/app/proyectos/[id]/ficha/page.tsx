@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 
 import Sidebar from "@/components/layout/Sidebar";
@@ -17,6 +17,12 @@ import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
+import { fetchProjects, saveProjects } from "@/lib/repositories/projects-repository";
+import { fetchClients } from "@/lib/repositories/clients-repository";
+import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
+import { fetchActivities } from "@/lib/repositories/activities-repository";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
+import type { Task } from "@/lib/types/task";
 
 type ProjectItem = (typeof projects)[number];
 type ActiveClientOption = {
@@ -24,119 +30,37 @@ type ActiveClientOption = {
   name: string;
   kind: "Empresa" | "Particular";
 };
+type ManualClientOption = ActiveClientOption;
 
-const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
-const MANUAL_CLIENTS_STORAGE_KEY = "cincel.clients.manual.v1";
-const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
 
+/** Pre-hydration seed — real data comes from `fetchProjects()`. */
 function loadPersistedProjects(): ProjectItem[] {
-  if (typeof window === "undefined") {
-    return projects;
-  }
-
-  const stored = readStorage(PROJECTS_STORAGE_KEY);
-
-  if (!stored) {
-    return projects;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as ProjectItem[];
-    return Array.isArray(parsed) ? parsed : projects;
-  } catch {
-    return projects;
-  }
+  return projects;
 }
 
-function loadActiveClients(projectsData: ProjectItem[]): ActiveClientOption[] {
-  const fromProjects: ActiveClientOption[] = projectsData
-    .map((project) => {
-      const kind: "Empresa" | "Particular" = project.client.kind === "Empresa" ? "Empresa" : "Particular";
-      const option: ActiveClientOption = {
-        id: project.client.id,
-        name: project.client.name,
-        kind,
-      };
-      return option;
-    });
-
-  if (typeof window === "undefined") {
-    return fromProjects;
-  }
-
-  const stored = readStorage(MANUAL_CLIENTS_STORAGE_KEY);
-  let fromManual: ActiveClientOption[] = [];
-
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as Array<{
-        id?: unknown;
-        name?: unknown;
-        kind?: unknown;
-        hasActiveProject?: unknown;
-      }>;
-
-      if (Array.isArray(parsed)) {
-        fromManual = parsed
-          .map((item) => {
-            const id = typeof item.id === "number" ? item.id : Number(item.id);
-            const name = typeof item.name === "string" ? item.name.trim() : "";
-
-            if (!Number.isFinite(id) || !name) {
-              return null;
-            }
-
-            return {
-              id,
-              name,
-              kind: item.kind === "Empresa" ? "Empresa" : "Particular",
-            };
-          })
-          .filter((item): item is ActiveClientOption => item !== null);
-      }
-    } catch {
-      fromManual = [];
-    }
-  }
+function loadActiveClients(
+  projectsData: ProjectItem[],
+  manualClients: ManualClientOption[] = []
+): ActiveClientOption[] {
+  const fromProjects: ActiveClientOption[] = projectsData.map((project) => ({
+    id: project.client.id,
+    name: project.client.name,
+    kind: project.client.kind === "Empresa" ? "Empresa" : "Particular",
+  }));
 
   const deduped = new Map<string, ActiveClientOption>();
-
-  for (const client of [...fromProjects, ...fromManual]) {
+  for (const client of [...fromProjects, ...manualClients]) {
     const key = client.name.toLowerCase();
-    if (!deduped.has(key)) {
-      deduped.set(key, client);
-    }
+    if (client.name && !deduped.has(key)) deduped.set(key, client);
   }
 
   return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Pre-hydration seed — real names come from `fetchTeamMembersPublic()`. */
 function loadActiveTeamNames(): string[] {
-  if (typeof window === "undefined") {
-    return teamMembers.filter((member) => member.active).map((member) => member.name);
-  }
-
-  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
-
-  if (!stored) {
-    return teamMembers.filter((member) => member.active).map((member) => member.name);
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Array<{ name?: unknown; active?: boolean }>;
-
-    if (!Array.isArray(parsed)) {
-      return teamMembers.filter((member) => member.active).map((member) => member.name);
-    }
-
-    return parsed
-      .filter((member) => member.active)
-      .map((member) => (typeof member.name === "string" ? member.name.trim() : ""))
-      .filter(Boolean);
-  } catch {
-    return teamMembers.filter((member) => member.active).map((member) => member.name);
-  }
+  return teamMembers.filter((member) => member.active).map((member) => member.name);
 }
 
 function loadSecondaryCoordinatorMap(): Record<number, string> {
@@ -199,6 +123,12 @@ export default function ProjectFichaPage() {
   const projectId = Number(params.id);
 
   const [projectsData, setProjectsData] = useState<ProjectItem[]>(() => loadPersistedProjects());
+  const [manualClients, setManualClients] = useState<ManualClientOption[]>([]);
+  const [tasksByWorkflow, setTasksByWorkflow] = useState<{ presale: Task[]; diseno: Task[]; construccion: Task[] }>(() => ({
+    presale: loadLinkedTasks("Presale", presaleTasks),
+    diseno: loadLinkedTasks("Diseño", disenoTasks),
+    construccion: loadLinkedTasks("Construcción", operativasTasks),
+  }));
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
@@ -209,8 +139,26 @@ export default function ProjectFichaPage() {
   const [inlineEditingAddress, setInlineEditingAddress] = useState(false);
   const [inlineAddressValue, setInlineAddressValue] = useState<{ street: string; city: string; state: string }>({ street: "", city: "", state: "" });
 
+  const lastSavedRef = useRef<ProjectItem[]>(projectsData);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced diffed save of project edits to Postgres.
   useEffect(() => {
-    writeStorage(PROJECTS_STORAGE_KEY, JSON.stringify(projectsData));
+    const changed = projectsData.filter((p) => {
+      const saved = lastSavedRef.current.find((s) => s.id === p.id);
+      return !saved || JSON.stringify(p) !== JSON.stringify(saved);
+    });
+    if (changed.length === 0) return;
+    if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      lastSavedRef.current = projectsData;
+      saveProjects(changed).catch((err: unknown) => {
+        if (err instanceof RepositoryError) reportRepositoryError(err);
+      });
+    }, 800);
+    return () => {
+      if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+    };
   }, [projectsData]);
 
   useEffect(() => {
@@ -218,17 +166,59 @@ export default function ProjectFichaPage() {
   }, [secondaryCoordinatorByProject]);
 
   useEffect(() => {
-    const refreshTeam = () => {
-      setActiveTeamNames(loadActiveTeamNames());
-      setAuthenticatedUser(getCurrentAuthenticatedUser());
+    const refreshLocal = () => setAuthenticatedUser(getCurrentAuthenticatedUser());
+    const hydrate = () => {
+      void fetchProjects()
+        .then((rows) => {
+          if (rows.length > 0) {
+            lastSavedRef.current = rows;
+            setProjectsData(rows);
+          }
+        })
+        .catch(() => undefined);
+      void fetchClients()
+        .then((rows) =>
+          setManualClients(
+            rows
+              .filter((c) => c.hasActiveProject)
+              .map((c) => ({ id: c.id, name: c.name, kind: c.kind }))
+          )
+        )
+        .catch(() => undefined);
+      void fetchTeamMembersPublic()
+        .then((rows) => {
+          const names = rows.filter((m) => m.active).map((m) => m.name).filter(Boolean);
+          if (names.length > 0) setActiveTeamNames(names);
+        })
+        .catch(() => undefined);
+      void Promise.all([
+        fetchActivities("Presale"),
+        fetchActivities("Diseño"),
+        fetchActivities("Construcción"),
+      ])
+        .then(([p, d, c]) => {
+          setTasksByWorkflow({
+            presale: loadLinkedTasks("Presale", p.length > 0 ? p : presaleTasks),
+            diseno: loadLinkedTasks("Diseño", d.length > 0 ? d : disenoTasks),
+            construccion: loadLinkedTasks("Construcción", c.length > 0 ? c : operativasTasks),
+          });
+        })
+        .catch(() => undefined);
     };
 
-    window.addEventListener("focus", refreshTeam);
-    window.addEventListener("storage", refreshTeam);
+    refreshLocal();
+    hydrate();
+
+    const onExternalChange = () => {
+      refreshLocal();
+      hydrate();
+    };
+    window.addEventListener("focus", onExternalChange);
+    window.addEventListener("storage", onExternalChange);
 
     return () => {
-      window.removeEventListener("focus", refreshTeam);
-      window.removeEventListener("storage", refreshTeam);
+      window.removeEventListener("focus", onExternalChange);
+      window.removeEventListener("storage", onExternalChange);
     };
   }, []);
 
@@ -237,7 +227,10 @@ export default function ProjectFichaPage() {
   }, [authenticatedUser]);
 
   const project = projectsData.find((item) => item.id === projectId) ?? null;
-  const activeClients = useMemo(() => loadActiveClients(projectsData), [projectsData]);
+  const activeClients = useMemo(
+    () => loadActiveClients(projectsData, manualClients),
+    [projectsData, manualClients]
+  );
   const constructionCoordinator = project ? secondaryCoordinatorByProject[project.id] || "Sin encargado" : "Sin encargado";
   const shouldAutoEditDocs = searchParams.get("edit") === "docs";
 
@@ -277,9 +270,9 @@ export default function ProjectFichaPage() {
   }
 
   const projectActivities = [
-    { label: "Presale", tasks: loadLinkedTasks("Presale", presaleTasks) },
-    { label: "Diseño", tasks: loadLinkedTasks("Diseño", disenoTasks) },
-    { label: "Construcción", tasks: loadLinkedTasks("Construcción", operativasTasks) },
+    { label: "Presale", tasks: tasksByWorkflow.presale },
+    { label: "Diseño", tasks: tasksByWorkflow.diseno },
+    { label: "Construcción", tasks: tasksByWorkflow.construccion },
   ].filter((activity) => activity.tasks.some((task) => task.project === project.name));
 
   const internalDocsUrl = project.drive?.administrativo ?? "";

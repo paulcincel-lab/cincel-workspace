@@ -18,7 +18,6 @@ import { fetchProjects } from "@/lib/repositories/projects-repository";
 import { fetchActivities } from "@/lib/repositories/activities-repository";
 import { RepositoryError } from "@/lib/errors";
 
-const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
 
 type ProjectData = (typeof baseProjects)[number];
@@ -31,23 +30,9 @@ type DashboardTasksState = {
 
 type DateRangeFilter = "7d" | "30d" | "90d";
 
+/** Pre-hydration seed only — real data comes from `fetchProjects()`. */
 function loadPersistedProjects(): ProjectData[] {
-  if (typeof window === "undefined") {
-    return baseProjects;
-  }
-
-  const stored = readStorage(PROJECTS_STORAGE_KEY);
-
-  if (!stored) {
-    return baseProjects;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as ProjectData[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : baseProjects;
-  } catch {
-    return baseProjects;
-  }
+  return baseProjects;
 }
 
 function loadSecondaryCoordinatorMap(): Record<number, string> {
@@ -142,15 +127,36 @@ function getMexicoCityToday(): Date {
   return new Date(`${year}-${month}-${day}T00:00:00`);
 }
 
-export default function InteractiveDashboard() {
-  const [projectsData, setProjectsData] = useState<ProjectData[]>(() => loadPersistedProjects());
+type DashboardInitialData = {
+  projects: ProjectData[];
+  activities: { presale: Task[]; diseno: Task[]; operativas: Task[] };
+};
+
+export default function InteractiveDashboard({
+  initialData,
+}: {
+  initialData?: DashboardInitialData;
+} = {}) {
+  const [projectsData, setProjectsData] = useState<ProjectData[]>(() =>
+    initialData && initialData.projects.length > 0
+      ? initialData.projects
+      : loadPersistedProjects()
+  );
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
-  const [tasksData, setTasksData] = useState<DashboardTasksState>(() => ({
-    presale: loadLinkedTasks("Presale", presaleTasks),
-    diseno: loadLinkedTasks("Diseño", disenoTasks),
-    operativas: loadLinkedTasks("Construcción", operativasTasks),
-  }));
+  const [tasksData, setTasksData] = useState<DashboardTasksState>(() =>
+    initialData
+      ? {
+          presale: loadLinkedTasks("Presale", initialData.activities.presale.length > 0 ? initialData.activities.presale : presaleTasks),
+          diseno: loadLinkedTasks("Diseño", initialData.activities.diseno.length > 0 ? initialData.activities.diseno : disenoTasks),
+          operativas: loadLinkedTasks("Construcción", initialData.activities.operativas.length > 0 ? initialData.activities.operativas : operativasTasks),
+        }
+      : {
+          presale: loadLinkedTasks("Presale", presaleTasks),
+          diseno: loadLinkedTasks("Diseño", disenoTasks),
+          operativas: loadLinkedTasks("Construcción", operativasTasks),
+        }
+  );
 
   const [rangeFilter, setRangeFilter] = useState<DateRangeFilter>("30d");
   const [stageFilter, setStageFilter] = useState<"Todas" | WorkflowType>("Todas");
@@ -177,35 +183,38 @@ export default function InteractiveDashboard() {
   );
 
   useEffect(() => {
-    const refreshAll = () => {
-      setProjectsData(loadPersistedProjects());
+    const refreshLocal = () => {
       setSecondaryCoordinatorByProject(loadSecondaryCoordinatorMap());
       setAuthenticatedUser(getCurrentAuthenticatedUser());
-      setTasksData({
-        presale: loadLinkedTasks("Presale", presaleTasks),
-        diseno: loadLinkedTasks("Diseño", disenoTasks),
-        operativas: loadLinkedTasks("Construcción", operativasTasks),
-      });
     };
 
-    // Ensure Dashboard starts with the latest local changes immediately.
-    refreshAll();
-
-    // Pull live data from Postgres, then re-read (fetch* mirrors into the
-    // localStorage keys the dashboard reads synchronously).
+    // Pull live data from Postgres (this is the source of truth; the mock set
+    // is only a pre-hydration seed).
     const hydrateFromDb = async () => {
       try {
-        await Promise.all([
+        const [projects, presale, diseno, operativas] = await Promise.all([
           fetchProjects(),
           fetchActivities("Presale"),
           fetchActivities("Diseño"),
           fetchActivities("Construcción"),
         ]);
-        refreshAll();
+        if (projects.length > 0) setProjectsData(projects);
+        setTasksData({
+          presale: loadLinkedTasks("Presale", presale.length > 0 ? presale : presaleTasks),
+          diseno: loadLinkedTasks("Diseño", diseno.length > 0 ? diseno : disenoTasks),
+          operativas: loadLinkedTasks("Construcción", operativas.length > 0 ? operativas : operativasTasks),
+        });
       } catch (err) {
         if (err instanceof RepositoryError) return;
       }
     };
+
+    const refreshAll = () => {
+      refreshLocal();
+      void hydrateFromDb();
+    };
+
+    refreshLocal();
     void hydrateFromDb();
 
     window.addEventListener("focus", refreshAll);

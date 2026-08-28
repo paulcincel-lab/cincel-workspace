@@ -61,6 +61,57 @@ export async function fetchTeamMembersAction(): Promise<TeamMember[]> {
   return rows.map(toTeamMember);
 }
 
+export type TeamMemberPublicRow = {
+  id: number;
+  name: string;
+  role: string;
+  area: string;
+  capacity: number;
+  availability: string;
+  active: boolean;
+  institutionalEmail: string;
+  phone: string;
+};
+
+/**
+ * PII-free projection of the roster — no CURP/RFC/address/personal contact.
+ * For consumers that only need identity/role (Header, permissions, dropdowns).
+ */
+export async function fetchTeamMembersPublicAction(): Promise<
+  TeamMemberPublicRow[]
+> {
+  const caps = await requireTeamCapabilities();
+  if (!caps.canViewTeam) return [];
+
+  const rows = await db
+    .select({
+      legacyId: teamMembers.legacyId,
+      name: teamMembers.name,
+      role: teamMembers.role,
+      area: teamMembers.area,
+      capacity: teamMembers.capacity,
+      availability: teamMembers.availability,
+      active: teamMembers.active,
+      institutionalEmail: teamMembers.institutionalEmail,
+      phone: teamMembers.phone,
+    })
+    .from(teamMembers)
+    .where(isNull(teamMembers.deletedAt))
+    .orderBy(asc(teamMembers.name));
+
+  return rows.map((r) => ({
+    id: r.legacyId ?? 0,
+    name: r.name,
+    role: r.role ?? "",
+    area: r.area ?? "",
+    capacity: r.capacity,
+    availability: r.availability ?? "Disponible",
+    active: r.active,
+    institutionalEmail: r.institutionalEmail ?? "",
+    phone: r.phone ?? "",
+  }));
+}
+
 export async function saveTeamMembersAction(list: TeamMember[]): Promise<void> {
   const caps = await requireTeamCapabilities();
   if (

@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
 import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
+import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
 import { isAdministratorRole } from "@/lib/data/roles";
 import { clearDashboardProfilePhoto, loadDashboardProfilePhoto, saveDashboardProfilePhoto } from "@/lib/auth/profile-photo";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
@@ -23,7 +24,6 @@ type HeaderLinks = {
   email: string;
 };
 
-const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const HEADER_LINKS_STORAGE_KEY = "cincel.header.links.v1";
 const FALLBACK_USER_ID = 2;
 const ADMIN_USER_IDS = new Set([2]);
@@ -149,34 +149,9 @@ function formatTodayLabel(): string {
     .join(" ");
 }
 
-function normalizeTeamMember(raw: TeamMember): TeamMember {
-  return {
-    ...raw,
-    role: raw.role ?? "",
-    area: raw.area ?? "",
-  };
-}
-
+/** Pre-hydration seed — real roster comes from `fetchTeamMembersPublic()`. */
 function loadTeamMembers(): TeamMember[] {
-  if (typeof window === "undefined") {
-    return teamMembersPublic;
-  }
-
-  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
-  if (!stored) {
-    return teamMembersPublic;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as TeamMember[];
-    if (!Array.isArray(parsed)) {
-      return teamMembersPublic;
-    }
-
-    return parsed.map((member) => normalizeTeamMember(member));
-  } catch {
-    return teamMembersPublic;
-  }
+  return teamMembersPublic;
 }
 
 function loadHeaderLinks(): HeaderLinks {
@@ -241,10 +216,10 @@ export default function Header({ variant = "default" }: HeaderProps) {
       return;
     }
 
-    const refreshMembers = () => {
+    const refreshMembers = (roster?: TeamMember[]) => {
       const authUser = getCurrentAuthenticatedUser();
       const nextMemberId = authUser?.member.id ?? null;
-      const nextMembers = loadTeamMembers();
+      const nextMembers = roster ?? loadTeamMembers();
       const nextCurrentMember = resolveCurrentMember(nextMembers, nextMemberId);
 
       setMembers(nextMembers);
@@ -254,13 +229,23 @@ export default function Header({ variant = "default" }: HeaderProps) {
     };
 
     refreshMembers();
+    void fetchTeamMembersPublic()
+      .then((rows) => {
+        if (rows.length > 0) refreshMembers(rows);
+      })
+      .catch(() => undefined);
 
-    window.addEventListener("focus", refreshMembers);
-    window.addEventListener("storage", refreshMembers);
+    const onExternalChange = () => {
+      void fetchTeamMembersPublic()
+        .then((rows) => refreshMembers(rows.length > 0 ? rows : undefined))
+        .catch(() => refreshMembers());
+    };
+    window.addEventListener("focus", onExternalChange);
+    window.addEventListener("storage", onExternalChange);
 
     return () => {
-      window.removeEventListener("focus", refreshMembers);
-      window.removeEventListener("storage", refreshMembers);
+      window.removeEventListener("focus", onExternalChange);
+      window.removeEventListener("storage", onExternalChange);
     };
   }, []);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { projects } from "@/lib/data/projects";
@@ -10,11 +10,12 @@ import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { saveProjects, fetchProjects, deleteProject, mirrorProjectsToStorage } from "@/lib/repositories/projects-repository";
+import { saveProjects, fetchProjects, deleteProject } from "@/lib/repositories/projects-repository";
+import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
+import { fetchActivities } from "@/lib/repositories/activities-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
-const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
 const NOTES_STORAGE_KEY = "cincel.projects.notes.v1";
 
@@ -62,22 +63,9 @@ function loadPersistedProjects(): ProjectItem[] {
   return projects;
 }
 
+/** Pre-hydration seed; the hook replaces this with `fetchTeamMembersPublic()`. */
 function loadActiveTeamNames(): string[] {
-  if (typeof window === "undefined") {
-    return teamMembers.filter((member) => member.active).map((member) => member.name);
-  }
-  const stored = readStorage(TEAM_MEMBERS_STORAGE_KEY);
-  if (!stored) return teamMembers.filter((member) => member.active).map((member) => member.name);
-  try {
-    const parsed = JSON.parse(stored) as Array<{ name?: unknown; active?: boolean }>;
-    if (!Array.isArray(parsed)) return teamMembers.filter((member) => member.active).map((member) => member.name);
-    return parsed
-      .filter((member) => member.active)
-      .map((member) => normalizeName(member.name))
-      .filter((name): name is string => name !== null);
-  } catch {
-    return teamMembers.filter((member) => member.active).map((member) => member.name);
-  }
+  return teamMembers.filter((member) => member.active).map((member) => member.name);
 }
 
 function loadSecondaryCoordinatorMap(): Record<number, string> {
@@ -125,6 +113,11 @@ export function useProjectsData(
   );
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
+  const [allTasks, setAllTasks] = useState<AllTasksSnapshot>(() => [
+    ...loadPersistedTasks("Presale", presaleTasks),
+    ...loadPersistedTasks("Diseño", disenoTasks),
+    ...loadPersistedTasks("Construcción", operativasTasks),
+  ]);
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
   const [isLoadingData, setIsLoadingData] = useState(!hasInitial);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -143,7 +136,6 @@ export function useProjectsData(
     if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       lastSavedRef.current = projectsData;
-      mirrorProjectsToStorage(projectsData);
       saveProjects(changed).catch((err: unknown) => {
         if (err instanceof RepositoryError) reportRepositoryError(err);
       });
@@ -157,13 +149,6 @@ export function useProjectsData(
   useEffect(() => {
     writeStorage(SECONDARY_COORDINATOR_STORAGE_KEY, JSON.stringify(secondaryCoordinatorByProject));
   }, [secondaryCoordinatorByProject]);
-
-  // When the page passed server-rendered data, mirror it into the localStorage
-  // key that the ficha page / tasks-linking still read synchronously.
-  useEffect(() => {
-    if (hasInitial) mirrorProjectsToStorage(projectsData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Hydrate from Postgres on mount (skipped when the page already provided
   // server-rendered data), and keep team names / auth user fresh.
@@ -191,28 +176,52 @@ export function useProjectsData(
         setIsLoadingData(false);
       }
     };
-    void hydrate();
+    const hydrateTeam = () => {
+      void fetchTeamMembersPublic()
+        .then((rows) => {
+          const names = rows
+            .filter((m) => m.active)
+            .map((m) => normalizeName(m.name))
+            .filter((n): n is string => n !== null);
+          if (names.length > 0) setActiveTeamNames(names);
+        })
+        .catch(() => undefined);
+    };
 
-    window.addEventListener("focus", refreshTeam);
-    window.addEventListener("storage", refreshTeam);
+    const hydrateTasks = () => {
+      void Promise.all([
+        fetchActivities("Presale"),
+        fetchActivities("Diseño"),
+        fetchActivities("Construcción"),
+      ])
+        .then(([p, d, c]) => {
+          const merged = [...p, ...d, ...c];
+          if (merged.length > 0) setAllTasks(merged);
+        })
+        .catch(() => undefined);
+    };
+
+    void hydrate();
+    hydrateTeam();
+    hydrateTasks();
+
+    const onExternalChange = () => {
+      refreshTeam();
+      hydrateTeam();
+    };
+    window.addEventListener("focus", onExternalChange);
+    window.addEventListener("storage", onExternalChange);
     return () => {
-      window.removeEventListener("focus", refreshTeam);
-      window.removeEventListener("storage", refreshTeam);
+      window.removeEventListener("focus", onExternalChange);
+      window.removeEventListener("storage", onExternalChange);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const allTasks = useMemo<AllTasksSnapshot>(() => [
-    ...loadPersistedTasks("Presale", presaleTasks),
-    ...loadPersistedTasks("Diseño", disenoTasks),
-    ...loadPersistedTasks("Construcción", operativasTasks),
-  ], []);
 
   const addProject = (project: ProjectItem) => {
     const nextProjects = [project, ...projectsData];
     lastSavedRef.current = nextProjects;
     setProjectsData(nextProjects);
-    mirrorProjectsToStorage(nextProjects);
     saveProjects([project]).catch((err: unknown) => {
       if (err instanceof RepositoryError) reportRepositoryError(err);
     });
@@ -239,7 +248,6 @@ export function useProjectsData(
   const removeProject = (projectId: number) => {
     setProjectsData((current) => {
       const next = current.filter((item) => item.id !== projectId);
-      mirrorProjectsToStorage(next);
       return next;
     });
     lastSavedRef.current = lastSavedRef.current.filter((item) => item.id !== projectId);

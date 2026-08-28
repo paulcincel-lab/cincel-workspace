@@ -20,7 +20,7 @@ import { presalePhaseOptions } from "@/lib/templates/phase-options";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
-import { fetchActivities, saveActivities, mirrorActivitiesToStorage } from "@/lib/repositories/activities-repository";
+import { fetchActivities, saveActivities } from "@/lib/repositories/activities-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
@@ -218,7 +218,6 @@ export default function PresaleTable({
     });
     if (changed.length === 0) return;
     lastSavedRef.current = tasks;
-    mirrorActivitiesToStorage(workflow, tasks);
     saveActivities(workflow, changed).catch((err: unknown) => {
       if (err instanceof RepositoryError) reportRepositoryError(err);
     });

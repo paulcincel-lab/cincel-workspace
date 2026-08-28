@@ -15,9 +15,6 @@ import {
   deleteClientAction,
 } from "@/lib/actions/clients-actions";
 
-/** @deprecated dead key kept so optimistic `writeStorage` calls still compile. */
-export const MANUAL_CLIENTS_STORAGE_KEY = "cincel.clients.manual.v1";
-
 export type ManualClient = {
   id: number;
   name: string;
