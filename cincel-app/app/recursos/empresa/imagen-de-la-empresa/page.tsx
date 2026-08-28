@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function EmpresaImagenPage() {
-  return <ResourcesWorkspace mode="empresa" titleOverride="Imagen de la empresa" descriptionOverride="Activos visuales, marca y materiales de identidad." />;
+export default async function EmpresaImagenPage() {
+  return <ResourcesWorkspaceServer mode="empresa" titleOverride="Imagen de la empresa" descriptionOverride="Activos visuales, marca y materiales de identidad." />;
 }

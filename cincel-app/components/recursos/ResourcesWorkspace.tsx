@@ -437,13 +437,17 @@ export default function ResourcesWorkspace({
   mode,
   titleOverride,
   descriptionOverride,
+  initialLinks,
 }: {
   mode: WorkspaceMode;
   titleOverride?: string;
   descriptionOverride?: string;
+  initialLinks?: ResourceLink[];
 }) {
   const [members] = useState<TeamMember[]>(() => loadTeamMembers());
-  const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>(() => loadResourceLinks(loadTeamMembers()));
+  const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>(() =>
+    loadResourceLinks(loadTeamMembers(), initialLinks ?? [])
+  );
   const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>(() => loadRecentDocuments());
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [search, setSearch] = useState("");

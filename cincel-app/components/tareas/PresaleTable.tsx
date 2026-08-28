@@ -46,6 +46,8 @@ type Props = {
   subtitle?: string;
   workflow?: WorkflowType;
   initialTasks?: Task[];
+  /** Server-rendered rows from Postgres — seed state without a client fetch. */
+  serverTasks?: Task[];
   templateItems?: TemplateItem[];
   templateName?: string;
   phaseOptions?: string[];
@@ -145,6 +147,7 @@ export default function PresaleTable({
   subtitle = "Flujo inicial",
   workflow = "Presale",
   initialTasks = presaleTasks,
+  serverTasks,
   templateItems = presaleTemplate,
   templateName = "Presale",
   phaseOptions = presalePhaseOptions,
@@ -155,7 +158,11 @@ export default function PresaleTable({
   const projectFromQuery = searchParams.get("project");
   const projectFilter = projectFromQuery || "Todos los proyectos";
 
-  const [tasks, setTasks] = useState<Task[]>(() => loadLinkedTasks(workflow, initialTasks));
+  const [tasks, setTasks] = useState<Task[]>(() =>
+    serverTasks && serverTasks.length > 0
+      ? loadLinkedTasks(workflow, serverTasks)
+      : loadLinkedTasks(workflow, initialTasks)
+  );
 
   const [search, setSearch] = useState("");
 

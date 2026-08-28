@@ -6,8 +6,16 @@ import PresaleTable from "@/components/tareas/PresaleTable";
 import { disenoTasks } from "@/lib/data/diseno";
 import { disenoTemplate } from "@/lib/templates/diseno";
 import { disenoPhaseOptions } from "@/lib/templates/phase-options";
+import { fetchActivitiesAction } from "@/lib/actions/activities-actions";
 
-export default function DisenoPage() {
+export default async function DisenoPage() {
+  let serverTasks: Awaited<ReturnType<typeof fetchActivitiesAction>> | undefined;
+  try {
+    serverTasks = await fetchActivitiesAction("Diseño");
+  } catch {
+    // Not authorized / no session — the client hydrates itself.
+  }
+
   return (
     <main className="flex min-h-screen bg-slate-100">
       <Sidebar />
@@ -21,6 +29,7 @@ export default function DisenoPage() {
             subtitle="Flujo de anteproyecto, proyecto y ejecutivo"
             workflow="Diseño"
             initialTasks={disenoTasks}
+            serverTasks={serverTasks}
             templateItems={disenoTemplate}
             templateName="Taller de Diseño"
             phaseOptions={disenoPhaseOptions}

@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function FormacionPage() {
-  return <ResourcesWorkspace mode="formacion" />;
+export default async function FormacionPage() {
+  return <ResourcesWorkspaceServer mode="formacion" />;
 }

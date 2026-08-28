@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function FormatosObraPage() {
-  return <ResourcesWorkspace mode="formatos-obra" />;
+export default async function FormatosObraPage() {
+  return <ResourcesWorkspaceServer mode="formatos-obra" />;
 }

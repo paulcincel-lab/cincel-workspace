@@ -107,7 +107,17 @@ function buildTimestampLabel(): string {
   return `${date}-${time}`;
 }
 
-export default function TareasPage() {
+type InitialActivities = {
+  presale: Task[];
+  diseno: Task[];
+  construccion: Task[];
+};
+
+export default function TareasPage({
+  initialActivities,
+}: {
+  initialActivities?: InitialActivities;
+} = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -117,16 +127,20 @@ export default function TareasPage() {
   const [responsableFilter, setResponsableFilter] = useState("Todos");
   const [projectsData, setProjectsData] = useState(() => loadPersistedProjects());
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const seed = (wf: WorkflowType, rows: Task[] | undefined): Task[] =>
+    rows && rows.length > 0
+      ? loadLinkedTasks(wf, rows)
+      : loadPersistedTasks(wf, getFallbackTasks(wf));
   const [presaleTasksState, setPresaleTasksState] = useState<Task[]>(() =>
-    loadPersistedTasks("Presale", getFallbackTasks("Presale"))
+    seed("Presale", initialActivities?.presale)
   );
   const [disenoTasksState, setDisenoTasksState] = useState<Task[]>(() =>
-    loadPersistedTasks("Diseño", getFallbackTasks("Diseño"))
+    seed("Diseño", initialActivities?.diseno)
   );
   const [construccionTasksState, setConstruccionTasksState] = useState<Task[]>(() =>
-    loadPersistedTasks("Construcción", getFallbackTasks("Construcción"))
+    seed("Construcción", initialActivities?.construccion)
   );
-  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(initialActivities === undefined);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -134,7 +148,7 @@ export default function TareasPage() {
     // The individual workflow pages (PresaleTable) do their own per-page fetch;
     // this aggregate view needs its own hydration so it shows live data too.
     const hydrateFromSupabase = async () => {
-      setIsLoadingData(true);
+      if (initialActivities === undefined) setIsLoadingData(true);
       setFetchError(null);
       try {
         const [presale, diseno, construccion] = await Promise.all([
@@ -170,6 +184,7 @@ export default function TareasPage() {
       window.removeEventListener("focus", refreshProjects);
       window.removeEventListener("storage", refreshProjects);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activitiesCapabilities = useMemo(() => {

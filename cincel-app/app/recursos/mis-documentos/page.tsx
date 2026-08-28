@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function MisDocumentosPage() {
-  return <ResourcesWorkspace mode="mis-documentos" />;
+export default async function MisDocumentosPage() {
+  return <ResourcesWorkspaceServer mode="mis-documentos" />;
 }
