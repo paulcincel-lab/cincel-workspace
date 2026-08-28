@@ -18,7 +18,9 @@ import {
   hasDriveUrl,
   inferLinkTypeFromUrl,
 } from "@/lib/google/drive-url";
+import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
 import type {
+  DriveFileMeta,
   ResourceAppliesTo,
   ResourceHistoryItem,
   ResourceLink,
@@ -106,6 +108,7 @@ type CreateDraft = {
   ownerTeamMemberId: number | null;
   personalForTeamMemberId: number | null;
   status: ResourceStatus;
+  drive: DriveFileMeta | null;
 };
 
 type RecentDocument = {
@@ -132,6 +135,7 @@ const EMPTY_CREATE_DRAFT: CreateDraft = {
   ownerTeamMemberId: null,
   personalForTeamMemberId: null,
   status: "vigente",
+  drive: null,
 };
 
 function loadTeamMembers(): TeamMember[] {
@@ -388,11 +392,13 @@ export default function ResourcesWorkspace({
   titleOverride,
   descriptionOverride,
   initialLinks,
+  driveEnabled = false,
 }: {
   mode: WorkspaceMode;
   titleOverride?: string;
   descriptionOverride?: string;
   initialLinks?: ResourceLink[];
+  driveEnabled?: boolean;
 }) {
   const [members] = useState<TeamMember[]>(() => loadTeamMembers());
   const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>(() =>
@@ -403,6 +409,30 @@ export default function ResourcesWorkspace({
   const [search, setSearch] = useState("");
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [creating, setCreating] = useState<CreateDraft | null>(null);
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
+
+  const applyDrivePick = (entry: DrivePickerEntry) => {
+    setShowDrivePicker(false);
+    setCreating((current) =>
+      current
+        ? {
+            ...current,
+            url: entry.webViewLink,
+            title: current.title.trim() || entry.name,
+            linkType: entry.isFolder ? "drive_folder" : "drive_file",
+            drive: {
+              googleFileId: entry.id,
+              fileName: entry.name,
+              mimeType: entry.mimeType,
+              iconLink: entry.iconLink,
+              thumbnailLink: entry.thumbnailLink,
+              webViewLink: entry.webViewLink,
+              syncedAt: new Date().toISOString(),
+            },
+          }
+        : current
+    );
+  };
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -504,7 +534,7 @@ export default function ResourcesWorkspace({
       personalForTeamMemberId: draft.personalForTeamMemberId,
       updatedAt: now,
       history: [createHistoryEntry("created", "Recurso creado")],
-      drive: null,
+      drive: draft.drive,
     };
 
     persistLinks([...resourceLinks, newItem]);
@@ -1072,14 +1102,34 @@ export default function ResourcesWorkspace({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">URL</label>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-medium text-slate-600">URL</label>
+                  {driveEnabled ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowDrivePicker(true)}
+                      className="text-xs font-medium text-blue-700 hover:underline"
+                    >
+                      Elegir de Google Drive
+                    </button>
+                  ) : null}
+                </div>
                 <input
                   type="text"
                   value={creating.url}
-                  onChange={(event) => setCreating((current) => current ? { ...current, url: event.target.value } : current)}
+                  onChange={(event) => setCreating((current) => current ? { ...current, url: event.target.value, drive: null } : current)}
                   placeholder="https://..."
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
+                {creating.drive ? (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                    {creating.drive.iconLink ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={creating.drive.iconLink} alt="" className="h-3.5 w-3.5" />
+                    ) : null}
+                    Vinculado a Drive: {creating.drive.fileName}
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -1102,6 +1152,12 @@ export default function ResourcesWorkspace({
           </div>
         </div>
       ) : null}
+
+      <DrivePickerDialog
+        open={showDrivePicker}
+        onClose={() => setShowDrivePicker(false)}
+        onPick={applyDrivePick}
+      />
 
       {removeDraft ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
