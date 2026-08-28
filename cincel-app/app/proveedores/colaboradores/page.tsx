@@ -10,7 +10,7 @@ import { colaboradores as baseColaboradores } from "@/lib/data/colaboradores";
 import type { Colaborador, ColaboradorRole, ColaboradorStatus, ColaboradorSeniority, ColaboradorPriceLevel } from "@/lib/types/colaborador";
 import { getColaboradoresSnapshot, saveColaboradores, fetchColaboradores } from "@/lib/repositories/providers-repository";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 const OPTIONS_STORAGE_KEY = "cincel.colaboradores.options.v2";
 const COLUMN_ORDER_STORAGE_KEY = "cincel.colaboradores.column.order.v2";
@@ -213,8 +213,8 @@ export default function ColaboradoresPage() {
         const remote = await fetchColaboradores();
         setColaboradores(remote.length > 0 ? remote : baseColaboradores);
       } catch (err) {
-        if (err instanceof SupabaseOperationError) {
-          reportSupabaseError(err);
+        if (err instanceof RepositoryError) {
+          reportRepositoryError(err);
         }
       } finally {
         setLoading(false);
@@ -227,7 +227,7 @@ export default function ColaboradoresPage() {
   const save = (next: Colaborador[]) => {
     setColaboradores(next);
     saveColaboradores(next).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      if (err instanceof RepositoryError) reportRepositoryError(err);
     });
   };
 

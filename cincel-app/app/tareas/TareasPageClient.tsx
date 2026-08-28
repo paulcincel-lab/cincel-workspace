@@ -20,7 +20,7 @@ import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
 import { fetchActivities, saveActivities, mirrorActivitiesToStorage } from "@/lib/repositories/activities-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 const TASK_STATUSES: TaskStatus[] = ["Pendiente", "En proceso", "Completado", "Bloqueado"];
 const TEAM_MEMBERS = [
@@ -148,7 +148,7 @@ export default function TareasPage() {
         if (diseno.length > 0) setDisenoTasksState(loadLinkedTasks("Diseño", diseno));
         if (construccion.length > 0) setConstruccionTasksState(loadLinkedTasks("Construcción", construccion));
       } catch (err) {
-        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+        if (err instanceof RepositoryError) reportRepositoryError(err);
         setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
       } finally {
         setIsLoadingData(false);
@@ -229,7 +229,7 @@ export default function TareasPage() {
     mirrorActivitiesToStorage(workflow, updatedTasks);
     const changed = updatedTasks.filter((t) => t.id === taskId);
     saveActivities(workflow, changed).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      if (err instanceof RepositoryError) reportRepositoryError(err);
     });
   };
 

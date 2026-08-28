@@ -10,7 +10,7 @@ import { contractors as baseContractors } from "@/lib/data/contractors";
 import type { Contractor, ContractorStatus, ContractorSeniority, PriceLevel } from "@/lib/types/contractor";
 import { getContractorsSnapshot, saveContractors, fetchContractors } from "@/lib/repositories/providers-repository";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 const OPTIONS_STORAGE_KEY = "cincel.contractors.options.v2";
 
@@ -440,8 +440,8 @@ export default function ContratistasPage() {
         const remote = await fetchContractors();
         setContractors(remote);
       } catch (err) {
-        if (err instanceof SupabaseOperationError) {
-          reportSupabaseError(err);
+        if (err instanceof RepositoryError) {
+          reportRepositoryError(err);
         }
       } finally {
         setLoading(false);
@@ -454,7 +454,7 @@ export default function ContratistasPage() {
   const save = (next: Contractor[]) => {
     setContractors(next);
     saveContractors(next).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      if (err instanceof RepositoryError) reportRepositoryError(err);
     });
   };
 

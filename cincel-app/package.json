@@ -14,15 +14,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",
-    "db:studio": "drizzle-kit studio",
-    "health:check": "node scripts/health-check.mjs",
-    "health:check:authenticated": "node scripts/health-check-authenticated.mjs",
-    "e2e:clientes": "node scripts/e2e-login-crud-clientes.mjs",
-    "e2e:modules-smoke": "node scripts/e2e-sprint11-modules-review.mjs"
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.5",
-    "@supabase/supabase-js": "^2.110.9",
     "@tanstack/react-query": "^5.102.8",
     "drizzle-orm": "^0.45.2",
     "jspdf": "^4.2.1",

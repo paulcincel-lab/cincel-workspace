@@ -16,7 +16,7 @@ import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { readStorage } from "@/lib/repositories/browser-state-repository";
 import { fetchProjects } from "@/lib/repositories/projects-repository";
 import { fetchActivities } from "@/lib/repositories/activities-repository";
-import { SupabaseOperationError } from "@/lib/supabase/errors";
+import { RepositoryError } from "@/lib/errors";
 
 const PROJECTS_STORAGE_KEY = "cincel.projects.data.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
@@ -203,7 +203,7 @@ export default function InteractiveDashboard() {
         ]);
         refreshAll();
       } catch (err) {
-        if (err instanceof SupabaseOperationError) return;
+        if (err instanceof RepositoryError) return;
       }
     };
     void hydrateFromDb();

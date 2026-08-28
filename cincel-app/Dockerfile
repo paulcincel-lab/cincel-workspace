@@ -10,20 +10,6 @@ RUN npm ci
 # Copy all other project files to working directory
 COPY . .
 
-# The app talks to Supabase directly from the browser via NEXT_PUBLIC_*
-# variables. Next.js inlines every process.env.NEXT_PUBLIC_* reference into
-# the compiled bundle at build time, so these must be supplied as build
-# args, not runtime env vars -- a `docker run -e` value set afterwards would
-# have no effect. Left unset, NEXT_PUBLIC_CINCEL_DATA_SOURCE defaults to
-# "localstorage" and the app runs against its built-in mock data instead of
-# Supabase (see lib/supabase/data-source.ts).
-ARG NEXT_PUBLIC_CINCEL_DATA_SOURCE=localstorage
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
-ENV NEXT_PUBLIC_CINCEL_DATA_SOURCE=$NEXT_PUBLIC_CINCEL_DATA_SOURCE \
-    NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
-    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-
 RUN npm run build
 
 FROM node:23-alpine
