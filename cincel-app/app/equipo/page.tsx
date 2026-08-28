@@ -23,7 +23,7 @@ import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers } from "@/lib/repositories/team-repository";
+import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers, mirrorTeamMembersToStorage } from "@/lib/repositories/team-repository";
 import { getProjectsSnapshot, fetchProjects } from "@/lib/repositories/projects-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
@@ -378,13 +378,20 @@ export default function EquipoPage() {
   const [draggingActiveColumn, setDraggingActiveColumn] = useState<ActiveColumnKey | null>(null);
   const [draggingInactiveColumn, setDraggingInactiveColumn] = useState<InactiveColumnKey | null>(null);
 
-  // Persist team edits. Guarded so the initial mock state (and the hydration
-  // set) don't upsert stale rows over real DB data before/at hydration — only
-  // user-driven changes after hydration are written back.
-  const hydratedRef = useRef(false);
+  // Diffed autosave: only members that actually changed since the last
+  // persisted state are upserted. `lastSavedRef` is seeded from the initial
+  // mock state and reset on hydration, so neither the mount value nor the
+  // hydration set is written back as a "change".
+  const lastSavedRef = useRef<TeamMember[]>(members);
   useEffect(() => {
-    if (!hydratedRef.current) return;
-    saveTeamMembers(members).catch((err: unknown) => {
+    const changed = members.filter((member) => {
+      const saved = lastSavedRef.current.find((m) => m.id === member.id);
+      return !saved || JSON.stringify(member) !== JSON.stringify(saved);
+    });
+    if (changed.length === 0) return;
+    lastSavedRef.current = members;
+    mirrorTeamMembersToStorage(members);
+    saveTeamMembers(changed).catch((err: unknown) => {
       if (err instanceof SupabaseOperationError) reportSupabaseError(err);
     });
   }, [members]);
@@ -411,7 +418,9 @@ export default function EquipoPage() {
         ]);
 
         if (remoteMembers.length > 0) {
-          setMembers(remoteMembers.map((m) => normalizeTeamMember(m)));
+          const normalized = remoteMembers.map((m) => normalizeTeamMember(m));
+          lastSavedRef.current = normalized;
+          setMembers(normalized);
         }
 
         if (remoteProjects.length > 0) {
@@ -421,8 +430,6 @@ export default function EquipoPage() {
         if (err instanceof SupabaseOperationError) {
           reportSupabaseError(err);
         }
-      } finally {
-        hydratedRef.current = true;
       }
     };
 

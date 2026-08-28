@@ -1,8 +1,7 @@
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
   bigint,
   boolean,
-  check,
   date,
   index,
   integer,
@@ -40,14 +39,9 @@ export const activities = core.table(
     ...timestamps,
   },
   (t) => [
-    check(
-      "activities_review_after_commitment",
-      sql`${t.reviewDate} is null or ${t.commitmentDate} is null or ${t.reviewDate} >= ${t.commitmentDate}`
-    ),
-    check(
-      "activities_delivery_after_commitment",
-      sql`${t.deliveryDate} is null or ${t.commitmentDate} is null or ${t.deliveryDate} >= ${t.commitmentDate}`
-    ),
+    // NOTE: no date-ordering CHECK between commitment/review/delivery — the
+    // product's own task data routinely schedules the review before the
+    // commitment date, and the app treats these as independent fields.
     index("idx_activities_project_id").on(t.projectId),
     index("idx_activities_workflow").on(t.workflow),
     index("idx_activities_status").on(t.status),

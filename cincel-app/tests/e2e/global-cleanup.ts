@@ -32,6 +32,19 @@ async function purgeE2ERows(): Promise<void> {
     `;
     await sql`delete from core.clients where name like '%E2E%'`;
     await sql`delete from core.team_members where name like '%E2E%'`;
+    await sql`
+      delete from core.activity_support_members
+      where activity_id in (select id from core.activities where description like '%E2E%')
+    `;
+    await sql`
+      delete from core.activity_history
+      where activity_id in (select id from core.activities where description like '%E2E%')
+    `;
+    await sql`
+      delete from core.activity_checklist_items
+      where activity_id in (select id from core.activities where description like '%E2E%')
+    `;
+    await sql`delete from core.activities where description like '%E2E%'`;
   } catch (err) {
     // A missing DB in a pure-mock run is not fatal for the suite.
     console.warn("[e2e global-cleanup] skipped:", (err as Error).message);
@@ -42,5 +55,6 @@ async function purgeE2ERows(): Promise<void> {
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
   await purgeE2ERows();
-  return purgeE2ERows;
+  // E2E_KEEP_ROWS leaves rows in place after the run for manual DB inspection.
+  return process.env.E2E_KEEP_ROWS ? async () => {} : purgeE2ERows;
 }
