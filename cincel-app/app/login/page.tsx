@@ -1,11 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { loginWithEmailAndPassword } from "@/lib/auth/auth-service";
-import { signInWithSupabase } from "@/lib/auth/supabase-auth";
-import { isSupabaseEnabled } from "@/lib/supabase/data-source";
+import { loginAction } from "@/lib/auth/auth-actions";
 
 type LoginDraft = {
   email: string;
@@ -22,64 +20,40 @@ export default function LoginPage() {
   const [draft, setDraft] = useState<LoginDraft>(DEFAULT_DRAFT);
   const [error, setError] = useState<string>("");
   const [helpMessage, setHelpMessage] = useState<string>("");
+  const [isPending, startTransition] = useTransition();
 
   const canSubmit = useMemo(() => {
-    return Boolean(draft.email.trim() && draft.password.trim());
-  }, [draft.email, draft.password]);
+    return Boolean(draft.email.trim() && draft.password.trim()) && !isPending;
+  }, [draft.email, draft.password, isPending]);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setHelpMessage("");
 
-    // Production path: delegate authentication to Supabase Auth.
-    if (isSupabaseEnabled()) {
-      const result = await signInWithSupabase(draft.email, draft.password);
+    startTransition(async () => {
+      const result = await loginAction(draft.email, draft.password);
+
       if (!result.ok) {
-        if (result.reason === "supabase_not_configured") {
-          setError("El servicio de autenticación no está configurado. Contacta a soporte.");
+        if (result.reason === "inactive_member") {
+          setError("Tu cuenta esta inactiva. Contacta a un administrador.");
+          return;
+        }
+        if (result.reason === "auth_disabled") {
+          setError("Esta cuenta no tiene acceso al sistema.");
+          return;
+        }
+        if (result.reason === "password_not_set") {
+          setError("La cuenta no tiene una contraseña temporal configurada.");
           return;
         }
         setError("Correo o contraseña incorrectos.");
         return;
       }
-      router.replace("/dashboard");
-      return;
-    }
 
-    // Development / localstorage path: local hash-based authentication.
-    const result = loginWithEmailAndPassword(draft.email, draft.password);
-    if (!result.ok) {
-      if (result.reason === "inactive_member") {
-        setError("Tu cuenta esta inactiva. Contacta a un administrador.");
-        return;
-      }
-
-      if (result.reason === "auth_disabled") {
-        setError("Esta cuenta no tiene acceso al sistema.");
-        return;
-      }
-
-      if (result.reason === "password_not_set") {
-        setError("La cuenta no tiene una contraseña temporal configurada.");
-        return;
-      }
-
-      if (result.reason === "access_not_allowed") {
-        setError("El acceso de este colaborador no permite iniciar sesion.");
-        return;
-      }
-
-      setError("Correo o contraseña incorrectos.");
-      return;
-    }
-
-    if (result.requiresPasswordChange) {
-      router.replace("/change-password");
-      return;
-    }
-
-    router.replace("/dashboard");
+      router.replace(result.mustChangePassword ? "/change-password" : "/dashboard");
+      router.refresh();
+    });
   };
 
   return (

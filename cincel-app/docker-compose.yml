@@ -31,6 +31,10 @@ services:
       - "${APP_PORT:-3000}:3000"
     env_file:
       - .env
+    environment:
+      # Inside the compose network the database is reachable as `db`, overriding
+      # whatever localhost-based DATABASE_URL is in .env for host tooling.
+      DATABASE_URL: postgres://${POSTGRES_USER:-cincel}:${POSTGRES_PASSWORD:-cincel}@db:5432/${POSTGRES_DB:-cincel}
     depends_on:
       db:
         condition: service_healthy

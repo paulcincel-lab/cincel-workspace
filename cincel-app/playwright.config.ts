@@ -35,6 +35,9 @@ export default defineConfig({
         timeout: process.env.CI ? 180_000 : 120_000,
         env: {
           PORT: "3000",
+          DATABASE_URL:
+            process.env.DATABASE_URL ??
+            "postgres://cincel:cincel@localhost:5432/cincel",
         },
       },
 });

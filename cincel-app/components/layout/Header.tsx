@@ -368,6 +368,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
     setProfileImage("");
     setMembers(loadTeamMembers());
     router.push("/login");
+    router.refresh();
   };
 
   if (variant === "profile") {

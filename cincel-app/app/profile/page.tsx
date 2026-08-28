@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import Avatar from "@/components/ui/Avatar";
-import { changeCurrentUserPassword, getCollaboratorAccessState, resolveCurrentSessionAccess } from "@/lib/auth/auth-service";
+import { getCollaboratorAccessState, resolveCurrentSessionAccess } from "@/lib/auth/auth-service";
+import { changePasswordAction } from "@/lib/auth/auth-actions";
 
 type PasswordDraft = {
   currentPassword: string;
@@ -24,6 +25,7 @@ export default function ProfilePage() {
   const [draft, setDraft] = useState<PasswordDraft>(EMPTY_PASSWORD_DRAFT);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [isPending, startTransition] = useTransition();
 
   const authUser = resolveCurrentSessionAccess().user;
   if (!authUser) {
@@ -51,39 +53,36 @@ export default function ProfilePage() {
     setError("");
     setSuccess("");
 
-    const result = changeCurrentUserPassword(draft.currentPassword, draft.nextPassword, draft.confirmPassword);
-    if (!result.ok) {
-      if (result.reason === "invalid_current_password") {
-        setError("La contrasena actual no es correcta.");
+    startTransition(async () => {
+      const result = await changePasswordAction(
+        draft.currentPassword,
+        draft.nextPassword,
+        draft.confirmPassword
+      );
+      if (!result.ok) {
+        if (result.reason === "invalid_current_password") {
+          setError("La contrasena actual no es correcta.");
+          return;
+        }
+        if (result.reason === "password_too_short") {
+          setError("La nueva contrasena debe tener al menos 8 caracteres.");
+          return;
+        }
+        if (result.reason === "password_confirmation_mismatch") {
+          setError("La confirmacion no coincide con la nueva contrasena.");
+          return;
+        }
+        if (result.reason === "no_session") {
+          setError("Tu sesion expiro. Inicia sesion de nuevo.");
+          return;
+        }
+        setError("No fue posible actualizar la contrasena.");
         return;
       }
 
-      if (result.reason === "password_too_short") {
-        setError("La nueva contrasena debe tener al menos 8 caracteres.");
-        return;
-      }
-
-      if (result.reason === "password_confirmation_mismatch") {
-        setError("La confirmacion no coincide con la nueva contrasena.");
-        return;
-      }
-
-      if (result.reason === "inactive_member") {
-        setError("Tu cuenta esta inactiva. Contacta a un administrador.");
-        return;
-      }
-
-      if (result.reason === "no_system_access") {
-        setError("Tu cuenta no tiene acceso al sistema.");
-        return;
-      }
-
-      setError("No fue posible actualizar la contrasena.");
-      return;
-    }
-
-    setSuccess("Contrasena actualizada correctamente.");
-    setDraft(EMPTY_PASSWORD_DRAFT);
+      setSuccess("Contrasena actualizada correctamente.");
+      setDraft(EMPTY_PASSWORD_DRAFT);
+    });
   };
 
   return (
@@ -221,9 +220,10 @@ export default function ProfilePage() {
 
               <button
                 type="submit"
-                className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                disabled={isPending}
+                className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                Guardar nueva contrasena
+                {isPending ? "Guardando..." : "Guardar nueva contrasena"}
               </button>
             </form>
           </section>

@@ -5,9 +5,21 @@ import { cookies } from "next/headers";
 import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { sessions, teamMembers } from "@/lib/db/schema";
+import { authCredentials, sessions, teamMembers } from "@/lib/db/schema";
+import {
+  DEFAULT_SYSTEM_ACCESS_ROLE,
+  hasDefaultSystemAdministratorAccess,
+  isAdministratorRole,
+  isLegacyBlockedAccessRole,
+  normalizeSystemAccessRole,
+  SYSTEM_ACCESS_ROLES,
+  SYSTEM_ADMIN_ROLE,
+  type SystemAccessRole,
+} from "@/lib/data/roles";
 
-export const SESSION_COOKIE = "cincel_session";
+import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
+
+export { SESSION_COOKIE };
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
 
 export type SessionUser = {
@@ -18,6 +30,7 @@ export type SessionUser = {
   role: string | null;
   area: string | null;
   active: boolean;
+  mustChangePassword: boolean;
 };
 
 export type Session = {
@@ -25,6 +38,53 @@ export type Session = {
   user: SessionUser;
   expiresAt: Date;
 };
+
+export type SessionAccessStatus =
+  | "guest"
+  | "inactive_member"
+  | "no_system_access"
+  | "pending_first_access"
+  | "active";
+
+export type SessionAccess = {
+  status: SessionAccessStatus;
+  user:
+    | (SessionUser & { access: SystemAccessRole })
+    | null;
+};
+
+function resolveAccessRole(
+  role: string | null,
+  email: string | null
+): SystemAccessRole | null {
+  if (isLegacyBlockedAccessRole(role)) return null;
+  const normalized = normalizeSystemAccessRole(role);
+  if (normalized && SYSTEM_ACCESS_ROLES.includes(normalized)) return normalized;
+  if (isAdministratorRole(role) || hasDefaultSystemAdministratorAccess(email)) {
+    return SYSTEM_ADMIN_ROLE;
+  }
+  return DEFAULT_SYSTEM_ACCESS_ROLE;
+}
+
+/**
+ * Server-side equivalent of the legacy `resolveCurrentSessionAccess()` — maps
+ * the current request's session to an access decision + role for the route
+ * guard. Safe to call in Server Components / layout.
+ */
+export async function getSessionAccess(): Promise<SessionAccess> {
+  const session = await getSession();
+  if (!session) return { status: "guest", user: null };
+  if (!session.user.active) return { status: "inactive_member", user: null };
+
+  const access = resolveAccessRole(session.user.role, session.user.email);
+  if (!access) return { status: "no_system_access", user: null };
+
+  const user = { ...session.user, access };
+  if (session.user.mustChangePassword) {
+    return { status: "pending_first_access", user };
+  }
+  return { status: "active", user };
+}
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -80,9 +140,11 @@ export async function getSession(): Promise<Session | null> {
       role: teamMembers.role,
       area: teamMembers.area,
       active: teamMembers.active,
+      mustChangePassword: authCredentials.mustChangePassword,
     })
     .from(sessions)
     .innerJoin(teamMembers, eq(teamMembers.id, sessions.teamMemberId))
+    .leftJoin(authCredentials, eq(authCredentials.teamMemberId, teamMembers.id))
     .where(
       and(
         eq(sessions.tokenHash, hashToken(token)),
@@ -106,6 +168,7 @@ export async function getSession(): Promise<Session | null> {
       role: row.role,
       area: row.area,
       active: row.active,
+      mustChangePassword: row.mustChangePassword ?? false,
     },
   };
 }
