@@ -13,7 +13,7 @@ import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { getProjectsSnapshot, PROJECTS_STORAGE_KEY, saveProjects } from "@/lib/repositories/projects-repository";
 import { getClientsSnapshot, MANUAL_CLIENTS_STORAGE_KEY, saveClients, deleteClientAndLinkedProjects, fetchClients } from "@/lib/repositories/clients-repository";
-import { getClientHistoryByClientId, saveClientHistoryByClientId, type ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
+import { getClientHistoryByClientId, fetchClientHistory, appendClientHistory, type ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
 import { writeStorage } from "@/lib/repositories/browser-state-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
@@ -270,6 +270,11 @@ export default function ClienteFichaPage() {
         if (!cancelled) setManualClients(remote);
       })
       .catch(() => undefined);
+    void fetchClientHistory()
+      .then((remote) => {
+        if (!cancelled) setHistoryByClient(remote);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -370,13 +375,16 @@ export default function ClienteFichaPage() {
       date: new Date().toISOString(),
     }));
 
-    const nextHistory = {
-      ...historyByClient,
-      [clientId]: [...nextEntries, ...(historyByClient[clientId] ?? [])],
-    };
+    // Optimistic; the authoritative rows come back on the next hydrate.
+    setHistoryByClient((current) => ({
+      ...current,
+      [clientId]: [...nextEntries, ...(current[clientId] ?? [])],
+    }));
 
-    setHistoryByClient(nextHistory);
-    saveClientHistoryByClientId(nextHistory);
+    void appendClientHistory(
+      clientId,
+      entries.map((e) => ({ field: e.field, before: e.before, after: e.after, author: e.author }))
+    ).catch(() => undefined);
   };
 
   const openEditor = () => {

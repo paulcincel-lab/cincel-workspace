@@ -1,4 +1,18 @@
-import { readJsonStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+/**
+ * Client interaction history (audit log of field changes).
+ *
+ * Phase 2: persisted in Postgres (`core.client_history`) via the Server Actions
+ * in `lib/actions/client-history-actions.ts`. `getClientHistoryByClientId()`
+ * returns `{}` for synchronous first paint — the ficha page hydrates via
+ * `fetchClientHistory()`.
+ */
+import {
+  fetchClientHistoryAction,
+  appendClientHistoryAction,
+  type ClientHistoryInput,
+} from "@/lib/actions/client-history-actions";
+
+export type { ClientHistoryInput };
 
 export type ClientHistoryEntry = {
   id: string;
@@ -10,16 +24,22 @@ export type ClientHistoryEntry = {
   date: string;
 };
 
-const CLIENT_HISTORY_STORAGE_KEY = "cincel.clients.history.v1";
-
-export function getClientHistoryByClientId(): Record<number, ClientHistoryEntry[]> {
-  return readJsonStorage<Record<number, ClientHistoryEntry[]>>(CLIENT_HISTORY_STORAGE_KEY, {});
+export function getClientHistoryByClientId(): Record<
+  number,
+  ClientHistoryEntry[]
+> {
+  return {};
 }
 
-export function saveClientHistoryByClientId(history: Record<number, ClientHistoryEntry[]>): void {
-  writeStorage(CLIENT_HISTORY_STORAGE_KEY, JSON.stringify(history));
+export async function fetchClientHistory(): Promise<
+  Record<number, ClientHistoryEntry[]>
+> {
+  return fetchClientHistoryAction();
 }
 
-export function clearClientHistory(): void {
-  removeStorage(CLIENT_HISTORY_STORAGE_KEY);
+export async function appendClientHistory(
+  clientLegacyId: number,
+  entries: ClientHistoryInput[]
+): Promise<void> {
+  await appendClientHistoryAction(clientLegacyId, entries);
 }

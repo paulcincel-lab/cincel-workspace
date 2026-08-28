@@ -7,6 +7,7 @@ import {
   integer,
   numeric,
   text,
+  timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 import { clientKind, core, timestamps } from "./_schema";
@@ -50,13 +51,41 @@ export const clientContacts = core.table("client_contacts", {
   ...timestamps,
 });
 
+export const clientHistory = core.table(
+  "client_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id),
+    field: text("field").notNull(),
+    beforeValue: text("before_value").notNull().default(""),
+    afterValue: text("after_value").notNull().default(""),
+    authorName: text("author_name").notNull().default(""),
+    eventAt: timestamp("event_at", { withTimezone: true }).notNull().defaultNow(),
+    ...timestamps,
+  },
+  (t) => [
+    index("idx_client_history_client_id").on(t.clientId),
+    index("idx_client_history_event_at").on(t.eventAt),
+  ]
+);
+
 export const clientsRelations = relations(clients, ({ many }) => ({
   contacts: many(clientContacts),
+  history: many(clientHistory),
 }));
 
 export const clientContactsRelations = relations(clientContacts, ({ one }) => ({
   client: one(clients, {
     fields: [clientContacts.clientId],
+    references: [clients.id],
+  }),
+}));
+
+export const clientHistoryRelations = relations(clientHistory, ({ one }) => ({
+  client: one(clients, {
+    fields: [clientHistory.clientId],
     references: [clients.id],
   }),
 }));

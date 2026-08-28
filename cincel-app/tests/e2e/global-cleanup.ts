@@ -30,6 +30,10 @@ async function purgeE2ERows(): Promise<void> {
       delete from core.client_contacts
       where client_id in (select id from core.clients where name like '%E2E%')
     `;
+    await sql`
+      delete from core.client_history
+      where client_id in (select id from core.clients where name like '%E2E%')
+    `;
     await sql`delete from core.clients where name like '%E2E%'`;
     await sql`delete from core.team_members where name like '%E2E%'`;
     await sql`
