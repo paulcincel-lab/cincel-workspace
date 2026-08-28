@@ -1,6 +1,5 @@
 import type { ResourceTemplate } from "@/lib/types/resource";
 
-export const RESOURCE_STORAGE_KEY = "cincel.resources.links.v1";
 
 export const RESOURCE_TEMPLATES: ResourceTemplate[] = [
   {

@@ -11,10 +11,9 @@ import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
-import { getProjectsSnapshot, PROJECTS_STORAGE_KEY, saveProjects } from "@/lib/repositories/projects-repository";
-import { getClientsSnapshot, MANUAL_CLIENTS_STORAGE_KEY, saveClients, deleteClientAndLinkedProjects, fetchClients } from "@/lib/repositories/clients-repository";
+import { getProjectsSnapshot, fetchProjects, saveProjects } from "@/lib/repositories/projects-repository";
+import { getClientsSnapshot, saveClients, deleteClientAndLinkedProjects, fetchClients } from "@/lib/repositories/clients-repository";
 import { getClientHistoryByClientId, fetchClientHistory, appendClientHistory, type ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
-import { writeStorage } from "@/lib/repositories/browser-state-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 type ClientKind = "Empresa" | "Particular";
@@ -265,6 +264,11 @@ export default function ClienteFichaPage() {
 
   useEffect(() => {
     let cancelled = false;
+    void fetchProjects()
+      .then((remote) => {
+        if (!cancelled && remote.length > 0) setProjects(remote);
+      })
+      .catch(() => undefined);
     void fetchClients()
       .then((remote) => {
         if (!cancelled) setManualClients(remote);
@@ -585,8 +589,6 @@ export default function ClienteFichaPage() {
     // Refleja el cambio de inmediato en UI y snapshot local.
     setProjects(updatedProjects);
     setManualClients(updatedManualClients);
-    writeStorage(PROJECTS_STORAGE_KEY, JSON.stringify(updatedProjects));
-    writeStorage(MANUAL_CLIENTS_STORAGE_KEY, JSON.stringify(updatedManualClients));
 
     try {
       await deleteClientAndLinkedProjects(clientId, removedProjectLegacyIds);
@@ -600,8 +602,6 @@ export default function ClienteFichaPage() {
       // Revertimos el estado optimista si la persistencia falla.
       setProjects(previousProjects);
       setManualClients(previousManualClients);
-      writeStorage(PROJECTS_STORAGE_KEY, JSON.stringify(previousProjects));
-      writeStorage(MANUAL_CLIENTS_STORAGE_KEY, JSON.stringify(previousManualClients));
 
       if (error instanceof RepositoryError) {
         reportRepositoryError(error);

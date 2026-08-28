@@ -23,7 +23,7 @@ import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers, mirrorTeamMembersToStorage } from "@/lib/repositories/team-repository";
+import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers } from "@/lib/repositories/team-repository";
 import { getProjectsSnapshot, fetchProjects } from "@/lib/repositories/projects-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
@@ -399,7 +399,6 @@ export default function EquipoPageClient({
     });
     if (changed.length === 0) return;
     lastSavedRef.current = members;
-    mirrorTeamMembersToStorage(members);
     saveTeamMembers(changed).catch((err: unknown) => {
       if (err instanceof RepositoryError) reportRepositoryError(err);
     });

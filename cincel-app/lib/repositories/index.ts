@@ -10,7 +10,6 @@ export {
   getProjectsSnapshot,
   fetchProjects,
   saveProjects,
-  PROJECTS_STORAGE_KEY,
   type Project,
 } from "./projects-repository";
 
@@ -18,7 +17,6 @@ export {
   getTeamMembersSnapshot,
   fetchTeamMembers,
   saveTeamMembers,
-  TEAM_MEMBERS_STORAGE_KEY,
   type TeamMember,
 } from "./team-repository";
 
@@ -27,7 +25,6 @@ export {
   fetchActivities,
   saveActivities,
   saveActivity,
-  activitiesStorageKey,
   type Task,
   type WorkflowType,
 } from "./activities-repository";
@@ -36,7 +33,6 @@ export {
   getClientsSnapshot,
   fetchClients,
   saveClients,
-  MANUAL_CLIENTS_STORAGE_KEY,
   type ManualClient,
 } from "./clients-repository";
 
@@ -44,15 +40,12 @@ export {
   getContractorsSnapshot,
   fetchContractors,
   saveContractors,
-  CONTRACTORS_STORAGE_KEY,
   getColaboradoresSnapshot,
   fetchColaboradores,
   saveColaboradores,
-  COLABORADORES_STORAGE_KEY,
   getTiendasSnapshot,
   fetchTiendas,
   saveTiendas,
-  TIENDAS_STORAGE_KEY,
   type Contractor,
   type Colaborador,
   type Tienda,
