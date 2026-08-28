@@ -11,6 +11,8 @@
  *
  * Run with: npm run db:seed
  */
+import { randomBytes, scrypt as scryptCb } from "node:crypto";
+import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -24,6 +26,18 @@ const connectionString =
 
 const sql = postgres(connectionString, { max: 1 });
 const db = drizzle(sql, { schema });
+
+const scrypt = promisify(scryptCb);
+
+// Must match lib/auth/password.ts
+async function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const derived = (await scrypt(password.normalize("NFKC"), salt, 64)) as Buffer;
+  return { hash: derived.toString("hex"), salt };
+}
+
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "paul@cincel.mx";
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "CincelAdmin2026!";
 
 async function seedTeam() {
   for (const m of teamSeed) {
@@ -190,10 +204,53 @@ async function seedProjects() {
   );
 }
 
+async function seedAdminCredential() {
+  const email = ADMIN_EMAIL.trim().toLowerCase();
+  const member = await db.query.teamMembers.findFirst({
+    where: eq(schema.teamMembers.institutionalEmail, ADMIN_EMAIL),
+  });
+  if (!member) {
+    console.log(`  admin credential: SKIPPED (no team member with email ${email})`);
+    return;
+  }
+
+  // Ensure the seeded admin actually has the Administrador role.
+  if (member.role !== "Administrador") {
+    await db
+      .update(schema.teamMembers)
+      .set({ role: "Administrador" })
+      .where(eq(schema.teamMembers.id, member.id));
+  }
+
+  const { hash, salt } = await hashPassword(ADMIN_PASSWORD);
+  await db
+    .insert(schema.authCredentials)
+    .values({
+      teamMemberId: member.id,
+      passwordHash: hash,
+      salt,
+      authEnabled: true,
+      mustChangePassword: false,
+      passwordUpdatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: schema.authCredentials.teamMemberId,
+      set: {
+        passwordHash: hash,
+        salt,
+        authEnabled: true,
+        mustChangePassword: false,
+        passwordUpdatedAt: new Date(),
+      },
+    });
+  console.log(`  auth_credentials: admin ${email} upserted`);
+}
+
 async function main() {
   console.log(`Seeding ${connectionString.replace(/:[^:@/]*@/, ":***@")}`);
   await seedTeam();
   await seedProjects();
+  await seedAdminCredential();
   console.log("Seed complete.");
   await sql.end();
 }

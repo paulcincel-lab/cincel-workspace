@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import AppRouteGuard from "@/components/auth/AppRouteGuard";
+import QueryProvider from "@/components/providers/QueryProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,7 +30,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AppRouteGuard>{children}</AppRouteGuard>
+        <QueryProvider>
+          <AppRouteGuard>{children}</AppRouteGuard>
+        </QueryProvider>
       </body>
     </html>
   );
