@@ -14,21 +14,25 @@ import { useSessionStore } from "@/lib/stores/session-store";
  * layout re-renders (and this re-runs) after every login/logout Server Action
  * because they call `revalidatePath("/", "layout")`.
  *
- * After updating the store it dispatches a synthetic `focus` event — the same
- * signal the legacy Supabase client used — so feature components that cached
- * `useState(() => getCurrentAuthenticatedUser())` re-read the new value.
+ * When the identity actually changes it dispatches a synthetic `focus` event —
+ * the same signal the legacy Supabase client used — so feature components that
+ * cached `useState(() => getCurrentAuthenticatedUser())` re-read it. It does
+ * NOT fire on unchanged re-renders, to avoid triggering every page's
+ * focus-based data refresh on unrelated revalidations.
  */
 export default function SessionHydrator({ value }: { value: SessionAccess }) {
-  const first = useRef(true);
+  const lastKey = useRef<string | null>(null);
 
   useEffect(() => {
     useSessionStore.getState().setAccess(value);
-    if (first.current) {
-      first.current = false;
+
+    const key = `${value.status}:${value.user?.id ?? ""}`;
+    if (lastKey.current !== null && lastKey.current !== key) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("focus"));
+      }
     }
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("focus"));
-    }
+    lastKey.current = key;
   }, [value]);
 
   return null;

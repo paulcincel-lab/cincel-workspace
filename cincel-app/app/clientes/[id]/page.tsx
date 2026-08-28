@@ -12,7 +12,7 @@ import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
 import { getProjectsSnapshot, PROJECTS_STORAGE_KEY, saveProjects } from "@/lib/repositories/projects-repository";
-import { getClientsSnapshot, MANUAL_CLIENTS_STORAGE_KEY, saveClients, deleteClientAndLinkedProjects } from "@/lib/repositories/clients-repository";
+import { getClientsSnapshot, MANUAL_CLIENTS_STORAGE_KEY, saveClients, deleteClientAndLinkedProjects, fetchClients } from "@/lib/repositories/clients-repository";
 import { getClientHistoryByClientId, saveClientHistoryByClientId, type ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
 import { writeStorage } from "@/lib/repositories/browser-state-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
@@ -262,6 +262,18 @@ export default function ClienteFichaPage() {
     completedProjectsText: "",
     contacts: [],
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchClients()
+      .then((remote) => {
+        if (!cancelled) setManualClients(remote);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const refreshAuthenticatedUser = () => {

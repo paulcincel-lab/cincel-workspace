@@ -184,6 +184,20 @@ export async function requireSession(): Promise<Session> {
   return session;
 }
 
+/**
+ * Require an active session with system access, returning the user + resolved
+ * access role. Use at the top of Server Actions that run capability checks.
+ */
+export async function requireSessionAccess(): Promise<
+  NonNullable<SessionAccess["user"]>
+> {
+  const access = await getSessionAccess();
+  if (!access.user || access.status === "no_system_access") {
+    throw new Error("FORBIDDEN");
+  }
+  return access.user;
+}
+
 /** Delete the current session row and clear the cookie. */
 export async function destroySession(): Promise<void> {
   const jar = await cookies();
