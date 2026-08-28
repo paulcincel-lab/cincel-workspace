@@ -45,6 +45,26 @@ async function purgeE2ERows(): Promise<void> {
       where activity_id in (select id from core.activities where description like '%E2E%')
     `;
     await sql`delete from core.activities where description like '%E2E%'`;
+    await sql`
+      delete from core.contractor_categories
+      where contractor_id in (select id from core.contractors where provider like '%E2E%')
+    `;
+    await sql`delete from core.contractors where provider like '%E2E%'`;
+    await sql`
+      delete from core.collaborator_categories
+      where collaborator_id in (select id from core.collaborator_providers where name like '%E2E%')
+    `;
+    await sql`
+      delete from core.collaborator_skills
+      where collaborator_id in (select id from core.collaborator_providers where name like '%E2E%')
+    `;
+    await sql`delete from core.collaborator_providers where name like '%E2E%'`;
+    await sql`
+      delete from core.store_categories
+      where store_id in (select id from core.stores where name like '%E2E%')
+    `;
+    await sql`delete from core.stores where name like '%E2E%'`;
+    await sql`delete from core.resource_links where title like '%E2E%'`;
   } catch (err) {
     // A missing DB in a pure-mock run is not fatal for the suite.
     console.warn("[e2e global-cleanup] skipped:", (err as Error).message);
