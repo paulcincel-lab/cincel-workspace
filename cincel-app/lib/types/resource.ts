@@ -24,6 +24,16 @@ export type ResourceTemplate = {
   appliesTo: ResourceAppliesTo;
 };
 
+export type DriveFileMeta = {
+  googleFileId: string;
+  fileName: string;
+  mimeType: string;
+  iconLink: string | null;
+  thumbnailLink: string | null;
+  webViewLink: string;
+  syncedAt: string;
+};
+
 export type ResourceLink = {
   id: string;
   templateKey: string;
@@ -38,6 +48,8 @@ export type ResourceLink = {
   personalForTeamMemberId: number | null;
   updatedAt: string;
   history: ResourceHistoryItem[];
+  /** Populated when the link was picked from the Drive browser. */
+  drive: DriveFileMeta | null;
 };
 
 export type ResourceHistoryItem = {

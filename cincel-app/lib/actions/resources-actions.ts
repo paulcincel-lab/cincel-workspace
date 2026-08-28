@@ -43,6 +43,17 @@ function toResourceLink(row: typeof resourceLinks.$inferSelect): ResourceLink {
     history: Array.isArray(row.history)
       ? (row.history as ResourceLink["history"])
       : [],
+    drive: row.googleFileId
+      ? {
+          googleFileId: row.googleFileId,
+          fileName: row.fileName ?? "",
+          mimeType: row.mimeType ?? "",
+          iconLink: row.iconLink,
+          thumbnailLink: row.thumbnailLink,
+          webViewLink: row.webViewLink ?? row.url,
+          syncedAt: (row.syncedAt ?? new Date()).toISOString(),
+        }
+      : null,
   };
 }
 
@@ -80,6 +91,13 @@ export async function saveResourceLinksAction(
       personalForTeamMemberLegacyId: link.personalForTeamMemberId,
       updatedAtLabel: link.updatedAt || null,
       history: link.history ?? [],
+      googleFileId: link.drive?.googleFileId ?? null,
+      fileName: link.drive?.fileName ?? null,
+      mimeType: link.drive?.mimeType ?? null,
+      iconLink: link.drive?.iconLink ?? null,
+      thumbnailLink: link.drive?.thumbnailLink ?? null,
+      webViewLink: link.drive?.webViewLink ?? null,
+      syncedAt: link.drive?.syncedAt ? new Date(link.drive.syncedAt) : null,
     };
 
     await db

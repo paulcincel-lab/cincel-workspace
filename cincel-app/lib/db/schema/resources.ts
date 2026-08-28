@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, index, jsonb, text } from "drizzle-orm/pg-core";
+import { bigint, check, index, jsonb, text, timestamp } from "drizzle-orm/pg-core";
 import { core, timestamps } from "./_schema";
 
 type ResourceHistoryItem = Record<string, unknown>;
@@ -23,6 +23,15 @@ export const resourceLinks = core.table(
       mode: "number",
     }),
     updatedAtLabel: text("updated_at_label"),
+    // Google Drive metadata cached when a link is picked via the Drive browser.
+    // Nullable — `url` remains the fallback for manually-pasted links.
+    googleFileId: text("google_file_id"),
+    fileName: text("file_name"),
+    mimeType: text("mime_type"),
+    iconLink: text("icon_link"),
+    thumbnailLink: text("thumbnail_link"),
+    webViewLink: text("web_view_link"),
+    syncedAt: timestamp("synced_at", { withTimezone: true }),
     history: jsonb("history")
       .$type<ResourceHistoryItem[]>()
       .notNull()
