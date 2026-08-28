@@ -116,12 +116,17 @@ export interface UseProjectsDataReturn {
  * secondary coordinator persistence, team sync, and notes.
  * Follows the pattern of lib/settings/use-general-settings.ts.
  */
-export function useProjectsData(): UseProjectsDataReturn {
-  const [projectsData, setProjectsData] = useState<ProjectItem[]>(() => loadPersistedProjects());
+export function useProjectsData(
+  initialProjects?: ProjectItem[]
+): UseProjectsDataReturn {
+  const hasInitial = initialProjects !== undefined && initialProjects.length > 0;
+  const [projectsData, setProjectsData] = useState<ProjectItem[]>(
+    () => initialProjects ?? loadPersistedProjects()
+  );
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
-  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(!hasInitial);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [notesByProject, setNotesByProject] = useState<Record<number, ProjectNote[]>>(() => loadProjectNotes());
 
@@ -153,7 +158,15 @@ export function useProjectsData(): UseProjectsDataReturn {
     writeStorage(SECONDARY_COORDINATOR_STORAGE_KEY, JSON.stringify(secondaryCoordinatorByProject));
   }, [secondaryCoordinatorByProject]);
 
-  // Hydrate from Supabase on mount, and keep team names / auth user fresh.
+  // When the page passed server-rendered data, mirror it into the localStorage
+  // key that the ficha page / tasks-linking still read synchronously.
+  useEffect(() => {
+    if (hasInitial) mirrorProjectsToStorage(projectsData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Hydrate from Postgres on mount (skipped when the page already provided
+  // server-rendered data), and keep team names / auth user fresh.
   useEffect(() => {
     const refreshTeam = () => {
       setActiveTeamNames(loadActiveTeamNames());
@@ -161,7 +174,9 @@ export function useProjectsData(): UseProjectsDataReturn {
     };
 
     const hydrate = async () => {
-      setIsLoadingData(true);
+      // Don't flash a loading state when the page already server-rendered data;
+      // this is a background revalidation to catch any SSR staleness.
+      if (!hasInitial) setIsLoadingData(true);
       setFetchError(null);
       try {
         const remote = await fetchProjects();
@@ -184,6 +199,7 @@ export function useProjectsData(): UseProjectsDataReturn {
       window.removeEventListener("focus", refreshTeam);
       window.removeEventListener("storage", refreshTeam);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const allTasks = useMemo<AllTasksSnapshot>(() => [
