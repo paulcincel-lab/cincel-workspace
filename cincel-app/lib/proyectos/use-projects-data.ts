@@ -12,7 +12,7 @@ import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { saveProjects, fetchProjects, deleteProject, mirrorProjectsToStorage } from "@/lib/repositories/projects-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 const TEAM_MEMBERS_STORAGE_KEY = "cincel.team.members.v1";
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
@@ -140,7 +140,7 @@ export function useProjectsData(): UseProjectsDataReturn {
       lastSavedRef.current = projectsData;
       mirrorProjectsToStorage(projectsData);
       saveProjects(changed).catch((err: unknown) => {
-        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+        if (err instanceof RepositoryError) reportRepositoryError(err);
       });
     }, 800);
     return () => {
@@ -170,7 +170,7 @@ export function useProjectsData(): UseProjectsDataReturn {
           setProjectsData(remote);
         }
       } catch (err) {
-        if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+        if (err instanceof RepositoryError) reportRepositoryError(err);
         setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
       } finally {
         setIsLoadingData(false);
@@ -198,7 +198,7 @@ export function useProjectsData(): UseProjectsDataReturn {
     setProjectsData(nextProjects);
     mirrorProjectsToStorage(nextProjects);
     saveProjects([project]).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      if (err instanceof RepositoryError) reportRepositoryError(err);
     });
   };
 
@@ -228,7 +228,7 @@ export function useProjectsData(): UseProjectsDataReturn {
     });
     lastSavedRef.current = lastSavedRef.current.filter((item) => item.id !== projectId);
     deleteProject(projectId).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      if (err instanceof RepositoryError) reportRepositoryError(err);
     });
     setNotesByProject((current) => {
       const next = { ...current };

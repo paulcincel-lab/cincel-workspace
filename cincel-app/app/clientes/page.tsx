@@ -21,7 +21,7 @@ import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { saveClients, fetchClients } from "@/lib/repositories/clients-repository";
 import { saveProjects, fetchProjects, getProjectsSnapshot } from "@/lib/repositories/projects-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 type RiskLevel = "Alto" | "Medio" | "Bajo";
 type ClientKind = "Empresa" | "Particular";
@@ -291,13 +291,13 @@ function normalizeClientKind(value: unknown): ClientKind {
 
 function updateManualClientsStorage(next: ManualClient[]) {
   saveClients(next).catch((err: unknown) => {
-    if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    if (err instanceof RepositoryError) reportRepositoryError(err);
   });
 }
 
 function updateProjectsStorage(next: (typeof baseProjects)) {
   saveProjects(next).catch((err: unknown) => {
-    if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+    if (err instanceof RepositoryError) reportRepositoryError(err);
   });
 }
 
@@ -355,8 +355,8 @@ export default function ClientesPage() {
         setProjects(remoteProjects.length > 0 ? remoteProjects : loadPersistedProjects());
         setManualClients(remoteClients);
       } catch (err) {
-        if (err instanceof SupabaseOperationError) {
-          reportSupabaseError(err);
+        if (err instanceof RepositoryError) {
+          reportRepositoryError(err);
         }
       }
     };

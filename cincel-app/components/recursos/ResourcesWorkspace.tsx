@@ -12,7 +12,7 @@ import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/da
 import { getTeamMembersSnapshot } from "@/lib/repositories/team-repository";
 import { fetchResourceLinks, saveResourceLinks, deleteResourceLink as deleteResourceLinkInDb } from "@/lib/repositories/resources-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import type {
   ResourceAppliesTo,
   ResourceHistoryItem,
@@ -479,8 +479,8 @@ export default function ResourcesWorkspace({
         const remote = await fetchResourceLinks();
         setResourceLinks(loadResourceLinks(loadTeamMembers(), remote));
       } catch (err) {
-        if (err instanceof SupabaseOperationError) {
-          reportSupabaseError(err);
+        if (err instanceof RepositoryError) {
+          reportRepositoryError(err);
         }
       }
     };
@@ -507,8 +507,8 @@ export default function ResourcesWorkspace({
   const persistLinks = (next: ResourceLink[]) => {
     setResourceLinks(next);
     saveResourceLinks(next).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) {
-        reportSupabaseError(err);
+      if (err instanceof RepositoryError) {
+        reportRepositoryError(err);
       }
     });
   };
@@ -517,8 +517,8 @@ export default function ResourcesWorkspace({
     const next = resourceLinks.filter((link) => link.id !== id);
     persistLinks(next);
     deleteResourceLinkInDb(id).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) {
-        reportSupabaseError(err);
+      if (err instanceof RepositoryError) {
+        reportRepositoryError(err);
       }
     });
 

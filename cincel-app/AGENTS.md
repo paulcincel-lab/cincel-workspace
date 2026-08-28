@@ -26,10 +26,11 @@ Este proyecto está basado en Next.js con React y sigue una estructura simple y 
 - lib/: lógica de negocio, acceso a datos y utilidades.
   - auth/: servicio de autenticación (`auth-service.ts`), permisos y roles por módulo (`permissions.ts`, `permissionsRegistry.ts`), y gestión de foto de perfil.
   - calendar/: servicio de calendario para cálculo de fechas y disponibilidad de colaboradores.
-  - data/: datos mock utilizados por la aplicación en modo `localstorage`.
-  - repositories/: repositorios de acceso a datos (uno por entidad). Abstraen la fuente activa (Supabase o localStorage) y exponen una interfaz uniforme a los componentes.
+  - data/: datos semilla / mock usados para el primer render y como fallback.
+  - db/: esquema Drizzle (`schema/`), cliente Postgres (`client.ts`) y migraciones (`migrations/`).
+  - actions/: Server Actions por entidad (`<entidad>-actions.ts`) — lectura/escritura contra Postgres vía Drizzle, con autorización de sesión.
+  - repositories/: delegadores delgados hacia `lib/actions/*`; conservan los nombres de tipos y funciones históricos para no tocar los consumidores.
   - settings/: configuración general de la aplicación (hook `use-general-settings` y lógica de persistencia).
-  - supabase/: cliente de Supabase (`client.ts`, `server.ts`), detección de fuente de datos (`data-source.ts`), manejo de errores y health check.
   - templates/: plantillas auxiliares para generación de registros iniciales (p. ej. resource_links por equipo).
   - types/: tipos de TypeScript compartidos por toda la aplicación.
   - utils/: utilidades transversales — formateo de fechas (`date.ts`), exportación a xlsx/csv (`export-service.ts`) y vinculación de tareas (`tasks-linking.ts`).

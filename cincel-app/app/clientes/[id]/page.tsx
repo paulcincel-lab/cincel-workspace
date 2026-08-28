@@ -15,7 +15,7 @@ import { getProjectsSnapshot, PROJECTS_STORAGE_KEY, saveProjects } from "@/lib/r
 import { getClientsSnapshot, MANUAL_CLIENTS_STORAGE_KEY, saveClients, deleteClientAndLinkedProjects, fetchClients } from "@/lib/repositories/clients-repository";
 import { getClientHistoryByClientId, saveClientHistoryByClientId, type ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
 import { writeStorage } from "@/lib/repositories/browser-state-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 type ClientKind = "Empresa" | "Particular";
 
@@ -595,8 +595,8 @@ export default function ClienteFichaPage() {
       writeStorage(PROJECTS_STORAGE_KEY, JSON.stringify(previousProjects));
       writeStorage(MANUAL_CLIENTS_STORAGE_KEY, JSON.stringify(previousManualClients));
 
-      if (error instanceof SupabaseOperationError) {
-        reportSupabaseError(error);
+      if (error instanceof RepositoryError) {
+        reportRepositoryError(error);
       }
 
       return;

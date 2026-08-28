@@ -26,7 +26,7 @@ import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
 import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers, mirrorTeamMembersToStorage } from "@/lib/repositories/team-repository";
 import { getProjectsSnapshot, fetchProjects } from "@/lib/repositories/projects-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 
 const emptyDraft: MemberDraft = {
@@ -392,7 +392,7 @@ export default function EquipoPage() {
     lastSavedRef.current = members;
     mirrorTeamMembersToStorage(members);
     saveTeamMembers(changed).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      if (err instanceof RepositoryError) reportRepositoryError(err);
     });
   }, [members]);
 
@@ -427,8 +427,8 @@ export default function EquipoPage() {
           setProjectsData(remoteProjects);
         }
       } catch (err) {
-        if (err instanceof SupabaseOperationError) {
-          reportSupabaseError(err);
+        if (err instanceof RepositoryError) {
+          reportRepositoryError(err);
         }
       }
     };

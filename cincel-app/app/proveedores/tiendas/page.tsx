@@ -10,7 +10,7 @@ import { tiendas as baseTiendas } from "@/lib/data/tiendas";
 import type { Tienda, TiendaStatus, TiendaType, TiendaPriceLevel } from "@/lib/types/tienda";
 import { getTiendasSnapshot, saveTiendas, fetchTiendas } from "@/lib/repositories/providers-repository";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
-import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
+import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 const OPTIONS_STORAGE_KEY = "cincel.tiendas.options.v2";
 const COLUMN_ORDER_STORAGE_KEY = "cincel.tiendas.column.order.v2";
@@ -204,8 +204,8 @@ export default function TiendasPage() {
         const remote = await fetchTiendas();
         setTiendas(remote.length > 0 ? remote : baseTiendas);
       } catch (err) {
-        if (err instanceof SupabaseOperationError) {
-          reportSupabaseError(err);
+        if (err instanceof RepositoryError) {
+          reportRepositoryError(err);
         }
       } finally {
         setLoading(false);
@@ -218,7 +218,7 @@ export default function TiendasPage() {
   const save = (next: Tienda[]) => {
     setTiendas(next);
     saveTiendas(next).catch((err: unknown) => {
-      if (err instanceof SupabaseOperationError) reportSupabaseError(err);
+      if (err instanceof RepositoryError) reportRepositoryError(err);
     });
   };
 
