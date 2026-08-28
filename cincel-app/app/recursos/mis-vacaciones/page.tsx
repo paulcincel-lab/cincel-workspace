@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function MisVacacionesPage() {
-  return <ResourcesWorkspace mode="mis-vacaciones" />;
+export default async function MisVacacionesPage() {
+  return <ResourcesWorkspaceServer mode="mis-vacaciones" />;
 }

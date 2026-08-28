@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function EmpresaBookPage() {
-  return <ResourcesWorkspace mode="empresa" titleOverride="Book" descriptionOverride="Documentación base de Book." />;
+export default async function EmpresaBookPage() {
+  return <ResourcesWorkspaceServer mode="empresa" titleOverride="Book" descriptionOverride="Documentación base de Book." />;
 }

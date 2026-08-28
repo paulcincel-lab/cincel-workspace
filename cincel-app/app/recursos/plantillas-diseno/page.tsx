@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function PlantillasDisenoPage() {
-  return <ResourcesWorkspace mode="plantillas-diseno" />;
+export default async function PlantillasDisenoPage() {
+  return <ResourcesWorkspaceServer mode="plantillas-diseno" />;
 }

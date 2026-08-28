@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function MisFavoritosPage() {
-  return <ResourcesWorkspace mode="mis-favoritos" />;
+export default async function MisFavoritosPage() {
+  return <ResourcesWorkspaceServer mode="mis-favoritos" />;
 }

@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function EmpresaManualPage() {
-  return <ResourcesWorkspace mode="empresa" titleOverride="Manual de la empresa" descriptionOverride="Lineamientos, procesos y referencia institucional." />;
+export default async function EmpresaManualPage() {
+  return <ResourcesWorkspaceServer mode="empresa" titleOverride="Manual de la empresa" descriptionOverride="Lineamientos, procesos y referencia institucional." />;
 }

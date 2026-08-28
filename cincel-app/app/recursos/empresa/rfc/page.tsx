@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function EmpresaRFCPage() {
-  return <ResourcesWorkspace mode="empresa" titleOverride="RFC" descriptionOverride="Datos fiscales y documentación administrativa." />;
+export default async function EmpresaRFCPage() {
+  return <ResourcesWorkspaceServer mode="empresa" titleOverride="RFC" descriptionOverride="Datos fiscales y documentación administrativa." />;
 }

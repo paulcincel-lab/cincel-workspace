@@ -1,5 +1,5 @@
-import ResourcesWorkspace from "@/components/recursos/ResourcesWorkspace";
+import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 
-export default function RecursosEmpresaPage() {
-  return <ResourcesWorkspace mode="empresa" />;
+export default async function RecursosEmpresaPage() {
+  return <ResourcesWorkspaceServer mode="empresa" />;
 }
