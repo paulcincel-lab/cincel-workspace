@@ -13,6 +13,11 @@ import { getTeamMembersSnapshot } from "@/lib/repositories/team-repository";
 import { fetchResourceLinks, saveResourceLinks, deleteResourceLink as deleteResourceLinkInDb } from "@/lib/repositories/resources-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
+import {
+  getDrivePreviewUrl,
+  hasDriveUrl,
+  inferLinkTypeFromUrl,
+} from "@/lib/google/drive-url";
 import type {
   ResourceAppliesTo,
   ResourceHistoryItem,
@@ -152,6 +157,7 @@ function normalizeResourceLink(link: ResourceLink): ResourceLink {
     ...link,
     status: link.status === "obsoleto" ? "obsoleto" : "vigente",
     history: Array.isArray(link.history) ? link.history : [],
+    drive: link.drive ?? null,
   };
 }
 
@@ -192,6 +198,7 @@ function buildDefaultResourceLinks(members: TeamMember[]): ResourceLink[] {
     personalForTeamMemberId: null,
     updatedAt: "",
     history: [],
+    drive: null,
   }));
 
   const personalDocs: ResourceLink[] = activeMembers.map((member) => ({
@@ -208,6 +215,7 @@ function buildDefaultResourceLinks(members: TeamMember[]): ResourceLink[] {
     personalForTeamMemberId: member.id,
     updatedAt: "",
     history: [],
+    drive: null,
   }));
 
   return [...personalDocs, ...globalLinks];
@@ -222,67 +230,9 @@ function loadResourceLinks(members: TeamMember[], persisted: ResourceLink[] = []
     mergedMap.set(item.id, normalizeResourceLink({ ...item, section: inferResourceSection(item) }));
   });
 
-  return Array.from(mergedMap.values()).filter((item) => hasResourceUrl(item.url));
+  return Array.from(mergedMap.values()).filter((item) => hasDriveUrl(item.url));
 }
 
-function normalizeDriveUrl(url: string): string {
-  return url.trim();
-}
-
-function hasResourceUrl(url: string): boolean {
-  return normalizeDriveUrl(url).length > 0;
-}
-
-function getDriveId(url: string): string | null {
-  const clean = normalizeDriveUrl(url);
-  if (!clean) return null;
-
-  const docsMatch = clean.match(/docs\.google\.com\/(?:document|spreadsheets|presentation|forms)\/d\/([a-zA-Z0-9_-]+)/);
-  if (docsMatch?.[1]) return docsMatch[1];
-
-  const folderMatch = clean.match(/\/folders\/([a-zA-Z0-9_-]+)/);
-  if (folderMatch?.[1]) return folderMatch[1];
-
-  const fileMatch = clean.match(/\/(?:file\/)?d\/([a-zA-Z0-9_-]+)/);
-  if (fileMatch?.[1]) return fileMatch[1];
-
-  const queryMatch = clean.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (queryMatch?.[1]) return queryMatch[1];
-
-  return null;
-}
-
-function getDrivePreviewUrl(url: string, linkType: ResourceLinkType): string | null {
-  const clean = normalizeDriveUrl(url);
-  if (!clean) return null;
-
-  const docsPreviewMatch = clean.match(/^https?:\/\/docs\.google\.com\/(document|spreadsheets|presentation)\/d\/([a-zA-Z0-9_-]+)/);
-  if (docsPreviewMatch) {
-    const [, docType, docId] = docsPreviewMatch;
-    return `https://docs.google.com/${docType}/d/${docId}/preview`;
-  }
-
-  const driveId = getDriveId(url);
-
-  if (!driveId) return null;
-
-  const isFolderUrl = /\/folders\//.test(clean);
-
-  if (linkType === "drive_folder" || isFolderUrl) {
-    return `https://drive.google.com/embeddedfolderview?id=${driveId}#grid`;
-  }
-
-  return `https://drive.google.com/file/d/${driveId}/preview`;
-}
-
-function inferLinkTypeFromUrl(url: string, currentType: ResourceLinkType): ResourceLinkType {
-  const clean = normalizeDriveUrl(url);
-  if (!clean) return currentType;
-  if (/\/folders\//.test(clean)) return "drive_folder";
-  if (/docs\.google\.com\//.test(clean)) return "drive_file";
-  if (/drive\.google\.com\//.test(clean)) return "drive_file";
-  return "web";
-}
 
 function loadRecentDocuments(): RecentDocument[] {
   const stored = readStorage(RECENT_DOCS_STORAGE_KEY);
@@ -303,7 +253,7 @@ function loadRecentDocuments(): RecentDocument[] {
         ...item,
         url: item.url ?? item.href,
       }))
-      .filter((item) => hasResourceUrl(item.url))
+      .filter((item) => hasDriveUrl(item.url))
       .slice(0, 8);
   } catch {
     removeStorage(RECENT_DOCS_STORAGE_KEY);
@@ -554,6 +504,7 @@ export default function ResourcesWorkspace({
       personalForTeamMemberId: draft.personalForTeamMemberId,
       updatedAt: now,
       history: [createHistoryEntry("created", "Recurso creado")],
+      drive: null,
     };
 
     persistLinks([...resourceLinks, newItem]);
@@ -564,7 +515,7 @@ export default function ResourcesWorkspace({
     const query = search.trim().toLowerCase();
 
     return resourceLinks
-      .filter((link) => hasResourceUrl(link.url))
+      .filter((link) => hasDriveUrl(link.url))
       .filter((link) => {
         if (link.templateKey.startsWith("personal_mis_documentos")) {
           return link.personalForTeamMemberId === effectiveSelectedMemberId;
