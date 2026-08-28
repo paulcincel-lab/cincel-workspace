@@ -10,7 +10,7 @@ import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { saveProjects, fetchProjects, deleteProject } from "@/lib/repositories/projects-repository";
+import { saveProjects, fetchProjects, deleteProject, mirrorProjectsToStorage } from "@/lib/repositories/projects-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import { SupabaseOperationError, reportSupabaseError } from "@/lib/supabase/errors";
 
@@ -138,6 +138,7 @@ export function useProjectsData(): UseProjectsDataReturn {
     if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       lastSavedRef.current = projectsData;
+      mirrorProjectsToStorage(projectsData);
       saveProjects(changed).catch((err: unknown) => {
         if (err instanceof SupabaseOperationError) reportSupabaseError(err);
       });
@@ -195,6 +196,7 @@ export function useProjectsData(): UseProjectsDataReturn {
     const nextProjects = [project, ...projectsData];
     lastSavedRef.current = nextProjects;
     setProjectsData(nextProjects);
+    mirrorProjectsToStorage(nextProjects);
     saveProjects([project]).catch((err: unknown) => {
       if (err instanceof SupabaseOperationError) reportSupabaseError(err);
     });
@@ -219,7 +221,11 @@ export function useProjectsData(): UseProjectsDataReturn {
   };
 
   const removeProject = (projectId: number) => {
-    setProjectsData((current) => current.filter((item) => item.id !== projectId));
+    setProjectsData((current) => {
+      const next = current.filter((item) => item.id !== projectId);
+      mirrorProjectsToStorage(next);
+      return next;
+    });
     lastSavedRef.current = lastSavedRef.current.filter((item) => item.id !== projectId);
     deleteProject(projectId).catch((err: unknown) => {
       if (err instanceof SupabaseOperationError) reportSupabaseError(err);

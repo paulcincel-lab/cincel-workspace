@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
@@ -378,7 +378,12 @@ export default function EquipoPage() {
   const [draggingActiveColumn, setDraggingActiveColumn] = useState<ActiveColumnKey | null>(null);
   const [draggingInactiveColumn, setDraggingInactiveColumn] = useState<InactiveColumnKey | null>(null);
 
+  // Persist team edits. Guarded so the initial mock state (and the hydration
+  // set) don't upsert stale rows over real DB data before/at hydration — only
+  // user-driven changes after hydration are written back.
+  const hydratedRef = useRef(false);
   useEffect(() => {
+    if (!hydratedRef.current) return;
     saveTeamMembers(members).catch((err: unknown) => {
       if (err instanceof SupabaseOperationError) reportSupabaseError(err);
     });
@@ -416,6 +421,8 @@ export default function EquipoPage() {
         if (err instanceof SupabaseOperationError) {
           reportSupabaseError(err);
         }
+      } finally {
+        hydratedRef.current = true;
       }
     };
 
