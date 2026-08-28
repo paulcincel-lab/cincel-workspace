@@ -41,7 +41,9 @@ USER nextuser
 EXPOSE 3000
 
 # set app host, port and node env
-ENV HOST=0.0.0.0 PORT=3000 NODE_ENV=production
+# Next.js standalone server.js binds to HOSTNAME (not HOST); without this it
+# inherits the container id as the hostname and fails with EAI_AGAIN.
+ENV HOST=0.0.0.0 HOSTNAME=0.0.0.0 PORT=3000 NODE_ENV=production
 # start the app with dumb-init to spawn the Node.js runtime process
 # with signal support
 CMD ["dumb-init", "node", "server.js"]
