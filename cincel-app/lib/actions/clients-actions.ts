@@ -5,29 +5,12 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { clientContacts, clients, projects } from "@/lib/db/schema";
-import { requireSessionAccess } from "@/lib/auth/session";
+import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
-import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import type { ManualClient } from "@/lib/repositories/clients-repository";
 
 async function requireClientsCapabilities() {
-  const user = await requireSessionAccess();
-  const authUser: AuthenticatedUser = {
-    member: {
-      id: user.legacyId ?? 0,
-      name: user.name,
-      role: user.role ?? "",
-      area: user.area ?? "",
-      capacity: 0,
-      availability: "",
-      active: user.active,
-      institutionalEmail: user.email ?? "",
-      phone: "",
-    },
-    email: user.email ?? "",
-    access: user.access,
-  };
-  return resolveClientsCapabilities(authUser);
+  return resolveClientsCapabilities(await requireCapabilityUser());
 }
 
 function toManualClient(row: {

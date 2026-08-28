@@ -198,6 +198,33 @@ export async function requireSessionAccess(): Promise<
   return access.user;
 }
 
+/**
+ * Require an active session and adapt it to the `AuthenticatedUser` shape the
+ * capability resolvers in `lib/auth/permissions.ts` expect. Server Actions call
+ * this and hand the result to `resolve<Module>Capabilities()` — the RLS
+ * replacement now that reads/writes go through Drizzle.
+ */
+export async function requireCapabilityUser(): Promise<
+  import("@/lib/auth/auth-service").AuthenticatedUser
+> {
+  const user = await requireSessionAccess();
+  return {
+    member: {
+      id: user.legacyId ?? 0,
+      name: user.name,
+      role: user.role ?? "",
+      area: user.area ?? "",
+      capacity: 0,
+      availability: "",
+      active: user.active,
+      institutionalEmail: user.email ?? "",
+      phone: "",
+    },
+    email: user.email ?? "",
+    access: user.access,
+  };
+}
+
 /** Delete the current session row and clear the cookie. */
 export async function destroySession(): Promise<void> {
   const jar = await cookies();
