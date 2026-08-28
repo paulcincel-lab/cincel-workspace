@@ -68,7 +68,11 @@ const PROJECT_TYPE_OPTIONS = ["Habitacional", "Oficinas", "Comercial", "Mobiliar
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ProjectsTable() {
+export default function ProjectsTable({
+  initialProjects,
+}: {
+  initialProjects?: ProjectItem[];
+} = {}) {
   const router = useRouter();
   const {
     projectsData,
@@ -85,7 +89,7 @@ export default function ProjectsTable() {
     updateProjectActive,
     removeProject,
     addNote,
-  } = useProjectsData();
+  } = useProjectsData(initialProjects);
 
 
   const [statusViewFilter, setStatusViewFilter] = useState<"Activos" | "Archivados">("Activos");
