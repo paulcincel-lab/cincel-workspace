@@ -11,6 +11,10 @@
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:studio": "drizzle-kit studio",
     "health:check": "node scripts/health-check.mjs",
     "health:check:authenticated": "node scripts/health-check-authenticated.mjs",
     "e2e:clientes": "node scripts/e2e-login-crud-clientes.mjs",
@@ -19,11 +23,14 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.110.9",
+    "drizzle-orm": "^0.45.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "next": "16.2.10",
+    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -33,11 +40,13 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.1.11",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "happy-dom": "^20.11.6",
     "playwright": "^1.62.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "^4.1.11"
   }

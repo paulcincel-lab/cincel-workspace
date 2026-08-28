@@ -1,4 +1,20 @@
 services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cincel}
+      POSTGRES_USER: ${POSTGRES_USER:-cincel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cincel}
+    ports:
+      - "5432:5432"
+    volumes:
+      - cincel_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cincel} -d ${POSTGRES_DB:-cincel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   app:
     deploy:
       resources:
@@ -15,3 +31,9 @@ services:
       - "3000:3000"
     env_file:
       - .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  cincel_db_data:
