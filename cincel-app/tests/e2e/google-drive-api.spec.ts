@@ -39,4 +39,17 @@ test.describe("Google Drive API", () => {
     );
     expect(res.status()).toBe(401);
   });
+
+  test("status route: { configured: false } for an authed user with no SA env", async ({
+    page,
+  }) => {
+    await seedAuth(page);
+    await loginAsAdmin(page, BASE_URL);
+    const result = await page.evaluate(async () => {
+      const r = await fetch("/api/google/drive/status");
+      return { status: r.status, body: await r.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.configured).toBe(false);
+  });
 });

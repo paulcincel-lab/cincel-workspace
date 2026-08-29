@@ -22,6 +22,8 @@ import { fetchClients } from "@/lib/repositories/clients-repository";
 import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
 import { fetchActivities } from "@/lib/repositories/activities-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
+import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
+import { useDriveEnabled } from "@/lib/google/use-drive-enabled";
 import type { Task } from "@/lib/types/task";
 
 type ProjectItem = (typeof projects)[number];
@@ -134,6 +136,10 @@ export default function ProjectFichaPage() {
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
   const [isEditing, setIsEditing] = useState(false);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [drivePickerFor, setDrivePickerFor] = useState<
+    "driveAdministrativo" | "driveReportes" | null
+  >(null);
+  const driveEnabled = useDriveEnabled();
   const [inlineEditingCoordinator, setInlineEditingCoordinator] = useState(false);
   const [inlineEditingConstructionCoordinator, setInlineEditingConstructionCoordinator] = useState(false);
   const [inlineEditingAddress, setInlineEditingAddress] = useState(false);
@@ -422,8 +428,19 @@ export default function ProjectFichaPage() {
                 <p className="text-xs text-slate-500">Documentos en Google Drive</p>
                 {isEditing && d ? (
                   <div className="mt-2 space-y-3">
-                    <label className="block text-xs text-slate-500">
-                      Link — Documentos internos
+                    <div className="block text-xs text-slate-500">
+                      <div className="flex items-center justify-between">
+                        <span>Link — Documentos internos</span>
+                        {driveEnabled ? (
+                          <button
+                            type="button"
+                            onClick={() => setDrivePickerFor("driveAdministrativo")}
+                            className="font-medium text-blue-700 hover:underline"
+                          >
+                            Elegir de Google Drive
+                          </button>
+                        ) : null}
+                      </div>
                       <input
                         type="url"
                         value={d.driveAdministrativo}
@@ -431,9 +448,20 @@ export default function ProjectFichaPage() {
                         placeholder="https://drive.google.com/..."
                         className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
                       />
-                    </label>
-                    <label className="block text-xs text-slate-500">
-                      Link — Documentos vista cliente
+                    </div>
+                    <div className="block text-xs text-slate-500">
+                      <div className="flex items-center justify-between">
+                        <span>Link — Documentos vista cliente</span>
+                        {driveEnabled ? (
+                          <button
+                            type="button"
+                            onClick={() => setDrivePickerFor("driveReportes")}
+                            className="font-medium text-blue-700 hover:underline"
+                          >
+                            Elegir de Google Drive
+                          </button>
+                        ) : null}
+                      </div>
                       <input
                         type="url"
                         value={d.driveReportes}
@@ -441,7 +469,7 @@ export default function ProjectFichaPage() {
                         placeholder="https://drive.google.com/..."
                         className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
                       />
-                    </label>
+                    </div>
                   </div>
                 ) : (
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -792,6 +820,19 @@ export default function ProjectFichaPage() {
           </div>
         </div>
       </section>
+
+      <DrivePickerDialog
+        open={drivePickerFor !== null}
+        onClose={() => setDrivePickerFor(null)}
+        onPick={(entry: DrivePickerEntry) => {
+          const field = drivePickerFor;
+          setDrivePickerFor(null);
+          if (!field) return;
+          setEditDraft((current) =>
+            current ? { ...current, [field]: entry.webViewLink } : current
+          );
+        }}
+      />
     </main>
   );
 }
