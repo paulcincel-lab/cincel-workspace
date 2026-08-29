@@ -123,6 +123,13 @@ describe("list_activities_due schema", () => {
     expect(r.success && r.data.onlyBlocked).toBe(false);
   });
 
+  it("accepts an optional projectName", () => {
+    const r = parse<{ projectName?: string }>(list_activities_due.inputSchema, {
+      projectName: "Casa Roma",
+    });
+    expect(r.success && r.data.projectName).toBe("Casa Roma");
+  });
+
   it("rejects withinDays outside 1..60", () => {
     expect(parse(list_activities_due.inputSchema, { withinDays: 0 }).success).toBe(false);
     expect(parse(list_activities_due.inputSchema, { withinDays: 61 }).success).toBe(false);

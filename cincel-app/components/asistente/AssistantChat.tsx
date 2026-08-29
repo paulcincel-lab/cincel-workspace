@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -25,6 +25,38 @@ type RenderChartInput = {
   data: { label: string; value: number }[];
 };
 
+// The conversation is kept in localStorage so it survives a reload / navigation
+// away from /asistente. Per-browser only; capped so it can't grow unbounded.
+const THREAD_KEY = "cincel.asistente.thread.v1";
+const MAX_PERSISTED_MESSAGES = 60;
+
+function loadThread(): UIMessage[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(THREAD_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? (parsed as UIMessage[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveThread(messages: UIMessage[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (messages.length === 0) {
+      window.localStorage.removeItem(THREAD_KEY);
+      return;
+    }
+    window.localStorage.setItem(
+      THREAD_KEY,
+      JSON.stringify(messages.slice(-MAX_PERSISTED_MESSAGES))
+    );
+  } catch {
+    // private mode / quota — the chat still works, just won't persist.
+  }
+}
+
 function Spinner() {
   return (
     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -37,10 +69,13 @@ function Spinner() {
 export function AssistantChat() {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [initialMessages] = useState<UIMessage[]>(loadThread);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({ api: "/api/asistente/chat" }),
+    messages: initialMessages,
     onError: (err) => {
       console.error("Assistant chat error:", err);
       setError(
@@ -55,21 +90,52 @@ export function AssistantChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, status]);
 
+  // Persist the conversation as it changes so it survives a reload.
+  useEffect(() => {
+    saveThread(messages);
+  }, [messages]);
+
+  const resizeTextarea = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  };
+
   const submit = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isBusy) return;
     setError(null);
     sendMessage({ text: trimmed });
     setInput("");
+    requestAnimationFrame(resizeTextarea);
+  };
+
+  const clearConversation = () => {
+    setMessages([]);
+    setError(null);
+    saveThread([]);
   };
 
   return (
     <div className="flex h-full w-full flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Asistente</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Pregunta sobre proyectos en riesgo, entregas próximas y carga del equipo.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Asistente</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Pregunta sobre proyectos en riesgo, entregas próximas y carga del equipo.
+          </p>
+        </div>
+        {messages.length > 0 ? (
+          <button
+            type="button"
+            onClick={clearConversation}
+            disabled={isBusy}
+            className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Nueva conversación
+          </button>
+        ) : null}
       </div>
 
       {error ? (
@@ -87,7 +153,11 @@ export function AssistantChat() {
                 <button
                   key={question}
                   type="button"
-                  onClick={() => setInput(question)}
+                  onClick={() => {
+                    setInput(question);
+                    textareaRef.current?.focus();
+                    requestAnimationFrame(resizeTextarea);
+                  }}
                   className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 hover:bg-slate-50"
                 >
                   {question}
@@ -111,7 +181,7 @@ export function AssistantChat() {
                 return message.role === "user" ? (
                   <div
                     key={index}
-                    className="max-w-[80%] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white"
+                    className="max-w-[80%] whitespace-pre-wrap rounded-lg bg-blue-600 px-3 py-2 text-sm text-white"
                   >
                     {part.text}
                   </div>
@@ -207,19 +277,31 @@ export function AssistantChat() {
           e.preventDefault();
           submit(input);
         }}
-        className="flex gap-2"
+        className="flex items-end gap-2"
       >
-        <input
+        <textarea
+          ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Escribe tu pregunta…"
+          onChange={(e) => {
+            setInput(e.target.value);
+            resizeTextarea();
+          }}
+          onKeyDown={(e) => {
+            // Enter sends; Shift+Enter (or Alt/Ctrl+Enter) inserts a newline.
+            if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+              e.preventDefault();
+              submit(input);
+            }
+          }}
+          rows={1}
+          placeholder="Escribe tu pregunta…  (Shift+Enter para salto de línea)"
           disabled={isBusy}
-          className="h-11 flex-1 rounded-lg border border-slate-300 px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
+          className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm leading-6 text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
         />
         <button
           type="submit"
           disabled={isBusy || !input.trim()}
-          className={`inline-flex h-11 items-center gap-2 rounded-lg px-5 text-sm font-medium text-white ${
+          className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-lg px-5 text-sm font-medium text-white ${
             isBusy || !input.trim()
               ? "cursor-not-allowed bg-slate-300"
               : "bg-blue-600 hover:bg-blue-700"

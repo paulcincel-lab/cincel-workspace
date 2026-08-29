@@ -2,7 +2,7 @@ import "server-only";
 
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
-import { and, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activities, projects, teamMembers } from "@/lib/db/schema";
@@ -88,13 +88,17 @@ export const list_projects = tool({
 
 export const list_activities_due = tool({
   description:
-    "Lista actividades/tareas con entrega (commitmentDate) o revisión (reviewDate) dentro de una ventana de días, o tareas bloqueadas. Filtra por responsable.",
+    "Lista actividades/tareas no completadas. Por defecto solo las que tienen entrega (commitmentDate) o revisión (reviewDate) dentro de una ventana de días, o las bloqueadas. Si indicas projectName, lista TODAS las tareas de ese proyecto tengan fecha o no (útil para revisar o secuenciar un proyecto recién creado). Filtra también por responsable.",
   inputSchema: z.object({
     withinDays: z.number().int().min(1).max(60).default(7),
     memberName: z.string().optional(),
+    projectName: z
+      .string()
+      .optional()
+      .describe("Al indicarlo se ignora la ventana de fechas y se listan todas las tareas del proyecto"),
     onlyBlocked: z.boolean().default(false),
   }),
-  execute: async ({ withinDays, memberName, onlyBlocked }) => {
+  execute: async ({ withinDays, memberName, projectName, onlyBlocked }) => {
     const today = new Date();
     const end = new Date(today.getTime() + withinDays * 86_400_000)
       .toISOString()
@@ -106,11 +110,20 @@ export const list_activities_due = tool({
       and(gte(activities.reviewDate, start), lte(activities.reviewDate, end))
     );
 
+    // Scope: blocked-only wins; then a named project lists everything (no date
+    // filter — freshly-created tasks have no dates yet); otherwise the window.
+    const scope = onlyBlocked
+      ? eq(activities.status, "Bloqueado")
+      : projectName
+        ? undefined
+        : dateWindow;
+
     const rows = await db
       .select({
         description: activities.description,
         project: activities.projectNameSnapshot,
         workflow: activities.workflow,
+        phase: activities.phase,
         status: activities.status,
         priority: activities.priority,
         commitmentDate: activities.commitmentDate,
@@ -123,13 +136,17 @@ export const list_activities_due = tool({
           isNull(activities.deletedAt),
           eq(activities.archived, false),
           ne(activities.status, "Completado"),
-          onlyBlocked ? eq(activities.status, "Bloqueado") : dateWindow,
+          scope,
+          projectName
+            ? sql`${activities.projectNameSnapshot} ilike ${`%${projectName}%`}`
+            : undefined,
           memberName
             ? sql`${activities.managerNameSnapshot} ilike ${`%${memberName}%`}`
             : undefined
         )
       )
-      .limit(60);
+      .orderBy(asc(activities.commitmentDate), asc(activities.reviewDate))
+      .limit(80);
 
     return rows;
   },
