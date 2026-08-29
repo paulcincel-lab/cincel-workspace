@@ -133,3 +133,33 @@ jobs:
 
       - name: Build image
         run: docker build -t cincel-app:ci .
+
+  # Manual only: apply Drizzle migrations to a remote/managed database (one that
+  # is not part of the docker-compose stack — for compose deploys the `migrate`
+  # service handles this automatically on `up`). Run via the Actions tab →
+  # "Run workflow". Requires the `production` environment to define a
+  # `PROD_DATABASE_URL` secret.
+  migrate-remote-db:
+    if: github.event_name == 'workflow_dispatch'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          cache: npm
+          cache-dependency-path: cincel-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply database migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}

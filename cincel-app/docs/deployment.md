@@ -1,88 +1,123 @@
 # Cincel Workspace — Deployment Guide
 
-## Environment Variables
+> The app is a **Next.js standalone server backed by Postgres via Drizzle ORM**.
+> There is no Supabase, no PostgREST, no `NEXT_PUBLIC_CINCEL_DATA_SOURCE` — every
+> environment reads and writes the same Postgres database. Authentication is
+> scrypt password hashing + opaque cookie sessions (`core.auth_credentials`,
+> `core.sessions`).
 
-### Required for Supabase / Production
+## Environment variables
 
-| Variable | Required | Description |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes (production) | Project URL from Supabase Dashboard |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes (production) | Publishable anon key (formerly `ANON_KEY`) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Alias | Legacy name, accepted for backward compatibility |
-| `NEXT_PUBLIC_CINCEL_DATA_SOURCE` | Yes (production) | Must be `supabase` in production |
-| `CINCEL_ADMIN_EMAILS` | Recommended | Comma-separated list of emails that receive automatic Administrador role (see below) |
+| Variable | Required | Used by | Notes |
+|---|---|---|---|
+| `DATABASE_URL` | **Yes** | `lib/db/client.ts`, `drizzle-kit`, `scripts/seed.ts` | `postgres://user:pw@host:5432/dbname`. Server-side only, never `NEXT_PUBLIC_`. |
+| `SEED_ADMIN_EMAIL` | Seed only | `scripts/seed.ts` | Institutional email of the bootstrap admin. Must match a `team_members` row (the roster seed creates it). Default `paul@cincel.mx`. |
+| `SEED_ADMIN_PASSWORD` | Seed only | `scripts/seed.ts` | Password for that admin credential. **Set a strong value in production** — re-running the seed resets it. |
+| `CINCEL_ADMIN_EMAILS` | Recommended | `lib/data/roles.ts` | Comma-separated emails that get the `Administrador` role automatically regardless of their `team_members.role`. Unset = no auto-escalation. |
+| `GOOGLE_SA_CLIENT_EMAIL` / `GOOGLE_SA_PRIVATE_KEY` / `GOOGLE_SA_SUBJECT` / `GOOGLE_DRIVE_ROOT_FOLDER_ID` | Optional | `lib/google/*` | Service-account access for the Drive pickers. Leave unset to disable (manual URL entry still works, API routes return 503). |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Optional | `lib/assistant/provider.ts` | OpenAI-compatible `/v1` endpoint for `/asistente`. Unset = assistant disabled (route returns 503, UI shows a notice). |
+| `APP_PORT` | Compose only | `docker-compose.yml` | Host port mapped to the container's 3000. Default 3000. |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Compose only | `docker-compose.yml` `db` service | Default `cincel` / `cincel` / `cincel`. |
 
-### Per-environment values
+Copy `.env.example` to `.env` and fill it in. `.env` is git-ignored and is read by
+both the `app` and `migrate` compose services (`env_file`).
 
-| Environment | `NEXT_PUBLIC_CINCEL_DATA_SOURCE` | Notes |
-|---|---|---|
-| Local dev (no Supabase credentials) | *(unset — defaults to `localstorage`)* | All data is stored in browser localStorage; multi-user and cross-session persistence are not available |
-| Local dev with Supabase | `supabase` | Requires real Supabase project credentials in `.env.local` |
-| Staging | `supabase` | Must match a dedicated staging Supabase project |
-| Production | `supabase` | **Required.** Setting this to `localstorage` in production means all business data lives only in each user's browser — no sharing, no backup, no collaboration |
+## Database migrations — REQUIRED on every deploy
 
-### Data Source Fallback Behavior
+The app image does **not** run migrations at startup, and the standalone runtime
+image does not even contain `drizzle-kit`. The schema must be applied to the
+target database **before** (or as part of) each deploy, or every request fails
+with `relation "core.*" does not exist` (Postgres error `42P01`).
 
-`lib/supabase/data-source.ts` defaults to `"localstorage"` when the variable is unset.
-This default is intentional for local development: contributors without Supabase
-credentials can run `npm run dev` and use the full UI with seeded mock data.
+Migrations live in `lib/db/migrations/*.sql` and are tracked in
+`drizzle.__drizzle_migrations` — `npm run db:migrate` is idempotent and only
+applies what is missing.
 
-The middleware (`middleware.ts`) is also a no-op when Supabase env vars are absent,
-so the app remains fully usable in localstorage mode without Supabase credentials.
+### docker-compose deploys — automatic
 
-### Supabase env file for local dev
-
-Copy `supabase/env.example` to `.env.local` and fill in the values:
-
-```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-anon-key
-NEXT_PUBLIC_CINCEL_DATA_SOURCE=supabase
-CINCEL_ADMIN_EMAILS=paul@cincel.mx,juanma@cincel.mx
-```
-
-## Admin Email List (`CINCEL_ADMIN_EMAILS`)
-
-`CINCEL_ADMIN_EMAILS` is a comma-separated list of institutional email addresses that
-receive the `Administrador` system role automatically, even if their `team_members` row
-has a different role. This replaces the previous hardcoded `SYSTEM_ADMIN_MEMBER_EMAILS`
-constant in `lib/data/roles.ts`.
-
-When the variable is unset, the list is empty — no automatic admin escalation.
-
-Example: `CINCEL_ADMIN_EMAILS=paul@cincel.mx,juanma@cincel.mx`
-
-## What Needs a Real Supabase Project
-
-The following features require a Supabase project with team members pre-registered
-in `auth.users`:
-
-- Real authentication (`supabase.auth.signInWithPassword`)
-- Server-side session middleware
-- RLS policies (migration `202608250001_rls_scoped_policies.sql`)
-- PII endpoint (`/api/team/sensitive/[id]`)
-- Cross-session data persistence
-
-None of these can be fully verified in a sandbox without live Supabase credentials.
-See `scripts/smoke-test-supabase.mjs` for the post-deploy verification script.
-
-## Smoke Test
-
-After deploying to a Supabase-connected environment, run:
+`docker-compose.yml` defines a one-shot **`migrate`** service that runs
+`npm run db:migrate` (from the Dockerfile `build` stage, which still has
+drizzle-kit). The `app` service `depends_on` it with
+`condition: service_completed_successfully`, so:
 
 ```bash
-# Requires NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-# SMOKE_TEST_EMAIL, and SMOKE_TEST_PASSWORD to be set.
-node scripts/smoke-test-supabase.mjs
+docker compose up -d --build
 ```
 
-This script:
-1. Signs in as `SMOKE_TEST_EMAIL`
-2. Creates a test record (writes to Supabase)
-3. Signs out and signs back in as a second user
-4. Verifies the record is visible to the second user (cross-session persistence)
-5. Cleans up the test record
+can never start the server against an un-migrated database. To run migrations
+alone:
 
-The `SMOKE_TEST_PASSWORD` used in this script is synthetic test data (`Temporal123` or
-any value configured in the CI environment). It is never a real production credential —
-real users authenticate through Supabase Auth, which enforces its own password policies.
+```bash
+docker compose run --rm migrate
+```
+
+### Managed / remote database — manual
+
+For a database that is not part of the compose stack (managed Postgres, a
+separate server), run migrations from a repo checkout or CI with `DATABASE_URL`
+pointed at that database:
+
+```bash
+cd cincel-app
+npm ci
+DATABASE_URL='postgres://USER:PW@HOST:5432/DBNAME' npm run db:migrate
+```
+
+Or use the **`migrate-remote-db`** job in
+`.github/workflows/cincel-app-build.yml`: Actions tab → *Run workflow*. It reads
+a `PROD_DATABASE_URL` secret from the repo's `production` environment — set that
+secret once in **Settings → Environments → production**.
+
+## First deploy — seed
+
+On a brand-new database, after migrating, seed the team roster + bootstrap admin
++ a couple of demo clients/projects:
+
+```bash
+DATABASE_URL='...' \
+  SEED_ADMIN_EMAIL=paul@cincel.mx SEED_ADMIN_PASSWORD='<strong-password>' \
+  npm run db:seed
+```
+
+`scripts/seed.ts` is idempotent (upserts on `legacy_id`). It is safe to re-run,
+but it **re-sets the admin password** to `SEED_ADMIN_PASSWORD` and re-upserts the
+demo clients/projects — do not point it at a database that already holds real
+business data under those legacy ids.
+
+The seed loads only the roster and demo rows. Real projects / clients / tasks /
+history are entered through the app; there is no bulk importer.
+
+## CI
+
+`.github/workflows/cincel-app-build.yml` runs on PRs and pushes to `main`:
+
+| Job | What |
+|---|---|
+| `verify` | `npm run lint` + `npm run build` |
+| `unit-tests` | `npm run test:unit` (vitest) |
+| `e2e-tests` | Spins a throwaway Postgres service, runs `db:migrate` + `db:seed`, then Playwright (`npm run test:e2e`) |
+| `docker-build` | `docker build` smoke |
+| `migrate-remote-db` | **manual only** (`workflow_dispatch`) — applies migrations to `secrets.PROD_DATABASE_URL` |
+
+CI does **not** deploy or migrate any real environment automatically.
+
+## Post-deploy smoke check
+
+```bash
+# login page renders + seeded admin can log in and reach a private route
+CI=1 E2E_BASE_URL='https://your-host' npx playwright test tests/e2e/smoke.spec.ts
+```
+
+Or manually: open `/login`, sign in as the seeded admin, confirm you land on
+`/dashboard` and the sidebar loads. `middleware.ts` redirects any
+cookie-less request for a protected route to `/login`; full session validation
+(expiry, member active, role) happens server-side in `getSession()`.
+
+## Rollback
+
+- **App**: redeploy the previous image tag. The schema is forward-compatible
+  within a release train, but a rollback across a migration that dropped/renamed
+  a column will break — check `lib/db/migrations` between the two versions.
+- **Migrations**: drizzle-kit has no down-migrations. To undo, write a new
+  forward migration. Take a `pg_dump` before applying migrations on a database
+  that holds real data (see `docs/backup-recovery.md`).

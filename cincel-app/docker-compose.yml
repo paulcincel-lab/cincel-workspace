@@ -15,6 +15,26 @@ services:
       timeout: 5s
       retries: 10
 
+  # One-shot: applies Drizzle migrations, then exits. `app` waits for this to
+  # finish successfully, so `docker compose up` can never start the server
+  # against an un-migrated database. Uses the Dockerfile `build` stage because
+  # that layer still has drizzle-kit + the migration SQL (the runtime image
+  # does not). Safe to re-run — drizzle tracks applied migrations.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    command: ["npm", "run", "db:migrate"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-cincel}:${POSTGRES_PASSWORD:-cincel}@db:5432/${POSTGRES_DB:-cincel}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   app:
     deploy:
       resources:
@@ -34,6 +54,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   cincel_db_data:
