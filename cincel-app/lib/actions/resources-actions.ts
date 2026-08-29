@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { resourceLinks } from "@/lib/db/schema";
+import { resourceLinks, teamMembers } from "@/lib/db/schema";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveResourcesCapabilities } from "@/lib/auth/permissions";
 import type { ResourceLink } from "@/lib/types/resource";
@@ -77,6 +77,28 @@ export async function saveResourceLinksAction(
     throw new Error("FORBIDDEN: resources write");
   }
 
+  // Resolve the legacy numeric member ids the app still uses to real uuids so
+  // both the legacy bigint and the FK column stay in sync (dual-write — see #112).
+  const referencedLegacyIds = [
+    ...new Set(
+      links
+        .flatMap((l) => [l.ownerTeamMemberId, l.personalForTeamMemberId])
+        .filter((n): n is number => typeof n === "number")
+    ),
+  ];
+  const memberIdByLegacy = new Map<number, string>();
+  if (referencedLegacyIds.length > 0) {
+    const rows = await db
+      .select({ legacyId: teamMembers.legacyId, id: teamMembers.id })
+      .from(teamMembers)
+      .where(inArray(teamMembers.legacyId, referencedLegacyIds));
+    for (const r of rows) {
+      if (r.legacyId != null) memberIdByLegacy.set(r.legacyId, r.id);
+    }
+  }
+  const toMemberId = (legacy: number | null | undefined) =>
+    typeof legacy === "number" ? memberIdByLegacy.get(legacy) ?? null : null;
+
   for (const link of links) {
     const values = {
       templateKey: link.templateKey,
@@ -89,6 +111,8 @@ export async function saveResourceLinksAction(
       status: link.status,
       ownerTeamMemberLegacyId: link.ownerTeamMemberId,
       personalForTeamMemberLegacyId: link.personalForTeamMemberId,
+      ownerMemberId: toMemberId(link.ownerTeamMemberId),
+      personalForMemberId: toMemberId(link.personalForTeamMemberId),
       updatedAtLabel: link.updatedAt || null,
       history: link.history ?? [],
       googleFileId: link.drive?.googleFileId ?? null,

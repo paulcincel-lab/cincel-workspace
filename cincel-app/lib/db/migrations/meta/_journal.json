@@ -43,6 +43,13 @@
       "when": 1788029391298,
       "tag": "0005_complete_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788029932550,
+      "tag": "0006_shocking_adam_destine",
+      "breakpoints": true
     }
   ]
 }
