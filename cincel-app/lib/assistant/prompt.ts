@@ -1,3 +1,5 @@
+import type { AuthenticatedUser } from "@/lib/auth/auth-service";
+
 const BASE_PROMPT = `Eres el asistente operativo interno de Cincel, un despacho de arquitectura y construcción. Ayudas al equipo a responder preguntas accionables sobre la operación.
 
 Puedes consultar:
@@ -14,7 +16,26 @@ const CREATE_LINE =
 const ASSIGN_LINE =
   "- Reasignar el responsable de una tarea existente (assign_task). Si la búsqueda es ambigua, muestra los candidatos y pide que el usuario aclare.";
 
-export function buildSystemPrompt(toolNames: readonly string[]): string {
+function identitySection(user: AuthenticatedUser | null): string {
+  if (!user) return "";
+  const name = user.member.name?.trim() || user.email?.trim();
+  if (!name) return "";
+  const role = user.access?.trim();
+  const area = user.member.area?.trim();
+  const who = [role, area ? `área ${area}` : null].filter(Boolean).join(", ");
+
+  return `\n\nEstás asistiendo a ${name}${who ? ` (${who})` : ""}. Cuando pregunte por "mis tareas", "lo que tengo pendiente" o similar, filtra list_activities_due por su nombre (${name}). Al crear o reasignar trabajo, la bitácora registra automáticamente que la solicitud viene de esta persona; no la nombres como responsable salvo que lo pida.`;
+}
+
+export type BuildSystemPromptOptions = {
+  toolNames: readonly string[];
+  user?: AuthenticatedUser | null;
+};
+
+export function buildSystemPrompt({
+  toolNames,
+  user = null,
+}: BuildSystemPromptOptions): string {
   const canCreate = toolNames.includes("create_task");
   const canAssign = toolNames.includes("assign_task");
 
@@ -28,10 +49,10 @@ export function buildSystemPrompt(toolNames: readonly string[]): string {
           .join("\n")}\nNunca elimines ni sobrescribas historial: cada cambio queda registrado como bitácora.`
       : "\n\nSolo puedes consultar información; no puedes crear ni modificar nada.";
 
-  return `${BASE_PROMPT}${writeSection}\n\nResponde siempre en español, de forma breve y directa. Hoy es ${new Date()
+  return `${BASE_PROMPT}${identitySection(user)}${writeSection}\n\nResponde siempre en español, de forma breve y directa. Hoy es ${new Date()
     .toISOString()
     .slice(0, 10)}.`;
 }
 
-/** Back-compat: the read-only prompt with no write actions. */
-export const SYSTEM_PROMPT = buildSystemPrompt([]);
+/** Back-compat: the read-only prompt with no write actions and no known user. */
+export const SYSTEM_PROMPT = buildSystemPrompt({ toolNames: [] });

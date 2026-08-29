@@ -40,7 +40,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const result = streamText({
     model: getLanguageModel(),
-    system: buildSystemPrompt(Object.keys(tools)),
+    system: buildSystemPrompt({ toolNames: Object.keys(tools), user }),
     messages: await convertToModelMessages(messages),
     tools,
     // Ceiling on tool-call round-trips per user turn — a cost/availability
