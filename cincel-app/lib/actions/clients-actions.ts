@@ -1,13 +1,25 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { clientContacts, clients, projects } from "@/lib/db/schema";
+import {
+  activities,
+  activityHistory,
+  clientContacts,
+  clients,
+  projects,
+} from "@/lib/db/schema";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { resolveClientsCapabilities } from "@/lib/auth/permissions";
+import {
+  resolveActivitiesCapabilities,
+  resolveClientsCapabilities,
+} from "@/lib/auth/permissions";
 import type { ManualClient } from "@/lib/repositories/clients-repository";
+import { presaleTemplate } from "@/lib/templates/presale";
+import { disenoTemplate } from "@/lib/templates/diseno";
+import { operativasTemplate } from "@/lib/templates/operativas";
 
 async function requireClientsCapabilities() {
   return resolveClientsCapabilities(await requireCapabilityUser());
@@ -190,4 +202,189 @@ export async function deleteClientAction(
 
   revalidatePath("/clientes");
   revalidatePath("/proyectos");
+}
+
+// ── Assistant-facing tool actions ──────────────────────────────────────────
+// Mirror the capability gates the /clientes and /tareas UIs enforce; the AI
+// assistant's tool set is built from the same capabilities, this is defense in
+// depth. Every write logs an activity_history bitácora entry naming the
+// requester — history is never overwritten.
+
+type ClientKind = "Empresa" | "Particular";
+
+type AssistantOnboardWorkflow = "Presale" | "Diseño" | "Construcción";
+
+const WORKFLOW_TO_DB_ENUM = {
+  Presale: "Presale",
+  "Diseño": "Diseno",
+  "Construcción": "Construccion",
+} as const satisfies Record<
+  AssistantOnboardWorkflow,
+  "Presale" | "Diseno" | "Construccion"
+>;
+
+const TEMPLATE_BY_WORKFLOW: Record<
+  AssistantOnboardWorkflow,
+  ReadonlyArray<{ phase: string; description: string }>
+> = {
+  Presale: presaleTemplate,
+  "Diseño": disenoTemplate,
+  "Construcción": operativasTemplate,
+};
+
+async function nextClientLegacyId(): Promise<number> {
+  const [row] = await db.select({ value: max(clients.legacyId) }).from(clients);
+  return Math.max(1000, Number(row?.value ?? 0)) + 1;
+}
+
+async function insertClient(input: {
+  name: string;
+  kind: ClientKind;
+  phone?: string;
+  acquisitionChannel?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+}): Promise<{ id: string; legacyId: number }> {
+  const legacyId = await nextClientLegacyId();
+  const [row] = await db
+    .insert(clients)
+    .values({
+      legacyId,
+      name: input.name.trim(),
+      kind: input.kind,
+      phone: input.phone?.trim() || null,
+      acquisitionChannel: input.acquisitionChannel?.trim() || null,
+    })
+    .returning({ id: clients.id });
+
+  if (input.contactName || input.contactEmail || input.contactPhone) {
+    await db.insert(clientContacts).values({
+      clientId: row.id,
+      name: input.contactName?.trim() || input.name.trim(),
+      phone: input.contactPhone?.trim() || null,
+      email: input.contactEmail?.trim() || null,
+      sortOrder: 0,
+    });
+  }
+
+  return { id: row.id, legacyId };
+}
+
+type AssistantCreateClientInput = {
+  name: string;
+  kind?: ClientKind;
+  phone?: string;
+  acquisitionChannel?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+};
+
+export async function createClientViaAssistantAction(
+  input: AssistantCreateClientInput
+): Promise<{ ok: true; name: string; kind: ClientKind }> {
+  const user = await requireCapabilityUser();
+  if (!resolveClientsCapabilities(user).canCreateClient) {
+    throw new Error("FORBIDDEN: clients create");
+  }
+
+  const kind = input.kind ?? "Particular";
+  await insertClient({ ...input, kind });
+
+  revalidatePath("/clientes");
+  revalidatePath("/proyectos");
+  return { ok: true, name: input.name.trim(), kind };
+}
+
+type AssistantOnboardClientInput = {
+  name: string;
+  kind?: ClientKind;
+  phone?: string;
+  acquisitionChannel?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  projectName: string;
+  workflow?: AssistantOnboardWorkflow;
+  manager?: string;
+  extraTasks?: string[];
+};
+
+/**
+ * Create a client and, in the same step, seed the standard task checklist for
+ * the chosen workflow (Presale by default) against a new project name.
+ * Requires BOTH canCreateClient and canCreateActivity.
+ */
+export async function onboardClientViaAssistantAction(
+  input: AssistantOnboardClientInput
+): Promise<{
+  ok: true;
+  client: string;
+  project: string;
+  workflow: AssistantOnboardWorkflow;
+  tasksCreated: number;
+}> {
+  const user = await requireCapabilityUser();
+  const clientsCaps = resolveClientsCapabilities(user);
+  const activitiesCaps = resolveActivitiesCapabilities(user);
+  if (!clientsCaps.canCreateClient) throw new Error("FORBIDDEN: clients create");
+  if (!activitiesCaps.canCreateActivity) {
+    throw new Error("FORBIDDEN: activities create");
+  }
+
+  const workflow = input.workflow ?? "Presale";
+  const kind = input.kind ?? "Particular";
+  const project = input.projectName.trim();
+  const manager = input.manager?.trim() || null;
+  const today = new Date().toISOString().slice(0, 10);
+  const requester = user.member.name || user.email || "Asistente";
+
+  await insertClient({ ...input, kind });
+
+  const items = [
+    ...TEMPLATE_BY_WORKFLOW[workflow].map((t) => ({
+      phase: t.phase,
+      description: t.description,
+    })),
+    ...(input.extraTasks ?? [])
+      .map((d) => d.trim())
+      .filter(Boolean)
+      .map((description) => ({ phase: null as string | null, description })),
+  ];
+
+  let tasksCreated = 0;
+  for (const item of items) {
+    const [row] = await db
+      .insert(activities)
+      .values({
+        projectNameSnapshot: project,
+        workflow: WORKFLOW_TO_DB_ENUM[workflow],
+        phase: item.phase,
+        description: item.description,
+        managerNameSnapshot: manager,
+        status: "Pendiente",
+        priority: "Media",
+        createdOn: today,
+        updatedOn: today,
+      })
+      .returning({ id: activities.id });
+
+    await db.insert(activityHistory).values({
+      activityId: row.id,
+      authorNameSnapshot: requester,
+      eventDate: today,
+      comment: `Tarea creada por el asistente al dar de alta al cliente ${input.name.trim()} (solicitado por ${requester}).`,
+    });
+    tasksCreated += 1;
+  }
+
+  revalidatePath("/clientes");
+  revalidatePath("/proyectos");
+  revalidatePath("/tareas");
+  revalidatePath("/tareas/presale");
+  revalidatePath("/tareas/diseno");
+  revalidatePath("/tareas/construccion");
+
+  return { ok: true, client: input.name.trim(), project, workflow, tasksCreated };
 }

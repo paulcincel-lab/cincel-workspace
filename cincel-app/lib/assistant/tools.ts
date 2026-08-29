@@ -7,11 +7,18 @@ import { and, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { activities, projects, teamMembers } from "@/lib/db/schema";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import {
+  resolveActivitiesCapabilities,
+  resolveClientsCapabilities,
+} from "@/lib/auth/permissions";
 import {
   assignActivityViaAssistantAction,
   createActivityViaAssistantAction,
 } from "@/lib/actions/activities-actions";
+import {
+  createClientViaAssistantAction,
+  onboardClientViaAssistantAction,
+} from "@/lib/actions/clients-actions";
 
 /**
  * Every tool here is read-only and only touches core.projects,
@@ -225,6 +232,52 @@ export const assign_task = tool({
   execute: async (input) => assignActivityViaAssistantAction(input),
 });
 
+const CLIENT_KIND_ENUM = z.enum(["Empresa", "Particular"]);
+
+export const create_client = tool({
+  description:
+    "Da de alta un nuevo cliente en Cincel (sin proyecto ni tareas). Úsalo solo cuando el usuario pida explícitamente registrar un cliente. Confirma antes el nombre y el tipo (Empresa/Particular).",
+  inputSchema: z.object({
+    name: z.string().min(2).describe("Nombre del cliente"),
+    kind: CLIENT_KIND_ENUM.default("Particular"),
+    phone: z.string().optional(),
+    acquisitionChannel: z
+      .string()
+      .optional()
+      .describe("Cómo llegó el cliente, p. ej. Referido, Instagram"),
+    contactName: z.string().optional(),
+    contactEmail: z.string().optional(),
+    contactPhone: z.string().optional(),
+  }),
+  execute: async (input) => createClientViaAssistantAction(input),
+});
+
+export const onboard_client = tool({
+  description:
+    "Da de alta un nuevo cliente y, en el mismo paso, crea el checklist estándar de tareas del flujo elegido (Presale por defecto) para un proyecto nuevo. Úsalo cuando el usuario quiera 'arrancar' un cliente/proyecto. Confirma antes el nombre del cliente, el nombre del proyecto y el flujo.",
+  inputSchema: z.object({
+    name: z.string().min(2).describe("Nombre del cliente"),
+    kind: CLIENT_KIND_ENUM.default("Particular"),
+    phone: z.string().optional(),
+    acquisitionChannel: z.string().optional(),
+    contactName: z.string().optional(),
+    contactEmail: z.string().optional(),
+    contactPhone: z.string().optional(),
+    projectName: z.string().min(2).describe("Nombre del proyecto nuevo"),
+    workflow: WORKFLOW_ENUM.default("Presale"),
+    manager: z
+      .string()
+      .optional()
+      .describe("Responsable para todas las tareas iniciales"),
+    extraTasks: z
+      .array(z.string())
+      .max(20)
+      .optional()
+      .describe("Tareas adicionales fuera de la plantilla"),
+  }),
+  execute: async (input) => onboardClientViaAssistantAction(input),
+});
+
 export const ASSISTANT_TOOLS = {
   list_projects,
   list_activities_due,
@@ -236,11 +289,14 @@ export const ASSISTANT_TOOLS = {
  * The tool set the assistant gets for a given caller. Read tools + render_chart
  * are always available; the write tools are gated by the same activities
  * capabilities the /tareas UI enforces:
- * - create_task  → canCreateActivity
- * - assign_task  → canChangeResponsible
+ * - create_task     → canCreateActivity
+ * - assign_task     → canChangeResponsible
+ * - create_client   → canCreateClient
+ * - onboard_client  → canCreateClient AND canCreateActivity
  */
 export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
   const activitiesCaps = resolveActivitiesCapabilities(user);
+  const clientsCaps = resolveClientsCapabilities(user);
   const tools: ToolSet = {
     list_projects,
     list_activities_due,
@@ -249,5 +305,9 @@ export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
   };
   if (activitiesCaps.canCreateActivity) tools.create_task = create_task;
   if (activitiesCaps.canChangeResponsible) tools.assign_task = assign_task;
+  if (clientsCaps.canCreateClient) tools.create_client = create_client;
+  if (clientsCaps.canCreateClient && activitiesCaps.canCreateActivity) {
+    tools.onboard_client = onboard_client;
+  }
   return tools;
 }

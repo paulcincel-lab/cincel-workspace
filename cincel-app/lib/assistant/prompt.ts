@@ -15,6 +15,10 @@ const CREATE_LINE =
   "- Crear tareas nuevas (create_task). Antes de crear, confirma con el usuario la descripción, el flujo, el proyecto, el responsable y las fechas. Verifica los nombres de proyecto y de persona con list_projects / team_workload_summary; no los inventes.";
 const ASSIGN_LINE =
   "- Reasignar el responsable de una tarea existente (assign_task). Si la búsqueda es ambigua, muestra los candidatos y pide que el usuario aclare.";
+const CREATE_CLIENT_LINE =
+  "- Dar de alta un cliente nuevo (create_client). Confirma el nombre y si es Empresa o Particular antes de crearlo.";
+const ONBOARD_CLIENT_LINE =
+  "- Arrancar un cliente nuevo con su proyecto y el checklist estándar de tareas del flujo (onboard_client). Confirma el nombre del cliente, el nombre del proyecto y el flujo (Presale por defecto) antes de ejecutarlo; explica que se crearán varias tareas de una vez.";
 
 function identitySection(user: AuthenticatedUser | null): string {
   if (!user) return "";
@@ -36,17 +40,18 @@ export function buildSystemPrompt({
   toolNames,
   user = null,
 }: BuildSystemPromptOptions): string {
-  const canCreate = toolNames.includes("create_task");
-  const canAssign = toolNames.includes("assign_task");
+  const lines = [
+    toolNames.includes("create_task") ? CREATE_LINE : null,
+    toolNames.includes("assign_task") ? ASSIGN_LINE : null,
+    toolNames.includes("create_client") ? CREATE_CLIENT_LINE : null,
+    toolNames.includes("onboard_client") ? ONBOARD_CLIENT_LINE : null,
+  ].filter(Boolean);
 
   const writeSection =
-    canCreate || canAssign
-      ? `\n\nEste usuario también puede pedirte acciones de escritura:\n${[
-          canCreate ? CREATE_LINE : null,
-          canAssign ? ASSIGN_LINE : null,
-        ]
-          .filter(Boolean)
-          .join("\n")}\nNunca elimines ni sobrescribas historial: cada cambio queda registrado como bitácora.`
+    lines.length > 0
+      ? `\n\nEste usuario también puede pedirte acciones de escritura:\n${lines.join(
+          "\n"
+        )}\nNunca elimines ni sobrescribas historial: cada cambio queda registrado como bitácora.`
       : "\n\nSolo puedes consultar información; no puedes crear ni modificar nada.";
 
   return `${BASE_PROMPT}${identitySection(user)}${writeSection}\n\nResponde siempre en español, de forma breve y directa. Hoy es ${new Date()
