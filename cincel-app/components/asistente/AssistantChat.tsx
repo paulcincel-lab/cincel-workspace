@@ -1,0 +1,214 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+import { AssistantChartMessage } from "@/components/asistente/AssistantChartMessage";
+
+const EXAMPLE_QUESTIONS = [
+  "¿Qué entregas vencen esta semana?",
+  "¿Quién está más saturado en el equipo?",
+  "¿Qué proyectos están en riesgo alto?",
+  "¿Hay tareas bloqueadas?",
+  "Compara el avance de los proyectos activos",
+  "Muéstrame la ocupación por área",
+];
+
+// render_chart's input shape (lib/assistant/tools.ts) — duplicated here since
+// that module is server-only.
+type RenderChartInput = {
+  chartType: "bar" | "line";
+  title: string;
+  data: { label: string; value: number }[];
+};
+
+function Spinner() {
+  return (
+    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  );
+}
+
+export function AssistantChat() {
+  const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({ api: "/api/asistente/chat" }),
+    onError: (err) => {
+      console.error("Assistant chat error:", err);
+      setError(
+        "No se pudo obtener una respuesta del asistente. Verifica que esté configurado e intenta de nuevo."
+      );
+    },
+  });
+
+  const isBusy = status === "submitted" || status === "streaming";
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, status]);
+
+  const submit = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || isBusy) return;
+    setError(null);
+    sendMessage({ text: trimmed });
+    setInput("");
+  };
+
+  return (
+    <div className="flex h-full w-full flex-col gap-4">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Asistente</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Pregunta sobre proyectos en riesgo, entregas próximas y carga del equipo.
+        </p>
+      </div>
+
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        {messages.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+            <p className="text-sm text-slate-500">Prueba con una de estas preguntas:</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {EXAMPLE_QUESTIONS.map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  onClick={() => setInput(question)}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={
+              message.role === "user"
+                ? "flex justify-end"
+                : "flex flex-col items-start gap-2"
+            }
+          >
+            {message.parts.map((part, index) => {
+              if (part.type === "text") {
+                return message.role === "user" ? (
+                  <div
+                    key={index}
+                    className="max-w-[80%] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white"
+                  >
+                    {part.text}
+                  </div>
+                ) : (
+                  <div
+                    key={index}
+                    className="max-w-full text-sm text-slate-800 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:my-2 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_th]:border [&_th]:border-slate-200 [&_th]:bg-slate-50 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_td]:py-1"
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
+                  </div>
+                );
+              }
+
+              if (part.type === "tool-render_chart") {
+                if (part.state === "input-streaming" || part.state === "input-available") {
+                  return (
+                    <p key={index} className="text-xs text-slate-400">
+                      Generando gráfico…
+                    </p>
+                  );
+                }
+                if (part.state === "output-available") {
+                  const chart = part.input as RenderChartInput;
+                  return (
+                    <div key={index} className="w-full max-w-md">
+                      <AssistantChartMessage
+                        chartType={chart.chartType}
+                        title={chart.title}
+                        data={chart.data}
+                      />
+                    </div>
+                  );
+                }
+                return null;
+              }
+
+              if (
+                part.type === "tool-list_projects" ||
+                part.type === "tool-list_activities_due" ||
+                part.type === "tool-team_workload_summary"
+              ) {
+                if (part.state === "input-streaming" || part.state === "input-available") {
+                  return (
+                    <p key={index} className="text-xs text-slate-400">
+                      Consultando datos…
+                    </p>
+                  );
+                }
+                return null;
+              }
+
+              return null;
+            })}
+          </div>
+        ))}
+
+        {status === "submitted" ? (
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Spinner />
+            Pensando…
+          </div>
+        ) : null}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit(input);
+        }}
+        className="flex gap-2"
+      >
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Escribe tu pregunta…"
+          disabled={isBusy}
+          className="h-11 flex-1 rounded-lg border border-slate-300 px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
+        />
+        <button
+          type="submit"
+          disabled={isBusy || !input.trim()}
+          className={`inline-flex h-11 items-center gap-2 rounded-lg px-5 text-sm font-medium text-white ${
+            isBusy || !input.trim()
+              ? "cursor-not-allowed bg-slate-300"
+              : "bg-blue-600 hover:bg-blue-700"
+          }`}
+        >
+          {isBusy ? <Spinner /> : null}
+          {status === "submitted"
+            ? "Pensando…"
+            : status === "streaming"
+              ? "Respondiendo…"
+              : "Enviar"}
+        </button>
+      </form>
+    </div>
+  );
+}
