@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -8,6 +8,7 @@ import {
   numeric,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { clientKind, core, timestamps } from "./_schema";
@@ -32,6 +33,11 @@ export const clients = core.table(
     ...timestamps,
   },
   (t) => [
+    // One live client per name, case-insensitive — the clientes UI and the
+    // assistant onboard tools key projects/history to a client by name.
+    uniqueIndex("clients_name_lower_uq")
+      .on(sql`lower(${t.name})`)
+      .where(sql`${t.deletedAt} is null`),
     index("idx_clients_name").on(t.name),
     index("idx_clients_kind").on(t.kind),
     index("idx_clients_deleted_at").on(t.deletedAt),

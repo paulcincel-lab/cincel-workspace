@@ -1,0 +1,3 @@
+ALTER TABLE "core"."project_members" DROP CONSTRAINT "project_members_project_id_team_member_id_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "clients_name_lower_uq" ON "core"."clients" USING btree (lower("name")) WHERE "core"."clients"."deleted_at" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX "project_members_project_member_uq" ON "core"."project_members" USING btree ("project_id",coalesce("team_member_id"::text, "member_name_snapshot"));

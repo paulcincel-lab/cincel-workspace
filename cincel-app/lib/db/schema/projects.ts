@@ -7,7 +7,7 @@ import {
   index,
   integer,
   text,
-  unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -72,7 +72,13 @@ export const projectMembers = core.table(
     ...timestamps,
   },
   (t) => [
-    unique().on(t.projectId, t.teamMemberId),
+    // One row per person per project. team_member_id is NULL for names not in
+    // the roster (the common case), and Postgres treats every NULL as distinct
+    // in a plain unique — so key on the resolved id OR the name snapshot.
+    uniqueIndex("project_members_project_member_uq").on(
+      t.projectId,
+      sql`coalesce(${t.teamMemberId}::text, ${t.memberNameSnapshot})`
+    ),
     index("idx_project_members_project_id").on(t.projectId),
     index("idx_project_members_member_id").on(t.teamMemberId),
   ]
