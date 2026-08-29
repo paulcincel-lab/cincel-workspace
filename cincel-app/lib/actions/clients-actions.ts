@@ -17,6 +17,7 @@ import {
   resolveClientsCapabilities,
 } from "@/lib/auth/permissions";
 import type { ManualClient } from "@/lib/repositories/clients-repository";
+import { diffChildRows } from "@/lib/actions/child-diff";
 import { presaleTemplate } from "@/lib/templates/presale";
 import { disenoTemplate } from "@/lib/templates/diseno";
 import { operativasTemplate } from "@/lib/templates/operativas";
@@ -201,23 +202,41 @@ export async function saveClientsAction(list: ManualClient[]): Promise<void> {
       })
       .returning({ id: clients.id });
 
-    // Replace contacts for this client (they carry no stable id from the UI).
-    await db
-      .delete(clientContacts)
-      .where(eq(clientContacts.clientId, row.id));
-    if (c.contacts.length > 0) {
-      await db.insert(clientContacts).values(
-        c.contacts
-          .filter((ct) => ct.name || ct.email || ct.phone)
-          .map((ct, i) => ({
-            clientId: row.id,
-            name: ct.name,
-            role: ct.role || null,
-            phone: ct.phone || null,
-            email: ct.email || null,
-            sortOrder: i,
-          }))
-      );
+    // Diff contacts by their natural key (email, else name) so an unrelated
+    // client edit doesn't churn every contact's created_at (issue #114).
+    const persistedContacts = await db
+      .select({
+        id: clientContacts.id,
+        name: clientContacts.name,
+        email: clientContacts.email,
+      })
+      .from(clientContacts)
+      .where(and(eq(clientContacts.clientId, row.id), isNull(clientContacts.deletedAt)));
+
+    const incomingContacts = c.contacts
+      .filter((ct) => ct.name || ct.email || ct.phone)
+      .map((ct, i) => ({
+        clientId: row.id,
+        name: ct.name,
+        role: ct.role || null,
+        phone: ct.phone || null,
+        email: ct.email || null,
+        sortOrder: i,
+      }));
+
+    const contactKey = (ct: { email: string | null; name: string }) =>
+      ct.email ? `e:${ct.email.trim().toLowerCase()}` : `n:${ct.name.trim().toLowerCase()}`;
+    const { toInsert, toDeleteIds } = diffChildRows(
+      persistedContacts,
+      incomingContacts,
+      contactKey,
+      contactKey
+    );
+    if (toDeleteIds.length > 0) {
+      await db.delete(clientContacts).where(inArray(clientContacts.id, toDeleteIds));
+    }
+    if (toInsert.length > 0) {
+      await db.insert(clientContacts).values(toInsert);
     }
   }
 

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/schema";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import { diffChildRows } from "@/lib/actions/child-diff";
 import type { Project } from "@/lib/repositories/projects-repository";
 
 async function requireProjectsCapabilities() {
@@ -216,21 +217,38 @@ export async function saveProjectsAction(list: Project[]): Promise<void> {
         },
       });
 
-    // Members carry no stable id from the UI (they are plain names) — replace.
-    await db.delete(projectMembers).where(eq(projectMembers.projectId, row.id));
-    const names = (p.team ?? []).filter(Boolean);
-    if (names.length > 0) {
-      const known = await db
-        .select({ id: teamMembers.id, name: teamMembers.name })
-        .from(teamMembers);
-      const byName = new Map(known.map((m) => [m.name, m.id]));
-      await db.insert(projectMembers).values(
-        names.map((name) => ({
-          projectId: row.id,
-          teamMemberId: byName.get(name) ?? null,
-          memberNameSnapshot: name,
-        }))
+    // Diff members by name snapshot so an unrelated project edit doesn't churn
+    // every member row's created_at (issue #114).
+    const names = [...new Set((p.team ?? []).filter(Boolean))];
+    const known = await db
+      .select({ id: teamMembers.id, name: teamMembers.name })
+      .from(teamMembers);
+    const memberIdByName = new Map(known.map((m) => [m.name, m.id]));
+
+    const persistedMembers = await db
+      .select({ id: projectMembers.id, name: projectMembers.memberNameSnapshot })
+      .from(projectMembers)
+      .where(
+        and(eq(projectMembers.projectId, row.id), isNull(projectMembers.deletedAt))
       );
+
+    const incomingMembers = names.map((name) => ({
+      projectId: row.id,
+      teamMemberId: memberIdByName.get(name) ?? null,
+      memberNameSnapshot: name,
+    }));
+
+    const { toInsert, toDeleteIds } = diffChildRows(
+      persistedMembers,
+      incomingMembers,
+      (m) => (m.name ?? "").trim().toLowerCase(),
+      (m) => m.memberNameSnapshot.trim().toLowerCase()
+    );
+    if (toDeleteIds.length > 0) {
+      await db.delete(projectMembers).where(inArray(projectMembers.id, toDeleteIds));
+    }
+    if (toInsert.length > 0) {
+      await db.insert(projectMembers).values(toInsert);
     }
   }
 
