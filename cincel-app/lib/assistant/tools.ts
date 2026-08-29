@@ -1,11 +1,17 @@
 import "server-only";
 
-import { tool } from "ai";
+import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { and, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activities, projects, teamMembers } from "@/lib/db/schema";
+import type { AuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import {
+  assignActivityViaAssistantAction,
+  createActivityViaAssistantAction,
+} from "@/lib/actions/activities-actions";
 
 /**
  * Every tool here is read-only and only touches core.projects,
@@ -186,9 +192,62 @@ export const render_chart = tool({
   },
 });
 
+const WORKFLOW_ENUM = z.enum(["Presale", "Diseño", "Construcción"]);
+
+export const create_task = tool({
+  description:
+    "Crea una nueva tarea/actividad en Cincel (estado inicial 'Pendiente') y opcionalmente le asigna un responsable. Úsalo solo cuando el usuario pida explícitamente crear o registrar trabajo. Verifica antes el nombre del proyecto y del responsable con list_projects / team_workload_summary; no los inventes.",
+  inputSchema: z.object({
+    description: z.string().min(3).describe("Qué hay que hacer"),
+    workflow: WORKFLOW_ENUM.describe("Flujo de trabajo"),
+    project: z.string().optional().describe("Nombre exacto del proyecto"),
+    manager: z.string().optional().describe("Nombre del responsable"),
+    priority: z.enum(["Alta", "Media", "Baja"]).default("Media"),
+    phase: z.string().optional(),
+    commitmentDate: z.string().optional().describe("Fecha de entrega YYYY-MM-DD"),
+    reviewDate: z.string().optional().describe("Fecha de revisión YYYY-MM-DD"),
+  }),
+  execute: async (input) => createActivityViaAssistantAction(input),
+});
+
+export const assign_task = tool({
+  description:
+    "Reasigna el responsable de una tarea existente, localizándola por un fragmento de su descripción (y opcionalmente proyecto/flujo). Si hay 0 o varias coincidencias devuelve el motivo y los candidatos para que el usuario aclare.",
+  inputSchema: z.object({
+    descriptionContains: z
+      .string()
+      .min(3)
+      .describe("Fragmento de la descripción de la tarea"),
+    manager: z.string().min(2).describe("Nuevo responsable"),
+    workflow: WORKFLOW_ENUM.optional(),
+    project: z.string().optional(),
+  }),
+  execute: async (input) => assignActivityViaAssistantAction(input),
+});
+
 export const ASSISTANT_TOOLS = {
   list_projects,
   list_activities_due,
   team_workload_summary,
   render_chart,
 } as const;
+
+/**
+ * The tool set the assistant gets for a given caller. Read tools + render_chart
+ * are always available; the write tools are gated by the same activities
+ * capabilities the /tareas UI enforces:
+ * - create_task  → canCreateActivity
+ * - assign_task  → canChangeResponsible
+ */
+export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
+  const activitiesCaps = resolveActivitiesCapabilities(user);
+  const tools: ToolSet = {
+    list_projects,
+    list_activities_due,
+    team_workload_summary,
+    render_chart,
+  };
+  if (activitiesCaps.canCreateActivity) tools.create_task = create_task;
+  if (activitiesCaps.canChangeResponsible) tools.assign_task = assign_task;
+  return tools;
+}

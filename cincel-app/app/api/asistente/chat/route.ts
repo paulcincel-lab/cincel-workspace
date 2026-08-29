@@ -6,10 +6,10 @@ import {
   type UIMessage,
 } from "ai";
 
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireCapabilityUser } from "@/lib/auth/session";
 import { getLanguageModel, isAssistantConfigured } from "@/lib/assistant/provider";
-import { ASSISTANT_TOOLS } from "@/lib/assistant/tools";
-import { SYSTEM_PROMPT } from "@/lib/assistant/prompt";
+import { buildAssistantTools } from "@/lib/assistant/tools";
+import { buildSystemPrompt } from "@/lib/assistant/prompt";
 
 export async function POST(request: NextRequest): Promise<Response> {
   const session = await getSession();
@@ -24,15 +24,27 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
+  let user;
+  try {
+    user = await requireCapabilityUser();
+  } catch {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { messages }: { messages: UIMessage[] } = await request.json();
+
+  // Tool set varies by the caller's role: read tools + render_chart for
+  // everyone, write tools (create_task / assign_task) only for roles that can
+  // create / reassign work in the /tareas UI.
+  const tools = buildAssistantTools(user);
 
   const result = streamText({
     model: getLanguageModel(),
-    system: SYSTEM_PROMPT,
+    system: buildSystemPrompt(Object.keys(tools)),
     messages: await convertToModelMessages(messages),
-    tools: ASSISTANT_TOOLS,
+    tools,
     // Ceiling on tool-call round-trips per user turn — a cost/availability
-    // guard, not data safety (every tool is read-only).
+    // guard, not data safety (write tools re-check capabilities server-side).
     stopWhen: stepCountIs(5),
   });
 
