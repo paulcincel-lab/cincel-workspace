@@ -260,16 +260,33 @@ async function insertClient(input: {
   }
 
   const legacyId = await nextClientLegacyId();
-  const [row] = await db
-    .insert(clients)
-    .values({
-      legacyId,
-      name,
-      kind: input.kind,
-      phone: input.phone?.trim() || null,
-      acquisitionChannel: input.acquisitionChannel?.trim() || null,
-    })
-    .returning({ id: clients.id });
+  let row: { id: string };
+  try {
+    [row] = await db
+      .insert(clients)
+      .values({
+        legacyId,
+        name,
+        kind: input.kind,
+        phone: input.phone?.trim() || null,
+        acquisitionChannel: input.acquisitionChannel?.trim() || null,
+      })
+      .returning({ id: clients.id });
+  } catch (error) {
+    // Lost a race to the `clients_name_lower_uq` partial unique index — another
+    // request created the same-named client between our pre-check and insert.
+    if ((error as { code?: string }).code === "23505") {
+      const [raced] = await db
+        .select({ id: clients.id, legacyId: clients.legacyId })
+        .from(clients)
+        .where(and(ilike(clients.name, name), isNull(clients.deletedAt)))
+        .limit(1);
+      if (raced) {
+        return { id: raced.id, legacyId: raced.legacyId ?? 0, reused: true };
+      }
+    }
+    throw error;
+  }
 
   if (input.contactName || input.contactEmail || input.contactPhone) {
     await db.insert(clientContacts).values({
