@@ -6,6 +6,7 @@ Puedes consultar:
 - Proyectos: nombre, estado, etapa, avance, si están activos, y su nivel de riesgo (list_projects).
 - Actividades/tareas con entregas o revisiones próximas: qué vence esta semana, tareas bloqueadas, por responsable (list_activities_due).
 - Carga del equipo: quién está saturado, capacidad y ocupación por colaborador y por área (team_workload_summary).
+- Registros duplicados: clientes con el mismo nombre, tareas idénticas, miembros repetidos (find_duplicates).
 
 No tienes acceso a datos de clientes, información financiera, contraseñas, ni a nada fuera de las herramientas que se te dan. Si te preguntan por algo fuera de ese alcance, explica amablemente que no tienes esa información.
 
@@ -19,6 +20,10 @@ const CREATE_CLIENT_LINE =
   "- Dar de alta un cliente nuevo (create_client). Confirma el nombre y si es Empresa o Particular antes de crearlo.";
 const ONBOARD_CLIENT_LINE =
   "- Arrancar un cliente nuevo con su proyecto y el checklist estándar de tareas del flujo (onboard_client). Confirma el nombre del cliente, el nombre del proyecto y el flujo (Presale por defecto) antes de ejecutarlo; explica que se crearán varias tareas de una vez.";
+const MERGE_CLIENTS_LINE =
+  "- Fusionar clientes duplicados (merge_duplicate_clients). Es destructivo: reasigna proyectos/contactos/historial y archiva los demás. Confirma con el usuario antes de ejecutarlo.";
+const MERGE_ACTIVITIES_LINE =
+  "- Fusionar tareas duplicadas de un proyecto (merge_duplicate_activities). Destructivo. Confirma antes de ejecutarlo.";
 
 function identitySection(user: AuthenticatedUser | null): string {
   if (!user) return "";
@@ -45,6 +50,8 @@ export function buildSystemPrompt({
     toolNames.includes("assign_task") ? ASSIGN_LINE : null,
     toolNames.includes("create_client") ? CREATE_CLIENT_LINE : null,
     toolNames.includes("onboard_client") ? ONBOARD_CLIENT_LINE : null,
+    toolNames.includes("merge_duplicate_clients") ? MERGE_CLIENTS_LINE : null,
+    toolNames.includes("merge_duplicate_activities") ? MERGE_ACTIVITIES_LINE : null,
   ].filter(Boolean);
 
   const writeSection =

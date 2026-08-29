@@ -221,12 +221,15 @@ export function AssistantChat() {
               if (
                 part.type === "tool-list_projects" ||
                 part.type === "tool-list_activities_due" ||
-                part.type === "tool-team_workload_summary"
+                part.type === "tool-team_workload_summary" ||
+                part.type === "tool-find_duplicates"
               ) {
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
                     <p key={index} className="text-xs text-slate-400">
-                      Consultando datos…
+                      {part.type === "tool-find_duplicates"
+                        ? "Buscando duplicados…"
+                        : "Consultando datos…"}
                     </p>
                   );
                 }
@@ -237,7 +240,9 @@ export function AssistantChat() {
                 part.type === "tool-create_task" ||
                 part.type === "tool-assign_task" ||
                 part.type === "tool-create_client" ||
-                part.type === "tool-onboard_client"
+                part.type === "tool-onboard_client" ||
+                part.type === "tool-merge_duplicate_clients" ||
+                part.type === "tool-merge_duplicate_activities"
               ) {
                 const label =
                   part.type === "tool-create_task"
@@ -246,7 +251,9 @@ export function AssistantChat() {
                       ? "Reasignando responsable…"
                       : part.type === "tool-create_client"
                         ? "Dando de alta al cliente…"
-                        : "Arrancando cliente y tareas…";
+                        : part.type === "tool-onboard_client"
+                          ? "Arrancando cliente y tareas…"
+                          : "Fusionando duplicados…";
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
                     <p key={index} className="text-xs text-slate-400">
