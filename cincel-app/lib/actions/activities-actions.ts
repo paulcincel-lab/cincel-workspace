@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/schema";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { selectNewHistoryEntries } from "@/lib/actions/activities-history";
 import type { Task, WorkflowType } from "@/lib/types/task";
 
 async function requireActivitiesCapabilities() {
@@ -179,19 +180,31 @@ async function upsertActivity(task: Task): Promise<void> {
     );
   }
 
-  await db
-    .delete(activityHistory)
+  // History is a chronological bitácora — append-only, NEVER deleted
+  // (AGENTS.md "Nunca eliminar historial"). Insert only entries not already
+  // persisted, so a stale or partial client payload can't drop rows.
+  const existingHistory = await db
+    .select({
+      legacyId: activityHistory.legacyId,
+      eventDate: activityHistory.eventDate,
+      authorNameSnapshot: activityHistory.authorNameSnapshot,
+      comment: activityHistory.comment,
+    })
+    .from(activityHistory)
     .where(eq(activityHistory.activityId, activityId));
-  if (task.history.length > 0) {
-    await db.insert(activityHistory).values(
-      task.history.map((h) => ({
-        activityId,
-        legacyId: typeof h.id === "number" ? h.id : null,
-        authorNameSnapshot: h.author || null,
-        eventDate: h.date || null,
-        comment: h.comment,
-      }))
-    );
+
+  const newHistory = selectNewHistoryEntries(existingHistory, task.history).map(
+    (h) => ({
+      activityId,
+      legacyId: typeof h.id === "number" ? h.id : null,
+      authorNameSnapshot: h.author || null,
+      eventDate: h.date || null,
+      comment: h.comment,
+    })
+  );
+
+  if (newHistory.length > 0) {
+    await db.insert(activityHistory).values(newHistory);
   }
 
   await db
