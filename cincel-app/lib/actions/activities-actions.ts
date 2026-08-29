@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, ilike, isNull } from "drizzle-orm";
+import { and, asc, eq, ilike, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -149,31 +149,21 @@ async function upsertActivity(task: Task): Promise<void> {
     updatedAtLabel: task.updatedAt || null,
   };
 
-  // legacy_id has no unique constraint (activities predate the legacy-id keying
-  // convention) — resolve by (legacy_id, workflow) then insert/update.
-  const [existing] = await db
-    .select({ id: activities.id })
-    .from(activities)
-    .where(
-      and(
-        eq(activities.legacyId, task.id),
-        eq(activities.workflow, dbWorkflow),
-        isNull(activities.deletedAt)
-      )
-    )
-    .limit(1);
-
-  let activityId: string;
-  if (existing) {
-    activityId = existing.id;
-    await db.update(activities).set(values).where(eq(activities.id, existing.id));
-  } else {
-    const [row] = await db
-      .insert(activities)
-      .values(values)
-      .returning({ id: activities.id });
-    activityId = row.id;
-  }
+  // legacy_id is unique only per (workflow) among live rows — see the partial
+  // unique index `activities_legacy_id_workflow_uq`.
+  const [row] = await db
+    .insert(activities)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [activities.legacyId, activities.workflow],
+      targetWhere: and(
+        isNull(activities.deletedAt),
+        sql`${activities.legacyId} is not null`
+      ),
+      set: values,
+    })
+    .returning({ id: activities.id });
+  const activityId = row.id;
 
   // Children carry no stable id from the UI — replace wholesale.
   await db
