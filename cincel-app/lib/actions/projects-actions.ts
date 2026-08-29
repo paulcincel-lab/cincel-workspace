@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
+  activities,
   clientContacts,
   clients,
   projectDriveLinks,
@@ -180,7 +181,21 @@ export async function saveProjectsAction(list: Project[]): Promise<void> {
       .insert(projects)
       .values({ legacyId: p.id, ...values })
       .onConflictDoUpdate({ target: projects.legacyId, set: values })
-      .returning({ id: projects.id });
+      .returning({ id: projects.id, name: projects.name });
+
+    // Propagate a rename to the activities that point at this project by id
+    // (ADR 0001 — activities.project_id is the reliable link; the snapshot is
+    // display text that must follow).
+    await db
+      .update(activities)
+      .set({ projectNameSnapshot: row.name })
+      .where(
+        and(
+          eq(activities.projectId, row.id),
+          isNull(activities.deletedAt),
+          ne(activities.projectNameSnapshot, row.name)
+        )
+      );
 
     await db
       .insert(projectDriveLinks)

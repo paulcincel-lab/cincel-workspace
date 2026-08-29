@@ -18,7 +18,9 @@ export const activities = core.table(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     legacyId: bigint("legacy_id", { mode: "number" }),
-    projectId: uuid("project_id").references(() => projects.id),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "set null",
+    }),
     projectNameSnapshot: text("project_name_snapshot"),
     workflow: workflowType("workflow").notNull(),
     phase: text("phase"),
