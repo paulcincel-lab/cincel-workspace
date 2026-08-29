@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, ilike, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -252,6 +252,164 @@ export async function saveActivitiesAction(
   revalidatePath("/tareas/presale");
   revalidatePath("/tareas/diseno");
   revalidatePath("/tareas/construccion");
+}
+
+const REVALIDATE_TAREAS_ROUTES = [
+  "/tareas",
+  "/tareas/presale",
+  "/tareas/diseno",
+  "/tareas/construccion",
+] as const;
+
+function revalidateTareas() {
+  for (const route of REVALIDATE_TAREAS_ROUTES) revalidatePath(route);
+}
+
+type AssistantCreateActivityInput = {
+  description: string;
+  workflow: WorkflowType;
+  project?: string;
+  manager?: string;
+  priority?: "Alta" | "Media" | "Baja";
+  phase?: string;
+  commitmentDate?: string;
+  reviewDate?: string;
+};
+
+/**
+ * Assistant-facing tool action: create a single task. Own capability check
+ * (`canCreateActivity`) — the AI assistant's tool set is built from the same
+ * capabilities, this is defense in depth. Always logs an activity_history entry
+ * naming the requesting user (bitácora — never overwrite history).
+ */
+export async function createActivityViaAssistantAction(
+  input: AssistantCreateActivityInput
+): Promise<{
+  ok: true;
+  description: string;
+  workflow: WorkflowType;
+  manager: string | null;
+}> {
+  const user = await requireCapabilityUser();
+  if (!resolveActivitiesCapabilities(user).canCreateActivity) {
+    throw new Error("FORBIDDEN: activities create");
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const description = input.description.trim();
+  const manager = input.manager?.trim() || null;
+  const requester = user.member.name || user.email || "Asistente";
+
+  const [row] = await db
+    .insert(activities)
+    .values({
+      projectNameSnapshot: input.project?.trim() || null,
+      workflow: WORKFLOW_TO_DB[input.workflow],
+      phase: input.phase?.trim() || null,
+      description,
+      managerNameSnapshot: manager,
+      status: "Pendiente",
+      priority: input.priority ?? "Media",
+      commitmentDate: input.commitmentDate || null,
+      reviewDate: input.reviewDate || null,
+      createdOn: today,
+      updatedOn: today,
+    })
+    .returning({ id: activities.id });
+
+  await db.insert(activityHistory).values({
+    activityId: row.id,
+    authorNameSnapshot: requester,
+    eventDate: today,
+    comment: `Tarea creada por el asistente a solicitud de ${requester}.`,
+  });
+
+  revalidateTareas();
+  return { ok: true, description, workflow: input.workflow, manager };
+}
+
+type AssistantAssignActivityInput = {
+  descriptionContains: string;
+  manager: string;
+  workflow?: WorkflowType;
+  project?: string;
+};
+
+/**
+ * Assistant-facing tool action: reassign a task's responsible. Requires
+ * `canChangeResponsible`. Locates the task by a description fragment (+ optional
+ * project / workflow); refuses to act on 0 or >1 matches so the assistant asks
+ * the user to disambiguate.
+ */
+export async function assignActivityViaAssistantAction(
+  input: AssistantAssignActivityInput
+): Promise<
+  | { ok: true; description: string; previousManager: string | null; manager: string }
+  | { ok: false; reason: "no_match" | "ambiguous"; candidates: string[] }
+> {
+  const user = await requireCapabilityUser();
+  if (!resolveActivitiesCapabilities(user).canChangeResponsible) {
+    throw new Error("FORBIDDEN: activities reassign");
+  }
+
+  const matches = await db
+    .select({
+      id: activities.id,
+      description: activities.description,
+      project: activities.projectNameSnapshot,
+      manager: activities.managerNameSnapshot,
+    })
+    .from(activities)
+    .where(
+      and(
+        isNull(activities.deletedAt),
+        eq(activities.archived, false),
+        ilike(activities.description, `%${input.descriptionContains.trim()}%`),
+        input.workflow ? eq(activities.workflow, WORKFLOW_TO_DB[input.workflow]) : undefined,
+        input.project
+          ? ilike(activities.projectNameSnapshot, `%${input.project.trim()}%`)
+          : undefined
+      )
+    )
+    .limit(10);
+
+  if (matches.length === 0) return { ok: false, reason: "no_match", candidates: [] };
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      reason: "ambiguous",
+      candidates: matches.map(
+        (m) => `${m.description}${m.project ? ` — ${m.project}` : ""}`
+      ),
+    };
+  }
+
+  const target = matches[0];
+  const manager = input.manager.trim();
+  const today = new Date().toISOString().slice(0, 10);
+  const requester = user.member.name || user.email || "Asistente";
+
+  await db
+    .update(activities)
+    .set({ managerNameSnapshot: manager, managerMemberId: null, updatedOn: today })
+    .where(eq(activities.id, target.id));
+
+  await db.insert(activityHistory).values({
+    activityId: target.id,
+    authorNameSnapshot: requester,
+    eventDate: today,
+    comment: `Responsable reasignado de ${
+      target.manager ?? "sin asignar"
+    } a ${manager} por el asistente (solicitado por ${requester}).`,
+  });
+
+  revalidateTareas();
+  return {
+    ok: true,
+    description: target.description,
+    previousManager: target.manager,
+    manager,
+  };
 }
 
 export async function saveActivityAction(task: Task): Promise<void> {

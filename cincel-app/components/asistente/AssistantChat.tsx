@@ -163,6 +163,21 @@ export function AssistantChat() {
                 return null;
               }
 
+              if (part.type === "tool-create_task" || part.type === "tool-assign_task") {
+                const label =
+                  part.type === "tool-create_task"
+                    ? "Creando tarea…"
+                    : "Reasignando responsable…";
+                if (part.state === "input-streaming" || part.state === "input-available") {
+                  return (
+                    <p key={index} className="text-xs text-slate-400">
+                      {label}
+                    </p>
+                  );
+                }
+                return null;
+              }
+
               return null;
             })}
           </div>
