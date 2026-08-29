@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNull, max } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -245,13 +245,26 @@ async function insertClient(input: {
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;
-}): Promise<{ id: string; legacyId: number }> {
+}): Promise<{ id: string; legacyId: number; reused: boolean }> {
+  const name = input.name.trim();
+
+  // Idempotency: a retried tool call must not create a second client. Reuse an
+  // existing non-deleted client with the same name (case-insensitive).
+  const [existing] = await db
+    .select({ id: clients.id, legacyId: clients.legacyId })
+    .from(clients)
+    .where(and(ilike(clients.name, name), isNull(clients.deletedAt)))
+    .limit(1);
+  if (existing) {
+    return { id: existing.id, legacyId: existing.legacyId ?? 0, reused: true };
+  }
+
   const legacyId = await nextClientLegacyId();
   const [row] = await db
     .insert(clients)
     .values({
       legacyId,
-      name: input.name.trim(),
+      name,
       kind: input.kind,
       phone: input.phone?.trim() || null,
       acquisitionChannel: input.acquisitionChannel?.trim() || null,
@@ -261,14 +274,14 @@ async function insertClient(input: {
   if (input.contactName || input.contactEmail || input.contactPhone) {
     await db.insert(clientContacts).values({
       clientId: row.id,
-      name: input.contactName?.trim() || input.name.trim(),
+      name: input.contactName?.trim() || name,
       phone: input.contactPhone?.trim() || null,
       email: input.contactEmail?.trim() || null,
       sortOrder: 0,
     });
   }
 
-  return { id: row.id, legacyId };
+  return { id: row.id, legacyId, reused: false };
 }
 
 type AssistantCreateClientInput = {
@@ -283,18 +296,18 @@ type AssistantCreateClientInput = {
 
 export async function createClientViaAssistantAction(
   input: AssistantCreateClientInput
-): Promise<{ ok: true; name: string; kind: ClientKind }> {
+): Promise<{ ok: true; name: string; kind: ClientKind; alreadyExisted: boolean }> {
   const user = await requireCapabilityUser();
   if (!resolveClientsCapabilities(user).canCreateClient) {
     throw new Error("FORBIDDEN: clients create");
   }
 
   const kind = input.kind ?? "Particular";
-  await insertClient({ ...input, kind });
+  const { reused } = await insertClient({ ...input, kind });
 
   revalidatePath("/clientes");
   revalidatePath("/proyectos");
-  return { ok: true, name: input.name.trim(), kind };
+  return { ok: true, name: input.name.trim(), kind, alreadyExisted: reused };
 }
 
 type AssistantOnboardClientInput = {
@@ -321,9 +334,11 @@ export async function onboardClientViaAssistantAction(
 ): Promise<{
   ok: true;
   client: string;
+  clientAlreadyExisted: boolean;
   project: string;
   workflow: AssistantOnboardWorkflow;
   tasksCreated: number;
+  tasksSkippedAsDuplicate: number;
 }> {
   const user = await requireCapabilityUser();
   const clientsCaps = resolveClientsCapabilities(user);
@@ -334,13 +349,14 @@ export async function onboardClientViaAssistantAction(
   }
 
   const workflow = input.workflow ?? "Presale";
+  const dbWorkflow = WORKFLOW_TO_DB_ENUM[workflow];
   const kind = input.kind ?? "Particular";
   const project = input.projectName.trim();
   const manager = input.manager?.trim() || null;
   const today = new Date().toISOString().slice(0, 10);
   const requester = user.member.name || user.email || "Asistente";
 
-  await insertClient({ ...input, kind });
+  const { reused } = await insertClient({ ...input, kind });
 
   const items = [
     ...TEMPLATE_BY_WORKFLOW[workflow].map((t) => ({
@@ -353,13 +369,35 @@ export async function onboardClientViaAssistantAction(
       .map((description) => ({ phase: null as string | null, description })),
   ];
 
+  // Idempotency: skip any task this project already has for this workflow
+  // (a retried tool call must not duplicate the checklist).
+  const existingTasks = await db
+    .select({ description: activities.description })
+    .from(activities)
+    .where(
+      and(
+        eq(activities.workflow, dbWorkflow),
+        ilike(activities.projectNameSnapshot, project),
+        isNull(activities.deletedAt)
+      )
+    );
+  const existingDescriptions = new Set(
+    existingTasks.map((t) => t.description.trim().toLowerCase())
+  );
+
   let tasksCreated = 0;
+  let tasksSkippedAsDuplicate = 0;
   for (const item of items) {
+    if (existingDescriptions.has(item.description.trim().toLowerCase())) {
+      tasksSkippedAsDuplicate += 1;
+      continue;
+    }
+    existingDescriptions.add(item.description.trim().toLowerCase());
     const [row] = await db
       .insert(activities)
       .values({
         projectNameSnapshot: project,
-        workflow: WORKFLOW_TO_DB_ENUM[workflow],
+        workflow: dbWorkflow,
         phase: item.phase,
         description: item.description,
         managerNameSnapshot: manager,
@@ -386,5 +424,13 @@ export async function onboardClientViaAssistantAction(
   revalidatePath("/tareas/diseno");
   revalidatePath("/tareas/construccion");
 
-  return { ok: true, client: input.name.trim(), project, workflow, tasksCreated };
+  return {
+    ok: true,
+    client: input.name.trim(),
+    clientAlreadyExisted: reused,
+    project,
+    workflow,
+    tasksCreated,
+    tasksSkippedAsDuplicate,
+  };
 }

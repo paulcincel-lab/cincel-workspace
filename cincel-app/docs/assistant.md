@@ -30,7 +30,7 @@ se sobrescribe.
 | Herramienta | Tipo | Capacidad requerida | Roles que la reciben |
 | --- | --- | --- | --- |
 | `list_projects` | lectura | — | todos |
-| `list_activities_due` | lectura | — | todos |
+| `list_activities_due` | lectura | — | todos — con `projectName` lista **todas** las tareas del proyecto (con o sin fecha), útil para revisar/secuenciar uno recién creado |
 | `team_workload_summary` | lectura | — | todos |
 | `render_chart` | UI (no-op en servidor) | — | todos |
 | `create_task` | escritura | `canCreateActivity` | todos |
@@ -41,7 +41,9 @@ se sobrescribe.
 `onboard_client` da de alta el cliente y, en el mismo paso, siembra el checklist
 estándar del flujo elegido (`lib/templates/{presale,diseno,operativas}.ts`,
 Presale por defecto) como tareas `Pendiente` contra un proyecto nuevo, más
-`extraTasks` opcionales.
+`extraTasks` opcionales. Es **idempotente**: si el cliente ya existe (mismo
+nombre) lo reutiliza, y omite las tareas de plantilla que el proyecto ya tenga
+para ese flujo — una llamada reintentada no duplica nada.
 
 Acciones de servidor: `lib/actions/activities-actions.ts`
 (`createActivityViaAssistantAction`, `assignActivityViaAssistantAction`) y
