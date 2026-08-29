@@ -12,7 +12,6 @@ import {
 } from "drizzle-orm/pg-core";
 import { core, taskPriority, taskStatus, timestamps, workflowType } from "./_schema";
 import { projects } from "./projects";
-import { teamMembers } from "./team";
 
 export const activities = core.table(
   "activities",
@@ -25,7 +24,9 @@ export const activities = core.table(
     phase: text("phase"),
     description: text("description").notNull(),
     notes: text("notes"),
-    managerMemberId: uuid("manager_member_id").references(() => teamMembers.id),
+    // Manager / support / author are referenced by name snapshot only — people
+    // data here is messy (freelancers, servicio social, historical names) and
+    // the snapshot is often the only correct value. See docs/adr/0001.
     managerNameSnapshot: text("manager_name_snapshot"),
     status: taskStatus("status").notNull(),
     priority: taskPriority("priority").notNull(),
@@ -53,7 +54,6 @@ export const activities = core.table(
     index("idx_activities_project_id").on(t.projectId),
     index("idx_activities_workflow").on(t.workflow),
     index("idx_activities_status").on(t.status),
-    index("idx_activities_manager_member_id").on(t.managerMemberId),
     index("idx_activities_project_name_snapshot").on(t.projectNameSnapshot),
     index("idx_activities_manager_name_snapshot").on(t.managerNameSnapshot),
     // Trigram GIN — the assistant tools filter these with `ilike '%term%'`,
@@ -85,12 +85,11 @@ export const activitySupportMembers = core.table(
     activityId: uuid("activity_id")
       .notNull()
       .references(() => activities.id),
-    teamMemberId: uuid("team_member_id").references(() => teamMembers.id),
     supportNameSnapshot: text("support_name_snapshot"),
     ...timestamps,
   },
   (t) => [
-    unique().on(t.activityId, t.teamMemberId, t.supportNameSnapshot),
+    unique().on(t.activityId, t.supportNameSnapshot),
     index("idx_activity_support_activity_id").on(t.activityId),
   ]
 );
@@ -103,7 +102,6 @@ export const activityHistory = core.table(
     .notNull()
     .references(() => activities.id),
   legacyId: bigint("legacy_id", { mode: "number" }),
-  authorMemberId: uuid("author_member_id").references(() => teamMembers.id),
   authorNameSnapshot: text("author_name_snapshot"),
     eventDate: date("event_date"),
     comment: text("comment").notNull(),
@@ -132,10 +130,6 @@ export const activitiesRelations = relations(activities, ({ one, many }) => ({
   project: one(projects, {
     fields: [activities.projectId],
     references: [projects.id],
-  }),
-  manager: one(teamMembers, {
-    fields: [activities.managerMemberId],
-    references: [teamMembers.id],
   }),
   supportMembers: many(activitySupportMembers),
   history: many(activityHistory),

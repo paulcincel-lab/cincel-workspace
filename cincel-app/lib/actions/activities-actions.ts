@@ -394,7 +394,7 @@ export async function assignActivityViaAssistantAction(
 
   await db
     .update(activities)
-    .set({ managerNameSnapshot: manager, managerMemberId: null, updatedOn: today })
+    .set({ managerNameSnapshot: manager, updatedOn: today })
     .where(eq(activities.id, target.id));
 
   await db.insert(activityHistory).values({
