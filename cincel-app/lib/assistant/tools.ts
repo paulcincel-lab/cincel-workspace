@@ -52,6 +52,7 @@ export const list_projects = tool({
 
     const rows = await db
       .select({
+        id: projects.id,
         name: projects.name,
         status: projects.status,
         stage: projects.stage,
@@ -62,22 +63,42 @@ export const list_projects = tool({
       .where(where)
       .limit(50);
 
-    // Per-project overdue / blocked activity counts for the risk score.
+    // Per-project overdue / blocked activity counts for the risk score. Grouped
+    // by project_id (ADR 0001) with a name-snapshot fallback for tasks whose
+    // project didn't resolve to an id.
     const today = new Date().toISOString().slice(0, 10);
     const counts = await db
       .select({
+        projectId: activities.projectId,
         project: activities.projectNameSnapshot,
         overdue: sql<number>`count(*) filter (where ${activities.commitmentDate} < ${today} and ${activities.status} <> 'Completado')`,
         blocked: sql<number>`count(*) filter (where ${activities.status} = 'Bloqueado')`,
       })
       .from(activities)
       .where(and(isNull(activities.deletedAt), eq(activities.archived, false)))
-      .groupBy(activities.projectNameSnapshot);
+      .groupBy(activities.projectId, activities.projectNameSnapshot);
 
-    const byName = new Map(counts.map((c) => [c.project ?? "", c]));
+    const byId = new Map<string, { overdue: number; blocked: number }>();
+    const byName = new Map<string, { overdue: number; blocked: number }>();
+    for (const c of counts) {
+      const v = { overdue: Number(c.overdue ?? 0), blocked: Number(c.blocked ?? 0) };
+      if (c.projectId) {
+        const cur = byId.get(c.projectId) ?? { overdue: 0, blocked: 0 };
+        byId.set(c.projectId, {
+          overdue: cur.overdue + v.overdue,
+          blocked: cur.blocked + v.blocked,
+        });
+      } else if (c.project) {
+        const cur = byName.get(c.project) ?? { overdue: 0, blocked: 0 };
+        byName.set(c.project, {
+          overdue: cur.overdue + v.overdue,
+          blocked: cur.blocked + v.blocked,
+        });
+      }
+    }
 
     return rows.map((p) => {
-      const c = byName.get(p.name);
+      const c = byId.get(p.id) ?? byName.get(p.name);
       const overdue = Number(c?.overdue ?? 0);
       const blocked = Number(c?.blocked ?? 0);
       const risk =
@@ -86,7 +107,9 @@ export const list_projects = tool({
           : p.progress < 75
             ? "Medio"
             : "Bajo";
-      return { ...p, overdueTasks: overdue, blockedTasks: blocked, risk };
+      const { id: _id, ...rest } = p;
+      void _id;
+      return { ...rest, overdueTasks: overdue, blockedTasks: blocked, risk };
     });
   },
 });

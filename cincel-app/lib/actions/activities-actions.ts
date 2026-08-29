@@ -9,6 +9,7 @@ import {
   activityChecklistItems,
   activityHistory,
   activitySupportMembers,
+  projects,
 } from "@/lib/db/schema";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
@@ -17,6 +18,22 @@ import type { Task, WorkflowType } from "@/lib/types/task";
 
 async function requireActivitiesCapabilities() {
   return resolveActivitiesCapabilities(await requireCapabilityUser());
+}
+
+/**
+ * Resolve a project name to its uuid so `activities.project_id` stays linked
+ * (ADR 0001). Only when exactly one live project has that name — otherwise the
+ * name snapshot alone carries the reference.
+ */
+async function resolveProjectId(name: string | null | undefined): Promise<string | null> {
+  const trimmed = name?.trim();
+  if (!trimmed) return null;
+  const rows = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.name, trimmed), isNull(projects.deletedAt)))
+    .limit(2);
+  return rows.length === 1 ? rows[0].id : null;
 }
 
 /**
@@ -134,6 +151,7 @@ async function upsertActivity(task: Task): Promise<void> {
 
   const values = {
     legacyId: task.id,
+    projectId: await resolveProjectId(task.project),
     projectNameSnapshot: task.project || null,
     workflow: dbWorkflow,
     phase: task.phase || null,
@@ -306,6 +324,7 @@ export async function createActivityViaAssistantAction(
   const [row] = await db
     .insert(activities)
     .values({
+      projectId: await resolveProjectId(input.project),
       projectNameSnapshot: input.project?.trim() || null,
       workflow: WORKFLOW_TO_DB[input.workflow],
       phase: input.phase?.trim() || null,

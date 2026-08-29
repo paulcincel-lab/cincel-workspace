@@ -71,6 +71,13 @@
       "when": 1788044464027,
       "tag": "0009_ordinary_sauron",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788045117155,
+      "tag": "0010_deep_shinobi_shaw",
+      "breakpoints": true
     }
   ]
 }
