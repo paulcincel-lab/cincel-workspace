@@ -1,6 +1,17 @@
-import { relations } from "drizzle-orm";
-import { bigint, date, index, integer, text, uuid } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { bigint, check, date, index, integer, text, uuid } from "drizzle-orm/pg-core";
 import { core, timestamps } from "./_schema";
+
+/**
+ * Closed set the proveedores UI writes to `status` (NULL allowed). CHECK rather
+ * than an enum so it can be widened without a type migration.
+ */
+const providerStatusCheck = (name: string, col: AnyPgColumn) =>
+  check(
+    name,
+    sql`${col} is null or ${col} in ('Activo', 'Inactivo', 'Pausado', 'Prospecto', 'Lista Negra (no deseado)')`
+  );
 
 // ── Contractors ────────────────────────────────────────────────────────────
 export const contractors = core.table(
@@ -24,6 +35,7 @@ export const contractors = core.table(
   (t) => [
     index("idx_contractors_provider").on(t.provider),
     index("idx_contractors_status").on(t.status),
+    providerStatusCheck("contractors_status_check", t.status),
     index("idx_contractors_deleted_at").on(t.deletedAt),
   ]
 );
@@ -61,6 +73,7 @@ export const collaboratorProviders = core.table(
   (t) => [
     index("idx_collaborator_providers_name").on(t.name),
     index("idx_collaborator_providers_status").on(t.status),
+    providerStatusCheck("collaborator_providers_status_check", t.status),
     index("idx_collaborator_providers_deleted_at").on(t.deletedAt),
   ]
 );
@@ -108,6 +121,7 @@ export const stores = core.table(
   (t) => [
     index("idx_stores_name").on(t.name),
     index("idx_stores_status").on(t.status),
+    providerStatusCheck("stores_status_check", t.status),
     index("idx_stores_deleted_at").on(t.deletedAt),
   ]
 );

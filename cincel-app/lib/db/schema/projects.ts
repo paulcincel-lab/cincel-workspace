@@ -39,6 +39,12 @@ export const projects = core.table(
   },
   (t) => [
     check("projects_progress_range", sql`${t.progress} >= 0 and ${t.progress} <= 100`),
+    // Closed set from ProjectCreateModal's STAGE_OPTIONS. `phase` stays free —
+    // it's workflow-specific and evolves with the templates.
+    check(
+      "projects_stage_check",
+      sql`${t.stage} is null or ${t.stage} in ('Presale', 'Diseño', 'Construcción')`
+    ),
     index("idx_projects_name").on(t.name),
     index("idx_projects_stage").on(t.stage),
     index("idx_projects_active").on(t.active),
