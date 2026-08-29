@@ -110,6 +110,13 @@ const ClientsIcon = ({ className = "h-5 w-5" }: IconProps) => (
   </svg>
 );
 
+const AssistantIcon = ({ className = "h-5 w-5" }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
+    <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2z" />
+    <path d="M9.5 9.5h5M9.5 12.5h3" />
+  </svg>
+);
+
 const SettingsIcon = ({ className = "h-5 w-5" }: IconProps) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
     <circle cx="12" cy="12" r="3" />
@@ -208,6 +215,7 @@ export default function Sidebar() {
     },
     { label: "Equipo", href: "/equipo", icon: TeamIcon },
     { label: "Clientes", href: "/clientes", icon: ClientsIcon },
+    { label: "Asistente", href: "/asistente", icon: AssistantIcon },
     ...(canViewConfiguration
       ? [
           {

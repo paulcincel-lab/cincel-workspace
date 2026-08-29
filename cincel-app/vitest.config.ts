@@ -6,7 +6,11 @@ export default defineConfig({
     environment: "happy-dom",
     globals: true,
     setupFiles: [],
-    include: ["tests/unit/**/*.{test,spec}.{ts,tsx}"],
+    include: [
+      "tests/unit/**/*.{test,spec}.{ts,tsx}",
+      "lib/**/*.{test,spec}.{ts,tsx}",
+      "app/**/*.{test,spec}.{ts,tsx}",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
