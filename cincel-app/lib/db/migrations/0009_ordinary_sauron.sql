@@ -1,0 +1,4 @@
+ALTER TABLE "core"."projects" ADD CONSTRAINT "projects_stage_check" CHECK ("core"."projects"."stage" is null or "core"."projects"."stage" in ('Presale', 'Diseño', 'Construcción'));--> statement-breakpoint
+ALTER TABLE "core"."collaborator_providers" ADD CONSTRAINT "collaborator_providers_status_check" CHECK ("core"."collaborator_providers"."status" is null or "core"."collaborator_providers"."status" in ('Activo', 'Inactivo', 'Pausado', 'Prospecto', 'Lista Negra (no deseado)'));--> statement-breakpoint
+ALTER TABLE "core"."contractors" ADD CONSTRAINT "contractors_status_check" CHECK ("core"."contractors"."status" is null or "core"."contractors"."status" in ('Activo', 'Inactivo', 'Pausado', 'Prospecto', 'Lista Negra (no deseado)'));--> statement-breakpoint
+ALTER TABLE "core"."stores" ADD CONSTRAINT "stores_status_check" CHECK ("core"."stores"."status" is null or "core"."stores"."status" in ('Activo', 'Inactivo', 'Pausado', 'Prospecto', 'Lista Negra (no deseado)'));
