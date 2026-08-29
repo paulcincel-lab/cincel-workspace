@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -7,6 +7,7 @@ import {
   integer,
   text,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { core, taskPriority, taskStatus, timestamps, workflowType } from "./_schema";
@@ -42,10 +43,19 @@ export const activities = core.table(
     // NOTE: no date-ordering CHECK between commitment/review/delivery — the
     // product's own task data routinely schedules the review before the
     // commitment date, and the app treats these as independent fields.
+    //
+    // legacy_id is the app's row identity but predates the keying convention,
+    // so it is unique only per workflow and only among live rows. This lets
+    // upsertActivity use onConflictDoUpdate instead of select-then-write.
+    uniqueIndex("activities_legacy_id_workflow_uq")
+      .on(t.legacyId, t.workflow)
+      .where(sql`${t.deletedAt} is null and ${t.legacyId} is not null`),
     index("idx_activities_project_id").on(t.projectId),
     index("idx_activities_workflow").on(t.workflow),
     index("idx_activities_status").on(t.status),
     index("idx_activities_manager_member_id").on(t.managerMemberId),
+    index("idx_activities_project_name_snapshot").on(t.projectNameSnapshot),
+    index("idx_activities_manager_name_snapshot").on(t.managerNameSnapshot),
     index("idx_activities_commitment_date").on(t.commitmentDate),
     index("idx_activities_review_date").on(t.reviewDate),
     index("idx_activities_delivery_date").on(t.deliveryDate),

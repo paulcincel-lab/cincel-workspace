@@ -1,0 +1,3 @@
+CREATE UNIQUE INDEX "activities_legacy_id_workflow_uq" ON "core"."activities" USING btree ("legacy_id","workflow") WHERE "core"."activities"."deleted_at" is null and "core"."activities"."legacy_id" is not null;--> statement-breakpoint
+CREATE INDEX "idx_activities_project_name_snapshot" ON "core"."activities" USING btree ("project_name_snapshot");--> statement-breakpoint
+CREATE INDEX "idx_activities_manager_name_snapshot" ON "core"."activities" USING btree ("manager_name_snapshot");
