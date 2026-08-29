@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, ilike, inArray, isNull, max } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, max, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -68,37 +68,98 @@ function toManualClient(row: {
   };
 }
 
+type ClientProjectStats = {
+  totalProjectsWorked: number;
+  hasActiveProject: boolean;
+  firstWorkDate: string | null;
+  activeProjectName: string | null;
+  activeProjectType: string | null;
+};
+
+/**
+ * Per-client rollups derived live from `projects` — replaces the drift-prone
+ * denormalized columns on `clients` (issue #114). `total_spent_mxn` stays a
+ * physical column: `projects` carries no cost, so it's genuinely manual data.
+ */
+async function fetchClientProjectStats(): Promise<Map<string, ClientProjectStats>> {
+  const agg = await db
+    .select({
+      clientId: projects.clientId,
+      count: sql<number>`count(*)::int`,
+      hasActive: sql<boolean>`bool_or(${projects.active})`,
+      firstStart: sql<string | null>`min(${projects.startDate})`,
+    })
+    .from(projects)
+    .where(isNull(projects.deletedAt))
+    .groupBy(projects.clientId);
+
+  const activeRows = await db
+    .select({
+      clientId: projects.clientId,
+      name: projects.name,
+      type: projects.projectType,
+    })
+    .from(projects)
+    .where(and(isNull(projects.deletedAt), eq(projects.active, true)))
+    .orderBy(desc(projects.startDate), desc(projects.createdAt));
+
+  const active = new Map<string, { name: string; type: string | null }>();
+  for (const r of activeRows) {
+    if (r.clientId && !active.has(r.clientId)) {
+      active.set(r.clientId, { name: r.name, type: r.type });
+    }
+  }
+
+  const out = new Map<string, ClientProjectStats>();
+  for (const r of agg) {
+    if (!r.clientId) continue;
+    const a = active.get(r.clientId);
+    out.set(r.clientId, {
+      totalProjectsWorked: Number(r.count ?? 0),
+      hasActiveProject: Boolean(r.hasActive),
+      firstWorkDate: r.firstStart,
+      activeProjectName: a?.name ?? null,
+      activeProjectType: a?.type ?? null,
+    });
+  }
+  return out;
+}
+
 export async function fetchClientsAction(): Promise<ManualClient[]> {
   const caps = await requireClientsCapabilities();
   if (!caps.canViewClients) return [];
 
-  const rows = await db.query.clients.findMany({
-    where: isNull(clients.deletedAt),
-    orderBy: asc(clients.name),
-    with: {
-      contacts: {
-        where: isNull(clientContacts.deletedAt),
-        orderBy: asc(clientContacts.sortOrder),
+  const [rows, stats] = await Promise.all([
+    db.query.clients.findMany({
+      where: isNull(clients.deletedAt),
+      orderBy: asc(clients.name),
+      with: {
+        contacts: {
+          where: isNull(clientContacts.deletedAt),
+          orderBy: asc(clientContacts.sortOrder),
+        },
       },
-    },
-  });
+    }),
+    fetchClientProjectStats(),
+  ]);
 
-  return rows.map((r) =>
-    toManualClient({
+  return rows.map((r) => {
+    const s = stats.get(r.id);
+    return toManualClient({
       legacyId: r.legacyId,
       name: r.name,
       kind: r.kind,
       phone: r.phone,
       acquisitionChannel: r.acquisitionChannel,
       totalSpentMxn: r.totalSpentMxn,
-      totalProjectsWorked: r.totalProjectsWorked,
-      firstWorkDate: r.firstWorkDate,
-      hasActiveProject: r.hasActiveProject,
-      activeProjectName: r.activeProjectName,
-      activeProjectType: r.activeProjectType,
+      totalProjectsWorked: s?.totalProjectsWorked ?? 0,
+      firstWorkDate: s?.firstWorkDate ?? null,
+      hasActiveProject: s?.hasActiveProject ?? false,
+      activeProjectName: s?.activeProjectName ?? null,
+      activeProjectType: s?.activeProjectType ?? null,
       contacts: r.contacts,
-    })
-  );
+    });
+  });
 }
 
 export async function saveClientsAction(list: ManualClient[]): Promise<void> {
