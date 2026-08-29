@@ -39,6 +39,8 @@ export const clients = core.table(
       .on(sql`lower(${t.name})`)
       .where(sql`${t.deletedAt} is null`),
     index("idx_clients_name").on(t.name),
+    // Trigram GIN for the assistant onboard-tool `ilike` name dedupe / match.
+    index("idx_clients_name_trgm").using("gin", sql`${t.name} gin_trgm_ops`),
     index("idx_clients_kind").on(t.kind),
     index("idx_clients_deleted_at").on(t.deletedAt),
   ]
