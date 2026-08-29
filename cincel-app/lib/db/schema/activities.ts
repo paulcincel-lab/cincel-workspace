@@ -56,6 +56,20 @@ export const activities = core.table(
     index("idx_activities_manager_member_id").on(t.managerMemberId),
     index("idx_activities_project_name_snapshot").on(t.projectNameSnapshot),
     index("idx_activities_manager_name_snapshot").on(t.managerNameSnapshot),
+    // Trigram GIN — the assistant tools filter these with `ilike '%term%'`,
+    // which a btree can't serve. Needs the pg_trgm extension (migration 0007).
+    index("idx_activities_project_name_snapshot_trgm").using(
+      "gin",
+      sql`${t.projectNameSnapshot} gin_trgm_ops`
+    ),
+    index("idx_activities_manager_name_snapshot_trgm").using(
+      "gin",
+      sql`${t.managerNameSnapshot} gin_trgm_ops`
+    ),
+    index("idx_activities_description_trgm").using(
+      "gin",
+      sql`${t.description} gin_trgm_ops`
+    ),
     index("idx_activities_commitment_date").on(t.commitmentDate),
     index("idx_activities_review_date").on(t.reviewDate),
     index("idx_activities_delivery_date").on(t.deliveryDate),
