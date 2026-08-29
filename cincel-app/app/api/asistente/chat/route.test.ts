@@ -112,7 +112,13 @@ describe("POST /api/asistente/chat", () => {
     expect(streamTextMock).toHaveBeenCalledTimes(1);
     const arg = streamTextMock.mock.calls[0][0];
     expect(Object.keys(arg.tools).sort()).toEqual(
-      [...Object.keys(ASSISTANT_TOOLS), "create_task", "assign_task"].sort()
+      [
+        ...Object.keys(ASSISTANT_TOOLS),
+        "create_task",
+        "assign_task",
+        "create_client",
+        "onboard_client",
+      ].sort()
     );
     expect(arg.stopWhen).toBe(5);
   });

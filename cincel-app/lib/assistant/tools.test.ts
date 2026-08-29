@@ -15,6 +15,8 @@ import {
   list_activities_due,
   team_workload_summary,
   render_chart,
+  create_client,
+  onboard_client,
   ASSISTANT_TOOLS,
   buildAssistantTools,
 } from "./tools";
@@ -55,26 +57,37 @@ describe("ASSISTANT_TOOLS", () => {
 });
 
 describe("buildAssistantTools", () => {
-  it("gives Administrador the read tools plus create_task and assign_task", () => {
+  it("gives Administrador every read and write tool", () => {
     const keys = Object.keys(buildAssistantTools(userWithAccess("Administrador"))).sort();
-    expect(keys).toEqual([...READ_TOOLS, "assign_task", "create_task"].sort());
+    expect(keys).toEqual(
+      [
+        ...READ_TOOLS,
+        "assign_task",
+        "create_task",
+        "create_client",
+        "onboard_client",
+      ].sort()
+    );
   });
 
-  it("gives Colaborador create_task but not assign_task", () => {
+  it("gives Colaborador create_task but not assign_task or client tools", () => {
     const keys = Object.keys(buildAssistantTools(userWithAccess("Colaborador"))).sort();
     expect(keys).toEqual([...READ_TOOLS, "create_task"].sort());
   });
 
-  it("gives Arquitecto Junior create_task but not assign_task", () => {
+  it("gives Arquitecto Junior create_task but not assign_task or client tools", () => {
     const keys = Object.keys(buildAssistantTools(userWithAccess("Arquitecto Junior")));
     expect(keys).toContain("create_task");
     expect(keys).not.toContain("assign_task");
+    expect(keys).not.toContain("create_client");
+    expect(keys).not.toContain("onboard_client");
   });
 
-  it("gives Arquitecto Senior assign_task", () => {
-    expect(
-      Object.keys(buildAssistantTools(userWithAccess("Arquitecto Senior")))
-    ).toContain("assign_task");
+  it("gives Arquitecto Senior assign_task and the client tools", () => {
+    const keys = Object.keys(buildAssistantTools(userWithAccess("Arquitecto Senior")));
+    expect(keys).toEqual(
+      expect.arrayContaining(["assign_task", "create_client", "onboard_client"])
+    );
   });
 
   it("falls back to the default role for a null user", () => {
@@ -114,6 +127,34 @@ describe("list_activities_due schema", () => {
     expect(parse(list_activities_due.inputSchema, { withinDays: 0 }).success).toBe(false);
     expect(parse(list_activities_due.inputSchema, { withinDays: 61 }).success).toBe(false);
     expect(parse(list_activities_due.inputSchema, { withinDays: 3.5 }).success).toBe(false);
+  });
+});
+
+describe("create_client / onboard_client schema", () => {
+  it("create_client defaults kind to Particular and requires a name", () => {
+    const r = parse<{ kind: string }>(create_client.inputSchema, { name: "Acme" });
+    expect(r.success && r.data.kind).toBe("Particular");
+    expect(parse(create_client.inputSchema, {}).success).toBe(false);
+  });
+
+  it("onboard_client defaults workflow to Presale and requires client + project", () => {
+    const r = parse<{ workflow: string }>(onboard_client.inputSchema, {
+      name: "Acme",
+      projectName: "Casa Roma",
+    });
+    expect(r.success && r.data.workflow).toBe("Presale");
+    expect(parse(onboard_client.inputSchema, { name: "Acme" }).success).toBe(false);
+  });
+
+  it("onboard_client caps extraTasks at 20", () => {
+    const extraTasks = Array.from({ length: 21 }, (_, i) => `t${i}`);
+    expect(
+      parse(onboard_client.inputSchema, {
+        name: "Acme",
+        projectName: "Casa Roma",
+        extraTasks,
+      }).success
+    ).toBe(false);
   });
 });
 

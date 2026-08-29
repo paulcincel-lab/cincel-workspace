@@ -163,11 +163,20 @@ export function AssistantChat() {
                 return null;
               }
 
-              if (part.type === "tool-create_task" || part.type === "tool-assign_task") {
+              if (
+                part.type === "tool-create_task" ||
+                part.type === "tool-assign_task" ||
+                part.type === "tool-create_client" ||
+                part.type === "tool-onboard_client"
+              ) {
                 const label =
                   part.type === "tool-create_task"
                     ? "Creando tarea…"
-                    : "Reasignando responsable…";
+                    : part.type === "tool-assign_task"
+                      ? "Reasignando responsable…"
+                      : part.type === "tool-create_client"
+                        ? "Dando de alta al cliente…"
+                        : "Arrancando cliente y tareas…";
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
                     <p key={index} className="text-xs text-slate-400">
