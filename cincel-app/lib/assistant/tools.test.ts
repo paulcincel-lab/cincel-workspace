@@ -66,27 +66,39 @@ describe("buildAssistantTools", () => {
         "create_task",
         "create_client",
         "onboard_client",
+        "find_duplicates",
+        "merge_duplicate_clients",
+        "merge_duplicate_activities",
       ].sort()
     );
   });
 
-  it("gives Colaborador create_task but not assign_task or client tools", () => {
+  it("gives Colaborador create_task + find_duplicates but no merge/client tools", () => {
     const keys = Object.keys(buildAssistantTools(userWithAccess("Colaborador"))).sort();
-    expect(keys).toEqual([...READ_TOOLS, "create_task"].sort());
+    expect(keys).toEqual([...READ_TOOLS, "create_task", "find_duplicates"].sort());
   });
 
-  it("gives Arquitecto Junior create_task but not assign_task or client tools", () => {
+  it("gives Arquitecto Junior create_task + find_duplicates but not the rest", () => {
     const keys = Object.keys(buildAssistantTools(userWithAccess("Arquitecto Junior")));
-    expect(keys).toContain("create_task");
+    expect(keys).toEqual(expect.arrayContaining(["create_task", "find_duplicates"]));
     expect(keys).not.toContain("assign_task");
     expect(keys).not.toContain("create_client");
-    expect(keys).not.toContain("onboard_client");
+    expect(keys).not.toContain("merge_duplicate_clients");
   });
 
-  it("gives Arquitecto Senior assign_task and the client tools", () => {
+  it("gives Arquitecto Senior the client tools but not the destructive merges", () => {
     const keys = Object.keys(buildAssistantTools(userWithAccess("Arquitecto Senior")));
     expect(keys).toEqual(
-      expect.arrayContaining(["assign_task", "create_client", "onboard_client"])
+      expect.arrayContaining(["assign_task", "create_client", "onboard_client", "find_duplicates"])
+    );
+    expect(keys).not.toContain("merge_duplicate_clients");
+    expect(keys).not.toContain("merge_duplicate_activities");
+  });
+
+  it("gives Dirección the destructive merge tools", () => {
+    const keys = Object.keys(buildAssistantTools(userWithAccess("Dirección")));
+    expect(keys).toEqual(
+      expect.arrayContaining(["merge_duplicate_clients", "merge_duplicate_activities"])
     );
   });
 

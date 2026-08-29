@@ -19,6 +19,11 @@ import {
   createClientViaAssistantAction,
   onboardClientViaAssistantAction,
 } from "@/lib/actions/clients-actions";
+import {
+  findDuplicatesAction,
+  mergeDuplicateActivitiesAction,
+  mergeDuplicateClientsAction,
+} from "@/lib/actions/maintenance-actions";
 
 /**
  * Every tool here is read-only and only touches core.projects,
@@ -295,6 +300,33 @@ export const onboard_client = tool({
   execute: async (input) => onboardClientViaAssistantAction(input),
 });
 
+export const find_duplicates = tool({
+  description:
+    "Escanea la base de datos en busca de registros duplicados: clientes con el mismo nombre, tareas idénticas en el mismo proyecto/flujo, y miembros repetidos en un proyecto. Solo lectura — devuelve los grupos para que el usuario decida.",
+  inputSchema: z.object({}),
+  execute: async () => findDuplicatesAction(),
+});
+
+export const merge_duplicate_clients = tool({
+  description:
+    "Fusiona todos los clientes activos que comparten un nombre (sin distinguir mayúsculas) en uno solo. Conserva el que tiene más proyectos; reasigna proyectos, contactos e historial al superviviente y archiva los demás. Pide confirmación antes de usarlo.",
+  inputSchema: z.object({
+    name: z.string().min(2).describe("Nombre del cliente duplicado"),
+  }),
+  execute: async (input) => mergeDuplicateClientsAction(input),
+});
+
+export const merge_duplicate_activities = tool({
+  description:
+    "Fusiona tareas duplicadas de un proyecto (misma descripción y flujo). Conserva la que tiene más bitácora; mueve historial, apoyos y checklist a esa y archiva las demás. Pide confirmación antes de usarlo.",
+  inputSchema: z.object({
+    projectName: z.string().min(2),
+    descriptionContains: z.string().min(3),
+    workflow: WORKFLOW_ENUM.optional(),
+  }),
+  execute: async (input) => mergeDuplicateActivitiesAction(input),
+});
+
 export const ASSISTANT_TOOLS = {
   list_projects,
   list_activities_due,
@@ -306,10 +338,13 @@ export const ASSISTANT_TOOLS = {
  * The tool set the assistant gets for a given caller. Read tools + render_chart
  * are always available; the write tools are gated by the same activities
  * capabilities the /tareas UI enforces:
- * - create_task     → canCreateActivity
- * - assign_task     → canChangeResponsible
- * - create_client   → canCreateClient
- * - onboard_client  → canCreateClient AND canCreateActivity
+ * - create_task              → canCreateActivity
+ * - assign_task              → canChangeResponsible
+ * - create_client            → canCreateClient
+ * - onboard_client           → canCreateClient AND canCreateActivity
+ * - find_duplicates          → canViewClients OR canViewActivities
+ * - merge_duplicate_clients  → canDeleteClient
+ * - merge_duplicate_activities → canDeleteActivity
  */
 export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
   const activitiesCaps = resolveActivitiesCapabilities(user);
@@ -325,6 +360,16 @@ export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
   if (clientsCaps.canCreateClient) tools.create_client = create_client;
   if (clientsCaps.canCreateClient && activitiesCaps.canCreateActivity) {
     tools.onboard_client = onboard_client;
+  }
+  // Maintenance: everyone can scan; merging is destructive → delete capability.
+  if (clientsCaps.canViewClients || activitiesCaps.canViewActivities) {
+    tools.find_duplicates = find_duplicates;
+  }
+  if (clientsCaps.canDeleteClient) {
+    tools.merge_duplicate_clients = merge_duplicate_clients;
+  }
+  if (activitiesCaps.canDeleteActivity) {
+    tools.merge_duplicate_activities = merge_duplicate_activities;
   }
   return tools;
 }
