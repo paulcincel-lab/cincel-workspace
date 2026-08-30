@@ -9,12 +9,13 @@ import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/au
 import type { Task, TaskStatus, TaskHistoryItem, WorkflowType } from "@/lib/types/task";
 import { presaleTasks } from "@/lib/data/presale";
 
-import PresaleRow from "./PresaleRow";
+import { buildPresaleColumns } from "./PresaleRow";
 import TaskDrawer from "./TaskDrawer";
 import NewTaskModal from "./NewTaskModal";
 import NewProjectTemplateModal from "./NewProjectTemplateModal";
 import GroupSection from "@/components/ui/GroupSection";
 import ExportMenu from "@/components/ui/ExportMenu";
+import { DataTable } from "@/components/ui/DataTable";
 import { presaleTemplate } from "@/lib/templates/presale";
 import { presalePhaseOptions } from "@/lib/templates/phase-options";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
@@ -355,6 +356,40 @@ export default function PresaleTable({
     archiveView,
   ]);
 
+  const columns = useMemo(
+    () =>
+      buildPresaleColumns({
+        phaseOptions,
+        teamMembers: availableTeamMembers,
+        availableProjects: activeProjects,
+        canChangeResponsible: activitiesCapabilities.canChangeResponsible,
+        canReorderPhases: activitiesCapabilities.canReorderPhases,
+        canDeleteActivity: activitiesCapabilities.canDeleteActivity,
+        getCanChangeStatus: (task) =>
+          canChangeActivityStatus({ capabilities: activitiesCapabilities, task, viewerName }),
+        onSave: (updatedTask) => {
+          setTasks((current) =>
+            current.map((currentTask) =>
+              currentTask.id === updatedTask.id ? updatedTask : currentTask
+            )
+          );
+        },
+        onOpenDetail: (nextTask) => setSelectedTask(nextTask),
+        onDelete: (taskId) => {
+          setTasks((current) => current.filter((currentTask) => currentTask.id !== taskId));
+
+          setSelectedTask((current) => {
+            if (!current) {
+              return null;
+            }
+
+            return current.id === taskId ? null : current;
+          });
+        },
+      }),
+    [phaseOptions, activeProjects, activitiesCapabilities, viewerName]
+  );
+
   const groupedTasks = useMemo(() => {
     const groups = filteredTasks.reduce<Record<string, Task[]>>((acc, task) => {
       const key = task.project || "Sin proyecto";
@@ -691,67 +726,13 @@ export default function PresaleTable({
               headerClassName={`${tone.headerClassName} rounded-t-xl border border-slate-200 border-b-0`}
               titleClassName={`${tone.titleClassName} inline-flex rounded-lg px-3 py-1`}
             >
-              <div className="overflow-x-auto rounded-b-xl border border-slate-200">
-                <table className="w-full min-w-[1800px] text-black">
-                <thead className="bg-slate-50 border-b">
-                  <tr className="text-left text-sm text-black">
-                    <th className="px-4 py-3 w-[7%]">Proyecto</th>
-                    <th className="px-4 py-3 w-[6%]">Fase</th>
-                    <th className="px-4 py-3 w-[23%]">Descripción</th>
-                    <th className="px-4 py-3 w-[14%]">Seguimiento</th>
-                    <th className="px-4 py-3 w-[12%]">Responsable</th>
-                    <th className="px-4 py-3 w-[12%]">Equipo</th>
-                    <th className="px-4 py-3 w-[11%] min-w-[150px] whitespace-nowrap">Estatus</th>
-                    <th className="px-4 py-3 w-[12%] min-w-[165px]">
-                      <span className="block leading-none">Compromiso</span>
-                      <span className="mt-1 block text-[11px] font-medium normal-case text-slate-600">(no mover fecha)</span>
-                    </th>
-                    <th className="px-4 py-3 w-[13%] min-w-[180px] whitespace-nowrap">Próxima revisión</th>
-                    <th className="px-4 py-3 w-[12%] min-w-[165px] whitespace-nowrap">Fecha entrega</th>
-                    <th className="px-4 py-3">Fecha actualizada</th>
-                    <th className="px-4 py-3">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                    {projectTasks.map((task) => (
-                      <PresaleRow
-                        key={task.id}
-                        task={task}
-                        phaseOptions={phaseOptions}
-                        teamMembers={availableTeamMembers}
-                        canChangeResponsible={activitiesCapabilities.canChangeResponsible}
-                        canReorderPhases={activitiesCapabilities.canReorderPhases}
-                        canDeleteActivity={activitiesCapabilities.canDeleteActivity}
-                        canChangeStatus={canChangeActivityStatus({
-                          capabilities: activitiesCapabilities,
-                          task,
-                          viewerName,
-                        })}
-                        onSave={(updatedTask) => {
-                          setTasks((current) =>
-                            current.map((currentTask) =>
-                              currentTask.id === updatedTask.id ? updatedTask : currentTask
-                            )
-                          );
-                        }}
-                        onOpenDetail={(nextTask) => setSelectedTask(nextTask)}
-                        onDelete={(taskId) => {
-                          setTasks((current) => current.filter((currentTask) => currentTask.id !== taskId));
-
-                          setSelectedTask((current) => {
-                            if (!current) {
-                              return null;
-                            }
-
-                            return current.id === taskId ? null : current;
-                          });
-                        }}
-                        availableProjects={activeProjects}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={columns}
+                data={projectTasks}
+                getRowId={(task) => String(task.id)}
+                rowClassName={(task) => (task.archived ? "bg-slate-50 opacity-80" : undefined)}
+                tableClassName="min-w-[1800px] text-black"
+              />
 
               <div className="px-4 pb-4 pt-2">
                 <button

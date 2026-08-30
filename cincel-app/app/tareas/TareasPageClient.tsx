@@ -8,6 +8,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/ui/Avatar";
 import ExportMenu from "@/components/ui/ExportMenu";
 import InlineEditableField from "@/components/ui/InlineEditableField";
+import { DataTable } from "@/components/ui/DataTable";
+import type { ColumnDef } from "@tanstack/react-table";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
@@ -192,24 +194,6 @@ export default function TareasPage({
   }, [authenticatedUser]);
 
   const viewerName = authenticatedUser?.member.name || "";
-
-  const toggleSort = (field: "etapa" | "compromiso" | "estatus") => {
-    if (sortBy === field) {
-      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-
-    setSortBy(field);
-    setSortDirection("asc");
-  };
-
-  const getSortLabel = (field: "etapa" | "compromiso" | "estatus") => {
-    if (sortBy !== field) {
-      return "";
-    }
-
-    return sortDirection === "asc" ? "(asc)" : "(desc)";
-  };
 
   function getTasksForWorkflow(workflow: WorkflowType): Task[] {
     if (workflow === "Presale") return presaleTasksState;
@@ -450,6 +434,176 @@ export default function TareasPage({
     ];
   }, []);
 
+  const unifiedColumns = useMemo<ColumnDef<(typeof unifiedRows)[number], unknown>[]>(() => {
+    return [
+      {
+        id: "stage",
+        accessorFn: (row) => row.stageTitle,
+        header: "Etapa",
+        cell: ({ row }) => (
+          <span className={`inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium ${stageBadgeClass(row.original.stageTitle)}`}>
+            {row.original.stageTitle}
+          </span>
+        ),
+      },
+      {
+        id: "phase",
+        accessorFn: (row) => row.task.phase,
+        header: "Fase",
+        cell: ({ row }) => row.original.task.phase,
+      },
+      {
+        id: "description",
+        accessorFn: (row) => row.task.description,
+        header: "Actividad",
+        cell: ({ row }) => <span className="font-medium">{row.original.task.description}</span>,
+      },
+      {
+        id: "manager",
+        accessorFn: (row) => row.task.manager || "Sin responsable",
+        header: "Responsable",
+        cell: ({ row }) => {
+          const { workflow, task } = row.original;
+          return (
+            <div className="flex items-center gap-2">
+              <Avatar name={task.manager || "Sin responsable"} showName={false} />
+              {activitiesCapabilities.canChangeResponsible ? (
+                <select
+                  value={task.manager || "Sin responsable"}
+                  onChange={(event) =>
+                    updateTaskInline(workflow, task.id, {
+                      manager: event.target.value,
+                    })
+                  }
+                  className="rounded-xl border border-transparent bg-transparent px-2 py-1 text-sm text-slate-800 focus:border-slate-200 focus:bg-white"
+                  aria-label={`Responsable de ${task.description}`}
+                >
+                  {TEAM_MEMBERS.map((member) => (
+                    <option key={`manager-${task.id}-${member}`} value={member}>
+                      {member}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="px-2 py-1 text-sm text-slate-800">{task.manager || "Sin responsable"}</span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "reviewDate",
+        accessorFn: (row) => row.task.reviewDate || "",
+        header: "Próxima revisión",
+        cell: ({ row }) => {
+          const { workflow, task } = row.original;
+          return (
+            <InlineEditableField
+              value={task.reviewDate || ""}
+              onCommit={(value) =>
+                updateTaskInline(workflow, task.id, {
+                  reviewDate: value,
+                })
+              }
+              renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
+              renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
+                <input
+                  autoFocus
+                  type="date"
+                  value={value}
+                  onChange={(event) => onChange(event.target.value)}
+                  onBlur={onBlur}
+                  onKeyDown={onKeyDown}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  aria-label={`Próxima revisión de ${task.description}`}
+                />
+              )}
+            />
+          );
+        },
+      },
+      {
+        id: "deliveryDate",
+        accessorFn: (row) => getDeliveryDate(row.task),
+        header: "Fecha de entrega",
+        cell: ({ row }) => {
+          const { workflow, task } = row.original;
+          return (
+            <InlineEditableField
+              value={getDeliveryDate(task)}
+              onCommit={(value) =>
+                updateTaskInline(workflow, task.id, {
+                  deliveryDate: value,
+                  commitmentDate: value,
+                })
+              }
+              renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
+              renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
+                <input
+                  autoFocus
+                  type="date"
+                  value={value}
+                  onChange={(event) => onChange(event.target.value)}
+                  onBlur={onBlur}
+                  onKeyDown={onKeyDown}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  aria-label={`Fecha de entrega de ${task.description}`}
+                />
+              )}
+            />
+          );
+        },
+      },
+      {
+        id: "status",
+        accessorFn: (row) => row.task.status,
+        header: "Estatus",
+        cell: ({ row }) => {
+          const { workflow, task } = row.original;
+          return canChangeActivityStatus({
+            capabilities: activitiesCapabilities,
+            task,
+            viewerName,
+          }) ? (
+            <select
+              value={task.status}
+              onChange={(event) =>
+                updateTaskInline(workflow, task.id, {
+                  status: event.target.value as TaskStatus,
+                })
+              }
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${statusBadgeClass(task.status)}`}
+            >
+              {TASK_STATUSES.map((status) => (
+                <option key={`status-${task.id}-${status}`} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${statusBadgeClass(task.status)}`}>
+              {task.status}
+            </span>
+          );
+        },
+      },
+      {
+        id: "action",
+        header: "Acción",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <Link
+            href={{ pathname: row.original.stageHref, query: { project: projectFromQuery } }}
+            className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-800 hover:bg-slate-50"
+          >
+            Abrir etapa
+          </Link>
+        ),
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activitiesCapabilities, viewerName, projectFromQuery]);
+
   const exportActivities = async (format: "xlsx" | "pdf") => {
     const { settings } = loadGeneralSettings();
 
@@ -670,177 +824,13 @@ export default function TareasPage({
                 ) : null}
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="min-w-[1120px] w-full bg-white">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-800">
-                    <tr>
-                      <th className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleSort("etapa")}
-                          className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-blue-700"
-                        >
-                          Etapa
-                          <span className="text-[11px] normal-case text-slate-800">{getSortLabel("etapa")}</span>
-                        </button>
-                      </th>
-                      <th className="px-4 py-3">Fase</th>
-                      <th className="px-4 py-3">Actividad</th>
-                      <th className="px-4 py-3">Responsable</th>
-                      <th className="px-4 py-3">Próxima revisión</th>
-                      <th className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleSort("compromiso")}
-                          className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-blue-700"
-                        >
-                          Fecha de entrega
-                          <span className="text-[11px] normal-case text-slate-800">{getSortLabel("compromiso")}</span>
-                        </button>
-                      </th>
-                      <th className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleSort("estatus")}
-                          className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-blue-700"
-                        >
-                          Estatus
-                          <span className="text-[11px] normal-case text-slate-800">{getSortLabel("estatus")}</span>
-                        </button>
-                      </th>
-                      <th className="px-4 py-3">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {unifiedRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-800">
-                          No hay actividades registradas para este proyecto.
-                        </td>
-                      </tr>
-                    ) : (
-                      unifiedRows.map(({ stageTitle, workflow, stageHref, task }) => (
-                        <tr key={`${stageTitle}-${task.id}`} className="border-b border-slate-100 text-sm text-slate-800 hover:bg-slate-50">
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium ${stageBadgeClass(stageTitle)}`}>
-                              {stageTitle}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">{task.phase}</td>
-                          <td className="px-4 py-3 font-medium">{task.description}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <Avatar name={task.manager || "Sin responsable"} showName={false} />
-                              {activitiesCapabilities.canChangeResponsible ? (
-                                <select
-                                  value={task.manager || "Sin responsable"}
-                                  onChange={(event) =>
-                                    updateTaskInline(workflow, task.id, {
-                                      manager: event.target.value,
-                                    })
-                                  }
-                                  className="rounded-xl border border-transparent bg-transparent px-2 py-1 text-sm text-slate-800 focus:border-slate-200 focus:bg-white"
-                                  aria-label={`Responsable de ${task.description}`}
-                                >
-                                  {TEAM_MEMBERS.map((member) => (
-                                    <option key={`manager-${task.id}-${member}`} value={member}>
-                                      {member}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <span className="px-2 py-1 text-sm text-slate-800">{task.manager || "Sin responsable"}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <InlineEditableField
-                              value={task.reviewDate || ""}
-                              onCommit={(value) =>
-                                updateTaskInline(workflow, task.id, {
-                                  reviewDate: value,
-                                })
-                              }
-                              renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
-                              renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                                <input
-                                  autoFocus
-                                  type="date"
-                                  value={value}
-                                  onChange={(event) => onChange(event.target.value)}
-                                  onBlur={onBlur}
-                                  onKeyDown={onKeyDown}
-                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                                  aria-label={`Próxima revisión de ${task.description}`}
-                                />
-                              )}
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <InlineEditableField
-                              value={getDeliveryDate(task)}
-                              onCommit={(value) =>
-                                updateTaskInline(workflow, task.id, {
-                                  deliveryDate: value,
-                                  commitmentDate: value,
-                                })
-                              }
-                              renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
-                              renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                                <input
-                                  autoFocus
-                                  type="date"
-                                  value={value}
-                                  onChange={(event) => onChange(event.target.value)}
-                                  onBlur={onBlur}
-                                  onKeyDown={onKeyDown}
-                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                                  aria-label={`Fecha de entrega de ${task.description}`}
-                                />
-                              )}
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            {canChangeActivityStatus({
-                              capabilities: activitiesCapabilities,
-                              task,
-                              viewerName,
-                            }) ? (
-                              <select
-                                value={task.status}
-                                onChange={(event) =>
-                                  updateTaskInline(workflow, task.id, {
-                                    status: event.target.value as TaskStatus,
-                                  })
-                                }
-                                className={`rounded-full border px-3 py-1 text-xs font-medium ${statusBadgeClass(task.status)}`}
-                              >
-                                {TASK_STATUSES.map((status) => (
-                                  <option key={`status-${task.id}-${status}`} value={status}>
-                                    {status}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${statusBadgeClass(task.status)}`}>
-                                {task.status}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Link
-                              href={{ pathname: stageHref, query: { project: projectFromQuery } }}
-                              className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-800 hover:bg-slate-50"
-                            >
-                              Abrir etapa
-                            </Link>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={unifiedColumns}
+                data={unifiedRows}
+                getRowId={(row) => `${row.stageTitle}-${row.task.id}`}
+                tableClassName="min-w-[1120px] bg-white"
+                emptyMessage="No hay actividades registradas para este proyecto."
+              />
             </div>
           ) : null}
 
