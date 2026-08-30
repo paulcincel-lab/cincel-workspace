@@ -11,6 +11,19 @@
 
 export type TeamAvailability = string;
 
+/**
+ * PII-free credential status, derived server-side from `core.auth_credentials`.
+ * Never carries a password hash — see `setTeamMemberCredentialAction` in
+ * `lib/actions/team-actions.ts` for the write path.
+ */
+export type TeamMemberAuthStatus = {
+  authEnabled: boolean;
+  hasPasswordHash: boolean;
+  mustChangePassword: boolean;
+  passwordUpdatedAt: string | null;
+  lastLoginAt: string | null;
+};
+
 export type TeamMember = {
   id: number;
   name: string;
@@ -35,13 +48,7 @@ export type TeamMember = {
   capacity: number;
   availability: TeamAvailability;
   active: boolean;
-  auth?: {
-    passwordHash: string;
-    authEnabled: boolean;
-    mustChangePassword?: boolean;
-    passwordUpdatedAt: string | null;
-    lastLoginAt: string | null;
-  };
+  authStatus?: TeamMemberAuthStatus;
 };
 
 const EMPTY_EMERGENCY_CONTACT = { name: "", relation: "", phone: "", address: "" };
@@ -86,13 +93,6 @@ export const teamMembers: TeamMember[] = [
     capacity: 8,
     availability: "Disponible",
     active: true,
-    auth: {
-      passwordHash: "f12f16d3",
-      authEnabled: true,
-      mustChangePassword: true,
-      passwordUpdatedAt: null,
-      lastLoginAt: null,
-    },
   },
   {
     id: 3,

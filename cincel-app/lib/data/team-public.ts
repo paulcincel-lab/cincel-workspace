@@ -10,6 +10,8 @@
  * /api/team/sensitive/[id] (see app/api/team/sensitive/[id]/route.ts).
  */
 
+import type { TeamMemberAuthStatus } from "@/lib/data/team";
+
 export type TeamMemberPublic = {
   id: number;
   name: string;
@@ -20,13 +22,7 @@ export type TeamMemberPublic = {
   active: boolean;
   institutionalEmail: string;
   phone: string;
-  auth?: {
-    passwordHash: string;
-    authEnabled: boolean;
-    mustChangePassword?: boolean;
-    passwordUpdatedAt: string | null;
-    lastLoginAt: string | null;
-  };
+  authStatus?: TeamMemberAuthStatus;
 };
 
 export const teamMembersPublic: TeamMemberPublic[] = [
@@ -53,16 +49,6 @@ export const teamMembersPublic: TeamMemberPublic[] = [
     active: true,
     institutionalEmail: "paul@cincel.mx",
     phone: "+52 646 222 3344",
-    auth: {
-      // FNV-1a hash of "Temporal123" (see simpleHash in lib/auth/auth-service.ts).
-      // TEMPORARY test credential — do not use in a real production dataset.
-      passwordHash: "7ea376fd",
-      authEnabled: true,
-      // TEMPORARY: forced first-access password change disabled for QA convenience.
-      mustChangePassword: false,
-      passwordUpdatedAt: "2026-01-01T00:00:00.000Z",
-      lastLoginAt: null,
-    },
   },
   {
     id: 3,

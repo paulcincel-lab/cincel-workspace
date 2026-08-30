@@ -16,18 +16,6 @@ type EmergencyContact = {
   address: string;
 };
 
-/**
- * Legacy `auth` jsonb blob. Retained through Phase 2 for compatibility; Phase 3
- * moves credentials into the dedicated `core.auth_credentials` table.
- */
-type LegacyAuthBlock = {
-  passwordHash: string;
-  authEnabled: boolean;
-  mustChangePassword?: boolean;
-  passwordUpdatedAt: string | null;
-  lastLoginAt: string | null;
-};
-
 export const teamMembers = core.table("team_members", {
   id: uuid("id").primaryKey().defaultRandom(),
   legacyId: bigint("legacy_id", { mode: "number" }).unique(),
@@ -48,6 +36,5 @@ export const teamMembers = core.table("team_members", {
   capacity: integer("capacity").notNull().default(0),
   availability: text("availability"),
   active: boolean("active").notNull().default(true),
-  auth: jsonb("auth").$type<LegacyAuthBlock>(),
   ...timestamps,
 }, (t) => [index("idx_team_members_deleted_at").on(t.deletedAt)]);

@@ -53,9 +53,9 @@ function makeUser(role: SystemAccessRole): AuthenticatedUser {
     capacity: 8,
     availability: "Disponible",
     active: true,
-    auth: {
-      passwordHash: "abc",
+    authStatus: {
       authEnabled: true,
+      hasPasswordHash: true,
       mustChangePassword: false,
       passwordUpdatedAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),

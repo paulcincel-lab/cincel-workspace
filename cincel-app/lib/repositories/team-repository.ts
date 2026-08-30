@@ -12,6 +12,7 @@ import {
   fetchTeamMembersAction,
   fetchTeamMembersPublicAction,
   saveTeamMembersAction,
+  setTeamMemberCredentialAction,
   type TeamMemberPublicRow,
 } from "@/lib/actions/team-actions";
 
@@ -32,4 +33,11 @@ export async function fetchTeamMembersPublic(): Promise<TeamMemberPublicRow[]> {
 
 export async function saveTeamMembers(members: TeamMember[]): Promise<void> {
   await saveTeamMembersAction(members);
+}
+
+export async function setTeamMemberCredential(
+  legacyId: number,
+  options: { enableAccess: boolean; temporaryPassword?: string }
+): Promise<void> {
+  await setTeamMemberCredentialAction(legacyId, options);
 }

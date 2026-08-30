@@ -14,7 +14,7 @@ import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProject
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { MemberProfileModal } from "@/components/equipo/MemberProfileModal";
 import type { AccessPreviewState, MemberDraft, TeamMemberWithWorkload } from "@/lib/equipo/types";
-import { getCollaboratorAccessState, getCurrentAuthenticatedUser, hashPassword, normalizeEmail } from "@/lib/auth/auth-service";
+import { getCollaboratorAccessState, getCurrentAuthenticatedUser, normalizeEmail } from "@/lib/auth/auth-service";
 import { resolveTeamCapabilities } from "@/lib/auth/permissions";
 import { type TeamAvailability, type TeamMember } from "@/lib/data/team";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, normalizeSystemAccessRole, type SystemAccessRole } from "@/lib/data/roles";
@@ -25,7 +25,7 @@ import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers } from "@/lib/repositories/team-repository";
+import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers, setTeamMemberCredential } from "@/lib/repositories/team-repository";
 import { getProjectsSnapshot, fetchProjects } from "@/lib/repositories/projects-repository";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
@@ -665,10 +665,13 @@ export default function EquipoPageClient({
     const tempPassword = draft.temporaryPassword.trim();
     const tempPasswordConfirmation = draft.temporaryPasswordConfirmation.trim();
     const existingMember = editingId === null ? null : members.find((member) => member.id === editingId) ?? null;
-    const existingAuth = existingMember?.auth ?? null;
+    const existingAccessState = existingMember ? getCollaboratorAccessState(existingMember) : null;
     const shouldAssignTemporaryPassword = draft.systemAccessEnabled && (
-      editingId === null || !existingAuth?.passwordHash || Boolean(tempPassword) || Boolean(tempPasswordConfirmation)
+      editingId === null || !existingAccessState?.hasPasswordHash || Boolean(tempPassword) || Boolean(tempPasswordConfirmation)
     );
+    const accessEnabledChanged = existingAccessState
+      ? existingAccessState.hasSystemAccess !== draft.systemAccessEnabled
+      : draft.systemAccessEnabled;
 
     if (!name || !role || !area || draft.capacity < 1) {
       setFormError("Completa nombre, puesto, area y una capacidad valida.");
@@ -729,6 +732,24 @@ export default function EquipoPageClient({
       }
     }
 
+    const persistCredentialChange = async (memberId: number, memberRow: TeamMember) => {
+      try {
+        await saveTeamMembers([memberRow]);
+        await setTeamMemberCredential(memberId, {
+          enableAccess: draft.systemAccessEnabled,
+          temporaryPassword: shouldAssignTemporaryPassword ? tempPassword : undefined,
+        });
+        const refreshed = await fetchTeamMembers();
+        if (refreshed.length > 0) {
+          const normalized = refreshed.map((m) => normalizeTeamMember(m));
+          lastSavedRef.current = normalized;
+          setMembers(normalized);
+        }
+      } catch (err) {
+        if (err instanceof RepositoryError) reportRepositoryError(err);
+      }
+    };
+
     if (editingId === null) {
       const nextId = members.reduce((max, member) => Math.max(max, member.id), 0) + 1;
       const newMember: TeamMember = {
@@ -755,15 +776,6 @@ export default function EquipoPageClient({
         capacity: draft.capacity,
         availability: draft.availability,
         active: true,
-        auth: draft.systemAccessEnabled
-          ? {
-              passwordHash: hashPassword(tempPassword),
-              authEnabled: true,
-              mustChangePassword: true,
-              passwordUpdatedAt: null,
-              lastLoginAt: null,
-            }
-          : undefined,
       };
 
       setMembers((current) => [...current, newMember]);
@@ -773,58 +785,38 @@ export default function EquipoPageClient({
           [nextId]: access,
         }));
       }
+
+      if (teamCapabilities.canChangeCollaboratorAccess && draft.systemAccessEnabled) {
+        void persistCredentialChange(nextId, newMember);
+      }
     } else {
+      const updatedMember: TeamMember = {
+        ...(existingMember as TeamMember),
+        name,
+        birthDate,
+        nationality,
+        phone,
+        institutionalEmail: normalizedInstitutionalEmail,
+        address,
+        maritalStatus,
+        homePhone,
+        personalEmail,
+        curp,
+        rfc,
+        emergencyContact: {
+          name: emergencyContactName,
+          relation: emergencyContactRelation,
+          phone: emergencyContactPhone,
+          address: emergencyContactAddress,
+        },
+        role,
+        area,
+        capacity: draft.capacity,
+        availability: draft.availability,
+      };
+
       setMembers((current) =>
-        current.map((member) =>
-          member.id === editingId
-            ? {
-                ...member,
-                name,
-                birthDate,
-                nationality,
-                phone,
-                institutionalEmail: normalizedInstitutionalEmail,
-                address,
-                maritalStatus,
-                homePhone,
-                personalEmail,
-                curp,
-                rfc,
-                emergencyContact: {
-                  name: emergencyContactName,
-                  relation: emergencyContactRelation,
-                  phone: emergencyContactPhone,
-                  address: emergencyContactAddress,
-                },
-                role,
-                area,
-                capacity: draft.capacity,
-                availability: draft.availability,
-                auth: draft.systemAccessEnabled
-                  ? shouldAssignTemporaryPassword
-                    ? {
-                        passwordHash: hashPassword(tempPassword),
-                        authEnabled: true,
-                        mustChangePassword: true,
-                        passwordUpdatedAt: null,
-                        lastLoginAt: member.auth?.lastLoginAt ?? null,
-                      }
-                    : {
-                        passwordHash: member.auth?.passwordHash ?? "",
-                        authEnabled: true,
-                        mustChangePassword: member.auth?.mustChangePassword ?? false,
-                        passwordUpdatedAt: member.auth?.passwordUpdatedAt ?? null,
-                        lastLoginAt: member.auth?.lastLoginAt ?? null,
-                      }
-                  : member.auth
-                    ? {
-                        ...member.auth,
-                        authEnabled: false,
-                      }
-                    : undefined,
-              }
-            : member
-        )
+        current.map((member) => (member.id === editingId ? updatedMember : member))
       );
 
       if (teamCapabilities.canChangeCollaboratorAccess) {
@@ -832,6 +824,10 @@ export default function EquipoPageClient({
           ...current,
           [editingId]: access,
         }));
+      }
+
+      if (teamCapabilities.canChangeCollaboratorAccess && (accessEnabledChanged || shouldAssignTemporaryPassword)) {
+        void persistCredentialChange(editingId, updatedMember);
       }
     }
 

@@ -45,9 +45,9 @@ describe("getCollaboratorAccessState", () => {
   it("returns 'Sin acceso al sistema' when authEnabled is false", () => {
     const state = getCollaboratorAccessState({
       ...base,
-      auth: {
-        passwordHash: "x",
+      authStatus: {
         authEnabled: false,
+        hasPasswordHash: true,
         mustChangePassword: false,
         passwordUpdatedAt: null,
         lastLoginAt: null,
@@ -60,9 +60,9 @@ describe("getCollaboratorAccessState", () => {
   it("returns 'Pendiente de primer acceso' when mustChangePassword is true", () => {
     const state = getCollaboratorAccessState({
       ...base,
-      auth: {
-        passwordHash: "x",
+      authStatus: {
         authEnabled: true,
+        hasPasswordHash: true,
         mustChangePassword: true,
         passwordUpdatedAt: null,
         lastLoginAt: null,
@@ -71,9 +71,24 @@ describe("getCollaboratorAccessState", () => {
     expect(state.status).toBe("Pendiente de primer acceso");
   });
 
-  it("returns 'Acceso activo' for a configured member with no auth block", () => {
-    const state = getCollaboratorAccessState(base);
+  it("returns 'Acceso activo' for an enabled member with a set password", () => {
+    const state = getCollaboratorAccessState({
+      ...base,
+      authStatus: {
+        authEnabled: true,
+        hasPasswordHash: true,
+        mustChangePassword: false,
+        passwordUpdatedAt: "2026-01-01T00:00:00.000Z",
+        lastLoginAt: null,
+      },
+    });
     expect(state.hasSystemAccess).toBe(true);
     expect(state.status).toBe("Acceso activo");
+  });
+
+  it("returns 'Sin acceso al sistema' for a member with no credential row", () => {
+    const state = getCollaboratorAccessState(base);
+    expect(state.hasSystemAccess).toBe(false);
+    expect(state.status).toBe("Sin acceso al sistema");
   });
 });

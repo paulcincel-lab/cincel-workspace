@@ -62,7 +62,6 @@ async function seedTeam() {
         capacity: m.capacity,
         availability: m.availability || null,
         active: m.active,
-        auth: m.auth ?? null,
       })
       .onConflictDoUpdate({
         target: schema.teamMembers.legacyId,
