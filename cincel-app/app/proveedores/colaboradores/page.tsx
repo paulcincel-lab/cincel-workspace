@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import { DataTable } from "@/components/ui/DataTable";
 import { EditableCell } from "@/components/proveedores/EditableCell";
 import { StarRating } from "@/components/proveedores/StarRating";
 import { PillDropdown } from "@/components/proveedores/PillDropdown";
@@ -450,6 +452,77 @@ export default function ColaboradoresPage() {
     }
   };
 
+  const sortValue = (c: Colaborador, key: ColumnKey): string | number => {
+    switch (key) {
+      case "name": return c.name ?? "";
+      case "role": return c.role ?? "";
+      case "status": return c.status ?? "";
+      case "department": return c.department ?? "";
+      case "contact": return c.contact ?? "";
+      case "email": return c.email ?? "";
+      case "skills": return (c.skills || []).join(", ");
+      case "categories": return (c.categories || []).join(", ");
+      case "seniority": return c.seniority ?? "";
+      case "priceLevel": return c.priceLevel ?? "";
+      case "secondaryContacts": return (c.secondaryContacts || []).join(", ");
+      case "availability": return c.availability ?? "";
+      case "rating": return c.rating ?? 0;
+      case "startDate": return c.startDate ?? "";
+      case "comments": return c.comments ?? "";
+      default: return "";
+    }
+  };
+
+  const columns: ColumnDef<Colaborador, unknown>[] = [
+    ...columnOrder.map((key): ColumnDef<Colaborador, unknown> => ({
+      id: key,
+      accessorFn: (row) => sortValue(row, key),
+      header: () => (
+        <div
+          draggable
+          onDragStart={() => setDraggedColumn(key)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => {
+            if (draggedColumn) reorderColumn(draggedColumn, key);
+            setDraggedColumn(null);
+          }}
+          onDragEnd={() => setDraggedColumn(null)}
+          className={`cursor-move ${draggedColumn === key ? "text-blue-600" : ""}`}
+          title="Arrastra para reordenar"
+        >
+          {columnLabel(key)}
+        </div>
+      ),
+      cell: ({ row }) => <div className={columnMinWidth[key]}>{renderCell(row.original, key)}</div>,
+    })),
+    {
+      id: "actions",
+      header: () => null,
+      enableSorting: false,
+      cell: ({ row }) => {
+        const c = row.original;
+        return deletingId === c.id ? (
+          <div className="flex items-center gap-1 justify-end">
+            <button
+              onClick={() => deleteColaborador(c.id)}
+              className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 whitespace-nowrap"
+            >Eliminar</button>
+            <button
+              onClick={() => setDeletingId(null)}
+              className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300"
+            >✕</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setDeletingId(c.id)}
+            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition text-base px-1"
+            title="Eliminar colaborador"
+          >🗑</button>
+        );
+      },
+    },
+  ];
+
   const activeFiltersCount = [!!filterRole, !!filterStatus, !!filterAvailability, filterSkills.length > 0, filterMinRating > 0, !!searchTerm, showActiveOnly].filter(Boolean).length;
 
   const filtered = colaboradores.filter((c) => {
@@ -597,71 +670,15 @@ export default function ColaboradoresPage() {
           </div>
 
           {/* Table */}
-          {filtered.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-xl border border-gray-200 mt-4">
-              <p className="text-gray-400">{searchTerm ? "Sin resultados" : "No hay colaboradores"}</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto mt-4">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    {columnOrder.map((colKey) => (
-                      <th
-                        key={colKey}
-                        draggable
-                        onDragStart={() => setDraggedColumn(colKey)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => {
-                          if (draggedColumn) reorderColumn(draggedColumn, colKey);
-                          setDraggedColumn(null);
-                        }}
-                        onDragEnd={() => setDraggedColumn(null)}
-                        className={`px-4 py-3 text-left ${columnMinWidth[colKey]} cursor-move hover:bg-gray-100 transition ${
-                          draggedColumn === colKey ? "bg-blue-100" : ""
-                        }`}
-                        title="Arrastra para reordenar"
-                      >
-                        {columnLabel(colKey)}
-                      </th>
-                    ))}
-                    <th className="px-2 py-3 w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filtered.map((c) => (
-                    <tr key={c.id} className="hover:bg-blue-50/30 transition-colors group">
-                      {columnOrder.map((colKey) => (
-                        <td key={colKey} className={`px-4 py-3 ${columnMinWidth[colKey]}`}>
-                          {renderCell(c, colKey)}
-                        </td>
-                      ))}
-                      <td className="px-2 py-3 text-right">
-                        {deletingId === c.id ? (
-                          <div className="flex items-center gap-1 justify-end">
-                            <button
-                              onClick={() => deleteColaborador(c.id)}
-                              className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 whitespace-nowrap"
-                            >Eliminar</button>
-                            <button
-                              onClick={() => setDeletingId(null)}
-                              className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300"
-                            >✕</button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeletingId(c.id)}
-                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition text-base px-1"
-                            title="Eliminar colaborador"
-                          >🗑</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="mt-4">
+            <DataTable
+              columns={columns}
+              data={filtered}
+              getRowId={(c) => String(c.id)}
+              rowClassName={() => "group"}
+              emptyMessage={searchTerm ? "Sin resultados" : "No hay colaboradores"}
+            />
+          </div>
 
           <p className="text-xs text-gray-400 mt-3">{filtered.length} colaborador{filtered.length !== 1 ? "es" : ""}</p>
         </main>
