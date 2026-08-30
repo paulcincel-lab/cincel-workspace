@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -19,6 +19,7 @@ import { requireCapabilityUser } from "@/lib/auth/session";
 import {
   resolveActivitiesCapabilities,
   resolveClientsCapabilities,
+  resolveProjectsCapabilities,
 } from "@/lib/auth/permissions";
 
 function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
@@ -383,4 +384,92 @@ export async function mergeDuplicateActivitiesAction(input: {
     merged: loserIds.length,
     repointedHistory,
   };
+}
+
+// ── Discard a project + its tasks (soft-delete) ────────────────────────────
+
+export type DiscardProjectResult =
+  | { ok: true; project: string; tasksDiscarded: number }
+  | { ok: false; reason: "not_found" | "ambiguous"; candidates: string[] };
+
+/**
+ * Soft-delete a project and every non-deleted task attached to it (by
+ * project_id, with a name-snapshot fallback). Nothing is hard-deleted — the
+ * rows keep their history and can be restored by clearing `deleted_at`.
+ * Requires `canDeleteProject` (Administrador / Dirección). Use for cleaning up
+ * test / seeding projects.
+ */
+export async function discardProjectViaAssistantAction(input: {
+  projectName: string;
+}): Promise<DiscardProjectResult> {
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canDeleteProject) {
+    throw new Error("FORBIDDEN: projects delete");
+  }
+
+  const name = input.projectName.trim();
+  const matches = await db
+    .select({ id: projects.id, legacyId: projects.legacyId, name: projects.name })
+    .from(projects)
+    .where(and(sql`lower(${projects.name}) = lower(${name})`, isNull(projects.deletedAt)));
+
+  if (matches.length === 0) return { ok: false, reason: "not_found", candidates: [] };
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      reason: "ambiguous",
+      candidates: matches.map((m) => `${m.name} (#${m.legacyId ?? "?"})`),
+    };
+  }
+
+  const project = matches[0];
+  const now = new Date();
+  const requester = user.member.name || user.email || "Asistente";
+
+  let tasksDiscarded = 0;
+  await db.transaction(async (tx) => {
+    const affected = await tx
+      .update(activities)
+      .set({ deletedAt: now })
+      .where(
+        and(
+          isNull(activities.deletedAt),
+          or(
+            eq(activities.projectId, project.id),
+            sql`lower(${activities.projectNameSnapshot}) = lower(${project.name})`
+          )
+        )
+      )
+      .returning({ id: activities.id });
+    tasksDiscarded = affected.length;
+
+    if (affected.length > 0) {
+      await tx.insert(activityHistory).values(
+        affected.map((a) => ({
+          activityId: a.id,
+          authorNameSnapshot: requester,
+          eventDate: now.toISOString().slice(0, 10),
+          comment: `Tarea descartada junto con el proyecto ${project.name} (por ${requester}). Recuperable.`,
+        }))
+      );
+    }
+
+    await tx
+      .update(projects)
+      .set({ deletedAt: now })
+      .where(eq(projects.id, project.id));
+  });
+
+  revalidatePath("/proyectos");
+  revalidatePath("/clientes");
+  for (const route of [
+    "/tareas",
+    "/tareas/presale",
+    "/tareas/diseno",
+    "/tareas/construccion",
+  ]) {
+    revalidatePath(route);
+  }
+
+  return { ok: true, project: project.name, tasksDiscarded };
 }

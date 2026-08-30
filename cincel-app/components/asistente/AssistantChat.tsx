@@ -242,7 +242,8 @@ export function AssistantChat() {
                 part.type === "tool-create_client" ||
                 part.type === "tool-onboard_client" ||
                 part.type === "tool-merge_duplicate_clients" ||
-                part.type === "tool-merge_duplicate_activities"
+                part.type === "tool-merge_duplicate_activities" ||
+                part.type === "tool-discard_project"
               ) {
                 const label =
                   part.type === "tool-create_task"
@@ -253,7 +254,9 @@ export function AssistantChat() {
                         ? "Dando de alta al cliente…"
                         : part.type === "tool-onboard_client"
                           ? "Arrancando cliente y tareas…"
-                          : "Fusionando duplicados…";
+                          : part.type === "tool-discard_project"
+                            ? "Descartando proyecto y tareas…"
+                            : "Fusionando duplicados…";
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
                     <p key={index} className="text-xs text-slate-400">
