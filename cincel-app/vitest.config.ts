@@ -10,6 +10,7 @@ export default defineConfig({
       "tests/unit/**/*.{test,spec}.{ts,tsx}",
       "lib/**/*.{test,spec}.{ts,tsx}",
       "app/**/*.{test,spec}.{ts,tsx}",
+      "components/**/*.{test,spec}.{ts,tsx}",
     ],
     coverage: {
       provider: "v8",
