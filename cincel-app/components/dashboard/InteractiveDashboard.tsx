@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 
 import UnifiedCalendar from "@/components/calendario/UnifiedCalendar";
+import { DataTable } from "@/components/ui/DataTable";
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveCalendarCapabilities, resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
@@ -131,6 +133,97 @@ type DashboardInitialData = {
   projects: ProjectData[];
   activities: { presale: Task[]; diseno: Task[]; operativas: Task[] };
 };
+
+type ProjectAssignmentRow = {
+  id: number;
+  project: string;
+  projectLeader: string;
+  constructionLeader: string;
+  responsables: string;
+  support: string;
+};
+
+const projectAssignmentColumns: ColumnDef<ProjectAssignmentRow, unknown>[] = [
+  {
+    accessorKey: "project",
+    header: "Proyecto",
+    cell: ({ row }) => <span className="font-semibold text-slate-900">{row.original.project}</span>,
+  },
+  { accessorKey: "projectLeader", header: "Lider de proyecto" },
+  { accessorKey: "constructionLeader", header: "Lider de construccion" },
+  { accessorKey: "responsables", header: "Responsable" },
+  { accessorKey: "support", header: "Equipo de apoyo" },
+];
+
+type RiskRow = {
+  name: string;
+  manager: string;
+  stage: string;
+  progress: number;
+  overdue: number;
+  blocked: number;
+  unassigned: number;
+  score: number;
+};
+
+const riskColumns: ColumnDef<RiskRow, unknown>[] = [
+  {
+    accessorKey: "name",
+    header: "Proyecto",
+    cell: ({ row }) => <span className="font-semibold">{row.original.name}</span>,
+  },
+  { accessorKey: "stage", header: "Etapa" },
+  { accessorKey: "manager", header: "Responsable" },
+  {
+    accessorKey: "progress",
+    header: "Avance",
+    cell: ({ row }) => `${row.original.progress}%`,
+  },
+  { accessorKey: "overdue", header: "Vencidas" },
+  { accessorKey: "blocked", header: "Bloqueadas" },
+  {
+    accessorKey: "score",
+    header: "Riesgo",
+    cell: ({ row }) => (
+      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${riskTone(row.original.score)}`}>
+        {row.original.score}
+      </span>
+    ),
+  },
+];
+
+type WorkloadRow = {
+  manager: string;
+  total: number;
+  inProgress: number;
+  blocked: number;
+  overdue: number;
+  saturation: number;
+};
+
+const workloadColumns: ColumnDef<WorkloadRow, unknown>[] = [
+  {
+    accessorKey: "manager",
+    header: "Responsable",
+    cell: ({ row }) => <span className="font-semibold">{row.original.manager}</span>,
+  },
+  { accessorKey: "total", header: "Activas" },
+  { accessorKey: "inProgress", header: "En proceso" },
+  { accessorKey: "overdue", header: "Vencidas" },
+  { accessorKey: "blocked", header: "Bloqueadas" },
+  {
+    accessorKey: "saturation",
+    header: "Saturacion",
+    cell: ({ row }) => (
+      <div>
+        <div className="h-2 w-full rounded-full bg-slate-200">
+          <div className="h-2 rounded-full bg-blue-600" style={{ width: `${row.original.saturation}%` }} />
+        </div>
+        <span className="mt-1 inline-block text-xs font-semibold text-slate-700">{row.original.saturation}%</span>
+      </div>
+    ),
+  },
+];
 
 export default function InteractiveDashboard({
   initialData,
@@ -777,29 +870,13 @@ export default function InteractiveDashboard({
                 No hay proyectos en el contexto de filtros actual.
               </p>
             ) : (
-              <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full min-w-[720px] bg-white">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-700">
-                    <tr>
-                      <th className="px-3 py-2">Proyecto</th>
-                      <th className="px-3 py-2">Lider de proyecto</th>
-                      <th className="px-3 py-2">Lider de construccion</th>
-                      <th className="px-3 py-2">Responsable</th>
-                      <th className="px-3 py-2">Equipo de apoyo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {projectAssignments.map((row) => (
-                      <tr key={`assign-${row.id}`} className="border-b border-slate-100 text-sm text-slate-800 last:border-b-0">
-                        <td className="px-3 py-2 font-semibold text-slate-900">{row.project}</td>
-                        <td className="px-3 py-2">{row.projectLeader}</td>
-                        <td className="px-3 py-2">{row.constructionLeader}</td>
-                        <td className="px-3 py-2">{row.responsables}</td>
-                        <td className="px-3 py-2">{row.support}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="mt-4">
+                <DataTable
+                  columns={projectAssignmentColumns}
+                  data={projectAssignments}
+                  getRowId={(row) => `assign-${row.id}`}
+                  tableClassName="min-w-[720px]"
+                />
               </div>
             )}
           </article>
@@ -944,38 +1021,12 @@ export default function InteractiveDashboard({
             <span className="text-sm text-slate-700">Score calculado por vencidas, bloqueos y tareas sin responsable</span>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px]">
-              <thead className="border-b border-slate-200 text-left text-sm text-slate-800">
-                <tr>
-                  <th className="px-3 py-2">Proyecto</th>
-                  <th className="px-3 py-2">Etapa</th>
-                  <th className="px-3 py-2">Responsable</th>
-                  <th className="px-3 py-2">Avance</th>
-                  <th className="px-3 py-2">Vencidas</th>
-                  <th className="px-3 py-2">Bloqueadas</th>
-                  <th className="px-3 py-2">Riesgo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {riskByProject.map((row) => (
-                  <tr key={row.name} className="border-b border-slate-100 text-sm text-slate-900">
-                    <td className="px-3 py-3 font-semibold">{row.name}</td>
-                    <td className="px-3 py-3">{row.stage}</td>
-                    <td className="px-3 py-3">{row.manager}</td>
-                    <td className="px-3 py-3">{row.progress}%</td>
-                    <td className="px-3 py-3">{row.overdue}</td>
-                    <td className="px-3 py-3">{row.blocked}</td>
-                    <td className="px-3 py-3">
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${riskTone(row.score)}`}>
-                        {row.score}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={riskColumns}
+            data={riskByProject}
+            getRowId={(row) => row.name}
+            tableClassName="min-w-[760px]"
+          />
         </article>
         ) : null}
 
@@ -1006,39 +1057,13 @@ export default function InteractiveDashboard({
         {dashboardCapabilities.sections.showTeamWorkload ? (
           <article className="xl:col-span-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-xl font-semibold text-slate-900">Carga del equipo</h2>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[680px]">
-                <thead className="border-b border-slate-200 text-left text-sm text-slate-800">
-                  <tr>
-                    <th className="px-3 py-2">Responsable</th>
-                    <th className="px-3 py-2">Activas</th>
-                    <th className="px-3 py-2">En proceso</th>
-                    <th className="px-3 py-2">Vencidas</th>
-                    <th className="px-3 py-2">Bloqueadas</th>
-                    <th className="px-3 py-2">Saturacion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {workload.map((item) => (
-                    <tr key={item.manager} className="border-b border-slate-100 text-sm text-slate-900">
-                      <td className="px-3 py-3 font-semibold">{item.manager}</td>
-                      <td className="px-3 py-3">{item.total}</td>
-                      <td className="px-3 py-3">{item.inProgress}</td>
-                      <td className="px-3 py-3">{item.overdue}</td>
-                      <td className="px-3 py-3">{item.blocked}</td>
-                      <td className="px-3 py-3">
-                        <div className="h-2 w-full rounded-full bg-slate-200">
-                          <div
-                            className="h-2 rounded-full bg-blue-600"
-                            style={{ width: `${item.saturation}%` }}
-                          />
-                        </div>
-                        <span className="mt-1 inline-block text-xs font-semibold text-slate-700">{item.saturation}%</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-4">
+              <DataTable
+                columns={workloadColumns}
+                data={workload}
+                getRowId={(row) => row.manager}
+                tableClassName="min-w-[680px]"
+              />
             </div>
           </article>
         ) : null}
