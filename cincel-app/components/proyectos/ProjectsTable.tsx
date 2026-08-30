@@ -4,8 +4,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
 
 import ExportMenu from "@/components/ui/ExportMenu";
+import { DataTable } from "@/components/ui/DataTable";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { fetchClients } from "@/lib/repositories/clients-repository";
@@ -286,6 +288,197 @@ export default function ProjectsTable({
     setRiskFilter("Todos");
   };
 
+  type EnrichedProject = (typeof enrichedProjects)[number];
+
+  const projectColumns = useMemo<ColumnDef<EnrichedProject, unknown>[]>(
+    () => [
+      {
+        id: "project",
+        header: "Proyecto",
+        accessorFn: (project) => project.name,
+        cell: ({ row }) => (
+          <span className="font-semibold text-blue-700">
+            <Link href={projectTasksPath(row.original.name)}>{row.original.name}</Link>
+          </span>
+        ),
+      },
+      {
+        id: "client",
+        header: "Cliente",
+        accessorFn: (project) => project.client.name,
+      },
+      {
+        id: "stage",
+        header: "Etapa",
+        accessorFn: (project) => project.stage,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-1.5">
+            {row.original.stage
+              .split("/")
+              .map((stage) => stage.trim())
+              .filter(Boolean)
+              .map((stage) => (
+                <span
+                  key={`${row.original.id}-${stage}`}
+                  className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700"
+                >
+                  {stage}
+                </span>
+              ))}
+          </div>
+        ),
+      },
+      {
+        id: "designLead",
+        header: "Líder de diseño",
+        accessorFn: (project) => normalizeName(project.coordinator) || "Sin encargado",
+        cell: ({ row }) => {
+          const project = row.original;
+          return projectsCapabilities.canEditProjectGeneral &&
+            inlineEditingCell?.projectId === project.id &&
+            inlineEditingCell.field === "design" ? (
+            <select
+              value={normalizeName(project.coordinator) || "Sin encargado"}
+              onChange={(event) => {
+                updateCoordinator(project.id, event.target.value);
+                setInlineEditingCell(null);
+              }}
+              onBlur={() => setInlineEditingCell(null)}
+              autoFocus
+              className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
+            >
+              <option value="Sin encargado">Sin encargado</option>
+              {getCoordinatorOptions(project).map((member) => (
+                <option key={`table-design-${project.id}-${member}`} value={member}>
+                  {member}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span
+              className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
+              onClick={() => {
+                if (!projectsCapabilities.canEditProjectGeneral) return;
+                setInlineEditingCell({ projectId: project.id, field: "design" });
+              }}
+            >
+              {normalizeName(project.coordinator) || "Sin encargado"}
+            </span>
+          );
+        },
+      },
+      {
+        id: "constructionLead",
+        header: "Líder de construcción",
+        accessorFn: (project) => secondaryCoordinatorByProject[project.id] || "Sin encargado",
+        cell: ({ row }) => {
+          const project = row.original;
+          return projectsCapabilities.canEditProjectGeneral &&
+            inlineEditingCell?.projectId === project.id &&
+            inlineEditingCell.field === "construction" ? (
+            <select
+              value={secondaryCoordinatorByProject[project.id] || "Sin encargado"}
+              onChange={(event) => {
+                setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: event.target.value }));
+                setInlineEditingCell(null);
+              }}
+              onBlur={() => setInlineEditingCell(null)}
+              autoFocus
+              className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
+            >
+              <option value="Sin encargado">Sin encargado</option>
+              {getCoordinatorOptions(project).map((member) => (
+                <option key={`table-construction-${project.id}-${member}`} value={member}>
+                  {member}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span
+              className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
+              onClick={() => {
+                if (!projectsCapabilities.canEditProjectGeneral) return;
+                setInlineEditingCell({ projectId: project.id, field: "construction" });
+              }}
+            >
+              {secondaryCoordinatorByProject[project.id] || "Sin encargado"}
+            </span>
+          );
+        },
+      },
+      {
+        id: "nextDelivery",
+        header: "Proxima entrega",
+        accessorFn: (project) => (project.nextDelivery ? project.nextDelivery.getTime() : Number.POSITIVE_INFINITY),
+        cell: ({ row }) => (
+          <span suppressHydrationWarning>
+            {row.original.nextDelivery ? formatDate(row.original.nextDelivery.toISOString()) : "Sin fecha"}
+          </span>
+        ),
+      },
+      {
+        id: "status",
+        header: "Estado",
+        accessorFn: (project) => (project.active ? "activo" : "archivado"),
+        cell: ({ row }) => {
+          const project = row.original;
+          return (
+            <div className="inline-flex items-center gap-2">
+              <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
+              <select
+                value={project.active ? "activo" : "archivado"}
+                onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
+                disabled={!projectsCapabilities.canArchiveProject}
+                className={`rounded-lg border px-2 py-1 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
+                aria-label={`Estado en tabla de ${project.name}`}
+              >
+                <option value="activo">Proyecto activo</option>
+                <option value="archivado">Proyecto archivado</option>
+              </select>
+            </div>
+          );
+        },
+      },
+      {
+        id: "actions",
+        header: "Acciones",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className="flex gap-2">
+            <Link
+              href={`/proyectos/${row.original.id}/ficha`}
+              className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+            >
+              Ficha
+            </Link>
+            <Link
+              href={projectTasksPath(row.original.name)}
+              className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+            >
+              Actividades
+            </Link>
+            <button
+              onClick={() => openNotesModal(row.original.id)}
+              className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+            >
+              Nota
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [
+      projectsCapabilities,
+      inlineEditingCell,
+      secondaryCoordinatorByProject,
+      setSecondaryCoordinatorByProject,
+      updateCoordinator,
+      updateProjectActive,
+      getCoordinatorOptions,
+    ]
+  );
+
   return (
     <div className="space-y-6">
       {isLoadingData && (
@@ -491,127 +684,14 @@ export default function ProjectsTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-[1100px] w-full">
-          <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-700">
-            <tr>
-              <th className="px-4 py-3">Proyecto</th>
-              <th className="px-4 py-3">Cliente</th>
-              <th className="px-4 py-3">Etapa</th>
-              <th className="px-4 py-3">Líder de diseño</th>
-              <th className="px-4 py-3">Líder de construcción</th>
-              <th className="px-4 py-3">Proxima entrega</th>
-              <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleProjects.map((project) => (
-              <tr key={`table-${project.id}`} className="border-b border-slate-100 text-sm text-slate-800 hover:bg-slate-50">
-                <td className="px-4 py-3 font-semibold text-blue-700">
-                  <Link href={projectTasksPath(project.name)}>{project.name}</Link>
-                </td>
-                <td className="px-4 py-3">{project.client.name}</td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1.5">
-                    {project.stage.split("/").map((stage) => stage.trim()).filter(Boolean).map((stage) => (
-                      <span key={`${project.id}-${stage}`} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700">
-                        {stage}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  {projectsCapabilities.canEditProjectGeneral && inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "design" ? (
-                    <select
-                      value={normalizeName(project.coordinator) || "Sin encargado"}
-                      onChange={(event) => { updateCoordinator(project.id, event.target.value); setInlineEditingCell(null); }}
-                      onBlur={() => setInlineEditingCell(null)}
-                      autoFocus
-                      className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
-                    >
-                      <option value="Sin encargado">Sin encargado</option>
-                      {getCoordinatorOptions(project).map((member) => (
-                        <option key={`table-design-${project.id}-${member}`} value={member}>{member}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span
-                      className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
-                      onClick={() => {
-                        if (!projectsCapabilities.canEditProjectGeneral) return;
-                        setInlineEditingCell({ projectId: project.id, field: "design" });
-                      }}
-                    >
-                      {normalizeName(project.coordinator) || "Sin encargado"}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  {projectsCapabilities.canEditProjectGeneral && inlineEditingCell?.projectId === project.id && inlineEditingCell.field === "construction" ? (
-                    <select
-                      value={secondaryCoordinatorByProject[project.id] || "Sin encargado"}
-                      onChange={(event) => { setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: event.target.value })); setInlineEditingCell(null); }}
-                      onBlur={() => setInlineEditingCell(null)}
-                      autoFocus
-                      className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
-                    >
-                      <option value="Sin encargado">Sin encargado</option>
-                      {getCoordinatorOptions(project).map((member) => (
-                        <option key={`table-construction-${project.id}-${member}`} value={member}>{member}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span
-                      className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
-                      onClick={() => {
-                        if (!projectsCapabilities.canEditProjectGeneral) return;
-                        setInlineEditingCell({ projectId: project.id, field: "construction" });
-                      }}
-                    >
-                      {secondaryCoordinatorByProject[project.id] || "Sin encargado"}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3" suppressHydrationWarning>
-                  {project.nextDelivery ? formatDate(project.nextDelivery.toISOString()) : "Sin fecha"}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="inline-flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
-                    <select
-                      value={project.active ? "activo" : "archivado"}
-                      onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
-                      disabled={!projectsCapabilities.canArchiveProject}
-                      className={`rounded-lg border px-2 py-1 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
-                      aria-label={`Estado en tabla de ${project.name}`}
-                    >
-                      <option value="activo">Proyecto activo</option>
-                      <option value="archivado">Proyecto archivado</option>
-                    </select>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    <Link href={`/proyectos/${project.id}/ficha`} className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                      Ficha
-                    </Link>
-                    <Link href={projectTasksPath(project.name)} className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                      Actividades
-                    </Link>
-                    <button
-                      onClick={() => openNotesModal(project.id)}
-                      className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                    >
-                      Nota
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={projectColumns}
+        data={visibleProjects}
+        getRowId={(project) => `table-${project.id}`}
+        tableClassName="min-w-[1100px]"
+        emptyMessage="No hay proyectos con los filtros actuales."
+        isLoading={isLoadingData && visibleProjects.length === 0}
+      />
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
