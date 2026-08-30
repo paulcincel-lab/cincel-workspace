@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
 import ExportMenu from "@/components/ui/ExportMenu";
+import { DataTable } from "@/components/ui/DataTable";
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { MemberProfileModal } from "@/components/equipo/MemberProfileModal";
@@ -166,18 +168,6 @@ const INACTIVE_COLUMN_LABEL: Record<InactiveColumnKey, string> = {
   acciones: "Acciones",
 };
 
-function getActiveHeaderWidthClass(column: ActiveColumnKey): string {
-  if (column === "order") return "w-[44px] min-w-[44px] max-w-[44px]";
-  if (column === "colaborador") return "min-w-[280px]";
-  return "";
-}
-
-function getInactiveHeaderWidthClass(column: InactiveColumnKey): string {
-  if (column === "order") return "w-[44px] min-w-[44px] max-w-[44px]";
-  if (column === "colaborador") return "min-w-[280px]";
-  return "";
-}
-
 function loadColumnOrder<T extends string>(storageKey: string, defaults: T[]): T[] {
   if (typeof window === "undefined") {
     return defaults;
@@ -206,24 +196,6 @@ function loadColumnOrder<T extends string>(storageKey: string, defaults: T[]): T
   } catch {
     return defaults;
   }
-}
-
-function reorderColumns<T extends string>(columns: T[], source: T, target: T): T[] {
-  if (source === target) {
-    return columns;
-  }
-
-  const sourceIndex = columns.indexOf(source);
-  const targetIndex = columns.indexOf(target);
-
-  if (sourceIndex === -1 || targetIndex === -1) {
-    return columns;
-  }
-
-  const next = [...columns];
-  const [moved] = next.splice(sourceIndex, 1);
-  next.splice(targetIndex, 0, moved);
-  return next;
 }
 
 function buildTimestampLabel(): string {
@@ -370,7 +342,6 @@ export default function EquipoPageClient({
   const [availabilityFilter, setAvailabilityFilter] = useState("Todas");
   const [selectedProfileMemberId, setSelectedProfileMemberId] = useState<number | null>(null);
   const [selectedCoordinatorMemberId, setSelectedCoordinatorMemberId] = useState<number | null>(null);
-  const [draggingMemberId, setDraggingMemberId] = useState<number | null>(null);
   const [activityTasks, setActivityTasks] = useState<Task[]>(() => loadAllActivityTasks());
   const [projectsData, setProjectsData] = useState(() =>
     initialProjects && initialProjects.length > 0 ? initialProjects : loadPersistedProjects()
@@ -378,14 +349,16 @@ export default function EquipoPageClient({
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
   const [systemRoleByMemberId, setSystemRoleByMemberId] = useState<Record<number, SystemAccessRole>>(() => loadSystemRolesMap());
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
-  const [activeColumnOrder, setActiveColumnOrder] = useState<ActiveColumnKey[]>(() =>
+  // Column order is loaded once from the same localStorage key the pre-DataTable
+  // markup used (drag-to-reorder is gone now that DataTable owns header
+  // rendering; sorting replaces it) so any previously saved order still
+  // determines column layout, and export column order stays unchanged.
+  const [activeColumnOrder] = useState<ActiveColumnKey[]>(() =>
     loadColumnOrder(ACTIVE_COLUMN_ORDER_STORAGE_KEY, ACTIVE_COLUMN_DEFAULT_ORDER)
   );
-  const [inactiveColumnOrder, setInactiveColumnOrder] = useState<InactiveColumnKey[]>(() =>
+  const [inactiveColumnOrder] = useState<InactiveColumnKey[]>(() =>
     loadColumnOrder(INACTIVE_COLUMN_ORDER_STORAGE_KEY, INACTIVE_COLUMN_DEFAULT_ORDER)
   );
-  const [draggingActiveColumn, setDraggingActiveColumn] = useState<ActiveColumnKey | null>(null);
-  const [draggingInactiveColumn, setDraggingInactiveColumn] = useState<InactiveColumnKey | null>(null);
 
   // Diffed autosave: only members that actually changed since the last
   // persisted state are upserted. `lastSavedRef` is seeded from the initial
@@ -442,19 +415,6 @@ export default function EquipoPageClient({
     };
 
     void hydrate();
-  }, []);
-
-  useEffect(() => {
-    const releaseDrag = () => {
-      setDraggingActiveColumn(null);
-      setDraggingInactiveColumn(null);
-    };
-
-    window.addEventListener("mouseup", releaseDrag);
-
-    return () => {
-      window.removeEventListener("mouseup", releaseDrag);
-    };
   }, []);
 
   useEffect(() => {
@@ -941,27 +901,6 @@ export default function EquipoPageClient({
     return resolveSystemRole(member) === SYSTEM_ADMIN_ROLE;
   };
 
-  const reorderMembers = (sourceId: number, targetId: number) => {
-    if (sourceId === targetId) {
-      return;
-    }
-
-    setMembers((current) => {
-      const sourceIndex = current.findIndex((member) => member.id === sourceId);
-      const targetIndex = current.findIndex((member) => member.id === targetId);
-
-      if (sourceIndex === -1 || targetIndex === -1) {
-        return current;
-      }
-
-      const next = [...current];
-      const [moved] = next.splice(sourceIndex, 1);
-      next.splice(targetIndex, 0, moved);
-
-      return next;
-    });
-  };
-
   const updateSystemRole = (memberId: number, nextRole: SystemAccessRole) => {
     if (!teamCapabilities.canChangeCollaboratorAccess) {
       return;
@@ -998,44 +937,6 @@ export default function EquipoPageClient({
     setSelectedProfileMemberId((current) => (current === memberId ? null : current));
     setSelectedCoordinatorMemberId((current) => (current === memberId ? null : current));
     setEditingId((current) => (current === memberId ? null : current));
-  };
-
-  const onDropActiveColumn = (target: ActiveColumnKey, sourceFromEvent?: string) => {
-    const source = (sourceFromEvent as ActiveColumnKey | undefined) ?? draggingActiveColumn;
-    if (!source) {
-      return;
-    }
-
-    setActiveColumnOrder((current) => reorderColumns(current, source, target));
-    setDraggingActiveColumn(null);
-  };
-
-  const onDropInactiveColumn = (target: InactiveColumnKey, sourceFromEvent?: string) => {
-    const source = (sourceFromEvent as InactiveColumnKey | undefined) ?? draggingInactiveColumn;
-    if (!source) {
-      return;
-    }
-
-    setInactiveColumnOrder((current) => reorderColumns(current, source, target));
-    setDraggingInactiveColumn(null);
-  };
-
-  const onMouseEnterActiveColumn = (target: ActiveColumnKey) => {
-    if (!draggingActiveColumn || draggingActiveColumn === target) {
-      return;
-    }
-
-    setActiveColumnOrder((current) => reorderColumns(current, draggingActiveColumn, target));
-    setDraggingActiveColumn(target);
-  };
-
-  const onMouseEnterInactiveColumn = (target: InactiveColumnKey) => {
-    if (!draggingInactiveColumn || draggingInactiveColumn === target) {
-      return;
-    }
-
-    setInactiveColumnOrder((current) => reorderColumns(current, draggingInactiveColumn, target));
-    setDraggingInactiveColumn(target);
   };
 
   type TeamExportRow = {
@@ -1135,29 +1036,26 @@ export default function EquipoPageClient({
     });
   };
 
+  // Cell content (no <td> — DataTable's <td className="px-4 py-3"> wraps this).
   const renderActiveCell = (member: TeamMemberWithWorkload, column: ActiveColumnKey) => {
     if (column === "order") {
-      return (
-        <td className="w-[44px] min-w-[44px] max-w-[44px] px-2 py-3 text-center text-xs font-medium text-slate-600">
-          ...
-        </td>
-      );
+      return <span className="block w-[28px] text-center text-xs font-medium text-slate-600">...</span>;
     }
 
     if (column === "colaborador") {
       return (
-        <td className="min-w-[280px] px-4 py-3">
+        <div className="min-w-[240px]">
           <Avatar name={member.name} />
-        </td>
+        </div>
       );
     }
 
     if (column === "institutionalEmail") {
-      return <td className="px-4 py-3 text-sm text-slate-700">{member.institutionalEmail || "-"}</td>;
+      return <span className="text-sm text-slate-700">{member.institutionalEmail || "-"}</span>;
     }
 
     if (column === "puesto") {
-      return <td className="px-4 py-3 text-sm font-medium">{member.role}</td>;
+      return <span className="text-sm font-medium">{member.role}</span>;
     }
 
     if (column === "rol") {
@@ -1165,106 +1063,86 @@ export default function EquipoPageClient({
       const canEditAccess = teamCapabilities.canChangeCollaboratorAccess && !isLocked;
 
       return (
-        <td className="px-4 py-3 text-sm">
-          <select
-            value={resolveSystemRole(member)}
-            onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
-            disabled={!canEditAccess}
-            title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
-          >
-            {systemRoleOptions.map((roleOption) => (
-              <option key={roleOption} value={roleOption}>{roleOption}</option>
-            ))}
-          </select>
-        </td>
+        <select
+          value={resolveSystemRole(member)}
+          onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
+          disabled={!canEditAccess}
+          title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
+          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
+        >
+          {systemRoleOptions.map((roleOption) => (
+            <option key={roleOption} value={roleOption}>{roleOption}</option>
+          ))}
+        </select>
       );
     }
 
     if (column === "area") {
-      return <td className="px-4 py-3 text-sm">{member.area}</td>;
+      return <span className="text-sm">{member.area}</span>;
     }
 
     if (column === "estado") {
-      return (
-        <td className="px-4 py-3">
-          <Badge label={member.active ? "Activo" : "Inactivo"} color={member.active ? "blue" : "gray"} />
-        </td>
-      );
+      return <Badge label={member.active ? "Activo" : "Inactivo"} color={member.active ? "blue" : "gray"} />;
     }
 
     if (column === "disponibilidad") {
-      return (
-        <td className="px-4 py-3">
-          <Badge label={member.availability} color={availabilityBadgeColor(member.availability)} />
-        </td>
-      );
+      return <Badge label={member.availability} color={availabilityBadgeColor(member.availability)} />;
     }
 
     if (column === "liderDiseno") {
-      return (
-        <td className="px-4 py-3">
-          {member.coordinatorProjectsCount === 0 ? (
-            <span className="text-slate-600">0</span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSelectedCoordinatorMemberId(member.id)}
-              className="font-medium text-slate-800 hover:text-blue-700 hover:underline"
-            >
-              {member.coordinatorProjectsCount}
-            </button>
-          )}
-        </td>
+      return member.coordinatorProjectsCount === 0 ? (
+        <span className="text-slate-600">0</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setSelectedCoordinatorMemberId(member.id)}
+          className="font-medium text-slate-800 hover:text-blue-700 hover:underline"
+        >
+          {member.coordinatorProjectsCount}
+        </button>
       );
     }
 
     if (column === "liderConstruccion") {
       return (
-        <td className="px-4 py-3 text-sm text-slate-800" suppressHydrationWarning>
+        <span className="text-sm text-slate-800" suppressHydrationWarning>
           {member.constructionProjectsCount === 0 ? (
             <span className="text-slate-600">0</span>
           ) : (
             <span className="font-medium">{member.constructionProjectsCount}</span>
           )}
-        </td>
+        </span>
       );
     }
 
     if (column === "responsable") {
-      return <td className="px-4 py-3 text-sm">{member.assigned}</td>;
+      return <span className="text-sm">{member.assigned}</span>;
     }
 
     if (column === "soporte") {
-      return <td className="px-4 py-3 text-sm">{member.support}</td>;
+      return <span className="text-sm">{member.support}</span>;
     }
 
     if (column === "carga") {
       return (
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Badge label={member.loadLabel} color={loadBadgeColor(member.occupancy, member.active)} />
-            <span className="text-xs text-slate-800">{member.occupancy}%</span>
-          </div>
-        </td>
+        <div className="flex items-center gap-2">
+          <Badge label={member.loadLabel} color={loadBadgeColor(member.occupancy, member.active)} />
+          <span className="text-xs text-slate-800">{member.occupancy}%</span>
+        </div>
       );
     }
 
     if (column === "proyectos") {
-      return (
-        <td className="px-4 py-3">
-          {member.projects.length === 0 ? (
-            <span className="text-sm text-slate-600">Sin proyectos</span>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {member.projects.map((project) => (
-                <span key={`${member.id}-${project}`} className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
-                  {project}
-                </span>
-              ))}
-            </div>
-          )}
-        </td>
+      return member.projects.length === 0 ? (
+        <span className="text-sm text-slate-600">Sin proyectos</span>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {member.projects.map((project) => (
+            <span key={`${member.id}-${project}`} className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+              {project}
+            </span>
+          ))}
+        </div>
       );
     }
 
@@ -1274,75 +1152,73 @@ export default function EquipoPageClient({
     const canDelete = teamCapabilities.canDeleteCollaborator && !isPrimaryAdmin;
 
     return (
-      <td className="px-4 py-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSelectedProfileMemberId(member.id)}
+          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Abrir ficha
+        </button>
+
+        <button
+          type="button"
+          onClick={() => openEditEditor(member)}
+          disabled={!teamCapabilities.canEditCollaborator}
+          title={teamCapabilities.canEditCollaborator ? "" : "No tienes permiso para editar colaboradores"}
+          className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canEditCollaborator ? "border-slate-200 text-slate-600 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+        >
+          Editar
+        </button>
+
+        <button
+          type="button"
+          onClick={() => toggleMemberActive(member.id)}
+          disabled={!canToggle}
+          title={isProtectedSelf ? "No puedes desactivar tu cuenta administradora principal" : teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
+          className={`rounded-lg border px-3 py-1 text-xs font-medium ${canToggle ? "border-amber-200 text-amber-700 hover:bg-amber-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+        >
+          Desactivar
+        </button>
+
+        {!isPrimaryAdmin ? (
           <button
             type="button"
-            onClick={() => setSelectedProfileMemberId(member.id)}
-            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            onClick={() => {
+              if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
+                deleteMember(member.id);
+              }
+            }}
+            disabled={!canDelete}
+            title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${canDelete ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
-            Abrir ficha
+            Eliminar
           </button>
-
-          <button
-            type="button"
-            onClick={() => openEditEditor(member)}
-            disabled={!teamCapabilities.canEditCollaborator}
-            title={teamCapabilities.canEditCollaborator ? "" : "No tienes permiso para editar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canEditCollaborator ? "border-slate-200 text-slate-600 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-          >
-            Editar
-          </button>
-
-          <button
-            type="button"
-            onClick={() => toggleMemberActive(member.id)}
-            disabled={!canToggle}
-            title={isProtectedSelf ? "No puedes desactivar tu cuenta administradora principal" : teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${canToggle ? "border-amber-200 text-amber-700 hover:bg-amber-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-          >
-            Desactivar
-          </button>
-
-          {!isPrimaryAdmin ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
-                  deleteMember(member.id);
-                }
-              }}
-              disabled={!canDelete}
-              title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
-              className={`rounded-lg border px-3 py-1 text-xs font-medium ${canDelete ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-            >
-              Eliminar
-            </button>
-          ) : null}
-        </div>
-      </td>
+        ) : null}
+      </div>
     );
   };
 
   const renderInactiveCell = (member: TeamMemberWithWorkload, column: InactiveColumnKey) => {
     if (column === "order") {
-      return <td className="w-[44px] min-w-[44px] max-w-[44px] px-2 py-3 text-center text-xs font-medium text-slate-600">-</td>;
+      return <span className="block w-[28px] text-center text-xs font-medium text-slate-600">-</span>;
     }
 
     if (column === "colaborador") {
       return (
-        <td className="min-w-[280px] px-4 py-3">
+        <div className="min-w-[240px]">
           <Avatar name={member.name} />
-        </td>
+        </div>
       );
     }
 
     if (column === "institutionalEmail") {
-      return <td className="px-4 py-3 text-sm text-slate-700">{member.institutionalEmail || "-"}</td>;
+      return <span className="text-sm text-slate-700">{member.institutionalEmail || "-"}</span>;
     }
 
     if (column === "puesto") {
-      return <td className="px-4 py-3 text-sm font-medium">{member.role}</td>;
+      return <span className="text-sm font-medium">{member.role}</span>;
     }
 
     if (column === "rol") {
@@ -1350,79 +1226,65 @@ export default function EquipoPageClient({
       const canEditAccess = teamCapabilities.canChangeCollaboratorAccess && !isLocked;
 
       return (
-        <td className="px-4 py-3 text-sm">
-          <select
-            value={resolveSystemRole(member)}
-            onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
-            disabled={!canEditAccess}
-            title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
-          >
-            {systemRoleOptions.map((roleOption) => (
-              <option key={roleOption} value={roleOption}>{roleOption}</option>
-            ))}
-          </select>
-        </td>
+        <select
+          value={resolveSystemRole(member)}
+          onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
+          disabled={!canEditAccess}
+          title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
+          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
+        >
+          {systemRoleOptions.map((roleOption) => (
+            <option key={roleOption} value={roleOption}>{roleOption}</option>
+          ))}
+        </select>
       );
     }
 
     if (column === "area") {
-      return <td className="px-4 py-3 text-sm">{member.area}</td>;
+      return <span className="text-sm">{member.area}</span>;
     }
 
     if (column === "disponibilidad") {
-      return (
-        <td className="px-4 py-3">
-          <Badge label={member.availability} color={availabilityBadgeColor(member.availability)} />
-        </td>
-      );
+      return <Badge label={member.availability} color={availabilityBadgeColor(member.availability)} />;
     }
 
     if (column === "liderDiseno") {
-      return (
-        <td className="px-4 py-3">
-          {member.coordinatorProjectsCount === 0 ? (
-            <span className="text-sm text-slate-600">0</span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSelectedCoordinatorMemberId(member.id)}
-              className="text-sm font-medium text-slate-800 hover:text-blue-700 hover:underline"
-            >
-              {member.coordinatorProjectsCount}
-            </button>
-          )}
-        </td>
+      return member.coordinatorProjectsCount === 0 ? (
+        <span className="text-sm text-slate-600">0</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setSelectedCoordinatorMemberId(member.id)}
+          className="text-sm font-medium text-slate-800 hover:text-blue-700 hover:underline"
+        >
+          {member.coordinatorProjectsCount}
+        </button>
       );
     }
 
     if (column === "liderConstruccion") {
       return (
-        <td className="px-4 py-3 text-sm text-slate-800" suppressHydrationWarning>
+        <span className="text-sm text-slate-800" suppressHydrationWarning>
           {member.constructionProjectsCount === 0 ? (
             <span className="text-slate-600">0</span>
           ) : (
             <span className="font-medium">{member.constructionProjectsCount}</span>
           )}
-        </td>
+        </span>
       );
     }
 
     if (column === "proyectos") {
-      return (
-        <td className="px-4 py-3">
-          {member.projects.length === 0 ? (
-            <span className="text-sm text-slate-600">Sin proyectos</span>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {member.projects.map((project) => (
-                <span key={`${member.id}-inactive-${project}`} className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
-                  {project}
-                </span>
-              ))}
-            </div>
-          )}
-        </td>
+      return member.projects.length === 0 ? (
+        <span className="text-sm text-slate-600">Sin proyectos</span>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {member.projects.map((project) => (
+            <span key={`${member.id}-inactive-${project}`} className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+              {project}
+            </span>
+          ))}
+        </div>
       );
     }
 
@@ -1432,53 +1294,98 @@ export default function EquipoPageClient({
     const canDelete = teamCapabilities.canDeleteCollaborator && !isPrimaryAdmin;
 
     return (
-      <td className="px-4 py-3">
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setSelectedProfileMemberId(member.id)}
-            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-white"
-          >
-            Abrir ficha
-          </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSelectedProfileMemberId(member.id)}
+          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-white"
+        >
+          Abrir ficha
+        </button>
 
+        <button
+          type="button"
+          onClick={() => openEditEditor(member)}
+          disabled={!teamCapabilities.canEditCollaborator}
+          title={teamCapabilities.canEditCollaborator ? "" : "No tienes permiso para editar colaboradores"}
+          className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canEditCollaborator ? "border-slate-200 text-slate-600 hover:bg-white" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+        >
+          Editar
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleMemberActive(member.id)}
+          disabled={!canToggle}
+          title={isProtectedSelf ? "No puedes desactivar tu cuenta administradora principal" : teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
+          className={`rounded-lg border px-3 py-1 text-xs font-medium ${canToggle ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+        >
+          Reactivar
+        </button>
+        {!isPrimaryAdmin ? (
           <button
             type="button"
-            onClick={() => openEditEditor(member)}
-            disabled={!teamCapabilities.canEditCollaborator}
-            title={teamCapabilities.canEditCollaborator ? "" : "No tienes permiso para editar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canEditCollaborator ? "border-slate-200 text-slate-600 hover:bg-white" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+            onClick={() => {
+              if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
+                deleteMember(member.id);
+              }
+            }}
+            disabled={!canDelete}
+            title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
+            className={`rounded-lg border px-3 py-1 text-xs font-medium ${canDelete ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
-            Editar
+            Eliminar
           </button>
-          <button
-            type="button"
-            onClick={() => toggleMemberActive(member.id)}
-            disabled={!canToggle}
-            title={isProtectedSelf ? "No puedes desactivar tu cuenta administradora principal" : teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${canToggle ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-          >
-            Reactivar
-          </button>
-          {!isPrimaryAdmin ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
-                  deleteMember(member.id);
-                }
-              }}
-              disabled={!canDelete}
-              title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
-              className={`rounded-lg border px-3 py-1 text-xs font-medium ${canDelete ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-            >
-              Eliminar
-            </button>
-          ) : null}
-        </div>
-      </td>
+        ) : null}
+      </div>
     );
   };
+
+  const sortableStringAccessor = (getValue: (member: TeamMemberWithWorkload) => string) => getValue;
+  const sortableNumberAccessor = (getValue: (member: TeamMemberWithWorkload) => number) => getValue;
+
+  const activeColumns: ColumnDef<TeamMemberWithWorkload, unknown>[] = activeColumnOrder.map((column) => {
+    const base = {
+      id: column,
+      header: ACTIVE_COLUMN_LABEL[column],
+      cell: ({ row }: { row: { original: TeamMemberWithWorkload } }) => renderActiveCell(row.original, column),
+    };
+
+    if (column === "colaborador") return { ...base, accessorFn: sortableStringAccessor((m) => m.name) };
+    if (column === "institutionalEmail") return { ...base, accessorFn: sortableStringAccessor((m) => m.institutionalEmail) };
+    if (column === "puesto") return { ...base, accessorFn: sortableStringAccessor((m) => m.role) };
+    if (column === "rol") return { ...base, accessorFn: sortableStringAccessor((m) => resolveSystemRole(m)) };
+    if (column === "area") return { ...base, accessorFn: sortableStringAccessor((m) => m.area) };
+    if (column === "estado") return { ...base, accessorFn: sortableNumberAccessor((m) => (m.active ? 1 : 0)) };
+    if (column === "disponibilidad") return { ...base, accessorFn: sortableStringAccessor((m) => m.availability) };
+    if (column === "liderDiseno") return { ...base, accessorFn: sortableNumberAccessor((m) => m.coordinatorProjectsCount) };
+    if (column === "liderConstruccion") return { ...base, accessorFn: sortableNumberAccessor((m) => m.constructionProjectsCount) };
+    if (column === "responsable") return { ...base, accessorFn: sortableNumberAccessor((m) => m.assigned) };
+    if (column === "soporte") return { ...base, accessorFn: sortableNumberAccessor((m) => m.support) };
+    if (column === "carga") return { ...base, accessorFn: sortableNumberAccessor((m) => m.occupancy) };
+
+    // order, proyectos, acciones have no natural sortable primitive.
+    return { ...base, enableSorting: false };
+  });
+
+  const inactiveColumns: ColumnDef<TeamMemberWithWorkload, unknown>[] = inactiveColumnOrder.map((column) => {
+    const base = {
+      id: column,
+      header: INACTIVE_COLUMN_LABEL[column],
+      cell: ({ row }: { row: { original: TeamMemberWithWorkload } }) => renderInactiveCell(row.original, column),
+    };
+
+    if (column === "colaborador") return { ...base, accessorFn: sortableStringAccessor((m) => m.name) };
+    if (column === "institutionalEmail") return { ...base, accessorFn: sortableStringAccessor((m) => m.institutionalEmail) };
+    if (column === "puesto") return { ...base, accessorFn: sortableStringAccessor((m) => m.role) };
+    if (column === "rol") return { ...base, accessorFn: sortableStringAccessor((m) => resolveSystemRole(m)) };
+    if (column === "area") return { ...base, accessorFn: sortableStringAccessor((m) => m.area) };
+    if (column === "disponibilidad") return { ...base, accessorFn: sortableStringAccessor((m) => m.availability) };
+    if (column === "liderDiseno") return { ...base, accessorFn: sortableNumberAccessor((m) => m.coordinatorProjectsCount) };
+    if (column === "liderConstruccion") return { ...base, accessorFn: sortableNumberAccessor((m) => m.constructionProjectsCount) };
+
+    // order, proyectos, acciones have no natural sortable primitive.
+    return { ...base, enableSorting: false };
+  });
 
   if (!teamCapabilities.canViewTeam) {
     return (
@@ -1614,69 +1521,16 @@ export default function EquipoPageClient({
           </div>
 
           {statusViewFilter === "Activos" ? (
-          <div className="overflow-x-auto p-6">
-            <table className="min-w-[1320px] w-full text-slate-800">
-              <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-800">
-                <tr>
-                  {activeColumnOrder.map((column) => (
-                    <th
-                      key={`active-header-${column}`}
-                      draggable
-                      onMouseDown={() => setDraggingActiveColumn(column)}
-                      onMouseEnter={() => onMouseEnterActiveColumn(column)}
-                      onDragStart={(event) => {
-                        setDraggingActiveColumn(column);
-                        event.dataTransfer.setData("text/plain", column);
-                        event.dataTransfer.effectAllowed = "move";
-                      }}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        onDropActiveColumn(column, event.dataTransfer.getData("text/plain"));
-                      }}
-                      onDragEnd={() => setDraggingActiveColumn(null)}
-                      className={`px-4 py-3 select-none ${getActiveHeaderWidthClass(column)} ${draggingActiveColumn === column ? "opacity-60" : ""}`}
-                      title="Arrastra para mover columna"
-                    >
-                      <span className="whitespace-nowrap">{ACTIVE_COLUMN_LABEL[column]}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              <tbody>
-                {activeVisibleMembers.map((member) => (
-                  <tr
-                    key={member.id}
-                    draggable
-                    onDragStart={() => setDraggingMemberId(member.id)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => {
-                      if (draggingMemberId !== null) {
-                        reorderMembers(draggingMemberId, member.id);
-                      }
-                      setDraggingMemberId(null);
-                    }}
-                    onDragEnd={() => setDraggingMemberId(null)}
-                    className={`border-b border-slate-100 hover:bg-slate-50/70 ${draggingMemberId === member.id ? "opacity-60" : ""}`}
-                  >
-                    {activeColumnOrder.map((column) => (
-                      <Fragment key={`active-cell-${member.id}-${column}`}>
-                        {renderActiveCell(member, column)}
-                      </Fragment>
-                    ))}
-                  </tr>
-                ))}
-
-                {activeVisibleMembers.length === 0 ? (
-                  <tr>
-                    <td colSpan={activeColumnOrder.length} className="px-4 py-10 text-center text-sm text-slate-500">
-                      No hay colaboradores activos con los filtros actuales.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+          <div className="p-6">
+            <DataTable
+              columns={activeColumns}
+              data={activeVisibleMembers}
+              getRowId={(member) => String(member.id)}
+              rowClassName={() => "hover:bg-slate-50/70"}
+              emptyMessage="No hay colaboradores activos con los filtros actuales."
+              tableClassName="min-w-[1320px]"
+              wrapperClassName="border-0 shadow-none"
+            />
           </div>
           ) : null}
 
@@ -1689,56 +1543,15 @@ export default function EquipoPageClient({
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="min-w-[1160px] w-full text-slate-800">
-                <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-800">
-                  <tr>
-                    {inactiveColumnOrder.map((column) => (
-                      <th
-                        key={`inactive-header-${column}`}
-                        draggable
-                        onMouseDown={() => setDraggingInactiveColumn(column)}
-                        onMouseEnter={() => onMouseEnterInactiveColumn(column)}
-                        onDragStart={(event) => {
-                          setDraggingInactiveColumn(column);
-                          event.dataTransfer.setData("text/plain", column);
-                          event.dataTransfer.effectAllowed = "move";
-                        }}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          onDropInactiveColumn(column, event.dataTransfer.getData("text/plain"));
-                        }}
-                        onDragEnd={() => setDraggingInactiveColumn(null)}
-                        className={`px-4 py-3 select-none ${getInactiveHeaderWidthClass(column)} ${draggingInactiveColumn === column ? "opacity-60" : ""}`}
-                        title="Arrastra para mover columna"
-                      >
-                        <span className="whitespace-nowrap">{INACTIVE_COLUMN_LABEL[column]}</span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {inactiveVisibleMembers.map((member) => (
-                    <tr key={member.id} className="border-b border-slate-100 bg-slate-50/60 text-slate-800">
-                      {inactiveColumnOrder.map((column) => (
-                        <Fragment key={`inactive-cell-${member.id}-${column}`}>
-                          {renderInactiveCell(member, column)}
-                        </Fragment>
-                      ))}
-                    </tr>
-                  ))}
-
-                  {inactiveVisibleMembers.length === 0 ? (
-                    <tr>
-                      <td colSpan={inactiveColumnOrder.length} className="px-4 py-8 text-center text-sm text-slate-500">
-                        No hay colaboradores desactivados con los filtros actuales.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={inactiveColumns}
+              data={inactiveVisibleMembers}
+              getRowId={(member) => String(member.id)}
+              rowClassName={() => "bg-slate-50/60"}
+              emptyMessage="No hay colaboradores desactivados con los filtros actuales."
+              tableClassName="min-w-[1160px]"
+              wrapperClassName="rounded-xl"
+            />
           </div>
           ) : null}
 
