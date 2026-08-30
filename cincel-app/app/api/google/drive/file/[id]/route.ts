@@ -5,7 +5,7 @@ import {
   resolveProjectsCapabilities,
   resolveResourcesCapabilities,
 } from "@/lib/auth/permissions";
-import { getDriveClient } from "@/lib/google/client";
+import { isDriveConfigured } from "@/lib/google/client";
 import { getFileMeta } from "@/lib/google/drive-repository";
 
 /**
@@ -32,10 +32,18 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (!getDriveClient()) {
+  if (!isDriveConfigured()) {
     return NextResponse.json(
       { error: "Google Drive is not configured on this server." },
       { status: 503 }
+    );
+  }
+
+  const userEmail = caller.email;
+  if (!userEmail) {
+    return NextResponse.json(
+      { error: "Tu cuenta no tiene un correo institucional configurado." },
+      { status: 403 }
     );
   }
 
@@ -44,7 +52,7 @@ export async function GET(
   }
 
   try {
-    return NextResponse.json(await getFileMeta(id));
+    return NextResponse.json(await getFileMeta(userEmail, id));
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";
     if (message.startsWith("DRIVE_API_404")) {
