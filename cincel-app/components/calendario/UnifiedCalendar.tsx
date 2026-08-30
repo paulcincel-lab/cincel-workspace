@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 
+import { DataTable } from "@/components/ui/DataTable";
 import {
   addDays,
   applyCalendarFilters,
@@ -45,6 +47,32 @@ function typePrefix(type: string): string {
 function monthLabel(date: Date): string {
   return date.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
 }
+
+const UPCOMING_EVENTS_COLUMNS: ColumnDef<CalendarEvent, unknown>[] = [
+  { accessorKey: "date", header: "Fecha" },
+  { accessorKey: "time", header: "Hora" },
+  {
+    accessorKey: "title",
+    header: "Actividad",
+    cell: ({ row }) => (
+      <Link href={row.original.href} className="font-semibold hover:text-blue-700 hover:underline">
+        {row.original.title}
+      </Link>
+    ),
+  },
+  { accessorKey: "project", header: "Proyecto" },
+  { accessorKey: "stageLabel", header: "Etapa" },
+  { accessorKey: "responsible", header: "Responsable" },
+  {
+    accessorKey: "type",
+    header: "Tipo",
+    cell: ({ row }) => (
+      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${typeClassName(row.original.type)}`}>
+        {row.original.type}
+      </span>
+    ),
+  },
+];
 
 function fullDateLabel(key: string): string {
   const date = toDate(key);
@@ -430,42 +458,14 @@ export default function UnifiedCalendar({
 
           <div className="border-t border-slate-200 px-4 py-4 xl:col-span-2">
             <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-600">Proximos eventos</h3>
-            <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[980px] bg-white">
-                <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-700">
-                  <tr>
-                    <th className="px-3 py-2">Fecha</th>
-                    <th className="px-3 py-2">Hora</th>
-                    <th className="px-3 py-2">Actividad</th>
-                    <th className="px-3 py-2">Proyecto</th>
-                    <th className="px-3 py-2">Etapa</th>
-                    <th className="px-3 py-2">Responsable</th>
-                    <th className="px-3 py-2">Tipo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {upcomingEvents.map((entry) => (
-                    <tr key={`upcoming-${entry.id}`} className="border-b border-slate-100 text-sm text-slate-800 last:border-b-0">
-                      <td className="px-3 py-2">{entry.date}</td>
-                      <td className="px-3 py-2">{entry.time}</td>
-                      <td className="px-3 py-2 font-semibold">
-                        <Link href={entry.href} className="hover:text-blue-700 hover:underline">{entry.title}</Link>
-                      </td>
-                      <td className="px-3 py-2">{entry.project}</td>
-                      <td className="px-3 py-2">{entry.stageLabel}</td>
-                      <td className="px-3 py-2">{entry.responsible}</td>
-                      <td className="px-3 py-2">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${typeClassName(entry.type)}`}>{entry.type}</span>
-                      </td>
-                    </tr>
-                  ))}
-                  {upcomingEvents.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-600">No hay eventos en los filtros seleccionados.</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+            <div className="mt-2">
+              <DataTable
+                columns={UPCOMING_EVENTS_COLUMNS}
+                data={upcomingEvents}
+                getRowId={(entry) => entry.id}
+                emptyMessage="No hay eventos en los filtros seleccionados."
+                tableClassName="min-w-[980px]"
+              />
             </div>
           </div>
         </div>
