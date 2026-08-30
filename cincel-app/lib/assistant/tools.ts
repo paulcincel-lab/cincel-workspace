@@ -246,6 +246,58 @@ export const render_chart = tool({
   },
 });
 
+// Semantic tone for the small widgets below — separate from the chart's blue
+// accent. Matches the Alto/Medio/Bajo risk convention used elsewhere in the
+// app (ok=green, warning=amber, critical=red), left for the frontend to map.
+const TONE_ENUM = z.enum(["ok", "warning", "critical"]);
+
+export const render_card = tool({
+  description:
+    "Renderiza una tarjeta con el estado de UNA sola entidad (un proyecto, un cliente, una persona) en la conversación: título, subtítulo opcional, una lista de campo/valor y una insignia de estado opcional. Úsalo para respuestas de una sola entidad en vez de un párrafo — p. ej. '¿cómo va Ensenada?'.",
+  inputSchema: z.object({
+    title: z.string(),
+    subtitle: z.string().optional(),
+    fields: z.array(z.object({ label: z.string(), value: z.string() })).max(10),
+    badge: z.object({ label: z.string(), tone: TONE_ENUM }).optional(),
+  }),
+  // Same no-op pattern as render_chart — the frontend renders from part.input.
+  execute: async () => {
+    return { ok: true } as const;
+  },
+});
+
+export const render_stat_grid = tool({
+  description:
+    "Renderiza una cuadrícula de varias métricas cortas en la conversación — para comparar VARIAS entidades o cifras sin necesitar una tendencia (eso es render_chart). Úsalo p. ej. para 'compara el avance de los proyectos activos' cuando no hace falta un gráfico.",
+  inputSchema: z.object({
+    title: z.string().optional(),
+    stats: z
+      .array(
+        z.object({
+          label: z.string(),
+          value: z.string(),
+          badge: z.object({ label: z.string(), tone: TONE_ENUM }).optional(),
+        })
+      )
+      .max(6),
+  }),
+  execute: async () => {
+    return { ok: true } as const;
+  },
+});
+
+export const render_list = tool({
+  description:
+    "Renderiza una lista corta con título en la conversación — para una enumeración simple (p. ej. qué falta en el checklist de una tarea) que no necesita ser una tabla ni un gráfico.",
+  inputSchema: z.object({
+    title: z.string(),
+    items: z.array(z.string()).min(1).max(20),
+  }),
+  execute: async () => {
+    return { ok: true } as const;
+  },
+});
+
 const WORKFLOW_ENUM = z.enum(["Presale", "Diseño", "Construcción"]);
 
 export const create_task = tool({
@@ -366,6 +418,9 @@ export const ASSISTANT_TOOLS = {
   list_activities_due,
   team_workload_summary,
   render_chart,
+  render_card,
+  render_stat_grid,
+  render_list,
 } as const;
 
 /**
@@ -390,6 +445,9 @@ export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
     list_activities_due,
     team_workload_summary,
     render_chart,
+    render_card,
+    render_stat_grid,
+    render_list,
   };
   if (activitiesCaps.canCreateActivity) tools.create_task = create_task;
   if (activitiesCaps.canChangeResponsible) tools.assign_task = assign_task;
