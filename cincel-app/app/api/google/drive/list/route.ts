@@ -5,7 +5,7 @@ import {
   resolveProjectsCapabilities,
   resolveResourcesCapabilities,
 } from "@/lib/auth/permissions";
-import { getDriveClient, getDriveRootFolderId } from "@/lib/google/client";
+import { isDriveConfigured, getDriveRootFolderId } from "@/lib/google/client";
 import { listFolder, searchFiles } from "@/lib/google/drive-repository";
 
 /**
@@ -32,10 +32,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (!getDriveClient()) {
+  if (!isDriveConfigured()) {
     return NextResponse.json(
       { error: "Google Drive is not configured on this server." },
       { status: 503 }
+    );
+  }
+
+  const userEmail = caller.email;
+  if (!userEmail) {
+    return NextResponse.json(
+      { error: "Tu cuenta no tiene un correo institucional configurado." },
+      { status: 403 }
     );
   }
 
@@ -53,10 +61,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     if (query) {
-      const entries = await searchFiles(query, folderId ?? undefined);
+      const entries = await searchFiles(userEmail, query, folderId ?? undefined);
       return NextResponse.json({ entries, nextPageToken: null });
     }
-    const listing = await listFolder(folderId as string, pageToken);
+    const listing = await listFolder(userEmail, folderId as string, pageToken);
     return NextResponse.json(listing);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";
