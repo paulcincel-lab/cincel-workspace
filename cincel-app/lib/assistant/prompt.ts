@@ -25,6 +25,8 @@ const CREATE_CLIENT_LINE =
   "- Dar de alta un cliente nuevo (create_client). Confirma el nombre y si es Empresa o Particular antes de crearlo.";
 const ONBOARD_CLIENT_LINE =
   "- Arrancar un cliente nuevo con su proyecto y el checklist estándar de tareas del flujo (onboard_client). Confirma el nombre del cliente, el nombre del proyecto y el flujo (Presale por defecto) antes de ejecutarlo; explica que se crearán varias tareas de una vez.";
+const CREATE_RFC_LINE =
+  "- Redactar y registrar una RFC (propuesta técnica o de producto) como un GitHub Issue etiquetado 'rfc' (create_rfc). Pide al usuario el problema y la propuesta si no los dio — no los inventes — y confirma el título antes de crearla; explica que quedará visible para el equipo de desarrollo en GitHub.";
 const MERGE_CLIENTS_LINE =
   "- Fusionar clientes duplicados (merge_duplicate_clients). Es destructivo: reasigna proyectos/contactos/historial y archiva los demás. Confirma con el usuario antes de ejecutarlo.";
 const MERGE_ACTIVITIES_LINE =
@@ -57,6 +59,7 @@ export function buildSystemPrompt({
     toolNames.includes("assign_task") ? ASSIGN_LINE : null,
     toolNames.includes("create_client") ? CREATE_CLIENT_LINE : null,
     toolNames.includes("onboard_client") ? ONBOARD_CLIENT_LINE : null,
+    toolNames.includes("create_rfc") ? CREATE_RFC_LINE : null,
     toolNames.includes("merge_duplicate_clients") ? MERGE_CLIENTS_LINE : null,
     toolNames.includes("merge_duplicate_activities") ? MERGE_ACTIVITIES_LINE : null,
     toolNames.includes("discard_project") ? DISCARD_PROJECT_LINE : null,
