@@ -110,12 +110,12 @@ export function logout(): void {
 // ── Collaborator access state (used by profile / equipo views) ───────────────
 
 export function getCollaboratorAccessState(
-  member: Pick<TeamMemberPublic, "active"> & { auth?: TeamMemberPublic["auth"] }
+  member: Pick<TeamMemberPublic, "active"> & { authStatus?: TeamMemberPublic["authStatus"] }
 ): CollaboratorAccessState {
-  const auth = member.auth;
-  const authEnabled = auth?.authEnabled ?? true;
-  const hasPasswordHash = Boolean(auth?.passwordHash);
-  const mustChangePassword = Boolean(auth?.mustChangePassword);
+  const authStatus = member.authStatus;
+  const authEnabled = authStatus?.authEnabled ?? false;
+  const hasPasswordHash = authStatus?.hasPasswordHash ?? false;
+  const mustChangePassword = authStatus?.mustChangePassword ?? false;
 
   if (!authEnabled) {
     return {
@@ -124,14 +124,16 @@ export function getCollaboratorAccessState(
       hasPasswordHash,
       authEnabled,
       mustChangePassword,
-      passwordUpdatedAt: auth?.passwordUpdatedAt ?? null,
-      lastLoginAt: auth?.lastLoginAt ?? null,
+      passwordUpdatedAt: authStatus?.passwordUpdatedAt ?? null,
+      lastLoginAt: authStatus?.lastLoginAt ?? null,
     };
   }
 
-  const status: CollaboratorAccessStatus = mustChangePassword
-    ? "Pendiente de primer acceso"
-    : "Acceso activo";
+  const status: CollaboratorAccessStatus = !hasPasswordHash
+    ? "Sin contraseña temporal"
+    : mustChangePassword
+      ? "Pendiente de primer acceso"
+      : "Acceso activo";
 
   return {
     hasSystemAccess: true,
@@ -139,28 +141,7 @@ export function getCollaboratorAccessState(
     hasPasswordHash,
     authEnabled,
     mustChangePassword,
-    passwordUpdatedAt: auth?.passwordUpdatedAt ?? null,
-    lastLoginAt: auth?.lastLoginAt ?? null,
+    passwordUpdatedAt: authStatus?.passwordUpdatedAt ?? null,
+    lastLoginAt: authStatus?.lastLoginAt ?? null,
   };
-}
-
-// ── Deprecated shims — team management moves to Server Actions in the team
-//    entity slice. These no longer persist; kept so existing admin panels
-//    compile during the transition. TODO(phase-2 team slice): replace.
-
-export function hashPassword(password: string): string {
-  return password.trim();
-}
-
-export function setCollaboratorPassword(): boolean {
-  return false;
-}
-export function setCollaboratorTemporaryPassword(): boolean {
-  return false;
-}
-export function setCollaboratorSystemAccess(): boolean {
-  return false;
-}
-export function setCollaboratorActiveStatus(): boolean {
-  return false;
 }
