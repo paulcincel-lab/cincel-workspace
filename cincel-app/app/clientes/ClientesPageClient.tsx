@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
+import { DataTable } from "@/components/ui/DataTable";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
@@ -401,6 +403,94 @@ export default function ClientesPageClient({
   const clientsCapabilities = useMemo(() => {
     return resolveClientsCapabilities(authenticatedUser);
   }, [authenticatedUser]);
+
+  const clientColumns = useMemo<ColumnDef<ClientSummary, unknown>[]>(() => {
+    return [
+      {
+        id: "name",
+        accessorKey: "name",
+        header: "Cliente",
+        cell: ({ row }) => <div className="font-medium text-slate-800">{row.original.name}</div>,
+      },
+      {
+        id: "emails",
+        accessorFn: (client) => client.emails.join(", "),
+        header: "Email(s)",
+        cell: ({ row }) => (
+          <span className="text-slate-700">{row.original.emails.join(", ") || "Sin correo"}</span>
+        ),
+      },
+      {
+        id: "phone",
+        accessorKey: "phone",
+        header: "Numero de contacto",
+        cell: ({ row }) => <span className="text-slate-700">{row.original.phone || "Sin numero"}</span>,
+      },
+      {
+        id: "projectTypes",
+        accessorFn: (client) => client.projectTypes.join(" / "),
+        header: "Tipo de proyecto",
+        cell: ({ row }) => <span className="text-slate-700">{row.original.projectTypes.join(" / ")}</span>,
+      },
+      {
+        id: "kind",
+        accessorKey: "kind",
+        header: "Empresa o Particular",
+        cell: ({ row }) => <span className="text-slate-700">{row.original.kind}</span>,
+      },
+      {
+        id: "hasActiveProject",
+        accessorKey: "hasActiveProject",
+        header: "Proyecto activo",
+        cell: ({ row }) => {
+          const client = row.original;
+          return (
+            <select
+              value={client.hasActiveProject ? "si" : "no"}
+              onChange={(event) => updateClientActiveInline(client.id, event.target.value === "si")}
+              disabled={!clientsCapabilities.canEditClient}
+              className="bg-transparent px-1 py-1 text-xs text-slate-700 focus:outline-none"
+              aria-label={`Proyecto activo ${client.name}`}
+            >
+              <option value="si">Si</option>
+              <option value="no">No</option>
+            </select>
+          );
+        },
+      },
+      {
+        id: "projectNames",
+        accessorFn: (client) => client.projectNames.join(" / "),
+        header: "Nombre del proyecto",
+        cell: ({ row }) => <span className="text-slate-700">{row.original.projectNames.join(" / ")}</span>,
+      },
+      {
+        id: "totalProjectsWorked",
+        accessorKey: "totalProjectsWorked",
+        header: "# proyectos con nosotros",
+        cell: ({ row }) => <span className="text-slate-700">{row.original.totalProjectsWorked}</span>,
+      },
+      {
+        id: "firstWorkDate",
+        accessorKey: "firstWorkDate",
+        header: "Fecha de primer trabajo",
+        cell: ({ row }) => <span className="text-slate-700">{row.original.firstWorkDate}</span>,
+      },
+      {
+        id: "ficha",
+        header: () => <div className="text-right">Ficha</div>,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className="text-right">
+            <Link href={`/clientes/${row.original.id}`} className="text-xs font-medium text-blue-700 hover:underline">
+              Ver ficha
+            </Link>
+          </div>
+        ),
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientsCapabilities.canEditClient]);
 
   const clientSummaries = useMemo<ClientSummary[]>(() => {
     const taskMapByProject = new Map<string, Task[]>();
@@ -1059,72 +1149,15 @@ export default function ClientesPageClient({
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                          <th className="pb-3 pr-3 font-semibold">Cliente</th>
-                          <th className="pb-3 pr-3 font-semibold">Email(s)</th>
-                          <th className="pb-3 pr-3 font-semibold">Numero de contacto</th>
-                          <th className="pb-3 pr-3 font-semibold">Tipo de proyecto</th>
-                          <th className="pb-3 pr-3 font-semibold">Empresa o Particular</th>
-                          <th className="pb-3 pr-3 font-semibold">Proyecto activo</th>
-                          <th className="pb-3 pr-3 font-semibold">Nombre del proyecto</th>
-                          <th className="pb-3 pr-3 font-semibold"># proyectos con nosotros</th>
-                          <th className="pb-3 pr-3 font-semibold">Fecha de primer trabajo</th>
-                          <th className="pb-3 pr-3 text-right font-semibold">Ficha</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {activeProjectClients.map((client) => {
-                          const isSelected = selectedClient?.id === client.id;
-
-                          return (
-                            <tr
-                              key={`active-${client.id}`}
-                              onClick={() => setSelectedClientId(client.id)}
-                              className={`cursor-pointer border-b border-slate-100 ${isSelected ? "bg-blue-50/60" : "hover:bg-slate-50"}`}
-                            >
-                              <td className="py-3 pr-3">
-                                <div className="font-medium text-slate-800">{client.name}</div>
-                              </td>
-                              <td className="py-3 pr-3 text-slate-700">{client.emails.join(", ") || "Sin correo"}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.phone || "Sin numero"}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.projectTypes.join(" / ")}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.kind}</td>
-                              <td className="py-3 pr-3">
-                                <select
-                                  value={client.hasActiveProject ? "si" : "no"}
-                                  onChange={(event) => updateClientActiveInline(client.id, event.target.value === "si")}
-                                  disabled={!clientsCapabilities.canEditClient}
-                                  className="bg-transparent px-1 py-1 text-xs text-slate-700 focus:outline-none"
-                                  aria-label={`Proyecto activo ${client.name}`}
-                                >
-                                  <option value="si">Si</option>
-                                  <option value="no">No</option>
-                                </select>
-                              </td>
-                              <td className="py-3 pr-3 text-slate-700">{client.projectNames.join(" / ")}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.totalProjectsWorked}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.firstWorkDate}</td>
-                              <td className="py-3 pr-3 text-right">
-                                <Link href={`/clientes/${client.id}`} className="text-xs font-medium text-blue-700 hover:underline">
-                                  Ver ficha
-                                </Link>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {activeProjectClients.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-center text-sm text-slate-500">
-                      No hay clientes con proyecto activo para estos filtros.
-                    </div>
-                  ) : null}
+                  <DataTable
+                    columns={clientColumns}
+                    data={activeProjectClients}
+                    getRowId={(client) => `active-${client.id}`}
+                    onRowClick={(client) => setSelectedClientId(client.id)}
+                    rowClassName={(client) => (selectedClient?.id === client.id ? "bg-blue-50/60" : undefined)}
+                    emptyMessage="No hay clientes con proyecto activo para estos filtros."
+                    tableClassName="min-w-full"
+                  />
                 </div>
 
                 <div>
@@ -1138,72 +1171,15 @@ export default function ClientesPageClient({
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                          <th className="pb-3 pr-3 font-semibold">Cliente</th>
-                          <th className="pb-3 pr-3 font-semibold">Email(s)</th>
-                          <th className="pb-3 pr-3 font-semibold">Numero de contacto</th>
-                          <th className="pb-3 pr-3 font-semibold">Tipo de proyecto</th>
-                          <th className="pb-3 pr-3 font-semibold">Empresa o Particular</th>
-                          <th className="pb-3 pr-3 font-semibold">Proyecto activo</th>
-                          <th className="pb-3 pr-3 font-semibold">Nombre del proyecto</th>
-                          <th className="pb-3 pr-3 font-semibold"># proyectos con nosotros</th>
-                          <th className="pb-3 pr-3 font-semibold">Fecha de primer trabajo</th>
-                          <th className="pb-3 pr-3 text-right font-semibold">Ficha</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {inactiveProjectClients.map((client) => {
-                          const isSelected = selectedClient?.id === client.id;
-
-                          return (
-                            <tr
-                              key={`inactive-${client.id}`}
-                              onClick={() => setSelectedClientId(client.id)}
-                              className={`cursor-pointer border-b border-slate-100 ${isSelected ? "bg-blue-50/60" : "hover:bg-slate-50"}`}
-                            >
-                              <td className="py-3 pr-3">
-                                <div className="font-medium text-slate-800">{client.name}</div>
-                              </td>
-                              <td className="py-3 pr-3 text-slate-700">{client.emails.join(", ") || "Sin correo"}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.phone || "Sin numero"}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.projectTypes.join(" / ")}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.kind}</td>
-                              <td className="py-3 pr-3">
-                                <select
-                                  value={client.hasActiveProject ? "si" : "no"}
-                                  onChange={(event) => updateClientActiveInline(client.id, event.target.value === "si")}
-                                  disabled={!clientsCapabilities.canEditClient}
-                                  className="bg-transparent px-1 py-1 text-xs text-slate-700 focus:outline-none"
-                                  aria-label={`Proyecto activo ${client.name}`}
-                                >
-                                  <option value="si">Si</option>
-                                  <option value="no">No</option>
-                                </select>
-                              </td>
-                              <td className="py-3 pr-3 text-slate-700">{client.projectNames.join(" / ")}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.totalProjectsWorked}</td>
-                              <td className="py-3 pr-3 text-slate-700">{client.firstWorkDate}</td>
-                              <td className="py-3 pr-3 text-right">
-                                <Link href={`/clientes/${client.id}`} className="text-xs font-medium text-blue-700 hover:underline">
-                                  Ver ficha
-                                </Link>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {inactiveProjectClients.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-center text-sm text-slate-500">
-                      No hay clientes con proyectos inactivos para estos filtros.
-                    </div>
-                  ) : null}
+                  <DataTable
+                    columns={clientColumns}
+                    data={inactiveProjectClients}
+                    getRowId={(client) => `inactive-${client.id}`}
+                    onRowClick={(client) => setSelectedClientId(client.id)}
+                    rowClassName={(client) => (selectedClient?.id === client.id ? "bg-blue-50/60" : undefined)}
+                    emptyMessage="No hay clientes con proyectos inactivos para estos filtros."
+                    tableClassName="min-w-full"
+                  />
                 </div>
 
                 {filteredClients.length === 0 ? (
