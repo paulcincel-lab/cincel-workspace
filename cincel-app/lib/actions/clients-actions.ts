@@ -317,6 +317,43 @@ async function nextClientLegacyId(): Promise<number> {
   return Math.max(1000, Number(row?.value ?? 0)) + 1;
 }
 
+async function nextProjectLegacyId(): Promise<number> {
+  const [row] = await db.select({ value: max(projects.legacyId) }).from(projects);
+  return Math.max(1000, Number(row?.value ?? 0)) + 1;
+}
+
+/**
+ * Resolve-or-create the real `projects` row a project name refers to. Without
+ * this, a project only "exists" as a string on `activities.project_name_snapshot`
+ * — invisible to list_projects, the Proyectos page, and the risk rollups.
+ */
+async function resolveOrCreateProject(
+  name: string,
+  clientId: string,
+  stage: "Presale" | "Diseño" | "Construcción"
+): Promise<{ id: string; created: boolean }> {
+  const [existing] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(ilike(projects.name, name), isNull(projects.deletedAt)))
+    .limit(1);
+  if (existing) return { id: existing.id, created: false };
+
+  const legacyId = await nextProjectLegacyId();
+  const [row] = await db
+    .insert(projects)
+    .values({
+      legacyId,
+      name,
+      clientId,
+      stage,
+      active: true,
+      progress: 0,
+    })
+    .returning({ id: projects.id });
+  return { id: row.id, created: true };
+}
+
 async function insertClient(input: {
   name: string;
   kind: ClientKind;
@@ -433,6 +470,7 @@ export async function onboardClientViaAssistantAction(
   client: string;
   clientAlreadyExisted: boolean;
   project: string;
+  projectAlreadyExisted: boolean;
   workflow: AssistantOnboardWorkflow;
   tasksCreated: number;
   tasksSkippedAsDuplicate: number;
@@ -453,7 +491,12 @@ export async function onboardClientViaAssistantAction(
   const today = new Date().toISOString().slice(0, 10);
   const requester = user.member.name || user.email || "Asistente";
 
-  const { reused } = await insertClient({ ...input, kind });
+  const { id: clientId, reused } = await insertClient({ ...input, kind });
+  const { id: projectId, created: projectCreated } = await resolveOrCreateProject(
+    project,
+    clientId,
+    workflow
+  );
 
   const items = [
     ...TEMPLATE_BY_WORKFLOW[workflow].map((t) => ({
@@ -467,7 +510,9 @@ export async function onboardClientViaAssistantAction(
   ];
 
   // Idempotency: skip any task this project already has for this workflow
-  // (a retried tool call must not duplicate the checklist).
+  // (a retried tool call must not duplicate the checklist). Also backfill
+  // project_id on any pre-existing task that predates resolveOrCreateProject
+  // (e.g. a project created by an older assistant run before this fix).
   const existingTasks = await db
     .select({ description: activities.description })
     .from(activities)
@@ -476,6 +521,17 @@ export async function onboardClientViaAssistantAction(
         eq(activities.workflow, dbWorkflow),
         ilike(activities.projectNameSnapshot, project),
         isNull(activities.deletedAt)
+      )
+    );
+  await db
+    .update(activities)
+    .set({ projectId })
+    .where(
+      and(
+        eq(activities.workflow, dbWorkflow),
+        ilike(activities.projectNameSnapshot, project),
+        isNull(activities.deletedAt),
+        sql`${activities.projectId} is null`
       )
     );
   const existingDescriptions = new Set(
@@ -493,6 +549,7 @@ export async function onboardClientViaAssistantAction(
     const [row] = await db
       .insert(activities)
       .values({
+        projectId,
         projectNameSnapshot: project,
         workflow: dbWorkflow,
         phase: item.phase,
@@ -526,6 +583,7 @@ export async function onboardClientViaAssistantAction(
     client: input.name.trim(),
     clientAlreadyExisted: reused,
     project,
+    projectAlreadyExisted: !projectCreated,
     workflow,
     tasksCreated,
     tasksSkippedAsDuplicate,
