@@ -37,6 +37,7 @@ se sobrescribe.
 | `assign_task` | escritura | `canChangeResponsible` | Administrador, Dirección, Jefe de Taller, Jefe de Construcción, Arquitecto Senior |
 | `create_client` | escritura | `canCreateClient` | Administrador, Dirección, Jefes, Arquitecto Senior |
 | `onboard_client` | escritura | `canCreateClient` **y** `canCreateActivity` | Administrador, Dirección, Jefes, Arquitecto Senior |
+| `create_rfc` | escritura externa | `canCreateActivity` | todos |
 
 `onboard_client` da de alta el cliente y, en el mismo paso, siembra el checklist
 estándar del flujo elegido (`lib/templates/{presale,diseno,operativas}.ts`,
@@ -49,6 +50,13 @@ Acciones de servidor: `lib/actions/activities-actions.ts`
 (`createActivityViaAssistantAction`, `assignActivityViaAssistantAction`) y
 `lib/actions/clients-actions.ts` (`createClientViaAssistantAction`,
 `onboardClientViaAssistantAction`).
+
+`create_rfc` es distinto de las demás escrituras: no toca `core.*`, crea un
+GitHub Issue vía `lib/github/client.ts` (`createGithubIssue`), etiquetado
+`rfc`, con el problema/propuesta/alternativas armados en el cuerpo del issue.
+Requiere `GITHUB_PAT` (fine-grained, scope `Issues: write` solo sobre
+`GITHUB_REPO`) y `GITHUB_REPO` (`owner/repo`) — sin ellas, la herramienta
+responde `{ ok: false, error }` en vez de fallar silenciosamente.
 
 ## Cómo agregar una herramienta
 
@@ -81,3 +89,13 @@ Sin estas variables el endpoint responde 503 y la UI muestra el aviso "El
 asistente no está configurado". Las rutas de degradación están cubiertas por
 `tests/e2e/asistente.spec.ts`; el camino con LLM real por
 `tests/e2e/asistente-live.spec.ts` (`RUN_LIVE_ASSISTANT=1`).
+
+`create_rfc` (opcional, independiente de lo anterior):
+
+```
+GITHUB_PAT=github_pat_…
+GITHUB_REPO=owner/repo
+```
+
+Sin estas dos variables la herramienta sigue apareciendo para los roles con
+`canCreateActivity`, pero devuelve un error legible en vez de crear el issue.

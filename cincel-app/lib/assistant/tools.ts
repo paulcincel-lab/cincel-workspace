@@ -26,6 +26,7 @@ import {
   mergeDuplicateActivitiesAction,
   mergeDuplicateClientsAction,
 } from "@/lib/actions/maintenance-actions";
+import { createGithubIssue, isGithubConfigured } from "@/lib/github/client";
 
 /**
  * Every tool here is read-only and only touches core.projects,
@@ -377,6 +378,58 @@ export const onboard_client = tool({
   execute: async (input) => onboardClientViaAssistantAction(input),
 });
 
+export const create_rfc = tool({
+  description:
+    "Redacta y registra una RFC (propuesta técnica o de producto) como un GitHub Issue etiquetado 'rfc' en el repositorio del proyecto. Úsalo solo cuando el usuario pida explícitamente escribir/registrar una RFC o propuesta formal. No inventes el problema ni la propuesta: pide al usuario que los describa si no los ha dado. Confirma el título antes de crearla — la acción es visible para todo el equipo de desarrollo en GitHub.",
+  inputSchema: z.object({
+    title: z.string().min(4).describe("Título corto de la RFC"),
+    problem: z
+      .string()
+      .min(10)
+      .describe("Qué problema u oportunidad motiva la RFC"),
+    proposal: z.string().min(10).describe("La propuesta concreta"),
+    alternatives: z
+      .string()
+      .optional()
+      .describe("Alternativas consideradas y por qué se descartaron"),
+    labels: z
+      .array(z.string())
+      .max(5)
+      .optional()
+      .describe("Etiquetas adicionales de GitHub, además de 'rfc'"),
+  }),
+  execute: async ({ title, problem, proposal, alternatives, labels }) => {
+    if (!isGithubConfigured()) {
+      return {
+        ok: false as const,
+        error:
+          "GitHub no está configurado en este entorno (falta GITHUB_PAT / GITHUB_REPO).",
+      };
+    }
+
+    const body = [
+      "## Problema",
+      problem,
+      "",
+      "## Propuesta",
+      proposal,
+      alternatives ? `\n## Alternativas consideradas\n${alternatives}` : "",
+      "",
+      "_Generado desde el asistente de Cincel Workspace._",
+    ]
+      .filter((line) => line !== "")
+      .join("\n");
+
+    const issue = await createGithubIssue({
+      title: `[RFC] ${title}`,
+      body,
+      labels: ["rfc", ...(labels ?? [])],
+    });
+
+    return { ok: true as const, number: issue.number, url: issue.url };
+  },
+});
+
 export const find_duplicates = tool({
   description:
     "Escanea la base de datos en busca de registros duplicados: clientes con el mismo nombre, tareas idénticas en el mismo proyecto/flujo, y miembros repetidos en un proyecto. Solo lectura — devuelve los grupos para que el usuario decida.",
@@ -431,6 +484,8 @@ export const ASSISTANT_TOOLS = {
  * - assign_task              → canChangeResponsible
  * - create_client            → canCreateClient
  * - onboard_client           → canCreateClient AND canCreateActivity
+ * - create_rfc               → canCreateActivity (same tier as create_task —
+ *   RFCs are proposals, not destructive; gate is about "can write", not rank)
  * - find_duplicates          → canViewClients OR canViewActivities
  * - merge_duplicate_clients  → canDeleteClient
  * - merge_duplicate_activities → canDeleteActivity
@@ -450,6 +505,7 @@ export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
     render_list,
   };
   if (activitiesCaps.canCreateActivity) tools.create_task = create_task;
+  if (activitiesCaps.canCreateActivity) tools.create_rfc = create_rfc;
   if (activitiesCaps.canChangeResponsible) tools.assign_task = assign_task;
   if (clientsCaps.canCreateClient) tools.create_client = create_client;
   if (clientsCaps.canCreateClient && activitiesCaps.canCreateActivity) {
