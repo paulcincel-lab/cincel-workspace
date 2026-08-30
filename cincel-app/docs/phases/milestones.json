@@ -3,5 +3,8 @@
   "Phase 2: Repository Layer + Server Components": "phase:2",
   "Phase 3: Session Auth": "phase:3",
   "Phase 4: Google Drive Integration": "phase:4",
-  "Phase 5: AI Assistant": "phase:5"
+  "Phase 5: AI Assistant": "phase:5",
+  "Phase 6: Google Drive per-user impersonation": "phase:6",
+  "Phase 7: TanStack Table Adoption": "phase:7",
+  "Phase 8: Assistant shadcn/ui Widgets": "phase:8"
 }
