@@ -7,6 +7,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { AssistantChartMessage } from "@/components/asistente/AssistantChartMessage";
+import { AssistantCardMessage } from "@/components/asistente/AssistantCardMessage";
+import { AssistantStatGridMessage } from "@/components/asistente/AssistantStatGridMessage";
+import { AssistantListMessage } from "@/components/asistente/AssistantListMessage";
+import type { WidgetTone } from "@/components/asistente/tone";
 
 const EXAMPLE_QUESTIONS = [
   "¿Qué entregas vencen esta semana?",
@@ -23,6 +27,22 @@ type RenderChartInput = {
   chartType: "bar" | "line";
   title: string;
   data: { label: string; value: number }[];
+};
+
+// render_card / render_stat_grid / render_list input shapes — same reasoning.
+type RenderCardInput = {
+  title: string;
+  subtitle?: string;
+  fields: { label: string; value: string }[];
+  badge?: { label: string; tone: WidgetTone };
+};
+type RenderStatGridInput = {
+  title?: string;
+  stats: { label: string; value: string; badge?: { label: string; tone: WidgetTone } }[];
+};
+type RenderListInput = {
+  title: string;
+  items: string[];
 };
 
 // The conversation is kept in localStorage so it survives a reload / navigation
@@ -212,6 +232,68 @@ export function AssistantChat() {
                         title={chart.title}
                         data={chart.data}
                       />
+                    </div>
+                  );
+                }
+                return null;
+              }
+
+              if (part.type === "tool-render_card") {
+                if (part.state === "input-streaming" || part.state === "input-available") {
+                  return (
+                    <p key={index} className="text-xs text-slate-400">
+                      Generando tarjeta…
+                    </p>
+                  );
+                }
+                if (part.state === "output-available") {
+                  const card = part.input as RenderCardInput;
+                  return (
+                    <div key={index} className="w-full">
+                      <AssistantCardMessage
+                        title={card.title}
+                        subtitle={card.subtitle}
+                        fields={card.fields}
+                        badge={card.badge}
+                      />
+                    </div>
+                  );
+                }
+                return null;
+              }
+
+              if (part.type === "tool-render_stat_grid") {
+                if (part.state === "input-streaming" || part.state === "input-available") {
+                  return (
+                    <p key={index} className="text-xs text-slate-400">
+                      Generando comparación…
+                    </p>
+                  );
+                }
+                if (part.state === "output-available") {
+                  const grid = part.input as RenderStatGridInput;
+                  return (
+                    <div key={index} className="w-full">
+                      <AssistantStatGridMessage title={grid.title} stats={grid.stats} />
+                    </div>
+                  );
+                }
+                return null;
+              }
+
+              if (part.type === "tool-render_list") {
+                if (part.state === "input-streaming" || part.state === "input-available") {
+                  return (
+                    <p key={index} className="text-xs text-slate-400">
+                      Generando lista…
+                    </p>
+                  );
+                }
+                if (part.state === "output-available") {
+                  const list = part.input as RenderListInput;
+                  return (
+                    <div key={index} className="w-full">
+                      <AssistantListMessage title={list.title} items={list.items} />
                     </div>
                   );
                 }

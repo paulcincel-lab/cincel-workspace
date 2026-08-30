@@ -15,6 +15,9 @@ import {
   list_activities_due,
   team_workload_summary,
   render_chart,
+  render_card,
+  render_stat_grid,
+  render_list,
   create_client,
   onboard_client,
   ASSISTANT_TOOLS,
@@ -46,12 +49,15 @@ function userWithAccess(access: SystemAccessRole): AuthenticatedUser {
 const READ_TOOLS = [
   "list_activities_due",
   "list_projects",
+  "render_card",
   "render_chart",
+  "render_list",
+  "render_stat_grid",
   "team_workload_summary",
 ];
 
 describe("ASSISTANT_TOOLS", () => {
-  it("exposes exactly the four read/render tools", () => {
+  it("exposes exactly the seven read/render tools", () => {
     expect(Object.keys(ASSISTANT_TOOLS).sort()).toEqual(READ_TOOLS);
   });
 });
@@ -202,6 +208,86 @@ describe("render_chart", () => {
   it("execute is a no-op that returns { ok: true }", async () => {
     const out = await render_chart.execute!(
       { chartType: "bar", title: "x", data: [] },
+      { toolCallId: "t", messages: [] } as never
+    );
+    expect(out).toEqual({ ok: true });
+  });
+});
+
+describe("render_card", () => {
+  it("accepts a title-only card with no fields or badge", () => {
+    expect(parse(render_card.inputSchema, { title: "Ensenada", fields: [] }).success).toBe(
+      true
+    );
+  });
+
+  it("accepts a badge with a valid tone", () => {
+    expect(
+      parse(render_card.inputSchema, {
+        title: "Ensenada",
+        fields: [{ label: "Avance", value: "62%" }],
+        badge: { label: "Riesgo alto", tone: "critical" },
+      }).success
+    ).toBe(true);
+  });
+
+  it("rejects an unknown badge tone", () => {
+    expect(
+      parse(render_card.inputSchema, {
+        title: "Ensenada",
+        fields: [],
+        badge: { label: "x", tone: "danger" },
+      }).success
+    ).toBe(false);
+  });
+
+  it("rejects more than 10 fields", () => {
+    const fields = Array.from({ length: 11 }, (_, i) => ({ label: `L${i}`, value: "x" }));
+    expect(parse(render_card.inputSchema, { title: "x", fields }).success).toBe(false);
+  });
+
+  it("execute is a no-op that returns { ok: true }", async () => {
+    const out = await render_card.execute!(
+      { title: "x", fields: [] },
+      { toolCallId: "t", messages: [] } as never
+    );
+    expect(out).toEqual({ ok: true });
+  });
+});
+
+describe("render_stat_grid", () => {
+  it("accepts an optional title and up to 6 stats", () => {
+    const stats = Array.from({ length: 6 }, (_, i) => ({ label: `L${i}`, value: "1" }));
+    expect(parse(render_stat_grid.inputSchema, { stats }).success).toBe(true);
+  });
+
+  it("rejects more than 6 stats", () => {
+    const stats = Array.from({ length: 7 }, (_, i) => ({ label: `L${i}`, value: "1" }));
+    expect(parse(render_stat_grid.inputSchema, { stats }).success).toBe(false);
+  });
+
+  it("execute is a no-op that returns { ok: true }", async () => {
+    const out = await render_stat_grid.execute!(
+      { stats: [] },
+      { toolCallId: "t", messages: [] } as never
+    );
+    expect(out).toEqual({ ok: true });
+  });
+});
+
+describe("render_list", () => {
+  it("requires at least one item", () => {
+    expect(parse(render_list.inputSchema, { title: "x", items: [] }).success).toBe(false);
+  });
+
+  it("rejects more than 20 items", () => {
+    const items = Array.from({ length: 21 }, (_, i) => `item ${i}`);
+    expect(parse(render_list.inputSchema, { title: "x", items }).success).toBe(false);
+  });
+
+  it("execute is a no-op that returns { ok: true }", async () => {
+    const out = await render_list.execute!(
+      { title: "x", items: ["a"] },
       { toolCallId: "t", messages: [] } as never
     );
     expect(out).toEqual({ ok: true });
