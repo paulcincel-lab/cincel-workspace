@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import { DataTable } from "@/components/ui/DataTable";
 import { EditableCell } from "@/components/proveedores/EditableCell";
 import { StarRating } from "@/components/proveedores/StarRating";
 import { PillDropdown } from "@/components/proveedores/PillDropdown";
@@ -414,6 +416,76 @@ export default function TiendasPage() {
     }
   };
 
+  const sortValue = (t: Tienda, key: ColumnKey): string | number => {
+    switch (key) {
+      case "name": return t.name ?? "";
+      case "company": return t.company ?? "";
+      case "status": return t.status ?? "";
+      case "type": return t.type ?? "";
+      case "mainSpecialty": return t.mainSpecialty ?? "";
+      case "categories": return (t.categories || []).join(", ");
+      case "location": return t.location ?? "";
+      case "contact": return t.contact ?? "";
+      case "secondaryContacts": return (t.secondaryContacts || []).join(", ");
+      case "priceLevel": return t.priceLevel ?? "";
+      case "rating": return t.rating ?? 0;
+      case "startDate": return t.startDate ?? "";
+      case "comments": return t.comments ?? "";
+      case "website": return t.website ?? "";
+      default: return "";
+    }
+  };
+
+  const columns: ColumnDef<Tienda, unknown>[] = [
+    ...columnOrder.map((key): ColumnDef<Tienda, unknown> => ({
+      id: key,
+      accessorFn: (row) => sortValue(row, key),
+      header: () => (
+        <div
+          draggable
+          onDragStart={() => setDraggedColumn(key)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => {
+            if (draggedColumn) reorderColumn(draggedColumn, key);
+            setDraggedColumn(null);
+          }}
+          onDragEnd={() => setDraggedColumn(null)}
+          className={`cursor-move ${draggedColumn === key ? "text-blue-600" : ""}`}
+          title="Arrastra para reordenar"
+        >
+          {columnLabel(key)}
+        </div>
+      ),
+      cell: ({ row }) => <div className={columnMinWidth[key]}>{renderCell(row.original, key)}</div>,
+    })),
+    {
+      id: "actions",
+      header: () => null,
+      enableSorting: false,
+      cell: ({ row }) => {
+        const t = row.original;
+        return deletingId === t.id ? (
+          <div className="flex items-center gap-1 justify-end">
+            <button
+              onClick={() => deleteTienda(t.id)}
+              className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 whitespace-nowrap"
+            >Eliminar</button>
+            <button
+              onClick={() => setDeletingId(null)}
+              className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300"
+            >✕</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setDeletingId(t.id)}
+            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition text-base px-1"
+            title="Eliminar tienda"
+          >🗑</button>
+        );
+      },
+    },
+  ];
+
   const activeFiltersCount = [!!filterStatus, !!filterType, filterMinRating > 0, !!searchTerm, showActiveOnly].filter(Boolean).length;
 
   const filtered = tiendas.filter((t) => {
@@ -526,71 +598,15 @@ export default function TiendasPage() {
           </div>
 
           {/* Table */}
-          {filtered.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-xl border border-gray-200 mt-4">
-              <p className="text-gray-400">{searchTerm ? "Sin resultados" : "No hay tiendas"}</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto mt-4">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    {columnOrder.map((colKey) => (
-                      <th
-                        key={colKey}
-                        draggable
-                        onDragStart={() => setDraggedColumn(colKey)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => {
-                          if (draggedColumn) reorderColumn(draggedColumn, colKey);
-                          setDraggedColumn(null);
-                        }}
-                        onDragEnd={() => setDraggedColumn(null)}
-                        className={`px-4 py-3 text-left ${columnMinWidth[colKey]} cursor-move hover:bg-gray-100 transition ${
-                          draggedColumn === colKey ? "bg-blue-100" : ""
-                        }`}
-                        title="Arrastra para reordenar"
-                      >
-                        {columnLabel(colKey)}
-                      </th>
-                    ))}
-                    <th className="px-2 py-3 w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filtered.map((t) => (
-                    <tr key={t.id} className="hover:bg-blue-50/30 transition-colors group">
-                      {columnOrder.map((colKey) => (
-                        <td key={colKey} className={`px-4 py-3 ${columnMinWidth[colKey]}`}>
-                          {renderCell(t, colKey)}
-                        </td>
-                      ))}
-                      <td className="px-2 py-3 text-right">
-                        {deletingId === t.id ? (
-                          <div className="flex items-center gap-1 justify-end">
-                            <button
-                              onClick={() => deleteTienda(t.id)}
-                              className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 whitespace-nowrap"
-                            >Eliminar</button>
-                            <button
-                              onClick={() => setDeletingId(null)}
-                              className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300"
-                            >✕</button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeletingId(t.id)}
-                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition text-base px-1"
-                            title="Eliminar tienda"
-                          >🗑</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="mt-4">
+            <DataTable
+              columns={columns}
+              data={filtered}
+              getRowId={(t) => String(t.id)}
+              rowClassName={() => "group"}
+              emptyMessage={searchTerm ? "Sin resultados" : "No hay tiendas"}
+            />
+          </div>
 
           <p className="text-xs text-gray-400 mt-3">{filtered.length} tienda{filtered.length !== 1 ? "s" : ""}</p>
         </main>
