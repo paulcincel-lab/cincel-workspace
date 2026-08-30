@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
+import { DataTable } from "@/components/ui/DataTable";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { PERMISSIONS_CUSTOM_STORAGE_KEY } from "@/lib/auth/permissions";
 import {
@@ -226,6 +228,73 @@ function getModuleDetails(moduleDefinition: PermissionsModuleDefinition, moduleS
   return `${moduleDefinition.detailsLabel}: ${moduleDefinition.detailsValueLabel(moduleState)}`;
 }
 
+function buildAccessColumns(setSelectedAccess: (role: SystemAccessRole) => void): ColumnDef<AccessSummary, unknown>[] {
+  return [
+    {
+      accessorKey: "role",
+      header: "Acceso",
+      cell: ({ row }) => <span className="font-semibold text-slate-900">{row.original.role}</span>,
+    },
+    {
+      accessorKey: "description",
+      header: "Descripcion",
+      cell: ({ row }) => <span className="text-slate-600">{row.original.description}</span>,
+    },
+    {
+      accessorKey: "usersCount",
+      header: "Usuarios",
+      cell: ({ row }) => (
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+          {row.original.usersCount}
+        </span>
+      ),
+    },
+    {
+      id: "modules",
+      header: "Modulos",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1.5">
+          {row.original.enabledModules.map((module) => (
+            <span key={`${row.original.role}-${module}`} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+              {module}
+            </span>
+          ))}
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "Estado",
+      accessorFn: (access) => access.protectedRole,
+      cell: ({ row }) =>
+        row.original.protectedRole ? (
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Protegido</span>
+        ) : (
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Editable</span>
+        ),
+    },
+    {
+      id: "actions",
+      header: () => <span className="block text-right">Acciones</span>,
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className="text-right">
+          <button
+            type="button"
+            onClick={() => setSelectedAccess(row.original.role)}
+            disabled={row.original.protectedRole}
+            title={row.original.protectedRole ? "Administrador mantiene acceso completo y no puede editarse." : "Abrir editor de permisos"}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold ${row.original.protectedRole ? "cursor-not-allowed bg-slate-200 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+          >
+            Configurar
+          </button>
+        </div>
+      ),
+    },
+  ];
+}
+
 export default function PermissionsWorkspace() {
   const defaultPermissionsState = useMemo(() => buildDefaultPermissionsState(), []);
   const loadedPermissions = useMemo(() => loadPermissionsState(defaultPermissionsState), [defaultPermissionsState]);
@@ -288,6 +357,8 @@ export default function PermissionsWorkspace() {
       };
     });
   }, [permissionsState, usersByAccess]);
+
+  const accessColumns = useMemo(() => buildAccessColumns(setSelectedAccess), []);
 
   const selectedRoleInfo = accessSummary.find((access) => access.role === selectedAccess) ?? accessSummary[0];
   const selectedRoleState = permissionsState[selectedAccess] ?? {};
@@ -384,60 +455,12 @@ export default function PermissionsWorkspace() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="min-w-[960px] w-full text-sm text-slate-700">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                      <th className="px-3 py-3">Acceso</th>
-                      <th className="px-3 py-3">Descripcion</th>
-                      <th className="px-3 py-3">Usuarios</th>
-                      <th className="px-3 py-3">Modulos</th>
-                      <th className="px-3 py-3">Estado</th>
-                      <th className="px-3 py-3 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {accessSummary.map((access) => (
-                      <tr key={access.role} className="border-b border-slate-100 align-top">
-                        <td className="px-3 py-4 font-semibold text-slate-900">{access.role}</td>
-                        <td className="px-3 py-4 text-slate-600">{access.description}</td>
-                        <td className="px-3 py-4">
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                            {access.usersCount}
-                          </span>
-                        </td>
-                        <td className="px-3 py-4">
-                          <div className="flex flex-wrap gap-1.5">
-                            {access.enabledModules.map((module) => (
-                              <span key={`${access.role}-${module}`} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
-                                {module}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-3 py-4">
-                          {access.protectedRole ? (
-                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Protegido</span>
-                          ) : (
-                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Editable</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedAccess(access.role)}
-                            disabled={access.protectedRole}
-                            title={access.protectedRole ? "Administrador mantiene acceso completo y no puede editarse." : "Abrir editor de permisos"}
-                            className={`rounded-lg px-3 py-2 text-xs font-semibold ${access.protectedRole ? "cursor-not-allowed bg-slate-200 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-700"}`}
-                          >
-                            Configurar
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={accessColumns}
+                data={accessSummary}
+                getRowId={(access) => access.role}
+                tableClassName="min-w-[960px]"
+              />
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
