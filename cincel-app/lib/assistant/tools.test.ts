@@ -69,6 +69,7 @@ describe("buildAssistantTools", () => {
         "find_duplicates",
         "merge_duplicate_clients",
         "merge_duplicate_activities",
+        "discard_project",
       ].sort()
     );
   });
@@ -93,12 +94,13 @@ describe("buildAssistantTools", () => {
     );
     expect(keys).not.toContain("merge_duplicate_clients");
     expect(keys).not.toContain("merge_duplicate_activities");
+    expect(keys).not.toContain("discard_project");
   });
 
   it("gives Dirección the destructive merge tools", () => {
     const keys = Object.keys(buildAssistantTools(userWithAccess("Dirección")));
     expect(keys).toEqual(
-      expect.arrayContaining(["merge_duplicate_clients", "merge_duplicate_activities"])
+      expect.arrayContaining(["merge_duplicate_clients", "merge_duplicate_activities", "discard_project"])
     );
   });
 

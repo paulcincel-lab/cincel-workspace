@@ -121,6 +121,7 @@ describe("POST /api/asistente/chat", () => {
         "find_duplicates",
         "merge_duplicate_clients",
         "merge_duplicate_activities",
+        "discard_project",
       ].sort()
     );
     expect(arg.stopWhen).toBe(5);

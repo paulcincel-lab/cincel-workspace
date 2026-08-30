@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import {
   resolveActivitiesCapabilities,
   resolveClientsCapabilities,
+  resolveProjectsCapabilities,
 } from "@/lib/auth/permissions";
 import {
   assignActivityViaAssistantAction,
@@ -20,6 +21,7 @@ import {
   onboardClientViaAssistantAction,
 } from "@/lib/actions/clients-actions";
 import {
+  discardProjectViaAssistantAction,
   findDuplicatesAction,
   mergeDuplicateActivitiesAction,
   mergeDuplicateClientsAction,
@@ -350,6 +352,15 @@ export const merge_duplicate_activities = tool({
   execute: async (input) => mergeDuplicateActivitiesAction(input),
 });
 
+export const discard_project = tool({
+  description:
+    "Descarta (archiva de forma reversible) un proyecto completo y TODAS sus tareas — útil para limpiar proyectos de prueba o de semilleo. No borra nada de forma permanente: las filas conservan su historial y se pueden restaurar. Pide confirmación explícita y el nombre exacto del proyecto antes de usarlo.",
+  inputSchema: z.object({
+    projectName: z.string().min(2).describe("Nombre exacto del proyecto a descartar"),
+  }),
+  execute: async (input) => discardProjectViaAssistantAction(input),
+});
+
 export const ASSISTANT_TOOLS = {
   list_projects,
   list_activities_due,
@@ -368,10 +379,12 @@ export const ASSISTANT_TOOLS = {
  * - find_duplicates          → canViewClients OR canViewActivities
  * - merge_duplicate_clients  → canDeleteClient
  * - merge_duplicate_activities → canDeleteActivity
+ * - discard_project          → canDeleteProject
  */
 export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
   const activitiesCaps = resolveActivitiesCapabilities(user);
   const clientsCaps = resolveClientsCapabilities(user);
+  const projectsCaps = resolveProjectsCapabilities(user);
   const tools: ToolSet = {
     list_projects,
     list_activities_due,
@@ -393,6 +406,9 @@ export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
   }
   if (activitiesCaps.canDeleteActivity) {
     tools.merge_duplicate_activities = merge_duplicate_activities;
+  }
+  if (projectsCaps.canDeleteProject) {
+    tools.discard_project = discard_project;
   }
   return tools;
 }

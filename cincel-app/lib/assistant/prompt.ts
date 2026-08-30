@@ -24,6 +24,8 @@ const MERGE_CLIENTS_LINE =
   "- Fusionar clientes duplicados (merge_duplicate_clients). Es destructivo: reasigna proyectos/contactos/historial y archiva los demás. Confirma con el usuario antes de ejecutarlo.";
 const MERGE_ACTIVITIES_LINE =
   "- Fusionar tareas duplicadas de un proyecto (merge_duplicate_activities). Destructivo. Confirma antes de ejecutarlo.";
+const DISCARD_PROJECT_LINE =
+  "- Descartar un proyecto de prueba o semilleo con todas sus tareas (discard_project). Es reversible (soft-delete, conserva historial) pero afecta a muchas filas: exige confirmación explícita y el nombre exacto del proyecto.";
 
 function identitySection(user: AuthenticatedUser | null): string {
   if (!user) return "";
@@ -52,6 +54,7 @@ export function buildSystemPrompt({
     toolNames.includes("onboard_client") ? ONBOARD_CLIENT_LINE : null,
     toolNames.includes("merge_duplicate_clients") ? MERGE_CLIENTS_LINE : null,
     toolNames.includes("merge_duplicate_activities") ? MERGE_ACTIVITIES_LINE : null,
+    toolNames.includes("discard_project") ? DISCARD_PROJECT_LINE : null,
   ].filter(Boolean);
 
   const writeSection =
