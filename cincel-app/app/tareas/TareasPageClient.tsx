@@ -20,7 +20,7 @@ import type { Task, TaskStatus, WorkflowType } from "@/lib/types/task";
 import { formatDateDMY } from "@/lib/utils/date";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { getProjectsSnapshot } from "@/lib/repositories/projects-repository";
+import { fetchProjects, getProjectsSnapshot } from "@/lib/repositories/projects-repository";
 import { fetchActivities, saveActivities } from "@/lib/repositories/activities-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
@@ -153,16 +153,20 @@ export default function TareasPage({
       if (initialActivities === undefined) setIsLoadingData(true);
       setFetchError(null);
       try {
-        const [presale, diseno, construccion] = await Promise.all([
+        const [presale, diseno, construccion, projects] = await Promise.all([
           fetchActivities("Presale"),
           fetchActivities("Diseño"),
           fetchActivities("Construcción"),
+          fetchProjects(),
         ]);
         // Keep the mock fallback when a workflow has no DB rows yet, matching
         // PresaleTable — a fresh database shouldn't render an empty board.
         if (presale.length > 0) setPresaleTasksState(loadLinkedTasks("Presale", presale));
         if (diseno.length > 0) setDisenoTasksState(loadLinkedTasks("Diseño", diseno));
         if (construccion.length > 0) setConstruccionTasksState(loadLinkedTasks("Construcción", construccion));
+        // The projects dropdown must reflect the DB, not just the mock/localStorage
+        // snapshot — otherwise it silently omits projects created after the seed.
+        if (projects.length > 0) setProjectsData(projects);
       } catch (err) {
         if (err instanceof RepositoryError) reportRepositoryError(err);
         setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
