@@ -21,28 +21,35 @@ export function getPersonInitials(name: string): string {
 
 export function TeamMembersCompact({ members }: { members: string[] }) {
   if (members.length === 0) {
-    return <span className="text-black">Sin equipo</span>;
+    return <span className="text-sm text-slate-500">Sin equipo</span>;
   }
 
   const visibleMembers = members.slice(0, 2);
   const remaining = members.length - visibleMembers.length;
+  const nameList = visibleMembers.join(", ");
 
   return (
-    <div className="flex items-center gap-1">
-      {visibleMembers.map((member) => (
-        <span
-          key={member}
-          className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white"
-          title={member}
-        >
-          {getPersonInitials(member)}
-        </span>
-      ))}
-      {remaining > 0 ? (
-        <span className="inline-flex h-6 items-center justify-center rounded-full border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-600">
-          +{remaining}
-        </span>
-      ) : null}
+    <div className="flex items-center gap-2">
+      <div className="flex items-center">
+        {visibleMembers.map((member, index) => (
+          <span
+            key={member}
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white ring-2 ring-white ${index > 0 ? "-ml-1" : ""}`}
+            title={member}
+          >
+            {getPersonInitials(member)}
+          </span>
+        ))}
+        {remaining > 0 ? (
+          <span className="-ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 ring-2 ring-white">
+            +{remaining}
+          </span>
+        ) : null}
+      </div>
+      <span className="text-sm font-medium text-slate-800">
+        {nameList}
+        {remaining > 0 ? ` +${remaining}` : ""}
+      </span>
     </div>
   );
 }
@@ -92,11 +99,14 @@ export default function TeamMultiSelect({
               key={member}
               type="button"
               onClick={() => toggleMember(member)}
-              className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700"
+              className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800"
               title="Quitar integrante"
             >
-              <span>{getPersonInitials(member)}</span>
-              <span>×</span>
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">
+                {getPersonInitials(member)}
+              </span>
+              <span>{member}</span>
+              <span className="text-blue-400">×</span>
             </button>
           ))
         ) : (
@@ -112,7 +122,7 @@ export default function TeamMultiSelect({
         className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
       />
 
-      <div className="max-h-32 space-y-1 overflow-y-auto pr-1">
+      <div className="max-h-36 space-y-0.5 overflow-y-auto pr-1">
         {filteredOptions.length > 0 ? (
           filteredOptions.map((member) => {
             const isSelected = selected.includes(member);
@@ -122,10 +132,15 @@ export default function TeamMultiSelect({
                 key={member}
                 type="button"
                 onClick={() => toggleMember(member)}
-                className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-sm ${isSelected ? "bg-blue-50 text-blue-700" : "hover:bg-slate-50"}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm ${isSelected ? "bg-blue-50 text-blue-700" : "text-slate-800 hover:bg-slate-50"}`}
               >
-                <span>{member}</span>
-                <span className="text-xs">{isSelected ? "✓" : "+"}</span>
+                <span
+                  className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${isSelected ? "bg-blue-600" : "bg-slate-400"}`}
+                >
+                  {getPersonInitials(member)}
+                </span>
+                <span className="flex-1">{member}</span>
+                {isSelected ? <span className="text-xs font-semibold text-blue-600">✓</span> : null}
               </button>
             );
           })
