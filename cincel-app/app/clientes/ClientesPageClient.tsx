@@ -1,14 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import Avatar from "@/components/ui/Avatar";
-import Badge from "@/components/ui/Badge";
 import { DataTable } from "@/components/ui/DataTable";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
@@ -49,22 +46,6 @@ type ManualClient = {
   projectType: string;
   totalProjectsWorked: number;
   firstWorkDate: string;
-};
-
-type ClientProjectDraft = {
-  id: number;
-  name: string;
-  type: string;
-  active: boolean;
-  startDate: string;
-};
-
-type ClientDraft = {
-  name: string;
-  emailsText: string;
-  phone: string;
-  kind: ClientKind;
-  projects: ClientProjectDraft[];
 };
 
 type NewClientDraft = {
@@ -317,7 +298,6 @@ export default function ClientesPageClient({
   initialClients?: ManualClient[];
   initialProjects?: typeof baseProjects;
 } = {}) {
-  const router = useRouter();
   const [projects, setProjects] = useState<typeof baseProjects>(
     initialProjects.length > 0 ? initialProjects : baseProjects
   );
@@ -330,18 +310,6 @@ export default function ClientesPageClient({
   const [kindFilter, setKindFilter] = useState<"Todos" | ClientKind>("Todos");
   const [projectTypeFilter, setProjectTypeFilter] = useState<"Todos" | ProjectType>("Todos");
   const [firstWorkDateSort, setFirstWorkDateSort] = useState<"reciente" | "antigua">("reciente");
-  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
-  const [showEditor, setShowEditor] = useState(false);
-  const [editingClientId, setEditingClientId] = useState<number | null>(null);
-  const [editingManualClientId, setEditingManualClientId] = useState<number | null>(null);
-  const [editorError, setEditorError] = useState("");
-  const [draft, setDraft] = useState<ClientDraft>({
-    name: "",
-    emailsText: "",
-    phone: "",
-    kind: "Particular",
-    projects: [],
-  });
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createError, setCreateError] = useState("");
   const [newClientDraft, setNewClientDraft] = useState<NewClientDraft>(emptyNewClientDraft);
@@ -655,8 +623,6 @@ export default function ClientesPageClient({
   const activeProjectClients = filteredClients.filter((client) => client.hasActiveProject);
   const inactiveProjectClients = filteredClients.filter((client) => !client.hasActiveProject);
 
-  const selectedClient = filteredClients.find((client) => client.id === selectedClientId) ?? filteredClients[0] ?? null;
-
   const totalClients = clientSummaries.length;
   const totalActiveProjects = clientSummaries.reduce((sum, client) => sum + client.activeProjects, 0);
 
@@ -701,138 +667,6 @@ export default function ClientesPageClient({
   const closeCreateClient = () => {
     setShowCreateModal(false);
     setCreateError("");
-  };
-
-  const openEditor = (client: ClientSummary) => {
-    if (!clientsCapabilities.canEditClient) {
-      return;
-    }
-
-    setEditingClientId(client.id);
-    setEditorError("");
-    setDraft({
-      name: client.name,
-      emailsText: client.emails.join(", "),
-      phone: client.phone,
-      kind: client.kind,
-      projects: client.projects.map((project) => ({
-        id: project.id,
-        name: project.name,
-        type: normalizeProjectType(project.type),
-        active: project.active,
-        startDate: project.startDate || "",
-      })),
-    });
-    setShowEditor(true);
-  };
-
-  const closeEditor = () => {
-    setShowEditor(false);
-    setEditingClientId(null);
-    setEditingManualClientId(null);
-    setEditorError("");
-  };
-
-  const updateDraftProject = (projectId: number, updates: Partial<ClientProjectDraft>) => {
-    setDraft((prev) => ({
-      ...prev,
-      projects: prev.projects.map((project) => {
-        if (project.id !== projectId) {
-          return project;
-        }
-
-        return { ...project, ...updates };
-      }),
-    }));
-  };
-
-  const saveClientChanges = () => {
-    if (!clientsCapabilities.canEditClient) {
-      return;
-    }
-
-    if (editingManualClientId !== null) {
-      const trimmedName = draft.name.trim();
-      if (!trimmedName) {
-        setEditorError("El nombre del cliente es obligatorio.");
-        return;
-      }
-
-      const emails = draft.emailsText
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-
-      const updatedManual = manualClients.map((client) => {
-        if (client.id !== editingManualClientId) {
-          return client;
-        }
-
-        return {
-          ...client,
-          name: trimmedName,
-          emails,
-          phone: draft.phone.trim(),
-          kind: draft.kind,
-        };
-      });
-
-      setManualClients(updatedManual);
-      updateManualClientsStorage(updatedManual);
-      closeEditor();
-      return;
-    }
-
-    if (editingClientId === null) {
-      return;
-    }
-
-    const trimmedName = draft.name.trim();
-    if (!trimmedName) {
-      setEditorError("El nombre del cliente es obligatorio.");
-      return;
-    }
-
-    const emails = draft.emailsText
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    const projectMap = new Map(
-      draft.projects.map((project) => [project.id, project])
-    );
-
-    const updatedProjects = projects.map((project) => {
-      if (project.client.id !== editingClientId) {
-        return project;
-      }
-
-      const projectDraft = projectMap.get(project.id);
-
-      if (!projectDraft) {
-        return project;
-      }
-
-      return {
-        ...project,
-        name: projectDraft.name.trim() || project.name,
-        type: projectDraft.type,
-        active: projectDraft.active,
-        status: statusFromActive(projectDraft.active),
-        startDate: projectDraft.startDate || project.startDate,
-        client: {
-          ...project.client,
-          name: trimmedName,
-          emails,
-          phone: draft.phone.trim(),
-          kind: draft.kind,
-        },
-      };
-    });
-
-    setProjects(updatedProjects);
-    updateProjectsStorage(updatedProjects);
-    closeEditor();
   };
 
   const createClient = async () => {
@@ -881,7 +715,6 @@ export default function ClientesPageClient({
 
     const updatedManual = [...manualClients, createdClient];
     setManualClients(updatedManual);
-    setSelectedClientId(createdClient.id);
     try {
       await saveClients(updatedManual);
     } catch {
@@ -926,78 +759,6 @@ export default function ClientesPageClient({
 
     setProjects(updatedProjects);
     updateProjectsStorage(updatedProjects);
-  };
-
-  const convertManualClientToProject = () => {
-    if (!clientsCapabilities.canEditClient) {
-      return;
-    }
-
-    if (!selectedClient) {
-      return;
-    }
-
-    const manualClient = manualClients.find((client) => client.id === selectedClient.id);
-
-    if (!manualClient) {
-      return;
-    }
-
-    const usedProjectIds = new Set(projects.map((project) => project.id));
-    let nextProjectId = Math.max(0, ...Array.from(usedProjectIds)) + 1;
-    while (usedProjectIds.has(nextProjectId)) {
-      nextProjectId += 1;
-    }
-
-    const projectName = manualClient.projectName.trim() || `${manualClient.name} Proyecto`;
-    const createdProject = {
-      id: nextProjectId,
-      code: `CLT-${String(nextProjectId).padStart(3, "0")}`,
-      name: projectName,
-      active: manualClient.hasActiveProject,
-      status: statusFromActive(manualClient.hasActiveProject),
-      client: {
-        id: manualClient.id,
-        name: manualClient.name,
-        emails: manualClient.emails,
-        phone: manualClient.phone,
-        kind: manualClient.kind,
-        contacts: manualClient.contacts,
-        completedProjects: manualClient.completedProjects,
-        acquisitionChannel: manualClient.acquisitionChannel,
-        totalSpent: manualClient.totalSpent,
-      },
-      type: manualClient.projectType || "Otro",
-      stage: "Presale",
-      phase: "Inicial",
-      address: {
-        street: "",
-        city: "",
-        state: "",
-      },
-      manager: "Sin responsable",
-      coordinator: "Sin responsable",
-      team: [],
-      progress: 0,
-      drive: {
-        administrativo: "",
-        planos: "",
-        renders: "",
-        reportes: "",
-      },
-      startDate: manualClient.firstWorkDate || new Date().toISOString().split("T")[0],
-    };
-
-    const updatedProjects = [...projects, createdProject];
-    const updatedManualClients = manualClients.filter((client) => client.id !== manualClient.id);
-
-    setProjects(updatedProjects);
-    setManualClients(updatedManualClients);
-
-    updateProjectsStorage(updatedProjects);
-    updateManualClientsStorage(updatedManualClients);
-
-    router.push(`/proyectos/${createdProject.id}/ficha`);
   };
 
   if (!clientsCapabilities.canViewClients) {
@@ -1134,8 +895,7 @@ export default function ClientesPageClient({
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-3">
-          <section className="space-y-4 xl:col-span-2">
+        <section className="mt-6 space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="space-y-6">
                 <div>
@@ -1153,8 +913,6 @@ export default function ClientesPageClient({
                     columns={clientColumns}
                     data={activeProjectClients}
                     getRowId={(client) => `active-${client.id}`}
-                    onRowClick={(client) => setSelectedClientId(client.id)}
-                    rowClassName={(client) => (selectedClient?.id === client.id ? "bg-blue-50/60" : undefined)}
                     emptyMessage="No hay clientes con proyecto activo para estos filtros."
                     tableClassName="min-w-full"
                   />
@@ -1175,8 +933,6 @@ export default function ClientesPageClient({
                     columns={clientColumns}
                     data={inactiveProjectClients}
                     getRowId={(client) => `inactive-${client.id}`}
-                    onRowClick={(client) => setSelectedClientId(client.id)}
-                    rowClassName={(client) => (selectedClient?.id === client.id ? "bg-blue-50/60" : undefined)}
                     emptyMessage="No hay clientes con proyectos inactivos para estos filtros."
                     tableClassName="min-w-full"
                   />
@@ -1189,281 +945,7 @@ export default function ClientesPageClient({
                 ) : null}
               </div>
             </div>
-          </section>
-
-          <aside className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">Detalle del cliente</h2>
-
-              {selectedClient ? (
-                <div className="mt-4 space-y-4">
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!clientsCapabilities.canEditClient) {
-                          return;
-                        }
-
-                        const manualMatch = manualClients.find((item) => item.id === selectedClient.id);
-
-                        if (manualMatch) {
-                          setEditingClientId(null);
-                          setEditingManualClientId(manualMatch.id);
-                          setEditorError("");
-                          setDraft({
-                            name: manualMatch.name,
-                            emailsText: manualMatch.emails.join(", "),
-                            phone: manualMatch.phone,
-                            kind: manualMatch.kind,
-                            projects: [],
-                          });
-                          setShowEditor(true);
-                          return;
-                        }
-
-                        openEditor(selectedClient);
-                      }}
-                      disabled={!clientsCapabilities.canEditClient}
-                      title={clientsCapabilities.canEditClient ? "" : "No tienes permiso para editar clientes"}
-                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${clientsCapabilities.canEditClient ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
-                    >
-                      Editar cliente
-                    </button>
-                    <Link
-                      href={`/clientes/${selectedClient.id}`}
-                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                    >
-                      Abrir ficha del cliente
-                    </Link>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <Avatar name={selectedClient.name} />
-                    <p className="mt-2 text-xs text-slate-500">
-                      {selectedClient.emails.length > 0 ? selectedClient.emails.join(" · ") : "Sin correos registrados"}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">Contacto: {selectedClient.phone || "Sin numero"}</p>
-                  </div>
-
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
-                      <p className="text-xs text-slate-500">Numero de proyectos con nosotros</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-800">{selectedClient.totalProjectsWorked}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
-                      <p className="text-xs text-slate-500">Fecha de primer trabajo</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-800">{selectedClient.firstWorkDate}</p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-                    <p><span className="text-slate-500">Tipo de cliente:</span> {selectedClient.kind}</p>
-                    <p className="mt-1"><span className="text-slate-500">Proyecto activo:</span> {selectedClient.hasActiveProject ? "Si" : "Ya termino"}</p>
-                    <p className="mt-1"><span className="text-slate-500">Tipo de proyecto:</span> {selectedClient.projectTypes.join(" / ")}</p>
-                    <p className="mt-1"><span className="text-slate-500">Riesgo operativo:</span> {selectedClient.risk}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Proyectos del cliente</p>
-                    <div className="mt-2 space-y-2">
-                      {selectedClient.projects.map((project) => (
-                        <div key={project.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="font-medium text-slate-800">{project.name}</p>
-                              <p className="text-xs text-slate-500">{project.stage} · {project.phase}</p>
-                            </div>
-                            <Badge
-                              label={project.status}
-                              color={project.active ? "green" : "gray"}
-                            />
-                          </div>
-
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Link
-                              href={`/tareas?project=${encodeURIComponent(project.name)}`}
-                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              Ver actividades
-                            </Link>
-                          </div>
-                        </div>
-                      ))}
-
-                      {selectedClient.projects.length === 0 ? (
-                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-sm text-slate-500">
-                          <p>Cliente sin proyecto operativo vinculado.</p>
-                          <button
-                            type="button"
-                            onClick={convertManualClientToProject}
-                            disabled={!clientsCapabilities.canEditClient}
-                            title={clientsCapabilities.canEditClient ? "" : "No tienes permiso para editar clientes"}
-                            className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold text-white ${clientsCapabilities.canEditClient ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
-                          >
-                            Convertir a proyecto
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                  Selecciona un cliente de la tabla para ver su detalle.
-                </div>
-              )}
-            </div>
-          </aside>
-        </div>
-
-        {showEditor ? (
-          <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/30">
-            <div className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
-              <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Editar cliente</h2>
-                  <p className="text-sm text-slate-500">Actualiza datos de contacto y proyectos relacionados.</p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={closeEditor}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Cerrar
-                </button>
-              </div>
-
-              <div className="mt-5 space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm text-slate-700">
-                    Nombre del cliente
-                    <input
-                      value={draft.name}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    />
-                  </label>
-
-                  <label className="text-sm text-slate-700">
-                    Numero de contacto
-                    <input
-                      value={draft.phone}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, phone: event.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    />
-                  </label>
-
-                  <label className="text-sm text-slate-700 sm:col-span-2">
-                    Email(s) del cliente
-                    <input
-                      value={draft.emailsText}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, emailsText: event.target.value }))}
-                      placeholder="correo1@dominio.com, correo2@dominio.com"
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    />
-                  </label>
-
-                  <label className="text-sm text-slate-700">
-                    Empresa o Particular
-                    <select
-                      value={draft.kind}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, kind: event.target.value as ClientKind }))}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    >
-                      <option value="Empresa">Empresa</option>
-                      <option value="Particular">Particular</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Proyectos del cliente</p>
-                  <div className="mt-2 space-y-3">
-                    {draft.projects.map((project) => (
-                      <div key={project.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <label className="text-sm text-slate-700">
-                            Nombre del proyecto
-                            <input
-                              value={project.name}
-                              onChange={(event) => updateDraftProject(project.id, { name: event.target.value })}
-                              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                            />
-                          </label>
-
-                          <label className="text-sm text-slate-700">
-                            Tipo de proyecto
-                            <select
-                              value={project.type}
-                              onChange={(event) => updateDraftProject(project.id, { type: event.target.value })}
-                              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                            >
-                              {!projectTypeOptions.includes(project.type as ProjectType) ? (
-                                <option value={project.type}>{project.type}</option>
-                              ) : null}
-                              {projectTypeOptions.map((option) => (
-                                <option key={`${project.id}-${option}`} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <label className="text-sm text-slate-700">
-                            Proyecto activo
-                            <select
-                              value={project.active ? "si" : "no"}
-                              onChange={(event) => updateDraftProject(project.id, { active: event.target.value === "si" })}
-                              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                            >
-                              <option value="si">Si</option>
-                              <option value="no">Ya termino</option>
-                            </select>
-                          </label>
-
-                          <label className="text-sm text-slate-700">
-                            Fecha de primer trabajo
-                            <input
-                              type="date"
-                              value={project.startDate}
-                              onChange={(event) => updateDraftProject(project.id, { startDate: event.target.value })}
-                              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {editorError ? (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {editorError}
-                  </div>
-                ) : null}
-
-                <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
-                  <button
-                    type="button"
-                    onClick={closeEditor}
-                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveClientChanges}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                  >
-                    Guardar cambios
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        </section>
 
         {showCreateModal ? (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/30">
