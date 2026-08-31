@@ -14,6 +14,7 @@ type MenuLinkItem = {
   label: string;
   href: string;
   icon: (props: IconProps) => React.JSX.Element;
+  exact?: boolean;
 };
 
 type MenuGroupItem = {
@@ -173,7 +174,7 @@ export default function Sidebar() {
       label: "Actividades",
       icon: ActivityIcon,
       submenu: [
-        { label: "General", href: "/tareas", icon: ActivityIcon },
+        { label: "General", href: "/tareas", icon: ActivityIcon, exact: true },
         { label: "Presale", href: "/tareas/presale", icon: ActivityIcon },
         { label: "Taller de diseño", href: "/tareas/diseno", icon: ActivityIcon },
         { label: "Construccion", href: "/tareas/construccion", icon: ActivityIcon },
@@ -230,11 +231,12 @@ export default function Sidebar() {
       : []),
   ];
 
-  const isActivePath = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const isActivePath = (href: string, exact = false) =>
+    exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
   const currentProfileRole = (() => {
     for (const item of menu) {
       if (isGroup(item)) {
-        const activeSub = item.submenu.find((sub) => isActivePath(sub.href));
+        const activeSub = item.submenu.find((sub) => isActivePath(sub.href, sub.exact));
         if (activeSub) return activeSub.label;
       } else if (isActivePath(item.href)) {
         return item.label;
@@ -280,7 +282,7 @@ export default function Sidebar() {
         {menu.map((item) => {
           if (isGroup(item)) {
             const isExpanded = expandedMenu === item.label;
-            const hasActive = item.submenu.some((sub) => isActivePath(sub.href));
+            const hasActive = item.submenu.some((sub) => isActivePath(sub.href, sub.exact));
 
             return (
               <div key={item.label}>
@@ -302,7 +304,7 @@ export default function Sidebar() {
                 {isExpanded && (
                   <div className="ml-7 mt-1.5 pl-3 border-l border-[#BBC6DE] space-y-1">
                     {item.submenu.map((subitem) => {
-                      const subActive = isActivePath(subitem.href);
+                      const subActive = isActivePath(subitem.href, subitem.exact);
                       return (
                         <Link
                           key={subitem.label}
