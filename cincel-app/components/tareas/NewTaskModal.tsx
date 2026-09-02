@@ -3,12 +3,14 @@
 import { useRef, useState } from "react";
 import type { TaskStatus } from "@/lib/types/task";
 import DialogOverlay from "@/components/ui/DialogOverlay";
+import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 
 type TaskFormValues = {
   project: string;
   phase: string;
   description: string;
   manager: string;
+  support: string[];
   status: TaskStatus;
   notes: string;
   commitmentDate: string;
@@ -39,6 +41,7 @@ export default function NewTaskModal({
   const [phase, setPhase] = useState(phaseOptions[0] ?? "Inicial");
   const [description, setDescription] = useState("");
   const [manager, setManager] = useState(teamMembers[0] ?? "Sin responsable");
+  const [support, setSupport] = useState<string[]>([]);
   const [status, setStatus] = useState<TaskStatus>("Pendiente");
   const [notes, setNotes] = useState("");
   const [commitmentDate, setCommitmentDate] = useState("");
@@ -66,6 +69,7 @@ export default function NewTaskModal({
       phase: phaseRef.current?.value ?? phase,
       description: trimmedDescription,
       manager: managerRef.current?.value ?? manager,
+      support,
       status: (statusRef.current?.value as TaskStatus | undefined) ?? status,
       notes: notesRef.current?.value ?? notes,
       commitmentDate: commitmentDateRef.current?.value ?? commitmentDate,
@@ -130,6 +134,14 @@ export default function NewTaskModal({
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="block mb-2 font-medium text-black">Equipo</label>
+              <TeamMultiSelect
+                options={teamMembers}
+                selected={support}
+                onChange={setSupport}
+              />
             </div>
 
             <div>
