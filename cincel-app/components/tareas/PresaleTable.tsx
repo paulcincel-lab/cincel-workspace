@@ -31,6 +31,7 @@ type TaskFormValues = {
   phase: string;
   description: string;
   manager: string;
+  support: string[];
   status: TaskStatus;
   notes: string;
   commitmentDate: string;
@@ -122,7 +123,7 @@ function createTaskFromValues(
     description: values.description,
     notes: values.notes,
     manager: values.manager,
-    support: [],
+    support: values.support,
     status: values.status,
     priority: "Media",
     commitmentDate: values.commitmentDate,

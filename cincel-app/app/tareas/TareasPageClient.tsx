@@ -419,6 +419,23 @@ export default function TareasPage({
         getValue: (row) => row.task.manager || "Sin responsable",
       },
       {
+        key: "team",
+        header: "Equipo",
+        getValue: (row) => row.task.support?.join(", ") || "Sin equipo",
+      },
+      {
+        key: "commitment",
+        header: "Compromiso",
+        isDate: true,
+        getValue: (row) => row.task.commitmentDate || "",
+      },
+      {
+        key: "tracking",
+        header: "Seguimiento",
+        isDate: true,
+        getValue: (row) => row.task.reviewDate || "",
+      },
+      {
         key: "reviewDate",
         header: "Proxima revision",
         isDate: true,
@@ -494,6 +511,30 @@ export default function TareasPage({
             </div>
           );
         },
+      },
+      {
+        id: "team",
+        accessorFn: (row) => (row.task.support && row.task.support.length > 0 ? row.task.support.join(", ") : "Sin equipo"),
+        header: "Equipo",
+        cell: ({ row }) => (
+          <span className="text-sm text-slate-600">{row.original.task.support?.join(", ") || "Sin equipo"}</span>
+        ),
+      },
+      {
+        id: "commitment",
+        accessorFn: (row) => row.task.commitmentDate || "",
+        header: "Compromiso",
+        cell: ({ row }) => (
+          <span suppressHydrationWarning>{formatDateDMY(row.original.task.commitmentDate)}</span>
+        ),
+      },
+      {
+        id: "tracking",
+        accessorFn: (row) => row.task.reviewDate || "",
+        header: "Seguimiento",
+        cell: ({ row }) => (
+          <span suppressHydrationWarning>{formatDateDMY(row.original.task.reviewDate)}</span>
+        ),
       },
       {
         id: "reviewDate",
