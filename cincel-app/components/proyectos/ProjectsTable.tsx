@@ -8,6 +8,9 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 import ExportMenu from "@/components/ui/ExportMenu";
 import { DataTable } from "@/components/ui/DataTable";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { fetchClients } from "@/lib/repositories/clients-repository";
@@ -27,12 +30,6 @@ type ActiveClientOption = {
 };
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
-
-function projectStatusSelectClasses(active: boolean): string {
-  return active
-    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-    : "border-red-200 bg-red-50 text-red-800";
-}
 
 function projectStatusDotClasses(active: boolean): string {
   return active ? "bg-emerald-500" : "bg-red-500";
@@ -338,23 +335,29 @@ export default function ProjectsTable({
           return projectsCapabilities.canEditProjectGeneral &&
             inlineEditingCell?.projectId === project.id &&
             inlineEditingCell.field === "design" ? (
-            <select
+            <Select
               value={normalizeName(project.coordinator) || "Sin encargado"}
-              onChange={(event) => {
-                updateCoordinator(project.id, event.target.value);
+              onValueChange={(value) => {
+                updateCoordinator(project.id, value as string);
                 setInlineEditingCell(null);
               }}
-              onBlur={() => setInlineEditingCell(null)}
-              autoFocus
-              className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
+              onOpenChange={(open) => {
+                if (!open) setInlineEditingCell(null);
+              }}
+              defaultOpen
             >
-              <option value="Sin encargado">Sin encargado</option>
-              {getCoordinatorOptions(project).map((member) => (
-                <option key={`table-design-${project.id}-${member}`} value={member}>
-                  {member}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-auto text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Sin encargado">Sin encargado</SelectItem>
+                {getCoordinatorOptions(project).map((member) => (
+                  <SelectItem key={`table-design-${project.id}-${member}`} value={member}>
+                    {member}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <span
               className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
@@ -377,23 +380,29 @@ export default function ProjectsTable({
           return projectsCapabilities.canEditProjectGeneral &&
             inlineEditingCell?.projectId === project.id &&
             inlineEditingCell.field === "construction" ? (
-            <select
+            <Select
               value={secondaryCoordinatorByProject[project.id] || "Sin encargado"}
-              onChange={(event) => {
-                setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: event.target.value }));
+              onValueChange={(value) => {
+                setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: value as string }));
                 setInlineEditingCell(null);
               }}
-              onBlur={() => setInlineEditingCell(null)}
-              autoFocus
-              className="rounded-lg border border-blue-300 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none"
+              onOpenChange={(open) => {
+                if (!open) setInlineEditingCell(null);
+              }}
+              defaultOpen
             >
-              <option value="Sin encargado">Sin encargado</option>
-              {getCoordinatorOptions(project).map((member) => (
-                <option key={`table-construction-${project.id}-${member}`} value={member}>
-                  {member}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-auto text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Sin encargado">Sin encargado</SelectItem>
+                {getCoordinatorOptions(project).map((member) => (
+                  <SelectItem key={`table-construction-${project.id}-${member}`} value={member}>
+                    {member}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <span
               className={`text-sm text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`}
@@ -426,16 +435,19 @@ export default function ProjectsTable({
           return (
             <div className="inline-flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
-              <select
+              <Select
                 value={project.active ? "activo" : "archivado"}
-                onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
+                onValueChange={(value) => updateProjectActive(project.id, value === "activo")}
                 disabled={!projectsCapabilities.canArchiveProject}
-                className={`rounded-lg border px-2 py-1 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
-                aria-label={`Estado en tabla de ${project.name}`}
               >
-                <option value="activo">Proyecto activo</option>
-                <option value="archivado">Proyecto archivado</option>
-              </select>
+                <SelectTrigger aria-label={`Estado en tabla de ${project.name}`} className="w-auto text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="activo">Proyecto activo</SelectItem>
+                  <SelectItem value="archivado">Proyecto archivado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           );
         },
@@ -458,12 +470,9 @@ export default function ProjectsTable({
             >
               Actividades
             </Link>
-            <button
-              onClick={() => openNotesModal(row.original.id)}
-              className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
-            >
+            <Button variant="outline" size="sm" onClick={() => openNotesModal(row.original.id)}>
               Nota
-            </button>
+            </Button>
           </div>
         ),
       },
@@ -504,69 +513,65 @@ export default function ProjectsTable({
           </div>
 
           <div className="flex flex-col items-end gap-2">
-            <button
-              type="button"
+            <Button
               onClick={openCreateModal}
               disabled={!projectsCapabilities.canCreateProject}
               title={projectsCapabilities.canCreateProject ? "" : "No tienes permiso para crear proyectos"}
-              className={`rounded-xl px-5 py-2 text-sm font-medium text-white ${projectsCapabilities.canCreateProject ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
             >
               + Nuevo proyecto
-            </button>
+            </Button>
 
             <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
-              <button
-                type="button"
+              <Button
+                variant={statusViewFilter === "Activos" ? "default" : "ghost"}
+                size="sm"
                 onClick={() => setStatusViewFilter("Activos")}
-                className={`rounded-lg px-3 py-1 text-xs font-medium ${statusViewFilter === "Activos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
               >
                 Activos
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant={statusViewFilter === "Archivados" ? "default" : "ghost"}
+                size="sm"
                 onClick={() => setStatusViewFilter("Archivados")}
-                className={`rounded-lg px-3 py-1 text-xs font-medium ${statusViewFilter === "Archivados" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
               >
                 Archivados
-              </button>
+              </Button>
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <input
+          <Input
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Filtrar por nombre de proyecto..."
-            className="h-10 w-72 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 placeholder:text-slate-500"
+            className="h-10 w-72"
           />
-          <select
-            value={coordinatorFilter}
-            onChange={(event) => setCoordinatorFilter(event.target.value)}
-            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700"
-          >
-            {coordinators.map((coordinator) => (
-              <option key={coordinator} value={coordinator}>Encargado: {coordinator}</option>
-            ))}
-          </select>
-          <select
-            value={riskFilter}
-            onChange={(event) => setRiskFilter(event.target.value as RiskLevel | "Todos")}
-            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700"
-          >
-            <option value="Todos">Riesgo: todos</option>
-            <option value="Alto">Riesgo alto</option>
-            <option value="Medio">Riesgo medio</option>
-            <option value="Bajo">Riesgo bajo</option>
-          </select>
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
+          <Select value={coordinatorFilter} onValueChange={(v) => setCoordinatorFilter(v as string)}>
+            <SelectTrigger className="h-10 w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {coordinators.map((coordinator) => (
+                <SelectItem key={coordinator} value={coordinator}>Encargado: {coordinator}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={riskFilter} onValueChange={(v) => setRiskFilter(v as RiskLevel | "Todos")}>
+            <SelectTrigger className="h-10 w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Todos">Riesgo: todos</SelectItem>
+              <SelectItem value="Alto">Riesgo alto</SelectItem>
+              <SelectItem value="Medio">Riesgo medio</SelectItem>
+              <SelectItem value="Bajo">Riesgo bajo</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" className="h-10" onClick={clearFilters}>
             Limpiar filtros
-          </button>
+          </Button>
           {projectsCapabilities.canExportData ? (
             <ExportMenu onExport={exportProjects} scaleClassName="scale-100" />
           ) : null}
@@ -714,16 +719,19 @@ export default function ProjectsTable({
                     </div>
                     <div className="inline-flex items-center gap-2">
                       <span className={`h-2 w-2 rounded-full ${projectStatusDotClasses(project.active)}`} />
-                      <select
+                      <Select
                         value={project.active ? "activo" : "archivado"}
-                        onChange={(event) => updateProjectActive(project.id, event.target.value === "activo")}
+                        onValueChange={(value) => updateProjectActive(project.id, value === "activo")}
                         disabled={!projectsCapabilities.canArchiveProject}
-                        className={`rounded-lg border px-3 py-2 text-xs font-semibold ${projectStatusSelectClasses(project.active)}`}
-                        aria-label={`Estado de ${project.name}`}
                       >
-                        <option value="activo">Proyecto activo</option>
-                        <option value="archivado">Proyecto archivado</option>
-                      </select>
+                        <SelectTrigger aria-label={`Estado de ${project.name}`} className="w-auto text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="activo">Proyecto activo</SelectItem>
+                          <SelectItem value="archivado">Proyecto archivado</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
@@ -735,36 +743,42 @@ export default function ProjectsTable({
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-2">
                         <p className="text-sm text-slate-600">Líder de diseño</p>
-                        <select
+                        <Select
                           value={normalizeName(project.coordinator) || "Sin responsable"}
-                          onChange={(event) => updateCoordinator(project.id, event.target.value)}
+                          onValueChange={(value) => updateCoordinator(project.id, value as string)}
                           disabled={!projectsCapabilities.canEditProjectGeneral}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
-                          aria-label={`Líder de diseño de ${project.name}`}
                         >
-                          <option value="Sin responsable">Sin encargado</option>
-                          {getCoordinatorOptions(project).map((member) => (
-                            <option key={`card-coordinator-${project.id}-${member}`} value={member}>{member}</option>
-                          ))}
-                        </select>
+                          <SelectTrigger aria-label={`Líder de diseño de ${project.name}`} className="w-auto">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Sin responsable">Sin encargado</SelectItem>
+                            {getCoordinatorOptions(project).map((member) => (
+                              <SelectItem key={`card-coordinator-${project.id}-${member}`} value={member}>{member}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="flex items-center gap-2">
                         <p className="text-sm text-slate-600">Líder de construcción</p>
-                        <select
+                        <Select
                           value={secondaryCoordinatorByProject[project.id] || "Sin responsable"}
-                          onChange={(event) => {
+                          onValueChange={(value) => {
                             if (!projectsCapabilities.canEditProjectGeneral) return;
-                            setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: event.target.value }));
+                            setSecondaryCoordinatorByProject((current) => ({ ...current, [project.id]: value as string }));
                           }}
                           disabled={!projectsCapabilities.canEditProjectGeneral}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800"
-                          aria-label={`Líder de construcción de ${project.name}`}
                         >
-                          <option value="Sin responsable">Sin encargado</option>
-                          {getCoordinatorOptions(project).map((member) => (
-                            <option key={`card-construction-coordinator-${project.id}-${member}`} value={member}>{member}</option>
-                          ))}
-                        </select>
+                          <SelectTrigger aria-label={`Líder de construcción de ${project.name}`} className="w-auto">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Sin responsable">Sin encargado</SelectItem>
+                            {getCoordinatorOptions(project).map((member) => (
+                              <SelectItem key={`card-construction-coordinator-${project.id}-${member}`} value={member}>{member}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </div>
@@ -819,24 +833,22 @@ export default function ProjectsTable({
                       Alerta: {project.mainAlert}
                     </p>
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => openNotesModal(project.id)}
-                        className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-                      >
+                      <Button variant="outline" size="sm" onClick={() => openNotesModal(project.id)}>
                         Registrar nota
-                      </button>
+                      </Button>
                       <Link href={`/proyectos/${project.id}/ficha`} className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50">
                         Ficha del proyecto
                       </Link>
                       {section.key === "archivados" ? (
-                        <button
+                        <Button
+                          variant="destructive"
+                          size="sm"
                           onClick={() => deleteProject(project.id)}
                           disabled={!projectsCapabilities.canDeleteProject}
                           title={projectsCapabilities.canDeleteProject ? "" : "No tienes permiso para eliminar proyectos"}
-                          className={`rounded-lg border px-3 py-1 text-sm font-medium ${projectsCapabilities.canDeleteProject ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                         >
                           Eliminar proyecto
-                        </button>
+                        </Button>
                       ) : null}
                     </div>
                   </div>
