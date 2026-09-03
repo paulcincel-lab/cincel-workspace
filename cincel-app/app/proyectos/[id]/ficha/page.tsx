@@ -6,7 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
@@ -762,7 +762,7 @@ export default function ProjectFichaPage() {
 
                       setInlineEditingCoordinator(true);
                     }}>
-                      <Avatar name={project.coordinator || "Sin encargado"} />
+                      <AppAvatar name={project.coordinator || "Sin encargado"} />
                     </div>
                   )}
                 </div>
@@ -811,7 +811,7 @@ export default function ProjectFichaPage() {
 
                       setInlineEditingConstructionCoordinator(true);
                     }}>
-                      <Avatar name={constructionCoordinator} />
+                      <AppAvatar name={constructionCoordinator} />
                     </div>
                   )}
                 </div>

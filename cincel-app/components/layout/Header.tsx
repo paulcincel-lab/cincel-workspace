@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
 import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
 import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
@@ -455,7 +455,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-4">
-          <Avatar name={currentName} showName={false} />
+          <AppAvatar name={currentName} showName={false} />
 
           <h1 className="text-xl font-bold text-slate-900">
             {`Bienvenido, ${currentName}`}

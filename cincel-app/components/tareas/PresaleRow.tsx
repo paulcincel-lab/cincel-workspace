@@ -1,6 +1,6 @@
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 import Badge from "@/components/ui/Badge";
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 import InlineEditableField from "@/components/ui/InlineEditableField";
 import TeamMultiSelect, { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
 import type { Task, TaskStatus } from "@/lib/types/task";
@@ -279,7 +279,7 @@ export function buildPresaleColumns({
                 value={task.manager}
                 onCommit={(value) => updateField(task, "manager", value)}
                 commitOnChange
-                renderDisplay={(value) => <Avatar name={value} />}
+                renderDisplay={(value) => <AppAvatar name={value} />}
                 renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
                   <select
                     autoFocus
@@ -298,7 +298,7 @@ export function buildPresaleColumns({
                 )}
               />
             ) : (
-              <Avatar name={task.manager} />
+              <AppAvatar name={task.manager} />
             )}
           </div>
         );

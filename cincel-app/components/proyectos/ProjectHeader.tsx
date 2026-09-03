@@ -1,4 +1,4 @@
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 
 type Props = {
   name: string;
@@ -70,7 +70,7 @@ export default function ProjectHeader({
 
           <div className="flex items-center gap-3 mt-2">
 
-            <Avatar
+            <AppAvatar
               name={manager}
             />
 
@@ -86,7 +86,7 @@ export default function ProjectHeader({
 
           <div className="flex items-center gap-3 mt-2">
 
-            <Avatar
+            <AppAvatar
               name={coordinator}
             />
 
