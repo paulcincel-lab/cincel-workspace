@@ -8,6 +8,13 @@ import { DataTable } from "@/components/ui/DataTable";
 import { EditableCell } from "@/components/proveedores/EditableCell";
 import { StarRating } from "@/components/proveedores/StarRating";
 import { PillDropdown } from "@/components/proveedores/PillDropdown";
+import { Button } from "@/components/ui/shadcn/button";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { colaboradores as baseColaboradores } from "@/lib/data/colaboradores";
 import type { Colaborador, ColaboradorRole, ColaboradorStatus, ColaboradorSeniority, ColaboradorPriceLevel } from "@/lib/types/colaborador";
 import { getColaboradoresSnapshot, saveColaboradores, fetchColaboradores } from "@/lib/repositories/providers-repository";
@@ -22,6 +29,10 @@ const DEFAULT_ROLES: ColaboradorRole[] = ["Arquitecto", "Diseñador", "Ingeniero
 const DEFAULT_STATUS_OPTIONS: ColaboradorStatus[] = ["Activo", "Freelance", "Pasantía", "Inactivo"];
 const DEFAULT_SENIORITY_OPTIONS: ColaboradorSeniority[] = ["Excelente", "Nivel Medio", "Con detalles", "Bajo", "No trabajes con el"];
 const DEFAULT_PRICE_OPTIONS: ColaboradorPriceLevel[] = ["Gama Alta", "Nivel Medio", "Medio-Bajo", "Bajo"];
+
+const ALL_ROLE_VALUE = "__all_role__";
+const ALL_STATUS_VALUE = "__all_status__";
+const ALL_AVAILABILITY_VALUE = "__all_availability__";
 
 type ColumnKey = "name" | "role" | "status" | "department" | "contact" | "email" | "skills" | "categories" | "seniority" | "priceLevel" | "secondaryContacts" | "availability" | "rating" | "startDate" | "comments";
 
@@ -117,51 +128,57 @@ const AddColaboradorModal = ({ onClose, onAdd, roleOptions, statusOptions }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-      <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-[90%]">
-        <h2 className="text-lg font-bold mb-4 text-gray-900">Agregar Colaborador</h2>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogTitle>Agregar Colaborador</DialogTitle>
         <form onSubmit={submit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Nombre *</label>
-            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Nombre" />
+          <div className="space-y-1">
+            <Label>Nombre *</Label>
+            <Input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nombre" />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Rol</label>
-              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as ColaboradorRole })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
-                {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
+            <div className="space-y-1">
+              <Label>Rol</Label>
+              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as ColaboradorRole })}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Estado</label>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as ColaboradorStatus })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
-                {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+            <div className="space-y-1">
+              <Label>Estado</Label>
+              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as ColaboradorStatus })}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Departamento</label>
-            <input type="text" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Departamento" />
+          <div className="space-y-1">
+            <Label>Departamento</Label>
+            <Input type="text" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="Departamento" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Contacto</label>
-            <input type="text" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Teléfono" />
+          <div className="space-y-1">
+            <Label>Contacto</Label>
+            <Input type="text" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} placeholder="Teléfono" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
-            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Email" />
+          <div className="space-y-1">
+            <Label>Email</Label>
+            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Calificación</label>
+          <div className="space-y-1">
+            <Label>Calificación</Label>
             <StarRating rating={form.rating} onRate={(r) => setForm({ ...form, rating: r })} />
           </div>
           <div className="flex justify-end gap-3 pt-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800">Cancelar</button>
-            <button type="submit" className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition shadow-sm">Agregar</button>
+            <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button type="submit">Agregar</Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -503,21 +520,27 @@ export default function ColaboradoresPage() {
         const c = row.original;
         return deletingId === c.id ? (
           <div className="flex items-center gap-1 justify-end">
-            <button
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-auto px-2 py-1 text-xs"
               onClick={() => deleteColaborador(c.id)}
-              className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 whitespace-nowrap"
-            >Eliminar</button>
-            <button
+            >Eliminar</Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-auto px-2 py-1 text-xs"
               onClick={() => setDeletingId(null)}
-              className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300"
-            >✕</button>
+            >✕</Button>
           </div>
         ) : (
-          <button
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-auto px-1 py-0 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 text-base"
             onClick={() => setDeletingId(c.id)}
-            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition text-base px-1"
             title="Eliminar colaborador"
-          >🗑</button>
+          >🗑</Button>
         );
       },
     },
@@ -561,98 +584,90 @@ export default function ColaboradoresPage() {
             <div className="flex items-center justify-between mb-3">
               <h1 className="text-2xl font-bold text-gray-900">Colaboradores</h1>
               <div className="flex gap-2">
-                <button
+                <Button
+                  variant={showActiveOnly ? "default" : "outline"}
+                  className={showActiveOnly ? "bg-emerald-500 hover:bg-emerald-600 border-emerald-500" : ""}
                   onClick={() => setShowActiveOnly(!showActiveOnly)}
-                  className={`px-3 py-2 text-sm font-medium rounded-lg transition border ${
-                    showActiveOnly
-                      ? "bg-emerald-500 text-white border-emerald-500"
-                      : "bg-white text-gray-600 border-gray-300 hover:border-emerald-400 hover:text-emerald-600"
-                  }`}
                 >
                   ● Solo Activos
-                </button>
-                <button
-                  onClick={() => setShowModal(true)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition shadow-sm"
-                >
+                </Button>
+                <Button onClick={() => setShowModal(true)}>
                   + Agregar Colaborador
-                </button>
+                </Button>
               </div>
             </div>
-            <input
+            <Input
               type="text"
               placeholder="Buscar colaborador…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+              className="w-full bg-white"
             />
           </div>
 
           {/* Filtros */}
           <div className="flex items-center gap-2 flex-wrap bg-white border border-gray-200 rounded-lg px-4 py-2.5">
             <span className="text-xs font-medium text-gray-400 mr-1">Filtrar:</span>
-            <select
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
-              className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-            >
-              <option value="">Rol: Todos</option>
-              {DEFAULT_ROLES.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-            >
-              <option value="">Estado: Todos</option>
-              {statusOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-            <select
-              value={filterAvailability}
-              onChange={(e) => setFilterAvailability(e.target.value)}
-              className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-            >
-              <option value="">Disponibilidad: Todas</option>
-              <option value="Disponible">Disponible</option>
-              <option value="Parcial">Parcial</option>
-              <option value="Ocupado">Ocupado</option>
-            </select>
-            <div className="relative group">
-              <button className={`px-2 py-1 text-xs border rounded-md bg-gray-50 text-gray-700 ${filterSkills.length > 0 ? "border-blue-400 bg-blue-50 text-blue-700 font-semibold" : "border-gray-200"}`}>
+            <Select value={filterRole || ALL_ROLE_VALUE} onValueChange={(v) => setFilterRole(v === ALL_ROLE_VALUE ? "" : (v as string))}>
+              <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_ROLE_VALUE}>Rol: Todos</SelectItem>
+                {DEFAULT_ROLES.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus || ALL_STATUS_VALUE} onValueChange={(v) => setFilterStatus(v === ALL_STATUS_VALUE ? "" : (v as string))}>
+              <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_STATUS_VALUE}>Estado: Todos</SelectItem>
+                {statusOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterAvailability || ALL_AVAILABILITY_VALUE} onValueChange={(v) => setFilterAvailability(v === ALL_AVAILABILITY_VALUE ? "" : (v as string))}>
+              <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_AVAILABILITY_VALUE}>Disponibilidad: Todas</SelectItem>
+                <SelectItem value="Disponible">Disponible</SelectItem>
+                <SelectItem value="Parcial">Parcial</SelectItem>
+                <SelectItem value="Ocupado">Ocupado</SelectItem>
+              </SelectContent>
+            </Select>
+            <Popover>
+              <PopoverTrigger
+                className={`px-2 py-1 text-xs border rounded-md bg-gray-50 text-gray-700 ${filterSkills.length > 0 ? "border-blue-400 bg-blue-50 text-blue-700 font-semibold" : "border-gray-200"}`}
+              >
                 Habilidades {filterSkills.length > 0 && `(${filterSkills.length})`}
-              </button>
-              <div className="absolute left-0 top-full hidden group-hover:block mt-0.5 z-50 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-3 space-y-2 max-h-64 overflow-y-auto">
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-56 space-y-2 max-h-64 overflow-y-auto">
                 {allSkills.map((skill) => (
                   <label key={skill} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-gray-50 p-1 rounded">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={filterSkills.includes(skill)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
+                      onCheckedChange={(checked) => {
+                        if (checked) {
                           setFilterSkills([...filterSkills, skill]);
                         } else {
                           setFilterSkills(filterSkills.filter((s) => s !== skill));
                         }
                       }}
-                      className="accent-blue-600"
                     />
                     <span>{skill}</span>
                   </label>
                 ))}
-              </div>
-            </div>
-            <select
-              value={filterMinRating.toString()}
-              onChange={(e) => setFilterMinRating(Number(e.target.value))}
-              className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-            >
-              <option value="0">Calificación: Todas</option>
-              <option value="5">★★★★★  5 estrellas</option>
-              <option value="4">★★★★+  4 o más</option>
-              <option value="3">★★★+  3 o más</option>
-            </select>
+              </PopoverContent>
+            </Popover>
+            <Select value={filterMinRating.toString()} onValueChange={(v) => setFilterMinRating(Number(v))}>
+              <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Calificación: Todas</SelectItem>
+                <SelectItem value="5">★★★★★  5 estrellas</SelectItem>
+                <SelectItem value="4">★★★★+  4 o más</SelectItem>
+                <SelectItem value="3">★★★+  3 o más</SelectItem>
+              </SelectContent>
+            </Select>
             {activeFiltersCount > 0 && (
-              <button
+              <Button
+                variant="ghost"
+                className="ml-auto h-auto px-2.5 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
                 onClick={() => {
                   setFilterRole("");
                   setFilterStatus("");
@@ -662,10 +677,9 @@ export default function ColaboradoresPage() {
                   setSearchTerm("");
                   setShowActiveOnly(false);
                 }}
-                className="ml-auto px-2.5 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition"
               >
                 ✕ Limpiar ({activeFiltersCount})
-              </button>
+              </Button>
             )}
           </div>
 
