@@ -6,8 +6,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import AppAvatar from "@/components/ui/AppAvatar";
-import Badge from "@/components/ui/Badge";
+import Avatar from "@/components/ui/Avatar";
+import AppBadge from "@/components/ui/AppBadge";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { DataTable } from "@/components/ui/DataTable";
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
@@ -1078,11 +1078,11 @@ export default function EquipoPageClient({
     }
 
     if (column === "estado") {
-      return <Badge label={member.active ? "Activo" : "Inactivo"} color={member.active ? "blue" : "gray"} />;
+      return <AppBadge label={member.active ? "Activo" : "Inactivo"} color={member.active ? "blue" : "gray"} />;
     }
 
     if (column === "disponibilidad") {
-      return <Badge label={member.availability} color={availabilityBadgeColor(member.availability)} />;
+      return <AppBadge label={member.availability} color={availabilityBadgeColor(member.availability)} />;
     }
 
     if (column === "liderDiseno") {
@@ -1122,7 +1122,7 @@ export default function EquipoPageClient({
     if (column === "carga") {
       return (
         <div className="flex items-center gap-2">
-          <Badge label={member.loadLabel} color={loadBadgeColor(member.occupancy, member.active)} />
+          <AppBadge label={member.loadLabel} color={loadBadgeColor(member.occupancy, member.active)} />
           <span className="text-xs text-slate-800">{member.occupancy}%</span>
         </div>
       );
@@ -1241,7 +1241,7 @@ export default function EquipoPageClient({
     }
 
     if (column === "disponibilidad") {
-      return <Badge label={member.availability} color={availabilityBadgeColor(member.availability)} />;
+      return <AppBadge label={member.availability} color={availabilityBadgeColor(member.availability)} />;
     }
 
     if (column === "liderDiseno") {
@@ -1558,8 +1558,8 @@ export default function EquipoPageClient({
               {filteredMembers.map((member) => (
                 <div key={`card-${member.id}`} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <AppAvatar name={member.name} />
-                    <Badge label={member.active ? "Activo" : "Desactivado"} color={member.active ? "blue" : "gray"} />
+                    <Avatar name={member.name} />
+                    <AppBadge label={member.active ? "Activo" : "Desactivado"} color={member.active ? "blue" : "gray"} />
                   </div>
 
                   <div className="space-y-1 text-sm text-slate-600">

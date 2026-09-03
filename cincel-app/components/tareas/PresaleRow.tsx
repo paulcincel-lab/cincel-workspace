@@ -1,6 +1,6 @@
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
-import Badge from "@/components/ui/Badge";
-import AppAvatar from "@/components/ui/AppAvatar";
+import AppBadge from "@/components/ui/AppBadge";
+import Avatar from "@/components/ui/Avatar";
 import InlineEditableField from "@/components/ui/InlineEditableField";
 import TeamMultiSelect, { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
 import type { Task, TaskStatus } from "@/lib/types/task";
@@ -161,7 +161,7 @@ export function buildPresaleColumns({
                 commitOnChange
                 renderDisplay={(value) => (
                   <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-                    <Badge label={value} color={phaseColor(value)} />
+                    <AppBadge label={value} color={phaseColor(value)} />
                   </span>
                 )}
                 renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
@@ -200,7 +200,7 @@ export function buildPresaleColumns({
               />
             ) : (
               <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-                <Badge label={task.phase} color={phaseColor(task.phase)} />
+                <AppBadge label={task.phase} color={phaseColor(task.phase)} />
               </span>
             )}
           </div>
@@ -358,7 +358,7 @@ export function buildPresaleColumns({
                 value={task.status}
                 onCommit={(value) => updateField(task, "status", value as TaskStatus)}
                 commitOnChange
-                renderDisplay={(value) => <Badge label={value} color={statusColor(value)} />}
+                renderDisplay={(value) => <AppBadge label={value} color={statusColor(value)} />}
                 renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
                   <select
                     autoFocus
@@ -376,7 +376,7 @@ export function buildPresaleColumns({
                 )}
               />
             ) : (
-              <Badge label={task.status} color={statusColor(task.status)} />
+              <AppBadge label={task.status} color={statusColor(task.status)} />
             )}
           </div>
         );
