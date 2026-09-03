@@ -9,5 +9,9 @@
   "Phase 8: Assistant shadcn/ui Widgets": "phase:8",
   "Phase 9: Primitive Consolidation": "phase:9",
   "Phase 10: Overlay Consolidation": "phase:10",
-  "Phase 11: Form Controls Consolidation": "phase:11"
+  "Phase 11: Form Controls Consolidation": "phase:11",
+  "Phase 12: shadcn Form Primitives": "phase:12",
+  "Phase 13: Form Migration — Tareas + Proyectos": "phase:13",
+  "Phase 14: Form Migration — Proveedores + Equipo + Recursos + Clientes": "phase:14",
+  "Phase 15: Form Migration — Config + Layout + Shared UI + Auth Pages": "phase:15"
 }
