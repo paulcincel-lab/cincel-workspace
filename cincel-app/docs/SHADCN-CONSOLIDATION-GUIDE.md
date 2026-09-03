@@ -1,5 +1,7 @@
 # shadcn/ui Consolidation Guide
 
+> **Superseded by actual execution.** This document's original scope estimate ("55+ components", the 6-phase plan below) predates verifying against shipped work (Phase 7: TanStack Table adoption, Phase 8: shadcn init) and contains several ungrounded metrics — see [issue #176](https://github.com/paulcincel-lab/cincel-workspace/issues/176). The real, executed plan is **Phases 9-11** in `docs/phases/phase-9-primitive-consolidation.md`, `phase-10-overlay-consolidation.md`, `phase-11-form-controls-consolidation.md`, and the corrected scope table in `COMPONENT-INVENTORY.md`'s "Consolidation Roadmap" section (**20 components**, not 55+). The content below is kept for historical reference and because it still lists useful shadcn primitive → Cincel component mappings, but its phase numbering, hour estimates, and the metrics flagged below should not be relied on.
+
 Complete mapping of Cincel custom components to shadcn/ui equivalents with migration strategies and implementation recommendations.
 
 **Reference:** https://ui.shadcn.com/docs/components
@@ -23,9 +25,9 @@ Complete mapping of Cincel custom components to shadcn/ui equivalents with migra
 ## Summary & Strategy
 
 ### Current State
-- **Custom Components:** 59+ components
+- **Custom Components:** 59 components (see `COMPONENT-INVENTORY.md`)
 - **Already Using shadcn/ui:** Card, Avatar, Badge, Separator (4 primitives)
-- **Opportunity:** Consolidate 55+ custom components to shadcn/ui equivalents
+- **Actual consolidation scope (corrected, see note above):** 20 components — 8 in Phase 9, 10 in Phase 10, 2 in Phase 11. The "55+" figure below was never verified against the codebase.
 
 ### Benefits of Consolidation
 ✅ **Consistency** - Single design system across app  
@@ -33,7 +35,7 @@ Complete mapping of Cincel custom components to shadcn/ui equivalents with migra
 ✅ **Accessibility** - Battle-tested ARIA implementations  
 ✅ **Performance** - Optimized component library  
 ✅ **Developer Experience** - Familiar patterns for new team members  
-✅ **Reduced Codebase** - ~40% reduction in custom component code  
+✅ **Reduced Codebase** - fewer duplicate implementations (see actual results in Phase 9-11 PRs; the bundle-size estimate later in this doc was never measured)  
 
 ### Migration Strategy
 **Phase 1 (Now):** Low-risk replacements (static components)  
@@ -867,6 +869,9 @@ const getStatusVariant = (status: string) => {
 ---
 
 ### Phase 3: Dialogs & Modals (Week 5-7)
+
+> **Superseded.** This phase and Phase 4 below split `DialogOverlay`'s modal consumers from its drawer consumers (`TaskDrawer`, `MemberEditorDrawer`) across two separate phases — but `DialogOverlay` can't actually be deleted until *all* of its consumers, modals and drawers alike, have migrated, since it's the same file used by both groups. Splitting them meant `DialogOverlay` would still be in use (non-deletable) at the end of this phase. The actual executed work fixed this by merging both into one phase — see `docs/phases/phase-10-overlay-consolidation.md` — which additionally discovered that most of the components listed below (`MemberProfileModal`, `ProjectNotesModal`, `CoordinatorProjectsModal`, `ProjectCreateModal`) were never using `DialogOverlay` at all (raw divs), and that `MemberEditorDrawer` renders as a centered modal, not a drawer.
+
 **Goal:** Replace all modal overlays with shadcn components  
 **Components:**
 - [ ] DialogOverlay → Dialog component
@@ -902,8 +907,9 @@ const getStatusVariant = (status: string) => {
 - [ ] InteractiveDashboard → Refactor with shadcn components
 - [ ] ProjectsOverview → Card grid with ProjectCard refactored
 - [ ] TasksToday → Table component
-- [ ] ProjectsTable → Table component refinement
 - [ ] Remove unused custom components
+
+(Removed a duplicate "ProjectsTable → Table component refinement" line that also appeared in Phase 4 above — same component listed in two phases with no distinction between them.)
 
 **Effort:** 20-30 hours  
 **Testing:** Full dashboard testing  
@@ -987,7 +993,9 @@ Week 8-10:  Phase 4 (Drawers & Tables)        ✓ 30-40 hrs
 Week 11-12: Phase 5 (Integration & Cleanup)   ✓ 20-30 hrs
 Optional:   Phase 6 (Advanced Features)        ✓ 20-30 hrs
 
-TOTAL: 150-200 hours (3-4 developer weeks of work)
+TOTAL: 150-200 hours — 4-5 full-time developer weeks at 40h/week, or the
+10-12 weeks above at the assumed 15h/week part-time pace. (Not "3-4 weeks";
+that only holds at 50h/week.)
 ```
 
 ---
@@ -1090,6 +1098,8 @@ TOTAL: 150-200 hours (3-4 developer weeks of work)
 
 ## Bundle Size Impact
 
+> **Unverified estimate.** These numbers were never measured against an actual bundle analysis — treat everything below as a rough guess from the original draft, not a target. Re-measure with `next build` bundle output once Phase 9-11 land.
+
 ### Current State
 - Custom components: ~125KB (unminified)
 - shadcn/ui usage: ~15KB
@@ -1118,14 +1128,14 @@ TOTAL: 150-200 hours (3-4 developer weeks of work)
 | Phase | Component | A11y Improvement |
 |-------|-----------|------------------|
 | 1 | Badge | Semantic color coding |
-| 2 | Dialog | Focus trap (auto) |
 | 2 | Form | Form validation UI |
+| 3 | Dialog | Focus trap (auto) |
 | 3 | Sheet | Slide animation accessible |
 | 4 | Table | Sortable headers semantic |
 | 5 | Select | Keyboard navigation |
 | 6 | Tooltip | Assistive text |
 
-**Overall A11y Improvement:** ~30% (measured by WCAG AA compliance)
+(Corrected: Dialog is grouped with Phase 3 here to match the "Phase 3: Dialogs & Modals" roadmap section above — an earlier draft listed it under Phase 2, inconsistent with its own roadmap. The "~30% WCAG AA compliance improvement" claim from the original draft is removed: it had no baseline measurement or methodology behind it. The actual, executed Phase 9-11 migrations *did* add real focus-trap/Escape/ARIA behavior to several previously-unmanaged raw-div overlays — see the PRs linked from `COMPONENT-INVENTORY.md`'s Consolidation Roadmap for specifics — but no percentage claim is made here.)
 
 ---
 
