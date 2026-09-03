@@ -1,11 +1,17 @@
 "use client";
 
 import AppBadge from "@/components/ui/AppBadge";
+import { Button } from "@/components/ui/shadcn/button";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Input } from "@/components/ui/shadcn/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, normalizeSystemAccessRole } from "@/lib/data/roles";
 import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { TeamAvailability } from "@/lib/data/team";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
+
+const OTHER_AVAILABILITY_VALUE = "Otros...";
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) {
@@ -68,60 +74,63 @@ export function MemberEditorDrawer({
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-medium text-slate-800">Nombre</label>
-                <input
+                <Input
                   type="text"
                   value={draft.name}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, name: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Puesto</label>
-                <input
+                <Input
                   type="text"
                   value={draft.role}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, role: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
                 <p className="mt-1 text-xs text-slate-500">Cargo que desempeña dentro de la empresa.</p>
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Area</label>
-                <input
+                <Input
                   type="text"
                   value={draft.area}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, area: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
                 <p className="mt-1 text-xs text-slate-500">Departamento al que pertenece.</p>
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Acceso</label>
-                <select
+                <Select
                   value={draft.access}
-                  onChange={(event) => {
-                    const normalized = normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE;
+                  onValueChange={(value) => {
+                    const normalized = normalizeSystemAccessRole(value as string) ?? DEFAULT_SYSTEM_ACCESS_ROLE;
                     onChangeDraft((current) => ({ ...current, access: normalized }));
                   }}
                   disabled={!teamCapabilities.canChangeCollaboratorAccess}
-                  title={teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
-                  className="w-full rounded-xl border px-4 py-2"
                 >
-                  {SYSTEM_ACCESS_ROLES.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger
+                    className="w-full"
+                    title={teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SYSTEM_ACCESS_ROLES.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="mt-1 text-xs text-slate-500">Nivel de acceso dentro de Cincel.</p>
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Capacidad</label>
-                <input
+                <Input
                   type="number"
                   min={1}
                   value={draft.capacity}
@@ -129,18 +138,17 @@ export function MemberEditorDrawer({
                     const parsed = Number(event.target.value);
                     onChangeDraft((current) => ({ ...current, capacity: Number.isNaN(parsed) ? 1 : parsed }));
                   }}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Disponibilidad</label>
-                <select
+                <Select
                   value={draft.availability}
-                  onChange={(event) => {
-                    const selected = event.target.value;
+                  onValueChange={(value) => {
+                    const selected = value as string;
 
-                    if (selected === "Otros...") {
+                    if (selected === OTHER_AVAILABILITY_VALUE) {
                       const customAvailability = window.prompt("Nueva disponibilidad", "");
                       const trimmed = customAvailability?.trim();
 
@@ -153,15 +161,17 @@ export function MemberEditorDrawer({
 
                     onChangeDraft((current) => ({ ...current, availability: selected as TeamAvailability }));
                   }}
-                  className="w-full rounded-xl border px-4 py-2"
                 >
-                  {availabilityOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                  <option value="Otros...">Otros...</option>
-                </select>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {availabilityOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={OTHER_AVAILABILITY_VALUE}>Otros...</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </section>
@@ -203,18 +213,16 @@ export function MemberEditorDrawer({
                     </p>
                   </div>
 
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={draft.systemAccessEnabled}
-                    onChange={(event) =>
+                    onCheckedChange={(checked) =>
                       onChangeDraft((current) => ({
                         ...current,
-                        systemAccessEnabled: event.target.checked,
-                        temporaryPassword: event.target.checked ? current.temporaryPassword : "",
-                        temporaryPasswordConfirmation: event.target.checked ? current.temporaryPasswordConfirmation : "",
+                        systemAccessEnabled: checked === true,
+                        temporaryPassword: checked === true ? current.temporaryPassword : "",
+                        temporaryPasswordConfirmation: checked === true ? current.temporaryPasswordConfirmation : "",
                       }))
                     }
-                    className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-200"
                   />
                 </label>
               </div>
@@ -223,14 +231,13 @@ export function MemberEditorDrawer({
                 <>
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-800">Contraseña temporal</label>
-                    <input
+                    <Input
                       type="password"
                       value={draft.temporaryPassword}
                       onChange={(event) =>
                         onChangeDraft((current) => ({ ...current, temporaryPassword: event.target.value }))
                       }
                       placeholder={editingId === null ? "Asignar contraseña temporal" : "Solo si vas a restablecer"}
-                      className="w-full rounded-xl border px-4 py-2"
                     />
                     <p className="mt-1 text-xs leading-relaxed text-slate-500">
                       {editingId === null
@@ -241,14 +248,13 @@ export function MemberEditorDrawer({
 
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-800">Confirmar contraseña temporal</label>
-                    <input
+                    <Input
                       type="password"
                       value={draft.temporaryPasswordConfirmation}
                       onChange={(event) =>
                         onChangeDraft((current) => ({ ...current, temporaryPasswordConfirmation: event.target.value }))
                       }
                       placeholder="Repetir contraseña temporal"
-                      className="w-full rounded-xl border px-4 py-2"
                     />
                     <p className="mt-1 text-xs leading-relaxed text-slate-500">Debe coincidir con la contraseña temporal.</p>
                   </div>
@@ -278,51 +284,46 @@ export function MemberEditorDrawer({
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Fecha nacimiento</label>
-                <input
+                <Input
                   type="date"
                   value={draft.birthDate}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, birthDate: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Nacionalidad</label>
-                <input
+                <Input
                   type="text"
                   value={draft.nationality}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, nationality: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Estado civil</label>
-                <input
+                <Input
                   type="text"
                   value={draft.maritalStatus}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, maritalStatus: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">CURP</label>
-                <input
+                <Input
                   type="text"
                   value={draft.curp}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, curp: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">RFC</label>
-                <input
+                <Input
                   type="text"
                   value={draft.rfc}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, rfc: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
             </div>
@@ -334,53 +335,48 @@ export function MemberEditorDrawer({
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Celular</label>
-                <input
+                <Input
                   type="text"
                   value={draft.phone}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, phone: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Correo institucional</label>
-                <input
+                <Input
                   type="email"
                   value={draft.institutionalEmail}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, institutionalEmail: event.target.value }))}
                   disabled={isEditingSelfProtectedAdmin}
                   title={isEditingSelfProtectedAdmin ? "Tu correo administrador principal esta protegido" : ""}
-                  className={`w-full rounded-xl border px-4 py-2 ${isEditingSelfProtectedAdmin ? "cursor-not-allowed bg-slate-100 text-slate-500" : ""}`}
                 />
               </div>
 
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-medium text-slate-800">Direccion</label>
-                <input
+                <Input
                   type="text"
                   value={draft.address}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, address: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Telefono de casa</label>
-                <input
+                <Input
                   type="text"
                   value={draft.homePhone}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, homePhone: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Correo electronico personal</label>
-                <input
+                <Input
                   type="email"
                   value={draft.personalEmail}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, personalEmail: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
             </div>
@@ -392,41 +388,37 @@ export function MemberEditorDrawer({
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Nombre</label>
-                <input
+                <Input
                   type="text"
                   value={draft.emergencyContactName}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, emergencyContactName: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Relacion</label>
-                <input
+                <Input
                   type="text"
                   value={draft.emergencyContactRelation}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, emergencyContactRelation: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Telefono</label>
-                <input
+                <Input
                   type="text"
                   value={draft.emergencyContactPhone}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, emergencyContactPhone: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-800">Direccion</label>
-                <input
+                <Input
                   type="text"
                   value={draft.emergencyContactAddress}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, emergencyContactAddress: event.target.value }))}
-                  className="w-full rounded-xl border px-4 py-2"
                 />
               </div>
             </div>
@@ -434,22 +426,17 @@ export function MemberEditorDrawer({
         </div>
 
         <DialogFooter>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-slate-50"
-          >
+          <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onSave}
             disabled={!canSave}
             title={canSave ? "" : "No tienes permiso para guardar cambios"}
-            className={`rounded-xl px-4 py-2 text-sm font-medium text-white ${canSave ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
           >
             Guardar
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

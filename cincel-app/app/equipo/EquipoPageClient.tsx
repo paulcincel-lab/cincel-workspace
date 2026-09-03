@@ -10,6 +10,9 @@ import AppAvatar from "@/components/ui/AppAvatar";
 import AppBadge from "@/components/ui/AppBadge";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { DataTable } from "@/components/ui/DataTable";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { MemberProfileModal } from "@/components/equipo/MemberProfileModal";
@@ -1059,17 +1062,23 @@ export default function EquipoPageClient({
       const canEditAccess = teamCapabilities.canChangeCollaboratorAccess && !isLocked;
 
       return (
-        <select
+        <Select
           value={resolveSystemRole(member)}
-          onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
+          onValueChange={(value) => updateSystemRole(member.id, normalizeSystemAccessRole(value as string) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
           disabled={!canEditAccess}
-          title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
         >
-          {systemRoleOptions.map((roleOption) => (
-            <option key={roleOption} value={roleOption}>{roleOption}</option>
-          ))}
-        </select>
+          <SelectTrigger
+            className="h-auto px-2 py-1 text-xs"
+            title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {systemRoleOptions.map((roleOption) => (
+              <SelectItem key={roleOption} value={roleOption}>{roleOption}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     }
 
@@ -1089,13 +1098,13 @@ export default function EquipoPageClient({
       return member.coordinatorProjectsCount === 0 ? (
         <span className="text-slate-600">0</span>
       ) : (
-        <button
-          type="button"
+        <Button
+          variant="link"
+          className="h-auto p-0 font-medium text-slate-800 hover:text-blue-700"
           onClick={() => setSelectedCoordinatorMemberId(member.id)}
-          className="font-medium text-slate-800 hover:text-blue-700 hover:underline"
         >
           {member.coordinatorProjectsCount}
-        </button>
+        </Button>
       );
     }
 
@@ -1149,37 +1158,42 @@ export default function EquipoPageClient({
 
     return (
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-auto px-3 py-1 text-xs"
           onClick={() => setSelectedProfileMemberId(member.id)}
-          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
         >
           Abrir ficha
-        </button>
+        </Button>
 
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-auto px-3 py-1 text-xs"
           onClick={() => openEditEditor(member)}
           disabled={!teamCapabilities.canEditCollaborator}
           title={teamCapabilities.canEditCollaborator ? "" : "No tienes permiso para editar colaboradores"}
-          className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canEditCollaborator ? "border-slate-200 text-slate-600 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
         >
           Editar
-        </button>
+        </Button>
 
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-auto border-amber-200 px-3 py-1 text-xs text-amber-700 hover:bg-amber-50"
           onClick={() => toggleMemberActive(member.id)}
           disabled={!canToggle}
           title={isProtectedSelf ? "No puedes desactivar tu cuenta administradora principal" : teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
-          className={`rounded-lg border px-3 py-1 text-xs font-medium ${canToggle ? "border-amber-200 text-amber-700 hover:bg-amber-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
         >
           Desactivar
-        </button>
+        </Button>
 
         {!isPrimaryAdmin ? (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-auto border-red-200 px-3 py-1 text-xs text-red-700 hover:bg-red-50"
             onClick={() => {
               if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
                 deleteMember(member.id);
@@ -1187,10 +1201,9 @@ export default function EquipoPageClient({
             }}
             disabled={!canDelete}
             title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${canDelete ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
             Eliminar
-          </button>
+          </Button>
         ) : null}
       </div>
     );
@@ -1222,17 +1235,23 @@ export default function EquipoPageClient({
       const canEditAccess = teamCapabilities.canChangeCollaboratorAccess && !isLocked;
 
       return (
-        <select
+        <Select
           value={resolveSystemRole(member)}
-          onChange={(event) => updateSystemRole(member.id, normalizeSystemAccessRole(event.target.value) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
+          onValueChange={(value) => updateSystemRole(member.id, normalizeSystemAccessRole(value as string) ?? DEFAULT_SYSTEM_ACCESS_ROLE)}
           disabled={!canEditAccess}
-          title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
         >
-          {systemRoleOptions.map((roleOption) => (
-            <option key={roleOption} value={roleOption}>{roleOption}</option>
-          ))}
-        </select>
+          <SelectTrigger
+            className="h-auto px-2 py-1 text-xs"
+            title={isLocked ? "Tu acceso de Administrador esta protegido en esta tabla" : teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {systemRoleOptions.map((roleOption) => (
+              <SelectItem key={roleOption} value={roleOption}>{roleOption}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     }
 
@@ -1248,13 +1267,13 @@ export default function EquipoPageClient({
       return member.coordinatorProjectsCount === 0 ? (
         <span className="text-sm text-slate-600">0</span>
       ) : (
-        <button
-          type="button"
+        <Button
+          variant="link"
+          className="h-auto p-0 text-sm font-medium text-slate-800 hover:text-blue-700"
           onClick={() => setSelectedCoordinatorMemberId(member.id)}
-          className="text-sm font-medium text-slate-800 hover:text-blue-700 hover:underline"
         >
           {member.coordinatorProjectsCount}
-        </button>
+        </Button>
       );
     }
 
@@ -1291,35 +1310,40 @@ export default function EquipoPageClient({
 
     return (
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-auto px-3 py-1 text-xs"
           onClick={() => setSelectedProfileMemberId(member.id)}
-          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-white"
         >
           Abrir ficha
-        </button>
+        </Button>
 
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-auto px-3 py-1 text-xs"
           onClick={() => openEditEditor(member)}
           disabled={!teamCapabilities.canEditCollaborator}
           title={teamCapabilities.canEditCollaborator ? "" : "No tienes permiso para editar colaboradores"}
-          className={`rounded-lg border px-3 py-1 text-xs font-medium ${teamCapabilities.canEditCollaborator ? "border-slate-200 text-slate-600 hover:bg-white" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
         >
           Editar
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-auto border-emerald-200 px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
           onClick={() => toggleMemberActive(member.id)}
           disabled={!canToggle}
           title={isProtectedSelf ? "No puedes desactivar tu cuenta administradora principal" : teamCapabilities.canToggleCollaboratorActive ? "" : "No tienes permiso para activar o desactivar colaboradores"}
-          className={`rounded-lg border px-3 py-1 text-xs font-medium ${canToggle ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
         >
           Reactivar
-        </button>
+        </Button>
         {!isPrimaryAdmin ? (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-auto border-red-200 px-3 py-1 text-xs text-red-700 hover:bg-red-50"
             onClick={() => {
               if (window.confirm(`Eliminar a ${member.name} del equipo? Esta acción no se puede deshacer.`)) {
                 deleteMember(member.id);
@@ -1327,10 +1351,9 @@ export default function EquipoPageClient({
             }}
             disabled={!canDelete}
             title={teamCapabilities.canDeleteCollaborator ? "" : "Solo Administrador puede eliminar colaboradores"}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium ${canDelete ? "border-red-200 text-red-700 hover:bg-red-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
           >
             Eliminar
-          </button>
+          </Button>
         ) : null}
       </div>
     );
@@ -1418,31 +1441,31 @@ export default function EquipoPageClient({
               </div>
 
               <div className="flex flex-col items-end gap-2">
-                <button
-                  type="button"
+                <Button
                   onClick={openAddEditor}
                   disabled={!teamCapabilities.canCreateCollaborator}
                   title={teamCapabilities.canCreateCollaborator ? "" : "No tienes permiso para crear colaboradores"}
-                  className={`rounded-xl px-4 py-2 text-sm font-medium text-white ${teamCapabilities.canCreateCollaborator ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
                 >
                   + Agregar colaborador
-                </button>
+                </Button>
 
                 <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
-                  <button
-                    type="button"
+                  <Button
+                    variant={statusViewFilter === "Activos" ? "default" : "ghost"}
+                    size="sm"
+                    className="h-auto px-3 py-1 text-xs"
                     onClick={() => setStatusViewFilter("Activos")}
-                    className={`rounded-lg px-3 py-1 text-xs font-medium ${statusViewFilter === "Activos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
                   >
                     Activos
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant={statusViewFilter === "Desactivados" ? "default" : "ghost"}
+                    size="sm"
+                    className="h-auto px-3 py-1 text-xs"
                     onClick={() => setStatusViewFilter("Desactivados")}
-                    className={`rounded-lg px-3 py-1 text-xs font-medium ${statusViewFilter === "Desactivados" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
                   >
                     Desactivados
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1450,46 +1473,40 @@ export default function EquipoPageClient({
 
           <div className="border-b border-slate-200 px-6 py-4">
             <div className="flex flex-wrap items-center gap-3">
-              <input
+              <Input
                 type="text"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar colaborador, acceso o area..."
-                className="h-10 w-72 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 placeholder:text-slate-500"
+                className="h-10 w-72"
               />
 
-              <select
-                value={areaFilter}
-                onChange={(event) => setAreaFilter(event.target.value)}
-                className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
-              >
-                {areaOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              <Select value={areaFilter} onValueChange={(value) => setAreaFilter(value as string)}>
+                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {areaOptions.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-              <select
-                value={availabilityFilter}
-                onChange={(event) => setAvailabilityFilter(event.target.value)}
-                className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
-              >
-                <option value="Todas">Todas las disponibilidades</option>
-                {availabilityOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              <Select value={availabilityFilter} onValueChange={(value) => setAvailabilityFilter(value as string)}>
+                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Todas">Todas las disponibilidades</SelectItem>
+                  {availabilityOptions.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
-              >
+              <Button variant="outline" className="h-10" onClick={clearFilters}>
                 Limpiar filtros
-              </button>
+              </Button>
 
               {teamCapabilities.canExportData ? (
                 <ExportMenu onExport={statusViewFilter === "Activos" ? exportActiveTeam : exportInactiveTeam} scaleClassName="scale-100" />
@@ -1570,13 +1587,14 @@ export default function EquipoPageClient({
                   </div>
 
                   <div className="mt-4">
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-auto px-3 py-1 text-xs"
                       onClick={() => setSelectedProfileMemberId(member.id)}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
                     >
                       Abrir ficha
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
