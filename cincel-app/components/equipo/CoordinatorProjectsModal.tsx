@@ -1,5 +1,6 @@
 "use client";
 
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
 
 interface CoordinatorProjectsModalProps {
@@ -10,24 +11,14 @@ interface CoordinatorProjectsModalProps {
 /** Overlay listing all projects where a team member acts as coordinator. */
 export function CoordinatorProjectsModal({ member, onClose }: CoordinatorProjectsModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
-        <div className="border-b p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">Proyectos como Encargado</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-xl text-slate-400 hover:text-slate-700"
-              aria-label="Cerrar"
-            >
-              x
-            </button>
-          </div>
-          <p className="mt-1 text-sm text-slate-600">{member.name}</p>
-        </div>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Proyectos como Encargado</DialogTitle>
+          <DialogDescription>{member.name}</DialogDescription>
+        </DialogHeader>
 
-        <div className="space-y-3 p-6">
+        <div className="space-y-3">
           {member.coordinatorProjects.length === 0 ? (
             <p className="text-sm text-slate-500">No hay proyectos asignados como encargado.</p>
           ) : (
@@ -43,7 +34,7 @@ export function CoordinatorProjectsModal({ member, onClose }: CoordinatorProject
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

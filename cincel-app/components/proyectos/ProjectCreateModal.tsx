@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
 import type { ProjectItem } from "@/lib/proyectos/use-projects-data";
 
 const STAGE_OPTIONS = ["Presale", "Diseño", "Construcción"];
@@ -106,23 +107,14 @@ export function ProjectCreateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div>
-            <h4 className="text-lg font-bold text-slate-900">Nuevo proyecto</h4>
-            <p className="text-sm text-slate-600">Crea un proyecto operativo y abre su ficha.</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            Cerrar
-          </button>
-        </div>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-lg">Nuevo proyecto</DialogTitle>
+          <DialogDescription>Crea un proyecto operativo y abre su ficha.</DialogDescription>
+        </DialogHeader>
 
-        <div className="space-y-4 px-5 py-4">
+        <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm text-slate-700">
               Nombre del proyecto
@@ -224,25 +216,25 @@ export function ProjectCreateModal({
           {createError ? (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{createError}</p>
           ) : null}
-
-          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={handleCreate}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Crear proyecto
-            </button>
-          </div>
         </div>
-      </div>
-    </div>
+
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleCreate}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Crear proyecto
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

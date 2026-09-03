@@ -1,6 +1,7 @@
 "use client";
 
 import AppBadge from "@/components/ui/AppBadge";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, normalizeSystemAccessRole } from "@/lib/data/roles";
 import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { TeamAvailability } from "@/lib/data/team";
@@ -45,28 +46,14 @@ export function MemberEditorDrawer({
   teamCapabilities,
   availabilityOptions,
 }: MemberEditorDrawerProps) {
-  if (!show) {
-    return null;
-  }
-
   const canSave = editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white text-slate-800 shadow-xl">
-        <div className="border-b p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">{editingId === null ? "Agregar colaborador" : "Editar colaborador"}</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-xl text-slate-400 hover:text-slate-700"
-              aria-label="Cerrar"
-            >
-              x
-            </button>
-          </div>
-        </div>
+    <Dialog open={show} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto p-0 text-slate-800">
+        <DialogHeader className="border-b p-6">
+          <DialogTitle>{editingId === null ? "Agregar colaborador" : "Editar colaborador"}</DialogTitle>
+        </DialogHeader>
 
         <div className="space-y-6 p-6">
           {formError ? (
@@ -446,7 +433,7 @@ export function MemberEditorDrawer({
           </section>
         </div>
 
-        <div className="flex justify-end gap-3 border-t p-6">
+        <DialogFooter>
           <button
             type="button"
             onClick={onClose}
@@ -463,8 +450,8 @@ export function MemberEditorDrawer({
           >
             Guardar
           </button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

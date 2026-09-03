@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
 import type { ProjectNote } from "@/lib/proyectos/use-projects-data";
 
 function formatDate(input: string): string {
@@ -32,22 +33,14 @@ export function ProjectNotesModal({ projectName, notes, onClose, onSave }: Proje
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div>
-            <h4 className="text-lg font-bold text-slate-900">Notas del proyecto</h4>
-            <p className="text-sm text-slate-600">{projectName}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            Cerrar
-          </button>
-        </div>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-lg">Notas del proyecto</DialogTitle>
+          <DialogDescription>{projectName}</DialogDescription>
+        </DialogHeader>
 
-        <div className="space-y-4 px-5 py-4">
+        <div className="space-y-4">
           <textarea
             value={noteDraft}
             onChange={(event) => setNoteDraft(event.target.value)}
@@ -86,7 +79,7 @@ export function ProjectNotesModal({ projectName, notes, onClose, onSave }: Proje
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
