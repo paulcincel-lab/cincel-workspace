@@ -1041,7 +1041,7 @@ export default function EquipoPageClient({
     if (column === "colaborador") {
       return (
         <div className="min-w-[240px]">
-          <Avatar name={member.name} />
+          <AppAvatar name={member.name} />
         </div>
       );
     }
@@ -1204,7 +1204,7 @@ export default function EquipoPageClient({
     if (column === "colaborador") {
       return (
         <div className="min-w-[240px]">
-          <Avatar name={member.name} />
+          <AppAvatar name={member.name} />
         </div>
       );
     }

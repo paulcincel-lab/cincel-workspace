@@ -279,7 +279,7 @@ export function buildPresaleColumns({
                 value={task.manager}
                 onCommit={(value) => updateField(task, "manager", value)}
                 commitOnChange
-                renderDisplay={(value) => <Avatar name={value} />}
+                renderDisplay={(value) => <AppAvatar name={value} />}
                 renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
                   <select
                     autoFocus
@@ -298,7 +298,7 @@ export function buildPresaleColumns({
                 )}
               />
             ) : (
-              <Avatar name={task.manager} />
+              <AppAvatar name={task.manager} />
             )}
           </div>
         );

@@ -5,7 +5,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 import ExportMenu from "@/components/ui/ExportMenu";
 import InlineEditableField from "@/components/ui/InlineEditableField";
 import { DataTable } from "@/components/ui/DataTable";
@@ -487,7 +487,7 @@ export default function TareasPage({
           const { workflow, task } = row.original;
           return (
             <div className="flex items-center gap-2">
-              <Avatar name={task.manager || "Sin responsable"} showName={false} />
+              <AppAvatar name={task.manager || "Sin responsable"} showName={false} />
               {activitiesCapabilities.canChangeResponsible ? (
                 <select
                   value={task.manager || "Sin responsable"}

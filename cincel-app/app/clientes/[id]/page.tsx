@@ -657,7 +657,7 @@ export default function ClienteFichaPage() {
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-1">
-              <Avatar name={sourceClient.name} />
+              <AppAvatar name={sourceClient.name} />
               <p className="mt-2 text-xs text-slate-600">
                 {sourceClient.emails.length > 0 ? sourceClient.emails.join(" · ") : "Sin correos registrados"}
               </p>

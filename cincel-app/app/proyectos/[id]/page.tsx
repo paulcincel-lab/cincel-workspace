@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 
 import { projects } from "@/lib/data/projects";
 import { presaleTasks } from "@/lib/data/presale";
@@ -143,13 +143,13 @@ export default function ProjectDetailPage({ params }: Props) {
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs text-slate-500">Responsable</p>
                   <div className="mt-2">
-                    <Avatar name={project.manager} />
+                    <AppAvatar name={project.manager} />
                   </div>
                 </div>
                 <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
                   <p className="text-xs text-slate-500">Encargado cliente</p>
                   <div className="mt-2">
-                    <Avatar name={project.coordinator || "Sin encargado"} />
+                    <AppAvatar name={project.coordinator || "Sin encargado"} />
                   </div>
                 </div>
               </div>
