@@ -10,6 +10,7 @@ type Props = {
     value: string;
     onChange: (value: string) => void;
     onBlur: () => void;
+    onCancel: () => void;
     onKeyDown: (event: KeyboardEvent) => void;
   }) => ReactNode;
   commitOnChange?: boolean;
@@ -18,7 +19,7 @@ type Props = {
   editTriggerLabel?: string;
 };
 
-export default function InlineEditableField({
+export default function InlineEditable({
   value,
   onCommit,
   renderDisplay,
@@ -63,6 +64,11 @@ export default function InlineEditableField({
     }
   };
 
+  const handleCancel = () => {
+    setDraft(value);
+    setIsEditing(false);
+  };
+
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -72,8 +78,7 @@ export default function InlineEditableField({
 
     if (event.key === "Escape") {
       event.preventDefault();
-      setDraft(value);
-      setIsEditing(false);
+      handleCancel();
     }
   };
 
@@ -99,6 +104,7 @@ export default function InlineEditableField({
         value: draft,
         onChange: handleChange,
         onBlur: handleBlur,
+        onCancel: handleCancel,
         onKeyDown: handleKeyDown,
       })}
     </div>

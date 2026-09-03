@@ -7,7 +7,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/ui/Avatar";
 import ExportMenu from "@/components/ui/ExportMenu";
-import InlineEditableField from "@/components/ui/InlineEditableField";
+import InlineEditable from "@/components/ui/InlineEditable";
 import { DataTable } from "@/components/ui/DataTable";
 import type { ColumnDef } from "@tanstack/react-table";
 import { presaleTasks } from "@/lib/data/presale";
@@ -543,7 +543,7 @@ export default function TareasPage({
         cell: ({ row }) => {
           const { workflow, task } = row.original;
           return (
-            <InlineEditableField
+            <InlineEditable
               value={task.reviewDate || ""}
               onCommit={(value) =>
                 updateTaskInline(workflow, task.id, {
@@ -574,7 +574,7 @@ export default function TareasPage({
         cell: ({ row }) => {
           const { workflow, task } = row.original;
           return (
-            <InlineEditableField
+            <InlineEditable
               value={getDeliveryDate(task)}
               onCommit={(value) =>
                 updateTaskInline(workflow, task.id, {
