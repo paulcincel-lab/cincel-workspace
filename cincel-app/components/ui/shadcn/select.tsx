@@ -6,6 +6,11 @@ import { CheckIcon, ChevronDownIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * SelectItem values must not be an empty string — an empty-string item
+ * silently fails to display as selected. Use a non-empty sentinel (e.g.
+ * "__all__") for an "all/none" option and map it back at the call site.
+ */
 function Select(props: React.ComponentProps<typeof SelectPrimitive.Root>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />
 }
