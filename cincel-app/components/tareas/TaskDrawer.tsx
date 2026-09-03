@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import type { Task } from "@/lib/types/task";
 import { formatDateDMY } from "@/lib/utils/date";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
+import { Button } from "@/components/ui/shadcn/button";
+import { Textarea } from "@/components/ui/shadcn/textarea";
 
 type Props = {
   task: Task | null;
@@ -129,21 +131,20 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
                   )}
 
                   <div className="space-y-2 rounded-xl border border-dashed border-slate-200 p-3">
-                    <textarea
+                    <Textarea
                       value={newNote}
                       onChange={(event) => setNewNote(event.target.value)}
                       rows={3}
                       placeholder="Agregar nueva nota de seguimiento..."
-                      className="w-full rounded-lg border border-slate-200 p-2 text-sm"
+                      className="text-sm"
                     />
                     <div className="flex justify-end">
-                      <button
-                        type="button"
+                      <Button
                         onClick={handleAddNote}
-                        className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-900"
+                        className="h-auto rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-900"
                       >
                         Guardar nota
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -168,9 +169,9 @@ export default function TaskDrawer({ task, onClose, onSave }: Props) {
             </div>
 
             <SheetFooter>
-              <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-medium text-slate-800 hover:bg-slate-50">
+              <Button variant="outline" onClick={onClose}>
                 Cerrar
-              </button>
+              </Button>
             </SheetFooter>
           </>
         ) : null}
