@@ -7,6 +7,11 @@ import { useParams, useSearchParams } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import AppAvatar from "@/components/ui/AppAvatar";
+import { Button } from "@/components/ui/shadcn/button";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
@@ -86,6 +91,8 @@ function loadSecondaryCoordinatorMap(): Record<number, string> {
 
 const PROJECT_TYPES = ["Habitacional", "Oficinas", "Comercial", "Mobiliario", "Mantenimiento", "Otro"];
 const STAGE_OPTIONS_FICHA = ["Presale", "Diseño", "Construcción"];
+/** shadcn Select (base-ui) doesn't support an empty-string item value. */
+const NO_COORDINATOR_VALUE = "__none__";
 
 type EditDraft = {
   clientName: string;
@@ -362,20 +369,12 @@ export default function ProjectFichaPage() {
               <div className="flex flex-wrap gap-2">
                 {isEditing ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={cancelEditing}
-                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
+                    <Button variant="outline" onClick={cancelEditing}>
                       Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={saveEditing}
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                    >
+                    </Button>
+                    <Button onClick={saveEditing}>
                       Guardar cambios
-                    </button>
+                    </Button>
                   </>
                 ) : (
                   <>
@@ -385,15 +384,14 @@ export default function ProjectFichaPage() {
                     >
                       Cerrar
                     </Link>
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
                       onClick={startEditing}
                       disabled={!projectsCapabilities.canEditProjectGeneral}
                       title={projectsCapabilities.canEditProjectGeneral ? "" : "No tienes permiso para editar información general"}
-                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
                       Editar ficha
-                    </button>
+                    </Button>
                     <Link
                       href={`/tareas?project=${encodeURIComponent(project.name)}`}
                       className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
@@ -432,42 +430,42 @@ export default function ProjectFichaPage() {
                       <div className="flex items-center justify-between">
                         <span>Link — Documentos internos</span>
                         {driveEnabled ? (
-                          <button
-                            type="button"
+                          <Button
+                            variant="link"
                             onClick={() => setDrivePickerFor("driveAdministrativo")}
-                            className="font-medium text-blue-700 hover:underline"
+                            className="h-auto p-0 font-medium"
                           >
                             Elegir de Google Drive
-                          </button>
+                          </Button>
                         ) : null}
                       </div>
-                      <input
+                      <Input
                         type="url"
                         value={d.driveAdministrativo}
                         onChange={(e) => setEditDraft({ ...d, driveAdministrativo: e.target.value })}
                         placeholder="https://drive.google.com/..."
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+                        className="mt-1"
                       />
                     </div>
                     <div className="block text-xs text-slate-500">
                       <div className="flex items-center justify-between">
                         <span>Link — Documentos vista cliente</span>
                         {driveEnabled ? (
-                          <button
-                            type="button"
+                          <Button
+                            variant="link"
                             onClick={() => setDrivePickerFor("driveReportes")}
-                            className="font-medium text-blue-700 hover:underline"
+                            className="h-auto p-0 font-medium"
                           >
                             Elegir de Google Drive
-                          </button>
+                          </Button>
                         ) : null}
                       </div>
-                      <input
+                      <Input
                         type="url"
                         value={d.driveReportes}
                         onChange={(e) => setEditDraft({ ...d, driveReportes: e.target.value })}
                         placeholder="https://drive.google.com/..."
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+                        className="mt-1"
                       />
                     </div>
                   </div>
@@ -504,40 +502,44 @@ export default function ProjectFichaPage() {
 
               {isEditing && d ? (
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <label className="text-sm text-slate-700">
+                  <Label className="text-sm font-normal text-slate-700">
                     Cliente
-                    <select
+                    <Select
                       value={d.clientName}
-                      onChange={(e) => setEditDraft({ ...d, clientName: e.target.value })}
+                      onValueChange={(v) => setEditDraft({ ...d, clientName: v as string })}
                       disabled={!projectsCapabilities.canEditProtectedProjectData}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     >
-                      {activeClients.map((c) => (
-                        <option key={`ficha-client-${c.id}`} value={c.name}>{c.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-sm text-slate-700">
+                      <SelectTrigger className="mt-1 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeClients.map((c) => (
+                          <SelectItem key={`ficha-client-${c.id}`} value={c.name}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Label>
+                  <Label className="text-sm font-normal text-slate-700">
                     Tipo
-                    <select
-                      value={d.type}
-                      onChange={(e) => setEditDraft({ ...d, type: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    >
-                      {PROJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </label>
-                  <label className="text-sm text-slate-700 md:col-span-2">
+                    <Select value={d.type} onValueChange={(v) => setEditDraft({ ...d, type: v as string })}>
+                      <SelectTrigger className="mt-1 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROJECT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </Label>
+                  <Label className="text-sm font-normal text-slate-700 md:col-span-2">
                     Etapas
                     <div className="mt-2 space-y-2 rounded-lg border border-slate-300 bg-white px-3 py-2">
                       {STAGE_OPTIONS_FICHA.map((stage) => (
-                        <label key={`stage-${stage}`} className="flex items-center gap-2 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
+                        <Label key={`stage-${stage}`} className="flex items-center gap-2 text-sm font-normal text-slate-700">
+                          <Checkbox
                             checked={d.stages.includes(stage)}
                             disabled={!projectsCapabilities.canChangeProjectStage}
-                            onChange={(e) => {
-                              if (e.target.checked) {
+                            onCheckedChange={(checked) => {
+                              if (checked) {
                                 setEditDraft({ ...d, stages: [...d.stages, stage] });
                               } else {
                                 setEditDraft({ ...d, stages: d.stages.filter((s) => s !== stage) });
@@ -545,55 +547,55 @@ export default function ProjectFichaPage() {
                             }}
                           />
                           {stage}
-                        </label>
+                        </Label>
                       ))}
                     </div>
-                  </label>
-                  <label className="text-sm text-slate-700">
+                  </Label>
+                  <Label className="text-sm font-normal text-slate-700">
                     Fase
-                    <input
+                    <Input
                       type="text"
                       value={d.phase}
                       onChange={(e) => setEditDraft({ ...d, phase: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      className="mt-1"
                     />
-                  </label>
-                  <label className="text-sm text-slate-700">
+                  </Label>
+                  <Label className="text-sm font-normal text-slate-700">
                     Fecha de inicio
-                    <input
+                    <Input
                       type="date"
                       value={d.startDate}
                       onChange={(e) => setEditDraft({ ...d, startDate: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      className="mt-1"
                     />
-                  </label>
-                  <label className="text-sm text-slate-700">
+                  </Label>
+                  <Label className="text-sm font-normal text-slate-700">
                     Calle
-                    <input
+                    <Input
                       type="text"
                       value={d.street}
                       onChange={(e) => setEditDraft({ ...d, street: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      className="mt-1"
                     />
-                  </label>
-                  <label className="text-sm text-slate-700">
+                  </Label>
+                  <Label className="text-sm font-normal text-slate-700">
                     Ciudad
-                    <input
+                    <Input
                       type="text"
                       value={d.city}
                       onChange={(e) => setEditDraft({ ...d, city: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      className="mt-1"
                     />
-                  </label>
-                  <label className="text-sm text-slate-700 md:col-span-2">
+                  </Label>
+                  <Label className="text-sm font-normal text-slate-700 md:col-span-2">
                     Estado
-                    <input
+                    <Input
                       type="text"
                       value={d.addrState}
                       onChange={(e) => setEditDraft({ ...d, addrState: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      className="mt-1"
                     />
-                  </label>
+                  </Label>
                 </div>
               ) : (
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -633,29 +635,28 @@ export default function ProjectFichaPage() {
                     <p className="text-xs text-slate-500">Dirección</p>
                     {inlineEditingAddress ? (
                       <div className="mt-2 space-y-2">
-                        <input
+                        <Input
                           type="text"
                           value={inlineAddressValue.street}
                           onChange={(e) => setInlineAddressValue({ ...inlineAddressValue, street: e.target.value })}
                           placeholder="Calle"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
                         />
-                        <input
+                        <Input
                           type="text"
                           value={inlineAddressValue.city}
                           onChange={(e) => setInlineAddressValue({ ...inlineAddressValue, city: e.target.value })}
                           placeholder="Ciudad"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
                         />
-                        <input
+                        <Input
                           type="text"
                           value={inlineAddressValue.state}
                           onChange={(e) => setInlineAddressValue({ ...inlineAddressValue, state: e.target.value })}
                           placeholder="Estado"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
                         />
                         <div className="flex gap-2">
-                          <button
+                          <Button
+                            variant="outline"
+                            className="flex-1"
                             onClick={() => {
                               if (!projectsCapabilities.canEditProjectGeneral) {
                                 return;
@@ -678,16 +679,12 @@ export default function ProjectFichaPage() {
                               );
                               setInlineEditingAddress(false);
                             }}
-                            className="flex-1 rounded-lg border border-blue-500 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 hover:bg-blue-100"
                           >
                             Guardar
-                          </button>
-                          <button
-                            onClick={() => setInlineEditingAddress(false)}
-                            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                          >
+                          </Button>
+                          <Button variant="outline" className="flex-1" onClick={() => setInlineEditingAddress(false)}>
                             Cancelar
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -720,40 +717,53 @@ export default function ProjectFichaPage() {
                 <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
                   <p className="text-xs text-slate-500">Líder de diseño</p>
                   {isEditing && d ? (
-                    <select
-                      value={d.coordinator}
-                      onChange={(e) => setEditDraft({ ...d, coordinator: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                    <Select
+                      value={d.coordinator || NO_COORDINATOR_VALUE}
+                      onValueChange={(v) =>
+                        setEditDraft({ ...d, coordinator: v === NO_COORDINATOR_VALUE ? "" : (v as string) })
+                      }
                     >
-                      <option value="">Sin encargado</option>
-                      {activeTeamNames.map((member) => (
-                        <option key={`coordinator-${member}`} value={member}>{member}</option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="mt-2 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_COORDINATOR_VALUE}>Sin encargado</SelectItem>
+                        {activeTeamNames.map((member) => (
+                          <SelectItem key={`coordinator-${member}`} value={member}>{member}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : inlineEditingCoordinator ? (
-                    <select
-                      value={project.coordinator || ""}
-                      onChange={(e) => {
+                    <Select
+                      value={project.coordinator || NO_COORDINATOR_VALUE}
+                      onValueChange={(v) => {
                         if (!projectsCapabilities.canEditProjectGeneral) {
                           return;
                         }
 
+                        const nextValue = v === NO_COORDINATOR_VALUE ? "" : (v as string);
                         setProjectsData((current) =>
                           current.map((item) =>
-                            item.id === project.id ? { ...item, coordinator: e.target.value } : item
+                            item.id === project.id ? { ...item, coordinator: nextValue } : item
                           )
                         );
                         setInlineEditingCoordinator(false);
                       }}
-                      onBlur={() => setInlineEditingCoordinator(false)}
-                      autoFocus
-                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+                      onOpenChange={(open) => {
+                        if (!open) setInlineEditingCoordinator(false);
+                      }}
+                      defaultOpen
                     >
-                      <option value="">Sin encargado</option>
-                      {activeTeamNames.map((member) => (
-                        <option key={`coordinator-inline-${member}`} value={member}>{member}</option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="mt-2 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_COORDINATOR_VALUE}>Sin encargado</SelectItem>
+                        {activeTeamNames.map((member) => (
+                          <SelectItem key={`coordinator-inline-${member}`} value={member}>{member}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <div className={`mt-2 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer" : ""}`} onClick={() => {
                       if (!projectsCapabilities.canEditProjectGeneral) {
@@ -770,39 +780,49 @@ export default function ProjectFichaPage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs text-slate-500">Líder de construcción</p>
                   {isEditing && d ? (
-                    <select
+                    <Select
                       value={d.constructionCoordinator}
-                      onChange={(e) => setEditDraft({ ...d, constructionCoordinator: e.target.value })}
-                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                      onValueChange={(v) => setEditDraft({ ...d, constructionCoordinator: v as string })}
                     >
-                      <option value="Sin encargado">Sin encargado</option>
-                      {activeTeamNames.map((member) => (
-                        <option key={`construction-coordinator-${member}`} value={member}>{member}</option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="mt-2 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Sin encargado">Sin encargado</SelectItem>
+                        {activeTeamNames.map((member) => (
+                          <SelectItem key={`construction-coordinator-${member}`} value={member}>{member}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : inlineEditingConstructionCoordinator ? (
-                    <select
+                    <Select
                       value={constructionCoordinator}
-                      onChange={(e) => {
+                      onValueChange={(v) => {
                         if (!projectsCapabilities.canEditProjectGeneral) {
                           return;
                         }
 
                         setSecondaryCoordinatorByProject((current) => ({
                           ...current,
-                          [project.id]: e.target.value,
+                          [project.id]: v as string,
                         }));
                         setInlineEditingConstructionCoordinator(false);
                       }}
-                      onBlur={() => setInlineEditingConstructionCoordinator(false)}
-                      autoFocus
-                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+                      onOpenChange={(open) => {
+                        if (!open) setInlineEditingConstructionCoordinator(false);
+                      }}
+                      defaultOpen
                     >
-                      <option value="Sin encargado">Sin encargado</option>
-                      {activeTeamNames.map((member) => (
-                        <option key={`construction-coordinator-inline-${member}`} value={member}>{member}</option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="mt-2 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Sin encargado">Sin encargado</SelectItem>
+                        {activeTeamNames.map((member) => (
+                          <SelectItem key={`construction-coordinator-inline-${member}`} value={member}>{member}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <div className={`mt-2 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer" : ""}`} onClick={() => {
                       if (!projectsCapabilities.canEditProjectGeneral) {
