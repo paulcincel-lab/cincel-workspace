@@ -3,6 +3,9 @@ import AppBadge from "@/components/ui/AppBadge";
 import AppAvatar from "@/components/ui/AppAvatar";
 import InlineEditable from "@/components/ui/InlineEditable";
 import TeamMultiSelect, { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import type { Task, TaskStatus } from "@/lib/types/task";
 import { formatDateDMY } from "@/lib/utils/date";
 
@@ -121,21 +124,23 @@ export function buildPresaleColumns({
             value={task.project}
             onCommit={(value) => updateField(task, "project", value)}
             renderDisplay={(value) => <span className="font-medium text-black">{value}</span>}
-            renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-              <select
-                autoFocus
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                onBlur={onBlur}
-                onKeyDown={onKeyDown}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+            renderEditor={({ onChange, onBlur }) => (
+              <Select
+                defaultOpen
+                value={task.project}
+                onValueChange={(next) => { onChange(next as string); onBlur(); }}
               >
-                {selectableProjects.map((project) => (
-                  <option key={project} value={project}>
-                    {project}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectableProjects.map((project) => (
+                    <SelectItem key={project} value={project}>
+                      {project}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           />
         );
@@ -164,19 +169,18 @@ export function buildPresaleColumns({
                     <AppBadge label={value} color={phaseColor(value)} />
                   </span>
                 )}
-                renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                  <select
-                    autoFocus
-                    value={value}
-                    onChange={(event) => {
-                      const selected = event.target.value;
-
+                renderEditor={({ onChange, onBlur }) => (
+                  <Select
+                    defaultOpen
+                    value={task.phase}
+                    onValueChange={(selected) => {
                       if (selected === "Otro...") {
                         const customPhase = window.prompt("Nueva fase", "");
                         const trimmed = customPhase?.trim();
 
                         if (trimmed) {
                           onChange(trimmed);
+                          onBlur();
                         } else {
                           onBlur();
                         }
@@ -184,18 +188,21 @@ export function buildPresaleColumns({
                         return;
                       }
 
-                      onChange(selected);
+                      onChange(selected as string);
+                      onBlur();
                     }}
-                    onBlur={onBlur}
-                    onKeyDown={onKeyDown}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
                   >
-                    {selectablePhaseOptions.map((phaseOption) => (
-                      <option key={phaseOption} value={phaseOption}>
-                        {phaseOption}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectablePhaseOptions.map((phaseOption) => (
+                        <SelectItem key={phaseOption} value={phaseOption}>
+                          {phaseOption}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               />
             ) : (
@@ -224,13 +231,13 @@ export function buildPresaleColumns({
                 </span>
               )}
               renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                <input
+                <Input
                   autoFocus
                   value={value}
                   onChange={(event) => onChange(event.target.value)}
                   onBlur={onBlur}
                   onKeyDown={onKeyDown}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  className="text-sm"
                 />
               )}
             />
@@ -253,15 +260,15 @@ export function buildPresaleColumns({
             <span className="truncate text-black" title={latestNote || "Sin seguimiento"}>
               {latestNote || "Sin seguimiento"}
             </span>
-            <button
-              type="button"
+            <Button
+              variant="outline"
               onClick={() => onOpenDetail(task)}
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 text-xs text-black hover:bg-slate-100"
+              className="h-6 w-6 shrink-0 rounded-full p-0 text-xs text-black"
               aria-label="Abrir detalle"
               title="Ver detalle"
             >
               ⓘ
-            </button>
+            </Button>
           </div>
         );
       },
@@ -280,21 +287,23 @@ export function buildPresaleColumns({
                 onCommit={(value) => updateField(task, "manager", value)}
                 commitOnChange
                 renderDisplay={(value) => <AppAvatar name={value} />}
-                renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                  <select
-                    autoFocus
-                    value={value}
-                    onChange={(event) => onChange(event.target.value)}
-                    onBlur={onBlur}
-                    onKeyDown={onKeyDown}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                renderEditor={({ onChange, onBlur }) => (
+                  <Select
+                    defaultOpen
+                    value={task.manager}
+                    onValueChange={(next) => { onChange(next as string); onBlur(); }}
                   >
-                    {teamMembers.map((member) => (
-                      <option key={member} value={member}>
-                        {member}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teamMembers.map((member) => (
+                        <SelectItem key={member} value={member}>
+                          {member}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               />
             ) : (
@@ -359,20 +368,22 @@ export function buildPresaleColumns({
                 onCommit={(value) => updateField(task, "status", value as TaskStatus)}
                 commitOnChange
                 renderDisplay={(value) => <AppBadge label={value} color={statusColor(value)} />}
-                renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                  <select
-                    autoFocus
-                    value={value}
-                    onChange={(event) => onChange(event.target.value)}
-                    onBlur={onBlur}
-                    onKeyDown={onKeyDown}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                renderEditor={({ onChange, onBlur }) => (
+                  <Select
+                    defaultOpen
+                    value={task.status}
+                    onValueChange={(next) => { onChange(next as string); onBlur(); }}
                   >
-                    <option value="Pendiente">Pendiente</option>
-                    <option value="En proceso">En proceso</option>
-                    <option value="Completado">Completado</option>
-                    <option value="Bloqueado">Bloqueado</option>
-                  </select>
+                    <SelectTrigger className="w-full text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Pendiente">Pendiente</SelectItem>
+                      <SelectItem value="En proceso">En proceso</SelectItem>
+                      <SelectItem value="Completado">Completado</SelectItem>
+                      <SelectItem value="Bloqueado">Bloqueado</SelectItem>
+                    </SelectContent>
+                  </Select>
                 )}
               />
             ) : (
@@ -400,14 +411,14 @@ export function buildPresaleColumns({
               onCommit={(value) => updateField(task, "commitmentDate", value)}
               renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
               renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                <input
+                <Input
                   autoFocus
                   type="date"
                   value={value}
                   onChange={(event) => onChange(event.target.value)}
                   onBlur={onBlur}
                   onKeyDown={onKeyDown}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  className="text-sm"
                 />
               )}
             />
@@ -428,14 +439,14 @@ export function buildPresaleColumns({
               onCommit={(value) => updateField(task, "reviewDate", value)}
               renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
               renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                <input
+                <Input
                   autoFocus
                   type="date"
                   value={value}
                   onChange={(event) => onChange(event.target.value)}
                   onBlur={onBlur}
                   onKeyDown={onKeyDown}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  className="text-sm"
                 />
               )}
             />
@@ -456,14 +467,14 @@ export function buildPresaleColumns({
               onCommit={(value) => updateField(task, "deliveryDate", value)}
               renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
               renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                <input
+                <Input
                   autoFocus
                   type="date"
                   value={value}
                   onChange={(event) => onChange(event.target.value)}
                   onBlur={onBlur}
                   onKeyDown={onKeyDown}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  className="text-sm"
                 />
               )}
             />
@@ -487,29 +498,29 @@ export function buildPresaleColumns({
         const task = row.original;
         return (
           <div className="flex items-center gap-2 align-middle text-sm text-black">
-            <button
-              type="button"
+            <Button
+              variant="outline"
               onClick={() => onOpenDetail(task)}
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-black hover:bg-slate-100"
+              className="h-auto rounded-full px-3 py-1 text-xs font-medium text-black"
             >
               Detalle
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => handleArchive(task)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${task.archived ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 text-black hover:bg-slate-100"}`}
+              className={`h-auto rounded-full px-3 py-1 text-xs font-medium ${task.archived ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100" : "text-black"}`}
             >
               {task.archived ? "Desarchivar" : "Archivar"}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => handleDelete(task)}
               disabled={!canDeleteActivity}
               title={canDeleteActivity ? "" : "No tienes permiso para eliminar actividades"}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${canDeleteActivity ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
+              className={`h-auto rounded-full px-3 py-1 text-xs font-medium ${canDeleteActivity ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "bg-slate-100 text-slate-400"}`}
             >
               Eliminar
-            </button>
+            </Button>
           </div>
         );
       },

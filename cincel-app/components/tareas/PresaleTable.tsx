@@ -16,6 +16,9 @@ import NewProjectTemplateModal from "./NewProjectTemplateModal";
 import GroupSection from "@/components/ui/GroupSection";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { DataTable } from "@/components/ui/DataTable";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { presaleTemplate } from "@/lib/templates/presale";
 import { presalePhaseOptions } from "@/lib/templates/phase-options";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
@@ -577,21 +580,13 @@ export default function PresaleTable({
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowProjectTemplateModal(true)}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
+            <Button variant="outline" onClick={() => setShowProjectTemplateModal(true)}>
               Iniciar plantilla de {templateName}
-            </button>
+            </Button>
 
-            <button
-              type="button"
-              onClick={() => setShowNewTask(true)}
-              className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
-            >
+            <Button onClick={() => setShowNewTask(true)}>
               + Nueva tarea
-            </button>
+            </Button>
           </div>
 
         </div>
@@ -600,110 +595,106 @@ export default function PresaleTable({
 
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 p-6">
 
-        <input
+        <Input
           type="text"
           placeholder="Buscar tarea..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-10 w-64 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 placeholder:text-slate-500"
+          className="h-10 w-64"
         />
 
-        <select
-          value={projectFilter}
-          onChange={(e) => updateProjectFilter(e.target.value)}
-          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
-        >
-          <option value="Todos los proyectos">Proyecto</option>
-          {projects
-            .filter((project) => project !== "Todos los proyectos")
-            .map((project, index) => (
-              <option key={`project-option-${index}-${project}`} value={project}>
-                {project}
-              </option>
-            ))}
-        </select>
+        <Select value={projectFilter} onValueChange={(v) => updateProjectFilter(v as string)}>
+          <SelectTrigger className="h-10 w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todos los proyectos">Proyecto</SelectItem>
+            {projects
+              .filter((project) => project !== "Todos los proyectos")
+              .map((project, index) => (
+                <SelectItem key={`project-option-${index}-${project}`} value={project}>
+                  {project}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
 
-        <select
-          value={managerFilter}
-          onChange={(e) => setManagerFilter(e.target.value)}
-          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
-        >
-          <option value="Todos">Responsable</option>
-          {managers
-            .filter((manager) => manager !== "Todos")
-            .map((manager) => (
-              <option key={manager} value={manager}>
-                {manager}
-              </option>
-            ))}
-        </select>
+        <Select value={managerFilter} onValueChange={(v) => setManagerFilter(v as string)}>
+          <SelectTrigger className="h-10 w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todos">Responsable</SelectItem>
+            {managers
+              .filter((manager) => manager !== "Todos")
+              .map((manager) => (
+                <SelectItem key={manager} value={manager}>
+                  {manager}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
 
-        <select
-          value={teamFilter}
-          onChange={(e) => setTeamFilter(e.target.value)}
-          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
-        >
-          <option value="Todos">Equipo</option>
-          {teams
-            .filter((team) => team !== "Todos")
-            .map((team) => (
-              <option key={team} value={team}>
-                {team}
-              </option>
-            ))}
-        </select>
+        <Select value={teamFilter} onValueChange={(v) => setTeamFilter(v as string)}>
+          <SelectTrigger className="h-10 w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todos">Equipo</SelectItem>
+            {teams
+              .filter((team) => team !== "Todos")
+              .map((team) => (
+                <SelectItem key={team} value={team}>
+                  {team}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
-        >
-          <option value="Todos">Estatus</option>
-          {statuses
-            .filter((status) => status !== "Todos")
-            .map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-        </select>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as string)}>
+          <SelectTrigger className="h-10 w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todos">Estatus</SelectItem>
+            {statuses
+              .filter((status) => status !== "Todos")
+              .map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
 
-        <input
+        <Input
           type="date"
           value={deliveryDateFilter}
           onChange={(e) => setDeliveryDateFilter(e.target.value)}
           aria-label="Filtrar por fecha entrega"
-          className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800"
+          className="h-10 w-auto"
         />
 
         <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 px-2 text-sm">
-          <button
-            type="button"
-            onClick={() => {
-              setArchiveView("activos");
-            }}
-            className={`rounded-md px-2.5 py-1.5 text-sm ${archiveView === "activos" ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}
+          <Button
+            variant="ghost"
+            onClick={() => setArchiveView("activos")}
+            className={`h-auto rounded-md px-2.5 py-1.5 text-sm ${archiveView === "activos" ? "bg-blue-600 text-white hover:bg-blue-600" : "text-slate-700"}`}
           >
             Activas
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setArchiveView("archivadas");
-            }}
-            className={`rounded-md px-2.5 py-1.5 text-sm ${archiveView === "archivadas" ? "bg-slate-800 text-white" : "text-slate-700 hover:bg-slate-100"}`}
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setArchiveView("archivadas")}
+            className={`h-auto rounded-md px-2.5 py-1.5 text-sm ${archiveView === "archivadas" ? "bg-slate-800 text-white hover:bg-slate-800" : "text-slate-700"}`}
           >
             Archivadas
-          </button>
+          </Button>
         </div>
 
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
-        >
+        <Button variant="outline" onClick={clearFilters} className="h-10">
           Limpiar filtros
-        </button>
+        </Button>
 
         {activitiesCapabilities.canExportData ? (
           <ExportMenu onExport={exportActivities} scaleClassName="scale-100" />
@@ -738,13 +729,13 @@ export default function PresaleTable({
               />
 
               <div className="px-4 pb-4 pt-2">
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
                   onClick={() => addQuickTaskToProject(project)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-black hover:bg-slate-50"
+                  className="text-black"
                 >
                   + Agregar fila
-                </button>
+                </Button>
               </div>
             </GroupSection>
           );})
