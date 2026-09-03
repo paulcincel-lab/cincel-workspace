@@ -3,6 +3,11 @@
 import { useRef, useState } from "react";
 import type { TaskStatus } from "@/lib/types/task";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Textarea } from "@/components/ui/shadcn/textarea";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 
 type TaskFormValues = {
@@ -47,10 +52,6 @@ export default function NewTaskModal({
   const [reviewDate, setReviewDate] = useState("");
 
   const descriptionRef = useRef<HTMLInputElement>(null);
-  const projectRef = useRef<HTMLSelectElement>(null);
-  const phaseRef = useRef<HTMLSelectElement>(null);
-  const managerRef = useRef<HTMLSelectElement>(null);
-  const statusRef = useRef<HTMLSelectElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const commitmentDateRef = useRef<HTMLInputElement>(null);
   const reviewDateRef = useRef<HTMLInputElement>(null);
@@ -62,12 +63,12 @@ export default function NewTaskModal({
     if (!trimmedDescription) return;
 
     const nextValues: TaskFormValues = {
-      project: projectRef.current?.value ?? project,
-      phase: phaseRef.current?.value ?? phase,
+      project,
+      phase,
       description: trimmedDescription,
-      manager: managerRef.current?.value ?? manager,
+      manager,
       support,
-      status: (statusRef.current?.value as TaskStatus | undefined) ?? status,
+      status,
       notes: notesRef.current?.value ?? notes,
       commitmentDate: commitmentDateRef.current?.value ?? commitmentDate,
       reviewDate: reviewDateRef.current?.value ?? reviewDate,
@@ -90,40 +91,50 @@ export default function NewTaskModal({
           </div>
 
           <div>
-            <label className="block mb-2 font-medium text-black">Descripción</label>
-            <input
+            <Label className="mb-2 block text-black">Descripción</Label>
+            <Input
               ref={descriptionRef}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe la tarea..."
-              className="w-full border rounded-xl px-4 py-3 text-black placeholder:text-slate-500"
+              className="text-black placeholder:text-slate-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-5">
             <div>
-              <label className="block mb-2 font-medium text-black">Proyecto</label>
-              <select ref={projectRef} value={project} onChange={(e) => setProject(e.target.value)} className="w-full border rounded-xl bg-white px-4 py-3 text-black">
-                {projects.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
+              <Label className="mb-2 block text-black">Proyecto</Label>
+              <Select value={project} onValueChange={(v) => setProject(v as string)}>
+                <SelectTrigger className="w-full text-black">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
-              <label className="block mb-2 font-medium text-black">Responsable</label>
-              <select ref={managerRef} value={manager} onChange={(e) => setManager(e.target.value)} className="w-full border rounded-xl bg-white px-4 py-3 text-black">
-                {teamMembers.map((member) => (
-                  <option key={member} value={member}>
-                    {member}
-                  </option>
-                ))}
-              </select>
+              <Label className="mb-2 block text-black">Responsable</Label>
+              <Select value={manager} onValueChange={(v) => setManager(v as string)}>
+                <SelectTrigger className="w-full text-black">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamMembers.map((member) => (
+                    <SelectItem key={member} value={member}>
+                      {member}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-2">
-              <label className="block mb-2 font-medium text-black">Equipo</label>
+              <Label className="mb-2 block text-black">Equipo</Label>
               <TeamMultiSelect
                 options={teamMembers}
                 selected={support}
@@ -132,13 +143,10 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <label className="block mb-2 font-medium text-black">Fase</label>
-              <select
-                ref={phaseRef}
+              <Label className="mb-2 block text-black">Fase</Label>
+              <Select
                 value={phase}
-                onChange={(e) => {
-                  const selected = e.target.value;
-
+                onValueChange={(selected) => {
                   if (selected === "Otro...") {
                     const customPhase = window.prompt("Nueva fase", "");
                     const trimmed = customPhase?.trim();
@@ -150,62 +158,71 @@ export default function NewTaskModal({
                     return;
                   }
 
-                  setPhase(selected);
+                  setPhase(selected as string);
                 }}
-                className="w-full border rounded-xl bg-white px-4 py-3 text-black"
               >
-                {[...phaseOptions, "Otro..."].map((phaseOption) => (
-                  <option key={phaseOption} value={phaseOption}>
-                    {phaseOption}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full text-black">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[...phaseOptions, "Otro..."].map((phaseOption) => (
+                    <SelectItem key={phaseOption} value={phaseOption}>
+                      {phaseOption}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
-              <label className="block mb-2 font-medium text-black">Estado</label>
-              <select ref={statusRef} value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)} className="w-full border rounded-xl bg-white px-4 py-3 text-black">
-                <option>Pendiente</option>
-                <option>En proceso</option>
-                <option>Completado</option>
-                <option>Bloqueado</option>
-              </select>
+              <Label className="mb-2 block text-black">Estado</Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as TaskStatus)}>
+                <SelectTrigger className="w-full text-black">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pendiente">Pendiente</SelectItem>
+                  <SelectItem value="En proceso">En proceso</SelectItem>
+                  <SelectItem value="Completado">Completado</SelectItem>
+                  <SelectItem value="Bloqueado">Bloqueado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           <div>
-            <label className="block mb-2 font-medium text-black">Seguimiento</label>
-            <textarea
+            <Label className="mb-2 block text-black">Seguimiento</Label>
+            <Textarea
               ref={notesRef}
               rows={5}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Escribe el seguimiento inicial..."
-              className="w-full border rounded-xl p-4 text-black placeholder:text-slate-500"
+              className="text-black placeholder:text-slate-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-5">
             <div>
-              <label className="block mb-2 font-medium text-black">Fecha compromiso</label>
-              <input ref={commitmentDateRef} type="date" value={commitmentDate} onChange={(e) => setCommitmentDate(e.target.value)} className="w-full border rounded-xl bg-white px-4 py-3 text-black" />
+              <Label className="mb-2 block text-black">Fecha compromiso</Label>
+              <Input ref={commitmentDateRef} type="date" value={commitmentDate} onChange={(e) => setCommitmentDate(e.target.value)} className="text-black" />
             </div>
 
             <div>
-              <label className="block mb-2 font-medium text-black">Próxima revisión</label>
-              <input ref={reviewDateRef} type="date" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} className="w-full border rounded-xl bg-white px-4 py-3 text-black" />
+              <Label className="mb-2 block text-black">Próxima revisión</Label>
+              <Input ref={reviewDateRef} type="date" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} className="text-black" />
             </div>
           </div>
         </div>
 
         <DialogFooter className="p-6">
-          <button type="button" onClick={onClose} className="border px-5 py-3 rounded-xl text-black hover:bg-slate-50">
+          <Button variant="outline" onClick={onClose} className="text-black">
             Cancelar
-          </button>
+          </Button>
 
-          <button type="button" onClick={handleSave} className="bg-blue-600 text-white px-5 py-3 rounded-xl hover:bg-blue-700">
+          <Button onClick={handleSave}>
             Guardar
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
