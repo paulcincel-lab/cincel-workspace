@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
 
 type Props = {
   options: string[];
@@ -140,7 +141,7 @@ export default function TeamMultiSelect({
                   {getPersonInitials(member)}
                 </span>
                 <span className="flex-1">{member}</span>
-                {isSelected ? <span className="text-xs font-semibold text-blue-600">✓</span> : null}
+                <Checkbox checked={isSelected} readOnly tabIndex={-1} />
               </button>
             );
           })

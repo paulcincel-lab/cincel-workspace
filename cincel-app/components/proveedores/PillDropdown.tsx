@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
 
 /** Predefined color swatches for option badges. */
 export const COLOR_PALETTE: { label: string; bg: string; text: string }[] = [
@@ -55,20 +56,15 @@ export const PillDropdown = ({
   const close = () => { setOpen(false); setAdding(false); setPickingFor(null); setNewColor(null); };
 
   return (
-    <div className="relative inline-block">
-      <button
-        onClick={() => setOpen(!open)}
+    <Popover open={open} onOpenChange={(next) => { if (next) setOpen(true); else close(); }}>
+      <PopoverTrigger
         className={`px-3 py-1 rounded-md text-xs font-semibold whitespace-nowrap cursor-pointer hover:opacity-80 transition ${pillStyle.className ?? ""}`}
         style={pillStyle.style}
       >
         {value || "—"}
-      </button>
+      </PopoverTrigger>
 
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={close} />
-          <div className="absolute left-0 top-full mt-1 z-50 min-w-[220px] bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden">
-
+      <PopoverContent align="start" className="overflow-hidden">
             {pickingFor && onSetColor ? (
               <div className="p-3">
                 <div className="flex items-center justify-between mb-2">
@@ -186,9 +182,7 @@ export const PillDropdown = ({
                 )}
               </>
             )}
-          </div>
-        </>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 };
