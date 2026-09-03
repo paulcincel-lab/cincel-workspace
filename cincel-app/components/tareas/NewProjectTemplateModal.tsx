@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Button } from "@/components/ui/shadcn/button";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { Label } from "@/components/ui/shadcn/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 
 type TemplateItem = {
   phase: string;
@@ -101,41 +105,45 @@ export default function NewProjectTemplateModal({
 
         <div className="space-y-6 p-6">
           <div>
-            <label className="mb-2 block font-medium text-black">Nombre del proyecto</label>
-            <select
-              value={project}
-              onChange={(event) => setProject(event.target.value)}
-              className="w-full rounded-xl border bg-white px-4 py-3 text-black"
-            >
-              {projectOptions.length === 0 ? (
-                <option value="">No hay proyectos activos disponibles</option>
-              ) : null}
-              {projectOptions.map((projectOption) => (
-                <option key={projectOption} value={projectOption}>
-                  {projectOption}
-                </option>
-              ))}
-            </select>
+            <Label className="mb-2 block text-black">Nombre del proyecto</Label>
+            {projectOptions.length === 0 ? (
+              <p className="w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-500">
+                No hay proyectos activos disponibles
+              </p>
+            ) : (
+              <Select value={project} onValueChange={(v) => setProject(v as string)}>
+                <SelectTrigger className="w-full text-black">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {projectOptions.map((projectOption) => (
+                    <SelectItem key={projectOption} value={projectOption}>
+                      {projectOption}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label className="block font-medium text-black">Descripciones iniciales</label>
+              <Label className="block text-black">Descripciones iniciales</Label>
               <div className="flex items-center gap-4">
-                <button
-                  type="button"
+                <Button
+                  variant="link"
                   onClick={() => setSelectedKeys(templateItems.map((item) => itemKey(item)))}
-                  className="text-sm font-medium text-blue-700 hover:text-blue-800"
+                  className="h-auto p-0 text-sm font-medium text-blue-700 hover:text-blue-800"
                 >
                   Seleccionar todas
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="link"
                   onClick={() => setSelectedKeys([])}
-                  className="text-sm font-medium text-slate-900 hover:text-black"
+                  className="h-auto p-0 text-sm font-medium text-slate-900 hover:text-black"
                 >
                   Borrar todas
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -156,10 +164,9 @@ export default function NewProjectTemplateModal({
                           key={key}
                           className="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2 hover:bg-slate-50"
                         >
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={checked}
-                            onChange={() => toggleItem(item)}
+                            onCheckedChange={() => toggleItem(item)}
                             className="mt-1"
                           />
                           <span className="text-sm text-black">{item.description}</span>
@@ -174,22 +181,16 @@ export default function NewProjectTemplateModal({
         </div>
 
         <DialogFooter className="p-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border px-5 py-3 text-black hover:bg-slate-50"
-          >
+          <Button variant="outline" onClick={onClose} className="text-black">
             Cancelar
-          </button>
+          </Button>
 
-          <button
-            type="button"
+          <Button
             onClick={handleCreate}
             disabled={project.trim().length === 0 || selectedItems.length === 0 || projectOptions.length === 0}
-            className="rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Crear plantilla
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
