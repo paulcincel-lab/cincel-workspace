@@ -9,6 +9,9 @@ import AppAvatar from "@/components/ui/AppAvatar";
 import ExportMenu from "@/components/ui/ExportMenu";
 import InlineEditable from "@/components/ui/InlineEditable";
 import { DataTable } from "@/components/ui/DataTable";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import type { ColumnDef } from "@tanstack/react-table";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
@@ -25,6 +28,8 @@ import { fetchActivities, saveActivities } from "@/lib/repositories/activities-r
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 const TASK_STATUSES: TaskStatus[] = ["Pendiente", "En proceso", "Completado", "Bloqueado"];
+/** shadcn Select (base-ui) doesn't support an empty-string item value. */
+const ALL_PROJECTS_VALUE = "__all__";
 const TEAM_MEMBERS = [
   "Sin responsable",
   "Juanma",
@@ -489,22 +494,25 @@ export default function TareasPage({
             <div className="flex items-center gap-2">
               <AppAvatar name={task.manager || "Sin responsable"} showName={false} />
               {activitiesCapabilities.canChangeResponsible ? (
-                <select
+                <Select
                   value={task.manager || "Sin responsable"}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     updateTaskInline(workflow, task.id, {
-                      manager: event.target.value,
+                      manager: value as string,
                     })
                   }
-                  className="rounded-xl border border-transparent bg-transparent px-2 py-1 text-sm text-slate-800 focus:border-slate-200 focus:bg-white"
-                  aria-label={`Responsable de ${task.description}`}
                 >
-                  {TEAM_MEMBERS.map((member) => (
-                    <option key={`manager-${task.id}-${member}`} value={member}>
-                      {member}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger aria-label={`Responsable de ${task.description}`} className="w-auto">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TEAM_MEMBERS.map((member) => (
+                      <SelectItem key={`manager-${task.id}-${member}`} value={member}>
+                        {member}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : (
                 <span className="px-2 py-1 text-sm text-slate-800">{task.manager || "Sin responsable"}</span>
               )}
@@ -552,14 +560,13 @@ export default function TareasPage({
               }
               renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
               renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                <input
+                <Input
                   autoFocus
                   type="date"
                   value={value}
                   onChange={(event) => onChange(event.target.value)}
                   onBlur={onBlur}
                   onKeyDown={onKeyDown}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
                   aria-label={`Próxima revisión de ${task.description}`}
                 />
               )}
@@ -584,14 +591,13 @@ export default function TareasPage({
               }
               renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
               renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                <input
+                <Input
                   autoFocus
                   type="date"
                   value={value}
                   onChange={(event) => onChange(event.target.value)}
                   onBlur={onBlur}
                   onKeyDown={onKeyDown}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
                   aria-label={`Fecha de entrega de ${task.description}`}
                 />
               )}
@@ -610,21 +616,25 @@ export default function TareasPage({
             task,
             viewerName,
           }) ? (
-            <select
+            <Select
               value={task.status}
-              onChange={(event) =>
+              onValueChange={(value) =>
                 updateTaskInline(workflow, task.id, {
-                  status: event.target.value as TaskStatus,
+                  status: value as TaskStatus,
                 })
               }
-              className={`rounded-full border px-3 py-1 text-xs font-medium ${statusBadgeClass(task.status)}`}
             >
-              {TASK_STATUSES.map((status) => (
-                <option key={`status-${task.id}-${status}`} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TASK_STATUSES.map((status) => (
+                  <SelectItem key={`status-${task.id}-${status}`} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${statusBadgeClass(task.status)}`}>
               {task.status}
@@ -736,20 +746,24 @@ export default function TareasPage({
                 <label htmlFor="project-filter" className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">
                   Proyectos
                 </label>
-                <select
-                  id="project-filter"
-                  value={projectFromQuery ?? ""}
-                  onChange={(event) => updateProjectFromMenu(event.target.value)}
-                  className="w-full rounded-xl border border-blue-300 bg-white px-4 py-3 text-base font-semibold text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
-                  aria-label="Cambiar proyecto seleccionado"
+                <Select
+                  value={projectFromQuery ?? ALL_PROJECTS_VALUE}
+                  onValueChange={(value) =>
+                    updateProjectFromMenu(value === ALL_PROJECTS_VALUE ? "" : (value as string))
+                  }
                 >
-                  <option value="">Todos los proyectos</option>
-                  {projectOptions.map((project) => (
-                    <option key={`selected-project-${project}`} value={project}>
-                      {project}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="project-filter" aria-label="Cambiar proyecto seleccionado" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_PROJECTS_VALUE}>Todos los proyectos</SelectItem>
+                    {projectOptions.map((project) => (
+                      <SelectItem key={`selected-project-${project}`} value={project}>
+                        {project}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -758,13 +772,9 @@ export default function TareasPage({
                 <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
                   Proyecto activo: {projectFromQuery}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => updateProjectFromMenu("")}
-                  className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
+                <Button variant="outline" size="sm" onClick={() => updateProjectFromMenu("")}>
                   Ver todos
-                </button>
+                </Button>
               </div>
             ) : null}
           </div>
@@ -831,37 +841,40 @@ export default function TareasPage({
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-sm font-medium text-slate-800">Ordenar por</p>
 
-                  <select
-                    value={sortBy}
-                    onChange={(event) => setSortBy(event.target.value as "etapa" | "compromiso" | "estatus")}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
-                  >
-                    <option value="etapa">Etapa</option>
-                    <option value="compromiso">Compromiso</option>
-                    <option value="estatus">Estatus</option>
-                  </select>
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as "etapa" | "compromiso" | "estatus")}>
+                    <SelectTrigger className="w-auto">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="etapa">Etapa</SelectItem>
+                      <SelectItem value="compromiso">Compromiso</SelectItem>
+                      <SelectItem value="estatus">Estatus</SelectItem>
+                    </SelectContent>
+                  </Select>
 
-                  <select
-                    value={sortDirection}
-                    onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
-                  >
-                    <option value="asc">Ascendente</option>
-                    <option value="desc">Descendente</option>
-                  </select>
+                  <Select value={sortDirection} onValueChange={(v) => setSortDirection(v as "asc" | "desc")}>
+                    <SelectTrigger className="w-auto">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="asc">Ascendente</SelectItem>
+                      <SelectItem value="desc">Descendente</SelectItem>
+                    </SelectContent>
+                  </Select>
 
                   <span className="ml-2 text-sm font-medium text-slate-800">Responsable</span>
-                  <select
-                    value={responsableFilter}
-                    onChange={(event) => setResponsableFilter(event.target.value)}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800"
-                  >
-                    {responsibleOptions.map((manager) => (
-                      <option key={`responsable-filter-${manager}`} value={manager}>
-                        {manager}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={responsableFilter} onValueChange={(v) => setResponsableFilter(v as string)}>
+                    <SelectTrigger className="w-auto">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {responsibleOptions.map((manager) => (
+                        <SelectItem key={`responsable-filter-${manager}`} value={manager}>
+                          {manager}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {activitiesCapabilities.canExportData ? (
