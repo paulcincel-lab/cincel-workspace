@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
 
 export type DrivePickerEntry = {
   id: string;
@@ -83,8 +84,6 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, currentFolderId, search]);
 
-  if (!open) return null;
-
   const openFolder = (entry: DrivePickerEntry) => {
     setSearch("");
     setPath((p) => [...p, { id: entry.id, name: entry.name }]);
@@ -95,10 +94,10 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-      <div className="flex h-[80vh] w-full max-w-3xl flex-col rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
-          <h3 className="text-base font-semibold text-slate-900">Elegir de Google Drive</h3>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="flex h-[80vh] max-w-3xl flex-col p-0" showCloseButton={false}>
+        <DialogHeader className="flex-row items-center justify-between border-b border-slate-200 p-4">
+          <DialogTitle className="text-base font-semibold">Elegir de Google Drive</DialogTitle>
           <button
             type="button"
             onClick={onClose}
@@ -106,7 +105,7 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
           >
             Cerrar
           </button>
-        </div>
+        </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2 text-sm">
           <button type="button" onClick={() => goToCrumb(-1)} className="font-medium text-blue-700 hover:underline">
@@ -174,7 +173,7 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-200 p-4">
+        <DialogFooter className="items-center justify-between p-4">
           <span className="truncate text-sm text-slate-500">
             {selected ? `Seleccionado: ${selected.name}` : "Selecciona un archivo"}
           </span>
@@ -188,8 +187,8 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
           >
             Usar este archivo
           </button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

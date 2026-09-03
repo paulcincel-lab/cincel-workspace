@@ -2,6 +2,7 @@
 
 import AppAvatar from "@/components/ui/AppAvatar";
 import AppBadge from "@/components/ui/AppBadge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
 
 interface MemberProfileModalProps {
@@ -12,23 +13,13 @@ interface MemberProfileModalProps {
 /** Read-only personal profile overlay for a team member. */
 export function MemberProfileModal({ member, onClose }: MemberProfileModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
-        <div className="border-b p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">Ficha personal</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-xl text-slate-400 hover:text-slate-700"
-              aria-label="Cerrar"
-            >
-              x
-            </button>
-          </div>
-        </div>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Ficha personal</DialogTitle>
+        </DialogHeader>
 
-        <div className="space-y-4 p-6">
+        <div className="space-y-4">
           <div className="flex items-center justify-between gap-4">
             <AppAvatar name={member.name} />
             <AppBadge label={member.active ? "Activo" : "Desactivado"} color={member.active ? "blue" : "gray"} />
@@ -63,7 +54,7 @@ export function MemberProfileModal({ member, onClose }: MemberProfileModalProps)
             <p className="mt-1">Ocupacion: {member.occupancy}%</p>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
