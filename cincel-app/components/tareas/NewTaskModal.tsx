@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { TaskStatus } from "@/lib/types/task";
-import DialogOverlay from "@/components/ui/DialogOverlay";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 
 type TaskFormValues = {
@@ -35,7 +35,6 @@ export default function NewTaskModal({
   phaseOptions,
   onClose,
   onSave,
-  triggerRef,
 }: Props) {
   const [project, setProject] = useState(projects[0] ?? "Ensenada");
   const [phase, setPhase] = useState(phaseOptions[0] ?? "Inicial");
@@ -55,8 +54,6 @@ export default function NewTaskModal({
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const commitmentDateRef = useRef<HTMLInputElement>(null);
   const reviewDateRef = useRef<HTMLInputElement>(null);
-
-  if (!open) return null;
 
   const handleSave = () => {
     const currentDescription = descriptionRef.current?.value ?? description;
@@ -81,21 +78,11 @@ export default function NewTaskModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <DialogOverlay
-        label="Nueva tarea"
-        onClose={onClose}
-        triggerRef={triggerRef}
-        className="bg-white rounded-2xl w-[700px] shadow-xl text-black"
-      >
-        <div className="p-6 border-b">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-black">Nueva tarea</h2>
-            <button type="button" onClick={onClose} className="text-black hover:text-slate-700 text-xl">
-              ✕
-            </button>
-          </div>
-        </div>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="w-[700px] max-w-[700px] p-0 text-black">
+        <DialogHeader className="border-b border-slate-200 p-6">
+          <DialogTitle className="text-black">Nueva tarea</DialogTitle>
+        </DialogHeader>
 
         <div className="p-6 space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
@@ -211,7 +198,7 @@ export default function NewTaskModal({
           </div>
         </div>
 
-        <div className="p-6 border-t flex justify-end gap-3">
+        <DialogFooter className="p-6">
           <button type="button" onClick={onClose} className="border px-5 py-3 rounded-xl text-black hover:bg-slate-50">
             Cancelar
           </button>
@@ -219,8 +206,8 @@ export default function NewTaskModal({
           <button type="button" onClick={handleSave} className="bg-blue-600 text-white px-5 py-3 rounded-xl hover:bg-blue-700">
             Guardar
           </button>
-        </div>
-      </DialogOverlay>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

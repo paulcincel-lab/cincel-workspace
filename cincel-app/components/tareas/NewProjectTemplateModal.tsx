@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
 
 type TemplateItem = {
   phase: string;
@@ -64,8 +65,6 @@ export default function NewProjectTemplateModal({
     return templateItems.filter((item) => selectedKeys.includes(itemKey(item)));
   }, [templateItems, selectedKeys]);
 
-  if (!open) return null;
-
   const toggleItem = (item: TemplateItem) => {
     const key = itemKey(item);
 
@@ -94,21 +93,11 @@ export default function NewProjectTemplateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-[760px] rounded-2xl bg-white shadow-xl text-black">
-        <div className="border-b p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-black">Iniciar plantilla de proyecto</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-xl text-black hover:text-slate-700"
-              aria-label="Cerrar"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="w-[760px] max-w-[760px] p-0 text-black">
+        <DialogHeader className="border-b p-6">
+          <DialogTitle className="text-black">Iniciar plantilla de proyecto</DialogTitle>
+        </DialogHeader>
 
         <div className="space-y-6 p-6">
           <div>
@@ -184,7 +173,7 @@ export default function NewProjectTemplateModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 border-t p-6">
+        <DialogFooter className="p-6">
           <button
             type="button"
             onClick={onClose}
@@ -201,8 +190,8 @@ export default function NewProjectTemplateModal({
           >
             Crear plantilla
           </button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
