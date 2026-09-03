@@ -5,9 +5,14 @@ import { cn } from "@/lib/utils"
 
 function Progress({
   className,
+  trackClassName,
+  indicatorClassName,
   value,
   ...props
-}: React.ComponentProps<typeof ProgressPrimitive.Root>) {
+}: React.ComponentProps<typeof ProgressPrimitive.Root> & {
+  trackClassName?: string
+  indicatorClassName?: string
+}) {
   return (
     <ProgressPrimitive.Root
       data-slot="progress"
@@ -17,11 +22,14 @@ function Progress({
     >
       <ProgressPrimitive.Track
         data-slot="progress-track"
-        className="relative h-2 w-full overflow-hidden rounded-full bg-muted"
+        className={cn("relative h-2 w-full overflow-hidden rounded-full bg-muted", trackClassName)}
       >
         <ProgressPrimitive.Indicator
           data-slot="progress-indicator"
-          className="h-full bg-primary transition-all duration-300 ease-out data-[state=indeterminate]:animate-pulse"
+          className={cn(
+            "h-full bg-primary transition-all duration-300 ease-out data-[state=indeterminate]:animate-pulse",
+            indicatorClassName
+          )}
         />
       </ProgressPrimitive.Track>
     </ProgressPrimitive.Root>
