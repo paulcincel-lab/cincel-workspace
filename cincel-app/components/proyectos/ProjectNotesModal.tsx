@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Button } from "@/components/ui/shadcn/button";
+import { Textarea } from "@/components/ui/shadcn/textarea";
 import type { ProjectNote } from "@/lib/proyectos/use-projects-data";
 
 function formatDate(input: string): string {
@@ -41,27 +43,20 @@ export function ProjectNotesModal({ projectName, notes, onClose, onSave }: Proje
         </DialogHeader>
 
         <div className="space-y-4">
-          <textarea
+          <Textarea
             value={noteDraft}
             onChange={(event) => setNoteDraft(event.target.value)}
             placeholder="Escribe una nota operativa..."
             rows={4}
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm"
           />
 
           <div className="flex justify-end gap-2">
-            <button
-              onClick={onClose}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
+            <Button variant="outline" onClick={onClose}>
               Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
+            </Button>
+            <Button onClick={handleSave}>
               Guardar nota
-            </button>
+            </Button>
           </div>
 
           <div className="max-h-72 space-y-3 overflow-y-auto border-t border-slate-200 pt-4">
