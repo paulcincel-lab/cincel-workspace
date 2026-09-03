@@ -1,6 +1,6 @@
 "use client";
 
-import Badge from "@/components/ui/Badge";
+import AppBadge from "@/components/ui/AppBadge";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, normalizeSystemAccessRole } from "@/lib/data/roles";
 import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { TeamAvailability } from "@/lib/data/team";
@@ -189,7 +189,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Badge
+                <AppBadge
                   label={accessPreviewState.status}
                   color={accessPreviewState.status === "Acceso activo"
                     ? "blue"
@@ -199,7 +199,7 @@ export function MemberEditorDrawer({
                         ? "red"
                         : "gray"}
                 />
-                <Badge
+                <AppBadge
                   label={accessPreviewState.hasSystemAccess ? "Tiene acceso al sistema" : "Sin acceso al sistema"}
                   color={accessPreviewState.hasSystemAccess ? "blue" : "gray"}
                 />

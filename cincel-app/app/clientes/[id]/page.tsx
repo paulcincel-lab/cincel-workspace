@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import Badge from "@/components/ui/Badge";
+import AppBadge from "@/components/ui/AppBadge";
 import Avatar from "@/components/ui/Avatar";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
@@ -673,7 +673,7 @@ export default function ClienteFichaPage() {
                 <div>
                   <p className="text-xs text-slate-500">Proyecto activo</p>
                   <div className="mt-1">
-                    <Badge label={hasActiveProject ? "Si" : "No"} color={statusBadgeColor(hasActiveProject)} />
+                    <AppBadge label={hasActiveProject ? "Si" : "No"} color={statusBadgeColor(hasActiveProject)} />
                   </div>
                 </div>
                 <div>
@@ -747,7 +747,7 @@ export default function ClienteFichaPage() {
                         <p className="font-semibold text-slate-800">{project.name}</p>
                         <p className="text-xs text-slate-500">{project.type} · {project.stage}</p>
                       </div>
-                      <Badge label={project.active ? "Activo" : "Inactivo"} color={statusBadgeColor(project.active)} />
+                      <AppBadge label={project.active ? "Activo" : "Inactivo"} color={statusBadgeColor(project.active)} />
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
