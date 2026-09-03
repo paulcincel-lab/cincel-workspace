@@ -8,6 +8,14 @@ import { DataTable } from "@/components/ui/DataTable";
 import { EditableCell } from "@/components/proveedores/EditableCell";
 import { StarRating } from "@/components/proveedores/StarRating";
 import { PillDropdown } from "@/components/proveedores/PillDropdown";
+import { Button } from "@/components/ui/shadcn/button";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Textarea } from "@/components/ui/shadcn/textarea";
 import { contractors as baseContractors } from "@/lib/data/contractors";
 import type { Contractor, ContractorStatus, ContractorSeniority, PriceLevel } from "@/lib/types/contractor";
 import { getContractorsSnapshot, saveContractors, fetchContractors } from "@/lib/repositories/providers-repository";
@@ -40,6 +48,14 @@ const DEFAULT_PRICE_OPTIONS: string[] = [
 
 const COLORS_STORAGE_KEY = "cincel.contractors.colors.v1";
 const COLUMN_ORDER_STORAGE_KEY = "cincel.contractors.column.order.v2";
+
+const ALL_STATUS_VALUE = "__all_status__";
+const ALL_SPECIALTY_VALUE = "__all_specialty__";
+const ALL_SENIORITY_VALUE = "__all_seniority__";
+const ALL_PROVIDER_VALUE = "__all_provider__";
+const ALL_COMPANY_VALUE = "__all_company__";
+const ALL_PRICE_LEVEL_VALUE = "__all_price_level__";
+const NO_SPECIALTY_VALUE = "__no_specialty__";
 
 type ColumnKey = "company" | "provider" | "status" | "mainSpecialty" | "categories" | "seniority" | "priceLevel" | "rating" | "contact" | "secondaryContacts" | "startDate" | "comments" | "webPage";
 
@@ -160,8 +176,8 @@ const CategoryMultiSelect = ({
   const extra = values.length - MAX_VISIBLE;
 
   return (
-    <div className="relative">
-      <div className="flex flex-wrap gap-1 items-center cursor-pointer" onClick={() => setOpen(!open)}>
+    <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setAdding(false); }}>
+      <PopoverTrigger className="flex flex-wrap gap-1 items-center">
         {values.length === 0 && (
           <span className="text-gray-300 text-xs italic hover:text-gray-400">+ agregar</span>
         )}
@@ -173,54 +189,44 @@ const CategoryMultiSelect = ({
         {extra > 0 && (
           <span className="px-1.5 py-0.5 bg-gray-800 text-white rounded-full text-xs font-bold">+{extra}</span>
         )}
-      </div>
+      </PopoverTrigger>
 
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => { setOpen(false); setAdding(false); }} />
-          <div className="absolute left-0 top-full mt-1 z-50 w-64 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-            <div className="max-h-56 overflow-y-auto">
-              {options.map((opt) => (
-                <label key={opt} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm">
-                  <input
-                    type="checkbox"
-                    checked={values.includes(opt)}
-                    onChange={() => toggle(opt)}
-                    className="accent-blue-600"
-                  />
-                  {opt}
-                </label>
-              ))}
-            </div>
-            {onAddOption && (
-              <div className="border-t border-gray-100 p-2">
-                {!adding ? (
-                  <button onClick={() => setAdding(true)} className="w-full text-left text-xs text-blue-600 hover:text-blue-800 px-2 py-1">
-                    + Agregar categoría
-                  </button>
-                ) : (
-                  <div className="flex gap-1">
-                    <input
-                      autoFocus
-                      type="text"
-                      value={newVal}
-                      onChange={(e) => setNewVal(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && newVal.trim()) { onAddOption(newVal.trim()); setNewVal(""); setAdding(false); } }}
-                      placeholder="Nueva categoría…"
-                      className="flex-1 text-xs border border-gray-300 rounded px-2 py-1"
-                    />
-                    <button
-                      onClick={() => { if (newVal.trim()) { onAddOption(newVal.trim()); setNewVal(""); setAdding(false); } }}
-                      className="px-2 py-1 bg-blue-600 text-white rounded text-xs"
-                    >✓</button>
-                  </div>
-                )}
+      <PopoverContent align="start" className="w-64 overflow-hidden p-0">
+        <div className="max-h-56 overflow-y-auto">
+          {options.map((opt) => (
+            <label key={opt} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm">
+              <Checkbox checked={values.includes(opt)} onCheckedChange={() => toggle(opt)} />
+              {opt}
+            </label>
+          ))}
+        </div>
+        {onAddOption && (
+          <div className="border-t border-gray-100 p-2">
+            {!adding ? (
+              <Button variant="link" className="h-auto w-full justify-start px-2 py-1 text-xs" onClick={() => setAdding(true)}>
+                + Agregar categoría
+              </Button>
+            ) : (
+              <div className="flex gap-1">
+                <Input
+                  autoFocus
+                  type="text"
+                  value={newVal}
+                  onChange={(e) => setNewVal(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && newVal.trim()) { onAddOption(newVal.trim()); setNewVal(""); setAdding(false); } }}
+                  placeholder="Nueva categoría…"
+                  className="h-auto flex-1 px-2 py-1 text-xs"
+                />
+                <Button
+                  className="h-auto px-2 py-1 text-xs"
+                  onClick={() => { if (newVal.trim()) { onAddOption(newVal.trim()); setNewVal(""); setAdding(false); } }}
+                >✓</Button>
               </div>
             )}
           </div>
-        </>
-      )}
-    </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 };
 
@@ -262,71 +268,75 @@ const AddContractorModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">Agregar Proveedor</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
-        </div>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogTitle>Agregar Proveedor</DialogTitle>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Nombre del proveedor *</label>
-            <input
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <Label>Nombre del proveedor *</Label>
+            <Input
               autoFocus
               type="text"
               required
               value={form.provider}
               onChange={(e) => set("provider", e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Ej. Carpintero Juan Pérez"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Estado</label>
-              <select value={form.status} onChange={(e) => set("status", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {DEFAULT_STATUS_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-              </select>
+            <div className="space-y-1">
+              <Label>Estado</Label>
+              <Select value={form.status as string} onValueChange={(v) => set("status", v)}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DEFAULT_STATUS_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Seniority</label>
-              <select value={form.seniority} onChange={(e) => set("seniority", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {DEFAULT_SENIORITY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-              </select>
+            <div className="space-y-1">
+              <Label>Seniority</Label>
+              <Select value={form.seniority as string} onValueChange={(v) => set("seniority", v)}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DEFAULT_SENIORITY_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Ramo Principal</label>
-              <select value={form.mainSpecialty} onChange={(e) => set("mainSpecialty", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">— Seleccionar —</option>
-                {DEFAULT_CATEGORY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-              </select>
+            <div className="space-y-1">
+              <Label>Ramo Principal</Label>
+              <Select value={form.mainSpecialty || NO_SPECIALTY_VALUE} onValueChange={(v) => set("mainSpecialty", v === NO_SPECIALTY_VALUE ? "" : v)}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SPECIALTY_VALUE}>— Seleccionar —</SelectItem>
+                  {DEFAULT_CATEGORY_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Precios/Nivel</label>
-              <select value={form.priceLevel} onChange={(e) => set("priceLevel", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {DEFAULT_PRICE_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-              </select>
+            <div className="space-y-1">
+              <Label>Precios/Nivel</Label>
+              <Select value={form.priceLevel as string} onValueChange={(v) => set("priceLevel", v)}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DEFAULT_PRICE_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Categorías</label>
+          <div className="space-y-1">
+            <Label>Categorías</Label>
             <div className="border border-gray-300 rounded-lg px-3 py-2 max-h-32 overflow-y-auto grid grid-cols-2 gap-1">
               {categoryOptions.map((o) => (
                 <label key={o} className="flex items-center gap-1.5 text-xs cursor-pointer hover:text-blue-700">
-                  <input type="checkbox" checked={form.categories.includes(o)}
-                    onChange={() => set("categories", form.categories.includes(o) ? form.categories.filter((c) => c !== o) : [...form.categories, o])}
-                    className="accent-blue-600" />
+                  <Checkbox
+                    checked={form.categories.includes(o)}
+                    onCheckedChange={() => set("categories", form.categories.includes(o) ? form.categories.filter((c) => c !== o) : [...form.categories, o])}
+                  />
                   {o}
                 </label>
               ))}
@@ -334,55 +344,38 @@ const AddContractorModal = ({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Contacto / Teléfono</label>
-              <input type="text" value={form.contact} onChange={(e) => set("contact", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="+52 55 1234-5678" />
+            <div className="space-y-1">
+              <Label>Contacto / Teléfono</Label>
+              <Input type="text" value={form.contact} onChange={(e) => set("contact", e.target.value)} placeholder="+52 55 1234-5678" />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Fecha de inicio</label>
-              <input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="space-y-1">
+              <Label>Fecha de inicio</Label>
+              <Input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Calificación inicial</label>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button key={star} type="button" onClick={() => set("rating", star)}
-                  className={`text-2xl leading-none transition-colors ${star <= form.rating ? "text-orange-400" : "text-gray-200"}`}>★</button>
-              ))}
-            </div>
+          <div className="space-y-1">
+            <Label>Calificación inicial</Label>
+            <StarRating rating={form.rating} onRate={(r) => set("rating", r)} />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Página Web</label>
-            <input type="text" value={form.webPage} onChange={(e) => set("webPage", e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="https://..." />
+          <div className="space-y-1">
+            <Label>Página Web</Label>
+            <Input type="text" value={form.webPage} onChange={(e) => set("webPage", e.target.value)} placeholder="https://..." />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Comentarios</label>
-            <textarea value={form.comments} onChange={(e) => set("comments", e.target.value)} rows={2}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="Notas internas…" />
+          <div className="space-y-1">
+            <Label>Comentarios</Label>
+            <Textarea value={form.comments} onChange={(e) => set("comments", e.target.value)} rows={2} placeholder="Notas internas…" />
           </div>
 
           <div className="flex justify-end gap-3 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800">
-              Cancelar
-            </button>
-            <button type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
-              Agregar proveedor
-            </button>
+            <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button type="submit">Agregar proveedor</Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -603,41 +596,44 @@ export default function ContratistasPage() {
         return (
           <div className="text-xs text-gray-600">
             {!c.secondaryContacts || c.secondaryContacts.length === 0 ? (
-              <button
+              <Button
+                variant="link"
+                className="h-auto p-0 text-blue-600 hover:text-blue-800"
                 onClick={() => update(c.id, "secondaryContacts", [""])}
-                className="text-blue-600 hover:text-blue-800 underline"
               >
                 + Agregar
-              </button>
+              </Button>
             ) : (
               <div className="space-y-1">
                 {c.secondaryContacts.map((contact, idx) => (
                   <div key={idx} className="flex items-center gap-1">
-                    <EditableCell 
-                      value={contact} 
+                    <EditableCell
+                      value={contact}
                       onSave={(v) => {
                         const updated = [...(c.secondaryContacts || [])];
                         updated[idx] = v;
                         update(c.id, "secondaryContacts", updated);
                       }}
                     />
-                    <button
+                    <Button
+                      variant="ghost"
+                      className="h-auto p-0 text-xs text-red-400 hover:text-red-600"
                       onClick={() => {
                         const updated = (c.secondaryContacts || []).filter((_, i) => i !== idx);
                         update(c.id, "secondaryContacts", updated.length === 0 ? [] : updated);
                       }}
-                      className="text-red-400 hover:text-red-600 text-xs"
                     >
                       ✕
-                    </button>
+                    </Button>
                   </div>
                 ))}
-                <button
+                <Button
+                  variant="link"
+                  className="h-auto p-0 text-xs text-blue-600 hover:text-blue-800"
                   onClick={() => update(c.id, "secondaryContacts", [...(c.secondaryContacts || []), ""])}
-                  className="text-blue-600 hover:text-blue-800 text-xs underline"
                 >
                   + Agregar
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -702,21 +698,27 @@ export default function ContratistasPage() {
         const c = row.original;
         return deletingId === c.id ? (
           <div className="flex items-center gap-1 justify-end">
-            <button
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-auto px-2 py-1 text-xs"
               onClick={() => deleteContractor(c.id)}
-              className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 whitespace-nowrap"
-            >Eliminar</button>
-            <button
+            >Eliminar</Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-auto px-2 py-1 text-xs"
               onClick={() => setDeletingId(null)}
-              className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300"
-            >✕</button>
+            >✕</Button>
           </div>
         ) : (
-          <button
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-auto px-1 py-0 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 text-base"
             onClick={() => setDeletingId(c.id)}
-            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition text-base px-1"
             title="Eliminar proveedor"
-          >🗑</button>
+          >🗑</Button>
         );
       },
     },
@@ -762,116 +764,103 @@ export default function ContratistasPage() {
             <div className="flex items-center justify-between mb-3">
               <h1 className="text-2xl font-bold text-gray-900">Contratistas</h1>
               <div className="flex items-center gap-2">
-                <input
+                <Input
                   type="text"
                   placeholder="Buscar proveedor…"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+                  className="w-48"
                 />
-                <button
+                <Button
+                  variant={showActiveOnly ? "default" : "outline"}
+                  className={showActiveOnly ? "bg-emerald-500 hover:bg-emerald-600 border-emerald-500" : ""}
                   onClick={() => setShowActiveOnly(!showActiveOnly)}
-                  className={`px-3 py-2 text-sm font-medium rounded-lg transition border ${
-                    showActiveOnly
-                      ? "bg-emerald-500 text-white border-emerald-500"
-                      : "bg-white text-gray-600 border-gray-300 hover:border-emerald-400 hover:text-emerald-600"
-                  }`}
                 >
                   ● Solo Activos
-                </button>
-                <button
-                  onClick={() => setShowModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition shadow-sm"
-                >
-                  <span className="text-base leading-none font-bold">+</span>
-                  Agregar proveedor
-                </button>
+                </Button>
+                <Button onClick={() => setShowModal(true)}>
+                  + Agregar proveedor
+                </Button>
               </div>
             </div>
 
             {/* Filtros */}
             <div className="flex items-center gap-2 flex-wrap bg-white border border-gray-200 rounded-lg px-4 py-2.5">
               <span className="text-xs font-medium text-gray-400 mr-1">Filtrar:</span>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-              >
-                <option value="">Estado: Todos</option>
-                {statusOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-              <select
-                value={filterSpecialty}
-                onChange={(e) => setFilterSpecialty(e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-              >
-                <option value="">Ramo: Todos</option>
-                {categoryOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-              <select
-                value={filterSeniority}
-                onChange={(e) => setFilterSeniority(e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-              >
-                <option value="">Seniority: Todos</option>
-                {seniorityOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-              <select
-                value={filterMinRating.toString()}
-                onChange={(e) => setFilterMinRating(Number(e.target.value))}
-                className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-              >
-                <option value="0">Calificación: Todas</option>
-                <option value="5">★★★★★  5 estrellas</option>
-                <option value="4">★★★★+  4 o más</option>
-                <option value="3">★★★+  3 o más</option>
-                <option value="2">★★+  2 o más</option>
-              </select>
-              <select
-                value={filterProvider}
-                onChange={(e) => setFilterProvider(e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-              >
-                <option value="">Proveedor: Todos</option>
-                {Array.from(new Set(contractors.map((c) => c.provider))).sort().map((provider) => (
-                  <option key={provider} value={provider}>{provider}</option>
-                ))}
-              </select>
-              <select
-                value={filterCompany}
-                onChange={(e) => setFilterCompany(e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-              >
-                <option value="">Empresa: Todos</option>
-                {Array.from(new Set(contractors.map((c) => c.company ?? "").filter(Boolean))).sort().map((company) => (
-                  <option key={company} value={company}>{company}</option>
-                ))}
-              </select>
-              <select
-                value={filterPriceLevel}
-                onChange={(e) => setFilterPriceLevel(e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-              >
-                <option value="">Precios: Todos</option>
-                {priceOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
+              <Select value={filterStatus || ALL_STATUS_VALUE} onValueChange={(v) => setFilterStatus(v === ALL_STATUS_VALUE ? "" : (v as string))}>
+                <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_STATUS_VALUE}>Estado: Todos</SelectItem>
+                  {statusOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterSpecialty || ALL_SPECIALTY_VALUE} onValueChange={(v) => setFilterSpecialty(v === ALL_SPECIALTY_VALUE ? "" : (v as string))}>
+                <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_SPECIALTY_VALUE}>Ramo: Todos</SelectItem>
+                  {categoryOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterSeniority || ALL_SENIORITY_VALUE} onValueChange={(v) => setFilterSeniority(v === ALL_SENIORITY_VALUE ? "" : (v as string))}>
+                <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_SENIORITY_VALUE}>Seniority: Todos</SelectItem>
+                  {seniorityOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterMinRating.toString()} onValueChange={(v) => setFilterMinRating(Number(v))}>
+                <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Calificación: Todas</SelectItem>
+                  <SelectItem value="5">★★★★★  5 estrellas</SelectItem>
+                  <SelectItem value="4">★★★★+  4 o más</SelectItem>
+                  <SelectItem value="3">★★★+  3 o más</SelectItem>
+                  <SelectItem value="2">★★+  2 o más</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterProvider || ALL_PROVIDER_VALUE} onValueChange={(v) => setFilterProvider(v === ALL_PROVIDER_VALUE ? "" : (v as string))}>
+                <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_PROVIDER_VALUE}>Proveedor: Todos</SelectItem>
+                  {Array.from(new Set(contractors.map((c) => c.provider))).sort().map((provider) => (
+                    <SelectItem key={provider} value={provider}>{provider}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterCompany || ALL_COMPANY_VALUE} onValueChange={(v) => setFilterCompany(v === ALL_COMPANY_VALUE ? "" : (v as string))}>
+                <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_COMPANY_VALUE}>Empresa: Todos</SelectItem>
+                  {Array.from(new Set(contractors.map((c) => c.company ?? "").filter(Boolean))).sort().map((company) => (
+                    <SelectItem key={company} value={company}>{company}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterPriceLevel || ALL_PRICE_LEVEL_VALUE} onValueChange={(v) => setFilterPriceLevel(v === ALL_PRICE_LEVEL_VALUE ? "" : (v as string))}>
+                <SelectTrigger className="h-auto px-2 py-1 text-xs bg-gray-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_PRICE_LEVEL_VALUE}>Precios: Todos</SelectItem>
+                  {priceOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
               {activeFiltersCount > 0 && (
-                <button
-                  onClick={() => { 
-                    setFilterStatus(""); 
-                    setFilterSpecialty(""); 
-                    setFilterSeniority(""); 
-                    setFilterMinRating(0); 
-                    setShowActiveOnly(false); 
+                <Button
+                  variant="ghost"
+                  className="ml-auto h-auto px-2.5 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => {
+                    setFilterStatus("");
+                    setFilterSpecialty("");
+                    setFilterSeniority("");
+                    setFilterMinRating(0);
+                    setShowActiveOnly(false);
                     setFilterProvider("");
                     setFilterCompany("");
                     setFilterPriceLevel("");
                     setFilterCategories([]);
                   }}
-                  className="ml-auto px-2.5 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition flex items-center gap-1"
                 >
                   ✕ Limpiar ({activeFiltersCount})
-                </button>
+                </Button>
               )}
             </div>
           </div>
