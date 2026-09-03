@@ -1,7 +1,7 @@
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 import AppBadge from "@/components/ui/AppBadge";
 import Avatar from "@/components/ui/Avatar";
-import InlineEditableField from "@/components/ui/InlineEditableField";
+import InlineEditable from "@/components/ui/InlineEditable";
 import TeamMultiSelect, { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
 import type { Task, TaskStatus } from "@/lib/types/task";
 import { formatDateDMY } from "@/lib/utils/date";
@@ -117,7 +117,7 @@ export function buildPresaleColumns({
         ).sort((a, b) => a.localeCompare(b));
 
         return (
-          <InlineEditableField
+          <InlineEditable
             value={task.project}
             onCommit={(value) => updateField(task, "project", value)}
             renderDisplay={(value) => <span className="font-medium text-black">{value}</span>}
@@ -155,7 +155,7 @@ export function buildPresaleColumns({
         return (
           <div className="align-middle overflow-hidden text-black">
             {canReorderPhases ? (
-              <InlineEditableField
+              <InlineEditable
                 value={task.phase}
                 onCommit={(value) => updateField(task, "phase", value)}
                 commitOnChange
@@ -215,7 +215,7 @@ export function buildPresaleColumns({
         const task = row.original;
         return (
           <div className="align-middle font-medium text-black">
-            <InlineEditableField
+            <InlineEditable
               value={task.description}
               onCommit={(value) => updateField(task, "description", value)}
               renderDisplay={(value) => (
@@ -275,7 +275,7 @@ export function buildPresaleColumns({
         return (
           <div className="align-middle text-black">
             {canChangeResponsible ? (
-              <InlineEditableField
+              <InlineEditable
                 value={task.manager}
                 onCommit={(value) => updateField(task, "manager", value)}
                 commitOnChange
@@ -312,7 +312,7 @@ export function buildPresaleColumns({
         const task = row.original;
         return (
           <div className="align-middle text-black">
-            <InlineEditableField
+            <InlineEditable
               value={task.support.join("||")}
               onCommit={(value) =>
                 updateField(
@@ -354,7 +354,7 @@ export function buildPresaleColumns({
         return (
           <div className="min-w-[150px] whitespace-nowrap align-middle text-black">
             {getCanChangeStatus(task) ? (
-              <InlineEditableField
+              <InlineEditable
                 value={task.status}
                 onCommit={(value) => updateField(task, "status", value as TaskStatus)}
                 commitOnChange
@@ -395,7 +395,7 @@ export function buildPresaleColumns({
         const task = row.original;
         return (
           <div className="min-w-[165px] whitespace-nowrap align-middle text-sm text-black">
-            <InlineEditableField
+            <InlineEditable
               value={task.commitmentDate || ""}
               onCommit={(value) => updateField(task, "commitmentDate", value)}
               renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
@@ -423,7 +423,7 @@ export function buildPresaleColumns({
         const task = row.original;
         return (
           <div className="min-w-[180px] whitespace-nowrap align-middle text-sm text-black">
-            <InlineEditableField
+            <InlineEditable
               value={task.reviewDate || ""}
               onCommit={(value) => updateField(task, "reviewDate", value)}
               renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
@@ -451,7 +451,7 @@ export function buildPresaleColumns({
         const task = row.original;
         return (
           <div className="min-w-[165px] whitespace-nowrap align-middle text-sm text-black">
-            <InlineEditableField
+            <InlineEditable
               value={task.deliveryDate || ""}
               onCommit={(value) => updateField(task, "deliveryDate", value)}
               renderDisplay={(value) => <span>{formatDateDMY(value)}</span>}
