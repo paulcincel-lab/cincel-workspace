@@ -1,3 +1,5 @@
+import { Card, CardContent } from "@/components/ui/shadcn/card";
+
 type Props = {
   title: string;
   value: string;
@@ -5,16 +7,11 @@ type Props = {
 
 export default function KpiCard({ title, value }: Props) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-
-      <p className="text-slate-500 text-sm">
-        {title}
-      </p>
-
-      <h2 className="text-4xl font-bold mt-3">
-        {value}
-      </h2>
-
-    </div>
+    <Card className="rounded-2xl shadow-sm [--card-spacing:--spacing(6)]">
+      <CardContent>
+        <p className="text-sm text-slate-500">{title}</p>
+        <h2 className="mt-3 text-4xl font-bold">{value}</h2>
+      </CardContent>
+    </Card>
   );
 }

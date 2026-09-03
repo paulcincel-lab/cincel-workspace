@@ -1,5 +1,9 @@
 import Link from "next/link";
 
+import AppBadge from "@/components/ui/AppBadge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
+import { Progress } from "@/components/ui/shadcn/progress";
+
 type Props = {
   project: {
     id: number;
@@ -17,56 +21,29 @@ type Props = {
 export default function ProjectCard({ project }: Props) {
   return (
     <Link href={`/proyectos/${project.id}`}>
+      <Card className="rounded-2xl shadow-sm transition hover:shadow-lg [--card-spacing:--spacing(6)]">
+        <CardHeader className="flex-row items-start justify-between">
+          <CardTitle className="text-xl font-bold">{project.name}</CardTitle>
+          <AppBadge label={project.status} color={project.status === "Activo" ? "green" : "gray"} />
+        </CardHeader>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 hover:shadow-lg transition">
+        <CardContent>
+          <p className="text-slate-500">{project.client.name}</p>
 
-        <div className="flex justify-between">
+          <div className="mt-6">
+            <div className="flex justify-between text-sm">
+              <span>{project.phase}</span>
+              <span>{project.progress}%</span>
+            </div>
 
-          <h3 className="text-xl font-bold">
-            {project.name}
-          </h3>
-
-          <span
-            className={`rounded-full px-3 py-1 text-sm ${
-              project.status === "Activo"
-                ? "bg-green-100 text-green-700"
-                : "bg-slate-100 text-slate-700"
-            }`}
-          >
-            {project.status}
-          </span>
-
-        </div>
-
-        <p className="text-slate-500 mt-2">
-          {project.client.name}
-        </p>
-
-        <div className="mt-6">
-
-          <div className="flex justify-between text-sm">
-
-            <span>{project.phase}</span>
-
-            <span>{project.progress}%</span>
-
-          </div>
-
-          <div className="mt-2 h-2 rounded-full bg-slate-200">
-
-            <div
-              className="h-2 rounded-full bg-blue-600"
-              style={{
-                width: `${project.progress}%`,
-              }}
+            <Progress
+              value={project.progress}
+              className="mt-2"
+              indicatorClassName="bg-blue-600"
             />
-
           </div>
-
-        </div>
-
-      </div>
-
+        </CardContent>
+      </Card>
     </Link>
   );
 }
