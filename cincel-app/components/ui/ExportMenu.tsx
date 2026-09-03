@@ -54,7 +54,7 @@ export default function ExportMenu({ disabled = false, onExport, scaleClassName 
       </button>
 
       {open && !disabled ? (
-        <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+        <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
           <button
             type="button"
             onClick={() => {
