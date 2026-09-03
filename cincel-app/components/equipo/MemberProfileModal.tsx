@@ -1,6 +1,6 @@
 "use client";
 
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 import AppBadge from "@/components/ui/AppBadge";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
 
@@ -30,7 +30,7 @@ export function MemberProfileModal({ member, onClose }: MemberProfileModalProps)
 
         <div className="space-y-4 p-6">
           <div className="flex items-center justify-between gap-4">
-            <Avatar name={member.name} />
+            <AppAvatar name={member.name} />
             <AppBadge label={member.active ? "Activo" : "Desactivado"} color={member.active ? "blue" : "gray"} />
           </div>
 

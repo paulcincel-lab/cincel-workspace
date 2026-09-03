@@ -6,7 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 import AppBadge from "@/components/ui/AppBadge";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { DataTable } from "@/components/ui/DataTable";
@@ -1558,7 +1558,7 @@ export default function EquipoPageClient({
               {filteredMembers.map((member) => (
                 <div key={`card-${member.id}`} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <Avatar name={member.name} />
+                    <AppAvatar name={member.name} />
                     <AppBadge label={member.active ? "Activo" : "Desactivado"} color={member.active ? "blue" : "gray"} />
                   </div>
 

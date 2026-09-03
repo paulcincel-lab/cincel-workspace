@@ -1,6 +1,6 @@
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 import AppBadge from "@/components/ui/AppBadge";
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 import InlineEditable from "@/components/ui/InlineEditable";
 import TeamMultiSelect, { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
 import type { Task, TaskStatus } from "@/lib/types/task";
