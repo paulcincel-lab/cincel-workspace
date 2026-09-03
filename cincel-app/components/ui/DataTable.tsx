@@ -11,6 +11,16 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 
+import { Input } from "@/components/ui/shadcn/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/shadcn/table";
+
 /**
  * Shared record table — sticky header, sortable columns, an optional built-in
  * search box, empty/loading states. Replaces the hand-rolled `<table>` markup
@@ -81,31 +91,29 @@ export function DataTable<T>({
   const rows = table.getRowModel().rows;
 
   return (
-    <div
-      className={`overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm ${wrapperClassName}`}
-    >
+    <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${wrapperClassName}`}>
       {searchPlaceholder ? (
         <div className="border-b border-slate-100 p-3">
-          <input
+          <Input
             type="search"
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
+            className="max-w-xs"
           />
         </div>
       ) : null}
 
-      <table className={`w-full ${tableClassName}`}>
-        <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-700">
+      <Table className={tableClassName}>
+        <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
+            <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
                 const sortable = header.column.getCanSort();
                 return (
-                  <th
+                  <TableHead
                     key={header.id}
-                    className={`px-4 py-3 ${sortable ? "cursor-pointer select-none" : ""}`}
+                    className={sortable ? "cursor-pointer select-none" : ""}
                     onClick={sortable ? header.column.getToggleSortingHandler() : undefined}
                     aria-sort={
                       header.column.getIsSorted() === "asc"
@@ -121,44 +129,42 @@ export function DataTable<T>({
                         {sortable ? <SortIcon direction={header.column.getIsSorted()} /> : null}
                       </span>
                     )}
-                  </th>
+                  </TableHead>
                 );
               })}
-            </tr>
+            </TableRow>
           ))}
-        </thead>
-        <tbody>
+        </TableHeader>
+        <TableBody>
           {isLoading ? (
-            <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-slate-500">
+            <TableRow>
+              <TableCell colSpan={columns.length} className="py-8 text-center text-sm text-slate-500">
                 {loadingMessage}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-slate-500">
+            <TableRow>
+              <TableCell colSpan={columns.length} className="py-8 text-center text-sm text-slate-500">
                 {emptyMessage}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ) : (
             rows.map((row) => (
-              <tr
+              <TableRow
                 key={row.id}
                 onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                className={`border-b border-slate-100 text-sm text-slate-800 hover:bg-slate-50 ${
-                  onRowClick ? "cursor-pointer" : ""
-                } ${rowClassName?.(row.original) ?? ""}`}
+                className={`${onRowClick ? "cursor-pointer" : ""} ${rowClassName?.(row.original) ?? ""}`}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-3">
+                  <TableCell key={cell.id}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
+                  </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
