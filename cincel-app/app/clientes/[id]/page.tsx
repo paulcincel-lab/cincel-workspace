@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Badge from "@/components/ui/Badge";
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
@@ -657,7 +657,7 @@ export default function ClienteFichaPage() {
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-1">
-              <Avatar name={sourceClient.name} />
+              <AppAvatar name={sourceClient.name} />
               <p className="mt-2 text-xs text-slate-600">
                 {sourceClient.emails.length > 0 ? sourceClient.emails.join(" · ") : "Sin correos registrados"}
               </p>

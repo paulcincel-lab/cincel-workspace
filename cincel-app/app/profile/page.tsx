@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
-import Avatar from "@/components/ui/Avatar";
+import AppAvatar from "@/components/ui/AppAvatar";
 import { getCollaboratorAccessState, resolveCurrentSessionAccess } from "@/lib/auth/auth-service";
 import { changePasswordAction } from "@/lib/auth/auth-actions";
 
@@ -105,7 +105,7 @@ export default function ProfilePage() {
         <div className="grid gap-6 xl:grid-cols-[1fr_1.15fr]">
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center gap-4">
-              <Avatar name={member.name} showName={false} />
+              <AppAvatar name={member.name} showName={false} />
               <div>
                 <h1 className="text-2xl font-bold text-slate-900">{member.name}</h1>
                 <p className="text-sm text-slate-500">{member.role || "Sin puesto"}</p>
