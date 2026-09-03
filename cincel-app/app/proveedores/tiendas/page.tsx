@@ -8,6 +8,11 @@ import { DataTable } from "@/components/ui/DataTable";
 import { EditableCell } from "@/components/proveedores/EditableCell";
 import { StarRating } from "@/components/proveedores/StarRating";
 import { PillDropdown } from "@/components/proveedores/PillDropdown";
+import { Button } from "@/components/ui/shadcn/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { tiendas as baseTiendas } from "@/lib/data/tiendas";
 import type { Tienda, TiendaStatus, TiendaType, TiendaPriceLevel } from "@/lib/types/tienda";
 import { getTiendasSnapshot, saveTiendas, fetchTiendas } from "@/lib/repositories/providers-repository";
@@ -17,6 +22,10 @@ import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 const OPTIONS_STORAGE_KEY = "cincel.tiendas.options.v2";
 const COLUMN_ORDER_STORAGE_KEY = "cincel.tiendas.column.order.v2";
 const COLORS_STORAGE_KEY = "cincel.tiendas.colors.v1";
+
+/** shadcn Select (base-ui) doesn't support an empty-string item value. */
+const ALL_STATUS_VALUE = "__all_status__";
+const ALL_TYPE_VALUE = "__all_type__";
 
 const DEFAULT_STATUS_OPTIONS: TiendaStatus[] = ["Activa", "Inactiva", "Cerrada", "Próximo Abierto"];
 const DEFAULT_TYPE_OPTIONS: TiendaType[] = ["Física", "Online", "Híbrida"];
@@ -101,57 +110,74 @@ const AddTiendaModal = ({ onClose, onAdd, statusOptions, typeOptions, specialtyO
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-      <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-[90%]">
-        <h2 className="text-lg font-bold mb-4 text-gray-900">Agregar Tienda</h2>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogTitle>Agregar Tienda</DialogTitle>
         <form onSubmit={submit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Nombre *</label>
-            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Nombre de tienda" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Empresa</label>
-            <input type="text" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Empresa" />
-          </div>
+          <Label className="text-xs font-medium text-gray-600">
+            Nombre *
+            <Input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" placeholder="Nombre de tienda" />
+          </Label>
+          <Label className="text-xs font-medium text-gray-600">
+            Empresa
+            <Input type="text" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className="mt-1" placeholder="Empresa" />
+          </Label>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Estado</label>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as TiendaStatus })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
-                {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+            <Label className="text-xs font-medium text-gray-600">
+              Estado
+              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as TiendaStatus })}>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Label>
+            <Label className="text-xs font-medium text-gray-600">
+              Tipo
+              <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v as TiendaType })}>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {typeOptions.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Label>
+          </div>
+          <Label className="text-xs font-medium text-gray-600">
+            Ramo Principal
+            <Select value={form.mainSpecialty} onValueChange={(v) => setForm({ ...form, mainSpecialty: v as string })}>
+              <SelectTrigger className="mt-1 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {specialtyOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Label>
+          <Label className="text-xs font-medium text-gray-600">
+            Ubicación
+            <Input type="text" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="mt-1" placeholder="Ubicación" />
+          </Label>
+          <Label className="text-xs font-medium text-gray-600">
+            Contacto
+            <Input type="text" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} className="mt-1" placeholder="Teléfono/Email" />
+          </Label>
+          <Label className="text-xs font-medium text-gray-600">
+            Calificación
+            <div className="mt-1">
+              <StarRating rating={form.rating} onRate={(r) => setForm({ ...form, rating: r })} />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Tipo</label>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as TiendaType })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
-                {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Ramo Principal</label>
-            <select value={form.mainSpecialty} onChange={(e) => setForm({ ...form, mainSpecialty: e.target.value })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
-              {specialtyOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Ubicación</label>
-            <input type="text" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Ubicación" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Contacto</label>
-            <input type="text" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Teléfono/Email" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Calificación</label>
-            <StarRating rating={form.rating} onRate={(r) => setForm({ ...form, rating: r })} />
-          </div>
+          </Label>
           <div className="flex justify-end gap-3 pt-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800">Cancelar</button>
-            <button type="submit" className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition shadow-sm">Agregar Tienda</button>
+            <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button type="submit">Agregar Tienda</Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -466,21 +492,27 @@ export default function TiendasPage() {
         const t = row.original;
         return deletingId === t.id ? (
           <div className="flex items-center gap-1 justify-end">
-            <button
+            <Button
+              variant="destructive"
+              size="sm"
               onClick={() => deleteTienda(t.id)}
-              className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 whitespace-nowrap"
-            >Eliminar</button>
-            <button
+              className="h-auto whitespace-nowrap px-2 py-1 text-xs"
+            >Eliminar</Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setDeletingId(null)}
-              className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300"
-            >✕</button>
+              className="h-auto px-2 py-1 text-xs"
+            >✕</Button>
           </div>
         ) : (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setDeletingId(t.id)}
-            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition text-base px-1"
+            className="h-auto px-1 text-base text-gray-300 opacity-0 transition group-hover:opacity-100 hover:text-red-500"
             title="Eliminar tienda"
-          >🗑</button>
+          >🗑</Button>
         );
       },
     },
@@ -520,69 +552,71 @@ export default function TiendasPage() {
             <div className="flex items-center justify-between mb-3">
               <h1 className="text-2xl font-bold text-gray-900">Tiendas</h1>
               <div className="flex gap-2">
-                <button
+                <Button
+                  variant={showActiveOnly ? "default" : "outline"}
                   onClick={() => setShowActiveOnly(!showActiveOnly)}
-                  className={`px-3 py-2 text-sm font-medium rounded-lg transition border ${
-                    showActiveOnly
-                      ? "bg-emerald-500 text-white border-emerald-500"
-                      : "bg-white text-gray-600 border-gray-300 hover:border-emerald-400 hover:text-emerald-600"
-                  }`}
+                  className={showActiveOnly ? "bg-emerald-500 hover:bg-emerald-600" : ""}
                 >
                   ● Solo Activas
-                </button>
-                <button
-                  onClick={() => setShowModal(true)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition shadow-sm"
-                >
+                </Button>
+                <Button onClick={() => setShowModal(true)}>
                   + Agregar Tienda
-                </button>
+                </Button>
               </div>
             </div>
-            <input
+            <Input
               type="text"
               placeholder="Buscar tienda…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
             />
           </div>
 
           {/* Filtros */}
           <div className="flex items-center gap-2 flex-wrap bg-white border border-gray-200 rounded-lg px-4 py-2.5">
             <span className="text-xs font-medium text-gray-400 mr-1">Filtrar:</span>
-            <div className="relative group">
-              <button className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 hover:border-blue-400 text-gray-700">
-                Estado
-              </button>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as TiendaStatus)}
-                className="absolute left-0 top-full hidden group-hover:block mt-0.5 px-2 py-1 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 z-10 w-40"
-              >
-                <option value="">Estado: Todos</option>
-                {statusOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as TiendaType)}
-              className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
+            <Select
+              value={filterStatus || ALL_STATUS_VALUE}
+              onValueChange={(v) => setFilterStatus(v === ALL_STATUS_VALUE ? "" : (v as TiendaStatus))}
             >
-              <option value="">Tipo: Todos</option>
-              {typeOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-            <select
+              <SelectTrigger className="h-auto w-auto px-2 py-1 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_STATUS_VALUE}>Estado: Todos</SelectItem>
+                {statusOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select
+              value={filterType || ALL_TYPE_VALUE}
+              onValueChange={(v) => setFilterType(v === ALL_TYPE_VALUE ? "" : (v as TiendaType))}
+            >
+              <SelectTrigger className="h-auto w-auto px-2 py-1 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_TYPE_VALUE}>Tipo: Todos</SelectItem>
+                {typeOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select
               value={filterMinRating.toString()}
-              onChange={(e) => setFilterMinRating(Number(e.target.value))}
-              className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
+              onValueChange={(v) => setFilterMinRating(Number(v))}
             >
-              <option value="0">Calificación: Todas</option>
-              <option value="5">★★★★★  5 estrellas</option>
-              <option value="4">★★★★+  4 o más</option>
-              <option value="3">★★★+  3 o más</option>
-            </select>
+              <SelectTrigger className="h-auto w-auto px-2 py-1 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Calificación: Todas</SelectItem>
+                <SelectItem value="5">★★★★★  5 estrellas</SelectItem>
+                <SelectItem value="4">★★★★+  4 o más</SelectItem>
+                <SelectItem value="3">★★★+  3 o más</SelectItem>
+              </SelectContent>
+            </Select>
             {activeFiltersCount > 0 && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setFilterStatus("");
                   setFilterType("");
@@ -590,10 +624,10 @@ export default function TiendasPage() {
                   setSearchTerm("");
                   setShowActiveOnly(false);
                 }}
-                className="ml-auto px-2.5 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition"
+                className="ml-auto h-auto px-2.5 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
               >
                 ✕ Limpiar ({activeFiltersCount})
-              </button>
+              </Button>
             )}
           </div>
 
