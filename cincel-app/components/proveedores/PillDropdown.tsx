@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
 
 /** Predefined color swatches for option badges. */
@@ -69,12 +71,15 @@ export const PillDropdown = ({
               <div className="p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-medium text-gray-600 truncate max-w-[130px]">{pickingFor}</span>
-                  <button onClick={() => setPickingFor(null)} className="text-gray-400 hover:text-gray-600 text-xs">← Atrás</button>
+                  <Button variant="link" onClick={() => setPickingFor(null)} className="h-auto p-0 text-xs">← Atrás</Button>
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">
+                  {/* Color swatches: pure style={backgroundColor} squares, no text —
+                      shadcn Button's text-oriented defaults don't fit; kept as plain buttons. */}
                   {COLOR_PALETTE.map((c) => (
                     <button
                       key={c.bg}
+                      type="button"
                       title={c.label}
                       onClick={() => { onSetColor(pickingFor, { bg: c.bg, text: c.text }); setPickingFor(null); }}
                       className="w-8 h-8 rounded-md border-2 border-white hover:border-gray-400 transition shadow-sm"
@@ -90,29 +95,32 @@ export const PillDropdown = ({
                     const s = effectiveStyle(opt);
                     return (
                       <div key={opt} className={`flex items-center group px-2 py-1.5 hover:bg-gray-50 ${value === opt ? "bg-gray-50" : ""}`}>
-                        <button
+                        <Button
+                          variant="ghost"
                           onClick={() => { onSave(opt); close(); }}
-                          className="flex-1 text-left text-sm flex items-center gap-2"
+                          className="h-auto flex-1 justify-start gap-2 p-0 text-left text-sm font-normal"
                         >
                           <span
                             className={`w-3 h-3 rounded-sm flex-shrink-0 ${s.className ? s.className.split(" ")[0] : ""}`}
                             style={s.style ? { backgroundColor: s.style.backgroundColor as string } : undefined}
                           />
                           <span className={value === opt ? "font-semibold" : ""}>{opt}</span>
-                        </button>
+                        </Button>
                         {onSetColor && (
-                          <button
+                          <Button
+                            variant="ghost"
                             onClick={(e) => { e.stopPropagation(); setPickingFor(opt); }}
-                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-500 text-xs px-0.5 transition"
+                            className="h-auto opacity-0 group-hover:opacity-100 p-0.5 text-xs text-gray-300 hover:text-blue-500"
                             title="Cambiar color"
-                          >🎨</button>
+                          >🎨</Button>
                         )}
                         {onDeleteOption && (
-                          <button
+                          <Button
+                            variant="ghost"
                             onClick={(e) => { e.stopPropagation(); onDeleteOption(opt); }}
-                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 text-xs px-0.5 transition"
+                            className="h-auto opacity-0 group-hover:opacity-100 p-0.5 text-xs text-gray-300 hover:text-red-500"
                             title="Eliminar opción"
-                          >✕</button>
+                          >✕</Button>
                         )}
                       </div>
                     );
@@ -122,25 +130,28 @@ export const PillDropdown = ({
                 {onAddOption && (
                   <div className="border-t border-gray-100 p-2">
                     {!adding ? (
-                      <button onClick={() => setAdding(true)} className="w-full text-left text-xs text-blue-600 hover:text-blue-800 px-2 py-1">
+                      <Button variant="link" onClick={() => setAdding(true)} className="h-auto w-full justify-start p-1 text-xs">
                         + Agregar opción
-                      </button>
+                      </Button>
                     ) : (
                       <div className="space-y-2">
-                        <input
+                        <Input
                           autoFocus
                           type="text"
                           value={newVal}
                           onChange={(e) => setNewVal(e.target.value)}
                           placeholder="Nueva opción…"
-                          className="w-full text-xs border border-gray-300 rounded px-2 py-1.5"
+                          className="h-auto py-1.5 text-xs"
                         />
                         <div>
                           <p className="text-xs text-gray-400 mb-1">Color:</p>
                           <div className="flex flex-wrap gap-1">
+                            {/* Color swatches: pure style={backgroundColor} squares, no text —
+                                shadcn Button's text-oriented defaults don't fit; kept as plain buttons. */}
                             {COLOR_PALETTE.map((c) => (
                               <button
                                 key={c.bg}
+                                type="button"
                                 title={c.label}
                                 onClick={() => setNewColor(c)}
                                 className="w-5 h-5 rounded-sm border-2 transition"
@@ -162,7 +173,8 @@ export const PillDropdown = ({
                             </span>
                           )}
                           <div className="flex gap-1 ml-auto">
-                            <button
+                            <Button
+                              size="sm"
                               onClick={() => {
                                 if (newVal.trim()) {
                                   onAddOption(newVal.trim());
@@ -170,10 +182,14 @@ export const PillDropdown = ({
                                   setNewVal(""); setAdding(false); setNewColor(null);
                                 }
                               }}
-                              className="px-2 py-1 bg-blue-600 text-white rounded text-xs"
-                            >✓</button>
-                            <button onClick={() => { setAdding(false); setNewColor(null); setNewVal(""); }}
-                              className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs">✕</button>
+                              className="h-auto px-2 py-1 text-xs"
+                            >✓</Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => { setAdding(false); setNewColor(null); setNewVal(""); }}
+                              className="h-auto px-2 py-1 text-xs"
+                            >✕</Button>
                           </div>
                         </div>
                       </div>
