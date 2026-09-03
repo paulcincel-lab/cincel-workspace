@@ -1,6 +1,9 @@
 "use client";
 
 import InlineEditable from "@/components/ui/InlineEditable";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Textarea } from "@/components/ui/shadcn/textarea";
 
 /** Inline-editable text cell with click-to-edit, confirm, and cancel. */
 export const EditableCell = ({ value, onSave, type = "text" }: {
@@ -21,25 +24,25 @@ export const EditableCell = ({ value, onSave, type = "text" }: {
       renderEditor={({ value: draft, onChange, onBlur, onCancel, onKeyDown }) => (
         <div className="flex min-w-[100px] gap-1">
           {type === "textarea" ? (
-            <textarea
+            <Textarea
               autoFocus
               value={draft}
               onChange={(e) => onChange(e.target.value)}
-              className="flex-1 resize-none rounded border border-blue-400 px-2 py-1 text-xs"
+              className="flex-1 resize-none py-1 text-xs"
               rows={2}
             />
           ) : (
-            <input
+            <Input
               autoFocus
               type={type}
               value={draft}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={onKeyDown}
-              className="min-w-[90px] flex-1 rounded border border-blue-400 px-2 py-1 text-xs"
+              className="min-w-[90px] flex-1 py-1 text-xs"
             />
           )}
-          <button type="button" onClick={onBlur} className="text-sm font-bold text-emerald-600">✓</button>
-          <button type="button" onClick={onCancel} className="text-sm text-gray-400">✕</button>
+          <Button variant="ghost" size="sm" onClick={onBlur} className="h-auto p-0 text-sm font-bold text-emerald-600">✓</Button>
+          <Button variant="ghost" size="sm" onClick={onCancel} className="h-auto p-0 text-sm text-gray-400">✕</Button>
         </div>
       )}
     />
