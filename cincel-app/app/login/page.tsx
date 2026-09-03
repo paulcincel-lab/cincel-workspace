@@ -3,6 +3,9 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { Button } from "@/components/ui/shadcn/button";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { Input } from "@/components/ui/shadcn/input";
 import { loginAction } from "@/lib/auth/auth-actions";
 
 type LoginDraft = {
@@ -106,13 +109,13 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
               <label className="block">
                 <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">Correo institucional</span>
-                <input
+                <Input
                   type="email"
                   value={draft.email}
                   onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))}
                   placeholder="ejemplo@empresa.com"
                   aria-describedby="login-email-help"
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-[14px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="h-11"
                 />
               </label>
               <p id="login-email-help" className="-mt-2 text-[11px] leading-5 text-slate-500">Debe coincidir con el correo registrado en Equipo.</p>
@@ -122,28 +125,28 @@ export default function LoginPage() {
                   <label className="block flex-1">
                     <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">Contraseña</span>
                   </label>
-                  <button
-                    type="button"
+                  <Button
+                    variant="link"
+                    className="h-auto p-0 text-[11px] font-semibold uppercase tracking-[0.1em]"
                     onClick={() => setHelpMessage("Contacta a tu director")}
-                    className="text-[11px] font-semibold uppercase tracking-[0.1em] text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2"
                   >
                     ¿Olvidaste tu contraseña?
-                  </button>
+                  </Button>
                 </div>
 
-                <input
+                <Input
                   type="password"
                   value={draft.password}
                   onChange={(event) => setDraft((current) => ({ ...current, password: event.target.value }))}
                   placeholder="••••••••"
                   aria-describedby="login-password-help"
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-[14px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="h-11"
                 />
               </div>
               <p id="login-password-help" className="-mt-2 text-[11px] leading-5 text-slate-500">Si es tu primer acceso, usa la contraseña temporal inicial del administrador: CincelAdmin2026!.</p>
 
               <label className="flex items-center gap-2 pt-1 text-[13px] text-slate-600">
-                <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200" />
+                <Checkbox />
                 Mantener sesión iniciada
               </label>
 
@@ -159,27 +162,23 @@ export default function LoginPage() {
                 </p>
               ) : null}
 
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-[15px] font-semibold text-white shadow-[0_10px_20px_rgba(37,99,235,0.25)] transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-blue-300"
-              >
+              <Button type="submit" disabled={!canSubmit} className="h-12 w-full text-[15px]">
                 Entrar
                 <span aria-hidden="true">›</span>
-              </button>
+              </Button>
             </form>
 
             <div className="my-6 h-px bg-slate-200" aria-hidden="true" />
 
             <div className="grid gap-2 text-center text-[13px] text-slate-600">
               <p>¿Problemas para acceder?</p>
-              <button
-                type="button"
+              <Button
+                variant="link"
+                className="h-auto p-0 font-semibold"
                 onClick={() => setHelpMessage("Contacta a tu director")}
-                className="font-semibold text-blue-700 transition hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2"
               >
                 Contactar a Soporte IT
-              </button>
+              </Button>
 
               <div className="mt-4 flex items-center justify-center gap-6 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 <span className="inline-flex items-center gap-2">

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
 import { completeFirstAccessAction } from "@/lib/auth/auth-actions";
 
 type Draft = {
@@ -81,26 +83,24 @@ export default function ChangePasswordPage() {
           <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
             <label className="block">
               <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">Nueva contrasena</span>
-              <input
+              <Input
                 type="password"
                 value={draft.nextPassword}
                 onChange={(event) => setDraft((current) => ({ ...current, nextPassword: event.target.value }))}
                 placeholder="Minimo 8 caracteres"
                 aria-describedby="change-password-help"
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               />
             </label>
             <p id="change-password-help" className="-mt-2 text-xs leading-relaxed text-slate-500">Debe tener minimo 8 caracteres.</p>
 
             <label className="block">
               <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">Confirmar nueva contrasena</span>
-              <input
+              <Input
                 type="password"
                 value={draft.confirmPassword}
                 onChange={(event) => setDraft((current) => ({ ...current, confirmPassword: event.target.value }))}
                 placeholder="Repite la contrasena"
                 aria-describedby="change-password-confirm-help"
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               />
             </label>
             <p id="change-password-confirm-help" className="-mt-2 text-xs leading-relaxed text-slate-500">Escribe la misma contrasena para evitar errores de captura.</p>
@@ -117,13 +117,9 @@ export default function ChangePasswordPage() {
               </p>
             ) : null}
 
-            <button
-              type="submit"
-              disabled={isPending}
-              className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400"
-            >
+            <Button type="submit" disabled={isPending} className="w-full bg-slate-900 hover:bg-slate-800">
               {isPending ? "Guardando..." : "Guardar y continuar"}
-            </button>
+            </Button>
           </form>
         </section>
 

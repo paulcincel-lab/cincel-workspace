@@ -6,6 +6,8 @@ import { useState, useTransition } from "react";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import AppAvatar from "@/components/ui/AppAvatar";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
 import { getCollaboratorAccessState, resolveCurrentSessionAccess } from "@/lib/auth/auth-service";
 import { changePasswordAction } from "@/lib/auth/auth-actions";
 
@@ -171,37 +173,34 @@ export default function ProfilePage() {
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
               <label className="block">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">Contrasena actual</span>
-                <input
+                <Input
                   type="password"
                   value={draft.currentPassword}
                   onChange={(event) => setDraft((current) => ({ ...current, currentPassword: event.target.value }))}
                   aria-describedby="profile-current-password-help"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
               </label>
               <p id="profile-current-password-help" className="-mt-2 text-xs leading-relaxed text-slate-500">Necesaria para confirmar que la solicitud viene del usuario correcto.</p>
 
               <label className="block">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">Nueva contrasena</span>
-                <input
+                <Input
                   type="password"
                   value={draft.nextPassword}
                   onChange={(event) => setDraft((current) => ({ ...current, nextPassword: event.target.value }))}
                   placeholder="Minimo 8 caracteres"
                   aria-describedby="profile-next-password-help"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
               </label>
               <p id="profile-next-password-help" className="-mt-2 text-xs leading-relaxed text-slate-500">Minimo 8 caracteres. Puedes usar una frase facil de recordar.</p>
 
               <label className="block">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">Confirmar nueva contrasena</span>
-                <input
+                <Input
                   type="password"
                   value={draft.confirmPassword}
                   onChange={(event) => setDraft((current) => ({ ...current, confirmPassword: event.target.value }))}
                   aria-describedby="profile-confirm-password-help"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
               </label>
               <p id="profile-confirm-password-help" className="-mt-2 text-xs leading-relaxed text-slate-500">Escribe la misma contrasena para evitar errores de captura.</p>
@@ -218,13 +217,9 @@ export default function ProfilePage() {
                 </p>
               ) : null}
 
-              <button
-                type="submit"
-                disabled={isPending}
-                className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400"
-              >
+              <Button type="submit" disabled={isPending} className="w-full bg-slate-900 hover:bg-slate-800">
                 {isPending ? "Guardando..." : "Guardar nueva contrasena"}
-              </button>
+              </Button>
             </form>
           </section>
         </div>
