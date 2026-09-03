@@ -5,6 +5,11 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import { Button } from "@/components/ui/shadcn/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Input } from "@/components/ui/shadcn/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canCreateResourceInSection, canDeleteResourceInSection, canViewResourceSection, resolveResourcesCapabilities } from "@/lib/auth/permissions";
 import { RESOURCE_TEMPLATES } from "@/lib/data/resources";
@@ -794,26 +799,27 @@ export default function ResourcesWorkspace({
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <input
+                <Input
                   type="text"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Buscar carpeta o recurso"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none ring-0 transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:w-72"
+                  className="w-full sm:w-72"
                 />
 
-                <select
-                  value={effectiveSelectedMemberId ?? ""}
-                  onChange={(event) => setSelectedMemberId(Number(event.target.value))}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
+                <Select
+                  value={String(effectiveSelectedMemberId ?? "")}
+                  onValueChange={(value) => setSelectedMemberId(Number(value))}
                 >
-                  {activeMembers.map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
-                  ))}
-                </select>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {activeMembers.map((member) => (
+                      <SelectItem key={member.id} value={String(member.id)}>{member.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-                <button
-                  type="button"
+                <Button
                   disabled={!canCreateInCurrentSection}
                   onClick={() => openCreator({
                     title: "Nuevo recurso",
@@ -823,10 +829,9 @@ export default function ResourcesWorkspace({
                     appliesTo: "general",
                   })}
                   title={canCreateInCurrentSection ? "" : "No tienes permiso para agregar recursos en esta sección"}
-                  className={`rounded-2xl px-4 py-3 text-sm font-semibold shadow-sm ${canCreateInCurrentSection ? "bg-slate-900 text-white hover:bg-slate-800" : "cursor-not-allowed bg-slate-300 text-slate-100"}`}
                 >
                   + Nuevo acceso
-                </button>
+                </Button>
               </div>
             </div>
           </section>
@@ -932,11 +937,11 @@ export default function ResourcesWorkspace({
                       Abre un documento de Google para verlo aquí.
                     </div>
                   ) : recentDocumentsToShow.map((link) => (
-                    <button
+                    <Button
                       key={link.id}
-                      type="button"
+                      variant="outline"
+                      className="h-auto w-full justify-start bg-slate-50 p-4 text-left font-normal hover:bg-white"
                       onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-white"
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
@@ -951,7 +956,7 @@ export default function ResourcesWorkspace({
                           </div>
                         </div>
                       </div>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -978,35 +983,38 @@ export default function ResourcesWorkspace({
                     </span>
                     {pageDocuments.length > 0 ? (
                       <>
-                        <button
-                          type="button"
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-auto rounded-full border-rose-200 bg-rose-50 px-3 py-1.5 text-xs hover:bg-rose-100"
                           onClick={removePageResource}
                           disabled={!canDeleteInCurrentSection}
                           title={canDeleteInCurrentSection ? "" : "No tienes permiso para eliminar recursos en esta sección"}
-                          className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-rose-100"
                         >
                           Quitar
-                        </button>
-                        <button
-                          type="button"
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-auto rounded-full px-3 py-1.5 text-xs"
                           disabled={!canCreateInCurrentSection}
                           onClick={openPageCreator}
                           title={canCreateInCurrentSection ? "" : "No tienes permiso para agregar recursos en esta sección"}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${canCreateInCurrentSection ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                         >
                           Agregar
-                        </button>
+                        </Button>
                       </>
                     ) : (
-                      <button
-                        type="button"
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-auto rounded-full px-3 py-1.5 text-xs"
                         disabled={!canCreateInCurrentSection}
                         onClick={openPageCreator}
                         title={canCreateInCurrentSection ? "" : "No tienes permiso para agregar recursos en esta sección"}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${canCreateInCurrentSection ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                       >
                         Agregar
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -1020,14 +1028,15 @@ export default function ResourcesWorkspace({
                         const isActive = pagePreviewSource?.id === link.id;
 
                         return (
-                          <button
+                          <Button
                             key={link.id}
-                            type="button"
+                            variant={isActive ? "default" : "outline"}
+                            size="sm"
+                            className="h-auto rounded-full px-3 py-1.5 text-xs"
                             onClick={() => setSelectedDocumentId(link.id)}
-                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${isActive ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}
                           >
                             {link.title}
-                          </button>
+                          </Button>
                         );
                       })}
                     </div>
@@ -1059,11 +1068,11 @@ export default function ResourcesWorkspace({
                       Aún no has abierto documentos recientes.
                     </div>
                   ) : recentDocumentsToShow.map((link) => (
-                    <button
+                    <Button
                       key={link.id}
-                      type="button"
+                      variant="outline"
+                      className="h-auto w-full justify-start bg-slate-50 p-4 text-left font-normal hover:bg-white"
                       onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-white"
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
@@ -1075,7 +1084,7 @@ export default function ResourcesWorkspace({
                           <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-400">Abrir documento</p>
                         </div>
                       </div>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -1084,20 +1093,19 @@ export default function ResourcesWorkspace({
         </div>
       </section>
 
-      {creating ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
-            <h3 className="text-base font-semibold text-slate-900">Agregar recurso</h3>
-            <p className="mt-1 text-sm text-slate-500">Completa la información del nuevo recurso.</p>
+      <Dialog open={creating !== null} onOpenChange={(next) => { if (!next) setCreating(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle>Agregar recurso</DialogTitle>
+          <p className="text-sm text-slate-500">Completa la información del nuevo recurso.</p>
 
-            <div className="mt-4 space-y-3">
+          {creating ? (
+            <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-600">Título</label>
-                <input
+                <Input
                   type="text"
                   value={creating.title}
                   onChange={(event) => setCreating((current) => current ? { ...current, title: event.target.value } : current)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
               </div>
 
@@ -1105,21 +1113,20 @@ export default function ResourcesWorkspace({
                 <div className="mb-1 flex items-center justify-between">
                   <label className="block text-xs font-medium text-slate-600">URL</label>
                   {driveEnabled ? (
-                    <button
-                      type="button"
+                    <Button
+                      variant="link"
+                      className="h-auto p-0 text-xs"
                       onClick={() => setShowDrivePicker(true)}
-                      className="text-xs font-medium text-blue-700 hover:underline"
                     >
                       Elegir de Google Drive
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
-                <input
+                <Input
                   type="text"
                   value={creating.url}
                   onChange={(event) => setCreating((current) => current ? { ...current, url: event.target.value, drive: null } : current)}
                   placeholder="https://..."
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
                 {creating.drive ? (
                   <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
@@ -1132,26 +1139,18 @@ export default function ResourcesWorkspace({
                 ) : null}
               </div>
             </div>
+          ) : null}
 
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCreating(null)}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={saveCreate}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                Crear recurso
-              </button>
-            </div>
+          <div className="mt-2 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCreating(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={saveCreate}>
+              Crear recurso
+            </Button>
           </div>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
 
       <DrivePickerDialog
         open={showDrivePicker}
@@ -1159,71 +1158,69 @@ export default function ResourcesWorkspace({
         onPick={applyDrivePick}
       />
 
-      {removeDraft ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
-            <h3 className="text-base font-semibold text-slate-900">Quitar recurso</h3>
-            <p className="mt-1 text-sm text-slate-500">Selecciona el recurso que deseas quitar.</p>
+      <Dialog open={removeDraft !== null} onOpenChange={(next) => { if (!next) setRemoveDraft(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle>Quitar recurso</DialogTitle>
+          <p className="text-sm text-slate-500">Selecciona el recurso que deseas quitar.</p>
 
-            <div className="mt-4 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-3">
+          {removeDraft ? (
+            <RadioGroup
+              value={removeDraft.selectedId}
+              onValueChange={(value) => setRemoveDraft((current) => current ? { ...current, selectedId: value as string } : current)}
+              className="max-h-72 overflow-y-auto rounded-lg border border-slate-200 p-3"
+            >
               {pageDocuments.map((link) => (
                 <label key={link.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50">
-                  <input
-                    type="radio"
-                    name="remove-resource"
-                    checked={removeDraft.selectedId === link.id}
-                    onChange={() => setRemoveDraft((current) => current ? { ...current, selectedId: link.id } : current)}
-                  />
+                  <RadioGroupItem value={link.id} />
                   <span className="truncate text-sm text-slate-700">{link.title}</span>
                 </label>
               ))}
-            </div>
+            </RadioGroup>
+          ) : null}
 
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setRemoveDraft(null)}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={confirmRemoveDraft}
-                disabled={!canDeleteInCurrentSection}
-                className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-rose-100"
-              >
-                Quitar recurso
-              </button>
-            </div>
+          <div className="mt-2 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRemoveDraft(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="outline"
+              className="border-rose-200 bg-rose-50 hover:bg-rose-100"
+              onClick={confirmRemoveDraft}
+              disabled={!canDeleteInCurrentSection}
+            >
+              Quitar recurso
+            </Button>
           </div>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
 
-      {previewUrl ? (
-        <div className="fixed inset-0 z-50 bg-black/50 p-4">
-          <div className="mx-auto mt-6 flex h-[85vh] max-w-6xl flex-col rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-slate-800">Vista previa: {previewTitle}</h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setPreviewUrl(null);
-                  setPreviewTitle("");
-                }}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                Cerrar
-              </button>
-            </div>
+      <Dialog
+        open={previewUrl !== null}
+        onOpenChange={(next) => { if (!next) { setPreviewUrl(null); setPreviewTitle(""); } }}
+      >
+        <DialogContent className="flex h-[85vh] max-w-6xl flex-col p-0" showCloseButton={false}>
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <DialogTitle className="text-sm font-semibold">Vista previa: {previewTitle}</DialogTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPreviewUrl(null);
+                setPreviewTitle("");
+              }}
+            >
+              Cerrar
+            </Button>
+          </div>
+          {previewUrl ? (
             <iframe
               title={previewTitle}
               src={previewUrl}
               className="h-full w-full rounded-b-xl"
             />
-          </div>
-        </div>
-      ) : null}
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

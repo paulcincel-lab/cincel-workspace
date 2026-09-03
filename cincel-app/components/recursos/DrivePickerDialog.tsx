@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/shadcn/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Input } from "@/components/ui/shadcn/input";
 
 export type DrivePickerEntry = {
   id: string;
@@ -98,40 +100,31 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
       <DialogContent className="flex h-[80vh] max-w-3xl flex-col p-0" showCloseButton={false}>
         <DialogHeader className="flex-row items-center justify-between border-b border-slate-200 p-4">
           <DialogTitle className="text-base font-semibold">Elegir de Google Drive</DialogTitle>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-          >
+          <Button variant="outline" size="sm" onClick={onClose}>
             Cerrar
-          </button>
+          </Button>
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2 text-sm">
-          <button type="button" onClick={() => goToCrumb(-1)} className="font-medium text-blue-700 hover:underline">
+          <Button variant="link" className="h-auto p-0 font-medium" onClick={() => goToCrumb(-1)}>
             Inicio
-          </button>
+          </Button>
           {path.map((crumb, i) => (
             <span key={crumb.id} className="flex items-center gap-2">
               <span className="text-slate-400">/</span>
-              <button
-                type="button"
-                onClick={() => goToCrumb(i)}
-                className="text-blue-700 hover:underline"
-              >
+              <Button variant="link" className="h-auto p-0" onClick={() => goToCrumb(i)}>
                 {crumb.name}
-              </button>
+              </Button>
             </span>
           ))}
         </div>
 
         <div className="border-b border-slate-100 p-3">
-          <input
+          <Input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nombre…"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
 
@@ -146,13 +139,13 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
             <ul className="divide-y divide-slate-100">
               {entries.map((entry) => (
                 <li key={entry.id}>
-                  <button
-                    type="button"
-                    onClick={() => (entry.isFolder ? openFolder(entry) : setSelected(entry))}
-                    onDoubleClick={() => !entry.isFolder && onPick(entry)}
-                    className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50 ${
+                  <Button
+                    variant="ghost"
+                    className={`h-auto w-full justify-start gap-3 px-3 py-2 text-left text-sm font-normal ${
                       selected?.id === entry.id ? "bg-blue-50" : ""
                     }`}
+                    onClick={() => (entry.isFolder ? openFolder(entry) : setSelected(entry))}
+                    onDoubleClick={() => !entry.isFolder && onPick(entry)}
                   >
                     {entry.iconLink ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -166,7 +159,7 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
                     ) : (
                       <span className="text-xs text-slate-400">{formatModified(entry.modifiedTime)}</span>
                     )}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -177,16 +170,9 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
           <span className="truncate text-sm text-slate-500">
             {selected ? `Seleccionado: ${selected.name}` : "Selecciona un archivo"}
           </span>
-          <button
-            type="button"
-            disabled={!selected}
-            onClick={() => selected && onPick(selected)}
-            className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${
-              selected ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"
-            }`}
-          >
+          <Button disabled={!selected} onClick={() => selected && onPick(selected)}>
             Usar este archivo
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
