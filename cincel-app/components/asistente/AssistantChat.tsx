@@ -143,8 +143,8 @@ export function AssistantChat() {
     <div className="flex h-full w-full flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Asistente</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-foreground">Asistente</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Pregunta sobre proyectos en riesgo, entregas próximas y carga del equipo.
           </p>
         </div>
@@ -167,10 +167,10 @@ export function AssistantChat() {
         </div>
       ) : null}
 
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-white p-4 shadow-sm">
         {messages.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-            <p className="text-sm text-slate-500">Prueba con una de estas preguntas:</p>
+            <p className="text-sm text-muted-foreground">Prueba con una de estas preguntas:</p>
             <div className="flex flex-wrap justify-center gap-2">
               {EXAMPLE_QUESTIONS.map((question) => (
                 <Button
@@ -205,14 +205,14 @@ export function AssistantChat() {
                 return message.role === "user" ? (
                   <div
                     key={index}
-                    className="max-w-[80%] whitespace-pre-wrap rounded-lg bg-blue-600 px-3 py-2 text-sm text-white"
+                    className="max-w-[80%] whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"
                   >
                     {part.text}
                   </div>
                 ) : (
                   <div
                     key={index}
-                    className="max-w-full text-sm text-slate-800 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:my-2 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_th]:border [&_th]:border-slate-200 [&_th]:bg-slate-50 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_td]:py-1"
+                    className="max-w-full text-sm text-foreground [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:my-2 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1"
                   >
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
                   </div>
@@ -222,7 +222,7 @@ export function AssistantChat() {
               if (part.type === "tool-render_chart") {
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
-                    <p key={index} className="text-xs text-slate-400">
+                    <p key={index} className="text-xs text-muted-foreground">
                       Generando gráfico…
                     </p>
                   );
@@ -245,7 +245,7 @@ export function AssistantChat() {
               if (part.type === "tool-render_card") {
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
-                    <p key={index} className="text-xs text-slate-400">
+                    <p key={index} className="text-xs text-muted-foreground">
                       Generando tarjeta…
                     </p>
                   );
@@ -269,7 +269,7 @@ export function AssistantChat() {
               if (part.type === "tool-render_stat_grid") {
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
-                    <p key={index} className="text-xs text-slate-400">
+                    <p key={index} className="text-xs text-muted-foreground">
                       Generando comparación…
                     </p>
                   );
@@ -288,7 +288,7 @@ export function AssistantChat() {
               if (part.type === "tool-render_list") {
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
-                    <p key={index} className="text-xs text-slate-400">
+                    <p key={index} className="text-xs text-muted-foreground">
                       Generando lista…
                     </p>
                   );
@@ -312,7 +312,7 @@ export function AssistantChat() {
               ) {
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
-                    <p key={index} className="text-xs text-slate-400">
+                    <p key={index} className="text-xs text-muted-foreground">
                       {part.type === "tool-find_duplicates"
                         ? "Buscando duplicados…"
                         : "Consultando datos…"}
@@ -348,7 +348,7 @@ export function AssistantChat() {
                               : "Fusionando duplicados…";
                 if (part.state === "input-streaming" || part.state === "input-available") {
                   return (
-                    <p key={index} className="text-xs text-slate-400">
+                    <p key={index} className="text-xs text-muted-foreground">
                       {label}
                     </p>
                   );
@@ -362,7 +362,7 @@ export function AssistantChat() {
         ))}
 
         {status === "submitted" ? (
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner />
             Pensando…
           </div>
