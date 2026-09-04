@@ -8,6 +8,8 @@ import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
 import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
+import { createSelectionColumn } from "@/components/v2/table/bulk-select";
+import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Progress } from "@/components/ui/shadcn/progress";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
@@ -27,6 +29,23 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
   const [members] = useState<TeamMember[]>(initialTeam);
   const { allTasks } = useProjectsData();
   const [view, setView] = useState<"activos" | "desactivados">("activos");
+  const [selected, setSelected] = useState<Set<string | number>>(new Set());
+
+  function toggle(id: string | number) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll(ids: (string | number)[]) {
+    setSelected((cur) => {
+      const allSelected = ids.every((id) => cur.has(id));
+      return allSelected ? new Set() : new Set(ids);
+    });
+  }
 
   const activeTasks = useMemo(() => allTasks.filter((t) => !t.archived), [allTasks]);
 
@@ -59,6 +78,12 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
 
   const columns = useMemo<ColumnDef<(typeof withWorkload)[number], unknown>[]>(
     () => [
+      createSelectionColumn<(typeof withWorkload)[number]>({
+        getId: (m) => m.id,
+        selectedIds: selected,
+        onToggle: toggle,
+        onToggleAll: toggleAll,
+      }),
       {
         id: "member",
         header: "Colaborador",
@@ -95,8 +120,16 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
         },
       ]),
     ],
-    []
+    [selected]
   );
+
+  function bulkCopyEmails() {
+    const emails = withWorkload
+      .filter((m) => selected.has(m.id))
+      .map((m) => m.institutionalEmail)
+      .join(", ");
+    void navigator.clipboard.writeText(emails);
+  }
 
   return (
     <div>
@@ -104,7 +137,13 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
         title="Equipo"
         description="Avatares, capacidad y carga actual de colaboradores."
         actions={
-          <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
+          <Tabs
+            value={view}
+            onValueChange={(v) => {
+              setView(v as typeof view);
+              setSelected(new Set());
+            }}
+          >
             <TabsList>
               <TabsTrigger value="activos">Activos</TabsTrigger>
               <TabsTrigger value="desactivados">Desactivados</TabsTrigger>
@@ -122,10 +161,16 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
         ]}
       />
 
+      <BulkActionBar
+        selectedCount={selected.size}
+        itemLabel="colaboradores"
+        actions={[{ label: "Copiar correos", onClick: bulkCopyEmails }]}
+      />
       <DataTable
         columns={columns}
         data={visible}
         getRowId={(row) => String(row.id)}
+        wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage={view === "activos" ? "No hay colaboradores activos." : "No hay colaboradores desactivados."}
       />
     </div>
