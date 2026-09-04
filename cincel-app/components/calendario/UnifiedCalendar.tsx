@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
+import { Button } from "@/components/ui/shadcn/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import {
   addDays,
   applyCalendarFilters,
@@ -226,43 +228,44 @@ export default function UnifiedCalendar({
         </div>
 
         <div className="flex items-center gap-2 text-sm">
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            className="h-auto px-3 py-1.5 font-medium"
             onClick={() => {
               setCursor(new Date(today.getFullYear(), today.getMonth(), 1));
               setSelectedDate(dateKey(today));
             }}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-800 hover:bg-slate-50"
           >
             Hoy
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            className="h-auto px-2 py-1 text-2xl leading-none"
             onClick={() => setCursor((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
-            className="rounded px-2 py-1 text-2xl leading-none text-slate-700 hover:bg-slate-100"
           >
             ‹
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            className="h-auto px-2 py-1 text-2xl leading-none"
             onClick={() => setCursor((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
-            className="rounded px-2 py-1 text-2xl leading-none text-slate-700 hover:bg-slate-100"
           >
             ›
-          </button>
+          </Button>
           <p className="min-w-32 text-center text-base font-semibold capitalize text-slate-800 md:text-lg">{monthLabel(cursor)}</p>
 
           {mode === "full" ? (
             <div className="ml-1 flex items-center gap-1 rounded-xl border border-slate-200 p-1">
               {(["month", "week", "day"] as CalendarView[]).map((candidateView) => (
-                <button
+                <Button
                   key={candidateView}
-                  type="button"
+                  variant={view === candidateView ? "default" : "ghost"}
+                  size="sm"
+                  className="h-auto px-2 py-1 text-xs"
                   onClick={() => setView(candidateView)}
-                  className={`rounded-lg px-2 py-1 text-xs font-semibold ${view === candidateView ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}
                 >
                   {candidateView === "month" ? "Mes" : candidateView === "week" ? "Semana" : "Dia"}
-                </button>
+                </Button>
               ))}
             </div>
           ) : (
@@ -275,43 +278,42 @@ export default function UnifiedCalendar({
         <div className="grid gap-0 xl:grid-cols-[1fr_320px]">
           <div>
             <div className="grid grid-cols-2 gap-2 border-b border-slate-200 px-4 py-3 md:grid-cols-4">
-              <select
-                value={filters.project}
-                onChange={(event) => setFilters((current) => ({ ...current, project: event.target.value }))}
-                className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900"
-              >
-                {options.projects.map((value) => (
-                  <option key={`project-${value}`} value={value}>{value === "Todos" ? "Proyecto: Todos" : value}</option>
-                ))}
-              </select>
-              <select
+              <Select value={filters.project} onValueChange={(value) => setFilters((current) => ({ ...current, project: value as string }))}>
+                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {options.projects.map((value) => (
+                    <SelectItem key={`project-${value}`} value={value}>{value === "Todos" ? "Proyecto: Todos" : value}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
                 value={effectiveResponsibleFilter}
-                onChange={(event) => setFilters((current) => ({ ...current, responsible: event.target.value }))}
+                onValueChange={(value) => setFilters((current) => ({ ...current, responsible: value as string }))}
                 disabled={!canViewTeamCalendar}
-                className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900"
               >
-                {responsibleOptions.map((value) => (
-                  <option key={`resp-${value}`} value={value}>{value === "Todos" ? "Responsable: Todos" : value}</option>
-                ))}
-              </select>
-              <select
-                value={filters.type}
-                onChange={(event) => setFilters((current) => ({ ...current, type: event.target.value }))}
-                className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900"
-              >
-                {options.types.map((value) => (
-                  <option key={`type-${value}`} value={value}>{value === "Todos" ? "Tipo: Todos" : value}</option>
-                ))}
-              </select>
-              <select
-                value={filters.stage}
-                onChange={(event) => setFilters((current) => ({ ...current, stage: event.target.value }))}
-                className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900"
-              >
-                {options.stages.map((value) => (
-                  <option key={`stage-${value}`} value={value}>{value === "Todas" ? "Etapa: Todas" : value}</option>
-                ))}
-              </select>
+                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {responsibleOptions.map((value) => (
+                    <SelectItem key={`resp-${value}`} value={value}>{value === "Todos" ? "Responsable: Todos" : value}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filters.type} onValueChange={(value) => setFilters((current) => ({ ...current, type: value as string }))}>
+                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {options.types.map((value) => (
+                    <SelectItem key={`type-${value}`} value={value}>{value === "Todos" ? "Tipo: Todos" : value}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filters.stage} onValueChange={(value) => setFilters((current) => ({ ...current, stage: value as string }))}>
+                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {options.stages.map((value) => (
+                    <SelectItem key={`stage-${value}`} value={value}>{value === "Todas" ? "Etapa: Todas" : value}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {view === "month" ? (
@@ -328,11 +330,11 @@ export default function UnifiedCalendar({
                       const hiddenCount = Math.max(0, cell.events.length - visibleEvents.length);
 
                       return (
-                        <button
+                        <Button
                           key={cell.key}
-                          type="button"
+                          variant="ghost"
+                          className={`h-auto min-h-[96px] flex-col items-stretch justify-start rounded-none border-b border-r border-slate-200 p-1 text-left align-top font-normal ${cell.isCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-slate-50 text-slate-400 hover:bg-slate-50"} ${cell.key === selectedDate ? "ring-2 ring-inset ring-blue-500" : ""}`}
                           onClick={() => setSelectedDate(cell.key)}
-                          className={`min-h-[96px] border-b border-r border-slate-200 p-1 text-left align-top transition ${cell.isCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-slate-50 text-slate-400"} ${cell.key === selectedDate ? "ring-2 ring-inset ring-blue-500" : ""}`}
                         >
                           <div className="flex justify-end">
                             <span className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold ${cell.isToday ? "bg-blue-600 text-white" : "text-slate-700"}`}>
@@ -356,7 +358,7 @@ export default function UnifiedCalendar({
 
                             {hiddenCount > 0 ? <p className="px-1 text-xs font-medium text-slate-500">+{hiddenCount} mas</p> : null}
                           </div>
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
@@ -369,7 +371,7 @@ export default function UnifiedCalendar({
                 <div className="grid min-w-[900px] grid-cols-7 gap-3">
                   {weekDays.map((day) => (
                     <section key={day.key} className={`rounded-xl border p-3 ${day.key === selectedDate ? "border-blue-500 bg-blue-50/40" : "border-slate-200 bg-white"}`}>
-                      <button type="button" onClick={() => setSelectedDate(day.key)} className="text-left text-sm font-semibold text-slate-900">{day.label}</button>
+                      <Button variant="link" className="h-auto p-0 text-sm font-semibold text-slate-900" onClick={() => setSelectedDate(day.key)}>{day.label}</Button>
                       <div className="mt-2 space-y-2">
                         {day.events.length === 0 ? <p className="text-xs text-slate-500">Sin eventos</p> : null}
                         {day.events.map((entry) => (
@@ -484,11 +486,11 @@ export default function UnifiedCalendar({
                   const hiddenCount = Math.max(0, cell.events.length - visibleEvents.length);
 
                   return (
-                    <button
+                    <Button
                       key={cell.key}
-                      type="button"
+                      variant="ghost"
+                      className={`h-auto min-h-[96px] flex-col items-stretch justify-start rounded-none border-b border-r border-slate-200 p-1 text-left align-top font-normal ${cell.isCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-slate-50 text-slate-400 hover:bg-slate-50"} ${cell.key === selectedDate ? "ring-2 ring-inset ring-blue-500" : ""}`}
                       onClick={() => setSelectedDate(cell.key)}
-                      className={`min-h-[96px] border-b border-r border-slate-200 p-1 text-left align-top transition ${cell.isCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-slate-50 text-slate-400"} ${cell.key === selectedDate ? "ring-2 ring-inset ring-blue-500" : ""}`}
                     >
                       <div className="flex justify-end">
                         <span className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold ${cell.isToday ? "bg-blue-600 text-white" : "text-slate-700"}`}>{String(cell.dayNumber).padStart(2, "0")}</span>
@@ -507,7 +509,7 @@ export default function UnifiedCalendar({
                         ))}
                         {hiddenCount > 0 ? <p className="px-1 text-xs font-medium text-slate-500">+{hiddenCount} mas</p> : null}
                       </div>
-                    </button>
+                    </Button>
                   );
                 })}
               </div>

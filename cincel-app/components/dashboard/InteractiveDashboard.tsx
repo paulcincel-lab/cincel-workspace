@@ -6,6 +6,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 import UnifiedCalendar from "@/components/calendario/UnifiedCalendar";
 import { DataTable } from "@/components/ui/DataTable";
+import { Button } from "@/components/ui/shadcn/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveCalendarCapabilities, resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
@@ -769,73 +771,71 @@ export default function InteractiveDashboard({
           </div>
 
           <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-3 lg:max-w-[1040px] xl:grid-cols-6">
-            <select
-              value={rangeFilter}
-              onChange={(event) => setRangeFilter(event.target.value as DateRangeFilter)}
-              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
-            >
-              <option value="7d">Prox. 7 dias</option>
-              <option value="30d">Prox. 30 dias</option>
-              <option value="90d">Prox. 90 dias</option>
-            </select>
+            <Select value={rangeFilter} onValueChange={(value) => setRangeFilter(value as DateRangeFilter)}>
+              <SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7d">Prox. 7 dias</SelectItem>
+                <SelectItem value="30d">Prox. 30 dias</SelectItem>
+                <SelectItem value="90d">Prox. 90 dias</SelectItem>
+              </SelectContent>
+            </Select>
 
-            <select
-              value={stageFilter}
-              onChange={(event) => setStageFilter(event.target.value as "Todas" | WorkflowType)}
-              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
-            >
-              <option value="Todas">Todas etapas</option>
-              <option value="Presale">Presale</option>
-              <option value="Diseño">Taller de Diseño</option>
-              <option value="Construcción">Construccion</option>
-            </select>
+            <Select value={stageFilter} onValueChange={(value) => setStageFilter(value as "Todas" | WorkflowType)}>
+              <SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Todas">Todas etapas</SelectItem>
+                <SelectItem value="Presale">Presale</SelectItem>
+                <SelectItem value="Diseño">Taller de Diseño</SelectItem>
+                <SelectItem value="Construcción">Construccion</SelectItem>
+              </SelectContent>
+            </Select>
 
-            <select
-              value={projectFilter}
-              onChange={(event) => setProjectFilter(event.target.value)}
-              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
-            >
-              <option value="Todos">Todos proyectos</option>
-              {projectOptions.map((project) => (
-                <option key={project} value={project}>
-                  {project}
-                </option>
-              ))}
-            </select>
+            <Select value={projectFilter} onValueChange={(value) => setProjectFilter(value as string)}>
+              <SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Todos">Todos proyectos</SelectItem>
+                {projectOptions.map((project) => (
+                  <SelectItem key={project} value={project}>
+                    {project}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            <select
+            <Select
               value={canViewAllProfiles ? managerFilter : viewerName}
-              onChange={(event) => setManagerFilter(event.target.value)}
-              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
+              onValueChange={(value) => setManagerFilter(value as string)}
               disabled={!canViewAllProfiles}
             >
-              {canViewAllProfiles ? <option value="Todos">Todos responsables</option> : null}
-              {managerOptions.map((manager) => (
-                <option key={manager} value={manager}>
-                  {manager}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {canViewAllProfiles ? <SelectItem value="Todos">Todos responsables</SelectItem> : null}
+                {managerOptions.map((manager) => (
+                  <SelectItem key={manager} value={manager}>
+                    {manager}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as "Todos" | TaskStatus)}
-              className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900"
-            >
-              <option value="Todos">Todos estatus</option>
-              <option value="Pendiente">Pendiente</option>
-              <option value="En proceso">En proceso</option>
-              <option value="Completado">Completado</option>
-              <option value="Bloqueado">Bloqueado</option>
-            </select>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "Todos" | TaskStatus)}>
+              <SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Todos">Todos estatus</SelectItem>
+                <SelectItem value="Pendiente">Pendiente</SelectItem>
+                <SelectItem value="En proceso">En proceso</SelectItem>
+                <SelectItem value="Completado">Completado</SelectItem>
+                <SelectItem value="Bloqueado">Bloqueado</SelectItem>
+              </SelectContent>
+            </Select>
 
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              className="h-11 whitespace-nowrap"
               onClick={resetFilters}
-              className="h-11 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               Restablecer
-            </button>
+            </Button>
           </div>
         </div>
       </section>
