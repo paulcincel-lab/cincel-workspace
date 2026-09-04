@@ -94,15 +94,15 @@
   --sidebar-ring: #0a0a0a;
 }
 
-/* Auto dark mode (nothing sets the shadcn .dark class today, so this is what
-   actually runs) — kept in sync with :root's neutrals. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #f2f2f2;
-  }
-}
-
+/*
+ * Dark tokens. Duplicated between an explicit .dark class (currently never
+ * applied — no theme toggle wires it up yet) and OS-level prefers-color-scheme
+ * (what actually runs today), so both give the exact same result once a
+ * toggle exists. Previously only --background/--foreground were duplicated
+ * into the media query, so every shadcn Card/secondary/muted/border surface
+ * silently stayed at LIGHT values on a dark OS — keep any future edit to one
+ * block mirrored in the other.
+ */
 .dark {
   --background: #0a0a0a;
   --foreground: #f2f2f2;
@@ -137,6 +137,44 @@
   --sidebar-accent-foreground: #f2f2f2;
   --sidebar-border: rgba(255, 255, 255, 0.14);
   --sidebar-ring: #f2f2f2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0a0a0a;
+    --foreground: #f2f2f2;
+    --card: #161616;
+    --card-foreground: #f2f2f2;
+    --popover: #161616;
+    --popover-foreground: #f2f2f2;
+    --primary: #f2f2f2;
+    --primary-foreground: #0a0a0a;
+    --secondary: #1f1f1f;
+    --secondary-foreground: #f2f2f2;
+    --muted: #1a1a1a;
+    --muted-foreground: #9a9a9a;
+    --accent: #262626;
+    --accent-foreground: #f2f2f2;
+    --destructive: #e0574a;
+    --success: rgba(79, 190, 132, 0.14);
+    --success-foreground: #4fbe84;
+    --border: rgba(255, 255, 255, 0.14);
+    --input: rgba(255, 255, 255, 0.18);
+    --ring: #f2f2f2;
+    --chart-1: #f2f2f2;
+    --chart-2: #c7c7c7;
+    --chart-3: #9a9a9a;
+    --chart-4: #6b6b6b;
+    --chart-5: #3d3d3d;
+    --sidebar: #111111;
+    --sidebar-foreground: #f2f2f2;
+    --sidebar-primary: #f2f2f2;
+    --sidebar-primary-foreground: #0a0a0a;
+    --sidebar-accent: #1f1f1f;
+    --sidebar-accent-foreground: #f2f2f2;
+    --sidebar-border: rgba(255, 255, 255, 0.14);
+    --sidebar-ring: #f2f2f2;
+  }
 }
 
 @layer base {

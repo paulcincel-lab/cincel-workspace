@@ -37,7 +37,7 @@ function SheetBackdrop({ className, ...props }: React.ComponentProps<typeof Dial
 }
 
 const sheetVariants = cva(
-  "fixed z-50 flex flex-col gap-6 border-slate-200 bg-white text-slate-900 shadow-xl outline-none transition-transform duration-200",
+  "fixed z-50 flex flex-col gap-6 border-border bg-background text-foreground shadow-xl outline-none transition-transform duration-200",
   {
     variants: {
       side: {
@@ -75,7 +75,7 @@ function SheetContent({
         {showCloseButton ? (
           <DialogPrimitive.Close
             data-slot="sheet-close"
-            className="absolute top-6 right-6 rounded-lg text-slate-800 opacity-70 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            className="absolute top-6 right-6 rounded-lg text-foreground opacity-70 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <XIcon className="size-6" />
             <span className="sr-only">Cerrar</span>
@@ -87,14 +87,14 @@ function SheetContent({
 }
 
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="sheet-header" className={cn("flex flex-col gap-1.5 border-b border-slate-200 p-6 pr-14", className)} {...props} />
+  return <div data-slot="sheet-header" className={cn("flex flex-col gap-1.5 border-b border-border p-6 pr-14", className)} {...props} />
 }
 
 function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-footer"
-      className={cn("mt-auto flex items-center justify-end gap-3 border-t border-slate-200 p-6", className)}
+      className={cn("mt-auto flex items-center justify-end gap-3 border-t border-border p-6", className)}
       {...props}
     />
   )
@@ -104,7 +104,7 @@ function SheetTitle({ className, ...props }: React.ComponentProps<typeof DialogP
   return (
     <DialogPrimitive.Title
       data-slot="sheet-title"
-      className={cn("text-2xl font-bold text-slate-900", className)}
+      className={cn("text-2xl font-bold text-foreground", className)}
       {...props}
     />
   )
@@ -114,7 +114,7 @@ function SheetDescription({ className, ...props }: React.ComponentProps<typeof D
   return (
     <DialogPrimitive.Description
       data-slot="sheet-description"
-      className={cn("text-sm text-slate-500", className)}
+      className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
   )
