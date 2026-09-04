@@ -1,5 +1,9 @@
 # Phase 10: Overlay Consolidation — Dialog + Sheet Migration
 
+**Status: Done** (predates this doc's last edit; exact PR history not tracked here). Checkboxes below were never marked at the time and are left as a historical record rather than retrofitted — see the two corrections that matter:
+1. `MemberEditorDrawer.tsx` shipped as shadcn **Dialog**, not Sheet as originally planned here (confirmed in the Phase 14 doc when that phase actually read the file).
+2. As of 2026-09-04 (PR #242), **every overlay in the app — including everything this phase migrated to `Dialog` — is now `Sheet`**. The `Dialog` primitive itself was deleted; there are no centered modals left anywhere. If you're reading this doc for "how do I add a modal," the answer is: don't, use `Sheet`.
+
 ## Goal
 Migrate all modal and drawer overlays from the custom `DialogOverlay.tsx` wrapper to shadcn `Dialog` (for centered modals) and shadcn `Sheet` (for side drawers), then delete `DialogOverlay.tsx` entirely.
 
