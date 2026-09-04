@@ -16,6 +16,7 @@ import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { Button } from "@/components/ui/shadcn/button";
 import NewProjectTemplateModal from "@/components/tareas/NewProjectTemplateModal";
+import NewTaskModal from "@/components/tareas/NewTaskModal";
 import { DEPARTMENTOS, phasesFor } from "@/lib/actividades/departamento";
 import { saveActivities } from "@/lib/repositories/activities-repository";
 import type { Task } from "@/lib/types/task";
@@ -44,6 +45,7 @@ export function ActividadesV2Client({
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
 
   const phases = useMemo(() => phasesFor(departamento.template), [departamento.template]);
 
@@ -135,6 +137,35 @@ export function ActividadesV2Client({
     setTasks(next);
     await saveActivities(departamento.workflow, next);
     setTemplateOpen(false);
+  }
+
+  async function addTask(values: {
+    project: string;
+    phase: string;
+    description: string;
+    manager: string;
+    support: string[];
+    status: Task["status"];
+    notes: string;
+    commitmentDate: string;
+    reviewDate: string;
+  }) {
+    if (!departamento.workflow) return;
+    const now = new Date().toISOString();
+    const created: Task = {
+      id: nextTaskId(tasks),
+      workflow: departamento.workflow,
+      priority: "Media",
+      updatedAt: now,
+      createdAt: now,
+      history: [],
+      checklist: [],
+      archived: false,
+      ...values,
+    };
+    const next = [...tasks, created];
+    setTasks(next);
+    await saveActivities(departamento.workflow, next);
   }
 
   const columns = useMemo<ColumnDef<Task, unknown>[]>(() => {
@@ -229,9 +260,12 @@ export function ActividadesV2Client({
                 ))
               )}
             </div>
-            <Button variant="outline" onClick={() => setTemplateOpen(true)}>
-              Iniciar plantilla de {departamento.label}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setTemplateOpen(true)}>
+                Iniciar plantilla de {departamento.label}
+              </Button>
+              <Button onClick={() => setNewTaskOpen(true)}>+ Nueva tarea</Button>
+            </div>
           </div>
 
           {phases.length > 0 ? (
@@ -270,6 +304,15 @@ export function ActividadesV2Client({
             projectOptions={projectOptions}
             onClose={() => setTemplateOpen(false)}
             onCreate={applyTemplate}
+          />
+
+          <NewTaskModal
+            open={newTaskOpen}
+            projects={projectOptions}
+            teamMembers={initialTeam.map((m) => m.name)}
+            phaseOptions={phases}
+            onClose={() => setNewTaskOpen(false)}
+            onSave={addTask}
           />
         </>
       )}

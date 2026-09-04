@@ -80,32 +80,32 @@ export default function NewTaskModal({
 
   return (
     <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <SheetContent className="w-[700px] max-w-[700px] overflow-y-auto text-black">
+      <SheetContent className="w-[700px] max-w-[700px] overflow-y-auto text-foreground">
         <SheetHeader>
-          <SheetTitle className="text-black">Nueva tarea</SheetTitle>
+          <SheetTitle className="text-foreground">Nueva tarea</SheetTitle>
         </SheetHeader>
 
         <div className="p-6 space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
+          <div className="rounded-2xl border border-border bg-muted p-4 text-sm text-foreground">
             Se creará como tarea activa y aparecerá en el grupo del proyecto seleccionado.
           </div>
 
           <div>
-            <Label className="mb-2 block text-black">Descripción</Label>
+            <Label className="mb-2 block text-foreground">Descripción</Label>
             <Input
               ref={descriptionRef}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe la tarea..."
-              className="text-black placeholder:text-slate-500"
+              className="text-foreground placeholder:text-muted-foreground"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-5">
             <div>
-              <Label className="mb-2 block text-black">Proyecto</Label>
+              <Label className="mb-2 block text-foreground">Proyecto</Label>
               <Select value={project} onValueChange={(v) => setProject(v as string)}>
-                <SelectTrigger className="w-full text-black">
+                <SelectTrigger className="w-full text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -119,9 +119,9 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <Label className="mb-2 block text-black">Responsable</Label>
+              <Label className="mb-2 block text-foreground">Responsable</Label>
               <Select value={manager} onValueChange={(v) => setManager(v as string)}>
-                <SelectTrigger className="w-full text-black">
+                <SelectTrigger className="w-full text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -134,7 +134,7 @@ export default function NewTaskModal({
               </Select>
             </div>
             <div className="flex flex-col gap-2">
-              <Label className="mb-2 block text-black">Equipo</Label>
+              <Label className="mb-2 block text-foreground">Equipo</Label>
               <TeamMultiSelect
                 options={teamMembers}
                 selected={support}
@@ -143,7 +143,7 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <Label className="mb-2 block text-black">Fase</Label>
+              <Label className="mb-2 block text-foreground">Fase</Label>
               <Select
                 value={phase}
                 onValueChange={(selected) => {
@@ -161,7 +161,7 @@ export default function NewTaskModal({
                   setPhase(selected as string);
                 }}
               >
-                <SelectTrigger className="w-full text-black">
+                <SelectTrigger className="w-full text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -175,9 +175,9 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <Label className="mb-2 block text-black">Estado</Label>
+              <Label className="mb-2 block text-foreground">Estado</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as TaskStatus)}>
-                <SelectTrigger className="w-full text-black">
+                <SelectTrigger className="w-full text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -191,32 +191,32 @@ export default function NewTaskModal({
           </div>
 
           <div>
-            <Label className="mb-2 block text-black">Seguimiento</Label>
+            <Label className="mb-2 block text-foreground">Seguimiento</Label>
             <Textarea
               ref={notesRef}
               rows={5}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Escribe el seguimiento inicial..."
-              className="text-black placeholder:text-slate-500"
+              className="text-foreground placeholder:text-muted-foreground"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-5">
             <div>
-              <Label className="mb-2 block text-black">Fecha compromiso</Label>
-              <Input ref={commitmentDateRef} type="date" value={commitmentDate} onChange={(e) => setCommitmentDate(e.target.value)} className="text-black" />
+              <Label className="mb-2 block text-foreground">Fecha compromiso</Label>
+              <Input ref={commitmentDateRef} type="date" value={commitmentDate} onChange={(e) => setCommitmentDate(e.target.value)} className="text-foreground" />
             </div>
 
             <div>
-              <Label className="mb-2 block text-black">Próxima revisión</Label>
-              <Input ref={reviewDateRef} type="date" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} className="text-black" />
+              <Label className="mb-2 block text-foreground">Próxima revisión</Label>
+              <Input ref={reviewDateRef} type="date" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} className="text-foreground" />
             </div>
           </div>
         </div>
 
         <SheetFooter>
-          <Button variant="outline" onClick={onClose} className="text-black">
+          <Button variant="outline" onClick={onClose} className="text-foreground">
             Cancelar
           </Button>
 
