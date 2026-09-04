@@ -13,8 +13,17 @@ import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Progress } from "@/components/ui/shadcn/progress";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
+import { MemberProfileModal } from "@/components/equipo/MemberProfileModal";
 import { useProjectsData } from "@/lib/proyectos/use-projects-data";
 import type { TeamMember } from "@/lib/data/team";
+import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
+
+function loadLabel(percent: number, isActive: boolean): string {
+  if (!isActive) return "Inactivo";
+  if (percent >= 100) return "Saturado";
+  if (percent >= 75) return "Carga alta";
+  return "Disponible";
+}
 
 interface EquipoV2ClientProps {
   initialTeam: TeamMember[];
@@ -30,6 +39,7 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
   const { allTasks } = useProjectsData();
   const [view, setView] = useState<"activos" | "desactivados">("activos");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
+  const [profileMemberId, setProfileMemberId] = useState<number | null>(null);
 
   function toggle(id: string | number) {
     setSelected((cur) => {
@@ -49,17 +59,31 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
 
   const activeTasks = useMemo(() => allTasks.filter((t) => !t.archived), [allTasks]);
 
-  const withWorkload = useMemo(
+  const withWorkload = useMemo<TeamMemberWithWorkload[]>(
     () =>
       members.map((member) => {
         const assigned = activeTasks.filter((t) => t.manager === member.name).length;
         const support = activeTasks.filter((t) => t.support.includes(member.name)).length;
         const total = assigned + support;
         const occupancy = Math.round((total / Math.max(member.capacity, 1)) * 100);
-        return { ...member, total, occupancy };
+        return {
+          ...member,
+          assigned,
+          support,
+          total,
+          projects: [],
+          coordinatorProjects: [],
+          coordinatorProjectsCount: 0,
+          constructionProjects: [],
+          constructionProjectsCount: 0,
+          occupancy,
+          loadLabel: loadLabel(occupancy, member.active),
+        };
       }),
     [members, activeTasks]
   );
+
+  const profileMember = withWorkload.find((m) => m.id === profileMemberId) ?? null;
 
   const visible = useMemo(
     () => withWorkload.filter((m) => (view === "activos" ? m.active : !m.active)),
@@ -112,8 +136,10 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
         ),
       },
       createRowActionsColumn<(typeof withWorkload)[number]>(() => [
+        { label: "Ver ficha", onSelect: (m) => setProfileMemberId(m.id) },
         {
           label: "Copiar correo institucional",
+          separatorBefore: true,
           onSelect: (m) => {
             void navigator.clipboard.writeText(m.institutionalEmail);
           },
@@ -170,9 +196,14 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
         columns={columns}
         data={visible}
         getRowId={(row) => String(row.id)}
+        onRowClick={(row) => setProfileMemberId(row.id)}
         wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage={view === "activos" ? "No hay colaboradores activos." : "No hay colaboradores desactivados."}
       />
+
+      {profileMember ? (
+        <MemberProfileModal member={profileMember} onClose={() => setProfileMemberId(null)} />
+      ) : null}
     </div>
   );
 }

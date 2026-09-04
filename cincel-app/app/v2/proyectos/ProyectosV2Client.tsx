@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
+import { ProjectCreateModal } from "@/components/proyectos/ProjectCreateModal";
+import { fetchClients } from "@/lib/repositories/clients-repository";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
@@ -25,6 +28,8 @@ interface ProyectosV2ClientProps {
   initialProjects: ProjectItem[];
 }
 
+const PROJECT_TYPE_OPTIONS = ["Habitacional", "Oficinas", "Comercial", "Mobiliario", "Mantenimiento", "Otro"];
+
 /** Earliest upcoming task commitment date for a project, or null. */
 function nextDeliveryFor(project: ProjectItem, allTasks: ReturnType<typeof useProjectsData>["allTasks"]) {
   const dates = allTasks
@@ -36,15 +41,40 @@ function nextDeliveryFor(project: ProjectItem, allTasks: ReturnType<typeof usePr
 
 export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
   const router = useRouter();
-  const { projectsData, allTasks, isLoadingData, updateProjectActive } =
+  const { projectsData, allTasks, isLoadingData, updateProjectActive, activeTeamNames, addProject } =
     useProjectsData(initialProjects);
   const [view, setView] = useState<"activos" | "archivados">("activos");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
+  const [showCreate, setShowCreate] = useState(false);
 
   const visible = useMemo(
     () => projectsData.filter((p) => (view === "activos" ? p.active : !p.active)),
     [projectsData, view]
   );
+
+  const { data: manualClients = [] } = useQuery({
+    queryKey: ["clients"],
+    queryFn: () => fetchClients(),
+  });
+
+  const activeClientOptions = useMemo(() => {
+    const fromProjects = projectsData
+      .filter((p) => p.active)
+      .map((p) => ({
+        id: p.client.id,
+        name: p.client.name,
+        kind: (p.client.kind === "Empresa" ? "Empresa" : "Particular") as "Empresa" | "Particular",
+      }));
+    const fromManual = manualClients
+      .filter((c) => Boolean(c.hasActiveProject))
+      .map((c) => ({ id: c.id, name: c.name, kind: c.kind as "Empresa" | "Particular" }));
+    const deduped = new Map<string, (typeof fromProjects)[number]>();
+    for (const client of [...fromProjects, ...fromManual]) {
+      const key = client.name.toLowerCase();
+      if (!deduped.has(key)) deduped.set(key, client);
+    }
+    return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [projectsData, manualClients]);
 
   function toggle(id: string | number) {
     setSelected((cur) => {
@@ -160,7 +190,7 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
                 <TabsTrigger value="archivados">Archivados</TabsTrigger>
               </TabsList>
             </Tabs>
-            <Button>+ Nuevo proyecto</Button>
+            <Button onClick={() => setShowCreate(true)}>+ Nuevo proyecto</Button>
           </>
         }
       />
@@ -190,6 +220,22 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
         wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage={view === "activos" ? "No hay proyectos activos." : "No hay proyectos archivados."}
       />
+
+      {showCreate ? (
+        <ProjectCreateModal
+          activeClientOptions={activeClientOptions}
+          activeTeamNames={activeTeamNames}
+          projectTypeOptions={PROJECT_TYPE_OPTIONS}
+          existingProjectIds={projectsData.map((p) => p.id)}
+          existingClientIds={projectsData.map((p) => p.client.id)}
+          onClose={() => setShowCreate(false)}
+          onConfirm={(project) => {
+            addProject(project);
+            setShowCreate(false);
+            router.push(`/proyectos/${project.id}/ficha`);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
