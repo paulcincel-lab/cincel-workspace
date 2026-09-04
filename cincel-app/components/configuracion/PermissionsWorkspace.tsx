@@ -7,6 +7,9 @@ import type { ColumnDef } from "@tanstack/react-table";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import { DataTable } from "@/components/ui/DataTable";
+import { Button } from "@/components/ui/shadcn/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Switch } from "@/components/ui/shadcn/switch";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { PERMISSIONS_CUSTOM_STORAGE_KEY } from "@/lib/auth/permissions";
 import {
@@ -112,14 +115,6 @@ function toMockUser(access: SystemAccessRole): AuthenticatedUser {
     email: "configuracion@cincel.mx",
     access,
   };
-}
-
-function toggleClasses(enabled: boolean): string {
-  if (enabled) {
-    return "bg-emerald-500 border-emerald-500";
-  }
-
-  return "bg-slate-300 border-slate-300";
 }
 
 function buildDefaultPermissionsState(): PermissionsState {
@@ -280,15 +275,15 @@ function buildAccessColumns(setSelectedAccess: (role: SystemAccessRole) => void)
       enableSorting: false,
       cell: ({ row }) => (
         <div className="text-right">
-          <button
-            type="button"
+          <Button
+            size="sm"
+            className="h-auto px-3 py-2 text-xs"
             onClick={() => setSelectedAccess(row.original.role)}
             disabled={row.original.protectedRole}
             title={row.original.protectedRole ? "Administrador mantiene acceso completo y no puede editarse." : "Abrir editor de permisos"}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold ${row.original.protectedRole ? "cursor-not-allowed bg-slate-200 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-700"}`}
           >
             Configurar
-          </button>
+          </Button>
         </div>
       ),
     },
@@ -434,15 +429,15 @@ export default function PermissionsWorkspace() {
                 }
 
                 return (
-                  <button
+                  <Button
                     key={item.key}
-                    type="button"
+                    variant="ghost"
                     disabled
-                    className="w-full cursor-not-allowed rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-400"
+                    className="h-auto w-full justify-start px-3 py-2 text-left text-sm font-medium"
                   >
                     {item.label}
                     <span className="ml-2 text-xs text-slate-400">Proximamente</span>
-                  </button>
+                  </Button>
                 );
               })}
             </nav>
@@ -475,22 +470,23 @@ export default function PermissionsWorkspace() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-auto px-3 py-2 text-xs"
                     onClick={restoreDefaults}
                     disabled={!hasCustomConfig}
-                    className={`rounded-lg border px-3 py-2 text-xs font-semibold ${hasCustomConfig ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                   >
                     Restaurar permisos por defecto
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-auto px-3 py-2 text-xs"
                     onClick={saveChanges}
                     disabled={!isDirty || !canEditSelectedRole}
-                    className={`rounded-lg px-3 py-2 text-xs font-semibold text-white ${!isDirty || !canEditSelectedRole ? "cursor-not-allowed bg-slate-300" : "bg-blue-600 hover:bg-blue-700"}`}
                   >
                     Guardar cambios
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -523,50 +519,52 @@ export default function PermissionsWorkspace() {
                                 <label className="text-sm text-slate-700" htmlFor={`${moduleDefinition.id}-${action.id}`}>
                                   {action.label}
                                 </label>
-                                <select
-                                  id={`${moduleDefinition.id}-${action.id}`}
+                                <Select
                                   value={String(value)}
                                   disabled={!canEditSelectedRole}
-                                  onChange={(event) =>
+                                  onValueChange={(nextValue) =>
                                     updatePermissionValue({
                                       role: selectedAccess,
                                       moduleId: moduleDefinition.id,
                                       actionId: action.id,
-                                      nextValue: event.target.value,
+                                      nextValue: nextValue as string,
                                     })
                                   }
-                                  className={`rounded-md border px-2 py-1 text-xs font-medium ${canEditSelectedRole ? "border-slate-300 bg-white text-slate-700" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                                 >
-                                  {(action.options ?? []).map((option) => (
-                                    <option key={`${action.id}-${option.value}`} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
+                                  <SelectTrigger id={`${moduleDefinition.id}-${action.id}`} className="h-auto px-2 py-1 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(action.options ?? []).map((option) => (
+                                      <SelectItem key={`${action.id}-${option.value}`} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
                             );
                           }
 
                           return (
-                            <button
+                            <label
                               key={`${moduleDefinition.id}-${action.id}`}
-                              type="button"
-                              disabled={!canEditSelectedRole}
-                              onClick={() =>
-                                updatePermissionValue({
-                                  role: selectedAccess,
-                                  moduleId: moduleDefinition.id,
-                                  actionId: action.id,
-                                  nextValue: !Boolean(value),
-                                })
-                              }
-                              className={`flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left ${canEditSelectedRole ? "hover:bg-slate-50" : "cursor-not-allowed"}`}
+                              className={`flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 ${canEditSelectedRole ? "cursor-pointer hover:bg-slate-50" : "cursor-not-allowed"}`}
                             >
                               <p className={`text-sm ${canEditSelectedRole ? "text-slate-700" : "text-slate-400"}`}>{action.label}</p>
-                              <span className={`inline-flex h-6 w-11 items-center rounded-full border px-0.5 ${toggleClasses(Boolean(value))}`}>
-                                <span className={`h-4 w-4 rounded-full bg-white transition ${Boolean(value) ? "translate-x-5" : "translate-x-0"}`} />
-                              </span>
-                            </button>
+                              <Switch
+                                checked={Boolean(value)}
+                                disabled={!canEditSelectedRole}
+                                onCheckedChange={(checked) =>
+                                  updatePermissionValue({
+                                    role: selectedAccess,
+                                    moduleId: moduleDefinition.id,
+                                    actionId: action.id,
+                                    nextValue: checked,
+                                  })
+                                }
+                              />
+                            </label>
                           );
                         })}
                       </div>

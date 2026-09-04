@@ -6,6 +6,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Switch } from "@/components/ui/shadcn/switch";
 import {
   buildDefaultGeneralSettings,
   type GeneralSettings,
@@ -44,14 +48,6 @@ const CONFIG_NAV_ITEMS: Array<{ key: string; label: string; href?: string; enabl
   { key: "api-webhooks", label: "API / Webhooks", enabled: false },
   { key: "notificaciones", label: "Notificaciones", enabled: false },
 ];
-
-function toggleClasses(enabled: boolean): string {
-  if (enabled) {
-    return "bg-emerald-500 border-emerald-500";
-  }
-
-  return "bg-slate-300 border-slate-300";
-}
 
 export default function GeneralSettingsWorkspace() {
   const defaultSettings = useMemo(() => buildDefaultGeneralSettings(), []);
@@ -195,15 +191,15 @@ export default function GeneralSettingsWorkspace() {
                 }
 
                 return (
-                  <button
+                  <Button
                     key={item.key}
-                    type="button"
+                    variant="ghost"
                     disabled
-                    className="w-full cursor-not-allowed rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-400"
+                    className="h-auto w-full justify-start px-3 py-2 text-left text-sm font-medium"
                   >
                     {item.label}
                     <span className="ml-2 text-xs text-slate-400">Proximamente</span>
-                  </button>
+                  </Button>
                 );
               })}
             </nav>
@@ -226,22 +222,23 @@ export default function GeneralSettingsWorkspace() {
                   <p className="mt-1 text-xs text-slate-500">Clave de persistencia: {GENERAL_SETTINGS_STORAGE_KEY}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-auto px-3 py-2 text-xs"
                     onClick={restoreDefaults}
                     disabled={!hasCustomConfig}
-                    className={`rounded-lg border px-3 py-2 text-xs font-semibold ${hasCustomConfig ? "border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
                   >
                     Restaurar configuración por defecto
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-auto px-3 py-2 text-xs"
                     onClick={saveChanges}
                     disabled={!isDirty}
-                    className={`rounded-lg px-3 py-2 text-xs font-semibold text-white ${!isDirty ? "cursor-not-allowed bg-slate-300" : "bg-blue-600 hover:bg-blue-700"}`}
                   >
                     Guardar cambios
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -253,81 +250,74 @@ export default function GeneralSettingsWorkspace() {
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Nombre de la empresa</span>
-                      <input
+                      <Input
                         type="text"
                         value={settings.company.legalName}
                         onChange={(event) => updateCompanyField("legalName", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                       />
                     </label>
 
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Nombre comercial</span>
-                      <input
+                      <Input
                         type="text"
                         value={settings.company.tradeName}
                         onChange={(event) => updateCompanyField("tradeName", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                       />
                     </label>
 
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Correo principal</span>
-                      <input
+                      <Input
                         type="email"
                         value={settings.company.primaryEmail}
                         onChange={(event) => updateCompanyField("primaryEmail", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                       />
                     </label>
 
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Teléfono</span>
-                      <input
+                      <Input
                         type="text"
                         value={settings.company.phone}
                         onChange={(event) => updateCompanyField("phone", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                       />
                     </label>
 
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Sitio web</span>
-                      <input
+                      <Input
                         type="url"
                         value={settings.company.website}
                         onChange={(event) => updateCompanyField("website", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                       />
                     </label>
 
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">RFC (opcional)</span>
-                      <input
+                      <Input
                         type="text"
                         value={settings.company.rfc}
                         onChange={(event) => updateCompanyField("rfc", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                       />
                     </label>
 
                     <label className="space-y-1 md:col-span-2">
                       <span className="text-xs font-medium text-slate-600">Dirección</span>
-                      <input
+                      <Input
                         type="text"
                         value={settings.company.address}
                         onChange={(event) => updateCompanyField("address", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                       />
                     </label>
 
                     <label className="space-y-1 md:col-span-2">
                       <span className="text-xs font-medium text-slate-600">Logotipo de la empresa</span>
-                      <input
+                      <Input
                         type="file"
                         accept="image/png,image/jpeg"
                         onChange={(event) => handleLogoUpload("company", "logoUrl", event.target.files?.[0] ?? null)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+                        className="file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
                       />
                       {settings.company.logoUrl ? (
                         <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
@@ -356,46 +346,54 @@ export default function GeneralSettingsWorkspace() {
                   <div className="mt-4 space-y-3">
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Idioma</span>
-                      <select
+                      <Select
                         value={settings.regional.language}
-                        onChange={(event) => updateRegionalField("language", event.target.value as GeneralSettings["regional"]["language"])}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                        onValueChange={(value) => updateRegionalField("language", value as GeneralSettings["regional"]["language"])}
                       >
-                        <option value="es-MX">Español (México)</option>
-                      </select>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="es-MX">Español (México)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </label>
 
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Zona horaria</span>
-                      <select
+                      <Select
                         value={settings.regional.timeZone}
-                        onChange={(event) => updateRegionalField("timeZone", event.target.value as GeneralSettings["regional"]["timeZone"])}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                        onValueChange={(value) => updateRegionalField("timeZone", value as GeneralSettings["regional"]["timeZone"])}
                       >
-                        <option value="America/Mexico_City">America/Mexico_City</option>
-                      </select>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="America/Mexico_City">America/Mexico_City</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </label>
 
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Formato de fecha</span>
-                      <select
+                      <Select
                         value={settings.regional.dateFormat}
-                        onChange={(event) => updateRegionalField("dateFormat", event.target.value as GeneralSettings["regional"]["dateFormat"])}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                        onValueChange={(value) => updateRegionalField("dateFormat", value as GeneralSettings["regional"]["dateFormat"])}
                       >
-                        <option value="dd/MM/yyyy">dd/MM/yyyy</option>
-                      </select>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="dd/MM/yyyy">dd/MM/yyyy</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </label>
 
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Primer día de la semana</span>
-                      <select
+                      <Select
                         value={settings.regional.weekStartsOn}
-                        onChange={(event) => updateRegionalField("weekStartsOn", event.target.value as GeneralSettings["regional"]["weekStartsOn"])}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                        onValueChange={(value) => updateRegionalField("weekStartsOn", value as GeneralSettings["regional"]["weekStartsOn"])}
                       >
-                        <option value="monday">Lunes</option>
-                      </select>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monday">Lunes</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </label>
                   </div>
                 </article>
@@ -407,11 +405,11 @@ export default function GeneralSettingsWorkspace() {
                   <div className="mt-4 space-y-3">
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Logo del sistema</span>
-                      <input
+                      <Input
                         type="file"
                         accept="image/png,image/jpeg"
                         onChange={(event) => handleLogoUpload("appearance", "systemLogoUrl", event.target.files?.[0] ?? null)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+                        className="file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
                       />
                       {settings.appearance.systemLogoUrl ? (
                         <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
@@ -434,11 +432,10 @@ export default function GeneralSettingsWorkspace() {
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Color principal (opcional)</span>
                       <div className="flex items-center gap-2">
-                        <input
+                        <Input
                           type="text"
                           value={settings.appearance.primaryColor}
                           onChange={(event) => updateAppearanceField("primaryColor", event.target.value)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                         />
                         <span
                           className="inline-flex h-8 w-8 rounded-md border border-slate-300"
@@ -456,37 +453,30 @@ export default function GeneralSettingsWorkspace() {
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Nombre del sistema</span>
-                      <input
+                      <Input
                         type="text"
                         value={settings.system.systemName}
                         onChange={(event) => updateSystemField("systemName", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                       />
                     </label>
 
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-slate-600">Versión</span>
-                      <input
+                      <Input
                         type="text"
                         value={settings.system.version}
                         onChange={(event) => updateSystemField("version", event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                       />
                     </label>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => updateSystemField("showVersionInInterface", !settings.system.showVersionInInterface)}
-                    className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:bg-slate-50"
-                  >
+                  <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50">
                     <p className="text-sm text-slate-700">Mostrar versión en la interfaz</p>
-                    <span className={`inline-flex h-6 w-11 items-center rounded-full border px-0.5 ${toggleClasses(Boolean(settings.system.showVersionInInterface))}`}>
-                      <span
-                        className={`h-4 w-4 rounded-full bg-white transition ${settings.system.showVersionInInterface ? "translate-x-5" : "translate-x-0"}`}
-                      />
-                    </span>
-                  </button>
+                    <Switch
+                      checked={Boolean(settings.system.showVersionInInterface)}
+                      onCheckedChange={(checked) => updateSystemField("showVersionInInterface", checked)}
+                    />
+                  </label>
                 </article>
               </div>
             </section>
