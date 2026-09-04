@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { Input } from "@/components/ui/shadcn/input";
 
 type Props = {
   options: string[];
@@ -96,11 +98,11 @@ export default function TeamMultiSelect({
       <div className="mb-2 flex flex-wrap gap-1">
         {selected.length > 0 ? (
           selected.map((member) => (
-            <button
+            <Button
               key={member}
-              type="button"
+              variant="outline"
+              className="h-auto gap-1.5 rounded-full border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100"
               onClick={() => toggleMember(member)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800"
               title="Quitar integrante"
             >
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">
@@ -108,19 +110,19 @@ export default function TeamMultiSelect({
               </span>
               <span>{member}</span>
               <span className="text-blue-400">×</span>
-            </button>
+            </Button>
           ))
         ) : (
           <span className="text-xs text-slate-400">Sin integrantes asignados</span>
         )}
       </div>
 
-      <input
+      <Input
         autoFocus
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder={placeholder}
-        className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+        className="mb-2 h-auto px-2 py-1.5 text-sm"
       />
 
       <div className="max-h-36 space-y-0.5 overflow-y-auto pr-1">
@@ -129,11 +131,11 @@ export default function TeamMultiSelect({
             const isSelected = selected.includes(member);
 
             return (
-              <button
+              <Button
                 key={member}
-                type="button"
+                variant="ghost"
+                className={`h-auto w-full justify-start gap-2 px-2 py-1.5 text-left text-sm font-normal ${isSelected ? "bg-blue-50 text-blue-700 hover:bg-blue-50" : "text-slate-800"}`}
                 onClick={() => toggleMember(member)}
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm ${isSelected ? "bg-blue-50 text-blue-700" : "text-slate-800 hover:bg-slate-50"}`}
               >
                 <span
                   className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${isSelected ? "bg-blue-600" : "bg-slate-400"}`}
@@ -142,7 +144,7 @@ export default function TeamMultiSelect({
                 </span>
                 <span className="flex-1">{member}</span>
                 <Checkbox checked={isSelected} readOnly tabIndex={-1} />
-              </button>
+              </Button>
             );
           })
         ) : (
