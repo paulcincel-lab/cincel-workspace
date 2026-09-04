@@ -1,6 +1,7 @@
 "use client";
 
 import { type KeyboardEvent, type ReactNode, useState } from "react";
+import { Button } from "@/components/ui/shadcn/button";
 
 type Props = {
   value: string;
@@ -84,17 +85,17 @@ export default function InlineEditable({
 
   if (!isEditing) {
     return (
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        className={`h-auto w-full justify-start p-0 text-left font-normal hover:bg-transparent ${displayClassName ?? ""}`.trim()}
         onClick={() => {
           setDraft(value);
           setIsEditing(true);
         }}
-        className={`w-full text-left ${displayClassName ?? ""}`.trim()}
         aria-label={editTriggerLabel}
       >
         {renderDisplay(value)}
-      </button>
+      </Button>
     );
   }
 
