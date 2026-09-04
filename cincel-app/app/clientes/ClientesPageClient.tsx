@@ -8,6 +8,11 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { DataTable } from "@/components/ui/DataTable";
 import ExportMenu from "@/components/ui/ExportMenu";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
@@ -413,16 +418,19 @@ export default function ClientesPageClient({
         cell: ({ row }) => {
           const client = row.original;
           return (
-            <select
+            <Select
               value={client.hasActiveProject ? "si" : "no"}
-              onChange={(event) => updateClientActiveInline(client.id, event.target.value === "si")}
+              onValueChange={(value) => updateClientActiveInline(client.id, value === "si")}
               disabled={!clientsCapabilities.canEditClient}
-              className="bg-transparent px-1 py-1 text-xs text-slate-700 focus:outline-none"
-              aria-label={`Proyecto activo ${client.name}`}
             >
-              <option value="si">Si</option>
-              <option value="no">No</option>
-            </select>
+              <SelectTrigger className="h-auto border-0 bg-transparent px-1 py-1 text-xs" aria-label={`Proyecto activo ${client.name}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="si">Si</SelectItem>
+                <SelectItem value="no">No</SelectItem>
+              </SelectContent>
+            </Select>
           );
         },
       },
@@ -806,80 +814,78 @@ export default function ClientesPageClient({
                   Ver todos los proyectos
                 </Link>
 
-                <button
-                  type="button"
+                <Button
                   onClick={openCreateClient}
                   disabled={!clientsCapabilities.canCreateClient}
                   title={clientsCapabilities.canCreateClient ? "" : "No tienes permiso para crear clientes"}
-                  className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${clientsCapabilities.canCreateClient ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
                 >
                   Nuevo cliente
-                </button>
+                </Button>
               </div>
 
               <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
-                <button
-                  type="button"
+                <Button
+                  variant={activeFilter === "Activos" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-auto px-3 py-1 text-xs"
                   onClick={() => setActiveFilter("Activos")}
-                  className={`rounded-lg px-3 py-1 text-xs font-medium ${activeFilter === "Activos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
                 >
                   Activos
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant={activeFilter === "Inactivos" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-auto px-3 py-1 text-xs"
                   onClick={() => setActiveFilter("Inactivos")}
-                  className={`rounded-lg px-3 py-1 text-xs font-medium ${activeFilter === "Inactivos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
                 >
                   Desactivados
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant={activeFilter === "Todos" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-auto px-3 py-1 text-xs"
                   onClick={() => setActiveFilter("Todos")}
-                  className={`rounded-lg px-3 py-1 text-xs font-medium ${activeFilter === "Todos" ? "bg-slate-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
                 >
                   Todos
-                </button>
+                </Button>
               </div>
             </div>
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <input
+            <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar por cliente, proyecto o tipo"
-              className="min-w-[220px] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
+              className="min-w-[220px] flex-1"
             />
 
-            <select
-              value={kindFilter}
-              onChange={(event) => setKindFilter(event.target.value as "Todos" | ClientKind)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="Todos">Empresa / Particular: Todos</option>
-              <option value="Empresa">Empresa</option>
-              <option value="Particular">Particular</option>
-            </select>
+            <Select value={kindFilter} onValueChange={(value) => setKindFilter(value as "Todos" | ClientKind)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Todos">Empresa / Particular: Todos</SelectItem>
+                <SelectItem value="Empresa">Empresa</SelectItem>
+                <SelectItem value="Particular">Particular</SelectItem>
+              </SelectContent>
+            </Select>
 
-            <select
-              value={projectTypeFilter}
-              onChange={(event) => setProjectTypeFilter(event.target.value as "Todos" | ProjectType)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="Todos">Tipo de proyecto: Todos</option>
-              {projectTypeOptions.map((type) => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
+            <Select value={projectTypeFilter} onValueChange={(value) => setProjectTypeFilter(value as "Todos" | ProjectType)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Todos">Tipo de proyecto: Todos</SelectItem>
+                {projectTypeOptions.map((type) => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            <select
-              value={firstWorkDateSort}
-              onChange={(event) => setFirstWorkDateSort(event.target.value as "reciente" | "antigua")}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="reciente">Fecha primer trabajo: Mas reciente</option>
-              <option value="antigua">Fecha primer trabajo: Mas antigua</option>
-            </select>
+            <Select value={firstWorkDateSort} onValueChange={(value) => setFirstWorkDateSort(value as "reciente" | "antigua")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="reciente">Fecha primer trabajo: Mas reciente</SelectItem>
+                <SelectItem value="antigua">Fecha primer trabajo: Mas antigua</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
@@ -947,148 +953,128 @@ export default function ClientesPageClient({
             </div>
         </section>
 
-        {showCreateModal ? (
-          <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/30">
-            <div className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
-              <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Nuevo cliente</h2>
-                  <p className="text-sm text-slate-500">Crear cliente sin depender de un proyecto existente.</p>
-                </div>
+        <Sheet open={showCreateModal} onOpenChange={(next) => { if (!next) closeCreateClient(); }}>
+          <SheetContent className="max-w-2xl overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Nuevo cliente</SheetTitle>
+              <p className="text-sm text-slate-500">Crear cliente sin depender de un proyecto existente.</p>
+            </SheetHeader>
 
-                <button
-                  type="button"
-                  onClick={closeCreateClient}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Cerrar
-                </button>
+            <div className="grid gap-4 px-6 py-4 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label htmlFor="new-client-name">Nombre del cliente</Label>
+                <Input
+                  id="new-client-name"
+                  value={newClientDraft.name}
+                  onChange={(event) => setNewClientDraft((prev) => ({ ...prev, name: event.target.value }))}
+                />
               </div>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <label className="text-sm text-slate-700">
-                  Nombre del cliente
-                  <input
-                    value={newClientDraft.name}
-                    onChange={(event) => setNewClientDraft((prev) => ({ ...prev, name: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
+              <div className="space-y-1">
+                <Label htmlFor="new-client-phone">Numero de contacto</Label>
+                <Input
+                  id="new-client-phone"
+                  value={newClientDraft.phone}
+                  onChange={(event) => setNewClientDraft((prev) => ({ ...prev, phone: event.target.value }))}
+                />
+              </div>
 
-                <label className="text-sm text-slate-700">
-                  Numero de contacto
-                  <input
-                    value={newClientDraft.phone}
-                    onChange={(event) => setNewClientDraft((prev) => ({ ...prev, phone: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="new-client-emails">Email(s)</Label>
+                <Input
+                  id="new-client-emails"
+                  value={newClientDraft.emailsText}
+                  onChange={(event) => setNewClientDraft((prev) => ({ ...prev, emailsText: event.target.value }))}
+                  placeholder="correo1@dominio.com, correo2@dominio.com"
+                />
+              </div>
 
-                <label className="text-sm text-slate-700 sm:col-span-2">
-                  Email(s)
-                  <input
-                    value={newClientDraft.emailsText}
-                    onChange={(event) => setNewClientDraft((prev) => ({ ...prev, emailsText: event.target.value }))}
-                    placeholder="correo1@dominio.com, correo2@dominio.com"
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
+              <div className="space-y-1">
+                <Label htmlFor="new-client-kind">Empresa o Particular</Label>
+                <Select value={newClientDraft.kind} onValueChange={(value) => setNewClientDraft((prev) => ({ ...prev, kind: value as ClientKind }))}>
+                  <SelectTrigger id="new-client-kind" className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Empresa">Empresa</SelectItem>
+                    <SelectItem value="Particular">Particular</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <label className="text-sm text-slate-700">
-                  Empresa o Particular
-                  <select
-                    value={newClientDraft.kind}
-                    onChange={(event) => setNewClientDraft((prev) => ({ ...prev, kind: event.target.value as ClientKind }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="Empresa">Empresa</option>
-                    <option value="Particular">Particular</option>
-                  </select>
-                </label>
+              <div className="space-y-1">
+                <Label htmlFor="new-client-has-active-project">Proyecto activo</Label>
+                <Select
+                  value={newClientDraft.hasActiveProject ? "si" : "no"}
+                  onValueChange={(value) => setNewClientDraft((prev) => ({ ...prev, hasActiveProject: value === "si" }))}
+                >
+                  <SelectTrigger id="new-client-has-active-project" className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="si">Si</SelectItem>
+                    <SelectItem value="no">Ya termino</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <label className="text-sm text-slate-700">
-                  Proyecto activo
-                  <select
-                    value={newClientDraft.hasActiveProject ? "si" : "no"}
-                    onChange={(event) => setNewClientDraft((prev) => ({ ...prev, hasActiveProject: event.target.value === "si" }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="si">Si</option>
-                    <option value="no">Ya termino</option>
-                  </select>
-                </label>
+              <div className="space-y-1">
+                <Label htmlFor="new-client-project-name">Nombre del proyecto</Label>
+                <Input
+                  id="new-client-project-name"
+                  value={newClientDraft.projectName}
+                  onChange={(event) => setNewClientDraft((prev) => ({ ...prev, projectName: event.target.value }))}
+                />
+              </div>
 
-                <label className="text-sm text-slate-700">
-                  Nombre del proyecto
-                  <input
-                    value={newClientDraft.projectName}
-                    onChange={(event) => setNewClientDraft((prev) => ({ ...prev, projectName: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
-
-                <label className="text-sm text-slate-700">
-                  Tipo de proyecto
-                  <select
-                    value={newClientDraft.projectType}
-                    onChange={(event) => setNewClientDraft((prev) => ({ ...prev, projectType: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  >
+              <div className="space-y-1">
+                <Label htmlFor="new-client-project-type">Tipo de proyecto</Label>
+                <Select value={newClientDraft.projectType} onValueChange={(value) => setNewClientDraft((prev) => ({ ...prev, projectType: value as string }))}>
+                  <SelectTrigger id="new-client-project-type" className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
                     {projectTypeOptions.map((option) => (
-                      <option key={`new-client-${option}`} value={option}>
+                      <SelectItem key={`new-client-${option}`} value={option}>
                         {option}
-                      </option>
+                      </SelectItem>
                     ))}
-                  </select>
-                </label>
-
-                <label className="text-sm text-slate-700">
-                  Numero de proyectos con nosotros
-                  <input
-                    type="number"
-                    min={1}
-                    value={newClientDraft.totalProjectsWorked}
-                    onChange={(event) => setNewClientDraft((prev) => ({ ...prev, totalProjectsWorked: Number(event.target.value) || 1 }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
-
-                <label className="text-sm text-slate-700">
-                  Fecha de primer trabajo
-                  <input
-                    type="date"
-                    value={newClientDraft.firstWorkDate}
-                    onChange={(event) => setNewClientDraft((prev) => ({ ...prev, firstWorkDate: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
+                  </SelectContent>
+                </Select>
               </div>
 
-              {createError ? (
-                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {createError}
-                </div>
-              ) : null}
+              <div className="space-y-1">
+                <Label htmlFor="new-client-total-projects">Numero de proyectos con nosotros</Label>
+                <Input
+                  id="new-client-total-projects"
+                  type="number"
+                  min={1}
+                  value={newClientDraft.totalProjectsWorked}
+                  onChange={(event) => setNewClientDraft((prev) => ({ ...prev, totalProjectsWorked: Number(event.target.value) || 1 }))}
+                />
+              </div>
 
-              <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
-                <button
-                  type="button"
-                  onClick={closeCreateClient}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={createClient}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                >
-                  Crear cliente
-                </button>
+              <div className="space-y-1">
+                <Label htmlFor="new-client-first-work-date">Fecha de primer trabajo</Label>
+                <Input
+                  id="new-client-first-work-date"
+                  type="date"
+                  value={newClientDraft.firstWorkDate}
+                  onChange={(event) => setNewClientDraft((prev) => ({ ...prev, firstWorkDate: event.target.value }))}
+                />
               </div>
             </div>
-          </div>
-        ) : null}
+
+            {createError ? (
+              <div className="mx-6 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {createError}
+              </div>
+            ) : null}
+
+            <SheetFooter>
+              <Button variant="outline" onClick={closeCreateClient}>
+                Cancelar
+              </Button>
+              <Button onClick={createClient}>
+                Crear cliente
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
       </section>
     </main>
   );

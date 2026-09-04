@@ -8,6 +8,11 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import AppBadge from "@/components/ui/AppBadge";
 import AppAvatar from "@/components/ui/AppAvatar";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { projects as baseProjects } from "@/lib/data/projects";
@@ -626,25 +631,23 @@ export default function ClienteFichaPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
+              <Button
                 onClick={openEditor}
                 disabled={!clientsCapabilities.canEditClient}
                 title={clientsCapabilities.canEditClient ? "" : "No tienes permiso para editar clientes"}
-                className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${clientsCapabilities.canEditClient ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-slate-300"}`}
               >
                 Editar cliente
-              </button>
+              </Button>
 
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
                 onClick={deleteClient}
                 disabled={!clientsCapabilities.canDeleteClient}
                 title={clientsCapabilities.canDeleteClient ? "" : "No tienes permiso para eliminar clientes"}
-                className={`rounded-lg border px-4 py-2 text-sm font-medium ${clientsCapabilities.canDeleteClient ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"}`}
               >
                 Eliminar cliente
-              </button>
+              </Button>
 
               <Link
                 href="/clientes"
@@ -792,155 +795,144 @@ export default function ClienteFichaPage() {
           </div>
         </div>
 
-        {showEditor ? (
-          <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/30">
-            <div className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
-              <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Editar cliente</h2>
-                  <p className="text-sm text-slate-500">Actualiza contactos, origen y montos del cliente.</p>
-                </div>
+        <Sheet open={showEditor} onOpenChange={(next) => { if (!next) closeEditor(); }}>
+          <SheetContent className="max-w-2xl overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Editar cliente</SheetTitle>
+              <p className="text-sm text-slate-500">Actualiza contactos, origen y montos del cliente.</p>
+            </SheetHeader>
 
-                <button
-                  type="button"
-                  onClick={closeEditor}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Cerrar
-                </button>
-              </div>
-
-              <div className="mt-5 space-y-4">
+            <div className="space-y-4 px-6 py-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm text-slate-700">
-                    Nombre del cliente
-                    <input
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-client-name">Nombre del cliente</Label>
+                    <Input
+                      id="edit-client-name"
                       value={draft.name}
                       onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     />
-                  </label>
+                  </div>
 
-                  <label className="text-sm text-slate-700">
-                    Numero de contacto principal
-                    <input
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-client-phone">Numero de contacto principal</Label>
+                    <Input
+                      id="edit-client-phone"
                       value={draft.phone}
                       onChange={(event) => setDraft((prev) => ({ ...prev, phone: event.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     />
-                  </label>
+                  </div>
 
-                  <label className="text-sm text-slate-700 sm:col-span-2">
-                    Email(s)
-                    <input
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="edit-client-emails">Email(s)</Label>
+                    <Input
+                      id="edit-client-emails"
                       value={draft.emailsText}
                       onChange={(event) => setDraft((prev) => ({ ...prev, emailsText: event.target.value }))}
                       placeholder="correo1@dominio.com, correo2@dominio.com"
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     />
-                  </label>
+                  </div>
 
-                  <label className="text-sm text-slate-700">
-                    Empresa o Particular
-                    <select
-                      value={draft.kind}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, kind: event.target.value as ClientKind }))}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    >
-                      <option value="Empresa">Empresa</option>
-                      <option value="Particular">Particular</option>
-                    </select>
-                  </label>
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-client-kind">Empresa o Particular</Label>
+                    <Select value={draft.kind} onValueChange={(value) => setDraft((prev) => ({ ...prev, kind: value as ClientKind }))}>
+                      <SelectTrigger id="edit-client-kind" className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Empresa">Empresa</SelectItem>
+                        <SelectItem value="Particular">Particular</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                  <label className="text-sm text-slate-700">
-                    Como llegaron a nosotros
-                    <input
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-client-acquisition-channel">Como llegaron a nosotros</Label>
+                    <Input
+                      id="edit-client-acquisition-channel"
                       value={draft.acquisitionChannel}
                       onChange={(event) => setDraft((prev) => ({ ...prev, acquisitionChannel: event.target.value }))}
                       placeholder="Recomendacion, pagina web, redes sociales..."
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     />
-                  </label>
+                  </div>
 
-                  <label className="text-sm text-slate-700 sm:col-span-2">
-                    Montos gastados (MXN)
-                    <input
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="edit-client-total-spent">Montos gastados (MXN)</Label>
+                    <Input
+                      id="edit-client-total-spent"
                       type="number"
                       min={0}
                       value={draft.totalSpent}
                       onChange={(event) => setDraft((prev) => ({ ...prev, totalSpent: Number(event.target.value) || 0 }))}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     />
-                  </label>
+                  </div>
 
-                  <label className="text-sm text-slate-700 sm:col-span-2">
-                    Proyectos realizados con nosotros
-                    <input
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="edit-client-completed-projects">Proyectos realizados con nosotros</Label>
+                    <Input
+                      id="edit-client-completed-projects"
                       value={draft.completedProjectsText}
                       onChange={(event) => setDraft((prev) => ({ ...prev, completedProjectsText: event.target.value }))}
                       placeholder="Proyecto 1, Proyecto 2, Proyecto 3"
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     />
-                  </label>
+                  </div>
 
-                  <label className="text-sm text-slate-700">
-                    Proyecto activo
-                    <select
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-client-has-active-project">Proyecto activo</Label>
+                    <Select
                       value={draft.hasActiveProject ? "si" : "no"}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, hasActiveProject: event.target.value === "si" }))}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      onValueChange={(value) => setDraft((prev) => ({ ...prev, hasActiveProject: value === "si" }))}
                     >
-                      <option value="si">Si</option>
-                      <option value="no">No</option>
-                    </select>
-                  </label>
+                      <SelectTrigger id="edit-client-has-active-project" className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="si">Si</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                  <label className="text-sm text-slate-700">
-                    Fecha de primer trabajo
-                    <input
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-client-first-work-date">Fecha de primer trabajo</Label>
+                    <Input
+                      id="edit-client-first-work-date"
                       type="date"
                       value={draft.firstWorkDate}
                       onChange={(event) => setDraft((prev) => ({ ...prev, firstWorkDate: event.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     />
-                  </label>
+                  </div>
 
                   {manualClient ? (
                     <>
-                      <label className="text-sm text-slate-700">
-                        Nombre del proyecto
-                        <input
+                      <div className="space-y-1">
+                        <Label htmlFor="edit-client-project-name">Nombre del proyecto</Label>
+                        <Input
+                          id="edit-client-project-name"
                           value={draft.projectName}
                           onChange={(event) => setDraft((prev) => ({ ...prev, projectName: event.target.value }))}
-                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                         />
-                      </label>
+                      </div>
 
-                      <label className="text-sm text-slate-700">
-                        Tipo de proyecto
-                        <select
-                          value={draft.projectType}
-                          onChange={(event) => setDraft((prev) => ({ ...prev, projectType: event.target.value }))}
-                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        >
-                          {projectTypeOptions.map((option) => (
-                            <option key={`ficha-${option}`} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <div className="space-y-1">
+                        <Label htmlFor="edit-client-project-type">Tipo de proyecto</Label>
+                        <Select value={draft.projectType} onValueChange={(value) => setDraft((prev) => ({ ...prev, projectType: value as string }))}>
+                          <SelectTrigger id="edit-client-project-type" className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {projectTypeOptions.map((option) => (
+                              <SelectItem key={`ficha-${option}`} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                      <label className="text-sm text-slate-700 sm:col-span-2">
-                        Numero de proyectos con nosotros
-                        <input
+                      <div className="space-y-1 sm:col-span-2">
+                        <Label htmlFor="edit-client-total-projects">Numero de proyectos con nosotros</Label>
+                        <Input
+                          id="edit-client-total-projects"
                           type="number"
                           min={1}
                           value={draft.totalProjectsWorked}
                           onChange={(event) => setDraft((prev) => ({ ...prev, totalProjectsWorked: Number(event.target.value) || 1 }))}
-                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                         />
-                      </label>
+                      </div>
                     </>
                   ) : null}
                 </div>
@@ -948,60 +940,57 @@ export default function ClienteFichaPage() {
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-slate-900">Otros contactos</p>
-                    <button
-                      type="button"
-                      onClick={addDraftContact}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                    >
+                    <Button variant="outline" size="sm" className="h-auto px-3 py-1.5 text-xs" onClick={addDraftContact}>
                       Agregar contacto
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="mt-2 space-y-3">
                     {draft.contacts.map((contact, index) => (
                       <div key={`draft-contact-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                          <label className="text-xs text-slate-600">
-                            Nombre
-                            <input
+                          <div className="space-y-1">
+                            <Label htmlFor={`draft-contact-${index}-name`} className="text-xs text-slate-600">Nombre</Label>
+                            <Input
+                              id={`draft-contact-${index}-name`}
                               value={contact.name}
                               onChange={(event) => updateDraftContact(index, { name: event.target.value })}
-                              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
                             />
-                          </label>
-                          <label className="text-xs text-slate-600">
-                            Rol
-                            <input
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`draft-contact-${index}-role`} className="text-xs text-slate-600">Rol</Label>
+                            <Input
+                              id={`draft-contact-${index}-role`}
                               value={contact.role}
                               onChange={(event) => updateDraftContact(index, { role: event.target.value })}
-                              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
                             />
-                          </label>
-                          <label className="text-xs text-slate-600">
-                            Contacto
-                            <input
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`draft-contact-${index}-phone`} className="text-xs text-slate-600">Contacto</Label>
+                            <Input
+                              id={`draft-contact-${index}-phone`}
                               value={contact.phone}
                               onChange={(event) => updateDraftContact(index, { phone: event.target.value })}
-                              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
                             />
-                          </label>
-                          <label className="text-xs text-slate-600">
-                            Correo electronico
-                            <input
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`draft-contact-${index}-email`} className="text-xs text-slate-600">Correo electronico</Label>
+                            <Input
+                              id={`draft-contact-${index}-email`}
                               value={contact.email}
                               onChange={(event) => updateDraftContact(index, { email: event.target.value })}
-                              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
                             />
-                          </label>
+                          </div>
                         </div>
                         <div className="mt-2 flex justify-end">
-                          <button
-                            type="button"
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-auto px-2 py-1 text-xs"
                             onClick={() => removeDraftContact(index)}
-                            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
                           >
                             Quitar
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ))}
@@ -1013,27 +1002,18 @@ export default function ClienteFichaPage() {
                     {editorError}
                   </div>
                 ) : null}
-
-                <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
-                  <button
-                    type="button"
-                    onClick={closeEditor}
-                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveClient}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                  >
-                    Guardar cambios
-                  </button>
-                </div>
-              </div>
             </div>
-          </div>
-        ) : null}
+
+            <SheetFooter>
+              <Button variant="outline" onClick={closeEditor}>
+                Cancelar
+              </Button>
+              <Button onClick={saveClient}>
+                Guardar cambios
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
       </section>
     </main>
   );
