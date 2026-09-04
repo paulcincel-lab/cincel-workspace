@@ -133,23 +133,23 @@ const AddColaboradorModal = ({ onClose, onAdd, roleOptions, statusOptions }: {
         <DialogTitle>Agregar Colaborador</DialogTitle>
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1">
-            <Label>Nombre *</Label>
-            <Input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nombre" />
+            <Label htmlFor="add-colaborador-name">Nombre *</Label>
+            <Input id="add-colaborador-name" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nombre" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label>Rol</Label>
+              <Label htmlFor="add-colaborador-role">Rol</Label>
               <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as ColaboradorRole })}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="add-colaborador-role" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {roleOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>Estado</Label>
+              <Label htmlFor="add-colaborador-status">Estado</Label>
               <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as ColaboradorStatus })}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="add-colaborador-status" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {statusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
@@ -157,16 +157,16 @@ const AddColaboradorModal = ({ onClose, onAdd, roleOptions, statusOptions }: {
             </div>
           </div>
           <div className="space-y-1">
-            <Label>Departamento</Label>
-            <Input type="text" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="Departamento" />
+            <Label htmlFor="add-colaborador-department">Departamento</Label>
+            <Input id="add-colaborador-department" type="text" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="Departamento" />
           </div>
           <div className="space-y-1">
-            <Label>Contacto</Label>
-            <Input type="text" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} placeholder="Teléfono" />
+            <Label htmlFor="add-colaborador-contact">Contacto</Label>
+            <Input id="add-colaborador-contact" type="text" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} placeholder="Teléfono" />
           </div>
           <div className="space-y-1">
-            <Label>Email</Label>
-            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email" />
+            <Label htmlFor="add-colaborador-email">Email</Label>
+            <Input id="add-colaborador-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email" />
           </div>
           <div className="space-y-1">
             <Label>Calificación</Label>

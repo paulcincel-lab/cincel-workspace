@@ -274,8 +274,9 @@ const AddContractorModal = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
-            <Label>Nombre del proveedor *</Label>
+            <Label htmlFor="add-contractor-provider">Nombre del proveedor *</Label>
             <Input
+              id="add-contractor-provider"
               autoFocus
               type="text"
               required
@@ -287,18 +288,18 @@ const AddContractorModal = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label>Estado</Label>
+              <Label htmlFor="add-contractor-status">Estado</Label>
               <Select value={form.status as string} onValueChange={(v) => set("status", v)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="add-contractor-status" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {DEFAULT_STATUS_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>Seniority</Label>
+              <Label htmlFor="add-contractor-seniority">Seniority</Label>
               <Select value={form.seniority as string} onValueChange={(v) => set("seniority", v)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="add-contractor-seniority" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {DEFAULT_SENIORITY_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                 </SelectContent>
@@ -308,9 +309,9 @@ const AddContractorModal = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label>Ramo Principal</Label>
+              <Label htmlFor="add-contractor-main-specialty">Ramo Principal</Label>
               <Select value={form.mainSpecialty || NO_SPECIALTY_VALUE} onValueChange={(v) => set("mainSpecialty", v === NO_SPECIALTY_VALUE ? "" : v)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="add-contractor-main-specialty" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_SPECIALTY_VALUE}>— Seleccionar —</SelectItem>
                   {DEFAULT_CATEGORY_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
@@ -318,9 +319,9 @@ const AddContractorModal = ({
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>Precios/Nivel</Label>
+              <Label htmlFor="add-contractor-price-level">Precios/Nivel</Label>
               <Select value={form.priceLevel as string} onValueChange={(v) => set("priceLevel", v)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="add-contractor-price-level" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {DEFAULT_PRICE_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                 </SelectContent>
@@ -345,12 +346,12 @@ const AddContractorModal = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label>Contacto / Teléfono</Label>
-              <Input type="text" value={form.contact} onChange={(e) => set("contact", e.target.value)} placeholder="+52 55 1234-5678" />
+              <Label htmlFor="add-contractor-contact">Contacto / Teléfono</Label>
+              <Input id="add-contractor-contact" type="text" value={form.contact} onChange={(e) => set("contact", e.target.value)} placeholder="+52 55 1234-5678" />
             </div>
             <div className="space-y-1">
-              <Label>Fecha de inicio</Label>
-              <Input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
+              <Label htmlFor="add-contractor-start-date">Fecha de inicio</Label>
+              <Input id="add-contractor-start-date" type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
             </div>
           </div>
 
@@ -360,13 +361,13 @@ const AddContractorModal = ({
           </div>
 
           <div className="space-y-1">
-            <Label>Página Web</Label>
-            <Input type="text" value={form.webPage} onChange={(e) => set("webPage", e.target.value)} placeholder="https://..." />
+            <Label htmlFor="add-contractor-webpage">Página Web</Label>
+            <Input id="add-contractor-webpage" type="text" value={form.webPage} onChange={(e) => set("webPage", e.target.value)} placeholder="https://..." />
           </div>
 
           <div className="space-y-1">
-            <Label>Comentarios</Label>
-            <Textarea value={form.comments} onChange={(e) => set("comments", e.target.value)} rows={2} placeholder="Notas internas…" />
+            <Label htmlFor="add-contractor-comments">Comentarios</Label>
+            <Textarea id="add-contractor-comments" value={form.comments} onChange={(e) => set("comments", e.target.value)} rows={2} placeholder="Notas internas…" />
           </div>
 
           <div className="flex justify-end gap-3 pt-1">
