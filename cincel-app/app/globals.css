@@ -95,15 +95,16 @@
 }
 
 /*
- * Dark tokens. Duplicated between an explicit .dark class (currently never
- * applied — no theme toggle wires it up yet) and OS-level prefers-color-scheme
- * (what actually runs today), so both give the exact same result once a
- * toggle exists. Previously only --background/--foreground were duplicated
+ * Dark tokens. Duplicated between .dark / [data-theme="dark"] (set by
+ * components/layout/ThemeToggle.tsx) and OS-level prefers-color-scheme (the
+ * default when no explicit choice has been made), so both give the exact
+ * same result. Previously only --background/--foreground were duplicated
  * into the media query, so every shadcn Card/secondary/muted/border surface
  * silently stayed at LIGHT values on a dark OS — keep any future edit to one
  * block mirrored in the other.
  */
-.dark {
+.dark,
+:root[data-theme="dark"] {
   --background: #0a0a0a;
   --foreground: #f2f2f2;
   --card: #161616;

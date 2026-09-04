@@ -3,9 +3,25 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/shadcn/button";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import {
+  Sidebar as SidebarPrimitive,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/shadcn/sidebar";
 
 type IconProps = {
   className?: string;
@@ -279,105 +295,115 @@ export default function Sidebar() {
   const systemNameSecondary = systemNameRest.join(" ");
 
   return (
-    <aside className="w-64 h-screen bg-[#ECEFF6] border-r border-[#D9DEEA] text-slate-700 flex flex-col">
-      <div className="px-5 pt-5 pb-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{companyName}</p>
-        <h1 className="text-[34px] leading-[0.95] font-extrabold tracking-tight text-black">{systemNamePrimary || "Cincel"}</h1>
-        {systemNameSecondary ? (
-          <p className="text-[20px] leading-tight font-semibold text-black">{systemNameSecondary}</p>
-        ) : null}
-
-        <div className="mt-6 flex items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#2F63E7] text-[22px] font-bold text-white shadow-sm">
-            {currentProfileInitial || "D"}
+    <SidebarProvider className="contents">
+      <SidebarPrimitive collapsible="icon">
+        <SidebarHeader className="gap-3 px-3 py-3">
+          <div className="flex items-center justify-between">
+            <div className="px-1 group-data-[collapsible=icon]:hidden">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/60">
+                {companyName}
+              </p>
+              <h1 className="text-2xl leading-none font-extrabold tracking-tight text-sidebar-foreground">
+                {systemNamePrimary || "Cincel"}
+              </h1>
+              {systemNameSecondary ? (
+                <p className="text-sm font-semibold text-sidebar-foreground">{systemNameSecondary}</p>
+              ) : null}
+            </div>
+            <SidebarTrigger />
           </div>
-          <div>
-            <p className="text-[15px] font-semibold text-slate-800 leading-tight">{currentProfileRole}</p>
-            <p className="text-[10px] uppercase tracking-[0.1em] font-semibold text-slate-500">{currentProfileLabel}</p>
+
+          <div className="flex items-center gap-3 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-base font-bold text-sidebar-primary-foreground">
+              {currentProfileInitial || "D"}
+            </div>
+            <div className="group-data-[collapsible=icon]:hidden">
+              <p className="text-sm leading-tight font-semibold text-sidebar-foreground">{currentProfileRole}</p>
+              <p className="text-[10px] font-semibold tracking-[0.1em] text-sidebar-foreground/60 uppercase">
+                {currentProfileLabel}
+              </p>
+            </div>
           </div>
-        </div>
-      </div>
+        </SidebarHeader>
 
-      <div className="px-5 pb-4 border-b border-[#D9DEEA]">
-        <div className="h-px w-full bg-transparent" />
-      </div>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {menu.map((item) => {
+                  if (isGroup(item)) {
+                    const isExpanded = expandedMenu === item.label;
+                    const hasActive = item.submenu.some((sub) => isActivePath(sub.href, sub.exact));
 
-      <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
-        {menu.map((item) => {
-          if (isGroup(item)) {
-            const isExpanded = expandedMenu === item.label;
-            const hasActive = item.submenu.some((sub) => isActivePath(sub.href, sub.exact));
-
-            return (
-              <div key={item.label}>
-                <Button
-                  variant="ghost"
-                  className={`h-auto w-full justify-between rounded-xl px-3 py-2.5 ${
-                    hasActive || isExpanded
-                      ? "bg-[#2F63E7] text-white shadow-sm hover:bg-[#2F63E7] hover:text-white"
-                      : "text-slate-600 hover:bg-white/80"
-                  }`}
-                  onClick={() => setExpandedMenu(isExpanded ? null : item.label)}
-                >
-                  <span className="flex items-center gap-2.5">
-                    <item.icon className="h-[18px] w-[18px]" />
-                    <span className="text-[13px] leading-none font-semibold">{item.label}</span>
-                  </span>
-                  <ChevronIcon className={`h-[14px] w-[14px] transition ${isExpanded ? "rotate-180" : ""}`} />
-                </Button>
-
-                {isExpanded && (
-                  <div className="ml-7 mt-1.5 pl-3 border-l border-[#BBC6DE] space-y-1">
-                    {item.submenu.map((subitem) => {
-                      const subActive = isActivePath(subitem.href, subitem.exact);
-                      return (
-                        <Link
-                          key={subitem.label}
-                          href={subitem.href}
-                          className={`block rounded-lg px-2.5 py-1.5 transition text-[11px] ${
-                            subActive
-                              ? "bg-white text-[#2F63E7] font-semibold"
-                              : "text-slate-600 hover:bg-white/80"
-                          }`}
+                    return (
+                      <SidebarMenuItem key={item.label}>
+                        <SidebarMenuButton
+                          isActive={hasActive}
+                          tooltip={item.label}
+                          onClick={() => setExpandedMenu(isExpanded ? null : item.label)}
                         >
-                          {subitem.label}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
+                          <item.icon />
+                          <span>{item.label}</span>
+                          <ChevronIcon
+                            className={`ml-auto size-3.5 shrink-0 transition-transform group-data-[collapsible=icon]:hidden ${
+                              isExpanded ? "rotate-180" : ""
+                            }`}
+                          />
+                        </SidebarMenuButton>
 
-          const active = isActivePath(item.href);
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={`w-full rounded-xl px-3 py-2.5 transition flex items-center gap-2.5 ${
-                active
-                  ? "bg-[#2F63E7] text-white shadow-sm"
-                  : "hover:bg-white/80 text-slate-600"
-              }`}
-            >
-              <item.icon className="h-[18px] w-[18px]" />
-              <span className="text-[13px] leading-none font-semibold">{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+                        {isExpanded ? (
+                          <SidebarMenuSub>
+                            {item.submenu.map((subitem) => (
+                              <SidebarMenuSubItem key={subitem.label}>
+                                <SidebarMenuSubButton
+                                  render={<Link href={subitem.href} />}
+                                  isActive={isActivePath(subitem.href, subitem.exact)}
+                                >
+                                  {subitem.label}
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        ) : null}
+                      </SidebarMenuItem>
+                    );
+                  }
 
-      <div className="border-t border-[#D9DEEA] px-5 py-4 text-center">
-        <p className="text-[11px] font-medium leading-5 text-slate-600">
-          Software desarrollado por: Cincel despacho de Arquitectura
-        </p>
-        {versionLabel ? (
-          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-            {versionLabel}
-          </p>
-        ) : null}
-      </div>
-    </aside>
+                  const active = isActivePath(item.href);
+                  return (
+                    <SidebarMenuItem key={item.label}>
+                      <SidebarMenuButton
+                        isActive={active}
+                        tooltip={item.label}
+                        render={<Link href={item.href} />}
+                      >
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+
+        <SidebarFooter className="gap-3 border-t border-sidebar-border px-3 py-3">
+          <div className="flex items-center justify-center group-data-[collapsible=icon]:justify-center">
+            <ThemeToggle />
+          </div>
+          <div className="text-center group-data-[collapsible=icon]:hidden">
+            <p className="text-[11px] leading-5 font-medium text-sidebar-foreground/70">
+              Software desarrollado por: Cincel despacho de Arquitectura
+            </p>
+            {versionLabel ? (
+              <p className="mt-1 text-[10px] font-semibold tracking-[0.16em] text-sidebar-foreground/50 uppercase">
+                {versionLabel}
+              </p>
+            ) : null}
+          </div>
+        </SidebarFooter>
+      </SidebarPrimitive>
+    </SidebarProvider>
   );
 }
