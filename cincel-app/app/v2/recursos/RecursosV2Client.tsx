@@ -10,6 +10,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
 import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
+import { Button } from "@/components/ui/shadcn/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
+import { getDrivePreviewUrl } from "@/lib/google/drive-url";
 import type { ResourceLink, ResourceSection } from "@/lib/types/resource";
 
 interface RecursosV2ClientProps {
@@ -43,6 +46,8 @@ const SECTIONS = Object.keys(SECTION_LABEL) as ResourceSection[];
 export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
   const [section, setSection] = useState<"Todo" | ResourceSection>("Todo");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
+  const [previewLink, setPreviewLink] = useState<ResourceLink | null>(null);
+  const previewUrl = previewLink ? getDrivePreviewUrl(previewLink.url, previewLink.linkType) : null;
 
   const visible = useMemo(
     () => (section === "Todo" ? initialLinks : initialLinks.filter((l) => l.section === section)),
@@ -110,7 +115,8 @@ export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
         ),
       },
       createRowActionsColumn<ResourceLink>(() => [
-        { label: "Abrir", onSelect: (l) => window.open(l.url, "_blank", "noopener") },
+        { label: "Vista previa", onSelect: setPreviewLink },
+        { label: "Abrir en Drive", onSelect: (l) => window.open(l.url, "_blank", "noopener") },
       ]),
     ],
     [selected]
@@ -150,10 +156,35 @@ export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
         columns={columns}
         data={visible}
         getRowId={(row) => row.id}
+        onRowClick={setPreviewLink}
         searchPlaceholder="Buscar carpeta o recurso…"
         wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage="No hay recursos en esta vista."
       />
+
+      <Sheet open={previewLink !== null} onOpenChange={(next) => { if (!next) setPreviewLink(null); }}>
+        <SheetContent className="w-[90vw] max-w-5xl p-0" side="right">
+          <SheetHeader className="flex-row items-center justify-between gap-3 border-b border-border p-4">
+            <SheetTitle className="truncate">{previewLink?.title}</SheetTitle>
+            {previewLink ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(previewLink.url, "_blank", "noopener")}
+              >
+                Abrir en Drive
+              </Button>
+            ) : null}
+          </SheetHeader>
+          {previewUrl ? (
+            <iframe title={previewLink?.title} src={previewUrl} className="h-full w-full" />
+          ) : (
+            <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
+              No hay vista previa disponible para este recurso — usa &ldquo;Abrir en Drive&rdquo;.
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

@@ -30,22 +30,25 @@ export function createSelectionColumn<T>({
       const ids = table.getRowModel().rows.map((r) => getId(r.original));
       const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id));
       return (
-        <Checkbox
-          checked={allSelected}
-          onCheckedChange={() => onToggleAll(ids)}
-          aria-label="Seleccionar todo"
-        />
+        <div onClick={(e: MouseEvent) => e.stopPropagation()} className="flex">
+          <Checkbox
+            checked={allSelected}
+            onCheckedChange={() => onToggleAll(ids)}
+            aria-label="Seleccionar todo"
+          />
+        </div>
       );
     },
     cell: ({ row }) => {
       const id = getId(row.original);
       return (
-        <Checkbox
-          checked={selectedIds.has(id)}
-          onCheckedChange={() => onToggle(id)}
-          onClick={(e: MouseEvent) => e.stopPropagation()}
-          aria-label="Seleccionar fila"
-        />
+        <div onClick={(e: MouseEvent) => e.stopPropagation()} className="flex">
+          <Checkbox
+            checked={selectedIds.has(id)}
+            onCheckedChange={() => onToggle(id)}
+            aria-label="Seleccionar fila"
+          />
+        </div>
       );
     },
   };
