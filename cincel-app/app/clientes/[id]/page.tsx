@@ -805,24 +805,27 @@ export default function ClienteFichaPage() {
             <div className="space-y-4 px-6 py-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label>Nombre del cliente</Label>
+                    <Label htmlFor="edit-client-name">Nombre del cliente</Label>
                     <Input
+                      id="edit-client-name"
                       value={draft.name}
                       onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <Label>Numero de contacto principal</Label>
+                    <Label htmlFor="edit-client-phone">Numero de contacto principal</Label>
                     <Input
+                      id="edit-client-phone"
                       value={draft.phone}
                       onChange={(event) => setDraft((prev) => ({ ...prev, phone: event.target.value }))}
                     />
                   </div>
 
                   <div className="space-y-1 sm:col-span-2">
-                    <Label>Email(s)</Label>
+                    <Label htmlFor="edit-client-emails">Email(s)</Label>
                     <Input
+                      id="edit-client-emails"
                       value={draft.emailsText}
                       onChange={(event) => setDraft((prev) => ({ ...prev, emailsText: event.target.value }))}
                       placeholder="correo1@dominio.com, correo2@dominio.com"
@@ -830,9 +833,9 @@ export default function ClienteFichaPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label>Empresa o Particular</Label>
+                    <Label htmlFor="edit-client-kind">Empresa o Particular</Label>
                     <Select value={draft.kind} onValueChange={(value) => setDraft((prev) => ({ ...prev, kind: value as ClientKind }))}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="edit-client-kind" className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Empresa">Empresa</SelectItem>
                         <SelectItem value="Particular">Particular</SelectItem>
@@ -841,8 +844,9 @@ export default function ClienteFichaPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label>Como llegaron a nosotros</Label>
+                    <Label htmlFor="edit-client-acquisition-channel">Como llegaron a nosotros</Label>
                     <Input
+                      id="edit-client-acquisition-channel"
                       value={draft.acquisitionChannel}
                       onChange={(event) => setDraft((prev) => ({ ...prev, acquisitionChannel: event.target.value }))}
                       placeholder="Recomendacion, pagina web, redes sociales..."
@@ -850,8 +854,9 @@ export default function ClienteFichaPage() {
                   </div>
 
                   <div className="space-y-1 sm:col-span-2">
-                    <Label>Montos gastados (MXN)</Label>
+                    <Label htmlFor="edit-client-total-spent">Montos gastados (MXN)</Label>
                     <Input
+                      id="edit-client-total-spent"
                       type="number"
                       min={0}
                       value={draft.totalSpent}
@@ -860,8 +865,9 @@ export default function ClienteFichaPage() {
                   </div>
 
                   <div className="space-y-1 sm:col-span-2">
-                    <Label>Proyectos realizados con nosotros</Label>
+                    <Label htmlFor="edit-client-completed-projects">Proyectos realizados con nosotros</Label>
                     <Input
+                      id="edit-client-completed-projects"
                       value={draft.completedProjectsText}
                       onChange={(event) => setDraft((prev) => ({ ...prev, completedProjectsText: event.target.value }))}
                       placeholder="Proyecto 1, Proyecto 2, Proyecto 3"
@@ -869,12 +875,12 @@ export default function ClienteFichaPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label>Proyecto activo</Label>
+                    <Label htmlFor="edit-client-has-active-project">Proyecto activo</Label>
                     <Select
                       value={draft.hasActiveProject ? "si" : "no"}
                       onValueChange={(value) => setDraft((prev) => ({ ...prev, hasActiveProject: value === "si" }))}
                     >
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="edit-client-has-active-project" className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="si">Si</SelectItem>
                         <SelectItem value="no">No</SelectItem>
@@ -883,8 +889,9 @@ export default function ClienteFichaPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label>Fecha de primer trabajo</Label>
+                    <Label htmlFor="edit-client-first-work-date">Fecha de primer trabajo</Label>
                     <Input
+                      id="edit-client-first-work-date"
                       type="date"
                       value={draft.firstWorkDate}
                       onChange={(event) => setDraft((prev) => ({ ...prev, firstWorkDate: event.target.value }))}
@@ -894,17 +901,18 @@ export default function ClienteFichaPage() {
                   {manualClient ? (
                     <>
                       <div className="space-y-1">
-                        <Label>Nombre del proyecto</Label>
+                        <Label htmlFor="edit-client-project-name">Nombre del proyecto</Label>
                         <Input
+                          id="edit-client-project-name"
                           value={draft.projectName}
                           onChange={(event) => setDraft((prev) => ({ ...prev, projectName: event.target.value }))}
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <Label>Tipo de proyecto</Label>
+                        <Label htmlFor="edit-client-project-type">Tipo de proyecto</Label>
                         <Select value={draft.projectType} onValueChange={(value) => setDraft((prev) => ({ ...prev, projectType: value as string }))}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectTrigger id="edit-client-project-type" className="w-full"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {projectTypeOptions.map((option) => (
                               <SelectItem key={`ficha-${option}`} value={option}>
@@ -916,8 +924,9 @@ export default function ClienteFichaPage() {
                       </div>
 
                       <div className="space-y-1 sm:col-span-2">
-                        <Label>Numero de proyectos con nosotros</Label>
+                        <Label htmlFor="edit-client-total-projects">Numero de proyectos con nosotros</Label>
                         <Input
+                          id="edit-client-total-projects"
                           type="number"
                           min={1}
                           value={draft.totalProjectsWorked}
@@ -941,29 +950,33 @@ export default function ClienteFichaPage() {
                       <div key={`draft-contact-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                           <div className="space-y-1">
-                            <Label className="text-xs text-slate-600">Nombre</Label>
+                            <Label htmlFor={`draft-contact-${index}-name`} className="text-xs text-slate-600">Nombre</Label>
                             <Input
+                              id={`draft-contact-${index}-name`}
                               value={contact.name}
                               onChange={(event) => updateDraftContact(index, { name: event.target.value })}
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs text-slate-600">Rol</Label>
+                            <Label htmlFor={`draft-contact-${index}-role`} className="text-xs text-slate-600">Rol</Label>
                             <Input
+                              id={`draft-contact-${index}-role`}
                               value={contact.role}
                               onChange={(event) => updateDraftContact(index, { role: event.target.value })}
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs text-slate-600">Contacto</Label>
+                            <Label htmlFor={`draft-contact-${index}-phone`} className="text-xs text-slate-600">Contacto</Label>
                             <Input
+                              id={`draft-contact-${index}-phone`}
                               value={contact.phone}
                               onChange={(event) => updateDraftContact(index, { phone: event.target.value })}
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs text-slate-600">Correo electronico</Label>
+                            <Label htmlFor={`draft-contact-${index}-email`} className="text-xs text-slate-600">Correo electronico</Label>
                             <Input
+                              id={`draft-contact-${index}-email`}
                               value={contact.email}
                               onChange={(event) => updateDraftContact(index, { email: event.target.value })}
                             />

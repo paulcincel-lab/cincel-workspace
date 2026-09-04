@@ -12,13 +12,19 @@
  * staging) — this test writes synthetic PII-shaped data and deletes it on
  * teardown, but it must not pollute a shared project.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
 const TEST_CLIENT_NAME = `Cliente E2E ${RUN_ID}`;
 const EDITED_CLIENT_NAME = `${TEST_CLIENT_NAME} Editado`;
+
+/** shadcn Select is a custom combobox, not a native <select> — open it and click the option by its visible text. */
+async function selectShadcnOption(trigger: Locator, optionText: string) {
+  await trigger.click();
+  await trigger.page().getByRole("option", { name: optionText, exact: true }).click();
+}
 
 test.describe("Clientes — CRUD", () => {
   test.beforeEach(async ({ page }) => {
@@ -60,8 +66,8 @@ test.describe("Clientes — CRUD", () => {
     await createPanel
       .getByLabel("Email(s)")
       .fill(`e2e.${RUN_ID}@cincel.test`);
-    await createPanel.getByLabel("Empresa o Particular").selectOption("Empresa");
-    await createPanel.getByLabel("Proyecto activo").selectOption("no");
+    await selectShadcnOption(createPanel.getByLabel("Empresa o Particular"), "Empresa");
+    await selectShadcnOption(createPanel.getByLabel("Proyecto activo"), "Ya termino");
     await createPanel
       .getByLabel("Nombre del proyecto")
       .fill(`Proyecto E2E ${RUN_ID}`);

@@ -962,24 +962,27 @@ export default function ClientesPageClient({
 
             <div className="grid gap-4 px-6 py-4 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label>Nombre del cliente</Label>
+                <Label htmlFor="new-client-name">Nombre del cliente</Label>
                 <Input
+                  id="new-client-name"
                   value={newClientDraft.name}
                   onChange={(event) => setNewClientDraft((prev) => ({ ...prev, name: event.target.value }))}
                 />
               </div>
 
               <div className="space-y-1">
-                <Label>Numero de contacto</Label>
+                <Label htmlFor="new-client-phone">Numero de contacto</Label>
                 <Input
+                  id="new-client-phone"
                   value={newClientDraft.phone}
                   onChange={(event) => setNewClientDraft((prev) => ({ ...prev, phone: event.target.value }))}
                 />
               </div>
 
               <div className="space-y-1 sm:col-span-2">
-                <Label>Email(s)</Label>
+                <Label htmlFor="new-client-emails">Email(s)</Label>
                 <Input
+                  id="new-client-emails"
                   value={newClientDraft.emailsText}
                   onChange={(event) => setNewClientDraft((prev) => ({ ...prev, emailsText: event.target.value }))}
                   placeholder="correo1@dominio.com, correo2@dominio.com"
@@ -987,9 +990,9 @@ export default function ClientesPageClient({
               </div>
 
               <div className="space-y-1">
-                <Label>Empresa o Particular</Label>
+                <Label htmlFor="new-client-kind">Empresa o Particular</Label>
                 <Select value={newClientDraft.kind} onValueChange={(value) => setNewClientDraft((prev) => ({ ...prev, kind: value as ClientKind }))}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="new-client-kind" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Empresa">Empresa</SelectItem>
                     <SelectItem value="Particular">Particular</SelectItem>
@@ -998,12 +1001,12 @@ export default function ClientesPageClient({
               </div>
 
               <div className="space-y-1">
-                <Label>Proyecto activo</Label>
+                <Label htmlFor="new-client-has-active-project">Proyecto activo</Label>
                 <Select
                   value={newClientDraft.hasActiveProject ? "si" : "no"}
                   onValueChange={(value) => setNewClientDraft((prev) => ({ ...prev, hasActiveProject: value === "si" }))}
                 >
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="new-client-has-active-project" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="si">Si</SelectItem>
                     <SelectItem value="no">Ya termino</SelectItem>
@@ -1012,17 +1015,18 @@ export default function ClientesPageClient({
               </div>
 
               <div className="space-y-1">
-                <Label>Nombre del proyecto</Label>
+                <Label htmlFor="new-client-project-name">Nombre del proyecto</Label>
                 <Input
+                  id="new-client-project-name"
                   value={newClientDraft.projectName}
                   onChange={(event) => setNewClientDraft((prev) => ({ ...prev, projectName: event.target.value }))}
                 />
               </div>
 
               <div className="space-y-1">
-                <Label>Tipo de proyecto</Label>
+                <Label htmlFor="new-client-project-type">Tipo de proyecto</Label>
                 <Select value={newClientDraft.projectType} onValueChange={(value) => setNewClientDraft((prev) => ({ ...prev, projectType: value as string }))}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="new-client-project-type" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {projectTypeOptions.map((option) => (
                       <SelectItem key={`new-client-${option}`} value={option}>
@@ -1034,8 +1038,9 @@ export default function ClientesPageClient({
               </div>
 
               <div className="space-y-1">
-                <Label>Numero de proyectos con nosotros</Label>
+                <Label htmlFor="new-client-total-projects">Numero de proyectos con nosotros</Label>
                 <Input
+                  id="new-client-total-projects"
                   type="number"
                   min={1}
                   value={newClientDraft.totalProjectsWorked}
@@ -1044,8 +1049,9 @@ export default function ClientesPageClient({
               </div>
 
               <div className="space-y-1">
-                <Label>Fecha de primer trabajo</Label>
+                <Label htmlFor="new-client-first-work-date">Fecha de primer trabajo</Label>
                 <Input
+                  id="new-client-first-work-date"
                   type="date"
                   value={newClientDraft.firstWorkDate}
                   onChange={(event) => setNewClientDraft((prev) => ({ ...prev, firstWorkDate: event.target.value }))}
