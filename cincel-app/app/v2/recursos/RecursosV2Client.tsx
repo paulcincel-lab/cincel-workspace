@@ -11,8 +11,12 @@ import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
 import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Button } from "@/components/ui/shadcn/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
-import { getDrivePreviewUrl } from "@/lib/google/drive-url";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
+import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { getDrivePreviewUrl, inferLinkTypeFromUrl } from "@/lib/google/drive-url";
+import { saveResourceLinks } from "@/lib/repositories/resources-repository";
 import type { ResourceLink, ResourceSection } from "@/lib/types/resource";
 
 interface RecursosV2ClientProps {
@@ -44,15 +48,49 @@ const SECTIONS = Object.keys(SECTION_LABEL) as ResourceSection[];
  * of six navigations.
  */
 export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
+  const [links, setLinks] = useState<ResourceLink[]>(initialLinks);
   const [section, setSection] = useState<"Todo" | ResourceSection>("Todo");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [previewLink, setPreviewLink] = useState<ResourceLink | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftUrl, setDraftUrl] = useState("");
+  const [draftSection, setDraftSection] = useState<ResourceSection>("mis-documentos");
   const previewUrl = previewLink ? getDrivePreviewUrl(previewLink.url, previewLink.linkType) : null;
 
   const visible = useMemo(
-    () => (section === "Todo" ? initialLinks : initialLinks.filter((l) => l.section === section)),
-    [initialLinks, section]
+    () => (section === "Todo" ? links : links.filter((l) => l.section === section)),
+    [links, section]
   );
+
+  async function createResource() {
+    const title = draftTitle.trim();
+    const url = draftUrl.trim();
+    if (!title || !url) return;
+    const now = new Date().toISOString();
+    const newLink: ResourceLink = {
+      id: crypto.randomUUID(),
+      templateKey: "custom",
+      title,
+      section: draftSection,
+      subsection: null,
+      linkType: inferLinkTypeFromUrl(url, "web"),
+      appliesTo: "general",
+      url,
+      status: "vigente",
+      ownerTeamMemberId: null,
+      personalForTeamMemberId: null,
+      updatedAt: now,
+      history: [{ id: crypto.randomUUID(), at: now, action: "created", note: "Recurso creado" }],
+      drive: null,
+    };
+    const next = [...links, newLink];
+    setLinks(next);
+    setCreateOpen(false);
+    setDraftTitle("");
+    setDraftUrl("");
+    await saveResourceLinks(next);
+  }
 
   function toggle(id: string | number) {
     setSelected((cur) => {
@@ -71,7 +109,7 @@ export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
   }
 
   function bulkCopyLinks() {
-    const text = initialLinks
+    const text = links
       .filter((l) => selected.has(l.id))
       .map((l) => l.url)
       .join("\n");
@@ -128,22 +166,25 @@ export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
         title="Recursos"
         description="Acceso rápido a las áreas de recursos del despacho."
         actions={
-          <Tabs
-            value={section}
-            onValueChange={(v) => {
-              setSection(v as typeof section);
-              setSelected(new Set());
-            }}
-          >
-            <TabsList>
-              <TabsTrigger value="Todo">Todo</TabsTrigger>
-              {SECTIONS.map((s) => (
-                <TabsTrigger key={s} value={s}>
-                  {SECTION_LABEL[s]}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          <>
+            <Tabs
+              value={section}
+              onValueChange={(v) => {
+                setSection(v as typeof section);
+                setSelected(new Set());
+              }}
+            >
+              <TabsList>
+                <TabsTrigger value="Todo">Todo</TabsTrigger>
+                {SECTIONS.map((s) => (
+                  <TabsTrigger key={s} value={s}>
+                    {SECTION_LABEL[s]}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+            <Button onClick={() => setCreateOpen(true)}>+ Agregar recurso</Button>
+          </>
         }
       />
 
@@ -183,6 +224,47 @@ export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
               No hay vista previa disponible para este recurso — usa &ldquo;Abrir en Drive&rdquo;.
             </div>
           )}
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Agregar recurso</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 p-4">
+            <div>
+              <Label className="mb-2 block">Nombre</Label>
+              <Input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="Bitácora de obra" />
+            </div>
+            <div>
+              <Label className="mb-2 block">Enlace (Drive, Docs, o web)</Label>
+              <Input value={draftUrl} onChange={(e) => setDraftUrl(e.target.value)} placeholder="https://drive.google.com/…" />
+            </div>
+            <div>
+              <Label className="mb-2 block">Sección</Label>
+              <Select value={draftSection} onValueChange={(v) => setDraftSection(v as ResourceSection)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SECTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {SECTION_LABEL[s]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={createResource} disabled={!draftTitle.trim() || !draftUrl.trim()}>
+              Guardar
+            </Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
     </div>
