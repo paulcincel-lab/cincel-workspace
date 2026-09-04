@@ -10,6 +10,8 @@ import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
 import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
+import { createSelectionColumn } from "@/components/v2/table/bulk-select";
+import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Button } from "@/components/ui/shadcn/button";
 import {
   Tabs,
@@ -37,11 +39,33 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
   const { projectsData, allTasks, isLoadingData, updateProjectActive } =
     useProjectsData(initialProjects);
   const [view, setView] = useState<"activos" | "archivados">("activos");
+  const [selected, setSelected] = useState<Set<string | number>>(new Set());
 
   const visible = useMemo(
     () => projectsData.filter((p) => (view === "activos" ? p.active : !p.active)),
     [projectsData, view]
   );
+
+  function toggle(id: string | number) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll(ids: (string | number)[]) {
+    setSelected((cur) => {
+      const allSelected = ids.every((id) => cur.has(id));
+      return allSelected ? new Set() : new Set(ids);
+    });
+  }
+
+  function bulkSetActive(active: boolean) {
+    selected.forEach((id) => updateProjectActive(Number(id), active));
+    setSelected(new Set());
+  }
 
   const kpis = useMemo(() => {
     const active = projectsData.filter((p) => p.active);
@@ -51,6 +75,12 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
 
   const columns = useMemo<ColumnDef<ProjectItem, unknown>[]>(
     () => [
+      createSelectionColumn<ProjectItem>({
+        getId: (p) => p.id,
+        selectedIds: selected,
+        onToggle: toggle,
+        onToggleAll: toggleAll,
+      }),
       {
         accessorKey: "name",
         header: "Proyecto",
@@ -108,7 +138,7 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
         },
       ]),
     ],
-    [allTasks, router, updateProjectActive]
+    [allTasks, router, updateProjectActive, selected]
   );
 
   return (
@@ -118,7 +148,13 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
         description="Vista operativa para riesgo, entregas y carga por proyecto."
         actions={
           <>
-            <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
+            <Tabs
+              value={view}
+              onValueChange={(v) => {
+                setView(v as typeof view);
+                setSelected(new Set());
+              }}
+            >
               <TabsList>
                 <TabsTrigger value="activos">Activos</TabsTrigger>
                 <TabsTrigger value="archivados">Archivados</TabsTrigger>
@@ -136,12 +172,22 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
         ]}
       />
 
+      <BulkActionBar
+        selectedCount={selected.size}
+        itemLabel="proyectos"
+        actions={
+          view === "activos"
+            ? [{ label: "Archivar", onClick: () => bulkSetActive(false), variant: "destructive" }]
+            : [{ label: "Reactivar", onClick: () => bulkSetActive(true) }]
+        }
+      />
       <DataTable
         columns={columns}
         data={visible}
         isLoading={isLoadingData}
         getRowId={(row) => String(row.id)}
         onRowClick={(row) => router.push(`/proyectos/${row.id}/ficha`)}
+        wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage={view === "activos" ? "No hay proyectos activos." : "No hay proyectos archivados."}
       />
     </div>

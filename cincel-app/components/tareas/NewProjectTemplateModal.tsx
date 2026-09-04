@@ -98,21 +98,21 @@ export default function NewProjectTemplateModal({
 
   return (
     <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <SheetContent className="w-[760px] max-w-[760px] overflow-y-auto text-black">
+      <SheetContent className="w-[760px] max-w-[760px] overflow-y-auto text-foreground">
         <SheetHeader>
-          <SheetTitle className="text-black">Iniciar plantilla de proyecto</SheetTitle>
+          <SheetTitle className="text-foreground">Iniciar plantilla de proyecto</SheetTitle>
         </SheetHeader>
 
         <div className="space-y-6 p-6">
           <div>
-            <Label className="mb-2 block text-black">Nombre del proyecto</Label>
+            <Label className="mb-2 block text-foreground">Nombre del proyecto</Label>
             {projectOptions.length === 0 ? (
-              <p className="w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-500">
+              <p className="w-full rounded-xl border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
                 No hay proyectos activos disponibles
               </p>
             ) : (
               <Select value={project} onValueChange={(v) => setProject(v as string)}>
-                <SelectTrigger className="w-full text-black">
+                <SelectTrigger className="w-full text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -128,29 +128,29 @@ export default function NewProjectTemplateModal({
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <Label className="block text-black">Descripciones iniciales</Label>
+              <Label className="block text-foreground">Descripciones iniciales</Label>
               <div className="flex items-center gap-4">
                 <Button
                   variant="link"
                   onClick={() => setSelectedKeys(templateItems.map((item) => itemKey(item)))}
-                  className="h-auto p-0 text-sm font-medium text-blue-700 hover:text-blue-800"
+                  className="h-auto p-0 text-sm font-medium text-foreground hover:text-foreground/70"
                 >
                   Seleccionar todas
                 </Button>
                 <Button
                   variant="link"
                   onClick={() => setSelectedKeys([])}
-                  className="h-auto p-0 text-sm font-medium text-slate-900 hover:text-black"
+                  className="h-auto p-0 text-sm font-medium text-muted-foreground hover:text-foreground"
                 >
                   Borrar todas
                 </Button>
               </div>
             </div>
 
-            <div className="max-h-72 space-y-2 overflow-auto rounded-xl border border-slate-200 p-3">
+            <div className="max-h-72 space-y-2 overflow-auto rounded-xl border border-border p-3">
               {groupedTemplateItems.map((group) => (
-                <div key={group.phase} className="rounded-xl border border-slate-100 bg-white/80 p-2">
-                  <div className="border-b border-slate-100 px-2 pb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-800">
+                <div key={group.phase} className="rounded-xl border border-border bg-muted/50 p-2">
+                  <div className="border-b border-border px-2 pb-2 text-xs font-semibold uppercase tracking-[0.15em] text-foreground">
                     {group.phase}
                   </div>
 
@@ -162,14 +162,14 @@ export default function NewProjectTemplateModal({
                       return (
                         <label
                           key={key}
-                          className="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2 hover:bg-slate-50"
+                          className="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2 hover:bg-accent"
                         >
                           <Checkbox
                             checked={checked}
                             onCheckedChange={() => toggleItem(item)}
                             className="mt-1"
                           />
-                          <span className="text-sm text-black">{item.description}</span>
+                          <span className="text-sm text-foreground">{item.description}</span>
                         </label>
                       );
                     })}
@@ -181,7 +181,7 @@ export default function NewProjectTemplateModal({
         </div>
 
         <SheetFooter>
-          <Button variant="outline" onClick={onClose} className="text-black">
+          <Button variant="outline" onClick={onClose} className="text-foreground">
             Cancelar
           </Button>
 

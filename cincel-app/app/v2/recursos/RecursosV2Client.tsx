@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
+import { createSelectionColumn } from "@/components/v2/table/bulk-select";
+import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import type { ResourceLink, ResourceSection } from "@/lib/types/resource";
 
 interface RecursosV2ClientProps {
@@ -40,14 +42,45 @@ const SECTIONS = Object.keys(SECTION_LABEL) as ResourceSection[];
  */
 export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
   const [section, setSection] = useState<"Todo" | ResourceSection>("Todo");
+  const [selected, setSelected] = useState<Set<string | number>>(new Set());
 
   const visible = useMemo(
     () => (section === "Todo" ? initialLinks : initialLinks.filter((l) => l.section === section)),
     [initialLinks, section]
   );
 
+  function toggle(id: string | number) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll(ids: (string | number)[]) {
+    setSelected((cur) => {
+      const allSelected = ids.every((id) => cur.has(id));
+      return allSelected ? new Set() : new Set(ids);
+    });
+  }
+
+  function bulkCopyLinks() {
+    const text = initialLinks
+      .filter((l) => selected.has(l.id))
+      .map((l) => l.url)
+      .join("\n");
+    void navigator.clipboard.writeText(text);
+  }
+
   const columns = useMemo<ColumnDef<ResourceLink, unknown>[]>(
     () => [
+      createSelectionColumn<ResourceLink>({
+        getId: (l) => l.id,
+        selectedIds: selected,
+        onToggle: toggle,
+        onToggleAll: toggleAll,
+      }),
       {
         accessorKey: "title",
         header: "Nombre",
@@ -80,7 +113,7 @@ export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
         { label: "Abrir", onSelect: (l) => window.open(l.url, "_blank", "noopener") },
       ]),
     ],
-    []
+    [selected]
   );
 
   return (
@@ -89,7 +122,13 @@ export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
         title="Recursos"
         description="Acceso rápido a las áreas de recursos del despacho."
         actions={
-          <Tabs value={section} onValueChange={(v) => setSection(v as typeof section)}>
+          <Tabs
+            value={section}
+            onValueChange={(v) => {
+              setSection(v as typeof section);
+              setSelected(new Set());
+            }}
+          >
             <TabsList>
               <TabsTrigger value="Todo">Todo</TabsTrigger>
               {SECTIONS.map((s) => (
@@ -102,11 +141,17 @@ export function RecursosV2Client({ initialLinks }: RecursosV2ClientProps) {
         }
       />
 
+      <BulkActionBar
+        selectedCount={selected.size}
+        itemLabel="recursos"
+        actions={[{ label: "Copiar enlaces", onClick: bulkCopyLinks }]}
+      />
       <DataTable
         columns={columns}
         data={visible}
         getRowId={(row) => row.id}
         searchPlaceholder="Buscar carpeta o recurso…"
+        wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage="No hay recursos en esta vista."
       />
     </div>
