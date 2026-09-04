@@ -4,6 +4,27 @@ All notable changes to Cincel Workspace, generated from the git history.
 Newest first. No semver tags are cut for this project — entries are grouped
 by date; PR numbers are in parentheses where the change was merged via a PR.
 
+## 2026-09-03/04 — Phases 9–15 complete: full raw-HTML-to-shadcn/ui migration
+
+Every raw `<button>`, `<input>`, `<select>`, and `<textarea>` in the app is now a shadcn primitive (two documented exceptions: `StarRating`'s bare-glyph stars and `PillDropdown`'s color-swatch buttons, neither of which fit shadcn's Button styling). Every overlay in the app is now a `Sheet` — the `Dialog` (centered modal) primitive was removed entirely.
+
+- **refactor(ui):** every remaining `Dialog` usage (12 files: proveedores add-item forms, `ProjectCreateModal`, `ProjectNotesModal`, `NewTaskModal`, `NewProjectTemplateModal`, `MemberEditorDrawer`, `CoordinatorProjectsModal`, `MemberProfileModal`, `DrivePickerDialog`, `ResourcesWorkspace`'s 3 overlays) converted to `Sheet`; `components/ui/shadcn/dialog.tsx` deleted — zero centered modals remain (#242)
+- **fix(ui):** `Sheet`'s base `w-[560px]` always wins over a `max-w-*` override (width and max-width don't conflict in tailwind-merge) — the two clientes Sheets had silently been stuck at 560px since #235; fixed with an explicit `w-[672px]` (#242)
+- **feat(ui):** `UnifiedCalendar`, `AssistantChat`, `InteractiveDashboard` migrated to shadcn Button/Select/Textarea — the assistant chat's Enter-to-send `onKeyDown` verified unaffected (#241)
+- **feat(ui):** `TeamMultiSelect`, `InlineEditable` migrated to shadcn Button/Input; `InlineEditable`'s display-trigger uses `h-auto p-0` to avoid layout shift on click (#240)
+- **feat(ui):** `Sidebar`, `Header` migrated to shadcn Button/Input; verified no SSR regressions across all major routes (#239)
+- **fix(proveedores):** `colaboradores`/`contratistas` Add-item forms had shadcn `Label`s not associated with their `Input`/`Select` (`htmlFor`/`id` missing) — a latent accessibility bug, found via audit rather than a failing test (#238)
+- **feat(configuracion):** `PermissionsWorkspace`, `GeneralSettingsWorkspace` migrated to shadcn Select/Button; adds `components/ui/shadcn/switch.tsx` (new primitive, base-ui `Switch` wrapper) for the settings toggle pattern (#237)
+- **feat(auth):** `login`, `change-password`, `profile` pages migrated to shadcn Input/Button/Checkbox; login verified to render correctly unauthenticated via a built production server (#236)
+- **feat(clientes):** `ClientesPageClient` and the client detail page migrated to shadcn Input/Select/Button, both drawers to `Sheet` directly; CI caught a real Label/Input association bug (broke `clientes.spec.ts`'s `getByLabel` calls) and the e2e spec's native-`<select>` assumptions, both fixed before merge (#235)
+- **feat(recursos):** `ResourcesWorkspace`, `DrivePickerDialog` migrated to shadcn primitives; adds `components/ui/shadcn/radio-group.tsx` (new primitive) for the "Quitar recurso" single-select (#234)
+- **feat(equipo):** `MemberEditorDrawer`, `EquipoPageClient` migrated to shadcn primitives (#233)
+- **feat(proveedores):** `contratistas` page migrated; its hand-rolled multi-select dropdown converted to `Popover`, deleting its own click-away `useEffect` (#232)
+- **feat(proveedores):** `colaboradores` page migrated; its hover-reveal "Habilidades" filter converted to a click-based `Popover` + `Checkbox` list (#231)
+- **feat(ui):** `tiendas` page migrated to shadcn primitives; its hover-hidden "Estado" filter normalized to an always-visible `Select`, matching its siblings (#230)
+- **feat(ui):** `StarRating`, `PillDropdown`, `EditableCell` migrated to shadcn primitives (#229)
+- **feat(ui):** `DataTable` migrated to the shadcn `Table` primitive; the fix that shipped alongside it — migrating `ExportMenu` to `Popover` — resolved a real stacking-context bug where bumping z-index alone did not fix a blocked dropdown in CI (#227)
+
 ## 2026-08-29
 
 - **fix(asistente):** `onboard_client` now creates a real `projects` row instead of only a name snapshot on activities — fixes projects "started" through the assistant being invisible to `list_projects` and the Proyectos page (#133)
