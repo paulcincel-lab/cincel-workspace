@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 
 import AppAvatar from "@/components/ui/AppAvatar";
+import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
 import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
 import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
 import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
@@ -363,7 +365,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div className="group flex flex-col items-center">
-              <input
+              <Input
                 ref={profileImageInputRef}
                 type="file"
                 accept="image/*"
@@ -386,32 +388,32 @@ export default function Header({ variant = "default" }: HeaderProps) {
                 )}
               </div>
               <div className="relative mt-1">
-                <button
-                  type="button"
+                <Button
+                  variant="link"
+                  className="h-auto p-0 text-[10px] font-medium uppercase tracking-wide"
                   onClick={() => setIsProfileImageMenuOpen((previous) => !previous)}
-                  className="text-[10px] font-medium uppercase tracking-wide text-slate-500 transition-colors hover:text-slate-700"
                   aria-expanded={isProfileImageMenuOpen}
                   aria-haspopup="menu"
                 >
                   Editar
-                </button>
+                </Button>
 
                 {isProfileImageMenuOpen ? (
                   <div className="absolute left-1/2 z-20 mt-2 w-28 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      className="h-auto w-full justify-start rounded-lg px-2 py-1.5 text-left text-[11px] font-medium"
                       onClick={() => profileImageInputRef.current?.click()}
-                      className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-medium text-slate-700 transition hover:bg-slate-50"
                     >
                       Cambiar
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-auto w-full justify-start rounded-lg px-2 py-1.5 text-left text-[11px] font-medium"
                       onClick={handleRemoveProfileImage}
-                      className="block w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-medium text-slate-700 transition hover:bg-slate-50"
                     >
                       Quitar
-                    </button>
+                    </Button>
                   </div>
                 ) : null}
               </div>
@@ -432,15 +434,15 @@ export default function Header({ variant = "default" }: HeaderProps) {
               <DevelopmentMenu isVisible={shouldShowDevelopmentMenu} />
               <HeaderActions links={headerLinks} />
               {hasAuthenticatedSession ? (
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  className="h-12 w-24 border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
                   onClick={handleLogout}
-                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
                   aria-label="Cerrar sesion"
                   title="Cerrar sesion"
                 >
                   <SignOutIcon />
-                </button>
+                </Button>
               ) : null}
             </div>
           </div>
@@ -468,76 +470,77 @@ export default function Header({ variant = "default" }: HeaderProps) {
               <DevelopmentMenu isVisible={shouldShowDevelopmentMenu} />
               <HeaderActions links={headerLinks} />
               {hasAuthenticatedSession ? (
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  className="h-12 w-24 border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
                   onClick={handleLogout}
-                  className="inline-flex h-12 w-24 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
                   aria-label="Cerrar sesion"
                   title="Cerrar sesion"
                 >
                   <SignOutIcon />
-                </button>
+                </Button>
               ) : null}
             </div>
             {canEditLinksInThisPage ? (
               <>
-                <button
-                  type="button"
+                <Button
+                  variant="link"
+                  className="h-auto p-0 text-[10px] font-medium uppercase tracking-wide"
                   onClick={handleEditLinksClick}
-                  className="text-[10px] font-medium uppercase tracking-wide text-slate-500 transition-colors hover:text-slate-700"
                 >
                   Editar links
-                </button>
+                </Button>
 
                 {isLinksEditorOpen ? (
                   <div className="w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                     <div className="space-y-2">
                       <label className="block">
                         <span className="mb-1 block text-[11px] font-medium text-slate-600">Instagram</span>
-                        <input
+                        <Input
                           value={linksDraft.instagram}
                           onChange={(event) => handleDraftLinkChange("instagram", event.target.value)}
-                          className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400"
+                          className="h-auto px-2 py-1 text-xs"
                         />
                       </label>
 
                       <label className="block">
                         <span className="mb-1 block text-[11px] font-medium text-slate-600">Pagina web</span>
-                        <input
+                        <Input
                           value={linksDraft.website}
                           onChange={(event) => handleDraftLinkChange("website", event.target.value)}
-                          className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400"
+                          className="h-auto px-2 py-1 text-xs"
                         />
                       </label>
 
                       <label className="block">
                         <span className="mb-1 block text-[11px] font-medium text-slate-600">E-mail (URL o correo)</span>
-                        <input
+                        <Input
                           value={linksDraft.email}
                           onChange={(event) => handleDraftLinkChange("email", event.target.value)}
-                          className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400"
+                          className="h-auto px-2 py-1 text-xs"
                         />
                       </label>
                     </div>
 
                     <div className="mt-3 flex justify-end gap-2">
-                      <button
-                        type="button"
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-auto px-2 py-1 text-xs"
                         onClick={() => {
                           setIsLinksEditorOpen(false);
                           setLinksDraft(headerLinks);
                         }}
-                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
                       >
                         Cancelar
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-auto bg-slate-900 px-2 py-1 text-xs hover:bg-slate-800"
                         onClick={handleSaveLinks}
-                        className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
                       >
                         Guardar
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ) : null}

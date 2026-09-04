@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/shadcn/button";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 
@@ -286,20 +287,21 @@ export default function Sidebar() {
 
             return (
               <div key={item.label}>
-                <button
-                  onClick={() => setExpandedMenu(isExpanded ? null : item.label)}
-                  className={`w-full rounded-xl px-3 py-2.5 transition flex items-center justify-between ${
+                <Button
+                  variant="ghost"
+                  className={`h-auto w-full justify-between rounded-xl px-3 py-2.5 ${
                     hasActive || isExpanded
-                      ? "bg-[#2F63E7] text-white shadow-sm"
-                      : "hover:bg-white/80 text-slate-600"
+                      ? "bg-[#2F63E7] text-white shadow-sm hover:bg-[#2F63E7] hover:text-white"
+                      : "text-slate-600 hover:bg-white/80"
                   }`}
+                  onClick={() => setExpandedMenu(isExpanded ? null : item.label)}
                 >
                   <span className="flex items-center gap-2.5">
                     <item.icon className="h-[18px] w-[18px]" />
                     <span className="text-[13px] leading-none font-semibold">{item.label}</span>
                   </span>
                   <ChevronIcon className={`h-[14px] w-[14px] transition ${isExpanded ? "rotate-180" : ""}`} />
-                </button>
+                </Button>
 
                 {isExpanded && (
                   <div className="ml-7 mt-1.5 pl-3 border-l border-[#BBC6DE] space-y-1">
