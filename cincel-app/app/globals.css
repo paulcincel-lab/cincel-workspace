@@ -51,84 +51,86 @@
 }
 
 :root {
-  /* App's original background/foreground (unchanged) — the shadcn-generated
-     neutrals below are used only by the new components/ui/shadcn/* primitives
-     via --color-card etc.; nothing pre-existing reads --background directly. */
+  /* True black/white, matching the cincel.mx wordmark and CTAs — not the
+     shadcn-default near-black. Neutrals are grayscale on purpose (the brand
+     carries zero accent hue anywhere in its chrome; color only ever comes
+     from project photography), each step distinct so muted/hover/secondary
+     surfaces read differently from one another. */
   --background: #ffffff;
-  --foreground: #171717;
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --foreground: #0a0a0a;
+  --card: #fafafa;
+  --card-foreground: #0a0a0a;
+  --popover: #fafafa;
+  --popover-foreground: #0a0a0a;
+  --primary: #0a0a0a;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f2;
+  --secondary-foreground: #0a0a0a;
+  --muted: #ededed;
+  --muted-foreground: #6b6b6b;
+  --accent: #e6e6e6;
+  --accent-foreground: #0a0a0a;
+  --destructive: #c6362b;
+  --border: #e2e2e2;
+  --input: #e2e2e2;
+  --ring: #0a0a0a;
+  --chart-1: #0a0a0a;
+  --chart-2: #3d3d3d;
+  --chart-3: #6b6b6b;
+  --chart-4: #9a9a9a;
+  --chart-5: #c7c7c7;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #f7f7f7;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-primary: #0a0a0a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #efefef;
+  --sidebar-accent-foreground: #0a0a0a;
+  --sidebar-border: #e2e2e2;
+  --sidebar-ring: #0a0a0a;
 }
 
-/* Original auto dark mode (nothing sets the shadcn .dark class today, so this
-   is what still actually runs). */
+/* Auto dark mode (nothing sets the shadcn .dark class today, so this is what
+   actually runs) — kept in sync with :root's neutrals. */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
-    --foreground: #ededed;
+    --foreground: #f2f2f2;
   }
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0a0a0a;
+  --foreground: #f2f2f2;
+  --card: #161616;
+  --card-foreground: #f2f2f2;
+  --popover: #161616;
+  --popover-foreground: #f2f2f2;
+  --primary: #f2f2f2;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1f1f1f;
+  --secondary-foreground: #f2f2f2;
+  --muted: #1a1a1a;
+  --muted-foreground: #9a9a9a;
+  --accent: #262626;
+  --accent-foreground: #f2f2f2;
+  --destructive: #e0574a;
+  --border: rgba(255, 255, 255, 0.14);
+  --input: rgba(255, 255, 255, 0.18);
+  --ring: #f2f2f2;
+  --chart-1: #f2f2f2;
+  --chart-2: #c7c7c7;
+  --chart-3: #9a9a9a;
+  --chart-4: #6b6b6b;
+  --chart-5: #3d3d3d;
+  --sidebar: #111111;
+  --sidebar-foreground: #f2f2f2;
+  --sidebar-primary: #f2f2f2;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #1f1f1f;
+  --sidebar-accent-foreground: #f2f2f2;
+  --sidebar-border: rgba(255, 255, 255, 0.14);
+  --sidebar-ring: #f2f2f2;
 }
 
 @layer base {
