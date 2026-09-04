@@ -53,8 +53,8 @@ type DataTableProps<T> = {
 function SortIcon({ direction }: { direction: "asc" | "desc" | false }) {
   return (
     <span className="inline-flex flex-col leading-none text-[10px]" aria-hidden>
-      <span className={direction === "asc" ? "text-slate-700" : "text-slate-300"}>▲</span>
-      <span className={direction === "desc" ? "text-slate-700" : "text-slate-300"}>▼</span>
+      <span className={direction === "asc" ? "text-foreground" : "text-muted-foreground/40"}>▲</span>
+      <span className={direction === "desc" ? "text-foreground" : "text-muted-foreground/40"}>▼</span>
     </span>
   );
 }
@@ -91,9 +91,9 @@ export function DataTable<T>({
   const rows = table.getRowModel().rows;
 
   return (
-    <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${wrapperClassName}`}>
+    <div className={`overflow-hidden rounded-2xl border border-border bg-background shadow-sm ${wrapperClassName}`}>
       {searchPlaceholder ? (
-        <div className="border-b border-slate-100 p-3">
+        <div className="border-b border-border p-3">
           <Input
             type="search"
             value={globalFilter}
@@ -138,13 +138,13 @@ export function DataTable<T>({
         <TableBody>
           {isLoading ? (
             <TableRow>
-              <TableCell colSpan={columns.length} className="py-8 text-center text-sm text-slate-500">
+              <TableCell colSpan={columns.length} className="py-8 text-center text-sm text-muted-foreground">
                 {loadingMessage}
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={columns.length} className="py-8 text-center text-sm text-slate-500">
+              <TableCell colSpan={columns.length} className="py-8 text-center text-sm text-muted-foreground">
                 {emptyMessage}
               </TableCell>
             </TableRow>

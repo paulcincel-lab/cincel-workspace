@@ -1,0 +1,133 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+
+import { DataTable } from "@/components/ui/DataTable";
+import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
+import { PageHeader } from "@/components/v2/layout/PageHeader";
+import { KpiRow } from "@/components/v2/layout/KpiRow";
+import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
+import { Progress } from "@/components/ui/shadcn/progress";
+import { Badge } from "@/components/ui/shadcn/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
+import { useProjectsData } from "@/lib/proyectos/use-projects-data";
+import type { TeamMember } from "@/lib/data/team";
+
+interface EquipoV2ClientProps {
+  initialTeam: TeamMember[];
+}
+
+const AVAILABILITY_VARIANT: Record<string, "success" | "secondary" | "outline"> = {
+  Disponible: "success",
+  Mixto: "secondary",
+};
+
+export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
+  const [members] = useState<TeamMember[]>(initialTeam);
+  const { allTasks } = useProjectsData();
+  const [view, setView] = useState<"activos" | "desactivados">("activos");
+
+  const activeTasks = useMemo(() => allTasks.filter((t) => !t.archived), [allTasks]);
+
+  const withWorkload = useMemo(
+    () =>
+      members.map((member) => {
+        const assigned = activeTasks.filter((t) => t.manager === member.name).length;
+        const support = activeTasks.filter((t) => t.support.includes(member.name)).length;
+        const total = assigned + support;
+        const occupancy = Math.round((total / Math.max(member.capacity, 1)) * 100);
+        return { ...member, total, occupancy };
+      }),
+    [members, activeTasks]
+  );
+
+  const visible = useMemo(
+    () => withWorkload.filter((m) => (view === "activos" ? m.active : !m.active)),
+    [withWorkload, view]
+  );
+
+  const kpis = useMemo(() => {
+    const active = withWorkload.filter((m) => m.active);
+    return {
+      activos: active.length,
+      desactivados: withWorkload.length - active.length,
+      saturados: active.filter((m) => m.occupancy >= 100).length,
+      disponibles: active.filter((m) => m.occupancy < 100).length,
+    };
+  }, [withWorkload]);
+
+  const columns = useMemo<ColumnDef<(typeof withWorkload)[number], unknown>[]>(
+    () => [
+      {
+        id: "member",
+        header: "Colaborador",
+        cell: ({ row }) => (
+          <PersonAvatar name={row.original.name} subtitle={row.original.institutionalEmail} />
+        ),
+      },
+      { accessorKey: "role", header: "Puesto" },
+      { accessorKey: "area", header: "Área" },
+      {
+        id: "load",
+        header: "Carga",
+        cell: ({ row }) => (
+          <div className="w-[120px]">
+            <Progress value={Math.min(row.original.occupancy, 100)} className="h-2" />
+          </div>
+        ),
+      },
+      {
+        accessorKey: "availability",
+        header: "Disponibilidad",
+        cell: ({ row }) => (
+          <Badge variant={AVAILABILITY_VARIANT[row.original.availability] ?? "outline"}>
+            {row.original.availability}
+          </Badge>
+        ),
+      },
+      createRowActionsColumn<(typeof withWorkload)[number]>(() => [
+        {
+          label: "Copiar correo institucional",
+          onSelect: (m) => {
+            void navigator.clipboard.writeText(m.institutionalEmail);
+          },
+        },
+      ]),
+    ],
+    []
+  );
+
+  return (
+    <div>
+      <PageHeader
+        title="Equipo"
+        description="Avatares, capacidad y carga actual de colaboradores."
+        actions={
+          <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
+            <TabsList>
+              <TabsTrigger value="activos">Activos</TabsTrigger>
+              <TabsTrigger value="desactivados">Desactivados</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        }
+      />
+
+      <KpiRow
+        tiles={[
+          { label: "Activos", value: kpis.activos },
+          { label: "Desactivados", value: kpis.desactivados },
+          { label: "Saturados", value: kpis.saturados, tone: kpis.saturados > 0 ? "warn" : "default" },
+          { label: "Disponibles", value: kpis.disponibles, tone: "ok" },
+        ]}
+      />
+
+      <DataTable
+        columns={columns}
+        data={visible}
+        getRowId={(row) => String(row.id)}
+        emptyMessage={view === "activos" ? "No hay colaboradores activos." : "No hay colaboradores desactivados."}
+      />
+    </div>
+  );
+}

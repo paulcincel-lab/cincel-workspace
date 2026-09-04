@@ -26,6 +26,14 @@ type MenuGroupItem = {
 
 type MenuItem = MenuLinkItem | MenuGroupItem;
 
+const PreviewIcon = ({ className = "h-5 w-5" }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
+    <path d="M9.5 3h5" />
+    <path d="M12 3v6" />
+    <path d="M8.5 9 4.5 18.5A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.8-2.5L15.5 9" />
+  </svg>
+);
+
 const DashboardIcon = ({ className = "h-5 w-5" }: IconProps) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
     <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -139,7 +147,9 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [expandedMenu, setExpandedMenu] = useState<string | null>(
-    pathname.startsWith("/recursos/empresa")
+    pathname.startsWith("/v2")
+      ? "Vista previa v2"
+      : pathname.startsWith("/recursos/empresa")
       ? "Empresa"
       : pathname.startsWith("/recursos")
       ? "Recursos"
@@ -170,6 +180,19 @@ export default function Sidebar() {
   const canViewConfiguration = authenticatedUser?.access === "Administrador";
 
   const menu: MenuItem[] = [
+    {
+      label: "Vista previa v2",
+      icon: PreviewIcon,
+      submenu: [
+        { label: "Dashboard", href: "/v2/dashboard", icon: DashboardIcon },
+        { label: "Proyectos", href: "/v2/proyectos", icon: ProjectIcon },
+        { label: "Actividades", href: "/v2/actividades/diseno", icon: ActivityIcon },
+        { label: "Equipo", href: "/v2/equipo", icon: TeamIcon },
+        { label: "Directorio", href: "/v2/directorio", icon: ClientsIcon },
+        { label: "Recursos", href: "/v2/recursos", icon: ResourcesIcon },
+        { label: "Asistente", href: "/v2/asistente", icon: AssistantIcon },
+      ],
+    },
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
     {
       label: "Actividades",

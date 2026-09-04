@@ -12,9 +12,9 @@ import {
   YAxis,
 } from "recharts";
 
-const ACCENT = "#2563eb"; // blue-600
-const GRID = "#e2e8f0"; // slate-200
-const AXIS = "#64748b"; // slate-500
+const ACCENT = "var(--foreground)";
+const GRID = "var(--border)";
+const AXIS = "var(--muted-foreground)";
 
 type ChartDataPoint = { label: string; value: number };
 
