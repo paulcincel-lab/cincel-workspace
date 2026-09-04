@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Label } from "@/components/ui/shadcn/label";
@@ -97,11 +97,11 @@ export default function NewProjectTemplateModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="w-[760px] max-w-[760px] p-0 text-black">
-        <DialogHeader className="border-b p-6">
-          <DialogTitle className="text-black">Iniciar plantilla de proyecto</DialogTitle>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="w-[760px] max-w-[760px] overflow-y-auto text-black">
+        <SheetHeader>
+          <SheetTitle className="text-black">Iniciar plantilla de proyecto</SheetTitle>
+        </SheetHeader>
 
         <div className="space-y-6 p-6">
           <div>
@@ -180,7 +180,7 @@ export default function NewProjectTemplateModal({
           </div>
         </div>
 
-        <DialogFooter className="p-6">
+        <SheetFooter>
           <Button variant="outline" onClick={onClose} className="text-black">
             Cancelar
           </Button>
@@ -191,8 +191,8 @@ export default function NewProjectTemplateModal({
           >
             Crear plantilla
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

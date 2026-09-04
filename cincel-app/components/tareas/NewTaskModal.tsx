@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { TaskStatus } from "@/lib/types/task";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
@@ -79,11 +79,11 @@ export default function NewTaskModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="w-[700px] max-w-[700px] p-0 text-black">
-        <DialogHeader className="border-b border-slate-200 p-6">
-          <DialogTitle className="text-black">Nueva tarea</DialogTitle>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="w-[700px] max-w-[700px] overflow-y-auto text-black">
+        <SheetHeader>
+          <SheetTitle className="text-black">Nueva tarea</SheetTitle>
+        </SheetHeader>
 
         <div className="p-6 space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
@@ -215,7 +215,7 @@ export default function NewTaskModal({
           </div>
         </div>
 
-        <DialogFooter className="p-6">
+        <SheetFooter>
           <Button variant="outline" onClick={onClose} className="text-black">
             Cancelar
           </Button>
@@ -223,8 +223,8 @@ export default function NewTaskModal({
           <Button onClick={handleSave}>
             Guardar
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

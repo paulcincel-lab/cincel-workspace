@@ -954,7 +954,7 @@ export default function ClientesPageClient({
         </section>
 
         <Sheet open={showCreateModal} onOpenChange={(next) => { if (!next) closeCreateClient(); }}>
-          <SheetContent className="max-w-2xl overflow-y-auto">
+          <SheetContent className="w-[672px] max-w-[672px] overflow-y-auto">
             <SheetHeader>
               <SheetTitle>Nuevo cliente</SheetTitle>
               <p className="text-sm text-slate-500">Crear cliente sin depender de un proyecto existente.</p>

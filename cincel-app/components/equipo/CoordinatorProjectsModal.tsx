@@ -1,6 +1,6 @@
 "use client";
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
 
 interface CoordinatorProjectsModalProps {
@@ -11,14 +11,14 @@ interface CoordinatorProjectsModalProps {
 /** Overlay listing all projects where a team member acts as coordinator. */
 export function CoordinatorProjectsModal({ member, onClose }: CoordinatorProjectsModalProps) {
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Proyectos como Encargado</DialogTitle>
-          <DialogDescription>{member.name}</DialogDescription>
-        </DialogHeader>
+    <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Proyectos como Encargado</SheetTitle>
+          <SheetDescription>{member.name}</SheetDescription>
+        </SheetHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-3 px-6 py-4">
           {member.coordinatorProjects.length === 0 ? (
             <p className="text-sm text-slate-500">No hay proyectos asignados como encargado.</p>
           ) : (
@@ -34,7 +34,7 @@ export function CoordinatorProjectsModal({ member, onClose }: CoordinatorProject
             </div>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

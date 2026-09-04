@@ -2,7 +2,7 @@
 
 import AppAvatar from "@/components/ui/AppAvatar";
 import AppBadge from "@/components/ui/AppBadge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
 
 interface MemberProfileModalProps {
@@ -13,13 +13,13 @@ interface MemberProfileModalProps {
 /** Read-only personal profile overlay for a team member. */
 export function MemberProfileModal({ member, onClose }: MemberProfileModalProps) {
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Ficha personal</DialogTitle>
-        </DialogHeader>
+    <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Ficha personal</SheetTitle>
+        </SheetHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 px-6 py-4">
           <div className="flex items-center justify-between gap-4">
             <AppAvatar name={member.name} />
             <AppBadge label={member.active ? "Activo" : "Desactivado"} color={member.active ? "blue" : "gray"} />
@@ -54,7 +54,7 @@ export function MemberProfileModal({ member, onClose }: MemberProfileModalProps)
             <p className="mt-1">Ocupacion: {member.occupancy}%</p>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

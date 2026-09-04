@@ -796,7 +796,7 @@ export default function ClienteFichaPage() {
         </div>
 
         <Sheet open={showEditor} onOpenChange={(next) => { if (!next) closeEditor(); }}>
-          <SheetContent className="max-w-2xl overflow-y-auto">
+          <SheetContent className="w-[672px] max-w-[672px] overflow-y-auto">
             <SheetHeader>
               <SheetTitle>Editar cliente</SheetTitle>
               <p className="text-sm text-slate-500">Actualiza contactos, origen y montos del cliente.</p>

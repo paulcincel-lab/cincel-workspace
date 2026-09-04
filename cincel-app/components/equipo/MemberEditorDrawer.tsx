@@ -3,7 +3,7 @@
 import AppBadge from "@/components/ui/AppBadge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, normalizeSystemAccessRole } from "@/lib/data/roles";
@@ -55,13 +55,13 @@ export function MemberEditorDrawer({
   const canSave = editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator;
 
   return (
-    <Dialog open={show} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto p-0 text-slate-800">
-        <DialogHeader className="border-b p-6">
-          <DialogTitle>{editingId === null ? "Agregar colaborador" : "Editar colaborador"}</DialogTitle>
-        </DialogHeader>
+    <Sheet open={show} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="w-[800px] max-w-[800px] overflow-y-auto text-slate-800">
+        <SheetHeader>
+          <SheetTitle>{editingId === null ? "Agregar colaborador" : "Editar colaborador"}</SheetTitle>
+        </SheetHeader>
 
-        <div className="space-y-6 p-6">
+        <div className="space-y-6 px-6 py-4">
           {formError ? (
             <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
               {formError}
@@ -425,7 +425,7 @@ export function MemberEditorDrawer({
           </section>
         </div>
 
-        <DialogFooter>
+        <SheetFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
@@ -437,8 +437,8 @@ export function MemberEditorDrawer({
           >
             Guardar
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

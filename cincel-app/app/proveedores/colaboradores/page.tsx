@@ -10,7 +10,7 @@ import { StarRating } from "@/components/proveedores/StarRating";
 import { PillDropdown } from "@/components/proveedores/PillDropdown";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
@@ -128,10 +128,12 @@ const AddColaboradorModal = ({ onClose, onAdd, roleOptions, statusOptions }: {
   };
 
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogTitle>Agregar Colaborador</DialogTitle>
-        <form onSubmit={submit} className="space-y-4">
+    <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Agregar Colaborador</SheetTitle>
+        </SheetHeader>
+        <form onSubmit={submit} className="space-y-4 px-6 py-4">
           <div className="space-y-1">
             <Label htmlFor="add-colaborador-name">Nombre *</Label>
             <Input id="add-colaborador-name" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nombre" />
@@ -172,13 +174,13 @@ const AddColaboradorModal = ({ onClose, onAdd, roleOptions, statusOptions }: {
             <Label>Calificación</Label>
             <StarRating rating={form.rating} onRate={(r) => setForm({ ...form, rating: r })} />
           </div>
-          <div className="flex justify-end gap-3 pt-3">
+          <SheetFooter className="mt-0 flex-row justify-end border-t-0 p-0 pt-3">
             <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
             <Button type="submit">Agregar</Button>
-          </div>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 };
 
