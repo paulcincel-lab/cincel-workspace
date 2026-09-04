@@ -6,6 +6,8 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { Button } from "@/components/ui/shadcn/button";
+import { Textarea } from "@/components/ui/shadcn/textarea";
 import { AssistantChartMessage } from "@/components/asistente/AssistantChartMessage";
 import { AssistantCardMessage } from "@/components/asistente/AssistantCardMessage";
 import { AssistantStatGridMessage } from "@/components/asistente/AssistantStatGridMessage";
@@ -147,14 +149,15 @@ export function AssistantChat() {
           </p>
         </div>
         {messages.length > 0 ? (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-auto shrink-0 px-3 py-1.5"
             onClick={clearConversation}
             disabled={isBusy}
-            className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Nueva conversación
-          </button>
+          </Button>
         ) : null}
       </div>
 
@@ -170,18 +173,19 @@ export function AssistantChat() {
             <p className="text-sm text-slate-500">Prueba con una de estas preguntas:</p>
             <div className="flex flex-wrap justify-center gap-2">
               {EXAMPLE_QUESTIONS.map((question) => (
-                <button
+                <Button
                   key={question}
-                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-auto rounded-full px-3 py-1"
                   onClick={() => {
                     setInput(question);
                     textareaRef.current?.focus();
                     requestAnimationFrame(resizeTextarea);
                   }}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 hover:bg-slate-50"
                 >
                   {question}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -374,7 +378,7 @@ export function AssistantChat() {
         }}
         className="flex items-end gap-2"
       >
-        <textarea
+        <Textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => {
@@ -391,16 +395,12 @@ export function AssistantChat() {
           rows={1}
           placeholder="Escribe tu pregunta…  (Shift+Enter para salto de línea)"
           disabled={isBusy}
-          className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm leading-6 text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
+          className="max-h-40 min-h-[2.75rem] flex-1 resize-none py-2 leading-6"
         />
-        <button
+        <Button
           type="submit"
           disabled={isBusy || !input.trim()}
-          className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-lg px-5 text-sm font-medium text-white ${
-            isBusy || !input.trim()
-              ? "cursor-not-allowed bg-slate-300"
-              : "bg-blue-600 hover:bg-blue-700"
-          }`}
+          className="h-11 shrink-0 px-5"
         >
           {isBusy ? <Spinner /> : null}
           {status === "submitted"
@@ -408,7 +408,7 @@ export function AssistantChat() {
             : status === "streaming"
               ? "Respondiendo…"
               : "Enviar"}
-        </button>
+        </Button>
       </form>
     </div>
   );
