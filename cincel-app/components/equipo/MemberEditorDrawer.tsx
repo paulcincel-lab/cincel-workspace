@@ -1,6 +1,6 @@
 "use client";
 
-import AppBadge from "@/components/ui/AppBadge";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
@@ -56,24 +56,24 @@ export function MemberEditorDrawer({
 
   return (
     <Sheet open={show} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <SheetContent className="w-[800px] max-w-[800px] overflow-y-auto text-slate-800">
+      <SheetContent className="w-[800px] max-w-[800px] overflow-y-auto text-foreground">
         <SheetHeader>
           <SheetTitle>{editingId === null ? "Agregar colaborador" : "Editar colaborador"}</SheetTitle>
         </SheetHeader>
 
         <div className="space-y-6 px-6 py-4">
           {formError ? (
-            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {formError}
             </div>
           ) : null}
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Información laboral</h3>
+          <section className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground">Información laboral</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-slate-800">Nombre</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Nombre</label>
                 <Input
                   type="text"
                   value={draft.name}
@@ -82,27 +82,27 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Puesto</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Puesto</label>
                 <Input
                   type="text"
                   value={draft.role}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, role: event.target.value }))}
                 />
-                <p className="mt-1 text-xs text-slate-500">Cargo que desempeña dentro de la empresa.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Cargo que desempeña dentro de la empresa.</p>
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Area</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Area</label>
                 <Input
                   type="text"
                   value={draft.area}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, area: event.target.value }))}
                 />
-                <p className="mt-1 text-xs text-slate-500">Departamento al que pertenece.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Departamento al que pertenece.</p>
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Acceso</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Acceso</label>
                 <Select
                   value={draft.access}
                   onValueChange={(value) => {
@@ -125,11 +125,11 @@ export function MemberEditorDrawer({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="mt-1 text-xs text-slate-500">Nivel de acceso dentro de Cincel.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Nivel de acceso dentro de Cincel.</p>
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Capacidad</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Capacidad</label>
                 <Input
                   type="number"
                   min={1}
@@ -142,7 +142,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Disponibilidad</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Disponibilidad</label>
                 <Select
                   value={draft.availability}
                   onValueChange={(value) => {
@@ -176,39 +176,39 @@ export function MemberEditorDrawer({
             </div>
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <section className="rounded-xl border border-border bg-card p-4">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">Acceso al sistema</h3>
-                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                <h3 className="text-sm font-semibold text-foreground">Acceso al sistema</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                   Administra aquí el acceso, la contraseña temporal y el historial de uso del colaborador.
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <AppBadge
-                  label={accessPreviewState.status}
-                  color={accessPreviewState.status === "Acceso activo"
-                    ? "blue"
-                    : accessPreviewState.status === "Pendiente de primer acceso"
-                      ? "yellow"
-                      : accessPreviewState.status === "Sin contraseña temporal"
-                        ? "red"
-                        : "gray"}
-                />
-                <AppBadge
-                  label={accessPreviewState.hasSystemAccess ? "Tiene acceso al sistema" : "Sin acceso al sistema"}
-                  color={accessPreviewState.hasSystemAccess ? "blue" : "gray"}
-                />
+                <Badge
+                  variant={accessPreviewState.status === "Acceso activo"
+                    ? "success"
+                    : accessPreviewState.status === "Sin contraseña temporal"
+                      ? "destructive"
+                      : accessPreviewState.status === "Pendiente de primer acceso"
+                        ? "secondary"
+                        : "outline"}
+                >
+                  {accessPreviewState.status}
+                </Badge>
+                <Badge variant={accessPreviewState.hasSystemAccess ? "success" : "outline"}>
+                  {accessPreviewState.hasSystemAccess ? "Tiene acceso al sistema" : "Sin acceso al sistema"}
+                </Badge>
               </div>
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="md:col-span-2 rounded-2xl border border-border bg-muted p-4">
                 <label className="flex items-center justify-between gap-4">
                   <div>
-                    <span className="block text-sm font-medium text-slate-800">Tiene acceso al sistema</span>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                    <span className="block text-sm font-medium text-foreground">Tiene acceso al sistema</span>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                       Si lo activas, el colaborador podrá iniciar sesión y ver el ERP según su acceso.
                     </p>
                   </div>
@@ -230,7 +230,7 @@ export function MemberEditorDrawer({
               {draft.systemAccessEnabled ? (
                 <>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-800">Contraseña temporal</label>
+                    <label className="mb-2 block text-sm font-medium text-foreground">Contraseña temporal</label>
                     <Input
                       type="password"
                       value={draft.temporaryPassword}
@@ -239,7 +239,7 @@ export function MemberEditorDrawer({
                       }
                       placeholder={editingId === null ? "Asignar contraseña temporal" : "Solo si vas a restablecer"}
                     />
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                       {editingId === null
                         ? "Obligatoria al crear una cuenta con acceso al sistema."
                         : "Rellena este campo solo si vas a restablecer la contraseña."}
@@ -247,7 +247,7 @@ export function MemberEditorDrawer({
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-800">Confirmar contraseña temporal</label>
+                    <label className="mb-2 block text-sm font-medium text-foreground">Confirmar contraseña temporal</label>
                     <Input
                       type="password"
                       value={draft.temporaryPasswordConfirmation}
@@ -256,21 +256,21 @@ export function MemberEditorDrawer({
                       }
                       placeholder="Repetir contraseña temporal"
                     />
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">Debe coincidir con la contraseña temporal.</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Debe coincidir con la contraseña temporal.</p>
                   </div>
 
                   <div>
-                    <p className="text-sm font-medium text-slate-800">Último acceso</p>
-                    <p className="mt-1 text-sm text-slate-600">{formatDateTime(accessPreviewState.lastLoginAt)}</p>
+                    <p className="text-sm font-medium text-foreground">Último acceso</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{formatDateTime(accessPreviewState.lastLoginAt)}</p>
                   </div>
 
                   <div>
-                    <p className="text-sm font-medium text-slate-800">Último cambio de contraseña</p>
-                    <p className="mt-1 text-sm text-slate-600">{formatDateTime(accessPreviewState.passwordUpdatedAt)}</p>
+                    <p className="text-sm font-medium text-foreground">Último cambio de contraseña</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{formatDateTime(accessPreviewState.passwordUpdatedAt)}</p>
                   </div>
                 </>
               ) : (
-                <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-600">
+                <div className="md:col-span-2 rounded-2xl border border-border bg-card p-4 text-sm leading-relaxed text-muted-foreground">
                   Este colaborador no tendrá acceso al sistema ni podrá iniciar sesión. Podrá seguir asignado a proyectos,
                   tareas y recursos.
                 </div>
@@ -278,12 +278,12 @@ export function MemberEditorDrawer({
             </div>
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Información personal</h3>
+          <section className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground">Información personal</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Fecha nacimiento</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Fecha nacimiento</label>
                 <Input
                   type="date"
                   value={draft.birthDate}
@@ -292,7 +292,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Nacionalidad</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Nacionalidad</label>
                 <Input
                   type="text"
                   value={draft.nationality}
@@ -301,7 +301,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Estado civil</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Estado civil</label>
                 <Input
                   type="text"
                   value={draft.maritalStatus}
@@ -310,7 +310,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">CURP</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">CURP</label>
                 <Input
                   type="text"
                   value={draft.curp}
@@ -319,7 +319,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">RFC</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">RFC</label>
                 <Input
                   type="text"
                   value={draft.rfc}
@@ -329,12 +329,12 @@ export function MemberEditorDrawer({
             </div>
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Contacto</h3>
+          <section className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground">Contacto</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Celular</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Celular</label>
                 <Input
                   type="text"
                   value={draft.phone}
@@ -343,7 +343,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Correo institucional</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Correo institucional</label>
                 <Input
                   type="email"
                   value={draft.institutionalEmail}
@@ -354,7 +354,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-slate-800">Direccion</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Direccion</label>
                 <Input
                   type="text"
                   value={draft.address}
@@ -363,7 +363,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Telefono de casa</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Telefono de casa</label>
                 <Input
                   type="text"
                   value={draft.homePhone}
@@ -372,7 +372,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Correo electronico personal</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Correo electronico personal</label>
                 <Input
                   type="email"
                   value={draft.personalEmail}
@@ -382,12 +382,12 @@ export function MemberEditorDrawer({
             </div>
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Contacto de emergencia</h3>
+          <section className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground">Contacto de emergencia</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Nombre</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Nombre</label>
                 <Input
                   type="text"
                   value={draft.emergencyContactName}
@@ -396,7 +396,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Relacion</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Relacion</label>
                 <Input
                   type="text"
                   value={draft.emergencyContactRelation}
@@ -405,7 +405,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Telefono</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Telefono</label>
                 <Input
                   type="text"
                   value={draft.emergencyContactPhone}
@@ -414,7 +414,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-800">Direccion</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Direccion</label>
                 <Input
                   type="text"
                   value={draft.emergencyContactAddress}

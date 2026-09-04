@@ -16,11 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { MemberProfileModal } from "@/components/equipo/MemberProfileModal";
-import type { AccessPreviewState, MemberDraft, TeamMemberWithWorkload } from "@/lib/equipo/types";
-import { getCollaboratorAccessState, getCurrentAuthenticatedUser, normalizeEmail } from "@/lib/auth/auth-service";
-import { resolveTeamCapabilities } from "@/lib/auth/permissions";
+import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { type TeamAvailability, type TeamMember } from "@/lib/data/team";
-import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, hasDefaultSystemAdministratorAccess, isAdministratorRole, normalizeSystemAccessRole, type SystemAccessRole } from "@/lib/data/roles";
+import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, SYSTEM_ADMIN_ROLE, normalizeSystemAccessRole, type SystemAccessRole } from "@/lib/data/roles";
+import { useMemberEditor } from "@/lib/equipo/use-member-editor";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import type { Task } from "@/lib/types/task";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
@@ -28,37 +28,12 @@ import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
 import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers, setTeamMemberCredential } from "@/lib/repositories/team-repository";
+import { getTeamMembersSnapshot, fetchTeamMembers, saveTeamMembers } from "@/lib/repositories/team-repository";
 import { getProjectsSnapshot, fetchProjects } from "@/lib/repositories/projects-repository";
-import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 
-const emptyDraft: MemberDraft = {
-  name: "",
-  access: DEFAULT_SYSTEM_ACCESS_ROLE,
-  systemAccessEnabled: false,
-  temporaryPassword: "",
-  temporaryPasswordConfirmation: "",
-  birthDate: "",
-  nationality: "",
-  phone: "",
-  institutionalEmail: "",
-  address: "",
-  maritalStatus: "",
-  homePhone: "",
-  personalEmail: "",
-  curp: "",
-  rfc: "",
-  emergencyContactName: "",
-  emergencyContactRelation: "",
-  emergencyContactPhone: "",
-  emergencyContactAddress: "",
-  role: "",
-  area: "",
-  capacity: 8,
-  availability: "Disponible",
-};
 
 
 const availabilityOptions: TeamAvailability[] = [
@@ -73,7 +48,6 @@ const availabilityOptions: TeamAvailability[] = [
 ];
 
 const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
-const SYSTEM_ROLE_STORAGE_KEY = "cincel.team.system-roles.v1";
 const ACTIVE_COLUMN_ORDER_STORAGE_KEY = "cincel.team.active-column-order.v1";
 const INACTIVE_COLUMN_ORDER_STORAGE_KEY = "cincel.team.inactive-column-order.v1";
 
@@ -285,44 +259,6 @@ function loadLabel(percent: number, isActive: boolean): string {
   return "Disponible";
 }
 
-function getSystemRole(member: TeamMember): SystemAccessRole {
-  if (isAdministratorRole(member.role) || hasDefaultSystemAdministratorAccess(member.institutionalEmail)) {
-    return SYSTEM_ADMIN_ROLE;
-  }
-
-  return DEFAULT_SYSTEM_ACCESS_ROLE;
-}
-
-function loadSystemRolesMap(): Record<number, SystemAccessRole> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  const stored = readStorage(SYSTEM_ROLE_STORAGE_KEY);
-  if (!stored) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Record<number, string>;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-
-    return Object.entries(parsed).reduce<Record<number, SystemAccessRole>>((accumulator, [memberId, role]) => {
-      const normalized = normalizeSystemAccessRole(role);
-      if (normalized) {
-        accumulator[Number(memberId)] = normalized;
-      }
-
-      return accumulator;
-    }, {});
-  } catch {
-    removeStorage(SYSTEM_ROLE_STORAGE_KEY);
-    return {};
-  }
-}
-
 export default function EquipoPageClient({
   initialTeam,
   initialProjects,
@@ -335,10 +271,6 @@ export default function EquipoPageClient({
       initialTeam && initialTeam.length > 0 ? initialTeam : getTeamMembersSnapshot();
     return snapshot.map((member) => normalizeTeamMember(member));
   });
-  const [showEditor, setShowEditor] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [draft, setDraft] = useState<MemberDraft>(emptyDraft);
-  const [formError, setFormError] = useState("");
   const [statusViewFilter, setStatusViewFilter] = useState<"Activos" | "Desactivados">("Activos");
   const [search, setSearch] = useState("");
   const [areaFilter, setAreaFilter] = useState("Todas");
@@ -350,8 +282,26 @@ export default function EquipoPageClient({
     initialProjects && initialProjects.length > 0 ? initialProjects : loadPersistedProjects()
   );
   const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
-  const [systemRoleByMemberId, setSystemRoleByMemberId] = useState<Record<number, SystemAccessRole>>(() => loadSystemRolesMap());
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const {
+    teamCapabilities,
+    setSystemRoleByMemberId,
+    resolveSystemRole,
+    isPrimaryAdminMember,
+    isSelfProtectedAdmin,
+    showEditor,
+    editingId,
+    setEditingId,
+    draft,
+    setDraft,
+    formError,
+    isEditingSelfProtectedAdmin,
+    accessPreviewState,
+    openAddEditor,
+    openEditEditor,
+    closeEditor,
+    saveMember,
+  } = useMemberEditor({ members, setMembers, authenticatedUser, normalizeMember: normalizeTeamMember });
   // Column order is loaded once from the same localStorage key the pre-DataTable
   // markup used (drag-to-reorder is gone now that DataTable owns header
   // rendering; sorting replaces it) so any previously saved order still
@@ -379,10 +329,6 @@ export default function EquipoPageClient({
       if (err instanceof RepositoryError) reportRepositoryError(err);
     });
   }, [members]);
-
-  useEffect(() => {
-    writeStorage(SYSTEM_ROLE_STORAGE_KEY, JSON.stringify(systemRoleByMemberId));
-  }, [systemRoleByMemberId]);
 
   useEffect(() => {
     writeStorage(ACTIVE_COLUMN_ORDER_STORAGE_KEY, JSON.stringify(activeColumnOrder));
@@ -446,10 +392,6 @@ export default function EquipoPageClient({
   }, []);
 
   const activeTasks = activityTasks.filter((task) => !task.archived && task.status !== "Completado");
-
-  const teamCapabilities = useMemo(() => {
-    return resolveTeamCapabilities(authenticatedUser);
-  }, [authenticatedUser]);
 
   const membersWithWorkload = useMemo<TeamMemberWithWorkload[]>(() => {
     return members.map((member) => {
@@ -528,315 +470,7 @@ export default function EquipoPageClient({
   const inactiveCount = membersWithWorkload.filter((member) => !member.active).length;
   const selectedProfileMember = membersWithWorkload.find((member) => member.id === selectedProfileMemberId) ?? null;
   const selectedCoordinatorMember = membersWithWorkload.find((member) => member.id === selectedCoordinatorMemberId) ?? null;
-  const editorMember = editingId === null ? null : membersWithWorkload.find((member) => member.id === editingId) ?? null;
-  const isEditingSelfProtectedAdmin = Boolean(
-    editorMember
-    && authenticatedUser
-    && authenticatedUser.member.id === editorMember.id
-    && hasDefaultSystemAdministratorAccess(editorMember.institutionalEmail)
-  );
-  const editorAccessState = editorMember ? getCollaboratorAccessState(editorMember) : null;
-  const accessPreviewState = useMemo<AccessPreviewState>(() => {
-    if (!draft.systemAccessEnabled) {
-      return {
-        hasSystemAccess: false,
-        status: "Sin acceso al sistema",
-        hasPasswordHash: false,
-        authEnabled: false,
-        mustChangePassword: false,
-        passwordUpdatedAt: null,
-        lastLoginAt: null,
-      };
-    }
-
-    if (editorAccessState) {
-      const isTempPasswordBeingEdited = Boolean(draft.temporaryPassword.trim() || draft.temporaryPasswordConfirmation.trim());
-
-      if (!isTempPasswordBeingEdited) {
-        return editorAccessState;
-      }
-
-      return {
-        ...editorAccessState,
-        hasSystemAccess: true,
-        status: "Pendiente de primer acceso",
-        hasPasswordHash: true,
-        authEnabled: true,
-        mustChangePassword: true,
-        passwordUpdatedAt: null,
-      };
-    }
-
-    return {
-      hasSystemAccess: true,
-      status: draft.temporaryPassword.trim() ? "Pendiente de primer acceso" : "Sin contraseña temporal",
-      hasPasswordHash: Boolean(draft.temporaryPassword.trim()),
-      authEnabled: true,
-      mustChangePassword: true,
-      passwordUpdatedAt: null,
-      lastLoginAt: null,
-    };
-  }, [draft.systemAccessEnabled, draft.temporaryPassword, draft.temporaryPasswordConfirmation, editorAccessState]);
   const systemRoleOptions = useMemo(() => [...SYSTEM_ACCESS_ROLES], []);
-
-  const resolveSystemRole = (member: TeamMember): SystemAccessRole => {
-    const configured = systemRoleByMemberId[member.id];
-    if (configured) {
-      return configured;
-    }
-
-    return getSystemRole(member);
-  };
-
-  const openAddEditor = () => {
-    if (!teamCapabilities.canCreateCollaborator) {
-      return;
-    }
-
-    setEditingId(null);
-    setDraft(emptyDraft);
-    setFormError("");
-    setShowEditor(true);
-  };
-
-  const openEditEditor = (member: TeamMember) => {
-    if (!teamCapabilities.canEditCollaborator) {
-      return;
-    }
-
-    const resolvedAccess = normalizeSystemAccessRole(resolveSystemRole(member)) ?? DEFAULT_SYSTEM_ACCESS_ROLE;
-    const accessState = getCollaboratorAccessState(member);
-
-    setEditingId(member.id);
-    setDraft({
-      name: member.name,
-      access: resolvedAccess,
-      systemAccessEnabled: accessState.hasSystemAccess,
-      temporaryPassword: "",
-      temporaryPasswordConfirmation: "",
-      birthDate: member.birthDate,
-      nationality: member.nationality,
-      phone: member.phone,
-      institutionalEmail: member.institutionalEmail,
-      address: member.address,
-      maritalStatus: member.maritalStatus,
-      homePhone: member.homePhone,
-      personalEmail: member.personalEmail,
-      curp: member.curp,
-      rfc: member.rfc,
-      emergencyContactName: member.emergencyContact.name,
-      emergencyContactRelation: member.emergencyContact.relation,
-      emergencyContactPhone: member.emergencyContact.phone,
-      emergencyContactAddress: member.emergencyContact.address,
-      role: member.role,
-      area: member.area,
-      capacity: member.capacity,
-      availability: member.availability,
-    });
-    setFormError("");
-    setShowEditor(true);
-  };
-
-  const saveMember = () => {
-    if (editingId === null && !teamCapabilities.canCreateCollaborator) {
-      return;
-    }
-
-    if (editingId !== null && !teamCapabilities.canEditCollaborator) {
-      return;
-    }
-
-    const name = draft.name.trim();
-    const birthDate = draft.birthDate.trim();
-    const nationality = draft.nationality.trim();
-    const phone = draft.phone.trim();
-    const institutionalEmail = draft.institutionalEmail.trim();
-    const address = draft.address.trim();
-    const maritalStatus = draft.maritalStatus.trim();
-    const homePhone = draft.homePhone.trim();
-    const personalEmail = draft.personalEmail.trim();
-    const curp = draft.curp.trim();
-    const rfc = draft.rfc.trim();
-    const emergencyContactName = draft.emergencyContactName.trim();
-    const emergencyContactRelation = draft.emergencyContactRelation.trim();
-    const emergencyContactPhone = draft.emergencyContactPhone.trim();
-    const emergencyContactAddress = draft.emergencyContactAddress.trim();
-    const role = draft.role.trim();
-    const area = draft.area.trim();
-    const access = draft.access;
-    const normalizedInstitutionalEmail = normalizeEmail(institutionalEmail);
-    const tempPassword = draft.temporaryPassword.trim();
-    const tempPasswordConfirmation = draft.temporaryPasswordConfirmation.trim();
-    const existingMember = editingId === null ? null : members.find((member) => member.id === editingId) ?? null;
-    const existingAccessState = existingMember ? getCollaboratorAccessState(existingMember) : null;
-    const shouldAssignTemporaryPassword = draft.systemAccessEnabled && (
-      editingId === null || !existingAccessState?.hasPasswordHash || Boolean(tempPassword) || Boolean(tempPasswordConfirmation)
-    );
-    const accessEnabledChanged = existingAccessState
-      ? existingAccessState.hasSystemAccess !== draft.systemAccessEnabled
-      : draft.systemAccessEnabled;
-
-    if (!name || !role || !area || draft.capacity < 1) {
-      setFormError("Completa nombre, puesto, area y una capacidad valida.");
-      return;
-    }
-
-    if (institutionalEmail && !institutionalEmail.includes("@")) {
-      setFormError("El correo institucional no es valido.");
-      return;
-    }
-
-    if (!institutionalEmail) {
-      setFormError("El correo institucional es obligatorio para acceso al sistema.");
-      return;
-    }
-
-    if (draft.systemAccessEnabled && shouldAssignTemporaryPassword) {
-      if (!tempPassword) {
-        setFormError("Asigna una contraseña temporal para habilitar el acceso al sistema.");
-        return;
-      }
-
-      if (tempPassword !== tempPasswordConfirmation) {
-        setFormError("La contraseña temporal y su confirmación no coinciden.");
-        return;
-      }
-
-      if (tempPassword.length < 8) {
-        setFormError("La contraseña temporal debe tener al menos 8 caracteres.");
-        return;
-      }
-    }
-
-    const normalized = name.toLowerCase();
-    const duplicated = members.some(
-      (member) => member.name.toLowerCase() === normalized && member.id !== editingId
-    );
-
-    if (duplicated) {
-      setFormError("Ya existe un colaborador con ese nombre.");
-      return;
-    }
-
-    const duplicatedEmail = members.some((member) =>
-      normalizeEmail(member.institutionalEmail || "") === normalizedInstitutionalEmail && member.id !== editingId
-    );
-
-    if (duplicatedEmail) {
-      setFormError("El correo institucional ya esta en uso por otro colaborador.");
-      return;
-    }
-
-    if (existingMember && isSelfProtectedAdmin(existingMember)) {
-      const currentEmail = normalizeEmail(existingMember.institutionalEmail || "");
-      if (normalizedInstitutionalEmail !== currentEmail) {
-        setFormError("Tu correo administrador principal esta protegido y no puede modificarse.");
-        return;
-      }
-    }
-
-    const persistCredentialChange = async (memberId: number, memberRow: TeamMember) => {
-      try {
-        await saveTeamMembers([memberRow]);
-        await setTeamMemberCredential(memberId, {
-          enableAccess: draft.systemAccessEnabled,
-          temporaryPassword: shouldAssignTemporaryPassword ? tempPassword : undefined,
-        });
-        const refreshed = await fetchTeamMembers();
-        if (refreshed.length > 0) {
-          const normalized = refreshed.map((m) => normalizeTeamMember(m));
-          lastSavedRef.current = normalized;
-          setMembers(normalized);
-        }
-      } catch (err) {
-        if (err instanceof RepositoryError) reportRepositoryError(err);
-      }
-    };
-
-    if (editingId === null) {
-      const nextId = members.reduce((max, member) => Math.max(max, member.id), 0) + 1;
-      const newMember: TeamMember = {
-        id: nextId,
-        name,
-        birthDate,
-        nationality,
-        phone,
-        institutionalEmail: normalizedInstitutionalEmail,
-        address,
-        maritalStatus,
-        homePhone,
-        personalEmail,
-        curp,
-        rfc,
-        emergencyContact: {
-          name: emergencyContactName,
-          relation: emergencyContactRelation,
-          phone: emergencyContactPhone,
-          address: emergencyContactAddress,
-        },
-        role,
-        area,
-        capacity: draft.capacity,
-        availability: draft.availability,
-        active: true,
-      };
-
-      setMembers((current) => [...current, newMember]);
-      if (teamCapabilities.canChangeCollaboratorAccess) {
-        setSystemRoleByMemberId((current) => ({
-          ...current,
-          [nextId]: access,
-        }));
-      }
-
-      if (teamCapabilities.canChangeCollaboratorAccess && draft.systemAccessEnabled) {
-        void persistCredentialChange(nextId, newMember);
-      }
-    } else {
-      const updatedMember: TeamMember = {
-        ...(existingMember as TeamMember),
-        name,
-        birthDate,
-        nationality,
-        phone,
-        institutionalEmail: normalizedInstitutionalEmail,
-        address,
-        maritalStatus,
-        homePhone,
-        personalEmail,
-        curp,
-        rfc,
-        emergencyContact: {
-          name: emergencyContactName,
-          relation: emergencyContactRelation,
-          phone: emergencyContactPhone,
-          address: emergencyContactAddress,
-        },
-        role,
-        area,
-        capacity: draft.capacity,
-        availability: draft.availability,
-      };
-
-      setMembers((current) =>
-        current.map((member) => (member.id === editingId ? updatedMember : member))
-      );
-
-      if (teamCapabilities.canChangeCollaboratorAccess) {
-        setSystemRoleByMemberId((current) => ({
-          ...current,
-          [editingId]: access,
-        }));
-      }
-
-      if (teamCapabilities.canChangeCollaboratorAccess && (accessEnabledChanged || shouldAssignTemporaryPassword)) {
-        void persistCredentialChange(editingId, updatedMember);
-      }
-    }
-
-    setFormError("");
-    setShowEditor(false);
-  };
 
   const toggleMemberActive = (id: number) => {
     if (!teamCapabilities.canToggleCollaboratorActive) {
@@ -873,18 +507,6 @@ export default function EquipoPageClient({
     setSearch("");
     setAreaFilter("Todas");
     setAvailabilityFilter("Todas");
-  };
-
-  const isPrimaryAdminMember = (member: TeamMember): boolean => {
-    return hasDefaultSystemAdministratorAccess(member.institutionalEmail);
-  };
-
-  const isSelfProtectedAdmin = (member: TeamMember): boolean => {
-    if (!authenticatedUser) {
-      return false;
-    }
-
-    return authenticatedUser.member.id === member.id && isPrimaryAdminMember(member);
   };
 
   const isSelfAdminAccessLocked = (member: TeamMember): boolean => {
@@ -1610,7 +1232,7 @@ export default function EquipoPageClient({
 
         <MemberEditorDrawer
           show={showEditor}
-          onClose={() => { setFormError(""); setShowEditor(false); }}
+          onClose={closeEditor}
           editingId={editingId}
           draft={draft}
           onChangeDraft={setDraft}
