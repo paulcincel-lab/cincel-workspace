@@ -14,9 +14,24 @@ import { Progress } from "@/components/ui/shadcn/progress";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { MemberProfileModal } from "@/components/equipo/MemberProfileModal";
+import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
+import { Button } from "@/components/ui/shadcn/button";
 import { useProjectsData } from "@/lib/proyectos/use-projects-data";
-import type { TeamMember } from "@/lib/data/team";
+import { useMemberEditor } from "@/lib/equipo/use-member-editor";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import type { TeamAvailability, TeamMember } from "@/lib/data/team";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
+
+const AVAILABILITY_OPTIONS: TeamAvailability[] = [
+  "Disponible",
+  "Medio Tiempo",
+  "Mixto",
+  "No disponible",
+  "Vacaciones",
+  "Permiso",
+  "Capacitacion",
+  "Home Office",
+];
 
 function loadLabel(percent: number, isActive: boolean): string {
   if (!isActive) return "Inactivo";
@@ -35,11 +50,26 @@ const AVAILABILITY_VARIANT: Record<string, "success" | "secondary" | "outline"> 
 };
 
 export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
-  const [members] = useState<TeamMember[]>(initialTeam);
+  const [members, setMembers] = useState<TeamMember[]>(initialTeam);
   const { allTasks } = useProjectsData();
   const [view, setView] = useState<"activos" | "desactivados">("activos");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [profileMemberId, setProfileMemberId] = useState<number | null>(null);
+  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const {
+    showEditor,
+    editingId,
+    draft,
+    setDraft,
+    formError,
+    accessPreviewState,
+    isEditingSelfProtectedAdmin,
+    teamCapabilities,
+    openAddEditor,
+    openEditEditor,
+    closeEditor,
+    saveMember,
+  } = useMemberEditor({ members, setMembers, authenticatedUser });
 
   function toggle(id: string | number) {
     setSelected((cur) => {
@@ -137,6 +167,7 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
       },
       createRowActionsColumn<(typeof withWorkload)[number]>(() => [
         { label: "Ver ficha", onSelect: (m) => setProfileMemberId(m.id) },
+        { label: "Editar", onSelect: (m) => openEditEditor(m) },
         {
           label: "Copiar correo institucional",
           separatorBefore: true,
@@ -146,7 +177,7 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
         },
       ]),
     ],
-    [selected]
+    [selected, openEditEditor]
   );
 
   function bulkCopyEmails() {
@@ -163,18 +194,21 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
         title="Equipo"
         description="Avatares, capacidad y carga actual de colaboradores."
         actions={
-          <Tabs
-            value={view}
-            onValueChange={(v) => {
-              setView(v as typeof view);
-              setSelected(new Set());
-            }}
-          >
-            <TabsList>
-              <TabsTrigger value="activos">Activos</TabsTrigger>
-              <TabsTrigger value="desactivados">Desactivados</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <>
+            <Tabs
+              value={view}
+              onValueChange={(v) => {
+                setView(v as typeof view);
+                setSelected(new Set());
+              }}
+            >
+              <TabsList>
+                <TabsTrigger value="activos">Activos</TabsTrigger>
+                <TabsTrigger value="desactivados">Desactivados</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button onClick={openAddEditor}>+ Agregar colaborador</Button>
+          </>
         }
       />
 
@@ -204,6 +238,20 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
       {profileMember ? (
         <MemberProfileModal member={profileMember} onClose={() => setProfileMemberId(null)} />
       ) : null}
+
+      <MemberEditorDrawer
+        show={showEditor}
+        onClose={closeEditor}
+        editingId={editingId}
+        draft={draft}
+        onChangeDraft={setDraft}
+        formError={formError}
+        onSave={saveMember}
+        accessPreviewState={accessPreviewState}
+        isEditingSelfProtectedAdmin={isEditingSelfProtectedAdmin}
+        teamCapabilities={teamCapabilities}
+        availabilityOptions={AVAILABILITY_OPTIONS}
+      />
     </div>
   );
 }
