@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/shadcn/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Input } from "@/components/ui/shadcn/input";
 
 export type DrivePickerEntry = {
@@ -96,14 +96,14 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="flex h-[80vh] max-w-3xl flex-col p-0" showCloseButton={false}>
-        <DialogHeader className="flex-row items-center justify-between border-b border-slate-200 p-4">
-          <DialogTitle className="text-base font-semibold">Elegir de Google Drive</DialogTitle>
+    <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="w-[720px] max-w-[720px]" showCloseButton={false}>
+        <SheetHeader className="flex-row items-center justify-between space-y-0 border-b border-slate-200 p-4">
+          <SheetTitle className="text-base font-semibold">Elegir de Google Drive</SheetTitle>
           <Button variant="outline" size="sm" onClick={onClose}>
             Cerrar
           </Button>
-        </DialogHeader>
+        </SheetHeader>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2 text-sm">
           <Button variant="link" className="h-auto p-0 font-medium" onClick={() => goToCrumb(-1)}>
@@ -166,15 +166,15 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
           )}
         </div>
 
-        <DialogFooter className="items-center justify-between p-4">
+        <SheetFooter className="mt-0 flex-row items-center justify-between border-t border-slate-200 p-4">
           <span className="truncate text-sm text-slate-500">
             {selected ? `Seleccionado: ${selected.name}` : "Selecciona un archivo"}
           </span>
           <Button disabled={!selected} onClick={() => selected && onPick(selected)}>
             Usar este archivo
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Input } from "@/components/ui/shadcn/input";
@@ -114,14 +114,14 @@ export function ProjectCreateModal({
   };
 
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-lg">Nuevo proyecto</DialogTitle>
-          <DialogDescription>Crea un proyecto operativo y abre su ficha.</DialogDescription>
-        </DialogHeader>
+    <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="text-lg">Nuevo proyecto</SheetTitle>
+          <SheetDescription>Crea un proyecto operativo y abre su ficha.</SheetDescription>
+        </SheetHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 px-6 py-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Label className="text-sm font-normal text-slate-700">
               Nombre del proyecto
@@ -236,15 +236,15 @@ export function ProjectCreateModal({
           ) : null}
         </div>
 
-        <DialogFooter>
+        <SheetFooter>
           <Button variant="outline" onClick={onClose}>
             Cancelar
           </Button>
           <Button onClick={handleCreate}>
             Crear proyecto
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

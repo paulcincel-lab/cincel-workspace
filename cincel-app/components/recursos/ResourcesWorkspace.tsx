@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/shadcn/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Input } from "@/components/ui/shadcn/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
@@ -1093,9 +1093,9 @@ export default function ResourcesWorkspace({
         </div>
       </section>
 
-      <Dialog open={creating !== null} onOpenChange={(next) => { if (!next) setCreating(null); }}>
-        <DialogContent className="max-w-lg">
-          <DialogTitle>Agregar recurso</DialogTitle>
+      <Sheet open={creating !== null} onOpenChange={(next) => { if (!next) setCreating(null); }}>
+        <SheetContent className="gap-6 overflow-y-auto p-6">
+          <SheetTitle>Agregar recurso</SheetTitle>
           <p className="text-sm text-slate-500">Completa la información del nuevo recurso.</p>
 
           {creating ? (
@@ -1149,8 +1149,8 @@ export default function ResourcesWorkspace({
               Crear recurso
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <DrivePickerDialog
         open={showDrivePicker}
@@ -1158,9 +1158,9 @@ export default function ResourcesWorkspace({
         onPick={applyDrivePick}
       />
 
-      <Dialog open={removeDraft !== null} onOpenChange={(next) => { if (!next) setRemoveDraft(null); }}>
-        <DialogContent className="max-w-lg">
-          <DialogTitle>Quitar recurso</DialogTitle>
+      <Sheet open={removeDraft !== null} onOpenChange={(next) => { if (!next) setRemoveDraft(null); }}>
+        <SheetContent className="overflow-y-auto p-6">
+          <SheetTitle>Quitar recurso</SheetTitle>
           <p className="text-sm text-slate-500">Selecciona el recurso que deseas quitar.</p>
 
           {removeDraft ? (
@@ -1191,16 +1191,16 @@ export default function ResourcesWorkspace({
               Quitar recurso
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      <Dialog
+      <Sheet
         open={previewUrl !== null}
         onOpenChange={(next) => { if (!next) { setPreviewUrl(null); setPreviewTitle(""); } }}
       >
-        <DialogContent className="flex h-[85vh] max-w-6xl flex-col p-0" showCloseButton={false}>
+        <SheetContent className="w-[90vw] max-w-6xl" showCloseButton={false}>
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-            <DialogTitle className="text-sm font-semibold">Vista previa: {previewTitle}</DialogTitle>
+            <SheetTitle className="text-sm font-semibold">Vista previa: {previewTitle}</SheetTitle>
             <Button
               variant="outline"
               size="sm"
@@ -1219,8 +1219,8 @@ export default function ResourcesWorkspace({
               className="h-full w-full rounded-b-xl"
             />
           ) : null}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </main>
   );
 }

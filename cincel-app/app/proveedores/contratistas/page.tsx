@@ -10,7 +10,7 @@ import { StarRating } from "@/components/proveedores/StarRating";
 import { PillDropdown } from "@/components/proveedores/PillDropdown";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
@@ -268,11 +268,13 @@ const AddContractorModal = ({
   };
 
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogTitle>Agregar Proveedor</DialogTitle>
+    <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Agregar Proveedor</SheetTitle>
+        </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 px-6 py-4">
           <div className="space-y-1">
             <Label htmlFor="add-contractor-provider">Nombre del proveedor *</Label>
             <Input
@@ -370,13 +372,13 @@ const AddContractorModal = ({
             <Textarea id="add-contractor-comments" value={form.comments} onChange={(e) => set("comments", e.target.value)} rows={2} placeholder="Notas internas…" />
           </div>
 
-          <div className="flex justify-end gap-3 pt-1">
+          <SheetFooter className="mt-0 flex-row justify-end border-t-0 p-0 pt-1">
             <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
             <Button type="submit">Agregar proveedor</Button>
-          </div>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 };
 

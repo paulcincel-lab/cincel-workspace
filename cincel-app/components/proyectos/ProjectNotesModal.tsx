@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import type { ProjectNote } from "@/lib/proyectos/use-projects-data";
@@ -35,14 +35,14 @@ export function ProjectNotesModal({ projectName, notes, onClose, onSave }: Proje
   };
 
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-lg">Notas del proyecto</DialogTitle>
-          <DialogDescription>{projectName}</DialogDescription>
-        </DialogHeader>
+    <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <SheetContent className="w-[672px] max-w-[672px] overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="text-lg">Notas del proyecto</SheetTitle>
+          <SheetDescription>{projectName}</SheetDescription>
+        </SheetHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 px-6 py-4">
           <Textarea
             value={noteDraft}
             onChange={(event) => setNoteDraft(event.target.value)}
@@ -74,7 +74,7 @@ export function ProjectNotesModal({ projectName, notes, onClose, onSave }: Proje
             )}
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
