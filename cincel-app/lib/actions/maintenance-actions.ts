@@ -252,7 +252,7 @@ export async function mergeDuplicateClientsAction(input: {
     });
   });
 
-  revalidatePath("/clientes");
+  revalidatePath("/directorio");
   revalidatePath("/proyectos");
 
   return {
@@ -461,7 +461,7 @@ export async function discardProjectViaAssistantAction(input: {
   });
 
   revalidatePath("/proyectos");
-  revalidatePath("/clientes");
+  revalidatePath("/directorio");
   for (const route of [
     "/tareas",
     "/tareas/presale",

@@ -19,6 +19,6 @@ test.describe("Smoke — login and navigation", () => {
   test("admin can log in and reach a private route", async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
-    await expect(page).toHaveURL(/\/(dashboard|clientes|proyectos|tareas|equipo)/);
+    await expect(page).toHaveURL(/\/(dashboard|directorio|proyectos|tareas|equipo)/);
   });
 });

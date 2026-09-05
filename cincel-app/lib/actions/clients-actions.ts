@@ -240,7 +240,7 @@ export async function saveClientsAction(list: ManualClient[]): Promise<void> {
     }
   }
 
-  revalidatePath("/clientes");
+  revalidatePath("/directorio");
   revalidatePath("/proyectos");
 }
 
@@ -280,12 +280,12 @@ export async function deleteClientAction(
     .set({ deletedAt: now })
     .where(eq(clients.legacyId, clientLegacyId));
 
-  revalidatePath("/clientes");
+  revalidatePath("/directorio");
   revalidatePath("/proyectos");
 }
 
 // ── Assistant-facing tool actions ──────────────────────────────────────────
-// Mirror the capability gates the /clientes and /tareas UIs enforce; the AI
+// Mirror the capability gates the /directorio and /tareas UIs enforce; the AI
 // assistant's tool set is built from the same capabilities, this is defense in
 // depth. Every write logs an activity_history bitácora entry naming the
 // requester — history is never overwritten.
@@ -439,7 +439,7 @@ export async function createClientViaAssistantAction(
   const kind = input.kind ?? "Particular";
   const { reused } = await insertClient({ ...input, kind });
 
-  revalidatePath("/clientes");
+  revalidatePath("/directorio");
   revalidatePath("/proyectos");
   return { ok: true, name: input.name.trim(), kind, alreadyExisted: reused };
 }
@@ -571,7 +571,7 @@ export async function onboardClientViaAssistantAction(
     tasksCreated += 1;
   }
 
-  revalidatePath("/clientes");
+  revalidatePath("/directorio");
   revalidatePath("/proyectos");
   revalidatePath("/tareas");
   revalidatePath("/tareas/presale");

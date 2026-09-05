@@ -601,7 +601,7 @@ export default function ProjectFichaPage() {
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-xs text-slate-500">Cliente</p>
-                    <Link href={`/clientes/${project.client.id}`} className="mt-1 font-medium text-blue-600 hover:underline">
+                    <Link href={`/directorio?cliente=${project.client.id}`} className="mt-1 font-medium text-blue-600 hover:underline">
                       {project.client.name}
                     </Link>
                   </div>
