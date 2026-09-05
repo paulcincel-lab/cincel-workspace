@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
@@ -39,7 +40,7 @@ import { useProjectsData } from "@/lib/proyectos/use-projects-data";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 
-interface DirectorioV2ClientProps {
+interface DirectorioClientProps {
   initialClients: ManualClient[];
   initialContractors: Contractor[];
   initialColaboradores: Colaborador[];
@@ -166,12 +167,12 @@ const RATING_FILTER_OPTIONS = [
 
 const emptyFilters = { status: "", category: "", minRating: 0, activeOnly: false };
 
-export function DirectorioV2Client({
+export function DirectorioClient({
   initialClients,
   initialContractors,
   initialColaboradores,
   initialTiendas,
-}: DirectorioV2ClientProps) {
+}: DirectorioClientProps) {
   const [clients, setClients] = useState(initialClients);
   const [contractors, setContractors] = useState(initialContractors);
   const [colaboradores, setColaboradores] = useState(initialColaboradores);
@@ -180,7 +181,11 @@ export function DirectorioV2Client({
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [detailRowId, setDetailRowId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const [detailRowId, setDetailRowId] = useState<string | null>(() => {
+    const clienteId = searchParams.get("cliente");
+    return clienteId ? `cliente-${clienteId}` : null;
+  });
   const [draft, setDraft] = useState<ContactDraft>(emptyContactDraft);
   const [formError, setFormError] = useState("");
   const [filters, setFilters] = useState(emptyFilters);

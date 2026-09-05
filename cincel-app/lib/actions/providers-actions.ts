@@ -129,7 +129,7 @@ export async function saveContractorsAction(list: Contractor[]): Promise<void> {
       .returning({ id: contractors.id });
     await replaceContractorCategories(row.id, c.categories);
   }
-  revalidatePath("/proveedores/contratistas");
+  revalidatePath("/directorio");
 }
 
 // ── Collaborator providers ─────────────────────────────────────────────────
@@ -208,7 +208,7 @@ export async function saveColaboradoresAction(
       );
     }
   }
-  revalidatePath("/proveedores/colaboradores");
+  revalidatePath("/directorio");
 }
 
 // ── Stores ─────────────────────────────────────────────────────────────────
@@ -265,5 +265,5 @@ export async function saveTiendasAction(list: Tienda[]): Promise<void> {
       .returning({ id: stores.id });
     await replaceStoreCategories(row.id, t.categories);
   }
-  revalidatePath("/proveedores/tiendas");
+  revalidatePath("/directorio");
 }

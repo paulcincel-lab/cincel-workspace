@@ -86,5 +86,5 @@ export async function appendClientHistoryAction(
     }))
   );
 
-  revalidatePath("/clientes");
+  revalidatePath("/directorio");
 }

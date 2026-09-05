@@ -38,7 +38,7 @@ export async function loginAsAdmin(page: Page, baseUrl: string): Promise<void> {
   await page.locator('input[type="password"]').first().fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Entrar" }).click();
   await page.waitForURL(
-    /\/dashboard|\/clientes|\/proyectos|\/tareas|\/equipo|\/change-password/,
+    /\/dashboard|\/directorio|\/proyectos|\/tareas|\/equipo|\/change-password/,
     { timeout: 20_000 }
   );
 }

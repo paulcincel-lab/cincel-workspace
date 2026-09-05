@@ -253,7 +253,7 @@ export async function saveProjectsAction(list: Project[]): Promise<void> {
   }
 
   revalidatePath("/proyectos");
-  revalidatePath("/clientes");
+  revalidatePath("/directorio");
   revalidatePath("/equipo");
 }
 
@@ -271,5 +271,5 @@ export async function deleteProjectAction(projectLegacyId: number): Promise<void
     );
 
   revalidatePath("/proyectos");
-  revalidatePath("/clientes");
+  revalidatePath("/directorio");
 }

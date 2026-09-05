@@ -1,24 +1,9 @@
-import ClientesPageClient from "./ClientesPageClient";
-import { fetchClientsAction } from "@/lib/actions/clients-actions";
-import { fetchProjectsAction } from "@/lib/actions/projects-actions";
+import { redirect } from "next/navigation";
 
-export default async function ClientesPage() {
-  // Server-rendered initial data — no client-side fetch waterfall on first paint.
-  let initialClients: Awaited<ReturnType<typeof fetchClientsAction>> = [];
-  let initialProjects: Awaited<ReturnType<typeof fetchProjectsAction>> = [];
-  try {
-    [initialClients, initialProjects] = await Promise.all([
-      fetchClientsAction(),
-      fetchProjectsAction(),
-    ]);
-  } catch {
-    // Not authorized / no session — the client falls back to hydrating itself.
-  }
-
-  return (
-    <ClientesPageClient
-      initialClients={initialClients}
-      initialProjects={initialProjects}
-    />
-  );
+/**
+ * Legacy route — Clientes is now part of the unified Directorio page.
+ * This redirect prevents dead-link 404s for any bookmarked URL.
+ */
+export default function ClientesLegacyPage() {
+  redirect("/directorio");
 }

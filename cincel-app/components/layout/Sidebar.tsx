@@ -117,16 +117,6 @@ const CompanyIcon = ({ className = "h-5 w-5" }: IconProps) => (
   </svg>
 );
 
-const SuppliersIcon = ({ className = "h-5 w-5" }: IconProps) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
-    <path d="M3 9h18" />
-    <path d="M5 9V6h14v3" />
-    <path d="M6 9v11h12V9" />
-    <path d="M9 13h6" />
-    <path d="M9 16h6" />
-  </svg>
-);
-
 const ClientsIcon = ({ className = "h-5 w-5" }: IconProps) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
     <circle cx="8" cy="9" r="3" />
@@ -169,8 +159,6 @@ export default function Sidebar() {
       ? "Empresa"
       : pathname.startsWith("/recursos")
       ? "Recursos"
-      : pathname.startsWith("/proveedores")
-      ? "Proveedores"
       : pathname.startsWith("/tareas")
         ? "Actividades"
         : pathname.startsWith("/configuracion")
@@ -202,7 +190,6 @@ export default function Sidebar() {
       submenu: [
         { label: "Dashboard", href: "/v2/dashboard", icon: DashboardIcon },
         { label: "Actividades", href: "/v2/actividades/diseno", icon: ActivityIcon },
-        { label: "Directorio", href: "/v2/directorio", icon: ClientsIcon },
         { label: "Recursos", href: "/v2/recursos", icon: ResourcesIcon },
         { label: "Asistente", href: "/v2/asistente", icon: AssistantIcon },
       ],
@@ -243,17 +230,8 @@ export default function Sidebar() {
         { label: "Politicas de la empresa", href: "/recursos/empresa/politicas-de-la-empresa", icon: ResourcesIcon },
       ],
     },
-    {
-      label: "Proveedores",
-      icon: SuppliersIcon,
-      submenu: [
-        { label: "Contratistas", href: "/proveedores/contratistas", icon: SuppliersIcon },
-        { label: "Colaboradores", href: "/proveedores/colaboradores", icon: SuppliersIcon },
-        { label: "Tiendas", href: "/proveedores/tiendas", icon: SuppliersIcon },
-      ],
-    },
     { label: "Equipo", href: "/equipo", icon: TeamIcon },
-    { label: "Clientes", href: "/clientes", icon: ClientsIcon },
+    { label: "Directorio", href: "/directorio", icon: ClientsIcon },
     { label: "Asistente", href: "/asistente", icon: AssistantIcon },
     ...(canViewConfiguration
       ? [
