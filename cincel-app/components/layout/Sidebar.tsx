@@ -188,7 +188,6 @@ export default function Sidebar() {
       label: "Vista previa v2",
       icon: PreviewIcon,
       submenu: [
-        { label: "Dashboard", href: "/v2/dashboard", icon: DashboardIcon },
         { label: "Actividades", href: "/v2/actividades/diseno", icon: ActivityIcon },
         { label: "Recursos", href: "/v2/recursos", icon: ResourcesIcon },
       ],
