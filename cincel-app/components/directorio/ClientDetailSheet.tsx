@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/shadcn/button";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import type { ManualClient } from "@/lib/repositories/clients-repository";
+import type { ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
 import type { ProjectItem } from "@/lib/proyectos/use-projects-data";
 
 interface ClientDetailSheetProps {
   client: ManualClient;
   linkedProjects: ProjectItem[];
+  historyEntries: ClientHistoryEntry[];
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -31,6 +33,7 @@ function formatCurrency(value: number): string {
 export function ClientDetailSheet({
   client,
   linkedProjects,
+  historyEntries,
   onClose,
   onEdit,
   onDelete,
@@ -179,6 +182,32 @@ export function ClientDetailSheet({
             ) : (
               <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
                 Este cliente no tiene proyectos operativos vinculados.
+              </p>
+            )}
+          </section>
+
+          <section>
+            <h3 className="mb-3 text-sm font-semibold">Bitácora de cambios</h3>
+            {historyEntries.length > 0 ? (
+              <div className="space-y-2">
+                {historyEntries.slice(0, 12).map((entry) => (
+                  <div key={entry.id} className="rounded-xl border border-border bg-muted p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold">{entry.field}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(entry.date).toLocaleString("es-MX")}
+                      </p>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {entry.before || "Vacío"} {"->"} {entry.after || "Vacío"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">Por: {entry.author}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                Todavía no hay cambios registrados para este cliente.
               </p>
             )}
           </section>

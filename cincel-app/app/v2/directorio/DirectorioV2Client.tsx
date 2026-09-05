@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
@@ -24,6 +24,7 @@ import { directorioRowSourceId, directorioStatusVariant, toDirectorioRows, type 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { saveClients, deleteClientAndLinkedProjects, type ManualClient } from "@/lib/repositories/clients-repository";
+import { fetchClientHistory, appendClientHistory, type ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
 import {
   saveColaboradores,
   saveContractors,
@@ -223,6 +224,11 @@ export function DirectorioV2Client({
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const clientsCapabilities = useMemo(() => resolveClientsCapabilities(authenticatedUser), [authenticatedUser]);
 
+  const [historyByClient, setHistoryByClient] = useState<Record<number, ClientHistoryEntry[]>>({});
+  useEffect(() => {
+    void fetchClientHistory().then(setHistoryByClient).catch(() => undefined);
+  }, []);
+
   const { projectsData } = useProjectsData();
 
   const vocab: DirectorioVocab = {
@@ -236,6 +242,28 @@ export function DirectorioV2Client({
     save(next).catch((err: unknown) => {
       if (err instanceof RepositoryError) reportRepositoryError(err);
     });
+  }
+
+  function appendHistory(clientId: number, entries: Array<Omit<ClientHistoryEntry, "id" | "date" | "clientId">>) {
+    if (entries.length === 0) return;
+
+    const nextEntries = entries.map((entry) => ({
+      ...entry,
+      id: `${clientId}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      clientId,
+      date: new Date().toISOString(),
+    }));
+
+    // Optimistic; the authoritative rows come back on the next hydrate.
+    setHistoryByClient((current) => ({
+      ...current,
+      [clientId]: [...nextEntries, ...(current[clientId] ?? [])],
+    }));
+
+    void appendClientHistory(
+      clientId,
+      entries.map((e) => ({ field: e.field, before: e.before, after: e.after, author: e.author }))
+    ).catch(() => undefined);
   }
 
   const updateClient = (id: number, patch: Partial<ManualClient>) =>
@@ -487,7 +515,7 @@ export function DirectorioV2Client({
     if (editingId !== null) {
       const id = directorioRowSourceId({ id: editingId });
       if (draft.type === "Cliente") {
-        updateClient(id, {
+        const patch: Partial<ManualClient> = {
           name,
           kind: draft.kind,
           phone: draft.phone.trim(),
@@ -503,7 +531,46 @@ export function DirectorioV2Client({
             .map((c) => ({ name: c.name.trim(), role: c.role.trim(), phone: c.phone.trim(), email: c.email.trim() }))
             .filter((c) => c.name || c.role || c.phone || c.email),
           completedProjects: draft.completedProjectsText.split(",").map((p) => p.trim()).filter(Boolean),
-        });
+        };
+
+        const before = clients.find((c) => c.id === id);
+        if (before) {
+          const changeEntries: Array<Omit<ClientHistoryEntry, "id" | "date" | "clientId">> = [];
+          const author = authenticatedUser?.member.name ?? "Usuario";
+          const registerChange = (field: string, prev: string, next: string) => {
+            if (prev !== next) changeEntries.push({ field, before: prev, after: next, author });
+          };
+
+          registerChange("Nombre", before.name, patch.name ?? before.name);
+          registerChange("Email(s)", before.emails.join(", "), (patch.emails ?? before.emails).join(", "));
+          registerChange("Contacto principal", before.phone || "", (patch.phone ?? before.phone) || "");
+          registerChange("Empresa/Particular", before.kind, patch.kind ?? before.kind);
+          registerChange("Canal de llegada", before.acquisitionChannel, patch.acquisitionChannel || "Sin registro");
+          registerChange("Monto gastado", String(before.totalSpent), String(patch.totalSpent ?? before.totalSpent));
+          registerChange("Proyecto activo", before.hasActiveProject ? "Si" : "No", patch.hasActiveProject ? "Si" : "No");
+          registerChange("Fecha primer trabajo", before.firstWorkDate || "Sin fecha", patch.firstWorkDate || "Sin fecha");
+          registerChange("Nombre de proyecto", before.projectName || "", patch.projectName || "");
+          registerChange("Tipo de proyecto", before.projectType || "", patch.projectType || "");
+          registerChange(
+            "# proyectos con nosotros",
+            String(before.totalProjectsWorked),
+            String(patch.totalProjectsWorked ?? before.totalProjectsWorked)
+          );
+          registerChange(
+            "Proyectos realizados",
+            before.completedProjects.join(", "),
+            (patch.completedProjects ?? before.completedProjects).join(", ")
+          );
+          registerChange(
+            "Contactos adicionales",
+            before.contacts.map((c) => `${c.name}|${c.role}|${c.phone}|${c.email}`).join(" || "),
+            (patch.contacts ?? before.contacts).map((c) => `${c.name}|${c.role}|${c.phone}|${c.email}`).join(" || ")
+          );
+
+          appendHistory(id, changeEntries);
+        }
+
+        updateClient(id, patch);
       } else if (draft.type === "Contratista") {
         updateContractor(id, {
           provider: name,
@@ -979,6 +1046,7 @@ export function DirectorioV2Client({
         <ClientDetailSheet
           client={detailClient}
           linkedProjects={detailLinkedProjects}
+          historyEntries={historyByClient[detailClient.id] ?? []}
           onClose={() => setDetailRowId(null)}
           onEdit={() => {
             const row = rows.find((r) => r.id === detailRowId);
