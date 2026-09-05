@@ -62,7 +62,7 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-muted px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-[1240px] overflow-hidden rounded-[28px] bg-card shadow-[0_24px_80px_rgba(15,23,42,0.12)] lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="relative flex overflow-hidden bg-[radial-gradient(circle_at_50%_12%,rgba(78,126,255,0.45),transparent_32%),radial-gradient(circle_at_62%_48%,rgba(26,86,255,0.7),transparent_48%),linear-gradient(145deg,#1651d7_0%,#0f4fd6_42%,#0a45c0_100%)] px-8 py-10 text-white sm:px-12 sm:py-12 lg:px-14 lg:py-14">
+        <section className="relative flex overflow-hidden bg-[radial-gradient(circle_at_50%_12%,rgba(255,255,255,0.10),transparent_32%),radial-gradient(circle_at_62%_48%,rgba(255,255,255,0.06),transparent_48%),linear-gradient(145deg,#0a0a0a_0%,#161616_42%,#000000_100%)] px-8 py-10 text-white sm:px-12 sm:py-12 lg:px-14 lg:py-14">
           <div className="absolute inset-0 opacity-25" aria-hidden="true" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.18) 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
           <div className="relative z-10 flex w-full flex-col justify-between">
             <div>
