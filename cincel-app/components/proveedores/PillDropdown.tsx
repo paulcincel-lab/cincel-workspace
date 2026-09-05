@@ -70,7 +70,7 @@ export const PillDropdown = ({
             {pickingFor && onSetColor ? (
               <div className="p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-gray-600 truncate max-w-[130px]">{pickingFor}</span>
+                  <span className="text-xs font-medium text-foreground truncate max-w-[130px]">{pickingFor}</span>
                   <Button variant="link" onClick={() => setPickingFor(null)} className="h-auto p-0 text-xs">← Atrás</Button>
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -82,7 +82,7 @@ export const PillDropdown = ({
                       type="button"
                       title={c.label}
                       onClick={() => { onSetColor(pickingFor, { bg: c.bg, text: c.text }); setPickingFor(null); }}
-                      className="w-8 h-8 rounded-md border-2 border-white hover:border-gray-400 transition shadow-sm"
+                      className="w-8 h-8 rounded-md border-2 border-background hover:border-muted-foreground transition shadow-sm"
                       style={{ backgroundColor: c.bg }}
                     />
                   ))}
@@ -94,7 +94,7 @@ export const PillDropdown = ({
                   {options.map((opt) => {
                     const s = effectiveStyle(opt);
                     return (
-                      <div key={opt} className={`flex items-center group px-2 py-1.5 hover:bg-gray-50 ${value === opt ? "bg-gray-50" : ""}`}>
+                      <div key={opt} className={`flex items-center group px-2 py-1.5 hover:bg-muted ${value === opt ? "bg-muted" : ""}`}>
                         <Button
                           variant="ghost"
                           onClick={() => { onSave(opt); close(); }}
@@ -110,7 +110,7 @@ export const PillDropdown = ({
                           <Button
                             variant="ghost"
                             onClick={(e) => { e.stopPropagation(); setPickingFor(opt); }}
-                            className="h-auto opacity-0 group-hover:opacity-100 p-0.5 text-xs text-gray-300 hover:text-blue-500"
+                            className="h-auto opacity-0 group-hover:opacity-100 p-0.5 text-xs text-muted-foreground hover:text-primary"
                             title="Cambiar color"
                           >🎨</Button>
                         )}
@@ -118,7 +118,7 @@ export const PillDropdown = ({
                           <Button
                             variant="ghost"
                             onClick={(e) => { e.stopPropagation(); onDeleteOption(opt); }}
-                            className="h-auto opacity-0 group-hover:opacity-100 p-0.5 text-xs text-gray-300 hover:text-red-500"
+                            className="h-auto opacity-0 group-hover:opacity-100 p-0.5 text-xs text-muted-foreground hover:text-destructive"
                             title="Eliminar opción"
                           >✕</Button>
                         )}
@@ -128,7 +128,7 @@ export const PillDropdown = ({
                 </div>
 
                 {onAddOption && (
-                  <div className="border-t border-gray-100 p-2">
+                  <div className="border-t border-border p-2">
                     {!adding ? (
                       <Button variant="link" onClick={() => setAdding(true)} className="h-auto w-full justify-start p-1 text-xs">
                         + Agregar opción
@@ -144,7 +144,7 @@ export const PillDropdown = ({
                           className="h-auto py-1.5 text-xs"
                         />
                         <div>
-                          <p className="text-xs text-gray-400 mb-1">Color:</p>
+                          <p className="text-xs text-muted-foreground mb-1">Color:</p>
                           <div className="flex flex-wrap gap-1">
                             {/* Color swatches: pure style={backgroundColor} squares, no text —
                                 shadcn Button's text-oriented defaults don't fit; kept as plain buttons. */}
@@ -157,7 +157,7 @@ export const PillDropdown = ({
                                 className="w-5 h-5 rounded-sm border-2 transition"
                                 style={{
                                   backgroundColor: c.bg,
-                                  borderColor: newColor?.bg === c.bg ? "#1d4ed8" : "transparent",
+                                  borderColor: newColor?.bg === c.bg ? "#0a0a0a" : "transparent",
                                 }}
                               />
                             ))}
