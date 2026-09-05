@@ -71,7 +71,7 @@ export const GENERAL_SETTINGS_DEFAULTS: GeneralSettings = {
   },
   appearance: {
     systemLogoUrl: "/favicon.ico",
-    primaryColor: "#2F63E7",
+    primaryColor: "#0A0A0A",
   },
   system: {
     systemName: "Cincel Workspace",
