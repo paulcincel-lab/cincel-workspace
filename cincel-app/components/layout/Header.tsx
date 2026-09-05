@@ -36,7 +36,7 @@ const DEFAULT_HEADER_LINKS: HeaderLinks = {
 };
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 
-const headerActionClassName = "inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700";
+const headerActionClassName = "inline-flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground transition hover:border-foreground/30 hover:bg-accent hover:text-foreground";
 const headerActionIconClassName = "h-[18px] w-[18px]";
 
 function SignOutIcon({ className = headerActionIconClassName }: { className?: string }) {
@@ -56,29 +56,29 @@ function DevelopmentMenu({ isVisible }: { isVisible: boolean }) {
 
   return (
     <details className="relative">
-      <summary className="list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-slate-300 hover:text-slate-800">
+      <summary className="list-none cursor-pointer rounded-xl border border-border bg-popover px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:border-foreground/30 hover:text-foreground">
         Desarrollo
       </summary>
 
-      <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-        <p className="px-2 pb-1 text-[10px] uppercase tracking-wide text-slate-500">Accesos temporales</p>
+      <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-border bg-popover p-2 shadow-lg">
+        <p className="px-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Accesos temporales</p>
 
         <nav className="space-y-1">
           <Link
             href="/login"
-            className="block rounded-lg px-2 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            className="block rounded-lg px-2 py-2 text-xs font-medium text-foreground transition hover:bg-accent"
           >
             Login
           </Link>
           <Link
             href="/change-password"
-            className="block rounded-lg px-2 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            className="block rounded-lg px-2 py-2 text-xs font-medium text-foreground transition hover:bg-accent"
           >
             Cambio obligatorio de contrasena
           </Link>
           <Link
             href="/profile"
-            className="block rounded-lg px-2 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            className="block rounded-lg px-2 py-2 text-xs font-medium text-foreground transition hover:bg-accent"
           >
             Perfil
           </Link>
@@ -372,7 +372,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
                 onChange={handleProfileImageChange}
                 className="sr-only"
               />
-              <div className="relative h-25 w-25 overflow-hidden rounded-full border-2 border-slate-200 bg-slate-200 sm:h-30 sm:w-30">
+              <div className="relative h-25 w-25 overflow-hidden rounded-full border-2 border-border bg-muted sm:h-30 sm:w-30">
                 {profileImage ? (
                   <Image
                     src={profileImage}
@@ -382,7 +382,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-blue-600 text-3xl font-semibold text-white">
+                  <div className="flex h-full w-full items-center justify-center bg-primary text-3xl font-semibold text-primary-foreground">
                     {currentInitial}
                   </div>
                 )}
@@ -399,7 +399,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
                 </Button>
 
                 {isProfileImageMenuOpen ? (
-                  <div className="absolute left-1/2 z-20 mt-2 w-28 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                  <div className="absolute left-1/2 z-20 mt-2 w-28 -translate-x-1/2 rounded-xl border border-border bg-popover p-1 shadow-lg">
                     <Button
                       variant="ghost"
                       className="h-auto w-full justify-start rounded-lg px-2 py-1.5 text-left text-[11px] font-medium"
@@ -420,10 +420,10 @@ export default function Header({ variant = "default" }: HeaderProps) {
             </div>
 
             <div>
-              <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">
+              <h1 className="text-3xl font-bold text-foreground sm:text-4xl">
                 {currentMember?.name ?? "Nombre del Usuario"}
               </h1>
-              <p className="mt-1 text-base text-slate-600 sm:text-xl">
+              <p className="mt-1 text-base text-muted-foreground sm:text-xl">
                 {profileSubtitle || "Puesto • Area"}
               </p>
             </div>
@@ -436,7 +436,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
               {hasAuthenticatedSession ? (
                 <Button
                   variant="outline"
-                  className="h-12 w-24 border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
+                  className="h-12 w-24 border-border bg-muted text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground"
                   onClick={handleLogout}
                   aria-label="Cerrar sesion"
                   title="Cerrar sesion"
@@ -459,7 +459,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
           <div className="flex items-center gap-4">
           <AppAvatar name={currentName} showName={false} />
 
-          <h1 className="text-xl font-bold text-slate-900">
+          <h1 className="text-xl font-bold text-foreground">
             {`Bienvenido, ${currentName}`}
           </h1>
         </div>
@@ -472,7 +472,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
               {hasAuthenticatedSession ? (
                 <Button
                   variant="outline"
-                  className="h-12 w-24 border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
+                  className="h-12 w-24 border-border bg-muted text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground"
                   onClick={handleLogout}
                   aria-label="Cerrar sesion"
                   title="Cerrar sesion"
@@ -492,10 +492,10 @@ export default function Header({ variant = "default" }: HeaderProps) {
                 </Button>
 
                 {isLinksEditorOpen ? (
-                  <div className="w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="w-72 rounded-xl border border-border bg-popover p-3 shadow-sm">
                     <div className="space-y-2">
                       <label className="block">
-                        <span className="mb-1 block text-[11px] font-medium text-slate-600">Instagram</span>
+                        <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Instagram</span>
                         <Input
                           value={linksDraft.instagram}
                           onChange={(event) => handleDraftLinkChange("instagram", event.target.value)}
@@ -504,7 +504,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
                       </label>
 
                       <label className="block">
-                        <span className="mb-1 block text-[11px] font-medium text-slate-600">Pagina web</span>
+                        <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Pagina web</span>
                         <Input
                           value={linksDraft.website}
                           onChange={(event) => handleDraftLinkChange("website", event.target.value)}
@@ -513,7 +513,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
                       </label>
 
                       <label className="block">
-                        <span className="mb-1 block text-[11px] font-medium text-slate-600">E-mail (URL o correo)</span>
+                        <span className="mb-1 block text-[11px] font-medium text-muted-foreground">E-mail (URL o correo)</span>
                         <Input
                           value={linksDraft.email}
                           onChange={(event) => handleDraftLinkChange("email", event.target.value)}
@@ -536,7 +536,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
                       </Button>
                       <Button
                         size="sm"
-                        className="h-auto bg-slate-900 px-2 py-1 text-xs hover:bg-slate-800"
+                        className="h-auto px-2 py-1 text-xs"
                         onClick={handleSaveLinks}
                       >
                         Guardar
@@ -550,7 +550,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
         </div>
       </div>
 
-      <p className="mt-2 text-slate-800" suppressHydrationWarning>
+      <p className="mt-2 text-muted-foreground" suppressHydrationWarning>
         {todayLabel || "Cargando fecha..."}
       </p>
 
