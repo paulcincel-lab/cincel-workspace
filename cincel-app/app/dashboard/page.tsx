@@ -1,36 +1,23 @@
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import InteractiveDashboard from "@/components/dashboard/InteractiveDashboard";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
-import { fetchActivitiesAction } from "@/lib/actions/activities-actions";
+import { DashboardClient } from "./DashboardClient";
 
-export default async function Home() {
-  let initialData;
+export default async function DashboardPage() {
+  let initialProjects: Awaited<ReturnType<typeof fetchProjectsAction>> = [];
   try {
-    const [projects, presale, diseno, operativas] = await Promise.all([
-      fetchProjectsAction(),
-      fetchActivitiesAction("Presale"),
-      fetchActivitiesAction("Diseño"),
-      fetchActivitiesAction("Construcción"),
-    ]);
-    initialData = { projects, activities: { presale, diseno, operativas } };
+    initialProjects = await fetchProjectsAction();
   } catch {
-    // Not authorized / no session — the client hydrates itself.
+    // Not authorized / no session — the client falls back to hydrating itself.
   }
 
   return (
-    <main className="flex min-h-screen bg-slate-100">
-
+    <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
-
-      <section className="flex-1 p-10 overflow-y-auto">
-
+      <section className="flex-1 overflow-y-auto p-10">
         <Header variant="profile" />
-
-        <InteractiveDashboard initialData={initialData} />
-
+        <DashboardClient initialProjects={initialProjects} />
       </section>
-
     </main>
   );
 }

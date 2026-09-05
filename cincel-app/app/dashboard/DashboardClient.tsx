@@ -1,15 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
 import { LoadBar } from "@/components/v2/status/LoadBar";
 import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
 import type { Task, TaskStatus } from "@/lib/types/task";
 
-interface DashboardV2ClientProps {
+interface DashboardClientProps {
   initialProjects: ProjectItem[];
 }
 
@@ -25,8 +27,9 @@ function effectiveDueDate(task: Task): string {
 
 const STATUS_ORDER: TaskStatus[] = ["Pendiente", "En proceso", "Completado", "Bloqueado"];
 
-export function DashboardV2Client({ initialProjects }: DashboardV2ClientProps) {
-  const { projectsData, allTasks, isLoadingData } = useProjectsData(initialProjects);
+export function DashboardClient({ initialProjects }: DashboardClientProps) {
+  const { projectsData, allTasks, isLoadingData, secondaryCoordinatorByProject } = useProjectsData(initialProjects);
+  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
 
   const today = useMemo(() => {
     const d = new Date();
@@ -34,10 +37,41 @@ export function DashboardV2Client({ initialProjects }: DashboardV2ClientProps) {
     return d;
   }, []);
 
-  const activeTasks = useMemo(() => allTasks.filter((t) => !t.archived), [allTasks]);
+  // Same role-based data scope (global / managed_projects / assigned_tasks) as
+  // the legacy dashboard — a non-privileged viewer must not see projects or
+  // tasks outside their scope just because this is the "new" page.
+  const dashboardCapabilities = useMemo(
+    () => resolveDashboardCapabilities(authenticatedUser),
+    [authenticatedUser]
+  );
+
+  const scopedProjectsData = useMemo(
+    () =>
+      scopeDashboardProjects({
+        projects: projectsData,
+        tasks: allTasks,
+        viewerName: authenticatedUser?.member.name || "",
+        dataScope: dashboardCapabilities.dataScope,
+        secondaryCoordinatorByProject,
+      }),
+    [allTasks, authenticatedUser, dashboardCapabilities.dataScope, projectsData, secondaryCoordinatorByProject]
+  );
+
+  const scopedAllTasks = useMemo(
+    () =>
+      scopeDashboardTasks({
+        tasks: allTasks,
+        viewerName: authenticatedUser?.member.name || "",
+        dataScope: dashboardCapabilities.dataScope,
+        allowedProjectNames: new Set(scopedProjectsData.map((project) => project.name)),
+      }),
+    [allTasks, authenticatedUser, dashboardCapabilities.dataScope, scopedProjectsData]
+  );
+
+  const activeTasks = useMemo(() => scopedAllTasks.filter((t) => !t.archived), [scopedAllTasks]);
 
   const kpis = useMemo(() => {
-    const activeProjects = projectsData.filter((p) => p.active).length;
+    const activeProjects = scopedProjectsData.filter((p) => p.active).length;
 
     const overdue = activeTasks.filter((t) => {
       const due = toDate(effectiveDueDate(t));
@@ -56,7 +90,7 @@ export function DashboardV2Client({ initialProjects }: DashboardV2ClientProps) {
     const noOwner = activeTasks.filter((t) => !t.manager || t.manager === "Sin responsable");
 
     return { activeProjects, overdue, blocked, reviews, noOwner };
-  }, [projectsData, activeTasks, today]);
+  }, [scopedProjectsData, activeTasks, today]);
 
   const statusMix = useMemo(() => {
     const total = activeTasks.length || 1;
