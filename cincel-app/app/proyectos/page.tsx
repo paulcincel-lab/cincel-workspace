@@ -1,7 +1,7 @@
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import ProjectsTable from "@/components/proyectos/ProjectsTable";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
+import { ProyectosClient } from "./ProyectosClient";
 
 export default async function ProyectosPage() {
   // Server-rendered initial data — no client-side fetch waterfall on first paint.
@@ -13,18 +13,12 @@ export default async function ProyectosPage() {
   }
 
   return (
-    <main className="flex min-h-screen bg-slate-100">
-
+    <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
-
-      <section className="flex-1 p-10 overflow-y-auto">
-
+      <section className="flex-1 overflow-y-auto p-10">
         <Header />
-
-        <ProjectsTable initialProjects={initialProjects} />
-
+        <ProyectosClient initialProjects={initialProjects} />
       </section>
-
     </main>
   );
 }

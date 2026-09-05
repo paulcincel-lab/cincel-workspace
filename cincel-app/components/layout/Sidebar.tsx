@@ -201,9 +201,7 @@ export default function Sidebar() {
       icon: PreviewIcon,
       submenu: [
         { label: "Dashboard", href: "/v2/dashboard", icon: DashboardIcon },
-        { label: "Proyectos", href: "/v2/proyectos", icon: ProjectIcon },
         { label: "Actividades", href: "/v2/actividades/diseno", icon: ActivityIcon },
-        { label: "Equipo", href: "/v2/equipo", icon: TeamIcon },
         { label: "Directorio", href: "/v2/directorio", icon: ClientsIcon },
         { label: "Recursos", href: "/v2/recursos", icon: ResourcesIcon },
         { label: "Asistente", href: "/v2/asistente", icon: AssistantIcon },
