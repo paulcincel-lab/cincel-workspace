@@ -191,7 +191,6 @@ export default function Sidebar() {
         { label: "Dashboard", href: "/v2/dashboard", icon: DashboardIcon },
         { label: "Actividades", href: "/v2/actividades/diseno", icon: ActivityIcon },
         { label: "Recursos", href: "/v2/recursos", icon: ResourcesIcon },
-        { label: "Asistente", href: "/v2/asistente", icon: AssistantIcon },
       ],
     },
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },

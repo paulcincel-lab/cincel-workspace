@@ -10,7 +10,7 @@ export default async function AsistentePage() {
   if (!session) redirect("/login");
 
   return (
-    <main className="flex min-h-screen bg-slate-100">
+    <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
       <section className="flex flex-1 flex-col overflow-hidden p-10">
         <Header />
