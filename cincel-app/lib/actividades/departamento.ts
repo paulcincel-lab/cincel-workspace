@@ -61,6 +61,26 @@ export function getDepartamento(slug: string) {
   return DEPARTMENTOS.find((d) => d.slug === slug);
 }
 
+/**
+ * Best-guess departamento slug for a project's `stage` field (which can hold
+ * several slash-separated stages, e.g. "Presale/Diseño") — used to deep-link
+ * from a project into its activities. Picks the last (most current) stage
+ * that matches a known departamento, falling back to "presale".
+ */
+export function departamentoSlugForStage(stage: string): string {
+  const stages = stage.split("/").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  for (let i = stages.length - 1; i >= 0; i -= 1) {
+    const match = DEPARTMENTOS.find((d) => d.stage.toLowerCase() === stages[i]);
+    if (match) return match.slug;
+  }
+  return "presale";
+}
+
+/** Departamento slug for a task's workflow — used to deep-link from a task into its activities page. */
+export function departamentoSlugForWorkflow(workflow: WorkflowType): string {
+  return DEPARTMENTOS.find((d) => d.workflow === workflow)?.slug ?? "presale";
+}
+
 /** Ordered, deduped phase sequence for a department's template — drives PhaseStepper. */
 export function phasesFor(template: readonly TemplateItem[]): string[] {
   return Array.from(new Set(template.map((t) => t.phase)));

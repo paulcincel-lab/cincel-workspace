@@ -269,17 +269,15 @@ export async function saveActivitiesAction(
       throw new Error("activities write: all rows failed to persist");
     }
   }
-  revalidatePath("/tareas");
-  revalidatePath("/tareas/presale");
-  revalidatePath("/tareas/diseno");
-  revalidatePath("/tareas/construccion");
+  revalidatePath("/actividades/presale");
+  revalidatePath("/actividades/diseno");
+  revalidatePath("/actividades/construccion");
 }
 
 const REVALIDATE_TAREAS_ROUTES = [
-  "/tareas",
-  "/tareas/presale",
-  "/tareas/diseno",
-  "/tareas/construccion",
+  "/actividades/presale",
+  "/actividades/diseno",
+  "/actividades/construccion",
 ] as const;
 
 function revalidateTareas() {
@@ -440,5 +438,5 @@ export async function saveActivityAction(task: Task): Promise<void> {
     throw new Error("FORBIDDEN: activities write");
   }
   await upsertActivity(task);
-  revalidatePath("/tareas");
+  revalidateTareas();
 }

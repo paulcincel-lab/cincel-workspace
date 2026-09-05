@@ -29,6 +29,7 @@ import { fetchActivities } from "@/lib/repositories/activities-repository";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
 import { useDriveEnabled } from "@/lib/google/use-drive-enabled";
+import { departamentoSlugForStage } from "@/lib/actividades/departamento";
 import type { Task } from "@/lib/types/task";
 
 type ProjectItem = (typeof projects)[number];
@@ -393,7 +394,7 @@ export default function ProjectFichaPage() {
                       Editar ficha
                     </Button>
                     <Link
-                      href={`/tareas?project=${encodeURIComponent(project.name)}`}
+                      href={`/actividades/${departamentoSlugForStage(project.stage)}?project=${encodeURIComponent(project.name)}`}
                       className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                     >
                       Ver actividades

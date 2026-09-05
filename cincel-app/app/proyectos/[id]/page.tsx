@@ -9,6 +9,7 @@ import { projects } from "@/lib/data/projects";
 import { presaleTasks } from "@/lib/data/presale";
 import { disenoTasks } from "@/lib/data/diseno";
 import { operativasTasks } from "@/lib/data/operativas";
+import { departamentoSlugForStage } from "@/lib/actividades/departamento";
 
 type Props = {
   params: {
@@ -86,7 +87,7 @@ export default function ProjectDetailPage({ params }: Props) {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <Link href={`/tareas?project=${encodeURIComponent(project.name)}`} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            <Link href={`/actividades/${departamentoSlugForStage(project.stage)}?project=${encodeURIComponent(project.name)}`} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
               Ver actividades
             </Link>
             <a

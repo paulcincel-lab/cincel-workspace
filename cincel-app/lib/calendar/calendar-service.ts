@@ -32,14 +32,14 @@ export function toDate(value: string): Date | null {
 
 function workflowHref(workflow: WorkflowType): string {
   if (workflow === "Presale") {
-    return "/tareas/presale";
+    return "/actividades/presale";
   }
 
   if (workflow === "Diseño") {
-    return "/tareas/diseno";
+    return "/actividades/diseno";
   }
 
-  return "/tareas/construccion";
+  return "/actividades/construccion";
 }
 
 export function formatStageLabel(workflow: WorkflowType): string {

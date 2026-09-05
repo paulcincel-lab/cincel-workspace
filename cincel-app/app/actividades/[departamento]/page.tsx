@@ -6,9 +6,9 @@ import { fetchActivitiesAction } from "@/lib/actions/activities-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { fetchTeamMembersAction } from "@/lib/actions/team-actions";
 import { getDepartamento } from "@/lib/actividades/departamento";
-import { ActividadesV2Client } from "./ActividadesV2Client";
+import { ActividadesClient } from "./ActividadesClient";
 
-export default async function ActividadesV2Page({
+export default async function ActividadesPage({
   params,
 }: {
   params: Promise<{ departamento: string }>;
@@ -37,7 +37,7 @@ export default async function ActividadesV2Page({
       <Sidebar />
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
-        <ActividadesV2Client
+        <ActividadesClient
           slug={slug}
           initialTasks={initialTasks}
           initialProjects={initialProjects}

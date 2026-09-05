@@ -15,7 +15,7 @@ test.describe("Tareas — create task with commitmentDate and reviewDate", () =>
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
-    await page.goto(`${BASE_URL}/tareas/presale`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE_URL}/actividades/presale`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("button", { name: /Nueva tarea/i }).first()).toBeVisible({ timeout: 30_000 });
   });
 
@@ -45,7 +45,7 @@ test.describe("Tareas — create task with commitmentDate and reviewDate", () =>
     await expect(page.getByText(TASK_DESC)).toBeVisible({ timeout: 15_000 });
 
     // Reload and confirm it persisted to Postgres (not just optimistic state).
-    await page.goto(`${BASE_URL}/tareas/presale`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE_URL}/actividades/presale`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("button", { name: /Nueva tarea/i }).first()).toBeVisible({ timeout: 30_000 });
     await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
     await expect(page.getByText(TASK_DESC)).toBeVisible({ timeout: 15_000 });

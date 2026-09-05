@@ -9,6 +9,7 @@ import { LoadBar } from "@/components/v2/status/LoadBar";
 import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
+import { departamentoSlugForWorkflow } from "@/lib/actividades/departamento";
 import type { Task, TaskStatus } from "@/lib/types/task";
 
 interface DashboardClientProps {
@@ -149,7 +150,10 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
                       <span className="size-1.5 rounded-full bg-destructive" />
                       {t.project} — {t.description}
                     </span>
-                    <Link href="/tareas" className="font-mono text-[10px] text-muted-foreground hover:text-foreground">
+                    <Link
+                      href={`/actividades/${departamentoSlugForWorkflow(t.workflow)}?project=${encodeURIComponent(t.project)}`}
+                      className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
+                    >
                       ver
                     </Link>
                   </li>
