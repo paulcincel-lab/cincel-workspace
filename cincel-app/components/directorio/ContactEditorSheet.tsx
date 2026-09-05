@@ -12,6 +12,10 @@ import { StarRating } from "@/components/proveedores/StarRating";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { CONTACT_TYPES, type ContactType } from "@/lib/types/enums";
 
+export type ClientContact = { name: string; role: string; phone: string; email: string };
+
+const emptyClientContact: ClientContact = { name: "", role: "", phone: "", email: "" };
+
 /** Every scalar field across the 4 contact types — branch by `type` when rendering. */
 export type ContactDraft = {
   type: ContactType;
@@ -32,6 +36,8 @@ export type ContactDraft = {
   projectType: string;
   totalProjectsWorked: number;
   firstWorkDate: string;
+  contacts: ClientContact[];
+  completedProjectsText: string;
   // Contratista
   company: string;
   mainSpecialty: string;
@@ -68,6 +74,8 @@ export const emptyContactDraft: ContactDraft = {
   projectType: "Otro",
   totalProjectsWorked: 1,
   firstWorkDate: "",
+  contacts: [],
+  completedProjectsText: "",
   company: "",
   mainSpecialty: "",
   categories: [],
@@ -249,6 +257,83 @@ export function ContactEditorSheet({
                   value={draft.totalSpent}
                   onChange={(e) => set(onChangeDraft, "totalSpent", Number(e.target.value) || 0)}
                 />
+              </div>
+              <div>
+                <Label className="mb-2 block">Proyectos realizados con nosotros</Label>
+                <Input
+                  value={draft.completedProjectsText}
+                  onChange={(e) => set(onChangeDraft, "completedProjectsText", e.target.value)}
+                  placeholder="Proyecto 1, Proyecto 2, Proyecto 3"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="block">Otros contactos</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-auto px-3 py-1.5 text-xs"
+                    onClick={() => set(onChangeDraft, "contacts", [...draft.contacts, { ...emptyClientContact }])}
+                  >
+                    Agregar contacto
+                  </Button>
+                </div>
+                <div className="mt-2 space-y-3">
+                  {draft.contacts.map((contact, index) => (
+                    <div key={index} className="rounded-xl border border-border bg-muted p-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input
+                          value={contact.name}
+                          placeholder="Nombre"
+                          onChange={(e) => {
+                            const next = [...draft.contacts];
+                            next[index] = { ...next[index], name: e.target.value };
+                            set(onChangeDraft, "contacts", next);
+                          }}
+                        />
+                        <Input
+                          value={contact.role}
+                          placeholder="Rol"
+                          onChange={(e) => {
+                            const next = [...draft.contacts];
+                            next[index] = { ...next[index], role: e.target.value };
+                            set(onChangeDraft, "contacts", next);
+                          }}
+                        />
+                        <Input
+                          value={contact.phone}
+                          placeholder="Contacto"
+                          onChange={(e) => {
+                            const next = [...draft.contacts];
+                            next[index] = { ...next[index], phone: e.target.value };
+                            set(onChangeDraft, "contacts", next);
+                          }}
+                        />
+                        <Input
+                          value={contact.email}
+                          placeholder="Correo electrónico"
+                          onChange={(e) => {
+                            const next = [...draft.contacts];
+                            next[index] = { ...next[index], email: e.target.value };
+                            set(onChangeDraft, "contacts", next);
+                          }}
+                        />
+                      </div>
+                      <div className="mt-2 flex justify-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-auto px-2 py-1 text-xs"
+                          onClick={() => set(onChangeDraft, "contacts", draft.contacts.filter((_, i) => i !== index))}
+                        >
+                          Quitar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           ) : null}
