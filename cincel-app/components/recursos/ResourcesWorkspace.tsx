@@ -290,12 +290,12 @@ function buildNextResourceId(resources: ResourceLink[]): string {
   return `resource_${maxId + 1}`;
 }
 
-function FolderGlyph({ accent = "bg-slate-500" }: { accent?: string }) {
+function FolderGlyph({ accent = "bg-foreground/70" }: { accent?: string }) {
   return (
     <div className="relative mx-auto h-28 w-36">
       <div className={`absolute left-0 top-0 h-7 w-16 rounded-tl-md rounded-tr-md ${accent}`} />
       <div className={`absolute left-0 top-5 h-20 w-36 rounded-lg ${accent} opacity-80`} />
-      <div className="absolute left-1 top-6 h-20 w-[138px] rounded-md bg-white/12" />
+      <div className="absolute left-1 top-6 h-20 w-[138px] rounded-md bg-background/20" />
     </div>
   );
 }
@@ -316,12 +316,12 @@ function FolderTile({
   return (
     <Link
       href={href}
-      className="group flex flex-col items-center justify-start rounded-3xl px-3 py-4 text-center transition hover:-translate-y-0.5 hover:bg-slate-50"
+      className="group flex flex-col items-center justify-start rounded-3xl px-3 py-4 text-center transition hover:-translate-y-0.5 hover:bg-accent"
     >
       <FolderGlyph accent={accent} />
-      <p className="mt-4 text-base font-medium text-slate-600 group-hover:text-slate-900">{label}</p>
-      <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
-      <span className="mt-2 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
+      <p className="mt-4 text-base font-medium text-muted-foreground group-hover:text-foreground">{label}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+      <span className="mt-2 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
         {count} carpeta{count === 1 ? "" : "s"}
       </span>
     </Link>
@@ -342,8 +342,8 @@ function ShowcaseCard({
   note: string;
 }) {
   return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_10px_28px_rgba(15,23,42,0.06)]">
-      <h3 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h3>
+    <article className="rounded-3xl border border-border bg-card p-6 shadow-[0_10px_28px_rgba(15,23,42,0.06)]">
+      <h3 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h3>
 
       <div className="mt-5 flex items-end gap-3">
         <div className={`h-12 w-12 rounded-full ${accent}`} />
@@ -351,10 +351,10 @@ function ShowcaseCard({
         <div className={`h-10 w-10 rounded-full ${accent} opacity-40`} />
       </div>
 
-      <div className="mt-5 border-t border-slate-200 pt-4">
-        <p className="text-4xl font-bold text-slate-900">{count}</p>
-        <p className="mt-2 text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">{caption}</p>
-        <p className="mt-4 text-sm italic text-slate-600">{note}</p>
+      <div className="mt-5 border-t border-border pt-4">
+        <p className="text-4xl font-bold text-foreground">{count}</p>
+        <p className="mt-2 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">{caption}</p>
+        <p className="mt-4 text-sm italic text-muted-foreground">{note}</p>
       </div>
     </article>
   );
@@ -368,7 +368,7 @@ function SectionPills({ mode, activeLabel }: { mode: WorkspaceMode; activeLabel:
           <Link
             key={item.path}
             href={item.path}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeLabel === item.label ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeLabel === item.label ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-accent"}`}
           >
             {item.label}
           </Link>
@@ -383,7 +383,7 @@ function SectionPills({ mode, activeLabel }: { mode: WorkspaceMode; activeLabel:
         <Link
           key={section}
           href={SECTION_PATH[section]}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition ${mode === section ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition ${mode === section ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-accent"}`}
         >
           {SECTION_LABEL[section]}
         </Link>
@@ -666,7 +666,7 @@ export default function ResourcesWorkspace({
     label: SECTION_LABEL[section],
     count: mode === "overview" ? grouped[section].general.length : (section === pageMode ? totalResources : 0),
     subtitle: SECTION_DESCRIPTION[section],
-    accent: "bg-slate-500",
+    accent: "bg-foreground/70",
     href: SECTION_PATH[section],
   }));
 
@@ -675,21 +675,21 @@ export default function ResourcesWorkspace({
       title: "Carpetas visibles",
       count: String(folderCount).padStart(2, "0"),
       caption: "Explorador Drive",
-      accent: "bg-orange-100",
+      accent: "bg-foreground/10",
       note: "Estructura visual compacta para navegar carpetas como en Drive.",
     },
     {
       title: "Recursos activos",
       count: String(totalResources),
       caption: "Enlaces filtrados",
-      accent: "bg-blue-100",
+      accent: "bg-foreground/15",
       note: "Vista limpia para identificar carpetas, archivos y accesos web.",
     },
     {
       title: "Contenido útil",
       count: String(fileCount + webCount),
       caption: "Material abierto",
-      accent: "bg-emerald-100",
+      accent: "bg-foreground/20",
       note: "Tarjetas grandes con jerarquía, separadores y estado visual.",
     },
   ];
@@ -755,7 +755,7 @@ export default function ResourcesWorkspace({
 
   if (!isMounted) {
     return (
-      <main className="flex min-h-screen bg-[#f3f4f6]">
+      <main className="flex min-h-screen bg-background text-foreground">
         <Sidebar />
         <section className="flex-1 overflow-y-auto p-6 lg:p-10">
           <Header />
@@ -766,14 +766,14 @@ export default function ResourcesWorkspace({
 
   if (!canViewCurrentSection) {
     return (
-      <main className="flex min-h-screen bg-[#f3f4f6]">
+      <main className="flex min-h-screen bg-background text-foreground">
         <Sidebar />
         <section className="flex-1 overflow-y-auto p-6 lg:p-10">
           <Header />
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h1 className="text-2xl font-bold text-slate-900">Sin acceso al modulo Empresa</h1>
-            <p className="mt-2 text-sm text-slate-600">Tu acceso actual no permite visualizar la biblioteca institucional.</p>
-            <Link href="/dashboard" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <h1 className="text-2xl font-bold text-foreground">Sin acceso al modulo Empresa</h1>
+            <p className="mt-2 text-sm text-muted-foreground">Tu acceso actual no permite visualizar la biblioteca institucional.</p>
+            <Link href="/dashboard" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/80">
               Volver al dashboard
             </Link>
           </div>
@@ -783,19 +783,19 @@ export default function ResourcesWorkspace({
   }
 
   return (
-    <main className="flex min-h-screen bg-[#f3f4f6]">
+    <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
 
       <section className="flex-1 overflow-y-auto p-6 lg:p-10">
         <Header />
 
         <div className="space-y-6">
-          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
+          <section className="rounded-[32px] border border-border bg-card p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Repositorio de Recursos</p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 lg:text-4xl">{sectionTitle}</h1>
-                <p className="mt-2 max-w-2xl text-sm text-slate-500">{sectionDescription}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Repositorio de Recursos</p>
+                <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground lg:text-4xl">{sectionTitle}</h1>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{sectionDescription}</p>
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -836,15 +836,15 @@ export default function ResourcesWorkspace({
             </div>
           </section>
 
-          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
+          <section className="rounded-[32px] border border-border bg-card p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
             {mode === "overview" ? (
               <>
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Google Drive</p>
-                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Carpetas principales</h2>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Google Drive</p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Carpetas principales</h2>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">
+                  <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
                     5 carpetas visibles
                   </span>
                 </div>
@@ -866,28 +866,28 @@ export default function ResourcesWorkspace({
               <>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sección activa</p>
-                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{sectionTitle}</h2>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Sección activa</p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{sectionTitle}</h2>
                   </div>
                   <SectionPills mode={mode} activeLabel={pageLabel} />
                 </div>
 
                 <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-3xl bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Recursos</p>
-                    <p className="mt-2 text-3xl font-semibold text-slate-900">{totalResources}</p>
+                  <div className="rounded-3xl bg-muted p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recursos</p>
+                    <p className="mt-2 text-3xl font-semibold text-foreground">{totalResources}</p>
                   </div>
-                  <div className="rounded-3xl bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Carpetas</p>
-                    <p className="mt-2 text-3xl font-semibold text-slate-900">{folderCount}</p>
+                  <div className="rounded-3xl bg-muted p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Carpetas</p>
+                    <p className="mt-2 text-3xl font-semibold text-foreground">{folderCount}</p>
                   </div>
-                  <div className="rounded-3xl bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Archivos</p>
-                    <p className="mt-2 text-3xl font-semibold text-slate-900">{fileCount}</p>
+                  <div className="rounded-3xl bg-muted p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Archivos</p>
+                    <p className="mt-2 text-3xl font-semibold text-foreground">{fileCount}</p>
                   </div>
-                  <div className="rounded-3xl bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Web</p>
-                    <p className="mt-2 text-3xl font-semibold text-slate-900">{webCount}</p>
+                  <div className="rounded-3xl bg-muted p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Web</p>
+                    <p className="mt-2 text-3xl font-semibold text-foreground">{webCount}</p>
                   </div>
                 </div>
               </>
@@ -904,13 +904,13 @@ export default function ResourcesWorkspace({
 
           {mode === "overview" ? (
             <section className="grid gap-6 xl:grid-cols-3">
-              <div className="xl:col-span-2 rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
+              <div className="xl:col-span-2 rounded-[32px] border border-border bg-card p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Navegación</p>
-                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Abrir una sección</h2>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Navegación</p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Abrir una sección</h2>
                   </div>
-                  <p className="text-sm text-slate-500">Elige una carpeta para entrar a su vista propia.</p>
+                  <p className="text-sm text-muted-foreground">Elige una carpeta para entrar a su vista propia.</p>
                 </div>
 
                 <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
@@ -920,39 +920,39 @@ export default function ResourcesWorkspace({
                       label={item.label}
                       count={grouped[item.section].general.length}
                       subtitle={SECTION_DESCRIPTION[item.section]}
-                      accent="bg-slate-500"
+                      accent="bg-foreground/70"
                       href={item.path}
                     />
                   ))}
                 </div>
               </div>
 
-              <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
-                <h3 className="text-2xl font-semibold tracking-tight text-slate-900">Abrir documentos Recientes</h3>
-                <p className="mt-2 text-sm text-slate-500">Documentos de Google abiertos recientemente en Recursos.</p>
+              <div className="rounded-[32px] border border-border bg-card p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
+                <h3 className="text-2xl font-semibold tracking-tight text-foreground">Abrir documentos Recientes</h3>
+                <p className="mt-2 text-sm text-muted-foreground">Documentos de Google abiertos recientemente en Recursos.</p>
 
                 <div className="mt-6 space-y-4">
                   {recentDocumentsToShow.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                    <div className="rounded-2xl border border-dashed border-border bg-muted p-4 text-sm text-muted-foreground">
                       Abre un documento de Google para verlo aquí.
                     </div>
                   ) : recentDocumentsToShow.map((link) => (
                     <Button
                       key={link.id}
                       variant="outline"
-                      className="h-auto w-full justify-start bg-slate-50 p-4 text-left font-normal hover:bg-white"
+                      className="h-auto w-full justify-start bg-muted p-4 text-left font-normal hover:bg-card"
                       onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
                     >
                       <div className="flex items-start gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
-                          <span className="text-lg text-slate-500">▣</span>
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-card shadow-sm">
+                          <span className="text-lg text-muted-foreground">▣</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-slate-900">{link.title}</p>
-                          <p className="mt-1 text-xs text-slate-500">{SECTION_LABEL[link.section]}</p>
-                          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-400">Abrir documento</p>
-                          <div className="mt-3 h-1.5 rounded-full bg-slate-200">
-                            <div className="h-1.5 rounded-full bg-blue-600" style={{ width: "78%" }} />
+                          <p className="truncate text-sm font-semibold text-foreground">{link.title}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{SECTION_LABEL[link.section]}</p>
+                          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Abrir documento</p>
+                          <div className="mt-3 h-1.5 rounded-full bg-border">
+                            <div className="h-1.5 rounded-full bg-primary" style={{ width: "78%" }} />
                           </div>
                         </div>
                       </div>
@@ -965,20 +965,20 @@ export default function ResourcesWorkspace({
 
           {mode !== "overview" ? (
             <section className="grid gap-6 xl:grid-cols-3">
-              <div className="xl:col-span-2 rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
+              <div className="xl:col-span-2 rounded-[32px] border border-border bg-card p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{pageLabel}</p>
-                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{pageLabel}</h2>
-                    <p className="mt-2 text-sm text-slate-500">Selecciona un documento con URL para ver su vista previa aquí.</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{pageLabel}</p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{pageLabel}</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">Selecciona un documento con URL para ver su vista previa aquí.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {pagePreviewSource && !pagePreviewUrl ? (
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                      <span className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
                         Sin preview
                       </span>
                     ) : null}
-                    <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">
+                    <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
                       {pageDocuments.length} documentos
                     </span>
                     {pageDocuments.length > 0 ? (
@@ -986,7 +986,7 @@ export default function ResourcesWorkspace({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-auto rounded-full border-rose-200 bg-rose-50 px-3 py-1.5 text-xs hover:bg-rose-100"
+                          className="h-auto rounded-full border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20"
                           onClick={removePageResource}
                           disabled={!canDeleteInCurrentSection}
                           title={canDeleteInCurrentSection ? "" : "No tienes permiso para eliminar recursos en esta sección"}
@@ -1019,9 +1019,9 @@ export default function ResourcesWorkspace({
                   </div>
                 </div>
 
-                <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mt-6 rounded-2xl border border-border bg-muted p-3">
                   {pageDocuments.length === 0 ? (
-                    <p className="px-2 py-3 text-sm text-slate-500">No hay recursos en esta página con URL. Abre Agregar y guarda un enlace para mostrarlo aquí.</p>
+                    <p className="px-2 py-3 text-sm text-muted-foreground">No hay recursos en esta página con URL. Abre Agregar y guarda un enlace para mostrarlo aquí.</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {pageDocuments.map((link) => {
@@ -1043,7 +1043,7 @@ export default function ResourcesWorkspace({
                   )}
                 </div>
 
-                <div className="mt-6 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50">
+                <div className="mt-6 overflow-hidden rounded-[28px] border border-border bg-muted">
                   {pagePreviewUrl ? (
                     <iframe
                       title={pagePreviewSource?.title ?? pageLabel}
@@ -1051,37 +1051,37 @@ export default function ResourcesWorkspace({
                       className="h-[620px] w-full"
                     />
                   ) : (
-                    <div className="flex h-[620px] items-center justify-center p-8 text-center text-sm text-slate-500">
+                    <div className="flex h-[620px] items-center justify-center p-8 text-center text-sm text-muted-foreground">
                       {pagePreviewUnavailableReason}
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
-                <h3 className="text-2xl font-semibold tracking-tight text-slate-900">Documentos Recientes</h3>
-                <p className="mt-2 text-sm text-slate-500">Documentos vistos últimamente. Haz clic para abrirlos de nuevo.</p>
+              <div className="rounded-[32px] border border-border bg-card p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
+                <h3 className="text-2xl font-semibold tracking-tight text-foreground">Documentos Recientes</h3>
+                <p className="mt-2 text-sm text-muted-foreground">Documentos vistos últimamente. Haz clic para abrirlos de nuevo.</p>
 
                 <div className="mt-6 space-y-4">
                   {recentDocumentsToShow.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                    <div className="rounded-2xl border border-dashed border-border bg-muted p-4 text-sm text-muted-foreground">
                       Aún no has abierto documentos recientes.
                     </div>
                   ) : recentDocumentsToShow.map((link) => (
                     <Button
                       key={link.id}
                       variant="outline"
-                      className="h-auto w-full justify-start bg-slate-50 p-4 text-left font-normal hover:bg-white"
+                      className="h-auto w-full justify-start bg-muted p-4 text-left font-normal hover:bg-card"
                       onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
                     >
                       <div className="flex items-start gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
-                          <span className="text-lg text-slate-500">▣</span>
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-card shadow-sm">
+                          <span className="text-lg text-muted-foreground">▣</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-slate-900">{link.title}</p>
-                          <p className="mt-1 text-xs text-slate-500">{SECTION_LABEL[link.section]}</p>
-                          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-400">Abrir documento</p>
+                          <p className="truncate text-sm font-semibold text-foreground">{link.title}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{SECTION_LABEL[link.section]}</p>
+                          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Abrir documento</p>
                         </div>
                       </div>
                     </Button>
@@ -1096,12 +1096,12 @@ export default function ResourcesWorkspace({
       <Sheet open={creating !== null} onOpenChange={(next) => { if (!next) setCreating(null); }}>
         <SheetContent className="gap-6 overflow-y-auto p-6">
           <SheetTitle>Agregar recurso</SheetTitle>
-          <p className="text-sm text-slate-500">Completa la información del nuevo recurso.</p>
+          <p className="text-sm text-muted-foreground">Completa la información del nuevo recurso.</p>
 
           {creating ? (
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Título</label>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Título</label>
                 <Input
                   type="text"
                   value={creating.title}
@@ -1111,7 +1111,7 @@ export default function ResourcesWorkspace({
 
               <div>
                 <div className="mb-1 flex items-center justify-between">
-                  <label className="block text-xs font-medium text-slate-600">URL</label>
+                  <label className="block text-xs font-medium text-muted-foreground">URL</label>
                   {driveEnabled ? (
                     <Button
                       variant="link"
@@ -1129,7 +1129,7 @@ export default function ResourcesWorkspace({
                   placeholder="https://..."
                 />
                 {creating.drive ? (
-                  <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                     {creating.drive.iconLink ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={creating.drive.iconLink} alt="" className="h-3.5 w-3.5" />
@@ -1161,18 +1161,18 @@ export default function ResourcesWorkspace({
       <Sheet open={removeDraft !== null} onOpenChange={(next) => { if (!next) setRemoveDraft(null); }}>
         <SheetContent className="overflow-y-auto p-6">
           <SheetTitle>Quitar recurso</SheetTitle>
-          <p className="text-sm text-slate-500">Selecciona el recurso que deseas quitar.</p>
+          <p className="text-sm text-muted-foreground">Selecciona el recurso que deseas quitar.</p>
 
           {removeDraft ? (
             <RadioGroup
               value={removeDraft.selectedId}
               onValueChange={(value) => setRemoveDraft((current) => current ? { ...current, selectedId: value as string } : current)}
-              className="max-h-72 overflow-y-auto rounded-lg border border-slate-200 p-3"
+              className="max-h-72 overflow-y-auto rounded-lg border border-border p-3"
             >
               {pageDocuments.map((link) => (
-                <label key={link.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50">
+                <label key={link.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-border px-3 py-2 hover:bg-accent">
                   <RadioGroupItem value={link.id} />
-                  <span className="truncate text-sm text-slate-700">{link.title}</span>
+                  <span className="truncate text-sm text-foreground">{link.title}</span>
                 </label>
               ))}
             </RadioGroup>
@@ -1184,7 +1184,7 @@ export default function ResourcesWorkspace({
             </Button>
             <Button
               variant="outline"
-              className="border-rose-200 bg-rose-50 hover:bg-rose-100"
+              className="border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20"
               onClick={confirmRemoveDraft}
               disabled={!canDeleteInCurrentSection}
             >
@@ -1199,7 +1199,7 @@ export default function ResourcesWorkspace({
         onOpenChange={(next) => { if (!next) { setPreviewUrl(null); setPreviewTitle(""); } }}
       >
         <SheetContent className="w-[90vw] max-w-6xl" showCloseButton={false}>
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <SheetTitle className="text-sm font-semibold">Vista previa: {previewTitle}</SheetTitle>
             <Button
               variant="outline"

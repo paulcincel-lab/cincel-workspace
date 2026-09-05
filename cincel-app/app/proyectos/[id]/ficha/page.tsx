@@ -265,16 +265,16 @@ export default function ProjectFichaPage() {
 
   if (!project) {
     return (
-      <main className="flex min-h-screen bg-slate-100">
+      <main className="flex min-h-screen bg-background text-foreground">
         <Sidebar />
 
         <section className="flex-1 overflow-y-auto p-10">
           <Header />
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h1 className="text-2xl font-bold text-slate-900">Proyecto no encontrado</h1>
-            <p className="mt-2 text-sm text-slate-600">No existe un proyecto con este identificador.</p>
-            <Link href="/proyectos" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <h1 className="text-2xl font-bold text-foreground">Proyecto no encontrado</h1>
+            <p className="mt-2 text-sm text-muted-foreground">No existe un proyecto con este identificador.</p>
+            <Link href="/proyectos" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/80">
               Volver a proyectos
             </Link>
           </div>
@@ -351,7 +351,7 @@ export default function ProjectFichaPage() {
   const d = editDraft;
 
   return (
-    <main className="flex min-h-screen bg-slate-100">
+    <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
 
       <section className="flex-1 overflow-y-auto p-10">
@@ -359,12 +359,12 @@ export default function ProjectFichaPage() {
 
         <div className="space-y-6">
           {/* Encabezado */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">{project.code}</p>
-                <h1 className="mt-1 text-3xl font-bold text-slate-900">Ficha del proyecto</h1>
-                <p className="mt-1 text-slate-600">{project.name}</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{project.code}</p>
+                <h1 className="mt-1 text-3xl font-bold text-foreground">Ficha del proyecto</h1>
+                <p className="mt-1 text-muted-foreground">{project.name}</p>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -381,7 +381,7 @@ export default function ProjectFichaPage() {
                   <>
                     <Link
                       href="/proyectos"
-                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
                     >
                       Cerrar
                     </Link>
@@ -395,7 +395,7 @@ export default function ProjectFichaPage() {
                     </Button>
                     <Link
                       href={`/actividades/${departamentoSlugForStage(project.stage)}?project=${encodeURIComponent(project.name)}`}
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80"
                     >
                       Ver actividades
                     </Link>
@@ -405,16 +405,16 @@ export default function ProjectFichaPage() {
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-1">
-                <p className="text-xs text-slate-500">Actividades donde participa</p>
+              <div className="rounded-xl border border-border bg-muted p-4 md:col-span-1">
+                <p className="text-xs text-muted-foreground">Actividades donde participa</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {projectActivities.length === 0 ? (
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                    <span className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
                       Sin actividades
                     </span>
                   ) : (
                     projectActivities.map((activity) => (
-                      <span key={`${project.id}-${activity.label}`} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                      <span key={`${project.id}-${activity.label}`} className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground">
                         {activity.label}
                       </span>
                     ))
@@ -423,11 +423,11 @@ export default function ProjectFichaPage() {
               </div>
 
               {/* Google Drive */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
-                <p className="text-xs text-slate-500">Documentos en Google Drive</p>
+              <div className="rounded-xl border border-border bg-muted p-4 md:col-span-2">
+                <p className="text-xs text-muted-foreground">Documentos en Google Drive</p>
                 {isEditing && d ? (
                   <div className="mt-2 space-y-3">
-                    <div className="block text-xs text-slate-500">
+                    <div className="block text-xs text-muted-foreground">
                       <div className="flex items-center justify-between">
                         <span>Link — Documentos internos</span>
                         {driveEnabled ? (
@@ -448,7 +448,7 @@ export default function ProjectFichaPage() {
                         className="mt-1"
                       />
                     </div>
-                    <div className="block text-xs text-slate-500">
+                    <div className="block text-xs text-muted-foreground">
                       <div className="flex items-center justify-between">
                         <span>Link — Documentos vista cliente</span>
                         {driveEnabled ? (
@@ -473,20 +473,20 @@ export default function ProjectFichaPage() {
                 ) : (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {internalDocsUrl ? (
-                      <a href={internalDocsUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+                      <a href={internalDocsUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted">
                         Documentos internos
                       </a>
                     ) : (
-                      <span className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-400">
+                      <span className="rounded-lg border border-border bg-muted px-4 py-2 text-sm text-muted-foreground">
                         Documentos internos
                       </span>
                     )}
                     {clientDocsUrl ? (
-                      <a href={clientDocsUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+                      <a href={clientDocsUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted">
                         Documentos vista cliente
                       </a>
                     ) : (
-                      <span className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-400">
+                      <span className="rounded-lg border border-border bg-muted px-4 py-2 text-sm text-muted-foreground">
                         Documentos vista cliente
                       </span>
                     )}
@@ -498,12 +498,12 @@ export default function ProjectFichaPage() {
 
           <div className="grid gap-6 lg:grid-cols-3">
             {/* Datos generales */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-              <h2 className="text-lg font-semibold text-slate-900">Datos generales</h2>
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-2">
+              <h2 className="text-lg font-semibold text-foreground">Datos generales</h2>
 
               {isEditing && d ? (
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <Label className="text-sm font-normal text-slate-700">
+                  <Label className="text-sm font-normal text-foreground">
                     Cliente
                     <Select
                       value={d.clientName}
@@ -520,7 +520,7 @@ export default function ProjectFichaPage() {
                       </SelectContent>
                     </Select>
                   </Label>
-                  <Label className="text-sm font-normal text-slate-700">
+                  <Label className="text-sm font-normal text-foreground">
                     Tipo
                     <Select value={d.type} onValueChange={(v) => setEditDraft({ ...d, type: v as string })}>
                       <SelectTrigger className="mt-1 w-full">
@@ -531,11 +531,11 @@ export default function ProjectFichaPage() {
                       </SelectContent>
                     </Select>
                   </Label>
-                  <Label className="text-sm font-normal text-slate-700 md:col-span-2">
+                  <Label className="text-sm font-normal text-foreground md:col-span-2">
                     Etapas
-                    <div className="mt-2 space-y-2 rounded-lg border border-slate-300 bg-white px-3 py-2">
+                    <div className="mt-2 space-y-2 rounded-lg border border-border bg-card px-3 py-2">
                       {STAGE_OPTIONS_FICHA.map((stage) => (
-                        <Label key={`stage-${stage}`} className="flex items-center gap-2 text-sm font-normal text-slate-700">
+                        <Label key={`stage-${stage}`} className="flex items-center gap-2 text-sm font-normal text-foreground">
                           <Checkbox
                             checked={d.stages.includes(stage)}
                             disabled={!projectsCapabilities.canChangeProjectStage}
@@ -552,7 +552,7 @@ export default function ProjectFichaPage() {
                       ))}
                     </div>
                   </Label>
-                  <Label className="text-sm font-normal text-slate-700">
+                  <Label className="text-sm font-normal text-foreground">
                     Fase
                     <Input
                       type="text"
@@ -561,7 +561,7 @@ export default function ProjectFichaPage() {
                       className="mt-1"
                     />
                   </Label>
-                  <Label className="text-sm font-normal text-slate-700">
+                  <Label className="text-sm font-normal text-foreground">
                     Fecha de inicio
                     <Input
                       type="date"
@@ -570,7 +570,7 @@ export default function ProjectFichaPage() {
                       className="mt-1"
                     />
                   </Label>
-                  <Label className="text-sm font-normal text-slate-700">
+                  <Label className="text-sm font-normal text-foreground">
                     Calle
                     <Input
                       type="text"
@@ -579,7 +579,7 @@ export default function ProjectFichaPage() {
                       className="mt-1"
                     />
                   </Label>
-                  <Label className="text-sm font-normal text-slate-700">
+                  <Label className="text-sm font-normal text-foreground">
                     Ciudad
                     <Input
                       type="text"
@@ -588,7 +588,7 @@ export default function ProjectFichaPage() {
                       className="mt-1"
                     />
                   </Label>
-                  <Label className="text-sm font-normal text-slate-700 md:col-span-2">
+                  <Label className="text-sm font-normal text-foreground md:col-span-2">
                     Estado
                     <Input
                       type="text"
@@ -600,40 +600,40 @@ export default function ProjectFichaPage() {
                 </div>
               ) : (
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs text-slate-500">Cliente</p>
-                    <Link href={`/directorio?cliente=${project.client.id}`} className="mt-1 font-medium text-blue-600 hover:underline">
+                  <div className="rounded-xl border border-border bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Cliente</p>
+                    <Link href={`/directorio?cliente=${project.client.id}`} className="mt-1 font-medium text-primary hover:underline">
                       {project.client.name}
                     </Link>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs text-slate-500">Tipo</p>
-                    <p className="mt-1 font-medium text-slate-800">{project.type}</p>
+                  <div className="rounded-xl border border-border bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Tipo</p>
+                    <p className="mt-1 font-medium text-foreground">{project.type}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs text-slate-500">Etapas</p>
+                  <div className="rounded-xl border border-border bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Etapas</p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {project.stage
                         .split("/")
                         .map((s) => s.trim())
                         .filter(Boolean)
                         .map((stage) => (
-                          <span key={stage} className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                          <span key={stage} className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
                             {stage}
                           </span>
                         ))}
                     </div>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs text-slate-500">Fase</p>
-                    <p className="mt-1 font-medium text-slate-800">{project.phase}</p>
+                  <div className="rounded-xl border border-border bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Fase</p>
+                    <p className="mt-1 font-medium text-foreground">{project.phase}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs text-slate-500">Fecha de inicio</p>
-                    <p className="mt-1 font-medium text-slate-800">{project.startDate || "Sin fecha"}</p>
+                  <div className="rounded-xl border border-border bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Fecha de inicio</p>
+                    <p className="mt-1 font-medium text-foreground">{project.startDate || "Sin fecha"}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
-                    <p className="text-xs text-slate-500">Dirección</p>
+                  <div className="rounded-xl border border-border bg-muted p-4 md:col-span-2">
+                    <p className="text-xs text-muted-foreground">Dirección</p>
                     {inlineEditingAddress ? (
                       <div className="mt-2 space-y-2">
                         <Input
@@ -689,7 +689,7 @@ export default function ProjectFichaPage() {
                         </div>
                       </div>
                     ) : (
-                      <p className={`mt-1 font-medium text-slate-800 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-blue-600" : ""}`} onClick={() => {
+                      <p className={`mt-1 font-medium text-foreground ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-primary" : ""}`} onClick={() => {
                         if (!projectsCapabilities.canEditProjectGeneral) {
                           return;
                         }
@@ -711,12 +711,12 @@ export default function ProjectFichaPage() {
             </div>
 
             {/* Equipo asignado */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">Equipo asignado</h2>
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <h2 className="text-lg font-semibold text-foreground">Equipo asignado</h2>
 
               <div className="mt-4 space-y-4">
-                <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
-                  <p className="text-xs text-slate-500">Líder de diseño</p>
+                <div className="rounded-xl border border-border bg-muted p-3">
+                  <p className="text-xs text-muted-foreground">Líder de diseño</p>
                   {isEditing && d ? (
                     <Select
                       value={d.coordinator || NO_COORDINATOR_VALUE}
@@ -778,8 +778,8 @@ export default function ProjectFichaPage() {
                   )}
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">Líder de construcción</p>
+                <div className="rounded-xl border border-border bg-muted p-3">
+                  <p className="text-xs text-muted-foreground">Líder de construcción</p>
                   {isEditing && d ? (
                     <Select
                       value={d.constructionCoordinator}
