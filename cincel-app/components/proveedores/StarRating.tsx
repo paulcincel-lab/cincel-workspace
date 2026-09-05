@@ -22,7 +22,7 @@ export const StarRating = ({ rating, onRate }: { rating: number; onRate: (v: num
           onClick={() => onRate(star)}
           onMouseEnter={() => setHover(star)}
           onMouseLeave={() => setHover(0)}
-          className={`text-base leading-none transition-colors ${star <= (hover || rating) ? "text-orange-400" : "text-gray-200"}`}
+          className={`text-base leading-none transition-colors ${star <= (hover || rating) ? "text-foreground" : "text-muted-foreground/30"}`}
         >★</button>
       ))}
     </div>

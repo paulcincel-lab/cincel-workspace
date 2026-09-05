@@ -20,27 +20,27 @@ export default function GroupSection({
   actions,
 }: Props) {
   return (
-    <section className="border-b border-slate-200 last:border-b-0">
-      <div className={`flex items-center justify-between px-6 py-3 ${headerClassName ?? "bg-slate-50"}`}>
+    <section className="border-b border-border last:border-b-0">
+      <div className={`flex items-center justify-between px-6 py-3 ${headerClassName ?? "bg-muted"}`}>
         <div>
-          <h2 className={`text-sm font-semibold uppercase tracking-[0.2em] text-slate-600 ${titleClassName ?? ""}`.trim()}>
+          <h2 className={`text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground ${titleClassName ?? ""}`.trim()}>
             {title}
           </h2>
         </div>
         <div className="flex items-center gap-2">
           {archivedCount > 0 ? (
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+            <span className="rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
               {archivedCount} archivada{archivedCount === 1 ? "" : "s"}
             </span>
           ) : null}
           {actions ? <div>{actions}</div> : null}
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+          <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
             {count} {count === 1 ? "tarea" : "tareas"}
           </span>
         </div>
       </div>
       {children}
-      <div className="mx-6 border-b border-slate-200" />
+      <div className="mx-6 border-b border-border" />
     </section>
   );
 }

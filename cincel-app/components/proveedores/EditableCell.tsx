@@ -17,8 +17,8 @@ export const EditableCell = ({ value, onSave, type = "text" }: {
       onCommit={onSave}
       renderDisplay={(displayValue) => (
         <div className="group flex min-h-[26px] cursor-pointer items-center gap-1">
-          <span className="text-xs text-gray-700">{displayValue || <span className="text-gray-300">—</span>}</span>
-          <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-60">✎</span>
+          <span className="text-xs text-foreground">{displayValue || <span className="text-muted-foreground/50">—</span>}</span>
+          <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-60">✎</span>
         </div>
       )}
       renderEditor={({ value: draft, onChange, onBlur, onCancel, onKeyDown }) => (
@@ -41,8 +41,8 @@ export const EditableCell = ({ value, onSave, type = "text" }: {
               className="min-w-[90px] flex-1 py-1 text-xs"
             />
           )}
-          <Button variant="ghost" size="sm" onClick={onBlur} className="h-auto p-0 text-sm font-bold text-emerald-600">✓</Button>
-          <Button variant="ghost" size="sm" onClick={onCancel} className="h-auto p-0 text-sm text-gray-400">✕</Button>
+          <Button variant="ghost" size="sm" onClick={onBlur} className="h-auto p-0 text-sm font-bold text-success">✓</Button>
+          <Button variant="ghost" size="sm" onClick={onCancel} className="h-auto p-0 text-sm text-muted-foreground">✕</Button>
         </div>
       )}
     />

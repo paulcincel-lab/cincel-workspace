@@ -123,7 +123,7 @@ export function ProjectCreateModal({
 
         <div className="space-y-4 px-6 py-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Label className="text-sm font-normal text-slate-700">
+            <Label className="text-sm font-normal text-muted-foreground">
               Nombre del proyecto
               <Input
                 value={draft.name}
@@ -132,7 +132,7 @@ export function ProjectCreateModal({
               />
             </Label>
 
-            <Label className="text-sm font-normal text-slate-700">
+            <Label className="text-sm font-normal text-muted-foreground">
               Cliente (activos existentes)
               <Select
                 value={draft.clientId || NO_CLIENT_VALUE}
@@ -156,7 +156,7 @@ export function ProjectCreateModal({
               </Select>
             </Label>
 
-            <Label className="text-sm font-normal text-slate-700">
+            <Label className="text-sm font-normal text-muted-foreground">
               Tipo de proyecto
               <Select value={draft.type} onValueChange={(value) => setDraft((prev) => ({ ...prev, type: value as string }))}>
                 <SelectTrigger className="mt-1 w-full">
@@ -170,11 +170,11 @@ export function ProjectCreateModal({
               </Select>
             </Label>
 
-            <Label className="text-sm font-normal text-slate-700">
+            <Label className="text-sm font-normal text-muted-foreground">
               Etapas (seleccion multiple)
-              <div className="mt-1 grid gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2">
+              <div className="mt-1 grid gap-2 rounded-lg border border-border bg-background px-3 py-2">
                 {STAGE_OPTIONS.map((stage) => (
-                  <Label key={`stage-${stage}`} className="flex items-center gap-2 text-sm font-normal text-slate-700">
+                  <Label key={`stage-${stage}`} className="flex items-center gap-2 text-sm font-normal text-muted-foreground">
                     <Checkbox
                       checked={draft.stages.includes(stage)}
                       onCheckedChange={(checked) => {
@@ -192,7 +192,7 @@ export function ProjectCreateModal({
               </div>
             </Label>
 
-            <Label className="text-sm font-normal text-slate-700">
+            <Label className="text-sm font-normal text-muted-foreground">
               Encargado
               <Select
                 value={draft.coordinator}
@@ -210,7 +210,7 @@ export function ProjectCreateModal({
               </Select>
             </Label>
 
-            <Label className="text-sm font-normal text-slate-700 sm:col-span-2">
+            <Label className="text-sm font-normal text-muted-foreground sm:col-span-2">
               Vinculo Google Doc del proyecto
               <Input
                 value={draft.docsUrl}
@@ -220,7 +220,7 @@ export function ProjectCreateModal({
               />
             </Label>
 
-            <Label className="text-sm font-normal text-slate-700 sm:col-span-2">
+            <Label className="text-sm font-normal text-muted-foreground sm:col-span-2">
               Fecha de inicio
               <Input
                 type="date"
@@ -232,7 +232,7 @@ export function ProjectCreateModal({
           </div>
 
           {createError ? (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{createError}</p>
+            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{createError}</p>
           ) : null}
         </div>
 

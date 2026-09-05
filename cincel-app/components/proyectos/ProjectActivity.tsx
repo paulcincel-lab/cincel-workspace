@@ -31,9 +31,9 @@ export default function ProjectActivity() {
   ];
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm mt-8">
+    <div className="bg-card rounded-2xl border border-border shadow-sm mt-8">
 
-      <div className="p-6 border-b border-slate-200">
+      <div className="p-6 border-b border-border">
 
         <h2 className="text-2xl font-bold">
           Actividad reciente
@@ -47,14 +47,14 @@ export default function ProjectActivity() {
 
           <div
             key={activity.id}
-            className="p-6 border-b last:border-b-0 border-slate-100"
+            className="p-6 border-b last:border-b-0 border-border"
           >
 
             <p className="font-semibold">
 
               {activity.user}
 
-              <span className="font-normal text-slate-600">
+              <span className="font-normal text-muted-foreground">
 
                 {" "}
 
@@ -70,7 +70,7 @@ export default function ProjectActivity() {
 
             </p>
 
-            <p className="text-sm text-slate-400 mt-2">
+            <p className="text-sm text-muted-foreground mt-2">
 
               {activity.time}
 

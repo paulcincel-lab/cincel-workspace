@@ -31,9 +31,9 @@ export function AssistantChartMessage({ chartType, title, data }: Props) {
       : 260;
 
   return (
-    <div className="w-full max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-4 py-3">
-        <p className="text-sm font-semibold text-slate-800">{title}</p>
+    <div className="w-full max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="border-b border-border px-4 py-3">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
       </div>
       <div className="w-full p-3" style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">

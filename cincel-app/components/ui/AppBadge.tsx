@@ -8,13 +8,19 @@ type Props = {
   color: AppBadgeColor;
 };
 
+/**
+ * No off-palette hues (brand is strictly black/white/gray) — only
+ * destructive/success carry real semantic meaning as tokens; the rest map to
+ * neutral surfaces at different weights so callers keep a visual distinction
+ * even though "yellow"/"blue"/"purple" no longer resolve to real colors.
+ */
 const colorClasses: Record<AppBadgeColor, string> = {
-  yellow: "bg-yellow-100 text-yellow-800",
-  green: "bg-green-100 text-green-800",
-  blue: "bg-blue-100 text-blue-800",
-  red: "bg-red-100 text-red-800",
-  gray: "bg-slate-100 text-slate-700",
-  purple: "bg-purple-100 text-purple-800",
+  yellow: "bg-foreground/10 text-foreground",
+  green: "bg-success/10 text-success",
+  blue: "bg-primary/10 text-primary",
+  red: "bg-destructive/10 text-destructive",
+  gray: "bg-muted text-muted-foreground",
+  purple: "bg-muted text-foreground",
 };
 
 export default function AppBadge({ label, color }: Props) {

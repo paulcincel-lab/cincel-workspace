@@ -98,20 +98,20 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
   return (
     <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <SheetContent className="w-[720px] max-w-[720px]" showCloseButton={false}>
-        <SheetHeader className="flex-row items-center justify-between space-y-0 border-b border-slate-200 p-4">
+        <SheetHeader className="flex-row items-center justify-between space-y-0 border-b border-border p-4">
           <SheetTitle className="text-base font-semibold">Elegir de Google Drive</SheetTitle>
           <Button variant="outline" size="sm" onClick={onClose}>
             Cerrar
           </Button>
         </SheetHeader>
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-sm">
           <Button variant="link" className="h-auto p-0 font-medium" onClick={() => goToCrumb(-1)}>
             Inicio
           </Button>
           {path.map((crumb, i) => (
             <span key={crumb.id} className="flex items-center gap-2">
-              <span className="text-slate-400">/</span>
+              <span className="text-muted-foreground">/</span>
               <Button variant="link" className="h-auto p-0" onClick={() => goToCrumb(i)}>
                 {crumb.name}
               </Button>
@@ -119,7 +119,7 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
           ))}
         </div>
 
-        <div className="border-b border-slate-100 p-3">
+        <div className="border-b border-border p-3">
           <Input
             type="text"
             value={search}
@@ -130,19 +130,19 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
 
         <div className="flex-1 overflow-y-auto p-2">
           {loading ? (
-            <p className="p-4 text-sm text-slate-500">Cargando…</p>
+            <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
           ) : error ? (
-            <p className="p-4 text-sm text-red-600">{error}</p>
+            <p className="p-4 text-sm text-destructive">{error}</p>
           ) : entries.length === 0 ? (
-            <p className="p-4 text-sm text-slate-500">Carpeta vacía.</p>
+            <p className="p-4 text-sm text-muted-foreground">Carpeta vacía.</p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-border">
               {entries.map((entry) => (
                 <li key={entry.id}>
                   <Button
                     variant="ghost"
                     className={`h-auto w-full justify-start gap-3 px-3 py-2 text-left text-sm font-normal ${
-                      selected?.id === entry.id ? "bg-blue-50" : ""
+                      selected?.id === entry.id ? "bg-accent" : ""
                     }`}
                     onClick={() => (entry.isFolder ? openFolder(entry) : setSelected(entry))}
                     onDoubleClick={() => !entry.isFolder && onPick(entry)}
@@ -151,13 +151,13 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={entry.iconLink} alt="" className="h-4 w-4 shrink-0" />
                     ) : (
-                      <span className="text-slate-400">{entry.isFolder ? "📁" : "📄"}</span>
+                      <span className="text-muted-foreground">{entry.isFolder ? "📁" : "📄"}</span>
                     )}
-                    <span className="flex-1 truncate text-slate-800">{entry.name}</span>
+                    <span className="flex-1 truncate text-foreground">{entry.name}</span>
                     {entry.isFolder ? (
-                      <span className="text-xs text-slate-400">›</span>
+                      <span className="text-xs text-muted-foreground">›</span>
                     ) : (
-                      <span className="text-xs text-slate-400">{formatModified(entry.modifiedTime)}</span>
+                      <span className="text-xs text-muted-foreground">{formatModified(entry.modifiedTime)}</span>
                     )}
                   </Button>
                 </li>
@@ -166,8 +166,8 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
           )}
         </div>
 
-        <SheetFooter className="mt-0 flex-row items-center justify-between border-t border-slate-200 p-4">
-          <span className="truncate text-sm text-slate-500">
+        <SheetFooter className="mt-0 flex-row items-center justify-between border-t border-border p-4">
+          <span className="truncate text-sm text-muted-foreground">
             {selected ? `Seleccionado: ${selected.name}` : "Selecciona un archivo"}
           </span>
           <Button disabled={!selected} onClick={() => selected && onPick(selected)}>
