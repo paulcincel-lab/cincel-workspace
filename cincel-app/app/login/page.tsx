@@ -60,8 +60,8 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f5f7fb] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-[1240px] overflow-hidden rounded-[28px] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.12)] lg:grid-cols-[1.05fr_0.95fr]">
+    <main className="min-h-screen bg-muted px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-[1240px] overflow-hidden rounded-[28px] bg-card shadow-[0_24px_80px_rgba(15,23,42,0.12)] lg:grid-cols-[1.05fr_0.95fr]">
         <section className="relative flex overflow-hidden bg-[radial-gradient(circle_at_50%_12%,rgba(78,126,255,0.45),transparent_32%),radial-gradient(circle_at_62%_48%,rgba(26,86,255,0.7),transparent_48%),linear-gradient(145deg,#1651d7_0%,#0f4fd6_42%,#0a45c0_100%)] px-8 py-10 text-white sm:px-12 sm:py-12 lg:px-14 lg:py-14">
           <div className="absolute inset-0 opacity-25" aria-hidden="true" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.18) 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
           <div className="relative z-10 flex w-full flex-col justify-between">
@@ -102,13 +102,13 @@ export default function LoginPage() {
         <section className="flex items-center justify-center px-6 py-10 sm:px-10 lg:px-14">
           <div className="w-full max-w-[390px]">
             <div className="mb-8">
-              <p className="text-2xl font-semibold tracking-tight text-slate-900">Iniciar Sesión</p>
-              <p className="mt-1 text-[14px] leading-6 text-slate-500">Ingresa tus credenciales institucionales para continuar.</p>
+              <p className="text-2xl font-semibold tracking-tight text-foreground">Iniciar Sesión</p>
+              <p className="mt-1 text-[14px] leading-6 text-muted-foreground">Ingresa tus credenciales institucionales para continuar.</p>
             </div>
 
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
               <label className="block">
-                <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">Correo institucional</span>
+                <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Correo institucional</span>
                 <Input
                   type="email"
                   value={draft.email}
@@ -118,12 +118,12 @@ export default function LoginPage() {
                   className="h-11"
                 />
               </label>
-              <p id="login-email-help" className="-mt-2 text-[11px] leading-5 text-slate-500">Debe coincidir con el correo registrado en Equipo.</p>
+              <p id="login-email-help" className="-mt-2 text-[11px] leading-5 text-muted-foreground">Debe coincidir con el correo registrado en Equipo.</p>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-4">
                   <label className="block flex-1">
-                    <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">Contraseña</span>
+                    <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Contraseña</span>
                   </label>
                   <Button
                     variant="link"
@@ -143,21 +143,21 @@ export default function LoginPage() {
                   className="h-11"
                 />
               </div>
-              <p id="login-password-help" className="-mt-2 text-[11px] leading-5 text-slate-500">Si es tu primer acceso, usa la contraseña temporal inicial del administrador: CincelAdmin2026!.</p>
+              <p id="login-password-help" className="-mt-2 text-[11px] leading-5 text-muted-foreground">Si es tu primer acceso, usa la contraseña temporal inicial del administrador: CincelAdmin2026!.</p>
 
-              <label className="flex items-center gap-2 pt-1 text-[13px] text-slate-600">
+              <label className="flex items-center gap-2 pt-1 text-[13px] text-muted-foreground">
                 <Checkbox />
                 Mantener sesión iniciada
               </label>
 
               {error ? (
-                <p role="alert" aria-live="polite" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] leading-5 text-rose-700">
+                <p role="alert" aria-live="polite" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] leading-5 text-destructive">
                   {error}
                 </p>
               ) : null}
 
               {helpMessage ? (
-                <p role="status" aria-live="polite" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-800">
+                <p role="status" aria-live="polite" className="rounded-lg border border-border bg-muted px-3 py-2 text-[12px] leading-5 text-foreground">
                   {helpMessage}
                 </p>
               ) : null}
@@ -168,9 +168,9 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="my-6 h-px bg-slate-200" aria-hidden="true" />
+            <div className="my-6 h-px bg-border" aria-hidden="true" />
 
-            <div className="grid gap-2 text-center text-[13px] text-slate-600">
+            <div className="grid gap-2 text-center text-[13px] text-muted-foreground">
               <p>¿Problemas para acceder?</p>
               <Button
                 variant="link"
@@ -180,13 +180,13 @@ export default function LoginPage() {
                 Contactar a Soporte IT
               </Button>
 
-              <div className="mt-4 flex items-center justify-center gap-6 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              <div className="mt-4 flex items-center justify-center gap-6 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 <span className="inline-flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-slate-300" aria-hidden="true" />
+                  <span className="h-2 w-2 rounded-full bg-muted-foreground/40" aria-hidden="true" />
                   Español
                 </span>
                 <span className="inline-flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-slate-300" aria-hidden="true" />
+                  <span className="h-2 w-2 rounded-full bg-muted-foreground/40" aria-hidden="true" />
                   Privacidad
                 </span>
               </div>

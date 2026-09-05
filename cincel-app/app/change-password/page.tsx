@@ -59,30 +59,30 @@ export default function ChangePasswordPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_15%_10%,#dbeafe,transparent_35%),radial-gradient(circle_at_86%_8%,#e2e8f0,transparent_32%),#f8fafc] px-4 py-10 sm:px-8">
+    <main className="min-h-screen bg-muted px-4 py-10 sm:px-8">
       <div className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8">
+        <section className="rounded-3xl border border-border bg-card p-6 shadow-xl sm:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-600">Primer acceso</p>
-              <h1 className="mt-2 text-3xl font-bold text-slate-900">Define tu nueva contrasena</h1>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Primer acceso</p>
+              <h1 className="mt-2 text-3xl font-bold text-foreground">Define tu nueva contrasena</h1>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
                 Este cambio es obligatorio antes de continuar al ERP. El sistema conservara tu sesion activa una vez que completes este paso.
               </p>
             </div>
-            <span className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+            <span className="rounded-xl border border-border bg-muted px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-foreground">
               Requerido
             </span>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="mt-6 rounded-2xl border border-border bg-muted p-4 text-sm text-foreground">
             <p className="font-semibold">Politica de seguridad V1</p>
-            <p className="mt-1 leading-relaxed text-blue-800">Usa una contrasena de al menos 8 caracteres. No pedimos complejidad extra por ahora para mantener el flujo simple.</p>
+            <p className="mt-1 leading-relaxed text-muted-foreground">Usa una contrasena de al menos 8 caracteres. No pedimos complejidad extra por ahora para mantener el flujo simple.</p>
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
             <label className="block">
-              <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">Nueva contrasena</span>
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nueva contrasena</span>
               <Input
                 type="password"
                 value={draft.nextPassword}
@@ -91,10 +91,10 @@ export default function ChangePasswordPage() {
                 aria-describedby="change-password-help"
               />
             </label>
-            <p id="change-password-help" className="-mt-2 text-xs leading-relaxed text-slate-500">Debe tener minimo 8 caracteres.</p>
+            <p id="change-password-help" className="-mt-2 text-xs leading-relaxed text-muted-foreground">Debe tener minimo 8 caracteres.</p>
 
             <label className="block">
-              <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">Confirmar nueva contrasena</span>
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Confirmar nueva contrasena</span>
               <Input
                 type="password"
                 value={draft.confirmPassword}
@@ -103,42 +103,42 @@ export default function ChangePasswordPage() {
                 aria-describedby="change-password-confirm-help"
               />
             </label>
-            <p id="change-password-confirm-help" className="-mt-2 text-xs leading-relaxed text-slate-500">Escribe la misma contrasena para evitar errores de captura.</p>
+            <p id="change-password-confirm-help" className="-mt-2 text-xs leading-relaxed text-muted-foreground">Escribe la misma contrasena para evitar errores de captura.</p>
 
             {error ? (
-              <p role="alert" aria-live="polite" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-relaxed text-rose-700">
+              <p role="alert" aria-live="polite" className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
                 {error}
               </p>
             ) : null}
 
             {success ? (
-              <p role="status" aria-live="polite" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-relaxed text-emerald-700">
+              <p role="status" aria-live="polite" className="rounded-xl border border-success-foreground/30 bg-success px-3 py-2 text-xs leading-relaxed text-success-foreground">
                 {success}
               </p>
             ) : null}
 
-            <Button type="submit" disabled={isPending} className="w-full bg-slate-900 hover:bg-slate-800">
+            <Button type="submit" disabled={isPending} className="w-full">
               {isPending ? "Guardando..." : "Guardar y continuar"}
             </Button>
           </form>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-slate-900 p-6 text-white shadow-xl shadow-slate-300/40 sm:p-8">
+        <section className="rounded-3xl border border-border bg-foreground p-6 text-background shadow-xl sm:p-8">
           <h2 className="text-lg font-semibold">Experiencia esperada</h2>
-          <ol className="mt-4 space-y-3 text-sm leading-relaxed text-slate-200">
+          <ol className="mt-4 space-y-3 text-sm leading-relaxed text-background/80">
             <li>1. Inicias con tu contrasena temporal.</li>
             <li>2. El sistema te obliga a definir una nueva contrasena.</li>
             <li>3. Al guardar, conservas la sesion activa.</li>
             <li>4. Continúas directamente al Dashboard.</li>
           </ol>
 
-          <div className="mt-6 rounded-2xl border border-white/20 bg-white/5 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Navegacion temporal</p>
+          <div className="mt-6 rounded-2xl border border-background/20 bg-background/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-background/70">Navegacion temporal</p>
             <div className="mt-3 grid gap-2">
-              <Link href="/login" className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-center text-xs font-medium text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900">
+              <Link href="/login" className="rounded-lg border border-background/20 bg-background/5 px-3 py-2 text-center text-xs font-medium text-background transition hover:bg-background/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background/60 focus-visible:ring-offset-2 focus-visible:ring-offset-foreground">
                 Regresar a Login
               </Link>
-              <Link href="/profile" className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-center text-xs font-medium text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900">
+              <Link href="/profile" className="rounded-lg border border-background/20 bg-background/5 px-3 py-2 text-center text-xs font-medium text-background transition hover:bg-background/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background/60 focus-visible:ring-offset-2 focus-visible:ring-offset-foreground">
                 Ir a Perfil
               </Link>
             </div>
