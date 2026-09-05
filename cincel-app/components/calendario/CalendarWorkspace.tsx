@@ -33,16 +33,16 @@ export default function CalendarWorkspace() {
   const capabilities = useMemo(() => resolveCalendarCapabilities(authenticatedUser), [authenticatedUser]);
 
   return (
-    <main className="flex min-h-screen bg-slate-100">
+    <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
 
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
 
         <div className="space-y-6">
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h1 className="text-3xl font-bold text-slate-900">Calendario</h1>
-            <p className="mt-2 text-slate-700">Vista integral de actividades, compromisos y agenda del equipo.</p>
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <h1 className="text-3xl font-bold text-foreground">Calendario</h1>
+            <p className="mt-2 text-muted-foreground">Vista integral de actividades, compromisos y agenda del equipo.</p>
           </section>
 
           {capabilities.canViewCalendar ? (
@@ -54,7 +54,7 @@ export default function CalendarWorkspace() {
               viewerName={authenticatedUser?.member.name || ""}
             />
           ) : (
-            <section className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
+            <section className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
               No tienes permiso para ver el calendario.
             </section>
           )}

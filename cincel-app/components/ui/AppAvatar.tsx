@@ -23,7 +23,7 @@ export default function AppAvatar({ name, showName = true, imageSrc = "", imageA
     <div className="flex items-center gap-3">
       <Avatar className="size-9">
         {imageSrc ? <AvatarImage src={imageSrc} alt={imageAlt || `Foto de ${name}`} /> : null}
-        <AvatarFallback className="bg-blue-600 text-sm font-bold text-white">
+        <AvatarFallback className="bg-foreground text-sm font-bold text-background">
           {initials}
         </AvatarFallback>
       </Avatar>

@@ -28,7 +28,7 @@ export default function ProjectCard({ project }: Props) {
         </CardHeader>
 
         <CardContent>
-          <p className="text-slate-500">{project.client.name}</p>
+          <p className="text-muted-foreground">{project.client.name}</p>
 
           <div className="mt-6">
             <div className="flex justify-between text-sm">
@@ -39,7 +39,7 @@ export default function ProjectCard({ project }: Props) {
             <Progress
               value={project.progress}
               className="mt-2"
-              indicatorClassName="bg-blue-600"
+              indicatorClassName="bg-foreground"
             />
           </div>
         </CardContent>

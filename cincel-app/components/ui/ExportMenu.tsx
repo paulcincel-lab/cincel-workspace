@@ -30,7 +30,7 @@ export default function ExportMenu({ disabled = false, onExport, scaleClassName 
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         disabled={disabled || isExporting}
-        className={`origin-top-right ${scaleClassName} rounded-lg border px-4 py-2 text-sm font-medium ${disabled || isExporting ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
+        className={`origin-top-right ${scaleClassName} rounded-lg border px-4 py-2 text-sm font-medium ${disabled || isExporting ? "cursor-not-allowed border-border bg-muted text-muted-foreground/60" : "border-border bg-background text-foreground hover:bg-muted"}`}
       >
         {isExporting ? "Exportando..." : "Exportar ▼"}
       </PopoverTrigger>
@@ -50,7 +50,7 @@ export default function ExportMenu({ disabled = false, onExport, scaleClassName 
           onClick={() => {
             void handleExport("pdf");
           }}
-          className="block h-auto w-full rounded-none border-t border-slate-100 px-4 py-2 text-left text-sm font-normal"
+          className="block h-auto w-full rounded-none border-t border-border px-4 py-2 text-left text-sm font-normal"
         >
           Exportar a PDF
         </Button>

@@ -27,7 +27,7 @@ export default function ProjectModuleCard({
 
           <p className="mt-5 text-4xl font-bold">{total}</p>
 
-          <p className="mt-2 text-slate-500">{subtitle}</p>
+          <p className="mt-2 text-muted-foreground">{subtitle}</p>
         </CardContent>
       </Card>
     </Link>

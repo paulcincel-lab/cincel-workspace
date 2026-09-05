@@ -24,7 +24,7 @@ export function getPersonInitials(name: string): string {
 
 export function TeamMembersCompact({ members }: { members: string[] }) {
   if (members.length === 0) {
-    return <span className="text-sm text-slate-500">Sin equipo</span>;
+    return <span className="text-sm text-muted-foreground">Sin equipo</span>;
   }
 
   const visibleMembers = members.slice(0, 2);
@@ -37,19 +37,19 @@ export function TeamMembersCompact({ members }: { members: string[] }) {
         {visibleMembers.map((member, index) => (
           <span
             key={member}
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white ring-2 ring-white ${index > 0 ? "-ml-1" : ""}`}
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background ring-2 ring-background ${index > 0 ? "-ml-1" : ""}`}
             title={member}
           >
             {getPersonInitials(member)}
           </span>
         ))}
         {remaining > 0 ? (
-          <span className="-ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 ring-2 ring-white">
+          <span className="-ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-[10px] font-semibold text-muted-foreground ring-2 ring-background">
             +{remaining}
           </span>
         ) : null}
       </div>
-      <span className="text-sm font-medium text-slate-800">
+      <span className="text-sm font-medium text-foreground">
         {nameList}
         {remaining > 0 ? ` +${remaining}` : ""}
       </span>
@@ -84,7 +84,7 @@ export default function TeamMultiSelect({
 
   return (
     <div
-      className="w-full rounded-xl border border-slate-200 bg-white p-2"
+      className="w-full rounded-xl border border-border bg-background p-2"
       tabIndex={-1}
       onBlur={(event) => {
         const nextFocused = event.relatedTarget as Node | null;
@@ -101,19 +101,19 @@ export default function TeamMultiSelect({
             <Button
               key={member}
               variant="outline"
-              className="h-auto gap-1.5 rounded-full border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100"
+              className="h-auto gap-1.5 rounded-full border-border bg-muted px-2 py-1 text-xs font-medium text-foreground hover:bg-accent"
               onClick={() => toggleMember(member)}
               title="Quitar integrante"
             >
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[9px] font-bold text-background">
                 {getPersonInitials(member)}
               </span>
               <span>{member}</span>
-              <span className="text-blue-400">×</span>
+              <span className="text-muted-foreground">×</span>
             </Button>
           ))
         ) : (
-          <span className="text-xs text-slate-400">Sin integrantes asignados</span>
+          <span className="text-xs text-muted-foreground">Sin integrantes asignados</span>
         )}
       </div>
 
@@ -134,11 +134,11 @@ export default function TeamMultiSelect({
               <Button
                 key={member}
                 variant="ghost"
-                className={`h-auto w-full justify-start gap-2 px-2 py-1.5 text-left text-sm font-normal ${isSelected ? "bg-blue-50 text-blue-700 hover:bg-blue-50" : "text-slate-800"}`}
+                className={`h-auto w-full justify-start gap-2 px-2 py-1.5 text-left text-sm font-normal ${isSelected ? "bg-accent text-accent-foreground hover:bg-accent" : "text-foreground"}`}
                 onClick={() => toggleMember(member)}
               >
                 <span
-                  className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${isSelected ? "bg-blue-600" : "bg-slate-400"}`}
+                  className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-background ${isSelected ? "bg-foreground" : "bg-muted-foreground/50"}`}
                 >
                   {getPersonInitials(member)}
                 </span>
@@ -148,7 +148,7 @@ export default function TeamMultiSelect({
             );
           })
         ) : (
-          <p className="px-2 py-1 text-xs text-slate-400">Sin resultados</p>
+          <p className="px-2 py-1 text-xs text-muted-foreground">Sin resultados</p>
         )}
       </div>
     </div>

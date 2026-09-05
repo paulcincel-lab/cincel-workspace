@@ -117,41 +117,40 @@ function loadTiendaOptions(): Partial<{ statusOptions: string[]; typeOptions: st
   }
 }
 
+/**
+ * No off-palette hues (brand is strictly black/white/gray) — only
+ * destructive/success carry real semantic meaning; other statuses map to
+ * neutral/primary tokens at different weights so the pill stays readable
+ * without inventing new colors.
+ */
 const contratistaStatusStyle = (s: string): string =>
   ({
-    Activo: "bg-emerald-100 text-emerald-700",
-    Pausado: "bg-orange-100 text-orange-700",
-    "Lista Negra": "bg-red-100 text-red-700",
-    "Sin actividad con nosotros": "bg-gray-100 text-gray-700",
-    Prospecto: "bg-blue-100 text-blue-700",
-    Inactivo: "bg-gray-100 text-gray-700",
-  })[s] ?? "bg-gray-100 text-gray-700";
+    Activo: "bg-success/15 text-success",
+    Pausado: "bg-muted text-muted-foreground",
+    "Lista Negra": "bg-destructive/15 text-destructive",
+    "Sin actividad con nosotros": "bg-muted text-muted-foreground",
+    Prospecto: "bg-primary/10 text-primary",
+    Inactivo: "bg-muted text-muted-foreground",
+  })[s] ?? "bg-muted text-muted-foreground";
 
 const colaboradorStatusStyle = (s: string): string =>
   ({
-    Activo: "bg-emerald-100 text-emerald-700",
-    Freelance: "bg-blue-100 text-blue-700",
-    Pasantía: "bg-yellow-100 text-yellow-700",
-    Inactivo: "bg-gray-100 text-gray-700",
-  })[s] ?? "bg-gray-100 text-gray-700";
+    Activo: "bg-success/15 text-success",
+    Freelance: "bg-primary/10 text-primary",
+    Pasantía: "bg-muted text-muted-foreground",
+    Inactivo: "bg-muted text-muted-foreground",
+  })[s] ?? "bg-muted text-muted-foreground";
 
 const tiendaStatusStyle = (s: string): string =>
   ({
-    Activa: "bg-emerald-100 text-emerald-700",
-    Inactiva: "bg-gray-100 text-gray-700",
-    Cerrada: "bg-red-100 text-red-700",
-    "Próximo Abierto": "bg-blue-100 text-blue-700",
-  })[s] ?? "bg-gray-100 text-gray-700";
+    Activa: "bg-success/15 text-success",
+    Inactiva: "bg-muted text-muted-foreground",
+    Cerrada: "bg-destructive/15 text-destructive",
+    "Próximo Abierto": "bg-primary/10 text-primary",
+  })[s] ?? "bg-muted text-muted-foreground";
 
-const specialtyStyle = (): string => "bg-blue-100 text-blue-700";
-const roleStyle = (r: string): string =>
-  ({
-    Arquitecto: "bg-purple-100 text-purple-700",
-    Diseñador: "bg-pink-100 text-pink-700",
-    Ingeniero: "bg-blue-100 text-blue-700",
-    Administrativo: "bg-slate-100 text-slate-700",
-    "Gestor de Proyecto": "bg-cyan-100 text-cyan-700",
-  })[r] ?? "bg-gray-100 text-gray-700";
+const specialtyStyle = (): string => "bg-muted text-muted-foreground";
+const roleStyle = (): string => "bg-muted text-muted-foreground";
 
 function nextId(items: Array<{ id: number }>): number {
   return Math.max(0, ...items.map((i) => i.id)) + 1;
