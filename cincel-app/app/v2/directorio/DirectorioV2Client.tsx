@@ -18,6 +18,7 @@ import { EditableCell } from "@/components/proveedores/EditableCell";
 import { PillDropdown } from "@/components/proveedores/PillDropdown";
 import { StarRating } from "@/components/proveedores/StarRating";
 import { ContactEditorSheet, emptyContactDraft, type ContactDraft, type DirectorioVocab } from "@/components/directorio/ContactEditorSheet";
+import { ClientDetailSheet } from "@/components/directorio/ClientDetailSheet";
 import { CONTACT_TYPES, type ContactType } from "@/lib/types/enums";
 import { directorioRowSourceId, directorioStatusVariant, toDirectorioRows, type DirectorioRow } from "@/lib/directorio/types";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
@@ -178,6 +179,7 @@ export function DirectorioV2Client({
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [detailRowId, setDetailRowId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ContactDraft>(emptyContactDraft);
   const [formError, setFormError] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
@@ -406,6 +408,8 @@ export function DirectorioV2Client({
         projectType: c.projectType,
         totalProjectsWorked: c.totalProjectsWorked,
         firstWorkDate: c.firstWorkDate,
+        contacts: c.contacts,
+        completedProjectsText: c.completedProjects.join(", "),
       });
     } else if (row.type === "Contratista") {
       const c = contractors.find((x) => x.id === id);
@@ -495,6 +499,10 @@ export function DirectorioV2Client({
           projectType: draft.projectType,
           totalProjectsWorked: Math.max(1, draft.totalProjectsWorked),
           firstWorkDate: draft.firstWorkDate,
+          contacts: draft.contacts
+            .map((c) => ({ name: c.name.trim(), role: c.role.trim(), phone: c.phone.trim(), email: c.email.trim() }))
+            .filter((c) => c.name || c.role || c.phone || c.email),
+          completedProjects: draft.completedProjectsText.split(",").map((p) => p.trim()).filter(Boolean),
         });
       } else if (draft.type === "Contratista") {
         updateContractor(id, {
@@ -554,8 +562,10 @@ export function DirectorioV2Client({
           emails: draft.emailsText.split(",").map((e) => e.trim()).filter(Boolean),
           phone: draft.phone.trim(),
           kind: draft.kind,
-          contacts: [],
-          completedProjects: [],
+          contacts: draft.contacts
+            .map((c) => ({ name: c.name.trim(), role: c.role.trim(), phone: c.phone.trim(), email: c.email.trim() }))
+            .filter((c) => c.name || c.role || c.phone || c.email),
+          completedProjects: draft.completedProjectsText.split(",").map((p) => p.trim()).filter(Boolean),
           acquisitionChannel: draft.acquisitionChannel.trim() || "Sin registro",
           totalSpent: draft.totalSpent,
           hasActiveProject: draft.hasActiveProject,
@@ -628,6 +638,13 @@ export function DirectorioV2Client({
 
     setShowEditor(false);
   }
+
+  const detailClient = detailRowId
+    ? clients.find((c) => c.id === directorioRowSourceId({ id: detailRowId })) ?? null
+    : null;
+  const detailLinkedProjects = detailClient
+    ? projectsData.filter((p) => p.client.id === detailClient.id)
+    : [];
 
   async function deleteRow(row: DirectorioRow) {
     if (!window.confirm(`¿Eliminar "${row.name}"? Esta acción no se puede deshacer.`)) return;
@@ -823,6 +840,9 @@ export function DirectorioV2Client({
         const canEdit = !isCliente || clientsCapabilities.canEditClient;
         const canDelete = !isCliente || clientsCapabilities.canDeleteClient;
         const actions: RowAction<DirectorioRow>[] = [];
+        if (isCliente && clientsCapabilities.canViewClients) {
+          actions.push({ label: "Ver ficha", onSelect: (r: DirectorioRow) => setDetailRowId(r.id) });
+        }
         if (canEdit) actions.push({ label: "Editar", onSelect: (r: DirectorioRow) => openEdit(r) });
         if (canDelete) {
           actions.push({
@@ -954,6 +974,26 @@ export function DirectorioV2Client({
         onSave={() => { void saveDraft(); }}
         vocab={vocab}
       />
+
+      {detailClient ? (
+        <ClientDetailSheet
+          client={detailClient}
+          linkedProjects={detailLinkedProjects}
+          onClose={() => setDetailRowId(null)}
+          onEdit={() => {
+            const row = rows.find((r) => r.id === detailRowId);
+            setDetailRowId(null);
+            if (row) openEdit(row);
+          }}
+          onDelete={() => {
+            const row = rows.find((r) => r.id === detailRowId);
+            setDetailRowId(null);
+            if (row) void deleteRow(row);
+          }}
+          canEdit={clientsCapabilities.canEditClient}
+          canDelete={clientsCapabilities.canDeleteClient}
+        />
+      ) : null}
     </div>
   );
 }
