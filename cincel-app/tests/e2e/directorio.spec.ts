@@ -14,7 +14,7 @@
  * staging) — this test writes synthetic PII-shaped data and deletes it on
  * teardown, but it must not pollute a shared project.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
@@ -22,6 +22,17 @@ const RUN_ID = Date.now();
 const TEST_CLIENT_NAME = `Cliente E2E ${RUN_ID}`;
 const EDITED_CLIENT_NAME = `${TEST_CLIENT_NAME} Editado`;
 const PROVIDER_NAME = `Proveedor E2E ${RUN_ID}`;
+
+/**
+ * ContactEditorSheet's <Label> elements aren't wired to their fields via
+ * htmlFor/id (plain sibling markup), so getByLabel doesn't work. Each field
+ * lives in its own wrapping <div> with the label text and nothing else
+ * matching it more deeply — `.last()` picks the innermost (most specific)
+ * match among ancestor divs that also contain the text.
+ */
+function fieldContainer(page: Page, labelText: string) {
+  return page.locator("div").filter({ has: page.getByText(labelText, { exact: true }) }).last();
+}
 
 test.describe("Directorio", () => {
   test.beforeEach(async ({ page }) => {
@@ -50,9 +61,9 @@ test.describe("Directorio", () => {
     await page.getByRole("button", { name: "+ Nuevo contacto" }).click();
     await page.getByRole("heading", { name: "Nuevo contacto" }).waitFor({ state: "visible" });
 
-    await page.getByLabel("Nombre").fill(TEST_CLIENT_NAME);
-    await page.getByLabel("Teléfono").fill("+52 646 000 9999");
-    await page.getByLabel("Email(s)").fill(`e2e.${RUN_ID}@cincel.test`);
+    await fieldContainer(page, "Nombre").locator("input").fill(TEST_CLIENT_NAME);
+    await fieldContainer(page, "Teléfono").locator("input").fill("+52 646 000 9999");
+    await fieldContainer(page, "Email(s)").locator("input").fill(`e2e.${RUN_ID}@cincel.test`);
     await page.getByRole("button", { name: "Guardar" }).click();
 
     await page
@@ -82,7 +93,7 @@ test.describe("Directorio", () => {
     await page.getByRole("button", { name: "Editar" }).click();
     await page.getByRole("heading", { name: "Editar contacto" }).waitFor({ state: "visible" });
 
-    await page.getByLabel("Nombre").fill(EDITED_CLIENT_NAME);
+    await fieldContainer(page, "Nombre").locator("input").fill(EDITED_CLIENT_NAME);
     await page.getByRole("button", { name: "Guardar" }).click();
     await page
       .getByRole("heading", { name: "Editar contacto" })
@@ -106,9 +117,9 @@ test.describe("Directorio", () => {
     await page.getByRole("button", { name: "+ Nuevo contacto" }).click();
     await page.getByRole("heading", { name: "Nuevo contacto" }).waitFor({ state: "visible" });
 
-    await page.getByLabel("Tipo de contacto").click();
+    await fieldContainer(page, "Tipo de contacto").getByRole("combobox").click();
     await page.getByRole("option", { name: "Contratista", exact: true }).click();
-    await page.getByLabel("Nombre").fill(PROVIDER_NAME);
+    await fieldContainer(page, "Nombre").locator("input").fill(PROVIDER_NAME);
     await page.getByRole("button", { name: "Guardar" }).click();
 
     await page
