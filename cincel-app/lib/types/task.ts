@@ -12,7 +12,8 @@ export type TaskPriority =
 export type WorkflowType =
   | "Presale"
   | "Diseño"
-  | "Construcción";
+  | "Construcción"
+  | "Decoración";
 
 export interface TaskHistoryItem {
   id: number;

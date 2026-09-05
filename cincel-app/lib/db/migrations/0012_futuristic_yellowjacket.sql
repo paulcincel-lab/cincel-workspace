@@ -1,0 +1,1 @@
+ALTER TYPE "core"."workflow_type" ADD VALUE 'Decoracion';

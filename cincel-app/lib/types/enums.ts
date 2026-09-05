@@ -1,30 +1,20 @@
+export type { TaskPriority, TaskStatus, WorkflowType } from "./task";
 import type { WorkflowType } from "./task";
 
-export type { TaskPriority, TaskStatus, WorkflowType } from "./task";
-
 /**
- * A project's stage in the firm's pipeline. Mirrors `WorkflowType` (which
- * already maps to `core.workflow_type` via the accent maps in
- * lib/actions/activities-actions.ts and lib/actions/maintenance-actions.ts),
- * plus the upcoming Decoración stage — not yet a value in `core.workflow_type`,
- * pending a small Drizzle migration. Diseño/Presale/Construcción-only code
- * should keep using `WorkflowType`; anything stage-aware for v2 (Actividades
- * departments, project stage badges) should use `ProjectStage`.
+ * A project's stage in the firm's pipeline — now identical to `WorkflowType`
+ * (all four departments map to `core.workflow_type` via the accent maps in
+ * lib/actions/activities-actions.ts and lib/actions/maintenance-actions.ts).
+ * Kept as a distinct alias since call sites already say `ProjectStage` for
+ * stage-aware code (Actividades departments, project stage badges).
  */
-export type ProjectStage = WorkflowType | "Decoración";
+export type ProjectStage = WorkflowType;
 
 export const PROJECT_STAGES: readonly ProjectStage[] = [
   "Presale",
   "Diseño",
   "Construcción",
   "Decoración",
-];
-
-/** Stage values that already exist in `core.workflow_type` today. */
-export const IMPLEMENTED_PROJECT_STAGES: readonly WorkflowType[] = [
-  "Presale",
-  "Diseño",
-  "Construcción",
 ];
 
 export type ProjectStatus = "Activo" | "Archivado";

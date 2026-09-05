@@ -12,6 +12,7 @@ export const workflowType = core.enum("workflow_type", [
   "Presale",
   "Diseno",
   "Construccion",
+  "Decoracion",
 ]);
 export const taskStatus = core.enum("task_status", [
   "Pendiente",
