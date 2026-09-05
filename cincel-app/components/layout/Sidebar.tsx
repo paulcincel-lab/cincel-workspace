@@ -157,8 +157,6 @@ export default function Sidebar() {
       ? "Vista previa v2"
       : pathname.startsWith("/recursos/empresa")
       ? "Empresa"
-      : pathname.startsWith("/recursos")
-      ? "Recursos"
       : pathname.startsWith("/tareas")
         ? "Actividades"
         : pathname.startsWith("/configuracion")
@@ -189,7 +187,6 @@ export default function Sidebar() {
       icon: PreviewIcon,
       submenu: [
         { label: "Actividades", href: "/v2/actividades/diseno", icon: ActivityIcon },
-        { label: "Recursos", href: "/v2/recursos", icon: ResourcesIcon },
       ],
     },
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
@@ -205,18 +202,7 @@ export default function Sidebar() {
     },
     { label: "Calendario", href: "/calendario", icon: CalendarIcon },
     { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
-    {
-      label: "Recursos",
-      icon: ResourcesIcon,
-      submenu: [
-        { label: "Mis documentos", href: "/recursos/mis-documentos", icon: ResourcesIcon },
-        { label: "Mis favoritos", href: "/recursos/mis-favoritos", icon: ResourcesIcon },
-        { label: "Plantillas de diseño", href: "/recursos/plantillas-diseno", icon: ResourcesIcon },
-        { label: "Formatos de Obra", href: "/recursos/formatos-obra", icon: ResourcesIcon },
-        { label: "Mis Vacaciones", href: "/recursos/mis-vacaciones", icon: ResourcesIcon },
-        { label: "Formación", href: "/recursos/formacion", icon: ResourcesIcon },
-      ],
-    },
+    { label: "Recursos", href: "/recursos", icon: ResourcesIcon },
     {
       label: "Empresa",
       icon: CompanyIcon,
