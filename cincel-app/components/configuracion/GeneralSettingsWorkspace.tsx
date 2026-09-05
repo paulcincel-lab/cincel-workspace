@@ -165,15 +165,15 @@ export default function GeneralSettingsWorkspace() {
   };
 
   return (
-    <main className="flex min-h-screen bg-slate-100">
+    <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
 
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
 
         <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
-          <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Configuracion</h2>
+          <aside className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Configuracion</h2>
             <nav className="mt-4 space-y-1.5">
               {CONFIG_NAV_ITEMS.map((item) => {
                 const isGeneral = item.key === "general";
@@ -183,7 +183,7 @@ export default function GeneralSettingsWorkspace() {
                     <Link
                       key={item.key}
                       href={item.href}
-                      className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-medium ${isGeneral ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}
+                      className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-medium ${isGeneral ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted"}`}
                     >
                       {item.label}
                     </Link>
@@ -198,7 +198,7 @@ export default function GeneralSettingsWorkspace() {
                     className="h-auto w-full justify-start px-3 py-2 text-left text-sm font-medium"
                   >
                     {item.label}
-                    <span className="ml-2 text-xs text-slate-400">Proximamente</span>
+                    <span className="ml-2 text-xs text-muted-foreground">Proximamente</span>
                   </Button>
                 );
               })}
@@ -206,20 +206,20 @@ export default function GeneralSettingsWorkspace() {
           </aside>
 
           <div className="space-y-6">
-            <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-              <h1 className="text-3xl font-bold text-slate-900">General</h1>
-              <p className="mt-2 text-sm text-slate-600">Administra la configuración base de la empresa y del sistema.</p>
+            <section className="rounded-2xl border border-border bg-card p-8 shadow-sm">
+              <h1 className="text-3xl font-bold text-foreground">General</h1>
+              <p className="mt-2 text-sm text-muted-foreground">Administra la configuración base de la empresa y del sistema.</p>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Editor de configuración general</h2>
-                  <p className="mt-1 text-sm text-slate-600">Ajusta la información principal de la empresa y del sistema.</p>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <h2 className="text-xl font-semibold text-foreground">Editor de configuración general</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Ajusta la información principal de la empresa y del sistema.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Fuente actual: {hasCustomConfig ? "Configuración personalizada" : "Valores por defecto"}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500">Clave de persistencia: {GENERAL_SETTINGS_STORAGE_KEY}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Clave de persistencia: {GENERAL_SETTINGS_STORAGE_KEY}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -243,13 +243,13 @@ export default function GeneralSettingsWorkspace() {
               </div>
 
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
-                  <h3 className="text-lg font-semibold tracking-tight text-slate-900">Información de la empresa</h3>
-                  <p className="mt-1 text-xs text-slate-500">Datos principales utilizados en documentos, contacto y cabecera.</p>
+                <article className="rounded-xl border border-border bg-muted p-4 lg:col-span-2">
+                  <h3 className="text-lg font-semibold tracking-tight text-foreground">Información de la empresa</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Datos principales utilizados en documentos, contacto y cabecera.</p>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Nombre de la empresa</span>
+                      <span className="text-xs font-medium text-muted-foreground">Nombre de la empresa</span>
                       <Input
                         type="text"
                         value={settings.company.legalName}
@@ -258,7 +258,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Nombre comercial</span>
+                      <span className="text-xs font-medium text-muted-foreground">Nombre comercial</span>
                       <Input
                         type="text"
                         value={settings.company.tradeName}
@@ -267,7 +267,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Correo principal</span>
+                      <span className="text-xs font-medium text-muted-foreground">Correo principal</span>
                       <Input
                         type="email"
                         value={settings.company.primaryEmail}
@@ -276,7 +276,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Teléfono</span>
+                      <span className="text-xs font-medium text-muted-foreground">Teléfono</span>
                       <Input
                         type="text"
                         value={settings.company.phone}
@@ -285,7 +285,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Sitio web</span>
+                      <span className="text-xs font-medium text-muted-foreground">Sitio web</span>
                       <Input
                         type="url"
                         value={settings.company.website}
@@ -294,7 +294,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">RFC (opcional)</span>
+                      <span className="text-xs font-medium text-muted-foreground">RFC (opcional)</span>
                       <Input
                         type="text"
                         value={settings.company.rfc}
@@ -303,7 +303,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1 md:col-span-2">
-                      <span className="text-xs font-medium text-slate-600">Dirección</span>
+                      <span className="text-xs font-medium text-muted-foreground">Dirección</span>
                       <Input
                         type="text"
                         value={settings.company.address}
@@ -312,15 +312,15 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1 md:col-span-2">
-                      <span className="text-xs font-medium text-slate-600">Logotipo de la empresa</span>
+                      <span className="text-xs font-medium text-muted-foreground">Logotipo de la empresa</span>
                       <Input
                         type="file"
                         accept="image/png,image/jpeg"
                         onChange={(event) => handleLogoUpload("company", "logoUrl", event.target.files?.[0] ?? null)}
-                        className="file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+                        className="file:mr-4 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-foreground hover:file:bg-accent"
                       />
                       {settings.company.logoUrl ? (
-                        <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <div className="mt-2 flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
                           <Image
                             src={settings.company.logoUrl}
                             alt="Vista previa del logotipo de la empresa"
@@ -330,8 +330,8 @@ export default function GeneralSettingsWorkspace() {
                             className="h-12 w-12 rounded-md object-contain"
                           />
                           <div>
-                            <p className="text-xs font-semibold text-slate-700">Imagen cargada</p>
-                            <p className="text-[11px] text-slate-500">PNG o JPG guardado en la configuración.</p>
+                            <p className="text-xs font-semibold text-foreground">Imagen cargada</p>
+                            <p className="text-[11px] text-muted-foreground">PNG o JPG guardado en la configuración.</p>
                           </div>
                         </div>
                       ) : null}
@@ -339,13 +339,13 @@ export default function GeneralSettingsWorkspace() {
                   </div>
                 </article>
 
-                <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <h3 className="text-lg font-semibold tracking-tight text-slate-900">Configuración regional</h3>
-                  <p className="mt-1 text-xs text-slate-500">Estructura preparada para soportar más opciones regionales en próximas versiones.</p>
+                <article className="rounded-xl border border-border bg-muted p-4">
+                  <h3 className="text-lg font-semibold tracking-tight text-foreground">Configuración regional</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Estructura preparada para soportar más opciones regionales en próximas versiones.</p>
 
                   <div className="mt-4 space-y-3">
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Idioma</span>
+                      <span className="text-xs font-medium text-muted-foreground">Idioma</span>
                       <Select
                         value={settings.regional.language}
                         onValueChange={(value) => updateRegionalField("language", value as GeneralSettings["regional"]["language"])}
@@ -358,7 +358,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Zona horaria</span>
+                      <span className="text-xs font-medium text-muted-foreground">Zona horaria</span>
                       <Select
                         value={settings.regional.timeZone}
                         onValueChange={(value) => updateRegionalField("timeZone", value as GeneralSettings["regional"]["timeZone"])}
@@ -371,7 +371,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Formato de fecha</span>
+                      <span className="text-xs font-medium text-muted-foreground">Formato de fecha</span>
                       <Select
                         value={settings.regional.dateFormat}
                         onValueChange={(value) => updateRegionalField("dateFormat", value as GeneralSettings["regional"]["dateFormat"])}
@@ -384,7 +384,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Primer día de la semana</span>
+                      <span className="text-xs font-medium text-muted-foreground">Primer día de la semana</span>
                       <Select
                         value={settings.regional.weekStartsOn}
                         onValueChange={(value) => updateRegionalField("weekStartsOn", value as GeneralSettings["regional"]["weekStartsOn"])}
@@ -398,21 +398,21 @@ export default function GeneralSettingsWorkspace() {
                   </div>
                 </article>
 
-                <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <h3 className="text-lg font-semibold tracking-tight text-slate-900">Apariencia</h3>
-                  <p className="mt-1 text-xs text-slate-500">Bloque simplificado para Beta. Sin sistema completo de temas.</p>
+                <article className="rounded-xl border border-border bg-muted p-4">
+                  <h3 className="text-lg font-semibold tracking-tight text-foreground">Apariencia</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Bloque simplificado para Beta. Sin sistema completo de temas.</p>
 
                   <div className="mt-4 space-y-3">
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Logo del sistema</span>
+                      <span className="text-xs font-medium text-muted-foreground">Logo del sistema</span>
                       <Input
                         type="file"
                         accept="image/png,image/jpeg"
                         onChange={(event) => handleLogoUpload("appearance", "systemLogoUrl", event.target.files?.[0] ?? null)}
-                        className="file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+                        className="file:mr-4 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-foreground hover:file:bg-accent"
                       />
                       {settings.appearance.systemLogoUrl ? (
-                        <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <div className="mt-2 flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
                           <Image
                             src={settings.appearance.systemLogoUrl}
                             alt="Vista previa del logo del sistema"
@@ -422,15 +422,15 @@ export default function GeneralSettingsWorkspace() {
                             className="h-12 w-12 rounded-md object-contain"
                           />
                           <div>
-                            <p className="text-xs font-semibold text-slate-700">Imagen cargada</p>
-                            <p className="text-[11px] text-slate-500">PNG o JPG guardado en la configuración.</p>
+                            <p className="text-xs font-semibold text-foreground">Imagen cargada</p>
+                            <p className="text-[11px] text-muted-foreground">PNG o JPG guardado en la configuración.</p>
                           </div>
                         </div>
                       ) : null}
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Color principal (opcional)</span>
+                      <span className="text-xs font-medium text-muted-foreground">Color principal (opcional)</span>
                       <div className="flex items-center gap-2">
                         <Input
                           type="text"
@@ -438,7 +438,7 @@ export default function GeneralSettingsWorkspace() {
                           onChange={(event) => updateAppearanceField("primaryColor", event.target.value)}
                         />
                         <span
-                          className="inline-flex h-8 w-8 rounded-md border border-slate-300"
+                          className="inline-flex h-8 w-8 rounded-md border border-border"
                           style={{ backgroundColor: settings.appearance.primaryColor || "#ffffff" }}
                         />
                       </div>
@@ -446,13 +446,13 @@ export default function GeneralSettingsWorkspace() {
                   </div>
                 </article>
 
-                <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
-                  <h3 className="text-lg font-semibold tracking-tight text-slate-900">Información del sistema</h3>
-                  <p className="mt-1 text-xs text-slate-500">Controla metadatos visibles del ERP para la operación diaria.</p>
+                <article className="rounded-xl border border-border bg-muted p-4 lg:col-span-2">
+                  <h3 className="text-lg font-semibold tracking-tight text-foreground">Información del sistema</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Controla metadatos visibles del ERP para la operación diaria.</p>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Nombre del sistema</span>
+                      <span className="text-xs font-medium text-muted-foreground">Nombre del sistema</span>
                       <Input
                         type="text"
                         value={settings.system.systemName}
@@ -461,7 +461,7 @@ export default function GeneralSettingsWorkspace() {
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-xs font-medium text-slate-600">Versión</span>
+                      <span className="text-xs font-medium text-muted-foreground">Versión</span>
                       <Input
                         type="text"
                         value={settings.system.version}
@@ -470,8 +470,8 @@ export default function GeneralSettingsWorkspace() {
                     </label>
                   </div>
 
-                  <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50">
-                    <p className="text-sm text-slate-700">Mostrar versión en la interfaz</p>
+                  <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 hover:bg-muted">
+                    <p className="text-sm text-foreground">Mostrar versión en la interfaz</p>
                     <Switch
                       checked={Boolean(settings.system.showVersionInInterface)}
                       onCheckedChange={(checked) => updateSystemField("showVersionInInterface", checked)}

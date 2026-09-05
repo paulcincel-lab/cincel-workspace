@@ -7,6 +7,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import { DataTable } from "@/components/ui/DataTable";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { Switch } from "@/components/ui/shadcn/switch";
@@ -228,18 +229,18 @@ function buildAccessColumns(setSelectedAccess: (role: SystemAccessRole) => void)
     {
       accessorKey: "role",
       header: "Acceso",
-      cell: ({ row }) => <span className="font-semibold text-slate-900">{row.original.role}</span>,
+      cell: ({ row }) => <span className="font-semibold text-foreground">{row.original.role}</span>,
     },
     {
       accessorKey: "description",
       header: "Descripcion",
-      cell: ({ row }) => <span className="text-slate-600">{row.original.description}</span>,
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.description}</span>,
     },
     {
       accessorKey: "usersCount",
       header: "Usuarios",
       cell: ({ row }) => (
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-foreground">
           {row.original.usersCount}
         </span>
       ),
@@ -251,7 +252,7 @@ function buildAccessColumns(setSelectedAccess: (role: SystemAccessRole) => void)
       cell: ({ row }) => (
         <div className="flex flex-wrap gap-1.5">
           {row.original.enabledModules.map((module) => (
-            <span key={`${row.original.role}-${module}`} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+            <span key={`${row.original.role}-${module}`} className="rounded-full border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">
               {module}
             </span>
           ))}
@@ -264,9 +265,9 @@ function buildAccessColumns(setSelectedAccess: (role: SystemAccessRole) => void)
       accessorFn: (access) => access.protectedRole,
       cell: ({ row }) =>
         row.original.protectedRole ? (
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Protegido</span>
+          <Badge variant="secondary">Protegido</Badge>
         ) : (
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Editable</span>
+          <Badge variant="outline">Editable</Badge>
         ),
     },
     {
@@ -403,15 +404,15 @@ export default function PermissionsWorkspace() {
   };
 
   return (
-    <main className="flex min-h-screen bg-slate-100">
+    <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
 
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
 
         <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
-          <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Configuracion</h2>
+          <aside className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Configuracion</h2>
             <nav className="mt-4 space-y-1.5">
               {CONFIG_NAV_ITEMS.map((item) => {
                 const isActive = item.key === "permisos";
@@ -421,7 +422,7 @@ export default function PermissionsWorkspace() {
                     <Link
                       key={item.key}
                       href={item.href}
-                      className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-medium ${isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}
+                      className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-medium ${isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted"}`}
                     >
                       {item.label}
                     </Link>
@@ -436,7 +437,7 @@ export default function PermissionsWorkspace() {
                     className="h-auto w-full justify-start px-3 py-2 text-left text-sm font-medium"
                   >
                     {item.label}
-                    <span className="ml-2 text-xs text-slate-400">Proximamente</span>
+                    <span className="ml-2 text-xs text-muted-foreground">Proximamente</span>
                   </Button>
                 );
               })}
@@ -444,12 +445,12 @@ export default function PermissionsWorkspace() {
           </aside>
 
           <div className="space-y-6">
-            <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-              <h1 className="text-3xl font-bold text-slate-900">Permisos</h1>
-              <p className="mt-2 text-sm text-slate-600">Administra los accesos y capacidades del sistema.</p>
+            <section className="rounded-2xl border border-border bg-card p-8 shadow-sm">
+              <h1 className="text-3xl font-bold text-foreground">Permisos</h1>
+              <p className="mt-2 text-sm text-muted-foreground">Administra los accesos y capacidades del sistema.</p>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <DataTable
                 columns={accessColumns}
                 data={accessSummary}
@@ -458,14 +459,14 @@ export default function PermissionsWorkspace() {
               />
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Editor de permisos</h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Configuración activa para el acceso: <span className="font-semibold text-slate-800">{selectedRoleInfo?.role}</span>
+                  <h2 className="text-xl font-semibold text-foreground">Editor de permisos</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Configuración activa para el acceso: <span className="font-semibold text-foreground">{selectedRoleInfo?.role}</span>
                   </p>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Fuente actual: {hasCustomConfig ? "Configuración personalizada" : "Valores por defecto de permissions.ts"}
                   </p>
                 </div>
@@ -496,15 +497,15 @@ export default function PermissionsWorkspace() {
                   const moduleDetails = getModuleDetails(moduleDefinition, moduleState);
 
                   return (
-                    <article key={moduleDefinition.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <article key={moduleDefinition.id} className="rounded-xl border border-border bg-muted p-4">
                       <div className="mb-3 flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="text-lg font-semibold tracking-tight text-slate-900">{moduleDefinition.name}</h3>
+                          <h3 className="text-lg font-semibold tracking-tight text-foreground">{moduleDefinition.name}</h3>
                           {moduleDetails ? (
-                            <p className="mt-1 text-xs text-slate-500">{moduleDetails}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{moduleDetails}</p>
                           ) : null}
                         </div>
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                        <span className="rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
                           {moduleDefinition.actions.length} acciones
                         </span>
                       </div>
@@ -515,8 +516,8 @@ export default function PermissionsWorkspace() {
 
                           if (action.type === "select") {
                             return (
-                              <div key={`${moduleDefinition.id}-${action.id}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                                <label className="text-sm text-slate-700" htmlFor={`${moduleDefinition.id}-${action.id}`}>
+                              <div key={`${moduleDefinition.id}-${action.id}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
+                                <label className="text-sm text-foreground" htmlFor={`${moduleDefinition.id}-${action.id}`}>
                                   {action.label}
                                 </label>
                                 <Select
@@ -549,9 +550,9 @@ export default function PermissionsWorkspace() {
                           return (
                             <label
                               key={`${moduleDefinition.id}-${action.id}`}
-                              className={`flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 ${canEditSelectedRole ? "cursor-pointer hover:bg-slate-50" : "cursor-not-allowed"}`}
+                              className={`flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 ${canEditSelectedRole ? "cursor-pointer hover:bg-muted" : "cursor-not-allowed"}`}
                             >
-                              <p className={`text-sm ${canEditSelectedRole ? "text-slate-700" : "text-slate-400"}`}>{action.label}</p>
+                              <p className={`text-sm ${canEditSelectedRole ? "text-foreground" : "text-muted-foreground"}`}>{action.label}</p>
                               <Switch
                                 checked={Boolean(value)}
                                 disabled={!canEditSelectedRole}
