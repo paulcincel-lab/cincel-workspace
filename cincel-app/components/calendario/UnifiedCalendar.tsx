@@ -28,7 +28,13 @@ type UnifiedCalendarProps = {
   viewerName?: string;
 };
 
-const PROJECT_EVENT_COLORS = ["#0e7490", "#db2777", "#f59e0b", "#2563eb", "#7c3aed", "#dc2626", "#059669"];
+/**
+ * Per-project border accents use a monochrome grayscale ladder (not real
+ * hues — brand is strictly black/white/gray) alternating dark/light steps so
+ * adjacent projects in the same day stay visually distinct without
+ * introducing off-palette colors.
+ */
+const PROJECT_EVENT_COLORS = ["#0a0a0a", "#9a9a9a", "#3d3d3d", "#c7c7c7", "#1f1f1f", "#6b6b6b", "#262626"];
 
 /**
  * Event-type badges use a monochrome opacity ladder (not real status colors —
@@ -355,7 +361,7 @@ export default function UnifiedCalendar({
                                 href={entry.href}
                                 onClick={(event) => event.stopPropagation()}
                                 className={`block truncate rounded border-l-4 px-2 py-1 text-[11px] font-semibold md:text-xs ${typeClassName(entry.type)}`}
-                                style={{ borderLeftColor: projectColorMap.get(entry.project) || "#64748b" }}
+                                style={{ borderLeftColor: projectColorMap.get(entry.project) || "#6b6b6b" }}
                                 title={`${entry.time} · ${entry.title} · ${entry.project}`}
                               >
                                 {typePrefix(entry.type)}. {entry.title}
@@ -508,7 +514,7 @@ export default function UnifiedCalendar({
                             href={entry.href}
                             onClick={(event) => event.stopPropagation()}
                             className={`block truncate rounded border-l-4 px-2 py-1 text-[11px] font-semibold md:text-xs ${typeClassName(entry.type)}`}
-                            style={{ borderLeftColor: projectColorMap.get(entry.project) || "#64748b" }}
+                            style={{ borderLeftColor: projectColorMap.get(entry.project) || "#6b6b6b" }}
                           >
                             {typePrefix(entry.type)}. {entry.title}
                           </Link>
