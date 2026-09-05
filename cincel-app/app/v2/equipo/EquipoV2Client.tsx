@@ -15,10 +15,14 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { MemberProfileModal } from "@/components/equipo/MemberProfileModal";
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
+import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { Button } from "@/components/ui/shadcn/button";
+import ExportMenu from "@/components/ui/ExportMenu";
 import { useProjectsData } from "@/lib/proyectos/use-projects-data";
 import { useMemberEditor } from "@/lib/equipo/use-member-editor";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { loadGeneralSettings } from "@/lib/settings/general-settings";
+import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import type { TeamAvailability, TeamMember } from "@/lib/data/team";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
 
@@ -51,10 +55,11 @@ const AVAILABILITY_VARIANT: Record<string, "success" | "secondary" | "outline"> 
 
 export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
   const [members, setMembers] = useState<TeamMember[]>(initialTeam);
-  const { allTasks } = useProjectsData();
+  const { allTasks, projectsData, secondaryCoordinatorByProject } = useProjectsData();
   const [view, setView] = useState<"activos" | "desactivados">("activos");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [profileMemberId, setProfileMemberId] = useState<number | null>(null);
+  const [coordinatorMemberId, setCoordinatorMemberId] = useState<number | null>(null);
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const {
     showEditor,
@@ -96,21 +101,36 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
         const support = activeTasks.filter((t) => t.support.includes(member.name)).length;
         const total = assigned + support;
         const occupancy = Math.round((total / Math.max(member.capacity, 1)) * 100);
+
+        const projects = Array.from(
+          new Set(
+            activeTasks
+              .filter((t) => t.manager === member.name || t.support.includes(member.name))
+              .map((t) => t.project)
+          )
+        );
+        const coordinatorProjects = projectsData
+          .filter((p) => p.active && p.coordinator === member.name)
+          .map((p) => p.name);
+        const constructionProjects = projectsData
+          .filter((p) => p.active && secondaryCoordinatorByProject[p.id] === member.name)
+          .map((p) => p.name);
+
         return {
           ...member,
           assigned,
           support,
           total,
-          projects: [],
-          coordinatorProjects: [],
-          coordinatorProjectsCount: 0,
-          constructionProjects: [],
-          constructionProjectsCount: 0,
+          projects,
+          coordinatorProjects,
+          coordinatorProjectsCount: coordinatorProjects.length,
+          constructionProjects,
+          constructionProjectsCount: constructionProjects.length,
           occupancy,
           loadLabel: loadLabel(occupancy, member.active),
         };
       }),
-    [members, activeTasks]
+    [members, activeTasks, projectsData, secondaryCoordinatorByProject]
   );
 
   const profileMember = withWorkload.find((m) => m.id === profileMemberId) ?? null;
@@ -168,6 +188,7 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
       createRowActionsColumn<(typeof withWorkload)[number]>(() => [
         { label: "Ver ficha", onSelect: (m) => setProfileMemberId(m.id) },
         { label: "Editar", onSelect: (m) => openEditEditor(m) },
+        { label: "Ver proyectos como encargado", onSelect: (m) => setCoordinatorMemberId(m.id) },
         {
           label: "Copiar correo institucional",
           separatorBefore: true,
@@ -186,6 +207,33 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
       .map((m) => m.institutionalEmail)
       .join(", ");
     void navigator.clipboard.writeText(emails);
+  }
+
+  const coordinatorMember = withWorkload.find((m) => m.id === coordinatorMemberId) ?? null;
+
+  const exportColumns = useMemo<ExportColumn<(typeof withWorkload)[number]>[]>(
+    () => [
+      { key: "name", header: "Colaborador", getValue: (m) => m.name },
+      { key: "role", header: "Puesto", getValue: (m) => m.role },
+      { key: "area", header: "Área", getValue: (m) => m.area },
+      { key: "occupancy", header: "Ocupación", getValue: (m) => `${m.occupancy}%` },
+      { key: "availability", header: "Disponibilidad", getValue: (m) => m.availability },
+      { key: "status", header: "Estado", getValue: (m) => (m.active ? "Activo" : "Desactivado") },
+    ],
+    []
+  );
+
+  async function exportTeam(format: "xlsx" | "pdf") {
+    const { settings } = loadGeneralSettings();
+    await exportTableData({
+      moduleName: "Equipo",
+      fileName: `equipo-${view}-${Date.now()}`,
+      format,
+      companyName: settings.company.tradeName || settings.company.legalName,
+      columns: exportColumns,
+      rows: visible,
+      landscape: true,
+    });
   }
 
   return (
@@ -207,6 +255,7 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
                 <TabsTrigger value="desactivados">Desactivados</TabsTrigger>
               </TabsList>
             </Tabs>
+            <ExportMenu onExport={exportTeam} />
             <Button onClick={openAddEditor}>+ Agregar colaborador</Button>
           </>
         }
@@ -237,6 +286,13 @@ export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
 
       {profileMember ? (
         <MemberProfileModal member={profileMember} onClose={() => setProfileMemberId(null)} />
+      ) : null}
+
+      {coordinatorMember ? (
+        <CoordinatorProjectsModal
+          member={coordinatorMember}
+          onClose={() => setCoordinatorMemberId(null)}
+        />
       ) : null}
 
       <MemberEditorDrawer

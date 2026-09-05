@@ -7,6 +7,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
 import { ProjectCreateModal } from "@/components/proyectos/ProjectCreateModal";
+import { ProjectNotesModal } from "@/components/proyectos/ProjectNotesModal";
 import { fetchClients } from "@/lib/repositories/clients-repository";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
@@ -16,12 +17,15 @@ import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
 import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Button } from "@/components/ui/shadcn/button";
+import ExportMenu from "@/components/ui/ExportMenu";
 import {
   Tabs,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/shadcn/tabs";
-import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
+import { useProjectsData, normalizeName, type ProjectItem } from "@/lib/proyectos/use-projects-data";
+import { loadGeneralSettings } from "@/lib/settings/general-settings";
+import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import type { ProjectStage, ProjectStatus } from "@/lib/types/enums";
 
 interface ProyectosV2ClientProps {
@@ -41,11 +45,22 @@ function nextDeliveryFor(project: ProjectItem, allTasks: ReturnType<typeof usePr
 
 export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
   const router = useRouter();
-  const { projectsData, allTasks, isLoadingData, updateProjectActive, activeTeamNames, addProject } =
-    useProjectsData(initialProjects);
+  const {
+    projectsData,
+    allTasks,
+    isLoadingData,
+    updateProjectActive,
+    activeTeamNames,
+    addProject,
+    notesByProject,
+    addNote,
+    secondaryCoordinatorByProject,
+  } = useProjectsData(initialProjects);
   const [view, setView] = useState<"activos" | "archivados">("activos");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [showCreate, setShowCreate] = useState(false);
+  const [notesProjectId, setNotesProjectId] = useState<number | null>(null);
+  const notesProject = projectsData.find((p) => p.id === notesProjectId) ?? null;
 
   const visible = useMemo(
     () => projectsData.filter((p) => (view === "activos" ? p.active : !p.active)),
@@ -97,9 +112,38 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
     setSelected(new Set());
   }
 
+  const exportColumns = useMemo<ExportColumn<ProjectItem>[]>(
+    () => [
+      { key: "project", header: "Proyecto", getValue: (p) => p.name },
+      { key: "client", header: "Cliente", getValue: (p) => p.client.name },
+      { key: "stage", header: "Etapa", getValue: (p) => p.stage },
+      { key: "designLeader", header: "Lider de diseño", getValue: (p) => normalizeName(p.coordinator) || "Sin encargado" },
+      {
+        key: "constructionLeader",
+        header: "Lider de construcción",
+        getValue: (p) => secondaryCoordinatorByProject[p.id] || "Sin encargado",
+      },
+      { key: "status", header: "Estado", getValue: (p) => (p.active ? "Proyecto activo" : "Proyecto archivado") },
+    ],
+    [secondaryCoordinatorByProject]
+  );
+
+  async function exportProjects(format: "xlsx" | "pdf") {
+    const { settings } = loadGeneralSettings();
+    await exportTableData({
+      moduleName: "Proyectos",
+      fileName: `proyectos-${view}-${Date.now()}`,
+      format,
+      companyName: settings.company.tradeName || settings.company.legalName,
+      columns: exportColumns,
+      rows: visible,
+      landscape: true,
+    });
+  }
+
   const kpis = useMemo(() => {
     const active = projectsData.filter((p) => p.active);
-    const managers = new Set(active.map((p) => p.manager).filter(Boolean));
+    const managers = new Set(active.map((p) => p.coordinator).filter(Boolean));
     return { active: active.length, managers: managers.size };
   }, [projectsData]);
 
@@ -129,14 +173,26 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
         ),
       },
       {
-        id: "manager",
-        header: "Responsable",
+        id: "coordinator",
+        header: "Líder de diseño",
         cell: ({ row }) =>
-          row.original.manager ? (
-            <PersonAvatar name={row.original.manager} />
+          row.original.coordinator ? (
+            <PersonAvatar name={row.original.coordinator} />
           ) : (
             <span className="text-muted-foreground">Sin encargado</span>
           ),
+      },
+      {
+        id: "constructionLeader",
+        header: "Líder de construcción",
+        cell: ({ row }) => {
+          const name = secondaryCoordinatorByProject[row.original.id];
+          return name ? (
+            <PersonAvatar name={name} />
+          ) : (
+            <span className="text-muted-foreground">Sin encargado</span>
+          );
+        },
       },
       {
         id: "nextDelivery",
@@ -160,6 +216,7 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
       createRowActionsColumn<ProjectItem>((project) => [
         { label: "Ver ficha", onSelect: (p) => router.push(`/proyectos/${p.id}/ficha`) },
         { label: "Ver actividades", onSelect: (p) => router.push(`/proyectos/${p.id}`) },
+        { label: "Notas", onSelect: (p) => setNotesProjectId(p.id) },
         {
           label: project.active ? "Archivar" : "Reactivar",
           separatorBefore: true,
@@ -168,7 +225,7 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
         },
       ]),
     ],
-    [allTasks, router, updateProjectActive, selected]
+    [allTasks, router, updateProjectActive, selected, secondaryCoordinatorByProject]
   );
 
   return (
@@ -190,6 +247,7 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
                 <TabsTrigger value="archivados">Archivados</TabsTrigger>
               </TabsList>
             </Tabs>
+            <ExportMenu onExport={exportProjects} />
             <Button onClick={() => setShowCreate(true)}>+ Nuevo proyecto</Button>
           </>
         }
@@ -234,6 +292,15 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
             setShowCreate(false);
             router.push(`/proyectos/${project.id}/ficha`);
           }}
+        />
+      ) : null}
+
+      {notesProject ? (
+        <ProjectNotesModal
+          projectName={notesProject.name}
+          notes={notesByProject[notesProject.id] ?? []}
+          onClose={() => setNotesProjectId(null)}
+          onSave={(content) => addNote(notesProject.id, content)}
         />
       ) : null}
     </div>

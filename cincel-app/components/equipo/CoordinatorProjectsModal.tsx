@@ -20,13 +20,13 @@ export function CoordinatorProjectsModal({ member, onClose }: CoordinatorProject
 
         <div className="space-y-3 px-6 py-4">
           {member.coordinatorProjects.length === 0 ? (
-            <p className="text-sm text-slate-500">No hay proyectos asignados como encargado.</p>
+            <p className="text-sm text-muted-foreground">No hay proyectos asignados como encargado.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {member.coordinatorProjects.map((project) => (
                 <span
                   key={`coordinator-project-${member.id}-${project}`}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700"
+                  className="rounded-full border border-border bg-muted px-3 py-1 text-sm text-foreground"
                 >
                   {project}
                 </span>

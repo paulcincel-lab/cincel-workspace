@@ -59,16 +59,16 @@ export function ProjectNotesModal({ projectName, notes, onClose, onSave }: Proje
             </Button>
           </div>
 
-          <div className="max-h-72 space-y-3 overflow-y-auto border-t border-slate-200 pt-4">
+          <div className="max-h-72 space-y-3 overflow-y-auto border-t border-border pt-4">
             {notes.length === 0 ? (
-              <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+              <p className="rounded-xl border border-border bg-muted p-3 text-sm text-muted-foreground">
                 Todavia no hay notas para este proyecto.
               </p>
             ) : (
               notes.map((note) => (
-                <div key={note.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-sm text-slate-800">{note.content}</p>
-                  <p className="mt-2 text-xs text-slate-500">{formatDate(note.createdAt)}</p>
+                <div key={note.id} className="rounded-xl border border-border bg-muted p-3">
+                  <p className="text-sm text-foreground">{note.content}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{formatDate(note.createdAt)}</p>
                 </div>
               ))
             )}
