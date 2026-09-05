@@ -44,7 +44,7 @@ function loadLabel(percent: number, isActive: boolean): string {
   return "Disponible";
 }
 
-interface EquipoV2ClientProps {
+interface EquipoClientProps {
   initialTeam: TeamMember[];
 }
 
@@ -53,7 +53,7 @@ const AVAILABILITY_VARIANT: Record<string, "success" | "secondary" | "outline"> 
   Mixto: "secondary",
 };
 
-export function EquipoV2Client({ initialTeam }: EquipoV2ClientProps) {
+export function EquipoClient({ initialTeam }: EquipoClientProps) {
   const [members, setMembers] = useState<TeamMember[]>(initialTeam);
   const { allTasks, projectsData, secondaryCoordinatorByProject } = useProjectsData();
   const [view, setView] = useState<"activos" | "desactivados">("activos");

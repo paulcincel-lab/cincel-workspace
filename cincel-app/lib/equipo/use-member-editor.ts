@@ -24,13 +24,11 @@ import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
 
 /**
  * Collaborator create/edit — draft state, validation, and credential
- * assignment (temporary password + system access toggle) — extracted out of
- * app/equipo/EquipoPageClient.tsx so both the legacy page and
- * app/v2/equipo/EquipoV2Client.tsx call the exact same logic instead of
- * risking two copies of security-relevant code drifting apart. The actual
- * privileged write (setTeamMemberCredentialAction) re-checks capabilities
- * and re-fetches the member server-side regardless of what a caller sends —
- * this hook is UI state/validation/gating only, not the security boundary.
+ * assignment (temporary password + system access toggle) — used by
+ * app/equipo/EquipoClient.tsx. The actual privileged write
+ * (setTeamMemberCredentialAction) re-checks capabilities and re-fetches the
+ * member server-side regardless of what a caller sends — this hook is UI
+ * state/validation/gating only, not the security boundary.
  */
 
 export const SYSTEM_ROLE_STORAGE_KEY = "cincel.team.system-roles.v1";

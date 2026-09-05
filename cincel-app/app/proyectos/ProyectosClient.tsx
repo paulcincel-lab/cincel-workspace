@@ -28,7 +28,7 @@ import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import type { ProjectStage, ProjectStatus } from "@/lib/types/enums";
 
-interface ProyectosV2ClientProps {
+interface ProyectosClientProps {
   initialProjects: ProjectItem[];
 }
 
@@ -43,7 +43,7 @@ function nextDeliveryFor(project: ProjectItem, allTasks: ReturnType<typeof usePr
   return dates[0] ?? null;
 }
 
-export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
+export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
   const router = useRouter();
   const {
     projectsData,
@@ -277,6 +277,7 @@ export function ProyectosV2Client({ initialProjects }: ProyectosV2ClientProps) {
         onRowClick={(row) => router.push(`/proyectos/${row.id}/ficha`)}
         wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage={view === "activos" ? "No hay proyectos activos." : "No hay proyectos archivados."}
+        searchPlaceholder="Filtrar por nombre de proyecto..."
       />
 
       {showCreate ? (

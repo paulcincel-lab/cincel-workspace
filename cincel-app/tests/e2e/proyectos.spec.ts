@@ -15,7 +15,7 @@ test.describe("Proyectos — create and edit", () => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
     await page.goto(`${BASE_URL}/proyectos`, { waitUntil: "domcontentloaded" });
-    // Wait for the exact Proyectos h2 heading in ProjectsTable
+    // Wait for the exact Proyectos heading
     await expect(page.getByRole("heading", { name: "Proyectos", exact: true })).toBeVisible({ timeout: 30_000 });
   });
 
@@ -23,13 +23,16 @@ test.describe("Proyectos — create and edit", () => {
     await page.getByRole("button", { name: /Nuevo proyecto/i }).click();
     await page.getByRole("heading", { name: "Nuevo proyecto" }).waitFor({ state: "visible" });
 
-    // In ProjectsTable the label wraps its input (implicit htmlFor association)
+    // The label wraps its input (implicit htmlFor association)
     await page.getByLabel("Nombre del proyecto").fill(PROJECT_NAME);
 
     await page.getByRole("button", { name: "Crear proyecto" }).click();
 
-    // After creation the app navigates to the project detail page — verify the project heading is there
-    await expect(page.getByRole("heading", { name: PROJECT_NAME })).toBeVisible({ timeout: 20_000 });
+    // After creation the app navigates to the project's ficha page — the name
+    // renders as a subtitle (<p>) under the static "Ficha del proyecto" <h1>,
+    // not as its own heading.
+    await expect(page.getByRole("heading", { name: "Ficha del proyecto" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(PROJECT_NAME).first()).toBeVisible({ timeout: 5_000 });
 
     // Navigate back to the list and verify the project persists (real localStorage)
     await page.goto(`${BASE_URL}/proyectos`, { waitUntil: "domcontentloaded" });
