@@ -370,10 +370,9 @@ export async function mergeDuplicateActivitiesAction(input: {
   });
 
   for (const route of [
-    "/tareas",
-    "/tareas/presale",
-    "/tareas/diseno",
-    "/tareas/construccion",
+    "/actividades/presale",
+    "/actividades/diseno",
+    "/actividades/construccion",
   ]) {
     revalidatePath(route);
   }
@@ -463,10 +462,9 @@ export async function discardProjectViaAssistantAction(input: {
   revalidatePath("/proyectos");
   revalidatePath("/directorio");
   for (const route of [
-    "/tareas",
-    "/tareas/presale",
-    "/tareas/diseno",
-    "/tareas/construccion",
+    "/actividades/presale",
+    "/actividades/diseno",
+    "/actividades/construccion",
   ]) {
     revalidatePath(route);
   }

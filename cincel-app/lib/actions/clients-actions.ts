@@ -573,10 +573,9 @@ export async function onboardClientViaAssistantAction(
 
   revalidatePath("/directorio");
   revalidatePath("/proyectos");
-  revalidatePath("/tareas");
-  revalidatePath("/tareas/presale");
-  revalidatePath("/tareas/diseno");
-  revalidatePath("/tareas/construccion");
+  revalidatePath("/actividades/presale");
+  revalidatePath("/actividades/diseno");
+  revalidatePath("/actividades/construccion");
 
   return {
     ok: true,

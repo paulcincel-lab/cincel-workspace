@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import type { ManualClient } from "@/lib/repositories/clients-repository";
 import type { ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
 import type { ProjectItem } from "@/lib/proyectos/use-projects-data";
+import { departamentoSlugForStage } from "@/lib/actividades/departamento";
 
 interface ClientDetailSheetProps {
   client: ManualClient;
@@ -170,7 +171,7 @@ export function ClientDetailSheet({
                         Ficha de proyecto
                       </Link>
                       <Link
-                        href={`/tareas?project=${encodeURIComponent(project.name)}`}
+                        href={`/actividades/${departamentoSlugForStage(project.stage)}?project=${encodeURIComponent(project.name)}`}
                         className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
                       >
                         Ver actividades
