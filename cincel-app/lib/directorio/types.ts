@@ -24,6 +24,11 @@ export function directorioStatusVariant(status: string): "outline" | "secondary"
   return /activ/i.test(status) ? "outline" : "secondary";
 }
 
+/** Recovers the numeric source-record id from a DirectorioRow's prefixed id (e.g. "contratista-42" -> 42). */
+export function directorioRowSourceId(row: Pick<DirectorioRow, "id">): number {
+  return Number(row.id.slice(row.id.indexOf("-") + 1));
+}
+
 export interface DirectorioSourceData {
   clients: ManualClient[];
   contractors: Contractor[];
