@@ -1,6 +1,7 @@
 import { presaleTemplate } from "@/lib/templates/presale";
 import { disenoTemplate } from "@/lib/templates/diseno";
 import { operativasTemplate } from "@/lib/templates/operativas";
+import { decoracionTemplate } from "@/lib/templates/decoracion";
 import type { WorkflowType } from "@/lib/types/task";
 import type { ProjectStage } from "@/lib/types/enums";
 
@@ -11,9 +12,7 @@ export interface TemplateItem {
 
 /**
  * The firm's internal departments — Presale → Diseño → Construcción →
- * Decoración — each keyed by its URL slug. Decoración has no template/data
- * yet (see the plan's note on the pending `workflow_type` migration); its
- * page renders a "próximamente" state instead of an empty table.
+ * Decoración — each keyed by its URL slug.
  */
 export const DEPARTMENTOS: Array<{
   slug: string;
@@ -50,10 +49,10 @@ export const DEPARTMENTOS: Array<{
   {
     slug: "decoracion",
     stage: "Decoración",
-    workflow: null,
+    workflow: "Decoración",
     label: "Decoración",
-    description: "Próximamente — pendiente de plantilla y migración de esquema.",
-    template: [],
+    description: "Flujo de selección de mobiliario, adquisición e instalación final.",
+    template: decoracionTemplate,
   },
 ];
 

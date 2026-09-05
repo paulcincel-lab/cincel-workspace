@@ -21,6 +21,7 @@ import {
   resolveClientsCapabilities,
   resolveProjectsCapabilities,
 } from "@/lib/auth/permissions";
+import type { WorkflowType } from "@/lib/types/task";
 
 function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
   const out = new Map<string, T[]>();
@@ -278,7 +279,7 @@ export type MergeActivitiesResult =
 export async function mergeDuplicateActivitiesAction(input: {
   projectName: string;
   descriptionContains: string;
-  workflow?: "Presale" | "Diseño" | "Construcción";
+  workflow?: WorkflowType;
 }): Promise<MergeActivitiesResult> {
   const user = await requireCapabilityUser();
   if (!resolveActivitiesCapabilities(user).canDeleteActivity) {
@@ -290,9 +291,11 @@ export async function mergeDuplicateActivitiesAction(input: {
       ? "Diseno"
       : input.workflow === "Construcción"
         ? "Construccion"
-        : input.workflow === "Presale"
-          ? "Presale"
-          : undefined;
+        : input.workflow === "Decoración"
+          ? "Decoracion"
+          : input.workflow === "Presale"
+            ? "Presale"
+            : undefined;
 
   const matches = await db
     .select({

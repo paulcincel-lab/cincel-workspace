@@ -299,7 +299,11 @@ export const render_list = tool({
   },
 });
 
-const WORKFLOW_ENUM = z.enum(["Presale", "Diseño", "Construcción"]);
+const WORKFLOW_ENUM = z.enum(["Presale", "Diseño", "Construcción", "Decoración"]);
+// A brand-new project can only start life in one of these three stages
+// (Decoración is reached later, not chosen at onboarding) — projects.stage's
+// closed set, distinct from activities.workflow's WORKFLOW_ENUM above.
+const ONBOARD_WORKFLOW_ENUM = z.enum(["Presale", "Diseño", "Construcción"]);
 
 export const create_task = tool({
   description:
@@ -364,7 +368,7 @@ export const onboard_client = tool({
     contactEmail: z.string().optional(),
     contactPhone: z.string().optional(),
     projectName: z.string().min(2).describe("Nombre del proyecto nuevo"),
-    workflow: WORKFLOW_ENUM.default("Presale"),
+    workflow: ONBOARD_WORKFLOW_ENUM.default("Presale"),
     manager: z
       .string()
       .optional()

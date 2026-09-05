@@ -44,12 +44,14 @@ const WORKFLOW_TO_DB = {
   Presale: "Presale",
   "Diseño": "Diseno",
   "Construcción": "Construccion",
+  "Decoración": "Decoracion",
 } as const satisfies Record<WorkflowType, string>;
 
 const WORKFLOW_FROM_DB: Record<string, WorkflowType> = {
   Presale: "Presale",
   Diseno: "Diseño",
   Construccion: "Construcción",
+  Decoracion: "Decoración",
 };
 
 type DbWorkflow = (typeof WORKFLOW_TO_DB)[WorkflowType];

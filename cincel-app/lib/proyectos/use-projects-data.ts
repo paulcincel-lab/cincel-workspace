@@ -193,9 +193,10 @@ export function useProjectsData(
         fetchActivities("Presale"),
         fetchActivities("Diseño"),
         fetchActivities("Construcción"),
+        fetchActivities("Decoración"),
       ])
-        .then(([p, d, c]) => {
-          const merged = [...p, ...d, ...c];
+        .then(([p, d, c, dec]) => {
+          const merged = [...p, ...d, ...c, ...dec];
           if (merged.length > 0) setAllTasks(merged);
         })
         .catch(() => undefined);
