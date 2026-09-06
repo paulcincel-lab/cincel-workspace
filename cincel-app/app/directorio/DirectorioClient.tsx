@@ -57,6 +57,18 @@ const COLABORADOR_OPTIONS_KEY = "cincel.colaboradores.options.v2";
 const COLABORADOR_COLORS_KEY = "cincel.colaboradores.colors.v1";
 const TIENDA_OPTIONS_KEY = "cincel.tiendas.options.v2";
 const TIENDA_COLORS_KEY = "cincel.tiendas.colors.v1";
+const COLUMN_ORDER_STORAGE_KEY = "cincel.directorio.column.order.v1";
+
+type ColumnKey = "name" | "type" | "category" | "contact" | "status" | "rating";
+const DEFAULT_COLUMN_ORDER: ColumnKey[] = ["name", "type", "category", "contact", "status", "rating"];
+const COLUMN_LABEL: Record<ColumnKey, string> = {
+  name: "Nombre",
+  type: "Tipo",
+  category: "Categoría",
+  contact: "Contacto",
+  status: "Estado",
+  rating: "Calificación",
+};
 
 const DEFAULT_CONTRACTOR_STATUS = ["Activo", "Pausado", "Lista Negra", "Sin actividad con nosotros", "Prospecto", "Inactivo"];
 const DEFAULT_CONTRACTOR_CATEGORY = [
@@ -82,6 +94,20 @@ function loadColors(key: string): OptionColors {
     return JSON.parse(stored) as OptionColors;
   } catch {
     return {};
+  }
+}
+
+function loadColumnOrder(): ColumnKey[] {
+  const stored = readStorage(COLUMN_ORDER_STORAGE_KEY);
+  if (!stored) return DEFAULT_COLUMN_ORDER;
+  try {
+    const parsed = JSON.parse(stored) as ColumnKey[];
+    if (!Array.isArray(parsed)) return DEFAULT_COLUMN_ORDER;
+    const known = parsed.filter((key): key is ColumnKey => DEFAULT_COLUMN_ORDER.includes(key));
+    const missing = DEFAULT_COLUMN_ORDER.filter((key) => !known.includes(key));
+    return [...known, ...missing];
+  } catch {
+    return DEFAULT_COLUMN_ORDER;
   }
 }
 
@@ -224,6 +250,23 @@ export function DirectorioClient({
     () => loadTiendaOptions().priceOptions ?? DEFAULT_PRICE
   );
   const [tiendaColors, setTiendaColors] = useState<OptionColors>(() => loadColors(TIENDA_COLORS_KEY));
+
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() => loadColumnOrder());
+  const [draggedColumn, setDraggedColumn] = useState<ColumnKey | null>(null);
+
+  const reorderColumn = (sourceKey: ColumnKey, targetKey: ColumnKey) => {
+    const sourceIdx = columnOrder.indexOf(sourceKey);
+    const targetIdx = columnOrder.indexOf(targetKey);
+    if (sourceIdx === -1 || targetIdx === -1 || sourceIdx === targetIdx) return;
+
+    const newOrder = [...columnOrder];
+    newOrder.splice(sourceIdx, 1);
+    const adjustedTargetIdx = sourceIdx < targetIdx ? targetIdx - 1 : targetIdx;
+    newOrder.splice(adjustedTargetIdx, 0, sourceKey);
+
+    setColumnOrder(newOrder);
+    writeStorage(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+  };
 
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const clientsCapabilities = useMemo(() => resolveClientsCapabilities(authenticatedUser), [authenticatedUser]);
@@ -778,23 +821,41 @@ export function DirectorioClient({
 
   const activeFiltersCount = [filters.status, filters.category, filters.activeOnly, filters.minRating > 0].filter(Boolean).length;
 
-  const columns = useMemo<ColumnDef<DirectorioRow, unknown>[]>(
-    () => [
-      createSelectionColumn<DirectorioRow>({
-        getId: (r) => r.id,
-        selectedIds: selected,
-        onToggle: toggle,
-        onToggleAll: toggleAll,
-      }),
-      { accessorKey: "name", header: "Nombre", cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
-      {
+  const draggableHeader = (key: ColumnKey) => (
+    <div
+      draggable
+      onDragStart={() => setDraggedColumn(key)}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={() => {
+        if (draggedColumn) reorderColumn(draggedColumn, key);
+        setDraggedColumn(null);
+      }}
+      onDragEnd={() => setDraggedColumn(null)}
+      className={`cursor-move ${draggedColumn === key ? "text-primary" : ""}`}
+      title="Arrastra para reordenar"
+    >
+      {COLUMN_LABEL[key]}
+    </div>
+  );
+
+  const dataColumnsByKey = useMemo<Record<ColumnKey, ColumnDef<DirectorioRow, unknown>>>(
+    () => ({
+      name: {
+        id: "name",
+        accessorKey: "name",
+        header: () => draggableHeader("name"),
+        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+      },
+      type: {
+        id: "type",
         accessorKey: "type",
-        header: "Tipo",
+        header: () => draggableHeader("type"),
         cell: ({ row }) => <Badge variant="secondary">{row.original.type}</Badge>,
       },
-      {
+      category: {
+        id: "category",
         accessorKey: "category",
-        header: "Categoría",
+        header: () => draggableHeader("category"),
         cell: ({ row }) => {
           const r = row.original;
           const id = directorioRowSourceId(r);
@@ -832,9 +893,10 @@ export function DirectorioClient({
           );
         },
       },
-      {
+      contact: {
+        id: "contact",
         accessorKey: "contact",
-        header: "Contacto",
+        header: () => draggableHeader("contact"),
         cell: ({ row }) => {
           const r = row.original;
           const id = directorioRowSourceId(r);
@@ -844,9 +906,10 @@ export function DirectorioClient({
           return <EditableCell value={r.contact} onSave={(v) => updateTienda(id, { contact: v })} />;
         },
       },
-      {
+      status: {
+        id: "status",
         accessorKey: "status",
-        header: "Estado",
+        header: () => draggableHeader("status"),
         cell: ({ row }) => {
           const r = row.original;
           const id = directorioRowSourceId(r);
@@ -894,9 +957,10 @@ export function DirectorioClient({
           );
         },
       },
-      {
+      rating: {
+        id: "rating",
         accessorKey: "rating",
-        header: "Calificación",
+        header: () => draggableHeader("rating"),
         cell: ({ row }) => {
           const r = row.original;
           const id = directorioRowSourceId(r);
@@ -906,6 +970,23 @@ export function DirectorioClient({
           return <StarRating rating={r.rating ?? 0} onRate={(v) => updateTienda(id, { rating: v })} />;
         },
       },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      draggedColumn, contractorCategoryOpts, contractorStatusOpts, contractorColors,
+      colaboradorStatusOpts, colaboradorColors, tiendaStatusOpts, tiendaColors,
+    ]
+  );
+
+  const columns = useMemo<ColumnDef<DirectorioRow, unknown>[]>(
+    () => [
+      createSelectionColumn<DirectorioRow>({
+        getId: (r) => r.id,
+        selectedIds: selected,
+        onToggle: toggle,
+        onToggleAll: toggleAll,
+      }),
+      ...columnOrder.map((key) => dataColumnsByKey[key]),
       createRowActionsColumn<DirectorioRow>((row) => {
         const isCliente = row.type === "Cliente";
         const canEdit = !isCliente || clientsCapabilities.canEditClient;
@@ -927,11 +1008,7 @@ export function DirectorioClient({
       }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      selected, contractorCategoryOpts, contractorStatusOpts, contractorColors,
-      colaboradorStatusOpts, colaboradorColors, tiendaStatusOpts, tiendaColors,
-      clientsCapabilities,
-    ]
+    [selected, columnOrder, dataColumnsByKey, clientsCapabilities]
   );
 
   return (
