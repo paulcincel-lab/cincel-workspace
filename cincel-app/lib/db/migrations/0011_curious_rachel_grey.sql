@@ -1,1 +1,0 @@
-ALTER TABLE "core"."team_members" DROP COLUMN "auth";

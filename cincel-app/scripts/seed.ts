@@ -1,31 +1,32 @@
 /**
- * Minimal database seed (Phase 1).
+ * Database seed (rebuild Phase 1).
  *
- * Populates just enough to run the app against a real Postgres database:
- *   - the full team roster (needed for login + assignment dropdowns)
- *   - the demo clients + contacts
- *   - the demo projects + drive links + project members
+ * Populates the minimum to log in and start using the app:
+ *   - the four workflows (Presale, Diseño, Construcción, Decoración), zero
+ *     templates until the client supplies them (Phase 0)
+ *   - areas, derived from the roster plus Decoración, each owning its workflow
+ *   - the staff roster with HR profiles and area memberships
+ *   - one admin login
  *
- * Everything else (activities, contractors, collaborators, stores, resources) is
- * entered through the app. Idempotent: re-running upserts on `legacy_id`.
+ * Idempotent: workflows upsert on key, areas and staff match on name (case-
+ * insensitive), memberships and credentials upsert on their primary key.
  *
  * Run with: npm run db:seed
  */
 import { randomBytes, scrypt as scryptCb } from "node:crypto";
 import { promisify } from "node:util";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import { teamMembers as teamSeed } from "../lib/data/team";
-import { projects as projectSeed } from "../lib/data/projects";
+import { teamMembers as roster } from "../lib/data/team";
 import * as schema from "../lib/db/schema";
 
 const connectionString =
   process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
 
-const sql = postgres(connectionString, { max: 1 });
-const db = drizzle(sql, { schema });
+const client = postgres(connectionString, { max: 1 });
+const db = drizzle(client, { schema });
 
 const scrypt = promisify(scryptCb);
 
@@ -39,223 +40,178 @@ async function hashPassword(password: string) {
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "paul@cincel.mx";
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "CincelAdmin2026!";
 
-async function seedTeam() {
-  for (const m of teamSeed) {
-    await db
-      .insert(schema.teamMembers)
-      .values({
-        legacyId: m.id,
-        name: m.name,
-        birthDate: m.birthDate || null,
-        nationality: m.nationality || null,
-        phone: m.phone || null,
-        institutionalEmail: m.institutionalEmail || null,
-        address: m.address || null,
-        maritalStatus: m.maritalStatus || null,
-        homePhone: m.homePhone || null,
-        personalEmail: m.personalEmail || null,
-        curp: m.curp || null,
-        rfc: m.rfc || null,
-        emergencyContact: m.emergencyContact,
-        role: m.role || null,
-        area: m.area || null,
-        capacity: m.capacity,
-        availability: m.availability || null,
-        active: m.active,
-      })
+const WORKFLOWS = [
+  { key: "presale", name: "Presale", area: "Presale" },
+  { key: "diseno", name: "Diseño", area: "Diseño" },
+  { key: "construccion", name: "Construcción", area: "Construcción" },
+  { key: "decoracion", name: "Decoración", area: "Decoración" },
+] as const;
+
+const orNull = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
+
+async function seedWorkflows() {
+  const ids = new Map<string, string>();
+  for (const [i, w] of WORKFLOWS.entries()) {
+    const [row] = await db
+      .insert(schema.workflows)
+      .values({ key: w.key, name: w.name, sortOrder: i })
       .onConflictDoUpdate({
-        target: schema.teamMembers.legacyId,
-        set: {
-          name: m.name,
-          role: m.role || null,
-          area: m.area || null,
-          capacity: m.capacity,
-          availability: m.availability || null,
-          active: m.active,
-          institutionalEmail: m.institutionalEmail || null,
-          phone: m.phone || null,
-        },
-      });
+        target: schema.workflows.key,
+        targetWhere: sql`${schema.workflows.deletedAt} is null`,
+        set: { name: w.name, sortOrder: i },
+      })
+      .returning({ id: schema.workflows.id });
+    ids.set(w.key, row.id);
   }
-  console.log(`  team_members: ${teamSeed.length} upserted`);
+  console.log(`  workflows: ${ids.size} upserted`);
+  return ids;
 }
 
-async function seedProjects() {
-  for (const p of projectSeed) {
-    const c = p.client;
+async function seedAreas() {
+  const names = new Set<string>(WORKFLOWS.map((w) => w.area));
+  for (const m of roster) if (m.area.trim()) names.add(m.area.trim());
 
-    // ── client ──
-    const [clientRow] = await db
-      .insert(schema.clients)
-      .values({
-        legacyId: c.id,
-        name: c.name,
-        kind: c.kind as "Empresa" | "Particular",
-        phone: c.phone || null,
-        acquisitionChannel: c.acquisitionChannel || null,
-        totalSpentMxn: String(c.totalSpent ?? 0),
-      })
-      .onConflictDoUpdate({
-        target: schema.clients.legacyId,
-        set: {
-          name: c.name,
-          kind: c.kind as "Empresa" | "Particular",
-          phone: c.phone || null,
-          acquisitionChannel: c.acquisitionChannel || null,
-          totalSpentMxn: String(c.totalSpent ?? 0),
-        },
-      })
-      .returning();
-
-    await db
-      .delete(schema.clientContacts)
-      .where(eq(schema.clientContacts.clientId, clientRow.id));
-    if (c.contacts.length > 0) {
-      await db.insert(schema.clientContacts).values(
-        c.contacts.map((contact, i) => ({
-          clientId: clientRow.id,
-          name: contact.name,
-          role: contact.role || null,
-          phone: contact.phone || null,
-          email: contact.email || null,
-          sortOrder: i,
-        }))
-      );
-    }
-
-    // ── project ──
-    const [projectRow] = await db
-      .insert(schema.projects)
-      .values({
-        legacyId: p.id,
-        code: p.code,
-        name: p.name,
-        status: p.status,
-        active: p.active,
-        clientId: clientRow.id,
-        projectType: p.type,
-        stage: p.stage,
-        phase: p.phase,
-        addressStreet: p.address.street || null,
-        addressCity: p.address.city || null,
-        addressState: p.address.state || null,
-        managerName: p.manager || null,
-        coordinatorName: p.coordinator || null,
-        progress: p.progress,
-        startDate: p.startDate || null,
-      })
-      .onConflictDoUpdate({
-        target: schema.projects.legacyId,
-        set: {
-          code: p.code,
-          name: p.name,
-          status: p.status,
-          active: p.active,
-          clientId: clientRow.id,
-          projectType: p.type,
-          stage: p.stage,
-          phase: p.phase,
-          managerName: p.manager || null,
-          coordinatorName: p.coordinator || null,
-          progress: p.progress,
-          startDate: p.startDate || null,
-        },
-      })
-      .returning();
-
-    // ── drive links ──
-    await db
-      .insert(schema.projectDriveLinks)
-      .values({
-        projectId: projectRow.id,
-        administrativoUrl: p.drive.administrativo || null,
-        planosUrl: p.drive.planos || null,
-        rendersUrl: p.drive.renders || null,
-        reportesUrl: p.drive.reportes || null,
-      })
-      .onConflictDoUpdate({
-        target: schema.projectDriveLinks.projectId,
-        set: {
-          administrativoUrl: p.drive.administrativo || null,
-          planosUrl: p.drive.planos || null,
-          rendersUrl: p.drive.renders || null,
-          reportesUrl: p.drive.reportes || null,
-        },
-      });
-
-    // ── members ──
-    await db
-      .delete(schema.projectMembers)
-      .where(eq(schema.projectMembers.projectId, projectRow.id));
-    for (const memberName of p.team) {
-      const match = await db.query.teamMembers.findFirst({
-        where: eq(schema.teamMembers.name, memberName),
-      });
-      await db.insert(schema.projectMembers).values({
-        projectId: projectRow.id,
-        teamMemberId: match?.id ?? null,
-        memberNameSnapshot: memberName,
-      });
-    }
+  const ids = new Map<string, string>();
+  let i = 0;
+  for (const name of names) {
+    const existing = await db.query.areas.findFirst({
+      where: sql`lower(${schema.areas.name}) = lower(${name}) and ${schema.areas.deletedAt} is null`,
+    });
+    const row =
+      existing ??
+      (
+        await db
+          .insert(schema.areas)
+          .values({ name, sortOrder: i })
+          .returning()
+      )[0];
+    ids.set(name.toLowerCase(), row.id);
+    i += 1;
   }
-  console.log(
-    `  clients: ${projectSeed.length} upserted, projects: ${projectSeed.length} upserted`
-  );
+  console.log(`  areas: ${ids.size} present`);
+  return ids;
+}
+
+async function seedAreaWorkflows(
+  workflowIds: Map<string, string>,
+  areaIds: Map<string, string>
+) {
+  for (const w of WORKFLOWS) {
+    await db
+      .insert(schema.areaWorkflows)
+      .values({
+        areaId: areaIds.get(w.area.toLowerCase())!,
+        workflowId: workflowIds.get(w.key)!,
+      })
+      .onConflictDoNothing();
+  }
+  console.log(`  area_workflows: ${WORKFLOWS.length} linked`);
+}
+
+async function seedStaff(areaIds: Map<string, string>) {
+  let count = 0;
+  for (const m of roster) {
+    const existing = await db.query.staff.findFirst({
+      where: sql`lower(${schema.staff.name}) = lower(${m.name}) and ${schema.staff.deletedAt} is null`,
+    });
+    const values = {
+      kind: "empleado" as const,
+      name: m.name,
+      phone: orNull(m.phone),
+      email: orNull(m.institutionalEmail)?.toLowerCase() ?? null,
+      role: orNull(m.role),
+      capacity: m.capacity,
+      availability: orNull(m.availability),
+      active: m.active,
+    };
+    const row = existing
+      ? (
+          await db
+            .update(schema.staff)
+            .set(values)
+            .where(eq(schema.staff.id, existing.id))
+            .returning()
+        )[0]
+      : (await db.insert(schema.staff).values(values).returning())[0];
+
+    const profile = {
+      staffId: row.id,
+      personalEmail: orNull(m.personalEmail),
+      homePhone: orNull(m.homePhone),
+      nationality: orNull(m.nationality),
+      address: orNull(m.address),
+      maritalStatus: orNull(m.maritalStatus),
+      birthDate: orNull(m.birthDate),
+      curp: orNull(m.curp),
+      rfc: orNull(m.rfc),
+      emergencyContactName: orNull(m.emergencyContact.name),
+      emergencyContactRelation: orNull(m.emergencyContact.relation),
+      emergencyContactPhone: orNull(m.emergencyContact.phone),
+      emergencyContactAddress: orNull(m.emergencyContact.address),
+    };
+    await db
+      .insert(schema.staffProfiles)
+      .values(profile)
+      .onConflictDoUpdate({ target: schema.staffProfiles.staffId, set: profile });
+
+    const areaId = areaIds.get(m.area.trim().toLowerCase());
+    if (areaId) {
+      await db
+        .insert(schema.areaMembers)
+        .values({ areaId, staffId: row.id })
+        .onConflictDoNothing();
+    }
+    count += 1;
+  }
+  console.log(`  staff: ${count} upserted (with profiles and area memberships)`);
 }
 
 async function seedAdminCredential() {
   const email = ADMIN_EMAIL.trim().toLowerCase();
-  const member = await db.query.teamMembers.findFirst({
-    where: eq(schema.teamMembers.institutionalEmail, ADMIN_EMAIL),
+  const member = await db.query.staff.findFirst({
+    where: sql`lower(${schema.staff.email}) = ${email} and ${schema.staff.deletedAt} is null`,
   });
   if (!member) {
-    console.log(`  admin credential: SKIPPED (no team member with email ${email})`);
+    console.log(`  admin credential: SKIPPED (no staff with email ${email})`);
     return;
   }
 
   // Ensure the seeded admin actually has the Administrador role.
   if (member.role !== "Administrador") {
     await db
-      .update(schema.teamMembers)
+      .update(schema.staff)
       .set({ role: "Administrador" })
-      .where(eq(schema.teamMembers.id, member.id));
+      .where(eq(schema.staff.id, member.id));
   }
 
   const { hash, salt } = await hashPassword(ADMIN_PASSWORD);
+  const credential = {
+    passwordHash: hash,
+    salt,
+    enabled: true,
+    mustChangePassword: false,
+    passwordUpdatedAt: new Date(),
+  };
   await db
     .insert(schema.authCredentials)
-    .values({
-      teamMemberId: member.id,
-      passwordHash: hash,
-      salt,
-      authEnabled: true,
-      mustChangePassword: false,
-      passwordUpdatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: schema.authCredentials.teamMemberId,
-      set: {
-        passwordHash: hash,
-        salt,
-        authEnabled: true,
-        mustChangePassword: false,
-        passwordUpdatedAt: new Date(),
-      },
-    });
+    .values({ staffId: member.id, ...credential })
+    .onConflictDoUpdate({ target: schema.authCredentials.staffId, set: credential });
   console.log(`  auth_credentials: admin ${email} upserted`);
 }
 
 async function main() {
   console.log(`Seeding ${connectionString.replace(/:[^:@/]*@/, ":***@")}`);
-  await seedTeam();
-  await seedProjects();
+  const workflowIds = await seedWorkflows();
+  const areaIds = await seedAreas();
+  await seedAreaWorkflows(workflowIds, areaIds);
+  await seedStaff(areaIds);
   await seedAdminCredential();
   console.log("Seed complete.");
-  await sql.end();
+  await client.end();
 }
 
 main().catch(async (err) => {
   console.error(err);
-  await sql.end();
+  await client.end();
   process.exit(1);
 });
