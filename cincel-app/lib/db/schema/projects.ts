@@ -1,114 +1,191 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
-  bigint,
-  boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
+  numeric,
+  primaryKey,
   text,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
-import { core, timestamps } from "./_schema";
-import { clients } from "./clients";
-import { teamMembers } from "./team";
+import { contactType, core, projectStatus, soft, stamps } from "./_schema";
+import { contacts } from "./contacts";
+import { staff } from "./people";
+import { driveFiles } from "./shared";
+import { workflows } from "./workflows";
 
+/** Part C.4. A project belongs to a client, and only a client (rule 1). */
 export const projects = core.table(
   "projects",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    legacyId: bigint("legacy_id", { mode: "number" }).unique(),
-    code: text("code").unique(),
+    code: text("code"),
     name: text("name").notNull(),
-    status: text("status"),
-    active: boolean("active").notNull().default(true),
-    clientId: uuid("client_id").references(() => clients.id),
-    projectType: text("project_type"),
-    stage: text("stage"),
+    clientId: uuid("client_id").notNull(),
+    clientType: contactType("client_type")
+      .notNull()
+      .generatedAlwaysAs(sql`'cliente'::core.contact_type`),
+    status: projectStatus("status").notNull().default("activo"),
+    // The stage.
+    currentWorkflowId: uuid("current_workflow_id").references(() => workflows.id, {
+      onDelete: "set null",
+    }),
     phase: text("phase"),
+    projectType: text("project_type"),
     addressStreet: text("address_street"),
     addressCity: text("address_city"),
     addressState: text("address_state"),
-    managerName: text("manager_name"),
-    coordinatorName: text("coordinator_name"),
+    managerId: uuid("manager_id").references(() => staff.id, { onDelete: "set null" }),
+    coordinatorId: uuid("coordinator_id").references(() => staff.id, {
+      onDelete: "set null",
+    }),
     progress: integer("progress").notNull().default(0),
     startDate: date("start_date"),
-    ...timestamps,
+    endDate: date("end_date"),
+    // The only money in the model.
+    contractAmountMxn: numeric("contract_amount_mxn", { precision: 14, scale: 2 }),
+    ...stamps,
+    ...soft,
   },
   (t) => [
-    check("projects_progress_range", sql`${t.progress} >= 0 and ${t.progress} <= 100`),
-    // Closed set from ProjectCreateModal's STAGE_OPTIONS. `phase` stays free —
-    // it's workflow-specific and evolves with the templates.
+    foreignKey({
+      name: "projects_client_fk",
+      columns: [t.clientId, t.clientType],
+      foreignColumns: [contacts.id, contacts.type],
+    }),
+    check("projects_progress_check", sql`${t.progress} between 0 and 100`),
     check(
-      "projects_stage_check",
-      sql`${t.stage} is null or ${t.stage} in ('Presale', 'Diseño', 'Construcción')`
+      "projects_dates_check",
+      sql`${t.startDate} is null or ${t.endDate} is null or ${t.endDate} >= ${t.startDate}`
     ),
-    index("idx_projects_name").on(t.name),
-    index("idx_projects_stage").on(t.stage),
-    index("idx_projects_active").on(t.active),
+    uniqueIndex("projects_code_uq")
+      .on(t.code)
+      .where(sql`${t.deletedAt} is null and ${t.code} is not null`),
+    uniqueIndex("projects_client_name_lower_uq")
+      .on(t.clientId, sql`lower(${t.name})`)
+      .where(sql`${t.deletedAt} is null`),
+    index("idx_projects_name_trgm").using("gin", sql`${t.name} gin_trgm_ops`),
     index("idx_projects_client_id").on(t.clientId),
-    index("idx_projects_deleted_at").on(t.deletedAt),
+    index("idx_projects_manager_id").on(t.managerId),
+    index("idx_projects_status").on(t.status),
+    index("idx_projects_current_workflow_id").on(t.currentWorkflowId),
   ]
 );
 
-export const projectDriveLinks = core.table("project_drive_links", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  projectId: uuid("project_id")
-    .notNull()
-    .unique()
-    .references(() => projects.id),
-  administrativoUrl: text("administrativo_url"),
-  planosUrl: text("planos_url"),
-  rendersUrl: text("renders_url"),
-  reportesUrl: text("reportes_url"),
-  ...timestamps,
-});
-
+/** Staff on a project. */
 export const projectMembers = core.table(
   "project_members",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    staffId: uuid("staff_id")
+      .notNull()
+      .references(() => staff.id, { onDelete: "cascade" }),
+    role: text("role"),
+    ...stamps,
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.staffId] }),
+    index("idx_project_members_staff_id").on(t.staffId),
+  ]
+);
+
+/** Partners and providers on a project. */
+export const projectContacts = core.table(
+  "project_contacts",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    role: text("role"),
+    ...stamps,
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.contactId] }),
+    index("idx_project_contacts_contact_id").on(t.contactId),
+  ]
+);
+
+/** Drive folders by purpose (administrativo, planos, renders, reportes, ...). */
+export const projectLinks = core.table(
+  "project_links",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id")
       .notNull()
-      .references(() => projects.id),
-    teamMemberId: uuid("team_member_id").references(() => teamMembers.id),
-    memberNameSnapshot: text("member_name_snapshot"),
-    ...timestamps,
+      .references(() => projects.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    title: text("title"),
+    url: text("url").notNull(),
+    driveFileId: uuid("drive_file_id").references(() => driveFiles.id, {
+      onDelete: "set null",
+    }),
+    ...stamps,
   },
-  (t) => [
-    // One row per person per project. team_member_id is NULL for names not in
-    // the roster (the common case), and Postgres treats every NULL as distinct
-    // in a plain unique — so key on the resolved id OR the name snapshot.
-    uniqueIndex("project_members_project_member_uq").on(
-      t.projectId,
-      sql`coalesce(${t.teamMemberId}::text, ${t.memberNameSnapshot})`
-    ),
-    index("idx_project_members_project_id").on(t.projectId),
-    index("idx_project_members_member_id").on(t.teamMemberId),
-  ]
+  (t) => [unique("project_links_project_kind_uq").on(t.projectId, t.kind)]
+);
+
+/** Derived client rollups; replaces stored counters (Part B.5). */
+export const clientStats = core.view("client_stats").as((qb) =>
+  qb
+    .select({
+      clientId: projects.clientId,
+      totalProjects: sql<number>`count(*)::int`.as("total_projects"),
+      activeProjects:
+        sql<number>`count(*) filter (where ${projects.status} = 'activo')::int`.as(
+          "active_projects"
+        ),
+      firstWorkDate: sql<string | null>`min(${projects.startDate})`.as("first_work_date"),
+      totalContractedMxn:
+        sql<string>`coalesce(sum(${projects.contractAmountMxn}), 0)`.as(
+          "total_contracted_mxn"
+        ),
+    })
+    .from(projects)
+    .where(sql`${projects.deletedAt} is null`)
+    .groupBy(projects.clientId)
 );
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
-  client: one(clients, {
-    fields: [projects.clientId],
-    references: [clients.id],
+  client: one(contacts, { fields: [projects.clientId], references: [contacts.id] }),
+  currentWorkflow: one(workflows, {
+    fields: [projects.currentWorkflowId],
+    references: [workflows.id],
   }),
-  driveLinks: one(projectDriveLinks, {
-    fields: [projects.id],
-    references: [projectDriveLinks.projectId],
+  manager: one(staff, {
+    fields: [projects.managerId],
+    references: [staff.id],
+    relationName: "project_manager",
+  }),
+  coordinator: one(staff, {
+    fields: [projects.coordinatorId],
+    references: [staff.id],
+    relationName: "project_coordinator",
   }),
   members: many(projectMembers),
+  contacts: many(projectContacts),
+  links: many(projectLinks),
 }));
 
 export const projectMembersRelations = relations(projectMembers, ({ one }) => ({
-  project: one(projects, {
-    fields: [projectMembers.projectId],
-    references: [projects.id],
-  }),
-  teamMember: one(teamMembers, {
-    fields: [projectMembers.teamMemberId],
-    references: [teamMembers.id],
-  }),
+  project: one(projects, { fields: [projectMembers.projectId], references: [projects.id] }),
+  staff: one(staff, { fields: [projectMembers.staffId], references: [staff.id] }),
+}));
+
+export const projectContactsRelations = relations(projectContacts, ({ one }) => ({
+  project: one(projects, { fields: [projectContacts.projectId], references: [projects.id] }),
+  contact: one(contacts, { fields: [projectContacts.contactId], references: [contacts.id] }),
+}));
+
+export const projectLinksRelations = relations(projectLinks, ({ one }) => ({
+  project: one(projects, { fields: [projectLinks.projectId], references: [projects.id] }),
+  driveFile: one(driveFiles, { fields: [projectLinks.driveFileId], references: [driveFiles.id] }),
 }));

@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
 
 export default defineConfig({
   dialect: "postgresql",
-  schema: "./lib/db/schema",
+  schema: "./lib/db/schema/index.ts",
   out: "./lib/db/migrations",
   schemaFilter: ["core"],
   dbCredentials: {
