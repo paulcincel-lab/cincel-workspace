@@ -1,3 +1,5 @@
+import type { DriveFileMeta, StaffRef } from "@/lib/types/core";
+
 export type ResourceSection =
   | "mis-documentos"
   | "mis-favoritos"
@@ -24,19 +26,9 @@ export type ResourceTemplate = {
   appliesTo: ResourceAppliesTo;
 };
 
-export type DriveFileMeta = {
-  googleFileId: string;
-  fileName: string;
-  mimeType: string;
-  iconLink: string | null;
-  thumbnailLink: string | null;
-  webViewLink: string;
-  syncedAt: string;
-};
-
 export type ResourceLink = {
   id: string;
-  templateKey: string;
+  templateKey: string | null;
   title: string;
   section: ResourceSection;
   subsection: ResourceSubsection;
@@ -44,17 +36,26 @@ export type ResourceLink = {
   appliesTo: ResourceAppliesTo;
   url: string;
   status: ResourceStatus;
-  ownerTeamMemberId: number | null;
-  personalForTeamMemberId: number | null;
-  updatedAt: string;
-  history: ResourceHistoryItem[];
+  owner: StaffRef | null;
+  personalFor: StaffRef | null;
+  sortOrder: number;
   /** Populated when the link was picked from the Drive browser. */
   drive: DriveFileMeta | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
-export type ResourceHistoryItem = {
-  id: string;
-  at: string;
-  action: "created" | "updated" | "status_changed";
-  note: string;
+export type ResourceLinkInput = {
+  templateKey?: string | null;
+  title: string;
+  section: ResourceSection;
+  subsection?: ResourceSubsection;
+  linkType: ResourceLinkType;
+  appliesTo?: ResourceAppliesTo;
+  url: string;
+  status?: ResourceStatus;
+  ownerId?: string | null;
+  personalForId?: string | null;
+  sortOrder?: number;
+  drive?: Omit<DriveFileMeta, "id"> | null;
 };
