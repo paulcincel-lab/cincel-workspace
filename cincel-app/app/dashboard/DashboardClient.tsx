@@ -1,36 +1,47 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
 import { LoadBar } from "@/components/v2/status/LoadBar";
 import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
+import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
-import { departamentoSlugForWorkflow } from "@/lib/actividades/departamento";
-import type { Task, TaskStatus } from "@/lib/types/task";
+import type { TaskListItem, TaskStatus } from "@/lib/types/core";
 
 interface DashboardClientProps {
   initialProjects: ProjectItem[];
 }
 
-function toDate(value: string): Date | null {
+function toDate(value: string | null): Date | null {
   if (!value) return null;
   const parsed = new Date(`${value}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function effectiveDueDate(task: Task): string {
-  return task.deliveryDate || task.commitmentDate || "";
+function effectiveDueDate(task: TaskListItem): string | null {
+  return task.deliveryDate || task.commitmentDate;
 }
 
-const STATUS_ORDER: TaskStatus[] = ["Pendiente", "En proceso", "Completado", "Bloqueado"];
+const STATUS_ORDER: TaskStatus[] = ["pendiente", "en_proceso", "completado", "bloqueado"];
+const STATUS_LABEL: Record<TaskStatus, string> = {
+  pendiente: "Pendiente",
+  en_proceso: "En proceso",
+  completado: "Completado",
+  bloqueado: "Bloqueado",
+};
 
 export function DashboardClient({ initialProjects }: DashboardClientProps) {
-  const { projectsData, allTasks, isLoadingData, secondaryCoordinatorByProject } = useProjectsData(initialProjects);
+  const { projectsData, isLoadingData } = useProjectsData(initialProjects);
+  const [allTasks, setAllTasks] = useState<TaskListItem[]>([]);
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+
+  useEffect(() => {
+    void fetchTasksAction({ archived: false }).then(setAllTasks).catch(() => undefined);
+  }, []);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -46,40 +57,41 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     [authenticatedUser]
   );
 
+  const viewerId = authenticatedUser?.member.id ?? "";
+
   const scopedProjectsData = useMemo(
     () =>
       scopeDashboardProjects({
         projects: projectsData,
         tasks: allTasks,
-        viewerName: authenticatedUser?.member.name || "",
+        viewerId,
         dataScope: dashboardCapabilities.dataScope,
-        secondaryCoordinatorByProject,
       }),
-    [allTasks, authenticatedUser, dashboardCapabilities.dataScope, projectsData, secondaryCoordinatorByProject]
+    [allTasks, viewerId, dashboardCapabilities.dataScope, projectsData]
   );
 
   const scopedAllTasks = useMemo(
     () =>
       scopeDashboardTasks({
         tasks: allTasks,
-        viewerName: authenticatedUser?.member.name || "",
+        viewerId,
         dataScope: dashboardCapabilities.dataScope,
-        allowedProjectNames: new Set(scopedProjectsData.map((project) => project.name)),
+        allowedProjectIds: new Set(scopedProjectsData.map((project) => project.id)),
       }),
-    [allTasks, authenticatedUser, dashboardCapabilities.dataScope, scopedProjectsData]
+    [allTasks, viewerId, dashboardCapabilities.dataScope, scopedProjectsData]
   );
 
   const activeTasks = useMemo(() => scopedAllTasks.filter((t) => !t.archived), [scopedAllTasks]);
 
   const kpis = useMemo(() => {
-    const activeProjects = scopedProjectsData.filter((p) => p.active).length;
+    const activeProjects = scopedProjectsData.filter((p) => p.status === "activo").length;
 
     const overdue = activeTasks.filter((t) => {
       const due = toDate(effectiveDueDate(t));
-      return !!due && due < today && t.status !== "Completado";
+      return !!due && due < today && t.status !== "completado";
     });
 
-    const blocked = activeTasks.filter((t) => t.status === "Bloqueado");
+    const blocked = activeTasks.filter((t) => t.status === "bloqueado");
 
     const weekEnd = new Date(today);
     weekEnd.setDate(today.getDate() + 7);
@@ -88,7 +100,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
       return !!review && review >= today && review <= weekEnd;
     });
 
-    const noOwner = activeTasks.filter((t) => !t.manager || t.manager === "Sin responsable");
+    const noOwner = activeTasks.filter((t) => !t.manager);
 
     return { activeProjects, overdue, blocked, reviews, noOwner };
   }, [scopedProjectsData, activeTasks, today]);
@@ -109,7 +121,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
       const due = toDate(effectiveDueDate(t));
       return !!due && due >= weekStart && due <= today;
     });
-    const completed = dueThisWeek.filter((t) => t.status === "Completado");
+    const completed = dueThisWeek.filter((t) => t.status === "completado");
     return { completed: completed.length, total: dueThisWeek.length };
   }, [activeTasks, today]);
 
@@ -148,10 +160,10 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
                   <li key={t.id} className="flex items-center justify-between text-[12.5px]">
                     <span className="flex items-center gap-2">
                       <span className="size-1.5 rounded-full bg-destructive" />
-                      {t.project} — {t.description}
+                      {t.project.name} — {t.title}
                     </span>
                     <Link
-                      href={`/actividades/${departamentoSlugForWorkflow(t.workflow)}?project=${encodeURIComponent(t.project)}`}
+                      href={`/proyectos/${t.projectId}/ficha`}
                       className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
                     >
                       ver
@@ -175,7 +187,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
               <div key={s.status} className="flex items-center justify-between text-[12.5px]">
                 <span className="flex items-center gap-2">
                   <span className="size-1.5 rounded-full bg-foreground" />
-                  {s.status}
+                  {STATUS_LABEL[s.status]}
                 </span>
                 <span className="tabular-nums text-muted-foreground">{Math.round(s.percent)}%</span>
               </div>

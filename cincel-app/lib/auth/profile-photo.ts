@@ -1,6 +1,6 @@
 const DASHBOARD_PROFILE_PHOTO_STORAGE_KEY_PREFIX = "cincel.dashboard.profile.photo.v1";
 
-export function getDashboardProfilePhotoStorageKey(memberId: number | null): string | null {
+export function getDashboardProfilePhotoStorageKey(memberId: string | null): string | null {
   if (memberId === null) {
     return null;
   }
@@ -8,7 +8,7 @@ export function getDashboardProfilePhotoStorageKey(memberId: number | null): str
   return `${DASHBOARD_PROFILE_PHOTO_STORAGE_KEY_PREFIX}.${memberId}`;
 }
 
-export function loadDashboardProfilePhoto(memberId: number | null): string {
+export function loadDashboardProfilePhoto(memberId: string | null): string {
   if (typeof window === "undefined") {
     return "";
   }
@@ -21,7 +21,7 @@ export function loadDashboardProfilePhoto(memberId: number | null): string {
   return localStorage.getItem(storageKey) ?? "";
 }
 
-export function saveDashboardProfilePhoto(memberId: number | null, value: string): void {
+export function saveDashboardProfilePhoto(memberId: string | null, value: string): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -34,7 +34,7 @@ export function saveDashboardProfilePhoto(memberId: number | null, value: string
   localStorage.setItem(storageKey, value);
 }
 
-export function clearDashboardProfilePhoto(memberId: number | null): void {
+export function clearDashboardProfilePhoto(memberId: string | null): void {
   if (typeof window === "undefined") {
     return;
   }

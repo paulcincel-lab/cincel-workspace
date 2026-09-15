@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import { fetchActivitiesAction } from "@/lib/actions/activities-actions";
+import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
-import { fetchTeamMembersAction } from "@/lib/actions/team-actions";
+import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
+import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { getDepartamento } from "@/lib/actividades/departamento";
+import type { WorkflowDetail } from "@/lib/types/core";
 import { ActividadesClient } from "./ActividadesClient";
 
 export default async function ActividadesPage({
@@ -17,19 +19,23 @@ export default async function ActividadesPage({
   const departamento = getDepartamento(slug);
   if (!departamento) notFound();
 
-  let initialTasks: Awaited<ReturnType<typeof fetchActivitiesAction>> = [];
+  let workflow: WorkflowDetail | null = null;
+  let initialTasks: Awaited<ReturnType<typeof fetchTasksAction>> = [];
   let initialProjects: Awaited<ReturnType<typeof fetchProjectsAction>> = [];
-  let initialTeam: Awaited<ReturnType<typeof fetchTeamMembersAction>> = [];
-  if (departamento.workflow) {
-    try {
-      [initialTasks, initialProjects, initialTeam] = await Promise.all([
-        fetchActivitiesAction(departamento.workflow),
+  let initialStaff: Awaited<ReturnType<typeof fetchAssignableStaffAction>> = [];
+
+  try {
+    const workflows = await fetchWorkflowsAction();
+    workflow = workflows.find((w) => w.key === slug) ?? null;
+    if (workflow) {
+      [initialTasks, initialProjects, initialStaff] = await Promise.all([
+        fetchTasksAction({ workflowId: workflow.id }),
         fetchProjectsAction(),
-        fetchTeamMembersAction(),
+        fetchAssignableStaffAction(workflow.id),
       ]);
-    } catch {
-      // Not authorized / no session — the client falls back to hydrating itself.
     }
+  } catch {
+    // Not authorized / no session — the client falls back to hydrating itself.
   }
 
   return (
@@ -39,9 +45,10 @@ export default async function ActividadesPage({
         <Header />
         <ActividadesClient
           slug={slug}
+          workflow={workflow}
           initialTasks={initialTasks}
           initialProjects={initialProjects}
-          initialTeam={initialTeam}
+          initialStaff={initialStaff}
         />
       </section>
     </main>

@@ -6,15 +6,10 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
-import type { ManualClient } from "@/lib/repositories/clients-repository";
-import type { ClientHistoryEntry } from "@/lib/repositories/client-history-repository";
-import type { ProjectItem } from "@/lib/proyectos/use-projects-data";
-import { departamentoSlugForStage } from "@/lib/actividades/departamento";
+import type { ContactDetail, ProjectStatus } from "@/lib/types/core";
 
 interface ClientDetailSheetProps {
-  client: ManualClient;
-  linkedProjects: ProjectItem[];
-  historyEntries: ClientHistoryEntry[];
+  contact: ContactDetail;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -22,39 +17,46 @@ interface ClientDetailSheetProps {
   canDelete: boolean;
 }
 
-function formatCurrency(value: number): string {
+const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
+  activo: "Activo",
+  pausado: "Pausado",
+  completado: "Completado",
+  cancelado: "Cancelado",
+};
+
+function formatCurrency(value: string): string {
+  const num = Number(value);
   return new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "MXN",
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(Number.isFinite(num) ? num : 0);
 }
 
-/** Read-only Cliente ficha — editing/deleting delegates to the shared ContactEditorSheet/delete flow. */
+/**
+ * Read-only ficha for a `cliente` contact — general data, `client_stats`
+ * (only populated server-side for cliente contacts) and its linked projects.
+ * Editing/deleting delegates to the shared ContactEditorSheet/delete flow.
+ */
 export function ClientDetailSheet({
-  client,
-  linkedProjects,
-  historyEntries,
+  contact,
   onClose,
   onEdit,
   onDelete,
   canEdit,
   canDelete,
 }: ClientDetailSheetProps) {
-  const completedProjects =
-    client.completedProjects.length > 0 ? client.completedProjects : linkedProjects.map((p) => p.name);
-
   return (
     <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
       <SheetContent className="w-[560px] max-w-[560px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Ficha del cliente</SheetTitle>
-          <SheetDescription>{client.name}</SheetDescription>
+          <SheetDescription>{contact.name}</SheetDescription>
         </SheetHeader>
 
         <div className="space-y-6 px-6 py-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <PersonAvatar name={client.name} subtitle={client.emails[0] ?? client.phone ?? "Sin contacto"} />
+            <PersonAvatar name={contact.name} subtitle={contact.email ?? contact.phone ?? "Sin contacto"} />
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -82,45 +84,63 @@ export function ClientDetailSheet({
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">Empresa o Particular</p>
-                <p className="mt-1 font-medium">{client.kind}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Proyecto activo</p>
-                <p className="mt-1">
-                  <Badge variant={client.hasActiveProject ? "outline" : "secondary"}>
-                    {client.hasActiveProject ? "Sí" : "No"}
-                  </Badge>
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground"># proyectos con nosotros</p>
-                <p className="mt-1 font-medium">{Math.max(client.totalProjectsWorked, linkedProjects.length)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Fecha de primer trabajo</p>
-                <p className="mt-1 font-medium">{client.firstWorkDate || "Sin fecha"}</p>
+                <p className="mt-1 font-medium">{contact.kind === "empresa" ? "Empresa" : "Particular"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Cómo llegaron a nosotros</p>
-                <p className="mt-1 font-medium">{client.acquisitionChannel}</p>
+                <p className="mt-1 font-medium">{contact.acquisitionChannel || "Sin registro"}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Montos gastados</p>
-                <p className="mt-1 font-medium">{formatCurrency(client.totalSpent)}</p>
+                <p className="text-xs text-muted-foreground">Teléfono</p>
+                <p className="mt-1 font-medium">{contact.phone || "Sin registro"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Email</p>
+                <p className="mt-1 font-medium">{contact.email || "Sin registro"}</p>
               </div>
             </div>
+            {contact.notes ? (
+              <p className="mt-3 text-sm text-muted-foreground">{contact.notes}</p>
+            ) : null}
           </section>
+
+          {contact.stats ? (
+            <section className="rounded-xl border border-border bg-card p-4">
+              <h3 className="mb-3 text-sm font-semibold">Estadísticas de cliente</h3>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground"># proyectos totales</p>
+                  <p className="mt-1 font-medium">{contact.stats.totalProjects}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Proyectos activos</p>
+                  <p className="mt-1 font-medium">{contact.stats.activeProjects}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Fecha de primer trabajo</p>
+                  <p className="mt-1 font-medium">{contact.stats.firstWorkDate || "Sin fecha"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total contratado</p>
+                  <p className="mt-1 font-medium">{formatCurrency(contact.stats.totalContractedMxn)}</p>
+                </div>
+              </div>
+            </section>
+          ) : null}
 
           <section>
             <h3 className="mb-3 text-sm font-semibold">Contactos adicionales</h3>
-            {client.contacts.length > 0 ? (
+            {contact.people.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                {client.contacts.map((contact, index) => (
-                  <div key={index} className="rounded-xl border border-border bg-muted p-3">
-                    <p className="font-medium">{contact.name || "Sin nombre"}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{contact.role || "Sin rol"}</p>
-                    <p className="mt-1 text-sm">{contact.phone || "Sin contacto"}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{contact.email || "Sin correo"}</p>
+                {contact.people.map((person) => (
+                  <div key={person.id} className="rounded-xl border border-border bg-muted p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium">{person.name}</p>
+                      {person.isPrimary ? <Badge variant="outline">Principal</Badge> : null}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{person.role || "Sin rol"}</p>
+                    <p className="mt-1 text-sm">{person.phone || "Sin contacto"}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{person.email || "Sin correo"}</p>
                   </div>
                 ))}
               </div>
@@ -132,86 +152,45 @@ export function ClientDetailSheet({
           </section>
 
           <section>
-            <h3 className="mb-3 text-sm font-semibold">Proyectos realizados con nosotros</h3>
-            {completedProjects.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {completedProjects.map((name, index) => (
-                  <span key={index} className="rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium">
-                    {name}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No hay proyectos históricos registrados para este cliente.
-              </p>
-            )}
-          </section>
-
-          <section>
-            <h3 className="mb-3 text-sm font-semibold">Proyectos vinculados</h3>
-            {linkedProjects.length > 0 ? (
+            <h3 className="mb-3 text-sm font-semibold">Proyectos</h3>
+            {contact.projects.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                {linkedProjects.map((project) => (
+                {contact.projects.map((project) => (
                   <div key={project.id} className="rounded-xl border border-border bg-muted p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-medium">{project.name}</p>
-                        <p className="text-xs text-muted-foreground">{project.type} · {project.stage}</p>
+                        <p className="text-xs text-muted-foreground">{project.startDate || "Sin fecha de inicio"}</p>
                       </div>
-                      <Badge variant={project.active ? "outline" : "secondary"}>
-                        {project.active ? "Activo" : "Inactivo"}
+                      <Badge variant={project.status === "activo" ? "outline" : "secondary"}>
+                        {PROJECT_STATUS_LABEL[project.status]}
                       </Badge>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2">
                       <Link
                         href={`/proyectos/${project.id}/ficha`}
                         className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
                       >
                         Ficha de proyecto
                       </Link>
-                      <Link
-                        href={`/actividades/${departamentoSlugForStage(project.stage)}?project=${encodeURIComponent(project.name)}`}
-                        className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
-                      >
-                        Ver actividades
-                      </Link>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
               <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                Este cliente no tiene proyectos operativos vinculados.
+                Este cliente no tiene proyectos registrados.
               </p>
             )}
           </section>
 
-          <section>
-            <h3 className="mb-3 text-sm font-semibold">Bitácora de cambios</h3>
-            {historyEntries.length > 0 ? (
-              <div className="space-y-2">
-                {historyEntries.slice(0, 12).map((entry) => (
-                  <div key={entry.id} className="rounded-xl border border-border bg-muted p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold">{entry.field}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(entry.date).toLocaleString("es-MX")}
-                      </p>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {entry.before || "Vacío"} {"->"} {entry.after || "Vacío"}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">Por: {entry.author}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                Todavía no hay cambios registrados para este cliente.
-              </p>
-            )}
-          </section>
+          {/*
+           * The old bitácora de cambios (per-field change history) had no
+           * equivalent action wired up in contacts-actions.ts yet — core.ts
+           * defines a generic HistoryEvent/HistoryEntity ("contact" included)
+           * but there's no fetch action exposed for it here, so it's dropped
+           * until that's added.
+           */}
         </div>
       </SheetContent>
     </Sheet>
