@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
-import type { SystemAccessRole } from "@/lib/data/roles";
+import { SYSTEM_ACCESS_ROLES, type SystemAccessRole } from "@/lib/data/roles";
 import type { ResourceSection } from "@/lib/types/resource";
 import { readStorage } from "@/lib/repositories/browser-state-repository";
 
@@ -78,6 +78,26 @@ export type TeamCapabilities = {
   canToggleCollaboratorActive: boolean;
   canDeleteCollaborator: boolean;
   canExportData: boolean;
+};
+
+/**
+ * Areas (`core.areas`, `core.area_members`, `core.area_workflows`) are a
+ * company-structure admin surface: everyone can see the directory (staff
+ * pickers, task assignment) but only Administrador / Dirección manage it.
+ */
+export type AreasCapabilities = {
+  canViewAreas: boolean;
+  canManageAreas: boolean;
+};
+
+/**
+ * Workflows and their task templates (`core.workflows`,
+ * `core.workflow_task_templates`) are the other half of the "method" admin
+ * surface — same view-all / manage-admin-only shape as areas.
+ */
+export type WorkflowsCapabilities = {
+  canViewWorkflows: boolean;
+  canManageWorkflows: boolean;
 };
 
 type ResourceEditScope = "all" | "owned_or_personal" | "none";
@@ -704,6 +724,24 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
   },
 };
 
+function canManageCompanyStructureByRole(access: SystemAccessRole): boolean {
+  return access === "Administrador" || access === "Dirección";
+}
+
+const AREAS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, AreasCapabilities> = Object.fromEntries(
+  SYSTEM_ACCESS_ROLES.map((role) => [
+    role,
+    { canViewAreas: true, canManageAreas: canManageCompanyStructureByRole(role) },
+  ])
+) as Record<SystemAccessRole, AreasCapabilities>;
+
+const WORKFLOWS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, WorkflowsCapabilities> = Object.fromEntries(
+  SYSTEM_ACCESS_ROLES.map((role) => [
+    role,
+    { canViewWorkflows: true, canManageWorkflows: canManageCompanyStructureByRole(role) },
+  ])
+) as Record<SystemAccessRole, WorkflowsCapabilities>;
+
 type StoredModulePermissionsState = Record<string, unknown>;
 
 type StoredRolePermissionsState = Record<string, StoredModulePermissionsState>;
@@ -858,6 +896,16 @@ export function resolveClientsCapabilitiesFromDefaults(user: AuthenticatedUser |
 export function resolveTeamCapabilitiesFromDefaults(user: AuthenticatedUser | null): TeamCapabilities {
   const access = resolveAccess(user);
   return TEAM_CAPABILITIES_BY_ROLE[access];
+}
+
+export function resolveAreasCapabilitiesFromDefaults(user: AuthenticatedUser | null): AreasCapabilities {
+  const access = resolveAccess(user);
+  return AREAS_CAPABILITIES_BY_ROLE[access];
+}
+
+export function resolveWorkflowsCapabilitiesFromDefaults(user: AuthenticatedUser | null): WorkflowsCapabilities {
+  const access = resolveAccess(user);
+  return WORKFLOWS_CAPABILITIES_BY_ROLE[access];
 }
 
 export function resolveDashboardCapabilities(user: AuthenticatedUser | null): DashboardCapabilities {
@@ -1058,6 +1106,32 @@ export function resolveTeamCapabilities(user: AuthenticatedUser | null): TeamCap
     canToggleCollaboratorActive: readBooleanOverride(moduleOverrides, "canToggleCollaboratorActive", defaults.canToggleCollaboratorActive),
     canDeleteCollaborator: readBooleanOverride(moduleOverrides, "canDeleteCollaborator", defaults.canDeleteCollaborator),
     canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
+  };
+}
+
+export function resolveAreasCapabilities(user: AuthenticatedUser | null): AreasCapabilities {
+  const access = resolveAccess(user);
+  const defaults = resolveAreasCapabilitiesFromDefaults(user);
+  const moduleOverrides = readRoleModuleOverrides(access, "areas");
+
+  if (!moduleOverrides) return defaults;
+
+  return {
+    canViewAreas: readBooleanOverride(moduleOverrides, "canViewAreas", defaults.canViewAreas),
+    canManageAreas: readBooleanOverride(moduleOverrides, "canManageAreas", defaults.canManageAreas),
+  };
+}
+
+export function resolveWorkflowsCapabilities(user: AuthenticatedUser | null): WorkflowsCapabilities {
+  const access = resolveAccess(user);
+  const defaults = resolveWorkflowsCapabilitiesFromDefaults(user);
+  const moduleOverrides = readRoleModuleOverrides(access, "workflows");
+
+  if (!moduleOverrides) return defaults;
+
+  return {
+    canViewWorkflows: readBooleanOverride(moduleOverrides, "canViewWorkflows", defaults.canViewWorkflows),
+    canManageWorkflows: readBooleanOverride(moduleOverrides, "canManageWorkflows", defaults.canManageWorkflows),
   };
 }
 

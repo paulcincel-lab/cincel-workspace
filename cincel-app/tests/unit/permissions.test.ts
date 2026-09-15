@@ -21,6 +21,8 @@ import {
   resolveTeamCapabilities,
   resolveActivitiesCapabilities,
   resolveProjectsCapabilities,
+  resolveAreasCapabilities,
+  resolveWorkflowsCapabilities,
 } from "@/lib/auth/permissions";
 import type { TeamMember } from "@/lib/auth/auth-service";
 
@@ -243,5 +245,33 @@ describe("resolveProjectsCapabilities — canExportData gated by role", () => {
 
   it("Arquitecto Junior cannot export projects data", () => {
     expect(resolveProjectsCapabilities(makeUser("Arquitecto Junior")).canExportData).toBe(false);
+  });
+});
+
+// ── Areas / Workflows capabilities (company-structure admin surfaces) ───────
+
+describe("resolveAreasCapabilities", () => {
+  it("everyone can view areas (staff pickers need it)", () => {
+    expect(resolveAreasCapabilities(makeUser("Colaborador")).canViewAreas).toBe(true);
+    expect(resolveAreasCapabilities(makeUser("Administrador")).canViewAreas).toBe(true);
+  });
+
+  it("only Administrador / Dirección can manage areas", () => {
+    expect(resolveAreasCapabilities(makeUser("Administrador")).canManageAreas).toBe(true);
+    expect(resolveAreasCapabilities(makeUser("Dirección")).canManageAreas).toBe(true);
+    expect(resolveAreasCapabilities(makeUser("Jefe de Taller")).canManageAreas).toBe(false);
+    expect(resolveAreasCapabilities(makeUser("Colaborador")).canManageAreas).toBe(false);
+  });
+});
+
+describe("resolveWorkflowsCapabilities", () => {
+  it("everyone can view workflows (task assignment needs it)", () => {
+    expect(resolveWorkflowsCapabilities(makeUser("Colaborador")).canViewWorkflows).toBe(true);
+  });
+
+  it("only Administrador / Dirección can manage workflows and templates", () => {
+    expect(resolveWorkflowsCapabilities(makeUser("Administrador")).canManageWorkflows).toBe(true);
+    expect(resolveWorkflowsCapabilities(makeUser("Dirección")).canManageWorkflows).toBe(true);
+    expect(resolveWorkflowsCapabilities(makeUser("Arquitecto Senior")).canManageWorkflows).toBe(false);
   });
 });
