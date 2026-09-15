@@ -614,10 +614,10 @@ export function ActividadesClient({
         header: "Estado",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
-          const canChange = canChangeActivityStatus<{ manager: string | null; support: string[] }>({
+          const canChange = canChangeActivityStatus({
             capabilities,
-            task: { manager: task.manager?.name ?? null, support: task.support.map((s) => s.name) },
-            viewerName,
+            task: { manager: task.manager, support: task.support },
+            viewerId,
           });
           if (!canChange) return <Badge variant={STATUS_VARIANT[task.status]}>{STATUS_LABEL[task.status]}</Badge>;
           return (
@@ -715,7 +715,7 @@ export function ActividadesClient({
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflow, phases, selected, capabilities, viewerName, staffNames, nameToStaffId]);
+  }, [workflow, phases, selected, capabilities, viewerId, staffNames, nameToStaffId]);
 
   return (
     <div>
