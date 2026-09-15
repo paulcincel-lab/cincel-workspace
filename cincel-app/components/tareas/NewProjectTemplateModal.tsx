@@ -12,12 +12,14 @@ type TemplateItem = {
   description: string;
 };
 
+type ProjectOption = { id: string; name: string };
+
 type Props = {
   open: boolean;
   templateItems: TemplateItem[];
-  projectOptions: string[];
+  projectOptions: ProjectOption[];
   onClose: () => void;
-  onCreate: (payload: { project: string; items: TemplateItem[] }) => void;
+  onCreate: (payload: { projectId: string; items: TemplateItem[] }) => void;
 };
 
 export default function NewProjectTemplateModal({
@@ -29,7 +31,7 @@ export default function NewProjectTemplateModal({
 }: Props) {
   const itemKey = (item: TemplateItem) => `${item.phase}::${item.description}`;
 
-  const [project, setProject] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<string[]>(
     () => templateItems.map((item) => itemKey(item))
   );
@@ -40,7 +42,7 @@ export default function NewProjectTemplateModal({
     }
 
     queueMicrotask(() => {
-      setProject(projectOptions[0] ?? "");
+      setProjectId(projectOptions[0]?.id ?? "");
       setSelectedKeys(templateItems.map((item) => itemKey(item)));
     });
   }, [open, projectOptions, templateItems]);
@@ -82,14 +84,12 @@ export default function NewProjectTemplateModal({
   };
 
   const handleCreate = () => {
-    const trimmedProject = project.trim();
-
-    if (!trimmedProject || selectedItems.length === 0) {
+    if (!projectId || selectedItems.length === 0) {
       return;
     }
 
     onCreate({
-      project: trimmedProject,
+      projectId,
       items: selectedItems,
     });
 
@@ -111,14 +111,14 @@ export default function NewProjectTemplateModal({
                 No hay proyectos activos disponibles
               </p>
             ) : (
-              <Select value={project} onValueChange={(v) => setProject(v as string)}>
+              <Select value={projectId} onValueChange={(v) => setProjectId(v as string)}>
                 <SelectTrigger className="w-full text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {projectOptions.map((projectOption) => (
-                    <SelectItem key={projectOption} value={projectOption}>
-                      {projectOption}
+                    <SelectItem key={projectOption.id} value={projectOption.id}>
+                      {projectOption.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -187,7 +187,7 @@ export default function NewProjectTemplateModal({
 
           <Button
             onClick={handleCreate}
-            disabled={project.trim().length === 0 || selectedItems.length === 0 || projectOptions.length === 0}
+            disabled={!projectId || selectedItems.length === 0 || projectOptions.length === 0}
           >
             Crear plantilla
           </Button>

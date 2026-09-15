@@ -12,22 +12,22 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canCreateResourceInSection, canDeleteResourceInSection, canViewResourceSection, resolveResourcesCapabilities } from "@/lib/auth/permissions";
-import { RESOURCE_TEMPLATES } from "@/lib/data/resources";
-import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
-import { getTeamMembersSnapshot } from "@/lib/repositories/team-repository";
-import { fetchResourceLinks, saveResourceLinks, deleteResourceLink as deleteResourceLinkInDb } from "@/lib/repositories/resources-repository";
+import {
+  createResourceLinkAction,
+  deleteResourceLinkAction,
+  fetchResourceLinksAction,
+} from "@/lib/actions/resources-actions";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
-import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import {
   getDrivePreviewUrl,
   hasDriveUrl,
   inferLinkTypeFromUrl,
 } from "@/lib/google/drive-url";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
+import type { DriveFileMeta, Staff } from "@/lib/types/core";
 import type {
-  DriveFileMeta,
   ResourceAppliesTo,
-  ResourceHistoryItem,
   ResourceLink,
   ResourceLinkType,
   ResourceSection,
@@ -36,7 +36,6 @@ import type {
 } from "@/lib/types/resource";
 
 const RECENT_DOCS_STORAGE_KEY = "cincel.resources.recent-docs.v1";
-const RESOURCE_ID_PATTERN = /^resource_(\d+)(?:_.+)?$/;
 
 const SECTION_ORDER: ResourceSection[] = [
   "mis-documentos",
@@ -110,10 +109,10 @@ type CreateDraft = {
   subsection: ResourceSubsection;
   linkType: ResourceLinkType;
   appliesTo: ResourceAppliesTo;
-  ownerTeamMemberId: number | null;
-  personalForTeamMemberId: number | null;
+  ownerId: string | null;
+  personalForId: string | null;
   status: ResourceStatus;
-  drive: DriveFileMeta | null;
+  drive: Omit<DriveFileMeta, "id"> | null;
 };
 
 type RecentDocument = {
@@ -137,111 +136,11 @@ const EMPTY_CREATE_DRAFT: CreateDraft = {
   subsection: null,
   linkType: "drive_file",
   appliesTo: "general",
-  ownerTeamMemberId: null,
-  personalForTeamMemberId: null,
+  ownerId: null,
+  personalForId: null,
   status: "vigente",
   drive: null,
 };
-
-function loadTeamMembers(): TeamMember[] {
-  const snapshot = getTeamMembersSnapshot();
-  if (Array.isArray(snapshot) && snapshot.length > 0) {
-    return snapshot;
-  }
-
-  return teamMembersPublic;
-}
-
-function createHistoryEntry(action: ResourceHistoryItem["action"], note: string): ResourceHistoryItem {
-  return {
-    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    at: new Date().toISOString(),
-    action,
-    note,
-  };
-}
-
-function normalizeResourceLink(link: ResourceLink): ResourceLink {
-  return {
-    ...link,
-    status: link.status === "obsoleto" ? "obsoleto" : "vigente",
-    history: Array.isArray(link.history) ? link.history : [],
-    drive: link.drive ?? null,
-  };
-}
-
-function inferResourceSection(link: ResourceLink): ResourceSection {
-  const legacySection = String(link.section);
-
-  if (legacySection === "mis-documentos" || legacySection === "mis-favoritos" || legacySection === "plantillas-diseno" || legacySection === "formatos-obra" || legacySection === "mis-vacaciones" || legacySection === "formacion" || legacySection === "empresa") {
-    return legacySection as ResourceSection;
-  }
-
-  if (link.templateKey.startsWith("personal_mis_documentos")) return "mis-documentos";
-  if (link.templateKey.includes("vacaciones")) return "mis-vacaciones";
-  if (legacySection === "personal") return "mis-documentos";
-  if (legacySection === "formatos") {
-    return link.subsection === "construccion" ? "formatos-obra" : "plantillas-diseno";
-  }
-  if (legacySection === "ventas") return "mis-favoritos";
-  if (legacySection === "formacion") return "formacion";
-  if (legacySection === "empresa") return "empresa";
-
-  return "mis-documentos";
-}
-
-function buildDefaultResourceLinks(members: TeamMember[]): ResourceLink[] {
-  const activeMembers = members.filter((member) => member.active);
-
-  const globalLinks: ResourceLink[] = RESOURCE_TEMPLATES.map((template) => ({
-    id: template.key,
-    templateKey: template.key,
-    title: template.title,
-    section: template.section,
-    subsection: template.subsection,
-    linkType: template.linkType,
-    appliesTo: template.appliesTo,
-    url: "",
-    status: "vigente",
-    ownerTeamMemberId: null,
-    personalForTeamMemberId: null,
-    updatedAt: "",
-    history: [],
-    drive: null,
-  }));
-
-  const personalDocs: ResourceLink[] = activeMembers.map((member) => ({
-    id: `personal_mis_documentos_${member.id}`,
-    templateKey: "personal_mis_documentos",
-    title: "Mis Documentos",
-    section: "mis-documentos",
-    subsection: null,
-    linkType: "drive_folder",
-    appliesTo: "general",
-    url: "",
-    status: "vigente",
-    ownerTeamMemberId: member.id,
-    personalForTeamMemberId: member.id,
-    updatedAt: "",
-    history: [],
-    drive: null,
-  }));
-
-  return [...personalDocs, ...globalLinks];
-}
-
-function loadResourceLinks(members: TeamMember[], persisted: ResourceLink[] = []): ResourceLink[] {
-  const defaults = buildDefaultResourceLinks(members);
-
-  const mergedMap = new Map<string, ResourceLink>();
-  defaults.forEach((item) => mergedMap.set(item.id, normalizeResourceLink(item)));
-  persisted.forEach((item) => {
-    mergedMap.set(item.id, normalizeResourceLink({ ...item, section: inferResourceSection(item) }));
-  });
-
-  return Array.from(mergedMap.values()).filter((item) => hasDriveUrl(item.url));
-}
-
 
 function loadRecentDocuments(): RecentDocument[] {
   const stored = readStorage(RECENT_DOCS_STORAGE_KEY);
@@ -272,22 +171,6 @@ function loadRecentDocuments(): RecentDocument[] {
 
 function saveRecentDocuments(next: RecentDocument[]): void {
   writeStorage(RECENT_DOCS_STORAGE_KEY, JSON.stringify(next.slice(0, 8)));
-}
-
-function buildNextResourceId(resources: ResourceLink[]): string {
-  let maxId = 0;
-
-  resources.forEach((resource) => {
-    const match = RESOURCE_ID_PATTERN.exec(resource.id);
-    if (!match) return;
-
-    const numericId = Number(match[1]);
-    if (Number.isFinite(numericId) && numericId > maxId) {
-      maxId = numericId;
-    }
-  });
-
-  return `resource_${maxId + 1}`;
 }
 
 function FolderGlyph({ accent = "bg-foreground/70" }: { accent?: string }) {
@@ -405,15 +288,14 @@ export default function ResourcesWorkspace({
   initialLinks?: ResourceLink[];
   driveEnabled?: boolean;
 }) {
-  const [members] = useState<TeamMember[]>(() => loadTeamMembers());
-  const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>(() =>
-    loadResourceLinks(loadTeamMembers(), initialLinks ?? [])
-  );
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>(() => initialLinks ?? []);
   const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>(() => loadRecentDocuments());
   const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const [search, setSearch] = useState("");
-  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [creating, setCreating] = useState<CreateDraft | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [showDrivePicker, setShowDrivePicker] = useState(false);
 
   const applyDrivePick = (entry: DrivePickerEntry) => {
@@ -438,8 +320,6 @@ export default function ResourcesWorkspace({
         : current
     );
   };
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewTitle, setPreviewTitle] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [removeDraft, setRemoveDraft] = useState<RemoveDraft | null>(null);
   const isMounted = useSyncExternalStore(
@@ -463,53 +343,58 @@ export default function ResourcesWorkspace({
   }, []);
 
   useEffect(() => {
-    const hydrateResources = async () => {
-      try {
-        const remote = await fetchResourceLinks();
-        setResourceLinks(loadResourceLinks(loadTeamMembers(), remote));
-      } catch (err) {
-        if (err instanceof RepositoryError) {
-          reportRepositoryError(err);
-        }
-      }
-    };
-
-    void hydrateResources();
+    void fetchStaffAction().then(setStaff);
   }, []);
 
-  const activeMembers = useMemo(() => members.filter((member) => member.active), [members]);
+  useEffect(() => {
+    void fetchResourceLinksAction()
+      .then(setResourceLinks)
+      .catch(() => {
+        // Not authorized / no session — keep whatever the server render gave us.
+      });
+  }, []);
 
-  const effectiveSelectedMemberId = useMemo(() => {
-    if (selectedMemberId && activeMembers.some((member) => member.id === selectedMemberId)) {
-      return selectedMemberId;
+  const activeStaff = useMemo(() => staff.filter((member) => member.active), [staff]);
+
+  const effectiveSelectedStaffId = useMemo(() => {
+    if (selectedStaffId && activeStaff.some((member) => member.id === selectedStaffId)) {
+      return selectedStaffId;
     }
 
-    return activeMembers[0]?.id ?? null;
-  }, [activeMembers, selectedMemberId]);
+    return activeStaff[0]?.id ?? null;
+  }, [activeStaff, selectedStaffId]);
 
-  const memberById = useMemo(() => {
-    const map = new Map<number, TeamMember>();
-    members.forEach((member) => map.set(member.id, member));
-    return map;
-  }, [members]);
-
-  const persistLinks = (next: ResourceLink[]) => {
-    setResourceLinks(next);
-    saveResourceLinks(next).catch((err: unknown) => {
-      if (err instanceof RepositoryError) {
-        reportRepositoryError(err);
-      }
-    });
+  const createResource = async (draft: CreateDraft): Promise<void> => {
+    setCreateError(null);
+    try {
+      const created = await createResourceLinkAction({
+        title: draft.title.trim(),
+        url: draft.url.trim(),
+        section: draft.section,
+        subsection: draft.subsection,
+        linkType: draft.linkType,
+        appliesTo: draft.appliesTo,
+        status: draft.status,
+        ownerId: draft.ownerId,
+        personalForId: draft.personalForId,
+        drive: draft.drive,
+      });
+      setResourceLinks((current) => [...current, created]);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "No se pudo crear el recurso.");
+      throw err;
+    }
   };
 
-  const deleteResource = (id: string) => {
-    const next = resourceLinks.filter((link) => link.id !== id);
-    persistLinks(next);
-    deleteResourceLinkInDb(id).catch((err: unknown) => {
-      if (err instanceof RepositoryError) {
-        reportRepositoryError(err);
-      }
-    });
+  const deleteResource = async (id: string): Promise<void> => {
+    try {
+      await deleteResourceLinkAction(id);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "No se pudo quitar el recurso.");
+      return;
+    }
+
+    setResourceLinks((current) => current.filter((link) => link.id !== id));
 
     setRecentDocuments((current) => {
       const cleaned = current.filter((item) => item.id !== id);
@@ -522,41 +407,17 @@ export default function ResourcesWorkspace({
     }
   };
 
-  const createResource = (draft: CreateDraft): ResourceLink => {
-    const now = new Date().toISOString();
-
-    const newItem: ResourceLink = {
-      id: buildNextResourceId(resourceLinks),
-      templateKey: draft.personalForTeamMemberId ? "personal_mis_documentos_custom" : "custom",
-      title: draft.title.trim(),
-      section: draft.section,
-      subsection: draft.subsection,
-      linkType: draft.linkType,
-      appliesTo: draft.appliesTo,
-      url: draft.url.trim(),
-      status: draft.status,
-      ownerTeamMemberId: draft.ownerTeamMemberId,
-      personalForTeamMemberId: draft.personalForTeamMemberId,
-      updatedAt: now,
-      history: [createHistoryEntry("created", "Recurso creado")],
-      drive: draft.drive,
-    };
-
-    persistLinks([...resourceLinks, newItem]);
-    return newItem;
-  };
-
   const filteredLinks = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     return resourceLinks
       .filter((link) => hasDriveUrl(link.url))
       .filter((link) => {
-        if (link.templateKey.startsWith("personal_mis_documentos")) {
-          return link.personalForTeamMemberId === effectiveSelectedMemberId;
-        }
-
-        return true;
+        // Personal links (e.g. someone's "Mis Documentos" folder) are only
+        // visible to the staff member currently selected in the picker.
+        // Links with no personalFor are shared/general and always show.
+        if (!link.personalFor) return true;
+        return link.personalFor.id === effectiveSelectedStaffId;
       })
       .filter((link) => {
         if (mode !== "overview" && link.section !== mode) {
@@ -565,7 +426,7 @@ export default function ResourcesWorkspace({
 
         if (!query) return true;
 
-        const owner = link.ownerTeamMemberId ? memberById.get(link.ownerTeamMemberId)?.name ?? "" : "";
+        const owner = link.owner?.name ?? "";
 
         return (
           link.title.toLowerCase().includes(query)
@@ -585,7 +446,7 @@ export default function ResourcesWorkspace({
 
         return a.title.localeCompare(b.title);
       });
-  }, [resourceLinks, search, effectiveSelectedMemberId, memberById, mode]);
+  }, [resourceLinks, search, effectiveSelectedStaffId, mode]);
 
   const grouped = useMemo(() => {
     const result: Record<ResourceSection, Record<string, ResourceLink[]>> = {
@@ -616,9 +477,10 @@ export default function ResourcesWorkspace({
       return;
     }
 
+    setCreateError(null);
     setCreating({
       ...EMPTY_CREATE_DRAFT,
-      ownerTeamMemberId: effectiveSelectedMemberId,
+      ownerId: effectiveSelectedStaffId,
       ...seed,
     });
   };
@@ -628,11 +490,16 @@ export default function ResourcesWorkspace({
     if (!creating.title.trim() || !creating.url.trim()) return;
     if (!canCreateResourceInSection({ capabilities: resourcesCapabilities, section: creating.section })) return;
 
-    createResource({
+    void createResource({
       ...creating,
       linkType: inferLinkTypeFromUrl(creating.url, creating.linkType),
-    });
-    setCreating(null);
+    }).then(
+      () => setCreating(null),
+      () => {
+        // Error already surfaced via createError — keep the sheet open so the
+        // user can adjust the input and retry.
+      }
+    );
   };
 
   const pageMode = mode === "overview" ? null : mode;
@@ -730,8 +597,8 @@ export default function ResourcesWorkspace({
       subsection: null,
       linkType: pageMode === "mis-favoritos" ? "web" : pageMode === "mis-documentos" ? "drive_folder" : pageMode === "mis-vacaciones" ? "drive_file" : pageMode === "empresa" ? "drive_file" : "drive_file",
       appliesTo: "general",
-      ownerTeamMemberId: pageMode === "mis-documentos" ? effectiveSelectedMemberId : null,
-      personalForTeamMemberId: pageMode === "mis-documentos" ? effectiveSelectedMemberId : null,
+      ownerId: pageMode === "mis-documentos" ? effectiveSelectedStaffId : null,
+      personalForId: pageMode === "mis-documentos" ? effectiveSelectedStaffId : null,
     });
   };
 
@@ -749,7 +616,7 @@ export default function ResourcesWorkspace({
   const confirmRemoveDraft = () => {
     if (!removeDraft) return;
     if (!canDeleteResourceInSection({ capabilities: resourcesCapabilities, section: removeDraft.scope })) return;
-    deleteResource(removeDraft.selectedId);
+    void deleteResource(removeDraft.selectedId);
     setRemoveDraft(null);
   };
 
@@ -808,13 +675,13 @@ export default function ResourcesWorkspace({
                 />
 
                 <Select
-                  value={String(effectiveSelectedMemberId ?? "")}
-                  onValueChange={(value) => setSelectedMemberId(Number(value))}
+                  value={effectiveSelectedStaffId ?? ""}
+                  onValueChange={(value) => setSelectedStaffId(value as string)}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {activeMembers.map((member) => (
-                      <SelectItem key={member.id} value={String(member.id)}>{member.name}</SelectItem>
+                    {activeStaff.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1093,7 +960,7 @@ export default function ResourcesWorkspace({
         </div>
       </section>
 
-      <Sheet open={creating !== null} onOpenChange={(next) => { if (!next) setCreating(null); }}>
+      <Sheet open={creating !== null} onOpenChange={(next) => { if (!next) { setCreating(null); setCreateError(null); } }}>
         <SheetContent className="gap-6 overflow-y-auto p-6">
           <SheetTitle>Agregar recurso</SheetTitle>
           <p className="text-sm text-muted-foreground">Completa la información del nuevo recurso.</p>
@@ -1138,11 +1005,13 @@ export default function ResourcesWorkspace({
                   </p>
                 ) : null}
               </div>
+
+              {createError ? <p className="text-sm text-destructive">{createError}</p> : null}
             </div>
           ) : null}
 
           <div className="mt-2 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setCreating(null)}>
+            <Button variant="outline" onClick={() => { setCreating(null); setCreateError(null); }}>
               Cancelar
             </Button>
             <Button onClick={saveCreate}>
@@ -1191,34 +1060,6 @@ export default function ResourcesWorkspace({
               Quitar recurso
             </Button>
           </div>
-        </SheetContent>
-      </Sheet>
-
-      <Sheet
-        open={previewUrl !== null}
-        onOpenChange={(next) => { if (!next) { setPreviewUrl(null); setPreviewTitle(""); } }}
-      >
-        <SheetContent className="w-[90vw] max-w-6xl" showCloseButton={false}>
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <SheetTitle className="text-sm font-semibold">Vista previa: {previewTitle}</SheetTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setPreviewUrl(null);
-                setPreviewTitle("");
-              }}
-            >
-              Cerrar
-            </Button>
-          </div>
-          {previewUrl ? (
-            <iframe
-              title={previewTitle}
-              src={previewUrl}
-              className="h-full w-full rounded-b-xl"
-            />
-          ) : null}
         </SheetContent>
       </Sheet>
     </main>

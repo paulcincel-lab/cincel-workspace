@@ -27,7 +27,7 @@ function formatDateTime(value: string | null | undefined): string {
 interface MemberEditorDrawerProps {
   show: boolean;
   onClose: () => void;
-  editingId: number | null;
+  editingId: string | null;
   draft: MemberDraft;
   onChangeDraft: React.Dispatch<React.SetStateAction<MemberDraft>>;
   formError: string;

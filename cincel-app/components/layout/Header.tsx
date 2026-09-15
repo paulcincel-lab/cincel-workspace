@@ -10,11 +10,11 @@ import AppAvatar from "@/components/ui/AppAvatar";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { getCurrentAuthenticatedUser, logout } from "@/lib/auth/auth-service";
-import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
-import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { isAdministratorRole } from "@/lib/data/roles";
 import { clearDashboardProfilePhoto, loadDashboardProfilePhoto, saveDashboardProfilePhoto } from "@/lib/auth/profile-photo";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
+import type { Staff } from "@/lib/types/core";
 
 type HeaderProps = {
   variant?: "default" | "profile";
@@ -27,8 +27,6 @@ type HeaderLinks = {
 };
 
 const HEADER_LINKS_STORAGE_KEY = "cincel.header.links.v1";
-const FALLBACK_USER_ID = 2;
-const ADMIN_USER_IDS = new Set([2]);
 const DEFAULT_HEADER_LINKS: HeaderLinks = {
   instagram: "https://www.instagram.com/cincel.mx/",
   website: "https://www.cincel.mx/",
@@ -151,11 +149,6 @@ function formatTodayLabel(): string {
     .join(" ");
 }
 
-/** Pre-hydration seed — real roster comes from `fetchTeamMembersPublic()`. */
-function loadTeamMembers(): TeamMember[] {
-  return teamMembersPublic;
-}
-
 function loadHeaderLinks(): HeaderLinks {
   if (typeof window === "undefined") {
     return DEFAULT_HEADER_LINKS;
@@ -178,21 +171,18 @@ function loadHeaderLinks(): HeaderLinks {
   }
 }
 
-function resolveCurrentMember(members: TeamMember[], authenticatedMemberId: number | null): TeamMember {
+/**
+ * Picks who the header displays: the authenticated staff member if their row
+ * is still active, otherwise the first active staff member as a fallback for
+ * unauthenticated/dev views. There's no more hardcoded fallback id — staff
+ * ids are random uuids now, not stable across environments.
+ */
+function resolveCurrentMember(members: Staff[], authenticatedMemberId: string | null): Staff | null {
   const byAuth = authenticatedMemberId
     ? members.find((member) => member.id === authenticatedMemberId && member.active)
     : null;
-
-  if (byAuth) {
-    return byAuth;
-  }
-
-  const byId = members.find((member) => member.id === FALLBACK_USER_ID && member.active);
-  if (byId) {
-    return byId;
-  }
-
-  return members.find((member) => member.active) ?? teamMembersPublic[0];
+  if (byAuth) return byAuth;
+  return members.find((member) => member.active) ?? null;
 }
 
 export default function Header({ variant = "default" }: HeaderProps) {
@@ -204,13 +194,13 @@ export default function Header({ variant = "default" }: HeaderProps) {
     () => false
   );
   const todayLabel = useMemo(() => (isMounted ? formatTodayLabel() : ""), [isMounted]);
-  const [members, setMembers] = useState<TeamMember[]>(() => loadTeamMembers());
+  const [members, setMembers] = useState<Staff[]>([]);
   const [profileImage, setProfileImage] = useState<string>("");
   const [headerLinks, setHeaderLinks] = useState<HeaderLinks>(() => loadHeaderLinks());
   const [isLinksEditorOpen, setIsLinksEditorOpen] = useState(false);
   const [isProfileImageMenuOpen, setIsProfileImageMenuOpen] = useState(false);
   const [linksDraft, setLinksDraft] = useState<HeaderLinks>(() => loadHeaderLinks());
-  const [authenticatedMemberId, setAuthenticatedMemberId] = useState<number | null>(null);
+  const [authenticatedMemberId, setAuthenticatedMemberId] = useState<string | null>(null);
   const profileImageInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -218,28 +208,26 @@ export default function Header({ variant = "default" }: HeaderProps) {
       return;
     }
 
-    const refreshMembers = (roster?: TeamMember[]) => {
+    const refreshMembers = (roster?: Staff[]) => {
       const authUser = getCurrentAuthenticatedUser();
       const nextMemberId = authUser?.member.id ?? null;
-      const nextMembers = roster ?? loadTeamMembers();
+      const nextMembers = roster ?? members;
       const nextCurrentMember = resolveCurrentMember(nextMembers, nextMemberId);
 
-      setMembers(nextMembers);
-      setProfileImage(loadDashboardProfilePhoto(nextCurrentMember.id));
+      if (roster) setMembers(roster);
+      setProfileImage(nextCurrentMember ? loadDashboardProfilePhoto(nextCurrentMember.id) : "");
       setHeaderLinks(loadHeaderLinks());
       setAuthenticatedMemberId(nextMemberId);
     };
 
     refreshMembers();
-    void fetchTeamMembersPublic()
-      .then((rows) => {
-        if (rows.length > 0) refreshMembers(rows);
-      })
+    void fetchStaffAction()
+      .then((rows) => refreshMembers(rows))
       .catch(() => undefined);
 
     const onExternalChange = () => {
-      void fetchTeamMembersPublic()
-        .then((rows) => refreshMembers(rows.length > 0 ? rows : undefined))
+      void fetchStaffAction()
+        .then((rows) => refreshMembers(rows))
         .catch(() => refreshMembers());
     };
     window.addEventListener("focus", onExternalChange);
@@ -249,49 +237,17 @@ export default function Header({ variant = "default" }: HeaderProps) {
       window.removeEventListener("focus", onExternalChange);
       window.removeEventListener("storage", onExternalChange);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const currentMember = useMemo(() => {
-    if (!isMounted) {
-      return null;
-    }
-
-    const byAuth = authenticatedMemberId
-      ? members.find((member) => member.id === authenticatedMemberId && member.active)
-      : null;
-
-    if (byAuth) {
-      return byAuth;
-    }
-
-    const byId = members.find((member) => member.id === FALLBACK_USER_ID && member.active);
-    if (byId) {
-      return byId;
-    }
-
-    return members.find((member) => member.active) ?? teamMembersPublic[0];
+    if (!isMounted) return null;
+    return resolveCurrentMember(members, authenticatedMemberId);
   }, [authenticatedMemberId, isMounted, members]);
-
-  const profileSubtitle = useMemo(() => {
-    if (!currentMember) {
-      return "";
-    }
-
-    const role = currentMember.role?.trim();
-    const area = currentMember.area?.trim();
-
-    if (role && area) {
-      return `${role} • ${area}`;
-    }
-
-    return role || area || "";
-  }, [currentMember]);
 
   const currentInitial = currentMember?.name?.trim().charAt(0).toUpperCase() || "P";
   const currentName = currentMember?.name?.trim() || "Usuario";
-  const isAdminProfile = Boolean(
-    currentMember && (ADMIN_USER_IDS.has(currentMember.id) || isAdministratorRole(currentMember.role))
-  );
+  const isAdminProfile = Boolean(currentMember && isAdministratorRole(currentMember.role));
   const hasAuthenticatedSession = authenticatedMemberId !== null;
   const canEditLinksInThisPage = isAdminProfile && pathname.startsWith("/configuracion");
   const shouldShowDevelopmentMenu = IS_DEVELOPMENT && pathname.startsWith("/configuracion");
@@ -353,7 +309,6 @@ export default function Header({ variant = "default" }: HeaderProps) {
     logout();
     setAuthenticatedMemberId(null);
     setProfileImage("");
-    setMembers(loadTeamMembers());
     router.push("/login");
     router.refresh();
   };
@@ -424,7 +379,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
                 {currentMember?.name ?? "Nombre del Usuario"}
               </h1>
               <p className="mt-1 text-base text-muted-foreground sm:text-xl">
-                {profileSubtitle || "Puesto • Area"}
+                {currentMember?.role || "Puesto"}
               </p>
             </div>
           </div>

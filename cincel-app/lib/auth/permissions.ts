@@ -23,20 +23,20 @@ export type CalendarCapabilities = {
 };
 
 type DashboardProjectShape = {
-  id: number;
+  id: string;
   name: string;
-  manager?: string | null;
+  manager?: { id: string } | null;
 };
 
 type DashboardTaskShape = {
-  project: string;
-  manager?: string | null;
-  support?: string[];
+  project: { id: string; name: string };
+  manager?: { id: string } | null;
+  support?: Array<{ id: string }>;
 };
 
 type ActivityTaskScopeShape = {
-  manager?: string | null;
-  support?: string[];
+  manager?: { id: string } | null;
+  support?: Array<{ id: string }>;
 };
 
 type ActivityStatusScope = "all" | "assigned_or_participant" | "none";
@@ -751,37 +751,24 @@ type StoredPermissionsState = {
   roles: Record<string, StoredRolePermissionsState>;
 };
 
-function normalizeName(value: string | null | undefined): string {
-  return (value || "").trim().toLowerCase();
-}
-
-function taskBelongsToViewer(task: DashboardTaskShape, viewerName: string): boolean {
-  if (!viewerName) {
+function taskBelongsToViewer(task: DashboardTaskShape, viewerId: string): boolean {
+  if (!viewerId) {
     return false;
   }
 
-  const managerName = normalizeName(task.manager);
-  if (managerName && managerName === viewerName) {
+  if (task.manager?.id === viewerId) {
     return true;
   }
 
-  return (task.support || []).some((member) => normalizeName(member) === viewerName);
+  return (task.support || []).some((member) => member.id === viewerId);
 }
 
-function projectIsManagedByViewer(
-  project: DashboardProjectShape,
-  viewerName: string,
-  secondaryCoordinatorByProject: Record<number, string>
-): boolean {
-  if (!viewerName) {
+function projectIsManagedByViewer(project: DashboardProjectShape, viewerId: string): boolean {
+  if (!viewerId) {
     return false;
   }
 
-  if (normalizeName(project.manager) === viewerName) {
-    return true;
-  }
-
-  return normalizeName(secondaryCoordinatorByProject[project.id]) === viewerName;
+  return project.manager?.id === viewerId;
 }
 
 function resolveAccess(user: AuthenticatedUser | null): SystemAccessRole {
@@ -1226,11 +1213,11 @@ export function canEditResourceInSection({
 export function canChangeActivityStatus<TTask extends ActivityTaskScopeShape>({
   capabilities,
   task,
-  viewerName,
+  viewerId,
 }: {
   capabilities: ActivitiesCapabilities;
   task: TTask;
-  viewerName: string;
+  viewerId: string;
 }): boolean {
   if (capabilities.statusScope === "all") {
     return true;
@@ -1240,74 +1227,60 @@ export function canChangeActivityStatus<TTask extends ActivityTaskScopeShape>({
     return false;
   }
 
-  const normalizedViewerName = normalizeName(viewerName);
-  if (!normalizedViewerName) {
+  if (!viewerId) {
     return false;
   }
 
   return taskBelongsToViewer(
     {
-      project: "",
+      project: { id: "", name: "" },
       manager: task.manager,
       support: task.support,
     },
-    normalizedViewerName
+    viewerId
   );
 }
 
 export function scopeDashboardProjects<TProject extends DashboardProjectShape, TTask extends DashboardTaskShape>({
   projects,
   tasks,
-  viewerName,
+  viewerId,
   dataScope,
-  secondaryCoordinatorByProject,
 }: {
   projects: TProject[];
   tasks: TTask[];
-  viewerName: string;
+  viewerId: string;
   dataScope: DashboardDataScope;
-  secondaryCoordinatorByProject: Record<number, string>;
 }): TProject[] {
   if (dataScope === "global") {
     return projects;
   }
 
-  const normalizedViewerName = normalizeName(viewerName);
-
   if (dataScope === "managed_projects") {
-    return projects.filter((project) => projectIsManagedByViewer(project, normalizedViewerName, secondaryCoordinatorByProject));
+    return projects.filter((project) => projectIsManagedByViewer(project, viewerId));
   }
 
-  const visibleProjectNames = new Set(
-    tasks
-      .filter((task) => taskBelongsToViewer(task, normalizedViewerName))
-      .map((task) => normalizeName(task.project))
-      .filter(Boolean)
+  const visibleProjectIds = new Set(
+    tasks.filter((task) => taskBelongsToViewer(task, viewerId)).map((task) => task.project.id)
   );
 
-  return projects.filter((project) => visibleProjectNames.has(normalizeName(project.name)));
+  return projects.filter((project) => visibleProjectIds.has(project.id));
 }
 
 export function scopeDashboardTasks<TTask extends DashboardTaskShape>({
   tasks,
-  viewerName,
+  viewerId,
   dataScope,
-  allowedProjectNames,
+  allowedProjectIds,
 }: {
   tasks: TTask[];
-  viewerName: string;
+  viewerId: string;
   dataScope: DashboardDataScope;
-  allowedProjectNames: Set<string>;
+  allowedProjectIds: Set<string>;
 }): TTask[] {
-  const normalizedAllowedProjects = new Set(Array.from(allowedProjectNames).map((projectName) => normalizeName(projectName)));
-  const normalizedViewerName = normalizeName(viewerName);
-
   if (dataScope === "assigned_tasks") {
-    return tasks.filter((task) => {
-      const inAllowedProject = normalizedAllowedProjects.has(normalizeName(task.project));
-      return inAllowedProject && taskBelongsToViewer(task, normalizedViewerName);
-    });
+    return tasks.filter((task) => allowedProjectIds.has(task.project.id) && taskBelongsToViewer(task, viewerId));
   }
 
-  return tasks.filter((task) => normalizedAllowedProjects.has(normalizeName(task.project)));
+  return tasks.filter((task) => allowedProjectIds.has(task.project.id));
 }

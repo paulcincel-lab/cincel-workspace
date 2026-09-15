@@ -1,12 +1,12 @@
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import { fetchTeamMembersAction } from "@/lib/actions/team-actions";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { EquipoClient } from "./EquipoClient";
 
 export default async function EquipoPage() {
-  let initialTeam: Awaited<ReturnType<typeof fetchTeamMembersAction>> = [];
+  let initialTeam: Awaited<ReturnType<typeof fetchStaffAction>> = [];
   try {
-    initialTeam = await fetchTeamMembersAction();
+    initialTeam = await fetchStaffAction({ includeInactive: true });
   } catch {
     // Not authorized / no session — the client falls back to hydrating itself.
   }

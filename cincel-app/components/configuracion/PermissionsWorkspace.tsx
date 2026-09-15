@@ -27,11 +27,10 @@ import {
   SYSTEM_ADMIN_ROLE,
   type SystemAccessRole,
 } from "@/lib/data/roles";
-import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
-import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
+import { teamMembersPublic } from "@/lib/data/team-public";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
-
-const SYSTEM_ROLE_STORAGE_KEY = "cincel.team.system-roles.v1";
+import type { Staff } from "@/lib/types/core";
 
 type AccessSummary = {
   role: SystemAccessRole;
@@ -72,42 +71,14 @@ const ACCESS_DESCRIPTIONS: Record<SystemAccessRole, string> = {
   Otros: "Acceso restringido para casos especiales de colaboración.",
 };
 
-/** Pre-hydration seed — real roster comes from `fetchTeamMembersPublic()`. */
-function loadTeamMembers(): TeamMember[] {
-  return teamMembersPublic;
-}
-
-function loadSystemRoleMap(): Record<number, string> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  const stored = readStorage(SYSTEM_ROLE_STORAGE_KEY);
-  if (!stored) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Record<number, string>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function resolveMemberAccess(member: TeamMember, roleMap: Record<number, string>): SystemAccessRole {
-  const configuredRaw = roleMap[member.id];
-  const configured = normalizeSystemAccessRole(configuredRaw);
-
-  if (configured) {
-    return configured;
-  }
-
-  if (isAdministratorRole(member.role) || hasDefaultSystemAdministratorAccess(member.institutionalEmail)) {
+/** Access role mirrors the server resolution in `lib/auth/session.ts`: it comes
+ * straight from `staff.role`, not a separate client-side override. */
+function resolveMemberAccess(member: Staff): SystemAccessRole {
+  if (isAdministratorRole(member.role) || hasDefaultSystemAdministratorAccess(member.email)) {
     return SYSTEM_ADMIN_ROLE;
   }
 
-  return DEFAULT_SYSTEM_ACCESS_ROLE;
+  return normalizeSystemAccessRole(member.role) ?? DEFAULT_SYSTEM_ACCESS_ROLE;
 }
 
 function toMockUser(access: SystemAccessRole): AuthenticatedUser {
@@ -291,25 +262,26 @@ function buildAccessColumns(setSelectedAccess: (role: SystemAccessRole) => void)
   ];
 }
 
-export default function PermissionsWorkspace() {
+interface PermissionsWorkspaceProps {
+  initialStaff: Staff[];
+}
+
+export default function PermissionsWorkspace({ initialStaff }: PermissionsWorkspaceProps) {
   const defaultPermissionsState = useMemo(() => buildDefaultPermissionsState(), []);
   const loadedPermissions = useMemo(() => loadPermissionsState(defaultPermissionsState), [defaultPermissionsState]);
 
-  const [members, setMembers] = useState<TeamMember[]>(() => loadTeamMembers());
-  const [systemRoleMap, setSystemRoleMap] = useState<Record<number, string>>(() => loadSystemRoleMap());
+  const [members, setMembers] = useState<Staff[]>(initialStaff);
   const [selectedAccess, setSelectedAccess] = useState<SystemAccessRole>("Dirección");
   const [permissionsState, setPermissionsState] = useState<PermissionsState>(loadedPermissions.state);
   const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(loadedPermissions.hasCustom);
 
   useEffect(() => {
     const refresh = () => {
-      setSystemRoleMap(loadSystemRoleMap());
-
       const loaded = loadPermissionsState(defaultPermissionsState);
       setPermissionsState(loaded.state);
       setHasCustomConfig(loaded.hasCustom);
 
-      void fetchTeamMembersPublic()
+      void fetchStaffAction({ includeInactive: true })
         .then((rows) => {
           if (rows.length > 0) setMembers(rows);
         })
@@ -330,12 +302,12 @@ export default function PermissionsWorkspace() {
     const initial = Object.fromEntries(SYSTEM_ACCESS_ROLES.map((role) => [role, 0])) as Record<SystemAccessRole, number>;
 
     for (const member of members) {
-      const access = resolveMemberAccess(member, systemRoleMap);
+      const access = resolveMemberAccess(member);
       initial[access] += 1;
     }
 
     return initial;
-  }, [members, systemRoleMap]);
+  }, [members]);
 
   const accessSummary = useMemo<AccessSummary[]>(() => {
     return SYSTEM_ACCESS_ROLES.map((role) => {
