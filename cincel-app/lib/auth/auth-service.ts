@@ -18,7 +18,7 @@ import { useSessionStore } from "@/lib/stores/session-store";
 export type TeamMember = TeamMemberPublic;
 
 export type AuthSession = {
-  collaboratorId: number;
+  collaboratorId: string;
   email: string;
   access: SystemAccessRole;
   loggedAt: string;
@@ -63,7 +63,7 @@ function toAuthenticatedUser(access: SessionAccess): AuthenticatedUser | null {
   if (!access.user) return null;
   const u = access.user;
   const member: TeamMember = {
-    id: u.legacyId ?? 0,
+    id: u.id,
     name: u.name,
     role: u.role ?? "",
     area: u.area ?? "",
