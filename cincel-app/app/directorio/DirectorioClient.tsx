@@ -26,7 +26,6 @@ import { ClientDetailSheet } from "@/components/directorio/ClientDetailSheet";
 import {
   CONTACT_TYPE_LABEL,
   PROVIDER_STATUS_LABEL,
-  directorioStatusVariant,
   toDirectorioRows,
   type DirectorioRow,
 } from "@/lib/directorio/types";
@@ -120,10 +119,7 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
   const clientsCapabilities = useMemo(() => resolveClientsCapabilities(authenticatedUser), [authenticatedUser]);
 
   useEffect(() => {
-    if (!detailContactId) {
-      setDetailContact(null);
-      return;
-    }
+    if (!detailContactId) return;
     let cancelled = false;
     void fetchContactAction(detailContactId).then((c) => {
       if (!cancelled) setDetailContact(c);
@@ -132,6 +128,8 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
       cancelled = true;
     };
   }, [detailContactId]);
+
+  const activeDetailContact = detailContactId && detailContact?.id === detailContactId ? detailContact : null;
 
   async function refreshContacts() {
     const next = await fetchContactsAction();
@@ -452,17 +450,17 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
         onSave={() => { void saveDraft(); }}
       />
 
-      {detailContact ? (
+      {activeDetailContact ? (
         <ClientDetailSheet
-          contact={detailContact}
+          contact={activeDetailContact}
           onClose={() => setDetailContactId(null)}
           onEdit={() => {
-            const row = rows.find((r) => r.id === detailContact.id);
+            const row = rows.find((r) => r.id === activeDetailContact.id);
             setDetailContactId(null);
             if (row) void openEdit(row);
           }}
           onDelete={() => {
-            const row = rows.find((r) => r.id === detailContact.id);
+            const row = rows.find((r) => r.id === activeDetailContact.id);
             if (row) void deleteRow(row);
           }}
           canEdit={clientsCapabilities.canEditClient}

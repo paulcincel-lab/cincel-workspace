@@ -7,7 +7,6 @@ import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import type {
   HistoryEvent,
-  Task,
   TaskChecklistItem,
   TaskDetail,
   TaskFilters,

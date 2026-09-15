@@ -45,7 +45,9 @@ export function useProjectsData(
   const [isLoadingData, setIsLoadingData] = useState(!hasInitial);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  useEffect(() => {
+    filtersRef.current = filters;
+  });
 
   const refresh = useCallback(async () => {
     setFetchError(null);
@@ -61,7 +63,10 @@ export function useProjectsData(
   }, []);
 
   useEffect(() => {
-    setAuthenticatedUser(getCurrentAuthenticatedUser());
+    // Sync projects with the server on mount — refresh() is also reused by
+    // addProject/updateProject/removeProject, so it can't be inlined here
+    // without duplicating the fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
     void fetchStaffAction()
       .then((rows) => setActiveStaff(rows.filter((s) => s.active)))

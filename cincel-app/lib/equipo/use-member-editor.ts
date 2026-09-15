@@ -8,7 +8,6 @@ import {
   DEFAULT_SYSTEM_ACCESS_ROLE,
   hasDefaultSystemAdministratorAccess,
   normalizeSystemAccessRole,
-  type SystemAccessRole,
 } from "@/lib/data/roles";
 import {
   fetchStaffDetailAction,

@@ -118,10 +118,7 @@ export function ActividadesClient({
   const nameToStaffId = useMemo(() => new Map(initialStaff.map((s) => [s.name, s.id])), [initialStaff]);
 
   const refresh = useCallback(async () => {
-    if (!workflow) {
-      setTasks([]);
-      return;
-    }
+    if (!workflow) return;
     try {
       const rows = await fetchTasksAction({ workflowId: workflow.id, archived: view === "archivadas" });
       setTasks(rows);
@@ -131,14 +128,15 @@ export function ActividadesClient({
   }, [workflow, view]);
 
   useEffect(() => {
+    // Sync the task list with the server on mount and whenever workflow/view
+    // change — refresh() is also reused by CRUD handlers, so it can't be
+    // inlined here without duplicating the fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    if (!selectedTaskId) {
-      setSelectedTaskDetail(null);
-      return;
-    }
+    if (!selectedTaskId) return;
     let cancelled = false;
     fetchTaskAction(selectedTaskId)
       .then((detail) => {
@@ -149,6 +147,8 @@ export function ActividadesClient({
       cancelled = true;
     };
   }, [selectedTaskId]);
+
+  const activeTaskDetail = selectedTaskId && selectedTaskDetail?.id === selectedTaskId ? selectedTaskDetail : null;
 
   async function runAction<T>(fn: () => Promise<T>, onSuccess?: (result: T) => void) {
     try {
@@ -867,7 +867,7 @@ export function ActividadesClient({
 
           <TaskDrawer
             open={selectedTaskId !== null}
-            task={selectedTaskDetail}
+            task={activeTaskDetail}
             onClose={() => setSelectedTaskId(null)}
             onAddComment={(comment) => void addComment(comment)}
             onAddChecklistItem={(title) => void addChecklistItem(title)}

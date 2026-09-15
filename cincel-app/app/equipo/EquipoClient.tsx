@@ -25,7 +25,7 @@ import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { useMemberEditor } from "@/lib/equipo/use-member-editor";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
-import { canExportStaff, exportStaffAction, staffExportColumns } from "@/lib/equipo/staff-export";
+import { canExportStaff, exportStaffAction } from "@/lib/equipo/staff-export";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
 import type { Staff } from "@/lib/types/core";
 
@@ -107,8 +107,11 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
   }
 
   useEffect(() => {
+    // Sync the roster/workload with the server on mount — refresh() is also
+    // reused by the editor drawer's save handlers, so it can't be inlined
+    // here without duplicating the fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const {

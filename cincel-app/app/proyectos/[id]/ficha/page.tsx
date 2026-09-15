@@ -102,6 +102,10 @@ export default function ProjectFichaPage() {
   }
 
   useEffect(() => {
+    // Load the project on mount and whenever the route id changes — reload()
+    // is also reused by the save handlers, so it can't be inlined here
+    // without duplicating the fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
