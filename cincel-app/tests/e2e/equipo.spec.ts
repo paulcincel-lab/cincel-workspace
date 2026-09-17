@@ -29,9 +29,11 @@ test.describe("Equipo — add team member", () => {
     // target the first occurrence which is the collaborator's name field.
     await drawer.locator("label:has-text('Nombre') + input").first().fill(MEMBER_NAME);
 
-    // Fill other required fields: Puesto, Area — each label is unique
+    // Fill other required fields: Puesto (free text), Áreas (multi-select
+    // against real core.areas — search then click the matching option).
     await drawer.locator("label:has-text('Puesto') + input").fill("Arquitecto");
-    await drawer.locator("label:has-text('Area') + input").fill("Diseño");
+    await drawer.getByPlaceholder("Buscar área...").fill("Diseño");
+    await drawer.getByRole("button", { name: /Diseño/ }).click();
 
     // Correo institucional is type=email and mandatory for system access validation
     const emailInput = drawer.locator("input[type=email]").first();
