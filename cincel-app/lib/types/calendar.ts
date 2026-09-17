@@ -9,7 +9,7 @@ export type CalendarEventType =
 
 export type CalendarEvent = {
   id: string;
-  taskId: number;
+  taskId: string;
   date: string;
   time: string;
   title: string;

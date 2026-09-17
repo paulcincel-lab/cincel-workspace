@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 
-import type { TaskChecklistItem, TaskDetail } from "@/lib/types/core";
+import type { StaffRef, TaskChecklistItem, TaskDetail } from "@/lib/types/core";
 import { formatDateDMY } from "@/lib/utils/date";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 
 const STATUS_LABEL: Record<TaskDetail["status"], string> = {
   pendiente: "Pendiente",
@@ -25,6 +26,11 @@ type Props = {
   onAddChecklistItem: (title: string) => void;
   onToggleChecklistItem: (item: TaskChecklistItem) => void;
   onRemoveChecklistItem: (item: TaskChecklistItem) => void;
+  /** Reorders the checklist to the given id order (top to bottom). Optional so other callers can skip it. */
+  onReorderChecklist?: (orderedIds: string[]) => void;
+  /** Active staff available to assign as support. Optional — support editing is hidden when omitted. */
+  staffOptions?: StaffRef[];
+  onChangeSupport?: (staffIds: string[]) => void;
 };
 
 export default function TaskDrawer({
@@ -35,9 +41,15 @@ export default function TaskDrawer({
   onAddChecklistItem,
   onToggleChecklistItem,
   onRemoveChecklistItem,
+  onReorderChecklist,
+  staffOptions = [],
+  onChangeSupport,
 }: Props) {
   const [newNote, setNewNote] = useState("");
   const [newChecklistItem, setNewChecklistItem] = useState("");
+
+  const nameToStaffId = useMemo(() => new Map(staffOptions.map((s) => [s.name, s.id])), [staffOptions]);
+  const staffNames = useMemo(() => staffOptions.map((s) => s.name), [staffOptions]);
 
   const sortedHistory = useMemo(() => {
     if (!task) return [];
@@ -56,6 +68,17 @@ export default function TaskDrawer({
     if (!trimmed) return;
     onAddChecklistItem(trimmed);
     setNewChecklistItem("");
+  };
+
+  const moveChecklistItem = (item: TaskChecklistItem, direction: "up" | "down") => {
+    if (!task || !onReorderChecklist) return;
+    const items = task.checklistItems;
+    const index = items.findIndex((i) => i.id === item.id);
+    const swapWith = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || swapWith < 0 || swapWith >= items.length) return;
+    const reordered = [...items];
+    [reordered[index], reordered[swapWith]] = [reordered[swapWith], reordered[index]];
+    onReorderChecklist(reordered.map((i) => i.id));
   };
 
   return (
@@ -156,12 +179,38 @@ export default function TaskDrawer({
                 <h3 className="text-lg font-semibold text-foreground">Checklist</h3>
                 <div className="mt-3 space-y-2 rounded-2xl border border-border p-4">
                   {task.checklistItems.length > 0 ? (
-                    task.checklistItems.map((item) => (
-                      <label key={item.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-muted">
-                        <Checkbox checked={item.completed} onCheckedChange={() => onToggleChecklistItem(item)} />
-                        <span className={`flex-1 text-sm ${item.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                          {item.title}
-                        </span>
+                    task.checklistItems.map((item, index) => (
+                      <div key={item.id} className="flex items-center gap-1 rounded-lg px-2 py-1.5 hover:bg-muted">
+                        {onReorderChecklist ? (
+                          <div className="flex flex-col">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-4 w-5 p-0 text-xs text-muted-foreground disabled:opacity-30"
+                              disabled={index === 0}
+                              onClick={() => moveChecklistItem(item, "up")}
+                              title="Mover arriba"
+                            >
+                              ↑
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-4 w-5 p-0 text-xs text-muted-foreground disabled:opacity-30"
+                              disabled={index === task.checklistItems.length - 1}
+                              onClick={() => moveChecklistItem(item, "down")}
+                              title="Mover abajo"
+                            >
+                              ↓
+                            </Button>
+                          </div>
+                        ) : null}
+                        <label className="flex flex-1 items-center gap-3">
+                          <Checkbox checked={item.completed} onCheckedChange={() => onToggleChecklistItem(item)} />
+                          <span className={`flex-1 text-sm ${item.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                            {item.title}
+                          </span>
+                        </label>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -170,7 +219,7 @@ export default function TaskDrawer({
                         >
                           Quitar
                         </Button>
-                      </label>
+                      </div>
                     ))
                   ) : (
                     <p className="text-sm text-muted-foreground">Sin puntos de checklist.</p>
@@ -195,6 +244,22 @@ export default function TaskDrawer({
                   </div>
                 </div>
               </section>
+
+              {onChangeSupport && staffOptions.length > 0 ? (
+                <section>
+                  <h3 className="text-lg font-semibold text-foreground">Staff de apoyo</h3>
+                  <div className="mt-3 rounded-2xl border border-border p-4">
+                    <TeamMultiSelect
+                      options={staffNames}
+                      selected={task.support.map((s) => s.name)}
+                      onChange={(members) => {
+                        const ids = members.map((n) => nameToStaffId.get(n)).filter((id): id is string => Boolean(id));
+                        onChangeSupport(ids);
+                      }}
+                    />
+                  </div>
+                </section>
+              ) : null}
               {/* Per-task attachments have no equivalent in the new schema (file links
                   now live only at the project level via ProjectLink) — dropped rather
                   than faked. */}

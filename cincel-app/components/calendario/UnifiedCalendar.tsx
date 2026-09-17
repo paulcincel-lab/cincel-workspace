@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
@@ -26,6 +26,12 @@ type UnifiedCalendarProps = {
   canViewDailyAgenda?: boolean;
   canViewTeamCalendar?: boolean;
   viewerName?: string;
+  /**
+   * Reports the date range (inclusive, YYYY-MM-DD) currently rendered by the
+   * month grid so a server-sourced parent can fetch events for it. Fires on
+   * mount and whenever the visible range changes (month navigation).
+   */
+  onVisibleRangeChange?: (fromDate: string, toDate: string) => void;
 };
 
 /**
@@ -106,6 +112,7 @@ export default function UnifiedCalendar({
   canViewDailyAgenda = true,
   canViewTeamCalendar = true,
   viewerName = "",
+  onVisibleRangeChange,
 }: UnifiedCalendarProps) {
   const normalizedViewerName = viewerName.trim();
   const today = useMemo(() => {
@@ -201,6 +208,14 @@ export default function UnifiedCalendar({
       };
     });
   }, [cursor, groupedByDate, today]);
+
+  useEffect(() => {
+    if (!onVisibleRangeChange || monthGrid.length === 0) {
+      return;
+    }
+
+    onVisibleRangeChange(monthGrid[0].key, monthGrid[monthGrid.length - 1].key);
+  }, [monthGrid, onVisibleRangeChange]);
 
   const weekDays = useMemo(() => {
     const date = toDate(selectedDate) ?? today;

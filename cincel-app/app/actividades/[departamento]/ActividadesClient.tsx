@@ -42,6 +42,7 @@ import {
   addChecklistItemAction,
   updateChecklistItemAction,
   removeChecklistItemAction,
+  reorderChecklistAction,
   addTaskCommentAction,
 } from "@/lib/actions/tasks-actions";
 import type {
@@ -411,6 +412,18 @@ export function ActividadesClient({
     if (!selectedTaskId) return;
     try {
       await removeChecklistItemAction(item.id);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) setTasks((cur) => cur.map((t) => (t.id === detail.id ? detail : t)));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function reorderChecklist(orderedIds: string[]) {
+    if (!selectedTaskId) return;
+    try {
+      await reorderChecklistAction(selectedTaskId, orderedIds);
       const detail = await fetchTaskAction(selectedTaskId);
       setSelectedTaskDetail(detail);
       if (detail) setTasks((cur) => cur.map((t) => (t.id === detail.id ? detail : t)));
@@ -868,11 +881,17 @@ export function ActividadesClient({
           <TaskDrawer
             open={selectedTaskId !== null}
             task={activeTaskDetail}
+            staffOptions={staffOptions}
             onClose={() => setSelectedTaskId(null)}
             onAddComment={(comment) => void addComment(comment)}
             onAddChecklistItem={(title) => void addChecklistItem(title)}
             onToggleChecklistItem={(item) => void toggleChecklistItem(item)}
             onRemoveChecklistItem={(item) => void removeChecklistItem(item)}
+            onReorderChecklist={(orderedIds) => void reorderChecklist(orderedIds)}
+            onChangeSupport={(staffIds) => {
+              if (!activeTaskDetail) return;
+              void changeSupport(activeTaskDetail, staffIds);
+            }}
           />
         </>
       )}
