@@ -70,6 +70,21 @@ const ActivityIcon = ({ className = "h-5 w-5" }: IconProps) => (
   </svg>
 );
 
+const BoardIcon = ({ className = "h-5 w-5" }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16" />
+    <path d="M15 4v16" />
+  </svg>
+);
+
+const MyTasksIcon = ({ className = "h-5 w-5" }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+    <path d="M8 12l2.5 2.5L16 9" />
+  </svg>
+);
+
 const CalendarIcon = ({ className = "h-5 w-5" }: IconProps) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
     <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -183,6 +198,8 @@ export default function Sidebar() {
         { label: "Decoración", href: "/actividades/decoracion", icon: ActivityIcon },
       ],
     },
+    { label: "Tablero", href: "/tablero", icon: BoardIcon },
+    { label: "Mis tareas", href: "/mis-tareas", icon: MyTasksIcon },
     { label: "Calendario", href: "/calendario", icon: CalendarIcon },
     { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
     { label: "Recursos", href: "/recursos", icon: ResourcesIcon },
@@ -208,6 +225,7 @@ export default function Sidebar() {
             submenu: [
               { label: "General", href: "/configuracion/general", icon: SettingsIcon },
               { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
+              { label: "Áreas", href: "/configuracion/areas", icon: SettingsIcon },
               { label: "Workflows", href: "/configuracion/workflows", icon: SettingsIcon },
             ],
           } satisfies MenuGroupItem,
