@@ -1173,15 +1173,15 @@ export function canDeleteResourceInSection({
 export function canEditResourceInSection({
   capabilities,
   section,
-  viewerMemberId,
-  ownerTeamMemberId,
-  personalForTeamMemberId,
+  viewerId = null,
+  ownerId = null,
+  personalForId = null,
 }: {
   capabilities: ResourcesCapabilities;
   section: ResourceSection;
-  viewerMemberId: number | null;
-  ownerTeamMemberId: number | null;
-  personalForTeamMemberId: number | null;
+  viewerId?: string | null;
+  ownerId?: string | null;
+  personalForId?: string | null;
 }): boolean {
   if (isCorporateResourcesSection(section)) {
     if (capabilities.corporate.editScope === "all") {
@@ -1192,11 +1192,11 @@ export function canEditResourceInSection({
       return false;
     }
 
-    if (viewerMemberId === null) {
+    if (viewerId === null) {
       return false;
     }
 
-    return ownerTeamMemberId === viewerMemberId || personalForTeamMemberId === viewerMemberId;
+    return ownerId === viewerId || personalForId === viewerId;
   }
 
   if (section === "mis-favoritos") {
