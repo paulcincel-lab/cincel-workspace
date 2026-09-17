@@ -5,14 +5,46 @@
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { test, expect } from "@playwright/test";
+import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
 const TASK_DESC = `Tarea E2E ${RUN_ID}`;
 
+const connectionString =
+  process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
+
+/**
+ * The "Nueva tarea" sheet only lets you save once a project is selected —
+ * its project dropdown is populated from active projects on the current
+ * workflow, and "Guardar" stays disabled with none available (see
+ * NewTaskModal.tsx). A fresh DB (scripts/seed.ts) seeds no projects at all,
+ * so this spec seeds its own client + active "presale" project directly,
+ * tagged "E2E" so global-cleanup.ts purges it like every other spec's rows.
+ */
+async function ensurePresaleProject(): Promise<void> {
+  const sql = postgres(connectionString, { max: 1 });
+  try {
+    const [workflow] = await sql`select id from core.workflows where key = 'presale' limit 1`;
+    if (!workflow) throw new Error("presale workflow not seeded");
+    const [client] = await sql`
+      insert into core.contacts (type, kind, name)
+      values ('cliente', 'particular', ${`Cliente E2E ${RUN_ID}`})
+      returning id
+    `;
+    await sql`
+      insert into core.projects (name, client_id, current_workflow_id, status)
+      values (${`Proyecto E2E ${RUN_ID}`}, ${client.id}, ${workflow.id}, 'activo')
+    `;
+  } finally {
+    await sql.end();
+  }
+}
+
 test.describe("Tareas — create task with commitmentDate and reviewDate", () => {
   test.beforeEach(async ({ page }) => {
+    await ensurePresaleProject();
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
     await page.goto(`${BASE_URL}/actividades/presale`, { waitUntil: "domcontentloaded" });
