@@ -1,15 +1,19 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, normalizeSystemAccessRole } from "@/lib/data/roles";
 import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { TeamAvailability } from "@/lib/data/team";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
+import type { Area } from "@/lib/types/core";
 
 const OTHER_AVAILABILITY_VALUE = "Otros...";
 
@@ -27,7 +31,7 @@ function formatDateTime(value: string | null | undefined): string {
 interface MemberEditorDrawerProps {
   show: boolean;
   onClose: () => void;
-  editingId: number | null;
+  editingId: string | null;
   draft: MemberDraft;
   onChangeDraft: React.Dispatch<React.SetStateAction<MemberDraft>>;
   formError: string;
@@ -36,6 +40,7 @@ interface MemberEditorDrawerProps {
   isEditingSelfProtectedAdmin: boolean;
   teamCapabilities: TeamCapabilities;
   availabilityOptions: readonly string[];
+  areaOptions: Area[];
 }
 
 /** Slide-in modal form for adding or editing a team member. */
@@ -51,8 +56,16 @@ export function MemberEditorDrawer({
   isEditingSelfProtectedAdmin,
   teamCapabilities,
   availabilityOptions,
+  areaOptions,
 }: MemberEditorDrawerProps) {
   const canSave = editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator;
+
+  const areaNames = useMemo(() => areaOptions.map((a) => a.name), [areaOptions]);
+  const areaIdByName = useMemo(() => new Map(areaOptions.map((a) => [a.name, a.id])), [areaOptions]);
+  const areaNameById = useMemo(() => new Map(areaOptions.map((a) => [a.id, a.name])), [areaOptions]);
+  const selectedAreaNames = draft.areaIds
+    .map((id) => areaNameById.get(id))
+    .filter((name): name is string => Boolean(name));
 
   return (
     <Sheet open={show} onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -91,14 +104,20 @@ export function MemberEditorDrawer({
                 <p className="mt-1 text-xs text-muted-foreground">Cargo que desempeña dentro de la empresa.</p>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Area</label>
-                <Input
-                  type="text"
-                  value={draft.area}
-                  onChange={(event) => onChangeDraft((current) => ({ ...current, area: event.target.value }))}
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-medium text-foreground">Áreas</label>
+                <TeamMultiSelect
+                  options={areaNames}
+                  selected={selectedAreaNames}
+                  onChange={(names) => {
+                    const ids = names
+                      .map((name) => areaIdByName.get(name))
+                      .filter((id): id is string => Boolean(id));
+                    onChangeDraft((current) => ({ ...current, areaIds: ids }));
+                  }}
+                  placeholder="Buscar área..."
                 />
-                <p className="mt-1 text-xs text-muted-foreground">Departamento al que pertenece.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Departamentos a los que pertenece. Puede tener varias.</p>
               </div>
 
               <div>

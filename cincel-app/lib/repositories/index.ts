@@ -1,59 +1,14 @@
 /**
- * Barrel de repositorios – Sprint 11.2
- *
- * Punto único de importación para toda la capa de acceso a datos.
- * Los componentes de UI deben importar SOLO desde este módulo o
- * desde los repositorios individuales; nunca directamente de Supabase.
+ * Data access layer, one module per aggregate. Each function takes an explicit
+ * actor (staff id) where it writes history, and none of them touch the
+ * request: session and capability checks live in `lib/actions`.
  */
-
-export {
-  getProjectsSnapshot,
-  fetchProjects,
-  saveProjects,
-  type Project,
-} from "./projects-repository";
-
-export {
-  getTeamMembersSnapshot,
-  fetchTeamMembers,
-  saveTeamMembers,
-  type TeamMember,
-} from "./team-repository";
-
-export {
-  getActivitiesSnapshot,
-  fetchActivities,
-  saveActivities,
-  saveActivity,
-  type Task,
-  type WorkflowType,
-} from "./activities-repository";
-
-export {
-  getClientsSnapshot,
-  fetchClients,
-  saveClients,
-  type ManualClient,
-} from "./clients-repository";
-
-export {
-  getContractorsSnapshot,
-  fetchContractors,
-  saveContractors,
-  getColaboradoresSnapshot,
-  fetchColaboradores,
-  saveColaboradores,
-  getTiendasSnapshot,
-  fetchTiendas,
-  saveTiendas,
-  type Contractor,
-  type Colaborador,
-  type Tienda,
-} from "./providers-repository";
-
-export {
-  fetchResourceLinks,
-  saveResourceLinks,
-  deleteResourceLink,
-  type ResourceLink,
-} from "./resources-repository";
+export * as staffRepository from "./staff-repository";
+export * as areasRepository from "./areas-repository";
+export * as contactsRepository from "./contacts-repository";
+export * as workflowsRepository from "./workflows-repository";
+export * as projectsRepository from "./projects-repository";
+export * as tasksRepository from "./tasks-repository";
+export * as resourcesRepository from "./resources-repository";
+export * as historyRepository from "./history-repository";
+export * as authRepository from "./auth-repository";

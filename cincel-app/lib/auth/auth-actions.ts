@@ -2,11 +2,9 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { and, eq, isNull } from "drizzle-orm";
 
-import { db } from "@/lib/db/client";
-import { authCredentials, teamMembers } from "@/lib/db/schema";
-import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import * as authRepository from "@/lib/repositories/auth-repository";
+import { verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession, getSession } from "@/lib/auth/session";
 
 export type LoginActionResult =
@@ -22,52 +20,18 @@ export type LoginActionResult =
 
 const MIN_PASSWORD_LENGTH = 8;
 
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
 export async function loginAction(
   email: string,
   password: string
 ): Promise<LoginActionResult> {
-  const [row] = await db
-    .select({
-      memberId: teamMembers.id,
-      active: teamMembers.active,
-      credHash: authCredentials.passwordHash,
-      credSalt: authCredentials.salt,
-      authEnabled: authCredentials.authEnabled,
-      mustChangePassword: authCredentials.mustChangePassword,
-    })
-    .from(teamMembers)
-    .leftJoin(authCredentials, eq(authCredentials.teamMemberId, teamMembers.id))
-    .where(
-      and(
-        eq(teamMembers.institutionalEmail, normalizeEmail(email)),
-        isNull(teamMembers.deletedAt)
-      )
-    )
-    .limit(1);
-
-  if (!row) return { ok: false, reason: "invalid_credentials" };
-  if (!row.active) return { ok: false, reason: "inactive_member" };
-  if (!row.credHash || !row.credSalt) {
-    return { ok: false, reason: "password_not_set" };
-  }
-  if (!row.authEnabled) return { ok: false, reason: "auth_disabled" };
-
-  const valid = await verifyPassword(password, row.credHash, row.credSalt);
-  if (!valid) return { ok: false, reason: "invalid_credentials" };
+  const result = await authRepository.authenticate(email, password);
+  if (!result.ok) return { ok: false, reason: result.reason };
 
   const userAgent = (await headers()).get("user-agent");
-  await createSession(row.memberId, userAgent);
-  await db
-    .update(authCredentials)
-    .set({ lastLoginAt: new Date() })
-    .where(eq(authCredentials.teamMemberId, row.memberId));
+  await createSession(result.staffId, userAgent);
 
   revalidatePath("/", "layout");
-  return { ok: true, mustChangePassword: row.mustChangePassword ?? false };
+  return { ok: true, mustChangePassword: result.mustChangePassword };
 }
 
 export async function logoutAction(): Promise<void> {
@@ -87,9 +51,9 @@ export type ChangePasswordResult =
     };
 
 /**
- * First-access flow: the member is logged in with a temporary password and
- * `must_change_password = true`. No current-password check (they just used it
- * to log in).
+ * First-access flow: the staff member is logged in with a temporary password
+ * and `must_change_password = true`. No current-password check (they just
+ * used it to log in).
  */
 export async function completeFirstAccessAction(
   newPassword: string,
@@ -106,27 +70,7 @@ export async function completeFirstAccessAction(
     return { ok: false, reason: "password_confirmation_mismatch" };
   }
 
-  const { hash, salt } = await hashPassword(next);
-  await db
-    .insert(authCredentials)
-    .values({
-      teamMemberId: session.user.id,
-      passwordHash: hash,
-      salt,
-      authEnabled: true,
-      mustChangePassword: false,
-      passwordUpdatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: authCredentials.teamMemberId,
-      set: {
-        passwordHash: hash,
-        salt,
-        mustChangePassword: false,
-        passwordUpdatedAt: new Date(),
-      },
-    });
-
+  await authRepository.setOwnPassword(session.user.id, next);
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -147,43 +91,16 @@ export async function changePasswordAction(
     return { ok: false, reason: "password_confirmation_mismatch" };
   }
 
-  const [cred] = await db
-    .select({
-      hash: authCredentials.passwordHash,
-      salt: authCredentials.salt,
-    })
-    .from(authCredentials)
-    .where(eq(authCredentials.teamMemberId, session.user.id))
-    .limit(1);
+  const cred = await authRepository.getCredential(session.user.id);
 
-  // First-access members may not have set a password yet; when a hash exists it
-  // must match.
-  if (cred?.hash && cred.salt) {
-    const ok = await verifyPassword(currentPassword, cred.hash, cred.salt);
+  // First-access members may not have set a password yet; when a hash exists
+  // it must match.
+  if (cred?.passwordHash && cred.salt) {
+    const ok = await verifyPassword(currentPassword, cred.passwordHash, cred.salt);
     if (!ok) return { ok: false, reason: "invalid_current_password" };
   }
 
-  const { hash, salt } = await hashPassword(next);
-  await db
-    .insert(authCredentials)
-    .values({
-      teamMemberId: session.user.id,
-      passwordHash: hash,
-      salt,
-      authEnabled: true,
-      mustChangePassword: false,
-      passwordUpdatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: authCredentials.teamMemberId,
-      set: {
-        passwordHash: hash,
-        salt,
-        mustChangePassword: false,
-        passwordUpdatedAt: new Date(),
-      },
-    });
-
+  await authRepository.setOwnPassword(session.user.id, next);
   revalidatePath("/", "layout");
   return { ok: true };
 }

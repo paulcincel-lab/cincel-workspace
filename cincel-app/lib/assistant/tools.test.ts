@@ -39,7 +39,7 @@ function parse<T>(schema: unknown, data: unknown) {
 function userWithAccess(access: SystemAccessRole): AuthenticatedUser {
   return {
     member: {
-      id: 1,
+      id: "1",
       name: "Test",
       role: access,
       area: "",
@@ -178,7 +178,7 @@ describe("create_client / onboard_client schema", () => {
       name: "Acme",
       projectName: "Casa Roma",
     });
-    expect(r.success && r.data.workflow).toBe("Presale");
+    expect(r.success && r.data.workflow).toBe("presale");
     expect(parse(onboard_client.inputSchema, { name: "Acme" }).success).toBe(false);
   });
 

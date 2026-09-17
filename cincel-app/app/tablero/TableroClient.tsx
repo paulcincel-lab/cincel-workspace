@@ -1,0 +1,312 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { PageHeader } from "@/components/v2/layout/PageHeader";
+import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
+import { Badge } from "@/components/ui/shadcn/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
+import TaskDrawer from "@/components/tareas/TaskDrawer";
+import { DEPARTMENTOS } from "@/lib/actividades/departamento";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { formatDateDMY } from "@/lib/utils/date";
+import {
+  fetchBoardAction,
+  fetchTaskAction,
+  setTaskStatusAction,
+  addTaskCommentAction,
+  addChecklistItemAction,
+  updateChecklistItemAction,
+  removeChecklistItemAction,
+} from "@/lib/actions/tasks-actions";
+import type {
+  TaskChecklistItem,
+  TaskDetail,
+  TaskListItem,
+  TaskPriority,
+  TaskStatus,
+  WorkflowDetail,
+} from "@/lib/types/core";
+
+const STATUS_LABEL: Record<TaskStatus, string> = {
+  pendiente: "Pendiente",
+  en_proceso: "En proceso",
+  completado: "Completado",
+  bloqueado: "Bloqueado",
+};
+
+const COLUMN_ORDER: TaskStatus[] = ["pendiente", "en_proceso", "completado", "bloqueado"];
+
+const PRIORITY_LABEL: Record<TaskPriority, string> = {
+  alta: "Alta",
+  media: "Media",
+  baja: "Baja",
+};
+
+const PRIORITY_VARIANT: Record<TaskPriority, "destructive" | "secondary" | "outline"> = {
+  alta: "destructive",
+  media: "secondary",
+  baja: "outline",
+};
+
+interface TableroClientProps {
+  initialBoard: Record<TaskStatus, TaskListItem[]>;
+  workflows: WorkflowDetail[];
+}
+
+export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
+  const [board, setBoard] = useState<Record<TaskStatus, TaskListItem[]>>(initialBoard);
+  const [departmentFilter, setDepartmentFilter] = useState<string>("");
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
+
+  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const capabilities = useMemo(() => resolveActivitiesCapabilities(authenticatedUser), [authenticatedUser]);
+  const viewerId = authenticatedUser?.member.id || "";
+
+  const workflowIdBySlug = useMemo(() => {
+    const map = new Map<string, string>();
+    DEPARTMENTOS.forEach((d) => {
+      const workflow = workflows.find((w) => w.key === d.slug);
+      if (workflow) map.set(d.slug, workflow.id);
+    });
+    return map;
+  }, [workflows]);
+
+  const refresh = useCallback(async () => {
+    try {
+      const workflowId = departmentFilter ? workflowIdBySlug.get(departmentFilter) : undefined;
+      const rows = await fetchBoardAction(workflowId ? { workflowId } : {});
+      setBoard(rows);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [departmentFilter, workflowIdBySlug]);
+
+  useEffect(() => {
+    // Re-fetch the board whenever the department filter changes — refresh()
+    // is also reused after a drag-and-drop status change, so it can't be
+    // inlined here without duplicating the fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!selectedTaskId) return;
+    let cancelled = false;
+    fetchTaskAction(selectedTaskId)
+      .then((detail) => {
+        if (!cancelled) setSelectedTaskDetail(detail);
+      })
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTaskId]);
+
+  const activeTaskDetail = selectedTaskId && selectedTaskDetail?.id === selectedTaskId ? selectedTaskDetail : null;
+
+  function applyDetailUpdate(updated: TaskDetail) {
+    setBoard((cur) => {
+      const next: Record<TaskStatus, TaskListItem[]> = { ...cur };
+      COLUMN_ORDER.forEach((status) => {
+        next[status] = next[status].map((t) => (t.id === updated.id ? updated : t));
+      });
+      return next;
+    });
+    setSelectedTaskDetail((cur) => (cur && cur.id === updated.id ? updated : cur));
+  }
+
+  function canDragTask(task: TaskListItem) {
+    return canChangeActivityStatus({
+      capabilities,
+      task: { manager: task.manager, support: task.support },
+      viewerId,
+    });
+  }
+
+  function handleDragStart(task: TaskListItem) {
+    if (!canDragTask(task)) return;
+    setDraggingTaskId(task.id);
+  }
+
+  function handleDragEnd() {
+    setDraggingTaskId(null);
+    setDragOverStatus(null);
+  }
+
+  // The drag-and-drop flow must never move a card locally before the server
+  // confirms the status change — only after setTaskStatusAction resolves do
+  // we update `board`, so the UI never shows a status the server hasn't
+  // accepted (see docs/phases/rebuild-phase-6-tasks.md risk note).
+  async function handleDrop(status: TaskStatus) {
+    const taskId = draggingTaskId;
+    setDraggingTaskId(null);
+    setDragOverStatus(null);
+    if (!taskId) return;
+
+    const task = COLUMN_ORDER.flatMap((s) => board[s]).find((t) => t.id === taskId);
+    if (!task || task.status === status || !canDragTask(task)) return;
+
+    try {
+      const updated = await setTaskStatusAction(taskId, status);
+      applyDetailUpdate(updated);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : "No se pudo cambiar el estatus de la tarea.";
+      window.alert(message.startsWith("FORBIDDEN:") ? "No tienes permiso para realizar esta acción." : message);
+      await refresh();
+    }
+  }
+
+  async function addComment(comment: string) {
+    if (!selectedTaskId) return;
+    try {
+      await addTaskCommentAction(selectedTaskId, comment);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function addChecklistItem(title: string) {
+    if (!selectedTaskId) return;
+    try {
+      await addChecklistItemAction(selectedTaskId, title);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function toggleChecklistItem(item: TaskChecklistItem) {
+    if (!selectedTaskId) return;
+    try {
+      await updateChecklistItemAction(item.id, { completed: !item.completed });
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function removeChecklistItem(item: TaskChecklistItem) {
+    if (!selectedTaskId) return;
+    try {
+      await removeChecklistItemAction(item.id);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title="Tablero"
+        description="Arrastra una tarjeta entre columnas para cambiar su estatus."
+        actions={
+          <Tabs value={departmentFilter || "__all__"} onValueChange={(v) => setDepartmentFilter(v === "__all__" ? "" : (v as string))}>
+            <TabsList>
+              <TabsTrigger value="__all__">Todos</TabsTrigger>
+              {DEPARTMENTOS.map((d) => (
+                <TabsTrigger key={d.slug} value={d.slug}>
+                  {d.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {COLUMN_ORDER.map((status) => {
+          const tasks = board[status] ?? [];
+          const isDragOver = dragOverStatus === status;
+          return (
+            <div
+              key={status}
+              onDragOver={(e) => {
+                if (!draggingTaskId) return;
+                e.preventDefault();
+                setDragOverStatus(status);
+              }}
+              onDragLeave={() => setDragOverStatus((cur) => (cur === status ? null : cur))}
+              onDrop={(e) => {
+                e.preventDefault();
+                void handleDrop(status);
+              }}
+              className={`flex min-h-[200px] flex-col gap-2 rounded-lg border p-3 transition-colors ${
+                isDragOver ? "border-primary bg-muted" : "border-border bg-card"
+              }`}
+            >
+              <div className="mb-1 flex items-center justify-between">
+                <h2 className="text-sm font-semibold">{STATUS_LABEL[status]}</h2>
+                <span className="text-xs text-muted-foreground">{tasks.length}</span>
+              </div>
+
+              {tasks.length === 0 ? (
+                <p className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                  Sin tareas
+                </p>
+              ) : (
+                tasks.map((task) => {
+                  const draggable = canDragTask(task);
+                  return (
+                    <div
+                      key={task.id}
+                      draggable={draggable}
+                      onDragStart={() => handleDragStart(task)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => setSelectedTaskId(task.id)}
+                      className={`cursor-pointer rounded-md border border-border bg-background p-3 text-sm shadow-sm transition-opacity hover:border-primary ${
+                        draggingTaskId === task.id ? "opacity-50" : ""
+                      } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+                    >
+                      <p className="font-medium">{task.title}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{task.project.name}</p>
+
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        {task.manager ? (
+                          <PersonAvatar name={task.manager.name} size="sm" />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Sin responsable</span>
+                        )}
+                        <Badge variant={PRIORITY_VARIANT[task.priority]}>{PRIORITY_LABEL[task.priority]}</Badge>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                        {task.commitmentDate ? <span>Compromiso: {formatDateDMY(task.commitmentDate)}</span> : null}
+                        {task.deliveryDate ? <span>Entrega: {formatDateDMY(task.deliveryDate)}</span> : null}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <TaskDrawer
+        open={selectedTaskId !== null}
+        task={activeTaskDetail}
+        onClose={() => setSelectedTaskId(null)}
+        onAddComment={(comment) => void addComment(comment)}
+        onAddChecklistItem={(title) => void addChecklistItem(title)}
+        onToggleChecklistItem={(item) => void toggleChecklistItem(item)}
+        onRemoveChecklistItem={(item) => void removeChecklistItem(item)}
+      />
+    </div>
+  );
+}

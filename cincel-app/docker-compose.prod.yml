@@ -1,0 +1,85 @@
+# Production example — pulls pre-built images from a registry instead of
+# building from source (that's what docker-compose.yml is for: local/dev,
+# builds from this checkout). See docs/deployment.md for the full picture.
+#
+# The `migrate` service intentionally points at a *different* image
+# (`cincel-app-migrate`) than `app`. Both are published by
+# .github/workflows/cincel-app-build.yml from the same Dockerfile, but from
+# different build stages: `cincel-app-migrate` is the `build` stage (still has
+# drizzle-kit + tsx + the migration SQL), `cincel-app` is the final distroless-
+# style runtime stage (does not). This mirrors docker-compose.yml's local
+# pattern of building the `migrate` service from the Dockerfile's `build`
+# target rather than the runtime target — do not point `migrate` at the
+# `cincel-app` runtime image, it will fail (`drizzle-kit: not found`).
+#
+# Usage:
+#   REGISTRY_URL=<your-registry-host> IMAGE_TAG=<sha-or-latest> \
+#     docker compose -f docker-compose.prod.yml up -d
+#
+# Required env vars (fail fast via ${VAR:?message} if unset):
+#   REGISTRY_URL, IMAGE_TAG, POSTGRES_PASSWORD, SEED_ADMIN_PASSWORD (seed only,
+#   not required to `up`), DATABASE-adjacent POSTGRES_DB/POSTGRES_USER default
+#   to `cincel` like the local compose file.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cincel}
+      POSTGRES_USER: ${POSTGRES_USER:-cincel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production — do not deploy with the local-dev default}
+    # No host port mapping in production — only `app`/`migrate` on the compose
+    # network need to reach Postgres. Expose 5432 to the host only if you have
+    # a specific operational reason to (e.g. ad-hoc psql from the deploy box).
+    volumes:
+      - cincel_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cincel} -d ${POSTGRES_DB:-cincel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot: applies Drizzle migrations, then exits. `app` waits for this to
+  # finish successfully, so `docker compose up` can never start the server
+  # against an un-migrated database. See the header comment above for why this
+  # is a separate image from `app`.
+  migrate:
+    image: ${REGISTRY_URL:?REGISTRY_URL must be set, e.g. your registry host}/cincel-app-migrate:${IMAGE_TAG:?IMAGE_TAG must be set, e.g. a commit SHA or latest}
+    command: ["npm", "run", "db:migrate"]
+    env_file:
+      # Optional — most secrets (GOOGLE_SA_*, LLM_*, GITHUB_PAT) can also come
+      # from the platform's own secret injection instead of a file on disk.
+      - path: .env.production
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-cincel}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production — do not deploy with the local-dev default}@db:5432/${POSTGRES_DB:-cincel}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    image: ${REGISTRY_URL:?REGISTRY_URL must be set, e.g. your registry host}/cincel-app:${IMAGE_TAG:?IMAGE_TAG must be set, e.g. a commit SHA or latest}
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    env_file:
+      - path: .env.production
+        required: false
+    environment:
+      # Inside the compose network the database is reachable as `db`,
+      # overriding whatever DATABASE_URL is in .env.production.
+      DATABASE_URL: postgres://${POSTGRES_USER:-cincel}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production — do not deploy with the local-dev default}@db:5432/${POSTGRES_DB:-cincel}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  cincel_db_data:

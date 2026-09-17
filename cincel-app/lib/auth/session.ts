@@ -1,11 +1,9 @@
 import "server-only";
 
-import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { and, eq, gt, isNull } from "drizzle-orm";
 
-import { db } from "@/lib/db/client";
-import { authCredentials, sessions, teamMembers } from "@/lib/db/schema";
+import * as authRepository from "@/lib/repositories/auth-repository";
+import type { SessionUser as RepoSessionUser } from "@/lib/repositories/auth-repository";
 import {
   DEFAULT_SYSTEM_ACCESS_ROLE,
   hasDefaultSystemAdministratorAccess,
@@ -20,18 +18,8 @@ import {
 import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
 
 export { SESSION_COOKIE };
-const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
 
-export type SessionUser = {
-  id: string;
-  legacyId: number | null;
-  name: string;
-  email: string | null;
-  role: string | null;
-  area: string | null;
-  active: boolean;
-  mustChangePassword: boolean;
-};
+export type SessionUser = RepoSessionUser;
 
 export type Session = {
   id: string;
@@ -86,27 +74,15 @@ export async function getSessionAccess(): Promise<SessionAccess> {
   return { status: "active", user };
 }
 
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
 /**
- * Create a session row for a team member and set the session cookie.
+ * Create a session row for a staff member and set the session cookie.
  * Returns the opaque token (already written to the cookie).
  */
 export async function createSession(
-  teamMemberId: string,
+  staffId: string,
   userAgent?: string | null
 ): Promise<string> {
-  const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-
-  await db.insert(sessions).values({
-    tokenHash: hashToken(token),
-    teamMemberId,
-    userAgent: userAgent ?? null,
-    expiresAt,
-  });
+  const { token, expiresAt } = await authRepository.createSessionRecord(staffId, userAgent);
 
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, {
@@ -122,55 +98,18 @@ export async function createSession(
 
 /**
  * Resolve the current request's session from the cookie. Returns `null` when
- * there is no cookie, the session is unknown, expired, or the member is gone.
+ * there is no cookie, the session is unknown, expired, or the staff member
+ * is gone.
  */
 export async function getSession(): Promise<Session | null> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
-  const [row] = await db
-    .select({
-      sessionId: sessions.id,
-      expiresAt: sessions.expiresAt,
-      memberId: teamMembers.id,
-      legacyId: teamMembers.legacyId,
-      name: teamMembers.name,
-      email: teamMembers.institutionalEmail,
-      role: teamMembers.role,
-      area: teamMembers.area,
-      active: teamMembers.active,
-      mustChangePassword: authCredentials.mustChangePassword,
-    })
-    .from(sessions)
-    .innerJoin(teamMembers, eq(teamMembers.id, sessions.teamMemberId))
-    .leftJoin(authCredentials, eq(authCredentials.teamMemberId, teamMembers.id))
-    .where(
-      and(
-        eq(sessions.tokenHash, hashToken(token)),
-        gt(sessions.expiresAt, new Date()),
-        isNull(sessions.deletedAt),
-        isNull(teamMembers.deletedAt)
-      )
-    )
-    .limit(1);
+  const record = await authRepository.findSessionByToken(token);
+  if (!record) return null;
 
-  if (!row) return null;
-
-  return {
-    id: row.sessionId,
-    expiresAt: row.expiresAt,
-    user: {
-      id: row.memberId,
-      legacyId: row.legacyId,
-      name: row.name,
-      email: row.email,
-      role: row.role,
-      area: row.area,
-      active: row.active,
-      mustChangePassword: row.mustChangePassword ?? false,
-    },
-  };
+  return { id: record.id, expiresAt: record.expiresAt, user: record.user };
 }
 
 /**
@@ -201,8 +140,7 @@ export async function requireSessionAccess(): Promise<
 /**
  * Require an active session and adapt it to the `AuthenticatedUser` shape the
  * capability resolvers in `lib/auth/permissions.ts` expect. Server Actions call
- * this and hand the result to `resolve<Module>Capabilities()` — the RLS
- * replacement now that reads/writes go through Drizzle.
+ * this and hand the result to `resolve<Module>Capabilities()`.
  */
 export async function requireCapabilityUser(): Promise<
   import("@/lib/auth/auth-service").AuthenticatedUser
@@ -210,7 +148,7 @@ export async function requireCapabilityUser(): Promise<
   const user = await requireSessionAccess();
   return {
     member: {
-      id: user.legacyId ?? 0,
+      id: user.id,
       name: user.name,
       role: user.role ?? "",
       area: user.area ?? "",
@@ -230,7 +168,7 @@ export async function destroySession(): Promise<void> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (token) {
-    await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+    await authRepository.deleteSessionByToken(token);
   }
   jar.delete(SESSION_COOKIE);
 }

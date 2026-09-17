@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
@@ -18,15 +18,18 @@ import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { Button } from "@/components/ui/shadcn/button";
 import ExportMenu from "@/components/ui/ExportMenu";
-import { useProjectsData } from "@/lib/proyectos/use-projects-data";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
+import { fetchAreasAction } from "@/lib/actions/areas-actions";
+import { fetchTasksAction } from "@/lib/actions/tasks-actions";
+import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { useMemberEditor } from "@/lib/equipo/use-member-editor";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
-import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
-import type { TeamAvailability, TeamMember } from "@/lib/data/team";
+import { canExportStaff, exportStaffAction } from "@/lib/equipo/staff-export";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
+import type { Area, Staff } from "@/lib/types/core";
 
-const AVAILABILITY_OPTIONS: TeamAvailability[] = [
+const AVAILABILITY_OPTIONS = [
   "Disponible",
   "Medio Tiempo",
   "Mixto",
@@ -45,7 +48,7 @@ function loadLabel(percent: number, isActive: boolean): string {
 }
 
 interface EquipoClientProps {
-  initialTeam: TeamMember[];
+  initialTeam: Staff[];
 }
 
 const AVAILABILITY_VARIANT: Record<string, "success" | "secondary" | "outline"> = {
@@ -54,13 +57,65 @@ const AVAILABILITY_VARIANT: Record<string, "success" | "secondary" | "outline"> 
 };
 
 export function EquipoClient({ initialTeam }: EquipoClientProps) {
-  const [members, setMembers] = useState<TeamMember[]>(initialTeam);
-  const { allTasks, projectsData, secondaryCoordinatorByProject } = useProjectsData();
+  const [staff, setStaff] = useState<Staff[]>(initialTeam);
+  const [areaOptions, setAreaOptions] = useState<Area[]>([]);
+  const [areaNamesByStaffId, setAreaNamesByStaffId] = useState<Record<string, string[]>>({});
+  const [taskLoad, setTaskLoad] = useState<
+    Record<string, { assigned: number; support: number; projects: Set<string> }>
+  >({});
+  const [coordinatorProjectsByStaffId, setCoordinatorProjectsByStaffId] = useState<Record<string, string[]>>({});
   const [view, setView] = useState<"activos" | "desactivados">("activos");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
-  const [profileMemberId, setProfileMemberId] = useState<number | null>(null);
-  const [coordinatorMemberId, setCoordinatorMemberId] = useState<number | null>(null);
+  const [profileMemberId, setProfileMemberId] = useState<string | null>(null);
+  const [coordinatorMemberId, setCoordinatorMemberId] = useState<string | null>(null);
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+
+  async function refresh() {
+    const [staffRows, areaRows, taskRows, projectRows] = await Promise.all([
+      fetchStaffAction({ includeInactive: true }),
+      fetchAreasAction(),
+      fetchTasksAction({ archived: false }),
+      fetchProjectsAction(),
+    ]);
+    setStaff(staffRows);
+    setAreaOptions(areaRows);
+
+    const areaMap: Record<string, string[]> = {};
+    for (const area of areaRows) {
+      for (const member of area.members) (areaMap[member.staffId] ??= []).push(area.name);
+    }
+    setAreaNamesByStaffId(areaMap);
+
+    const load: Record<string, { assigned: number; support: number; projects: Set<string> }> = {};
+    const ensure = (id: string) => (load[id] ??= { assigned: 0, support: 0, projects: new Set() });
+    for (const task of taskRows) {
+      if (task.manager) {
+        ensure(task.manager.id).assigned += 1;
+        ensure(task.manager.id).projects.add(task.project.name);
+      }
+      for (const s of task.support) {
+        ensure(s.id).support += 1;
+        ensure(s.id).projects.add(task.project.name);
+      }
+    }
+    setTaskLoad(load);
+
+    const coordinatorMap: Record<string, string[]> = {};
+    for (const project of projectRows) {
+      if (project.status !== "activo" || !project.coordinator) continue;
+      (coordinatorMap[project.coordinator.id] ??= []).push(project.name);
+    }
+    setCoordinatorProjectsByStaffId(coordinatorMap);
+  }
+
+  useEffect(() => {
+    // Sync the roster/workload with the server on mount — refresh() is also
+    // reused by the editor drawer's save handlers, so it can't be inlined
+    // here without duplicating the fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh();
+  }, []);
+
   const {
     showEditor,
     editingId,
@@ -74,7 +129,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     openEditEditor,
     closeEditor,
     saveMember,
-  } = useMemberEditor({ members, setMembers, authenticatedUser });
+  } = useMemberEditor({ authenticatedUser, onSaved: refresh });
 
   function toggle(id: string | number) {
     setSelected((cur) => {
@@ -92,45 +147,29 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     });
   }
 
-  const activeTasks = useMemo(() => allTasks.filter((t) => !t.archived), [allTasks]);
-
   const withWorkload = useMemo<TeamMemberWithWorkload[]>(
     () =>
-      members.map((member) => {
-        const assigned = activeTasks.filter((t) => t.manager === member.name).length;
-        const support = activeTasks.filter((t) => t.support.includes(member.name)).length;
-        const total = assigned + support;
+      staff.map((member) => {
+        const load = taskLoad[member.id] ?? { assigned: 0, support: 0, projects: new Set<string>() };
+        const total = load.assigned + load.support;
         const occupancy = Math.round((total / Math.max(member.capacity, 1)) * 100);
-
-        const projects = Array.from(
-          new Set(
-            activeTasks
-              .filter((t) => t.manager === member.name || t.support.includes(member.name))
-              .map((t) => t.project)
-          )
-        );
-        const coordinatorProjects = projectsData
-          .filter((p) => p.active && p.coordinator === member.name)
-          .map((p) => p.name);
-        const constructionProjects = projectsData
-          .filter((p) => p.active && secondaryCoordinatorByProject[p.id] === member.name)
-          .map((p) => p.name);
+        const coordinatorProjects = coordinatorProjectsByStaffId[member.id] ?? [];
 
         return {
           ...member,
-          assigned,
-          support,
+          institutionalEmail: member.email ?? "",
+          areas: areaNamesByStaffId[member.id] ?? [],
+          assigned: load.assigned,
+          support: load.support,
           total,
-          projects,
+          projects: Array.from(load.projects),
           coordinatorProjects,
           coordinatorProjectsCount: coordinatorProjects.length,
-          constructionProjects,
-          constructionProjectsCount: constructionProjects.length,
           occupancy,
           loadLabel: loadLabel(occupancy, member.active),
         };
       }),
-    [members, activeTasks, projectsData, secondaryCoordinatorByProject]
+    [staff, taskLoad, coordinatorProjectsByStaffId, areaNamesByStaffId]
   );
 
   const profileMember = withWorkload.find((m) => m.id === profileMemberId) ?? null;
@@ -150,9 +189,9 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     };
   }, [withWorkload]);
 
-  const columns = useMemo<ColumnDef<(typeof withWorkload)[number], unknown>[]>(
+  const columns = useMemo<ColumnDef<TeamMemberWithWorkload, unknown>[]>(
     () => [
-      createSelectionColumn<(typeof withWorkload)[number]>({
+      createSelectionColumn<TeamMemberWithWorkload>({
         getId: (m) => m.id,
         selectedIds: selected,
         onToggle: toggle,
@@ -166,7 +205,16 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         ),
       },
       { accessorKey: "role", header: "Puesto" },
-      { accessorKey: "area", header: "Área" },
+      {
+        id: "areas",
+        header: "Área",
+        cell: ({ row }) =>
+          row.original.areas.length > 0 ? (
+            <span className="text-sm text-foreground">{row.original.areas.join(", ")}</span>
+          ) : (
+            <span className="text-sm text-muted-foreground">Sin área</span>
+          ),
+      },
       {
         id: "load",
         header: "Carga",
@@ -180,14 +228,14 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         accessorKey: "availability",
         header: "Disponibilidad",
         cell: ({ row }) => (
-          <Badge variant={AVAILABILITY_VARIANT[row.original.availability] ?? "outline"}>
-            {row.original.availability}
+          <Badge variant={AVAILABILITY_VARIANT[row.original.availability ?? ""] ?? "outline"}>
+            {row.original.availability || "Sin definir"}
           </Badge>
         ),
       },
-      createRowActionsColumn<(typeof withWorkload)[number]>(() => [
+      createRowActionsColumn<TeamMemberWithWorkload>(() => [
         { label: "Ver ficha", onSelect: (m) => setProfileMemberId(m.id) },
-        { label: "Editar", onSelect: (m) => openEditEditor(m) },
+        { label: "Editar", onSelect: (m) => void openEditEditor(m) },
         { label: "Ver proyectos como encargado", onSelect: (m) => setCoordinatorMemberId(m.id) },
         {
           label: "Copiar correo institucional",
@@ -211,28 +259,11 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
 
   const coordinatorMember = withWorkload.find((m) => m.id === coordinatorMemberId) ?? null;
 
-  const exportColumns = useMemo<ExportColumn<(typeof withWorkload)[number]>[]>(
-    () => [
-      { key: "name", header: "Colaborador", getValue: (m) => m.name },
-      { key: "role", header: "Puesto", getValue: (m) => m.role },
-      { key: "area", header: "Área", getValue: (m) => m.area },
-      { key: "occupancy", header: "Ocupación", getValue: (m) => `${m.occupancy}%` },
-      { key: "availability", header: "Disponibilidad", getValue: (m) => m.availability },
-      { key: "status", header: "Estado", getValue: (m) => (m.active ? "Activo" : "Desactivado") },
-    ],
-    []
-  );
-
   async function exportTeam(format: "xlsx" | "pdf") {
     const { settings } = loadGeneralSettings();
-    await exportTableData({
-      moduleName: "Equipo",
-      fileName: `equipo-${view}-${Date.now()}`,
-      format,
+    await exportStaffAction(visible, format, {
+      user: authenticatedUser,
       companyName: settings.company.tradeName || settings.company.legalName,
-      columns: exportColumns,
-      rows: visible,
-      landscape: true,
     });
   }
 
@@ -255,8 +286,10 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
                 <TabsTrigger value="desactivados">Desactivados</TabsTrigger>
               </TabsList>
             </Tabs>
-            <ExportMenu onExport={exportTeam} />
-            <Button onClick={openAddEditor}>+ Agregar colaborador</Button>
+            {canExportStaff(authenticatedUser) ? <ExportMenu onExport={exportTeam} /> : null}
+            {teamCapabilities.canCreateCollaborator ? (
+              <Button onClick={openAddEditor}>+ Agregar colaborador</Button>
+            ) : null}
           </>
         }
       />
@@ -278,7 +311,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
       <DataTable
         columns={columns}
         data={visible}
-        getRowId={(row) => String(row.id)}
+        getRowId={(row) => row.id}
         onRowClick={(row) => setProfileMemberId(row.id)}
         wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage={view === "activos" ? "No hay colaboradores activos." : "No hay colaboradores desactivados."}
@@ -302,11 +335,12 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         draft={draft}
         onChangeDraft={setDraft}
         formError={formError}
-        onSave={saveMember}
+        onSave={() => void saveMember()}
         accessPreviewState={accessPreviewState}
         isEditingSelfProtectedAdmin={isEditingSelfProtectedAdmin}
         teamCapabilities={teamCapabilities}
         availabilityOptions={AVAILABILITY_OPTIONS}
+        areaOptions={areaOptions}
       />
     </div>
   );

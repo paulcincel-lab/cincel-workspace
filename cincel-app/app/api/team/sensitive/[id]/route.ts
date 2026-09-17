@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { teamMembers } from "@/lib/db/schema";
+import { staff, staffProfiles } from "@/lib/db/schema";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { isAdministratorRole } from "@/lib/data/roles";
 
@@ -11,12 +11,11 @@ import { isAdministratorRole } from "@/lib/data/roles";
  *
  * Returns PII fields (CURP, RFC, address, home phone, personal email,
  * emergency contact, birth date, marital status, nationality) for a single
- * team member, gated behind the DB-backed session (Phase 3).
+ * staff member, gated behind the DB-backed session.
  *
  * This endpoint is the ONLY server-sanctioned way for the client to access
- * sensitive team member data. The static team mock (lib/data/team.ts) ships
- * with empty strings for these fields specifically to avoid PII leaking into
- * the public JS bundle.
+ * sensitive staff data. The public team data ships without these fields
+ * specifically to avoid PII leaking into the public JS bundle.
  *
  * Authorization: caller must be a global admin (Administrador / Dirección per
  * lib/auth/permissions.ts). Project-scoped roles cannot access other members'
@@ -39,26 +38,25 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const legacyId = Number.parseInt(id, 10);
-  if (Number.isNaN(legacyId)) {
-    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
-  }
-
   const [row] = await db
     .select({
-      legacyId: teamMembers.legacyId,
-      curp: teamMembers.curp,
-      rfc: teamMembers.rfc,
-      address: teamMembers.address,
-      homePhone: teamMembers.homePhone,
-      personalEmail: teamMembers.personalEmail,
-      emergencyContact: teamMembers.emergencyContact,
-      birthDate: teamMembers.birthDate,
-      maritalStatus: teamMembers.maritalStatus,
-      nationality: teamMembers.nationality,
+      staffId: staff.id,
+      curp: staffProfiles.curp,
+      rfc: staffProfiles.rfc,
+      address: staffProfiles.address,
+      homePhone: staffProfiles.homePhone,
+      personalEmail: staffProfiles.personalEmail,
+      emergencyContactName: staffProfiles.emergencyContactName,
+      emergencyContactRelation: staffProfiles.emergencyContactRelation,
+      emergencyContactPhone: staffProfiles.emergencyContactPhone,
+      emergencyContactAddress: staffProfiles.emergencyContactAddress,
+      birthDate: staffProfiles.birthDate,
+      maritalStatus: staffProfiles.maritalStatus,
+      nationality: staffProfiles.nationality,
     })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.legacyId, legacyId), isNull(teamMembers.deletedAt)))
+    .from(staff)
+    .leftJoin(staffProfiles, eq(staffProfiles.staffId, staff.id))
+    .where(and(eq(staff.id, id), isNull(staff.deletedAt)))
     .limit(1);
 
   if (!row) {
@@ -66,13 +64,20 @@ export async function GET(
   }
 
   return NextResponse.json({
-    legacy_id: row.legacyId,
+    id: row.staffId,
     curp: row.curp ?? "",
     rfc: row.rfc ?? "",
     address: row.address ?? "",
     home_phone: row.homePhone ?? "",
     personal_email: row.personalEmail ?? "",
-    emergency_contact: row.emergencyContact ?? null,
+    emergency_contact: row.emergencyContactName
+      ? {
+          name: row.emergencyContactName ?? "",
+          relation: row.emergencyContactRelation ?? "",
+          phone: row.emergencyContactPhone ?? "",
+          address: row.emergencyContactAddress ?? "",
+        }
+      : null,
     birth_date: row.birthDate ?? "",
     marital_status: row.maritalStatus ?? "",
     nationality: row.nationality ?? "",

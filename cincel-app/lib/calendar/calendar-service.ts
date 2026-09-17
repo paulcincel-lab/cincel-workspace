@@ -1,9 +1,6 @@
-import { disenoTasks } from "@/lib/data/diseno";
-import { operativasTasks } from "@/lib/data/operativas";
-import { presaleTasks } from "@/lib/data/presale";
-import { readStorage } from "@/lib/repositories/browser-state-repository";
+import { getDepartamento } from "@/lib/actividades/departamento";
 import type { CalendarEvent, CalendarEventType, CalendarFilterOptions, CalendarFilters, CalendarTypeSummaryRow } from "@/lib/types/calendar";
-import type { Task, WorkflowType } from "@/lib/types/task";
+import type { TaskListItem } from "@/lib/types/core";
 
 const DEFAULT_FILTERS: CalendarFilters = {
   project: "Todos",
@@ -30,24 +27,20 @@ export function toDate(value: string): Date | null {
   return parsed;
 }
 
-function workflowHref(workflow: WorkflowType): string {
-  if (workflow === "Presale") {
-    return "/actividades/presale";
+function workflowHref(workflowKey: string | null): string {
+  if (!workflowKey) {
+    return "/actividades";
   }
 
-  if (workflow === "Diseño") {
-    return "/actividades/diseno";
-  }
-
-  return "/actividades/construccion";
+  return `/actividades/${workflowKey}`;
 }
 
-export function formatStageLabel(workflow: WorkflowType): string {
-  if (workflow === "Diseño") {
-    return "Taller de Diseño";
+export function formatStageLabel(workflowKey: string | null, workflowName: string | null): string {
+  if (!workflowKey) {
+    return workflowName || "Sin area";
   }
 
-  return workflow;
+  return getDepartamento(workflowKey)?.label || workflowName || workflowKey;
 }
 
 function defaultTimeByType(type: CalendarEventType): string {
@@ -58,7 +51,7 @@ function defaultTimeByType(type: CalendarEventType): string {
   return "08:00";
 }
 
-function inferAdditionalType(task: Task): CalendarEventType | null {
+function inferAdditionalType(task: TaskListItem): CalendarEventType | null {
   const phase = (task.phase || "").toLowerCase();
 
   if (phase.includes("reuni")) {
@@ -72,40 +65,49 @@ function inferAdditionalType(task: Task): CalendarEventType | null {
   return null;
 }
 
-function eventTitle(task: Task, type: CalendarEventType): string {
+function eventTitle(task: TaskListItem, type: CalendarEventType): string {
   if (type === "Reunion") {
-    return `Reunion: ${task.description}`;
+    return `Reunion: ${task.title}`;
   }
 
   if (type === "Visita de obra") {
-    return `Visita de obra: ${task.description}`;
+    return `Visita de obra: ${task.title}`;
   }
 
-  return task.description;
+  return task.title;
 }
 
-export function buildCalendarEvents(tasks: Task[]): CalendarEvent[] {
+/**
+ * Maps real `core.tasks` rows (as returned by `fetchCalendarAction` /
+ * `tasksRepository.listCalendar`) into the calendar's own `CalendarEvent`
+ * shape. Every task can surface up to three dated events (commitment,
+ * review, delivery) plus an inferred meeting/site-visit event, mirroring
+ * the mapping the legacy mock-data version used.
+ */
+export function buildCalendarEvents(tasks: TaskListItem[]): CalendarEvent[] {
   const events: CalendarEvent[] = [];
 
   for (const task of tasks) {
-    const baseHref = `${workflowHref(task.workflow)}?project=${encodeURIComponent(task.project)}`;
+    const workflowKey = task.workflow?.key ?? null;
+    const baseHref = `${workflowHref(workflowKey)}?project=${encodeURIComponent(task.project.name)}`;
+    const stageLabel = formatStageLabel(workflowKey, task.workflow?.name ?? null);
 
-    const pushEvent = ({ date, type, suffix }: { date: string; type: CalendarEventType; suffix: string }) => {
+    const pushEvent = ({ date, type, suffix }: { date: string | null; type: CalendarEventType; suffix: string }) => {
       if (!date) {
         return;
       }
 
       events.push({
-        id: `${suffix}-${task.workflow}-${task.id}-${date}`,
+        id: `${suffix}-${workflowKey ?? "sin-area"}-${task.id}-${date}`,
         taskId: task.id,
         date,
         time: defaultTimeByType(type),
         title: eventTitle(task, type),
-        project: task.project,
-        responsible: task.manager || "Sin responsable",
-        stage: task.workflow,
-        stageLabel: formatStageLabel(task.workflow),
-        phase: task.phase,
+        project: task.project.name,
+        responsible: task.manager?.name || "Sin responsable",
+        stage: workflowKey ?? "sin-area",
+        stageLabel,
+        phase: task.phase || "",
         type,
         href: baseHref,
       });
@@ -113,7 +115,7 @@ export function buildCalendarEvents(tasks: Task[]): CalendarEvent[] {
 
     pushEvent({ date: task.commitmentDate, type: "Compromiso", suffix: "c" });
     pushEvent({ date: task.reviewDate, type: "Proxima revision", suffix: "r" });
-    pushEvent({ date: task.deliveryDate || "", type: "Fecha de entrega", suffix: "e" });
+    pushEvent({ date: task.deliveryDate, type: "Fecha de entrega", suffix: "e" });
 
     const inferred = inferAdditionalType(task);
     if (inferred && task.commitmentDate) {
@@ -228,35 +230,4 @@ export function addDays(date: Date, amount: number): Date {
 
 export function getWeekdayLabels(): string[] {
   return ["lun.", "mar.", "mie.", "jue.", "vie.", "sab.", "dom."];
-}
-
-function tasksStorageKey(workflow: WorkflowType): string {
-  return `cincel.actividades.${workflow}.tasks.v1`;
-}
-
-function readWorkflowTasks(workflow: WorkflowType, fallback: Task[]): Task[] {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-    const stored = readStorage(tasksStorageKey(workflow));
-
-  if (!stored) {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Task[];
-    return Array.isArray(parsed) ? parsed : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-export function loadCalendarTasksFromSource(): Task[] {
-  const presale = readWorkflowTasks("Presale", presaleTasks);
-  const diseno = readWorkflowTasks("Diseño", disenoTasks);
-  const operativas = readWorkflowTasks("Construcción", operativasTasks);
-
-  return [...presale, ...diseno, ...operativas].filter((task) => !task.archived);
 }

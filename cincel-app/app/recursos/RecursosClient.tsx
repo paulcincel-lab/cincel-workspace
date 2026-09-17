@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
@@ -17,9 +17,12 @@ import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
 import { getDrivePreviewUrl, inferLinkTypeFromUrl } from "@/lib/google/drive-url";
-import { deleteResourceLink, saveResourceLinks } from "@/lib/repositories/resources-repository";
-import { getTeamMembersSnapshot } from "@/lib/repositories/team-repository";
-import { teamMembersPublic, type TeamMemberPublic as TeamMember } from "@/lib/data/team-public";
+import {
+  createResourceLinkAction,
+  deleteResourceLinkAction,
+  fetchResourceLinksAction,
+} from "@/lib/actions/resources-actions";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import {
   canCreateResourceInSection,
@@ -27,7 +30,8 @@ import {
   canViewResourceSection,
   resolveResourcesCapabilities,
 } from "@/lib/auth/permissions";
-import type { DriveFileMeta, ResourceLink, ResourceSection } from "@/lib/types/resource";
+import type { DriveFileMeta, Staff } from "@/lib/types/core";
+import type { ResourceLink, ResourceSection } from "@/lib/types/resource";
 
 interface RecursosClientProps {
   initialLinks: ResourceLink[];
@@ -52,14 +56,6 @@ const LINK_TYPE_LABEL: Record<ResourceLink["linkType"], string> = {
 
 const SECTIONS = Object.keys(SECTION_LABEL) as ResourceSection[];
 
-function loadTeamMembers(): TeamMember[] {
-  const snapshot = getTeamMembersSnapshot();
-  if (Array.isArray(snapshot) && snapshot.length > 0) {
-    return snapshot;
-  }
-  return teamMembersPublic;
-}
-
 /**
  * Was 6 separate routes (app/recursos/{mis-documentos,mis-favoritos,...})
  * each filtering the same `resource_links` table server-side by `section`.
@@ -74,23 +70,35 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [previewLink, setPreviewLink] = useState<ResourceLink | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftUrl, setDraftUrl] = useState("");
   const [draftSection, setDraftSection] = useState<ResourceSection>("mis-documentos");
-  const [draftDrive, setDraftDrive] = useState<DriveFileMeta | null>(null);
+  const [draftDrive, setDraftDrive] = useState<Omit<DriveFileMeta, "id"> | null>(null);
   const [showDrivePicker, setShowDrivePicker] = useState(false);
   const previewUrl = previewLink ? getDrivePreviewUrl(previewLink.url, previewLink.linkType) : null;
 
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const resourcesCapabilities = useMemo(() => resolveResourcesCapabilities(authenticatedUser), [authenticatedUser]);
 
-  const [members] = useState<TeamMember[]>(() => loadTeamMembers());
-  const activeMembers = useMemo(() => members.filter((m) => m.active), [members]);
-  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
-  const effectiveSelectedMemberId = useMemo(() => {
-    if (selectedMemberId && activeMembers.some((m) => m.id === selectedMemberId)) return selectedMemberId;
-    return activeMembers[0]?.id ?? null;
-  }, [activeMembers, selectedMemberId]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  useEffect(() => {
+    void fetchStaffAction().then(setStaff);
+  }, []);
+  const activeStaff = useMemo(() => staff.filter((s) => s.active), [staff]);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const effectiveSelectedStaffId = useMemo(() => {
+    if (selectedStaffId && activeStaff.some((s) => s.id === selectedStaffId)) return selectedStaffId;
+    return activeStaff[0]?.id ?? null;
+  }, [activeStaff, selectedStaffId]);
+
+  // Re-fetch once the client has staff/session context ready, so the
+  // "personal for" filter reflects the current user's own documents.
+  useEffect(() => {
+    void fetchResourceLinksAction().then(setLinks).catch(() => {
+      // Not authorized / no session — keep whatever the server render gave us.
+    });
+  }, []);
 
   const viewableSections = useMemo(
     () => SECTIONS.filter((s) => canViewResourceSection({ capabilities: resourcesCapabilities, section: s })),
@@ -102,12 +110,10 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
       links
         .filter((l) => viewableSections.includes(l.section))
         .filter((l) => {
-          if (l.templateKey.startsWith("personal_mis_documentos")) {
-            return l.personalForTeamMemberId === effectiveSelectedMemberId;
-          }
-          return true;
+          if (!l.personalFor) return true;
+          return l.personalFor.id === effectiveSelectedStaffId;
         }),
-    [links, viewableSections, effectiveSelectedMemberId]
+    [links, viewableSections, effectiveSelectedStaffId]
   );
 
   const visible = useMemo(
@@ -138,39 +144,41 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
     const url = draftUrl.trim();
     if (!title || !url) return;
     if (!canCreateInSection) return;
-    const now = new Date().toISOString();
-    const newLink: ResourceLink = {
-      id: crypto.randomUUID(),
-      templateKey: "custom",
-      title,
-      section: draftSection,
-      subsection: null,
-      linkType: inferLinkTypeFromUrl(url, "web"),
-      appliesTo: "general",
-      url,
-      status: "vigente",
-      ownerTeamMemberId: null,
-      personalForTeamMemberId: null,
-      updatedAt: now,
-      history: [{ id: crypto.randomUUID(), at: now, action: "created", note: "Recurso creado" }],
-      drive: draftDrive,
-    };
-    const next = [...links, newLink];
-    setLinks(next);
-    setCreateOpen(false);
-    setDraftTitle("");
-    setDraftUrl("");
-    setDraftDrive(null);
-    await saveResourceLinks(next);
+
+    const isPersonal = draftSection === "mis-documentos" ? effectiveSelectedStaffId : null;
+
+    setCreateError(null);
+    try {
+      const created = await createResourceLinkAction({
+        title,
+        url,
+        section: draftSection,
+        linkType: inferLinkTypeFromUrl(url, "web"),
+        ownerId: isPersonal,
+        personalForId: isPersonal,
+        drive: draftDrive,
+      });
+      setLinks((cur) => [...cur, created]);
+      setCreateOpen(false);
+      setDraftTitle("");
+      setDraftUrl("");
+      setDraftDrive(null);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "No se pudo crear el recurso.");
+    }
   }
 
   const removeResource = useCallback(
     async (link: ResourceLink) => {
       if (!canDeleteResourceInSection({ capabilities: resourcesCapabilities, section: link.section })) return;
       if (!window.confirm(`¿Quitar "${link.title}"?`)) return;
-      setLinks((cur) => cur.filter((l) => l.id !== link.id));
-      setPreviewLink((cur) => (cur?.id === link.id ? null : cur));
-      await deleteResourceLink(link.id);
+      try {
+        await deleteResourceLinkAction(link.id);
+        setLinks((cur) => cur.filter((l) => l.id !== link.id));
+        setPreviewLink((cur) => (cur?.id === link.id ? null : cur));
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : "No se pudo quitar el recurso.");
+      }
     },
     [resourcesCapabilities]
   );
@@ -266,13 +274,13 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
         actions={
           <>
             <Select
-              value={String(effectiveSelectedMemberId ?? "")}
-              onValueChange={(v) => setSelectedMemberId(Number(v))}
+              value={effectiveSelectedStaffId ?? ""}
+              onValueChange={(v) => setSelectedStaffId(v as string)}
             >
               <SelectTrigger className="w-48"><SelectValue placeholder="Colaborador" /></SelectTrigger>
               <SelectContent>
-                {activeMembers.map((m) => (
-                  <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
+                {activeStaff.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -341,7 +349,7 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
         </SheetContent>
       </Sheet>
 
-      <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+      <Sheet open={createOpen} onOpenChange={(next) => { setCreateOpen(next); if (!next) setCreateError(null); }}>
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Agregar recurso</SheetTitle>
@@ -384,6 +392,7 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
                 </SelectContent>
               </Select>
             </div>
+            {createError ? <p className="text-sm text-destructive">{createError}</p> : null}
           </div>
           <SheetFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>

@@ -13,7 +13,7 @@
 import type { TeamMemberAuthStatus } from "@/lib/data/team";
 
 export type TeamMemberPublic = {
-  id: number;
+  id: string;
   name: string;
   role: string;
   area: string;
@@ -27,7 +27,7 @@ export type TeamMemberPublic = {
 
 export const teamMembersPublic: TeamMemberPublic[] = [
   {
-    id: 1,
+    id: "1",
     name: "Juanma",
     role: "Director de Proyecto",
     area: "Direccion",
@@ -38,7 +38,7 @@ export const teamMembersPublic: TeamMemberPublic[] = [
     phone: "+52 646 111 2233",
   },
   {
-    id: 2,
+    id: "2",
     name: "Paul",
     // TEMPORARY test-only account: Administrador access for manual/QA testing.
     // Remove this override once real Supabase Auth + role management is in place.
@@ -51,7 +51,7 @@ export const teamMembersPublic: TeamMemberPublic[] = [
     phone: "+52 646 222 3344",
   },
   {
-    id: 3,
+    id: "3",
     name: "Rafa",
     role: "Arquitecto Senior",
     area: "Diseño",
@@ -62,7 +62,7 @@ export const teamMembersPublic: TeamMemberPublic[] = [
     phone: "+52 646 333 4455",
   },
   {
-    id: 4,
+    id: "4",
     name: "Aaron",
     role: "Arquitecto",
     area: "Diseño",
@@ -73,7 +73,7 @@ export const teamMembersPublic: TeamMemberPublic[] = [
     phone: "+52 646 444 5566",
   },
   {
-    id: 5,
+    id: "5",
     name: "Gabriel",
     role: "Coordinador de Obra",
     area: "Construcción",
@@ -84,7 +84,7 @@ export const teamMembersPublic: TeamMemberPublic[] = [
     phone: "+52 646 555 6677",
   },
   {
-    id: 6,
+    id: "6",
     name: "Alejandro",
     role: "Especialista Tecnico",
     area: "Ejecutivo",
@@ -95,7 +95,7 @@ export const teamMembersPublic: TeamMemberPublic[] = [
     phone: "+52 646 666 7788",
   },
   {
-    id: 7,
+    id: "7",
     name: "Rodrigo",
     role: "Residente de Obra",
     area: "Construcción",

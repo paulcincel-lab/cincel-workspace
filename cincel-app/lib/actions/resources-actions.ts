@@ -1,21 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
-import { db } from "@/lib/db/client";
-import { resourceLinks, teamMembers } from "@/lib/db/schema";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveResourcesCapabilities } from "@/lib/auth/permissions";
-import type { ResourceLink } from "@/lib/types/resource";
+import * as resourcesRepository from "@/lib/repositories/resources-repository";
+import type { ResourceLink, ResourceLinkInput, ResourceSection } from "@/lib/types/resource";
 
 async function requireResourcesCapabilities() {
   return resolveResourcesCapabilities(await requireCapabilityUser());
 }
 
-function canWriteResources(
-  caps: Awaited<ReturnType<typeof requireResourcesCapabilities>>
-): boolean {
+function canWriteResources(caps: Awaited<ReturnType<typeof requireResourcesCapabilities>>): boolean {
   return (
     caps.enterprise.canCreate ||
     caps.enterprise.canEdit ||
@@ -26,123 +22,46 @@ function canWriteResources(
   );
 }
 
-function toResourceLink(row: typeof resourceLinks.$inferSelect): ResourceLink {
-  return {
-    id: row.id,
-    templateKey: row.templateKey,
-    title: row.title,
-    section: row.section as ResourceLink["section"],
-    subsection: row.subsection as ResourceLink["subsection"],
-    linkType: row.linkType as ResourceLink["linkType"],
-    appliesTo: row.appliesTo as ResourceLink["appliesTo"],
-    url: row.url,
-    status: row.status as ResourceLink["status"],
-    ownerTeamMemberId: row.ownerTeamMemberLegacyId,
-    personalForTeamMemberId: row.personalForTeamMemberLegacyId,
-    updatedAt: row.updatedAtLabel ?? "",
-    history: Array.isArray(row.history)
-      ? (row.history as ResourceLink["history"])
-      : [],
-    drive: row.googleFileId
-      ? {
-          googleFileId: row.googleFileId,
-          fileName: row.fileName ?? "",
-          mimeType: row.mimeType ?? "",
-          iconLink: row.iconLink,
-          thumbnailLink: row.thumbnailLink,
-          webViewLink: row.webViewLink ?? row.url,
-          syncedAt: (row.syncedAt ?? new Date()).toISOString(),
-        }
-      : null,
-  };
+function revalidateRecursos() {
+  revalidatePath("/recursos");
 }
 
-export async function fetchResourceLinksAction(): Promise<ResourceLink[]> {
+export async function fetchResourceLinksAction(
+  options: { section?: ResourceSection; personalForId?: string | null } = {}
+): Promise<ResourceLink[]> {
   const caps = await requireResourcesCapabilities();
   if (!caps.canViewResources) return [];
-
-  const rows = await db.query.resourceLinks.findMany({
-    where: isNull(resourceLinks.deletedAt),
-    orderBy: [asc(resourceLinks.section), asc(resourceLinks.title)],
-  });
-
-  return rows.map(toResourceLink);
+  return resourcesRepository.listResourceLinks(options);
 }
 
-export async function saveResourceLinksAction(
-  links: ResourceLink[]
-): Promise<void> {
-  const caps = await requireResourcesCapabilities();
-  if (!canWriteResources(caps)) {
-    throw new Error("FORBIDDEN: resources write");
+export async function createResourceLinkAction(input: ResourceLinkInput): Promise<ResourceLink> {
+  const user = await requireCapabilityUser();
+  if (!canWriteResources(resolveResourcesCapabilities(user))) {
+    throw new Error("FORBIDDEN: resource create");
   }
+  const row = await resourcesRepository.createResourceLink(input, user.member.id);
+  revalidateRecursos();
+  return row;
+}
 
-  // Resolve the legacy numeric member ids the app still uses to real uuids so
-  // both the legacy bigint and the FK column stay in sync (dual-write — see #112).
-  const referencedLegacyIds = [
-    ...new Set(
-      links
-        .flatMap((l) => [l.ownerTeamMemberId, l.personalForTeamMemberId])
-        .filter((n): n is number => typeof n === "number")
-    ),
-  ];
-  const memberIdByLegacy = new Map<number, string>();
-  if (referencedLegacyIds.length > 0) {
-    const rows = await db
-      .select({ legacyId: teamMembers.legacyId, id: teamMembers.id })
-      .from(teamMembers)
-      .where(inArray(teamMembers.legacyId, referencedLegacyIds));
-    for (const r of rows) {
-      if (r.legacyId != null) memberIdByLegacy.set(r.legacyId, r.id);
-    }
+export async function updateResourceLinkAction(
+  id: string,
+  patch: Partial<ResourceLinkInput>
+): Promise<ResourceLink> {
+  const user = await requireCapabilityUser();
+  if (!canWriteResources(resolveResourcesCapabilities(user))) {
+    throw new Error("FORBIDDEN: resource edit");
   }
-  const toMemberId = (legacy: number | null | undefined) =>
-    typeof legacy === "number" ? memberIdByLegacy.get(legacy) ?? null : null;
-
-  for (const link of links) {
-    const values = {
-      templateKey: link.templateKey,
-      title: link.title,
-      section: link.section,
-      subsection: link.subsection,
-      linkType: link.linkType,
-      appliesTo: link.appliesTo,
-      url: link.url,
-      status: link.status,
-      ownerTeamMemberLegacyId: link.ownerTeamMemberId,
-      personalForTeamMemberLegacyId: link.personalForTeamMemberId,
-      ownerMemberId: toMemberId(link.ownerTeamMemberId),
-      personalForMemberId: toMemberId(link.personalForTeamMemberId),
-      updatedAtLabel: link.updatedAt || null,
-      history: link.history ?? [],
-      googleFileId: link.drive?.googleFileId ?? null,
-      fileName: link.drive?.fileName ?? null,
-      mimeType: link.drive?.mimeType ?? null,
-      iconLink: link.drive?.iconLink ?? null,
-      thumbnailLink: link.drive?.thumbnailLink ?? null,
-      webViewLink: link.drive?.webViewLink ?? null,
-      syncedAt: link.drive?.syncedAt ? new Date(link.drive.syncedAt) : null,
-    };
-
-    await db
-      .insert(resourceLinks)
-      .values({ id: link.id, ...values })
-      .onConflictDoUpdate({ target: resourceLinks.id, set: values });
-  }
-
-  revalidatePath("/recursos");
+  const row = await resourcesRepository.updateResourceLink(id, patch, user.member.id);
+  revalidateRecursos();
+  return row;
 }
 
 export async function deleteResourceLinkAction(id: string): Promise<void> {
-  const caps = await requireResourcesCapabilities();
-  if (!caps.enterprise.canDelete && !caps.corporate.canDelete) {
-    throw new Error("FORBIDDEN: resources delete");
+  const user = await requireCapabilityUser();
+  if (!canWriteResources(resolveResourcesCapabilities(user))) {
+    throw new Error("FORBIDDEN: resource delete");
   }
-
-  await db
-    .update(resourceLinks)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(resourceLinks.id, id), isNull(resourceLinks.deletedAt)));
-
-  revalidatePath("/recursos");
+  await resourcesRepository.softDeleteResourceLink(id, user.member.id);
+  revalidateRecursos();
 }

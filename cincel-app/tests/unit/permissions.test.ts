@@ -21,8 +21,10 @@ import {
   resolveTeamCapabilities,
   resolveActivitiesCapabilities,
   resolveProjectsCapabilities,
+  resolveAreasCapabilities,
+  resolveWorkflowsCapabilities,
 } from "@/lib/auth/permissions";
-import type { TeamMember } from "@/lib/data/team";
+import type { TeamMember } from "@/lib/auth/auth-service";
 
 // These capability functions are pure table lookups — no storage access needed.
 // The resolve*Capabilities (without FromDefaults) read localStorage only for custom overrides;
@@ -30,24 +32,10 @@ import type { TeamMember } from "@/lib/data/team";
 
 function makeUser(role: SystemAccessRole): AuthenticatedUser {
   const member: TeamMember = {
-    id: 999,
+    id: "00000000-0000-0000-0000-000000000999",
     name: "Test User",
-    birthDate: "1990-01-01",
-    nationality: "Mexicana",
     phone: "+52 000 000 0000",
     institutionalEmail: "test@cincel.mx",
-    address: "Test Address",
-    maritalStatus: "Soltero",
-    homePhone: "+52 000 000 0001",
-    personalEmail: "test@personal.mx",
-    curp: "TEST900101HTST000",
-    rfc: "TEST9001015A1",
-    emergencyContact: {
-      name: "EC Name",
-      relation: "Familiar",
-      phone: "+52 000 000 0002",
-      address: "EC Address",
-    },
     role: "Colaborador",
     area: "General",
     capacity: 8,
@@ -257,5 +245,33 @@ describe("resolveProjectsCapabilities — canExportData gated by role", () => {
 
   it("Arquitecto Junior cannot export projects data", () => {
     expect(resolveProjectsCapabilities(makeUser("Arquitecto Junior")).canExportData).toBe(false);
+  });
+});
+
+// ── Areas / Workflows capabilities (company-structure admin surfaces) ───────
+
+describe("resolveAreasCapabilities", () => {
+  it("everyone can view areas (staff pickers need it)", () => {
+    expect(resolveAreasCapabilities(makeUser("Colaborador")).canViewAreas).toBe(true);
+    expect(resolveAreasCapabilities(makeUser("Administrador")).canViewAreas).toBe(true);
+  });
+
+  it("only Administrador / Dirección can manage areas", () => {
+    expect(resolveAreasCapabilities(makeUser("Administrador")).canManageAreas).toBe(true);
+    expect(resolveAreasCapabilities(makeUser("Dirección")).canManageAreas).toBe(true);
+    expect(resolveAreasCapabilities(makeUser("Jefe de Taller")).canManageAreas).toBe(false);
+    expect(resolveAreasCapabilities(makeUser("Colaborador")).canManageAreas).toBe(false);
+  });
+});
+
+describe("resolveWorkflowsCapabilities", () => {
+  it("everyone can view workflows (task assignment needs it)", () => {
+    expect(resolveWorkflowsCapabilities(makeUser("Colaborador")).canViewWorkflows).toBe(true);
+  });
+
+  it("only Administrador / Dirección can manage workflows and templates", () => {
+    expect(resolveWorkflowsCapabilities(makeUser("Administrador")).canManageWorkflows).toBe(true);
+    expect(resolveWorkflowsCapabilities(makeUser("Dirección")).canManageWorkflows).toBe(true);
+    expect(resolveWorkflowsCapabilities(makeUser("Arquitecto Senior")).canManageWorkflows).toBe(false);
   });
 });

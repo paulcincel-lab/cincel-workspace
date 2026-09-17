@@ -1,117 +1,90 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
-import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
-import type { ProjectItem } from "@/lib/proyectos/use-projects-data";
+import { fetchContactsAction } from "@/lib/actions/contacts-actions";
+import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
+import type { ContactListItem, ProjectInput, Staff, Workflow } from "@/lib/types/core";
 
-const STAGE_OPTIONS = ["Presale", "Diseño", "Construcción"];
-/** shadcn Select (base-ui) doesn't support an empty-string item value. */
-const NO_CLIENT_VALUE = "__none__";
-
-type NewProjectDraft = {
-  name: string;
-  clientId: string;
-  type: string;
-  stages: string[];
-  coordinator: string;
-  docsUrl: string;
-  startDate: string;
-};
-
-const emptyDraft: NewProjectDraft = {
-  name: "",
-  clientId: "",
-  type: "Habitacional",
-  stages: ["Presale"],
-  coordinator: "Sin responsable",
-  docsUrl: "",
-  startDate: "",
-};
-
-type ActiveClientOption = {
-  id: number;
-  name: string;
-  kind: "Empresa" | "Particular";
-};
+const PROJECT_TYPE_OPTIONS = ["Habitacional", "Oficinas", "Comercial", "Mobiliario", "Mantenimiento", "Otro"];
+const NO_VALUE = "__none__";
 
 interface ProjectCreateModalProps {
-  activeClientOptions: ActiveClientOption[];
-  activeTeamNames: string[];
-  projectTypeOptions: string[];
-  existingProjectIds: number[];
-  existingClientIds: number[];
   onClose: () => void;
-  onConfirm: (project: ProjectItem) => void;
+  onConfirm: (input: ProjectInput) => Promise<void>;
 }
 
-/** Modal for creating a new project and navigating to its ficha. */
-export function ProjectCreateModal({
-  activeClientOptions,
-  activeTeamNames,
-  projectTypeOptions,
-  existingProjectIds,
-  existingClientIds,
-  onClose,
-  onConfirm,
-}: ProjectCreateModalProps) {
-  const [draft, setDraft] = useState<NewProjectDraft>(() => ({
-    ...emptyDraft,
-    type: projectTypeOptions[0] ?? "Habitacional",
-    coordinator: activeTeamNames[0] ?? "Sin responsable",
-  }));
-  const [createError, setCreateError] = useState("");
+/** Friendly copy for the defensive checks projects-repository.ts also runs server-side. */
+function friendlyCreateError(err: unknown): string {
+  if (err instanceof Error) {
+    if (err.message === "PROJECT_CLIENT_REQUIRED") return "Selecciona un cliente.";
+    if (err.message === "PROJECT_STAGE_REQUIRED") return "Selecciona una etapa inicial.";
+  }
+  return "No se pudo crear el proyecto. Intenta de nuevo.";
+}
 
-  const handleCreate = () => {
-    const projectName = draft.name.trim();
-    const selectedClient = activeClientOptions.find((client) => String(client.id) === draft.clientId);
+/**
+ * Modal for creating a new project. A project belongs to exactly one client
+ * and one stage (workflow) — see the model's rule 1 — so both are required
+ * single-selects, not the old multi-checkbox "stages" field.
+ */
+export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalProps) {
+  const [clients, setClients] = useState<ContactListItem[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [name, setName] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [workflowId, setWorkflowId] = useState("");
+  const [type, setType] = useState(PROJECT_TYPE_OPTIONS[0]);
+  const [managerId, setManagerId] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-    const nextProjectId = Math.max(0, ...existingProjectIds) + 1;
-    const nextClientId = Math.max(0, ...existingClientIds) + 1;
-    const safeProjectName = projectName || `Proyecto ${nextProjectId}`;
-    const stageLabel = draft.stages.length > 0 ? draft.stages.join(" / ") : "Sin etapa";
+  useEffect(() => {
+    void fetchContactsAction({ type: "cliente" }).then(setClients);
+    void fetchWorkflowsAction().then((rows) => {
+      setWorkflows(rows);
+      if (rows[0]) setWorkflowId(rows[0].id);
+    });
+    void fetchStaffAction().then(setStaff);
+  }, []);
 
-    const createdProject: ProjectItem = {
-      id: nextProjectId,
-      code: `PRJ-${String(nextProjectId).padStart(3, "0")}`,
-      name: safeProjectName,
-      active: true,
-      status: "Activo",
-      client: {
-        id: selectedClient?.id ?? nextClientId,
-        name: selectedClient?.name ?? "Sin cliente vinculado",
-        emails: [],
-        phone: "",
-        kind: selectedClient?.kind ?? "Particular",
-        contacts: [],
-        completedProjects: [],
-        acquisitionChannel: "Sin registro",
-        totalSpent: 0,
-      },
-      type: draft.type || "Otro",
-      stage: stageLabel,
-      phase: "Inicial",
-      address: { street: "", city: "", state: "" },
-      manager: "Sin responsable",
-      coordinator: draft.coordinator || "Sin responsable",
-      team: [],
-      progress: 0,
-      drive: {
-        administrativo: draft.docsUrl.trim(),
-        planos: "",
-        renders: "",
-        reportes: "",
-      },
-      startDate: draft.startDate || new Date().toISOString().split("T")[0],
-    };
-
-    setCreateError("");
-    onConfirm(createdProject);
-  };
+  async function handleCreate() {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("El nombre del proyecto es obligatorio.");
+      return;
+    }
+    if (!clientId) {
+      setError("Selecciona un cliente.");
+      return;
+    }
+    if (!workflowId) {
+      setError("Selecciona una etapa inicial.");
+      return;
+    }
+    setError("");
+    setSaving(true);
+    try {
+      await onConfirm({
+        name: trimmedName,
+        clientId,
+        currentWorkflowId: workflowId,
+        projectType: type,
+        managerId: managerId || null,
+        startDate: startDate || null,
+      });
+    } catch (err) {
+      setError(friendlyCreateError(err));
+      setSaving(false);
+    }
+  }
 
   return (
     <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -123,33 +96,24 @@ export function ProjectCreateModal({
 
         <div className="space-y-4 px-6 py-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Label className="text-sm font-normal text-muted-foreground">
+            <Label className="text-sm font-normal text-muted-foreground sm:col-span-2">
               Nombre del proyecto
-              <Input
-                value={draft.name}
-                onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-                className="mt-1"
-              />
+              <Input value={name} onChange={(event) => setName(event.target.value)} className="mt-1" />
             </Label>
 
             <Label className="text-sm font-normal text-muted-foreground">
-              Cliente (activos existentes)
-              <Select
-                value={draft.clientId || NO_CLIENT_VALUE}
-                onValueChange={(value) =>
-                  setDraft((prev) => ({ ...prev, clientId: value === NO_CLIENT_VALUE ? "" : (value as string) }))
-                }
-              >
+              Cliente
+              <Select value={clientId || NO_VALUE} onValueChange={(value) => setClientId(value === NO_VALUE ? "" : (value as string))}>
                 <SelectTrigger className="mt-1 w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_CLIENT_VALUE}>
-                    {activeClientOptions.length === 0 ? "No hay clientes activos" : "Vincular mas adelante"}
+                  <SelectItem value={NO_VALUE} disabled>
+                    {clients.length === 0 ? "No hay clientes" : "Selecciona un cliente"}
                   </SelectItem>
-                  {activeClientOptions.map((client) => (
-                    <SelectItem key={`active-client-${client.id}`} value={String(client.id)}>
-                      {client.name} ({client.kind})
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name} ({client.kind === "empresa" ? "Empresa" : "Particular"})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -157,82 +121,61 @@ export function ProjectCreateModal({
             </Label>
 
             <Label className="text-sm font-normal text-muted-foreground">
-              Tipo de proyecto
-              <Select value={draft.type} onValueChange={(value) => setDraft((prev) => ({ ...prev, type: value as string }))}>
+              Etapa inicial
+              <Select value={workflowId} onValueChange={(value) => setWorkflowId(value as string)}>
                 <SelectTrigger className="mt-1 w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {projectTypeOptions.map((type) => (
-                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  {workflows.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Label>
 
             <Label className="text-sm font-normal text-muted-foreground">
-              Etapas (seleccion multiple)
-              <div className="mt-1 grid gap-2 rounded-lg border border-border bg-background px-3 py-2">
-                {STAGE_OPTIONS.map((stage) => (
-                  <Label key={`stage-${stage}`} className="flex items-center gap-2 text-sm font-normal text-muted-foreground">
-                    <Checkbox
-                      checked={draft.stages.includes(stage)}
-                      onCheckedChange={(checked) => {
-                        setDraft((prev) => {
-                          const hasStage = prev.stages.includes(stage);
-                          if (checked && !hasStage) return { ...prev, stages: [...prev.stages, stage] };
-                          if (!checked && hasStage) return { ...prev, stages: prev.stages.filter((item) => item !== stage) };
-                          return prev;
-                        });
-                      }}
-                    />
-                    {stage}
-                  </Label>
-                ))}
-              </div>
+              Tipo de proyecto
+              <Select value={type} onValueChange={(value) => setType(value as string)}>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROJECT_TYPE_OPTIONS.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Label>
 
             <Label className="text-sm font-normal text-muted-foreground">
               Encargado
-              <Select
-                value={draft.coordinator}
-                onValueChange={(value) => setDraft((prev) => ({ ...prev, coordinator: value as string }))}
-              >
+              <Select value={managerId || NO_VALUE} onValueChange={(value) => setManagerId(value === NO_VALUE ? "" : (value as string))}>
                 <SelectTrigger className="mt-1 w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Sin responsable">Sin encargado</SelectItem>
-                  {activeTeamNames.map((name) => (
-                    <SelectItem key={`new-coordinator-${name}`} value={name}>{name}</SelectItem>
+                  <SelectItem value={NO_VALUE}>Sin encargado</SelectItem>
+                  {staff.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </Label>
-
-            <Label className="text-sm font-normal text-muted-foreground sm:col-span-2">
-              Vinculo Google Doc del proyecto
-              <Input
-                value={draft.docsUrl}
-                onChange={(event) => setDraft((prev) => ({ ...prev, docsUrl: event.target.value }))}
-                placeholder="https://docs.google.com/..."
-                className="mt-1"
-              />
             </Label>
 
             <Label className="text-sm font-normal text-muted-foreground sm:col-span-2">
               Fecha de inicio
               <Input
                 type="date"
-                value={draft.startDate}
-                onChange={(event) => setDraft((prev) => ({ ...prev, startDate: event.target.value }))}
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
                 className="mt-1"
               />
             </Label>
           </div>
 
-          {createError ? (
-            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{createError}</p>
+          {error ? (
+            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           ) : null}
         </div>
 
@@ -240,8 +183,8 @@ export function ProjectCreateModal({
           <Button variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={handleCreate}>
-            Crear proyecto
+          <Button onClick={handleCreate} disabled={saving}>
+            {saving ? "Creando..." : "Crear proyecto"}
           </Button>
         </SheetFooter>
       </SheetContent>

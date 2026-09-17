@@ -1,27 +1,13 @@
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import { fetchClientsAction } from "@/lib/actions/clients-actions";
-import {
-  fetchColaboradoresAction,
-  fetchContractorsAction,
-  fetchTiendasAction,
-} from "@/lib/actions/providers-actions";
-import type { ManualClient } from "@/lib/repositories/clients-repository";
-import type { Colaborador, Contractor, Tienda } from "@/lib/repositories/providers-repository";
+import { fetchContactsAction } from "@/lib/actions/contacts-actions";
+import type { ContactListItem } from "@/lib/types/core";
 import { DirectorioClient } from "./DirectorioClient";
 
 export default async function DirectorioPage() {
-  let clients: ManualClient[] = [];
-  let contractors: Contractor[] = [];
-  let colaboradores: Colaborador[] = [];
-  let tiendas: Tienda[] = [];
+  let contacts: ContactListItem[] = [];
   try {
-    [clients, contractors, colaboradores, tiendas] = await Promise.all([
-      fetchClientsAction(),
-      fetchContractorsAction(),
-      fetchColaboradoresAction(),
-      fetchTiendasAction(),
-    ]);
+    contacts = await fetchContactsAction();
   } catch {
     // Not authorized / no session — the client falls back to hydrating itself.
   }
@@ -31,12 +17,7 @@ export default async function DirectorioPage() {
       <Sidebar />
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
-        <DirectorioClient
-          initialClients={clients}
-          initialContractors={contractors}
-          initialColaboradores={colaboradores}
-          initialTiendas={tiendas}
-        />
+        <DirectorioClient initialContacts={contacts} />
       </section>
     </main>
   );

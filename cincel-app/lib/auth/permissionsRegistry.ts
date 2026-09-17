@@ -2,6 +2,8 @@ import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import {
   resolveActivitiesCapabilitiesFromDefaults,
   type ActivitiesCapabilities,
+  resolveAreasCapabilitiesFromDefaults,
+  type AreasCapabilities,
   resolveCalendarCapabilitiesFromDefaults,
   type CalendarCapabilities,
   resolveClientsCapabilitiesFromDefaults,
@@ -14,6 +16,8 @@ import {
   type ResourcesCapabilities,
   resolveTeamCapabilitiesFromDefaults,
   type TeamCapabilities,
+  resolveWorkflowsCapabilitiesFromDefaults,
+  type WorkflowsCapabilities,
 } from "@/lib/auth/permissions";
 
 export type PermissionValue = boolean | string;
@@ -424,5 +428,47 @@ export const PERMISSIONS_MODULES_REGISTRY = ([
       },
     ],
     isEnabled: (values) => values.canViewTeam === true,
+  },
+  {
+    id: "areas",
+    name: "Áreas",
+    order: 9,
+    resolver: resolveAreasCapabilitiesFromDefaults,
+    actions: [
+      {
+        id: "canViewAreas",
+        label: "Ver áreas",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as AreasCapabilities).canViewAreas,
+      },
+      {
+        id: "canManageAreas",
+        label: "Administrar áreas",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as AreasCapabilities).canManageAreas,
+      },
+    ],
+    isEnabled: (values) => values.canViewAreas === true,
+  },
+  {
+    id: "workflows",
+    name: "Workflows",
+    order: 10,
+    resolver: resolveWorkflowsCapabilitiesFromDefaults,
+    actions: [
+      {
+        id: "canViewWorkflows",
+        label: "Ver workflows",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as WorkflowsCapabilities).canViewWorkflows,
+      },
+      {
+        id: "canManageWorkflows",
+        label: "Administrar workflows y plantillas",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as WorkflowsCapabilities).canManageWorkflows,
+      },
+    ],
+    isEnabled: (values) => values.canViewWorkflows === true,
   },
 ] satisfies PermissionsModuleDefinition[]).sort((a, b) => a.order - b.order);

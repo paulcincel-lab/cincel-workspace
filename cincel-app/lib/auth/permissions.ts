@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
-import type { SystemAccessRole } from "@/lib/data/roles";
+import { SYSTEM_ACCESS_ROLES, type SystemAccessRole } from "@/lib/data/roles";
 import type { ResourceSection } from "@/lib/types/resource";
 import { readStorage } from "@/lib/repositories/browser-state-repository";
 
@@ -23,20 +23,20 @@ export type CalendarCapabilities = {
 };
 
 type DashboardProjectShape = {
-  id: number;
+  id: string;
   name: string;
-  manager?: string | null;
+  manager?: { id: string } | null;
 };
 
 type DashboardTaskShape = {
-  project: string;
-  manager?: string | null;
-  support?: string[];
+  project: { id: string; name: string };
+  manager?: { id: string } | null;
+  support?: Array<{ id: string }>;
 };
 
 type ActivityTaskScopeShape = {
-  manager?: string | null;
-  support?: string[];
+  manager?: { id: string } | null;
+  support?: Array<{ id: string }>;
 };
 
 type ActivityStatusScope = "all" | "assigned_or_participant" | "none";
@@ -78,6 +78,26 @@ export type TeamCapabilities = {
   canToggleCollaboratorActive: boolean;
   canDeleteCollaborator: boolean;
   canExportData: boolean;
+};
+
+/**
+ * Areas (`core.areas`, `core.area_members`, `core.area_workflows`) are a
+ * company-structure admin surface: everyone can see the directory (staff
+ * pickers, task assignment) but only Administrador / Dirección manage it.
+ */
+export type AreasCapabilities = {
+  canViewAreas: boolean;
+  canManageAreas: boolean;
+};
+
+/**
+ * Workflows and their task templates (`core.workflows`,
+ * `core.workflow_task_templates`) are the other half of the "method" admin
+ * surface — same view-all / manage-admin-only shape as areas.
+ */
+export type WorkflowsCapabilities = {
+  canViewWorkflows: boolean;
+  canManageWorkflows: boolean;
 };
 
 type ResourceEditScope = "all" | "owned_or_personal" | "none";
@@ -704,6 +724,24 @@ const TEAM_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TeamCapabilities> = {
   },
 };
 
+function canManageCompanyStructureByRole(access: SystemAccessRole): boolean {
+  return access === "Administrador" || access === "Dirección";
+}
+
+const AREAS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, AreasCapabilities> = Object.fromEntries(
+  SYSTEM_ACCESS_ROLES.map((role) => [
+    role,
+    { canViewAreas: true, canManageAreas: canManageCompanyStructureByRole(role) },
+  ])
+) as Record<SystemAccessRole, AreasCapabilities>;
+
+const WORKFLOWS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, WorkflowsCapabilities> = Object.fromEntries(
+  SYSTEM_ACCESS_ROLES.map((role) => [
+    role,
+    { canViewWorkflows: true, canManageWorkflows: canManageCompanyStructureByRole(role) },
+  ])
+) as Record<SystemAccessRole, WorkflowsCapabilities>;
+
 type StoredModulePermissionsState = Record<string, unknown>;
 
 type StoredRolePermissionsState = Record<string, StoredModulePermissionsState>;
@@ -713,37 +751,24 @@ type StoredPermissionsState = {
   roles: Record<string, StoredRolePermissionsState>;
 };
 
-function normalizeName(value: string | null | undefined): string {
-  return (value || "").trim().toLowerCase();
-}
-
-function taskBelongsToViewer(task: DashboardTaskShape, viewerName: string): boolean {
-  if (!viewerName) {
+function taskBelongsToViewer(task: DashboardTaskShape, viewerId: string): boolean {
+  if (!viewerId) {
     return false;
   }
 
-  const managerName = normalizeName(task.manager);
-  if (managerName && managerName === viewerName) {
+  if (task.manager?.id === viewerId) {
     return true;
   }
 
-  return (task.support || []).some((member) => normalizeName(member) === viewerName);
+  return (task.support || []).some((member) => member.id === viewerId);
 }
 
-function projectIsManagedByViewer(
-  project: DashboardProjectShape,
-  viewerName: string,
-  secondaryCoordinatorByProject: Record<number, string>
-): boolean {
-  if (!viewerName) {
+function projectIsManagedByViewer(project: DashboardProjectShape, viewerId: string): boolean {
+  if (!viewerId) {
     return false;
   }
 
-  if (normalizeName(project.manager) === viewerName) {
-    return true;
-  }
-
-  return normalizeName(secondaryCoordinatorByProject[project.id]) === viewerName;
+  return project.manager?.id === viewerId;
 }
 
 function resolveAccess(user: AuthenticatedUser | null): SystemAccessRole {
@@ -858,6 +883,16 @@ export function resolveClientsCapabilitiesFromDefaults(user: AuthenticatedUser |
 export function resolveTeamCapabilitiesFromDefaults(user: AuthenticatedUser | null): TeamCapabilities {
   const access = resolveAccess(user);
   return TEAM_CAPABILITIES_BY_ROLE[access];
+}
+
+export function resolveAreasCapabilitiesFromDefaults(user: AuthenticatedUser | null): AreasCapabilities {
+  const access = resolveAccess(user);
+  return AREAS_CAPABILITIES_BY_ROLE[access];
+}
+
+export function resolveWorkflowsCapabilitiesFromDefaults(user: AuthenticatedUser | null): WorkflowsCapabilities {
+  const access = resolveAccess(user);
+  return WORKFLOWS_CAPABILITIES_BY_ROLE[access];
 }
 
 export function resolveDashboardCapabilities(user: AuthenticatedUser | null): DashboardCapabilities {
@@ -1061,6 +1096,32 @@ export function resolveTeamCapabilities(user: AuthenticatedUser | null): TeamCap
   };
 }
 
+export function resolveAreasCapabilities(user: AuthenticatedUser | null): AreasCapabilities {
+  const access = resolveAccess(user);
+  const defaults = resolveAreasCapabilitiesFromDefaults(user);
+  const moduleOverrides = readRoleModuleOverrides(access, "areas");
+
+  if (!moduleOverrides) return defaults;
+
+  return {
+    canViewAreas: readBooleanOverride(moduleOverrides, "canViewAreas", defaults.canViewAreas),
+    canManageAreas: readBooleanOverride(moduleOverrides, "canManageAreas", defaults.canManageAreas),
+  };
+}
+
+export function resolveWorkflowsCapabilities(user: AuthenticatedUser | null): WorkflowsCapabilities {
+  const access = resolveAccess(user);
+  const defaults = resolveWorkflowsCapabilitiesFromDefaults(user);
+  const moduleOverrides = readRoleModuleOverrides(access, "workflows");
+
+  if (!moduleOverrides) return defaults;
+
+  return {
+    canViewWorkflows: readBooleanOverride(moduleOverrides, "canViewWorkflows", defaults.canViewWorkflows),
+    canManageWorkflows: readBooleanOverride(moduleOverrides, "canManageWorkflows", defaults.canManageWorkflows),
+  };
+}
+
 export function isCorporateResourcesSection(section: ResourceSection): boolean {
   return CORPORATE_RESOURCES_SECTIONS.includes(section);
 }
@@ -1152,11 +1213,11 @@ export function canEditResourceInSection({
 export function canChangeActivityStatus<TTask extends ActivityTaskScopeShape>({
   capabilities,
   task,
-  viewerName,
+  viewerId,
 }: {
   capabilities: ActivitiesCapabilities;
   task: TTask;
-  viewerName: string;
+  viewerId: string;
 }): boolean {
   if (capabilities.statusScope === "all") {
     return true;
@@ -1166,74 +1227,60 @@ export function canChangeActivityStatus<TTask extends ActivityTaskScopeShape>({
     return false;
   }
 
-  const normalizedViewerName = normalizeName(viewerName);
-  if (!normalizedViewerName) {
+  if (!viewerId) {
     return false;
   }
 
   return taskBelongsToViewer(
     {
-      project: "",
+      project: { id: "", name: "" },
       manager: task.manager,
       support: task.support,
     },
-    normalizedViewerName
+    viewerId
   );
 }
 
 export function scopeDashboardProjects<TProject extends DashboardProjectShape, TTask extends DashboardTaskShape>({
   projects,
   tasks,
-  viewerName,
+  viewerId,
   dataScope,
-  secondaryCoordinatorByProject,
 }: {
   projects: TProject[];
   tasks: TTask[];
-  viewerName: string;
+  viewerId: string;
   dataScope: DashboardDataScope;
-  secondaryCoordinatorByProject: Record<number, string>;
 }): TProject[] {
   if (dataScope === "global") {
     return projects;
   }
 
-  const normalizedViewerName = normalizeName(viewerName);
-
   if (dataScope === "managed_projects") {
-    return projects.filter((project) => projectIsManagedByViewer(project, normalizedViewerName, secondaryCoordinatorByProject));
+    return projects.filter((project) => projectIsManagedByViewer(project, viewerId));
   }
 
-  const visibleProjectNames = new Set(
-    tasks
-      .filter((task) => taskBelongsToViewer(task, normalizedViewerName))
-      .map((task) => normalizeName(task.project))
-      .filter(Boolean)
+  const visibleProjectIds = new Set(
+    tasks.filter((task) => taskBelongsToViewer(task, viewerId)).map((task) => task.project.id)
   );
 
-  return projects.filter((project) => visibleProjectNames.has(normalizeName(project.name)));
+  return projects.filter((project) => visibleProjectIds.has(project.id));
 }
 
 export function scopeDashboardTasks<TTask extends DashboardTaskShape>({
   tasks,
-  viewerName,
+  viewerId,
   dataScope,
-  allowedProjectNames,
+  allowedProjectIds,
 }: {
   tasks: TTask[];
-  viewerName: string;
+  viewerId: string;
   dataScope: DashboardDataScope;
-  allowedProjectNames: Set<string>;
+  allowedProjectIds: Set<string>;
 }): TTask[] {
-  const normalizedAllowedProjects = new Set(Array.from(allowedProjectNames).map((projectName) => normalizeName(projectName)));
-  const normalizedViewerName = normalizeName(viewerName);
-
   if (dataScope === "assigned_tasks") {
-    return tasks.filter((task) => {
-      const inAllowedProject = normalizedAllowedProjects.has(normalizeName(task.project));
-      return inAllowedProject && taskBelongsToViewer(task, normalizedViewerName);
-    });
+    return tasks.filter((task) => allowedProjectIds.has(task.project.id) && taskBelongsToViewer(task, viewerId));
   }
 
-  return tasks.filter((task) => normalizedAllowedProjects.has(normalizeName(task.project)));
+  return tasks.filter((task) => allowedProjectIds.has(task.project.id));
 }

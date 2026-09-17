@@ -1,13 +1,11 @@
-import type { ContactType } from "@/lib/types/enums";
-import type { ManualClient } from "@/lib/repositories/clients-repository";
-import type { Colaborador, Contractor, Tienda } from "@/lib/repositories/providers-repository";
+import type { ContactListItem, ContactType, ProviderStatus } from "@/lib/types/core";
 
 /**
- * Unified Directorio row — normalizes ManualClient/Contractor/Colaborador/
- * Tienda (four differently-shaped types with their own free-text status
- * vocabularies, see lib/types/{contractor,colaborador,tienda}.ts and
- * lib/repositories/clients-repository.ts) into one shape for a single
- * ContactType-filtered table, per the "Directorio" redesign.
+ * Unified Directorio row. The old model had four separate entity shapes
+ * (ManualClient/Contractor/Colaborador/Tienda) normalized into one row here;
+ * the new `core.contacts` model already unifies clientes/socios/proveedores
+ * into one `Contact`, so this is now a straight projection of
+ * `ContactListItem` instead of a four-way merge.
  */
 export interface DirectorioRow {
   id: string;
@@ -16,76 +14,45 @@ export interface DirectorioRow {
   contact: string;
   category: string;
   status: string;
-  rating?: number;
+  rating: number | null;
 }
 
-/** Heuristic active/inactive read on the source types' free-text statuses. */
+export const CONTACT_TYPE_LABEL: Record<ContactType, string> = {
+  cliente: "Cliente",
+  socio: "Socio",
+  proveedor: "Proveedor",
+};
+
+export const PROVIDER_STATUS_LABEL: Record<ProviderStatus, string> = {
+  activo: "Activo",
+  inactivo: "Inactivo",
+  pausado: "Pausado",
+  prospecto: "Prospecto",
+  lista_negra: "Lista negra",
+};
+
+/** Heuristic active/inactive read on the row's display status. */
 export function directorioStatusVariant(status: string): "outline" | "secondary" {
   return /activ/i.test(status) ? "outline" : "secondary";
 }
 
-/** Recovers the numeric source-record id from a DirectorioRow's prefixed id (e.g. "contratista-42" -> 42). */
-export function directorioRowSourceId(row: Pick<DirectorioRow, "id">): number {
-  return Number(row.id.slice(row.id.indexOf("-") + 1));
-}
-
-export interface DirectorioSourceData {
-  clients: ManualClient[];
-  contractors: Contractor[];
-  colaboradores: Colaborador[];
-  tiendas: Tienda[];
-}
-
-/** Normalizes the four source arrays into one Directorio table's rows. */
-export function toDirectorioRows({
-  clients,
-  contractors,
-  colaboradores,
-  tiendas,
-}: DirectorioSourceData): DirectorioRow[] {
-  return [
-    ...clients.map(
-      (c): DirectorioRow => ({
-        id: `cliente-${c.id}`,
-        type: "Cliente",
-        name: c.name,
-        contact: c.emails[0] ?? c.phone ?? "—",
-        category: c.kind,
-        status: c.hasActiveProject ? "Activo" : "Sin proyecto activo",
-      })
-    ),
-    ...contractors.map(
-      (c): DirectorioRow => ({
-        id: `contratista-${c.id}`,
-        type: "Contratista",
-        name: c.provider,
-        contact: c.contact ?? "—",
-        category: c.mainSpecialty,
-        status: c.status,
-        rating: c.rating,
-      })
-    ),
-    ...colaboradores.map(
-      (c): DirectorioRow => ({
-        id: `colaborador-${c.id}`,
-        type: "Colaborador",
-        name: c.name,
-        contact: c.contact ?? c.email ?? "—",
-        category: c.role,
-        status: c.status,
-        rating: c.rating,
-      })
-    ),
-    ...tiendas.map(
-      (t): DirectorioRow => ({
-        id: `tienda-${t.id}`,
-        type: "Tienda",
-        name: t.name,
-        contact: t.contact ?? "—",
-        category: t.mainSpecialty ?? t.type,
-        status: t.status,
-        rating: t.rating,
-      })
-    ),
-  ];
+/** Projects the unified Contact list into the Directorio table's rows. */
+export function toDirectorioRows(contacts: ContactListItem[]): DirectorioRow[] {
+  return contacts.map((c) => {
+    const provider = c.providerProfile;
+    const category = provider
+      ? (provider.mainSpecialty ?? provider.subtype)
+      : c.kind === "empresa"
+        ? "Empresa"
+        : "Particular";
+    return {
+      id: c.id,
+      type: c.type,
+      name: c.name,
+      contact: c.primaryPerson?.phone ?? c.primaryPerson?.email ?? c.phone ?? c.email ?? "—",
+      category,
+      status: provider?.status ? PROVIDER_STATUS_LABEL[provider.status] : "—",
+      rating: provider?.rating ?? null,
+    };
+  });
 }

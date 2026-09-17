@@ -13,5 +13,12 @@
   "Phase 12: shadcn Form Primitives": "phase:12",
   "Phase 13: Form Migration — Tareas + Proyectos": "phase:13",
   "Phase 14: Form Migration — Proveedores + Equipo + Recursos + Clientes": "phase:14",
-  "Phase 15: Form Migration — Config + Layout + Shared UI + Auth Pages": "phase:15"
+  "Phase 15: Form Migration — Config + Layout + Shared UI + Auth Pages": "phase:15",
+  "Rebuild M3 — Admin Surfaces": "rebuild:3",
+  "Rebuild M4 — CRM": "rebuild:4",
+  "Rebuild M5 — Projects": "rebuild:5",
+  "Rebuild M6 — Tasks": "rebuild:6",
+  "Rebuild M7 — Resources and Assistant": "rebuild:7",
+  "Rebuild M8 — Hardening": "rebuild:8",
+  "Rebuild M9 — Cutover Hooks": "rebuild:9"
 }

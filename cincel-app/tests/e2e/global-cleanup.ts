@@ -1,13 +1,14 @@
 /**
  * Global setup + teardown for the e2e suite.
  *
- * The specs now write to a real Postgres database (Phase 2 cutover) and share a
- * single dev server + DB across the run, with no per-test isolation. Each spec
- * tags the rows it creates with `E2E <timestamp>`; this purges any such rows
- * both before the run (leftovers from a crashed/interrupted run) and after it,
- * so repeated local runs stay deterministic.
+ * The specs write to a real Postgres database (greenfield model, Rebuild
+ * Phase 2+) and share a single dev server + DB across the run, with no
+ * per-test isolation. Each spec tags the rows it creates with `E2E
+ * <timestamp>`; this purges any such rows both before the run (leftovers
+ * from a crashed/interrupted run) and after it, so repeated local runs stay
+ * deterministic.
  *
- * Only touches rows whose name/description contains "E2E" — never seed data.
+ * Only touches rows whose name/title contains "E2E" — never seed data.
  */
 import postgres from "postgres";
 
@@ -18,56 +19,46 @@ async function purgeE2ERows(): Promise<void> {
   const sql = postgres(connectionString, { max: 1 });
   try {
     await sql`
+      delete from core.task_checklist_items
+      where task_id in (select id from core.tasks where title like '%E2E%')
+    `;
+    await sql`
+      delete from core.task_support
+      where task_id in (select id from core.tasks where title like '%E2E%')
+    `;
+    await sql`delete from core.tasks where title like '%E2E%'`;
+    await sql`
       delete from core.project_members
       where project_id in (select id from core.projects where name like '%E2E%')
     `;
     await sql`
-      delete from core.project_drive_links
+      delete from core.project_contacts
+      where project_id in (select id from core.projects where name like '%E2E%')
+    `;
+    await sql`
+      delete from core.project_links
       where project_id in (select id from core.projects where name like '%E2E%')
     `;
     await sql`delete from core.projects where name like '%E2E%'`;
     await sql`
-      delete from core.client_contacts
-      where client_id in (select id from core.clients where name like '%E2E%')
+      delete from core.contact_people
+      where contact_id in (select id from core.contacts where name like '%E2E%')
     `;
     await sql`
-      delete from core.client_history
-      where client_id in (select id from core.clients where name like '%E2E%')
-    `;
-    await sql`delete from core.clients where name like '%E2E%'`;
-    await sql`delete from core.team_members where name like '%E2E%'`;
-    await sql`
-      delete from core.activity_support_members
-      where activity_id in (select id from core.activities where description like '%E2E%')
+      delete from core.contact_tags
+      where contact_id in (select id from core.contacts where name like '%E2E%')
     `;
     await sql`
-      delete from core.activity_history
-      where activity_id in (select id from core.activities where description like '%E2E%')
+      delete from core.provider_profiles
+      where contact_id in (select id from core.contacts where name like '%E2E%')
     `;
+    await sql`delete from core.contacts where name like '%E2E%'`;
     await sql`
-      delete from core.activity_checklist_items
-      where activity_id in (select id from core.activities where description like '%E2E%')
+      delete from core.area_members
+      where staff_id in (select id from core.staff where name like '%E2E%')
     `;
-    await sql`delete from core.activities where description like '%E2E%'`;
-    await sql`
-      delete from core.contractor_categories
-      where contractor_id in (select id from core.contractors where provider like '%E2E%')
-    `;
-    await sql`delete from core.contractors where provider like '%E2E%'`;
-    await sql`
-      delete from core.collaborator_categories
-      where collaborator_id in (select id from core.collaborator_providers where name like '%E2E%')
-    `;
-    await sql`
-      delete from core.collaborator_skills
-      where collaborator_id in (select id from core.collaborator_providers where name like '%E2E%')
-    `;
-    await sql`delete from core.collaborator_providers where name like '%E2E%'`;
-    await sql`
-      delete from core.store_categories
-      where store_id in (select id from core.stores where name like '%E2E%')
-    `;
-    await sql`delete from core.stores where name like '%E2E%'`;
+    await sql`delete from core.auth_credentials where staff_id in (select id from core.staff where name like '%E2E%')`;
+    await sql`delete from core.staff where name like '%E2E%'`;
     await sql`delete from core.resource_links where title like '%E2E%'`;
   } catch (err) {
     // A missing DB in a pure-mock run is not fatal for the suite.
