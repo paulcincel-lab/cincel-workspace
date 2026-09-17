@@ -15,6 +15,7 @@ import {
   updateStaffAction,
   upsertStaffProfileAction,
   setStaffCredentialAction,
+  setStaffAreasAction,
 } from "@/lib/actions/staff-actions";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
@@ -59,7 +60,7 @@ export const emptyMemberDraft: MemberDraft = {
   emergencyContactPhone: "",
   emergencyContactAddress: "",
   role: "",
-  area: "",
+  areaIds: [],
   capacity: 8,
   availability: "Disponible",
 };
@@ -183,7 +184,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
       emergencyContactPhone: detail.profile?.emergencyContactPhone ?? "",
       emergencyContactAddress: detail.profile?.emergencyContactAddress ?? "",
       role: detail.role ?? "",
-      area: detail.areas[0]?.name ?? "",
+      areaIds: detail.areas.map((a) => a.id),
       capacity: detail.capacity,
       availability: detail.availability ?? "Disponible",
     });
@@ -203,13 +204,12 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     const name = draft.name.trim();
     const institutionalEmail = draft.institutionalEmail.trim();
     const role = draft.role.trim();
-    const area = draft.area.trim();
     const normalizedEmail = normalizeEmail(institutionalEmail);
     const tempPassword = draft.temporaryPassword.trim();
     const tempPasswordConfirmation = draft.temporaryPasswordConfirmation.trim();
 
-    if (!name || !role || !area || draft.capacity < 1) {
-      setFormError("Completa nombre, puesto, área y una capacidad válida.");
+    if (!name || !role || draft.areaIds.length === 0 || draft.capacity < 1) {
+      setFormError("Completa nombre, puesto, al menos un área y una capacidad válida.");
       return;
     }
     if (!institutionalEmail || !institutionalEmail.includes("@")) {
@@ -251,7 +251,6 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         role: draft.access, // access and role share the same value — see module comment
         email: normalizedEmail,
         phone: draft.phone.trim() || null,
-        area,
         capacity: draft.capacity,
         availability: draft.availability,
       };
@@ -294,6 +293,8 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         emergencyContactPhone: draft.emergencyContactPhone.trim() || null,
         emergencyContactAddress: draft.emergencyContactAddress.trim() || null,
       });
+
+      await setStaffAreasAction(staffId, draft.areaIds);
 
       if (teamCapabilities.canChangeCollaboratorAccess) {
         await setStaffCredentialAction(staffId, {

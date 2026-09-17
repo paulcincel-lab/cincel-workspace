@@ -1,6 +1,6 @@
 "use client";
 
-import type { Dispatch, SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/com
 import { StarRating } from "@/components/proveedores/StarRating";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { CONTACT_TYPE_LABEL, PROVIDER_STATUS_LABEL } from "@/lib/directorio/types";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import type {
   ContactInput,
   ContactKind,
@@ -17,7 +18,10 @@ import type {
   ContactType,
   ProviderStatus,
   ProviderSubtype,
+  Staff,
 } from "@/lib/types/core";
+
+const NO_STAFF_VALUE = "__none__";
 
 const CONTACT_TYPES: ContactType[] = ["cliente", "socio", "proveedor"];
 const PROVIDER_SUBTYPES: ProviderSubtype[] = ["contratista", "colaborador", "tienda"];
@@ -60,6 +64,9 @@ export type ContactDraft = {
   comments: string;
   rating: number;
   startDate: string;
+  // Proveedor + subtype "colaborador" only — links this contact to a real
+  // core.staff row so the same person can also be assigned tasks as staff.
+  staffId: string | null;
 };
 
 export const emptyContactDraft: ContactDraft = {
@@ -85,6 +92,7 @@ export const emptyContactDraft: ContactDraft = {
   comments: "",
   rating: 0,
   startDate: "",
+  staffId: null,
 };
 
 /** Builds the payload for createContactAction/updateContactAction from a draft. */
@@ -127,9 +135,7 @@ export function draftToContactInput(draft: ContactDraft): ContactInput {
             comments: draft.comments.trim() || null,
             rating: draft.rating || null,
             startDate: draft.startDate || null,
-            // No staff picker wired up here yet — providers linked to an
-            // internal staff record stay unlinked until that UI exists.
-            staffId: null,
+            staffId: draft.providerSubtype === "colaborador" ? draft.staffId : null,
           }
         : null,
   };
@@ -164,6 +170,11 @@ export function ContactEditorSheet({
   onSave,
 }: ContactEditorSheetProps) {
   const isEditing = editingId !== null;
+  const [staffOptions, setStaffOptions] = useState<Staff[]>([]);
+
+  useEffect(() => {
+    void fetchStaffAction().then((rows) => setStaffOptions(rows.filter((s) => s.active)));
+  }, []);
 
   return (
     <Sheet open={show} onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -287,6 +298,31 @@ export function ContactEditorSheet({
                   </Select>
                 </div>
               </div>
+              {draft.providerSubtype === "colaborador" ? (
+                <div>
+                  <Label className="mb-2 block">Staff vinculado</Label>
+                  {/* Links this colaborador contact to a core.staff row so the same
+                      person can also be assigned tasks as staff. Optional — leave
+                      "Ninguno" unless this person genuinely has a staff record, since
+                      linking the wrong one visually duplicates them as both a
+                      colaborador contact and a task-assignable staff member. */}
+                  <Select
+                    value={draft.staffId ?? NO_STAFF_VALUE}
+                    onValueChange={(v) => {
+                      const next = v as string;
+                      set(onChangeDraft, "staffId", next === NO_STAFF_VALUE ? null : next);
+                    }}
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_STAFF_VALUE}>Ninguno</SelectItem>
+                      {staffOptions.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="mb-2 block">Ramo principal</Label>

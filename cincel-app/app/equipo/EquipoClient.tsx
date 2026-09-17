@@ -27,7 +27,7 @@ import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { canExportStaff, exportStaffAction } from "@/lib/equipo/staff-export";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
-import type { Staff } from "@/lib/types/core";
+import type { Area, Staff } from "@/lib/types/core";
 
 const AVAILABILITY_OPTIONS = [
   "Disponible",
@@ -58,7 +58,8 @@ const AVAILABILITY_VARIANT: Record<string, "success" | "secondary" | "outline"> 
 
 export function EquipoClient({ initialTeam }: EquipoClientProps) {
   const [staff, setStaff] = useState<Staff[]>(initialTeam);
-  const [areaByStaffId, setAreaByStaffId] = useState<Record<string, string>>({});
+  const [areaOptions, setAreaOptions] = useState<Area[]>([]);
+  const [areaNamesByStaffId, setAreaNamesByStaffId] = useState<Record<string, string[]>>({});
   const [taskLoad, setTaskLoad] = useState<
     Record<string, { assigned: number; support: number; projects: Set<string> }>
   >({});
@@ -77,12 +78,13 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
       fetchProjectsAction(),
     ]);
     setStaff(staffRows);
+    setAreaOptions(areaRows);
 
-    const areaMap: Record<string, string> = {};
+    const areaMap: Record<string, string[]> = {};
     for (const area of areaRows) {
-      for (const member of area.members) areaMap[member.staffId] = area.name;
+      for (const member of area.members) (areaMap[member.staffId] ??= []).push(area.name);
     }
-    setAreaByStaffId(areaMap);
+    setAreaNamesByStaffId(areaMap);
 
     const load: Record<string, { assigned: number; support: number; projects: Set<string> }> = {};
     const ensure = (id: string) => (load[id] ??= { assigned: 0, support: 0, projects: new Set() });
@@ -156,7 +158,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         return {
           ...member,
           institutionalEmail: member.email ?? "",
-          area: areaByStaffId[member.id] ?? "",
+          areas: areaNamesByStaffId[member.id] ?? [],
           assigned: load.assigned,
           support: load.support,
           total,
@@ -167,7 +169,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
           loadLabel: loadLabel(occupancy, member.active),
         };
       }),
-    [staff, taskLoad, coordinatorProjectsByStaffId, areaByStaffId]
+    [staff, taskLoad, coordinatorProjectsByStaffId, areaNamesByStaffId]
   );
 
   const profileMember = withWorkload.find((m) => m.id === profileMemberId) ?? null;
@@ -203,7 +205,16 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         ),
       },
       { accessorKey: "role", header: "Puesto" },
-      { accessorKey: "area", header: "Área" },
+      {
+        id: "areas",
+        header: "Área",
+        cell: ({ row }) =>
+          row.original.areas.length > 0 ? (
+            <span className="text-sm text-foreground">{row.original.areas.join(", ")}</span>
+          ) : (
+            <span className="text-sm text-muted-foreground">Sin área</span>
+          ),
+      },
       {
         id: "load",
         header: "Carga",
@@ -329,6 +340,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         isEditingSelfProtectedAdmin={isEditingSelfProtectedAdmin}
         teamCapabilities={teamCapabilities}
         availabilityOptions={AVAILABILITY_OPTIONS}
+        areaOptions={areaOptions}
       />
     </div>
   );
