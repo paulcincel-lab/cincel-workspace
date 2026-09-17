@@ -40,11 +40,12 @@ delegation** → Add new:
 
 ### 3. Institutional email audit
 
-Impersonation is keyed on `team_members.institutional_email` — it must
-exactly match that person's real Workspace email. Mismatches mean that
-person's Drive picker silently returns nothing (their impersonation resolves
-to a non-existent or wrong Workspace identity). Audit the roster before
-rollout; fix mismatches in `equipo`.
+Impersonation is keyed on `core.staff.email` — it must exactly match that
+person's real Workspace email. Mismatches mean that person's Drive picker
+silently returns nothing (their impersonation resolves to a non-existent or
+wrong Workspace identity). Audit the roster before rollout with
+`npx tsx scripts/audit-staff-emails.ts` (see below); fix mismatches in
+`/equipo`.
 
 ### 4. Environment
 
