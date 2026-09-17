@@ -98,6 +98,7 @@ function draftFromDetail(detail: ContactDetail): ContactDraft {
     comments: provider?.comments ?? "",
     rating: provider?.rating ?? 0,
     startDate: provider?.startDate ?? "",
+    staffId: provider?.staffId ?? null,
   };
 }
 

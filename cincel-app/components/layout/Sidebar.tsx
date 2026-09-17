@@ -208,6 +208,7 @@ export default function Sidebar() {
             submenu: [
               { label: "General", href: "/configuracion/general", icon: SettingsIcon },
               { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
+              { label: "Workflows", href: "/configuracion/workflows", icon: SettingsIcon },
             ],
           } satisfies MenuGroupItem,
         ]

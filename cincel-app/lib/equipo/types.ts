@@ -23,7 +23,8 @@ export type MemberDraft = {
   emergencyContactPhone: string;
   emergencyContactAddress: string;
   role: string;
-  area: string;
+  /** `core.areas` ids this collaborator belongs to — a staff member can be in several. */
+  areaIds: string[];
   capacity: number;
   availability: TeamAvailability;
 };
@@ -38,7 +39,8 @@ export type MemberDraft = {
  */
 export type TeamMemberWithWorkload = Staff & {
   institutionalEmail: string;
-  area: string;
+  /** Names of the `core.areas` this collaborator belongs to (many-to-many). */
+  areas: string[];
   assigned: number;
   support: number;
   total: number;

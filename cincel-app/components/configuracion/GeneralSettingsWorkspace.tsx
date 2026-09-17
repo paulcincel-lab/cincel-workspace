@@ -42,6 +42,8 @@ function loadImageAsDataUrl(file: File): Promise<string> {
 const CONFIG_NAV_ITEMS: Array<{ key: string; label: string; href?: string; enabled: boolean }> = [
   { key: "permisos", label: "Permisos", href: "/configuracion/permisos", enabled: true },
   { key: "general", label: "General", href: "/configuracion/general", enabled: true },
+  { key: "areas", label: "Áreas", href: "/configuracion/areas", enabled: true },
+  { key: "workflows", label: "Workflows", href: "/configuracion/workflows", enabled: true },
   { key: "catalogos", label: "Catalogos", enabled: false },
   { key: "seguridad", label: "Seguridad", enabled: false },
   { key: "integraciones", label: "Integraciones", enabled: false },

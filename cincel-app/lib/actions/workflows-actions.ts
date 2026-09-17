@@ -18,7 +18,7 @@ async function requireWorkflowsCapabilities() {
 }
 
 export async function fetchWorkflowsAction(
-  options: { includeInactive?: boolean } = {}
+  options: { includeInactive?: boolean; includeInactiveTemplates?: boolean } = {}
 ): Promise<WorkflowDetail[]> {
   const caps = await requireWorkflowsCapabilities();
   if (!caps.canViewWorkflows) return [];
