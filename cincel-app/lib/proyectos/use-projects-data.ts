@@ -22,7 +22,7 @@ export interface UseProjectsDataReturn {
   fetchError: string | null;
   activeStaff: Staff[];
   authenticatedUser: ReturnType<typeof getCurrentAuthenticatedUser>;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<ProjectItem[]>;
   addProject: (input: ProjectInput) => Promise<ProjectItem | null>;
   updateProject: (id: string, patch: Partial<ProjectInput>) => Promise<void>;
   removeProject: (id: string) => Promise<void>;
@@ -49,14 +49,16 @@ export function useProjectsData(
     filtersRef.current = filters;
   });
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<ProjectItem[]> => {
     setFetchError(null);
     try {
       const rows = await fetchProjectsAction(filtersRef.current ?? {});
       setProjectsData(rows);
+      return rows;
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
       setFetchError("No se pudo sincronizar con el servidor. Los datos mostrados pueden estar desactualizados.");
+      return [];
     } finally {
       setIsLoadingData(false);
     }
@@ -81,15 +83,17 @@ export function useProjectsData(
   const addProject = useCallback(
     async (input: ProjectInput): Promise<ProjectItem | null> => {
       try {
-        await createProjectAction(input);
-        await refresh();
-        return projectsData.find((p) => p.name === input.name) ?? null;
+        const created = await createProjectAction(input);
+        const rows = await refresh();
+        // Use the freshly fetched list (not the stale `projectsData` closure)
+        // so the caller reliably gets the row it just created.
+        return rows.find((p) => p.id === created.id) ?? null;
       } catch (err) {
         if (err instanceof RepositoryError) reportRepositoryError(err);
         throw err;
       }
     },
-    [refresh, projectsData]
+    [refresh]
   );
 
   const updateProject = useCallback(

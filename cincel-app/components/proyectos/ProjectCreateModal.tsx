@@ -16,7 +16,16 @@ const NO_VALUE = "__none__";
 
 interface ProjectCreateModalProps {
   onClose: () => void;
-  onConfirm: (input: ProjectInput) => void;
+  onConfirm: (input: ProjectInput) => Promise<void>;
+}
+
+/** Friendly copy for the defensive checks projects-repository.ts also runs server-side. */
+function friendlyCreateError(err: unknown): string {
+  if (err instanceof Error) {
+    if (err.message === "PROJECT_CLIENT_REQUIRED") return "Selecciona un cliente.";
+    if (err.message === "PROJECT_STAGE_REQUIRED") return "Selecciona una etapa inicial.";
+  }
+  return "No se pudo crear el proyecto. Intenta de nuevo.";
 }
 
 /**
@@ -63,7 +72,7 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
     setError("");
     setSaving(true);
     try {
-      onConfirm({
+      await onConfirm({
         name: trimmedName,
         clientId,
         currentWorkflowId: workflowId,
@@ -71,7 +80,8 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
         managerId: managerId || null,
         startDate: startDate || null,
       });
-    } finally {
+    } catch (err) {
+      setError(friendlyCreateError(err));
       setSaving(false);
     }
   }
