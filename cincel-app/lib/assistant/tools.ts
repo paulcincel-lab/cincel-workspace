@@ -2,41 +2,93 @@ import "server-only";
 
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
-import { and, asc, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 
-import { db } from "@/lib/db/client";
-import { activities, projects, teamMembers } from "@/lib/db/schema";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import {
   resolveActivitiesCapabilities,
   resolveClientsCapabilities,
   resolveProjectsCapabilities,
 } from "@/lib/auth/permissions";
-import {
-  assignActivityViaAssistantAction,
-  createActivityViaAssistantAction,
-} from "@/lib/actions/activities-actions";
-import {
-  createClientViaAssistantAction,
-  onboardClientViaAssistantAction,
-} from "@/lib/actions/clients-actions";
-import {
-  discardProjectViaAssistantAction,
-  findDuplicatesAction,
-  mergeDuplicateActivitiesAction,
-  mergeDuplicateClientsAction,
-} from "@/lib/actions/maintenance-actions";
+import { fetchProjectsAction, createProjectAction, applyWorkflowAction, deleteProjectAction } from "@/lib/actions/projects-actions";
+import { fetchTasksAction, createUserTaskAction, assignTaskAction } from "@/lib/actions/tasks-actions";
+import { fetchContactsAction, createContactAction } from "@/lib/actions/contacts-actions";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
+import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { createGithubIssue, isGithubConfigured } from "@/lib/github/client";
+import type {
+  ContactKind,
+  ProjectListItem,
+  Staff,
+  TaskListItem,
+  TaskPriority,
+  WorkflowDetail,
+} from "@/lib/types/core";
 
 /**
- * Every tool here is read-only and only touches core.projects,
- * core.activities, core.team_members — never auth_credentials / sessions /
- * clients. Zod-validated inputs; selected columns are whitelisted and result
- * counts capped.
+ * Every tool here goes through lib/actions/* — never straight to Drizzle
+ * tables. Each action already re-checks the caller's session capability
+ * server-side (throwing "FORBIDDEN: ..." or, for reads, returning an empty
+ * result) so a tool can't be tricked into doing more than the caller's role
+ * allows even if buildAssistantTools() below mis-gated it. Zod-validated
+ * inputs; result counts capped where lists could get long.
  */
 
 const RISK_NOTE =
   "riesgo derivado del avance y de tareas vencidas/bloqueadas (Alto/Medio/Bajo)";
+
+// Firm departments / workflow slugs, matching lib/actividades/departamento.ts.
+const WORKFLOW_ENUM = z.enum(["presale", "diseno", "construccion", "decoracion"]);
+// A brand-new project can only start life in one of these three (Decoración
+// is reached later, not chosen at onboarding).
+const ONBOARD_WORKFLOW_ENUM = z.enum(["presale", "diseno", "construccion"]);
+const WORKFLOW_LABELS: Record<string, string> = {
+  presale: "Presale",
+  diseno: "Diseño",
+  construccion: "Construcción",
+  decoracion: "Decoración",
+};
+
+// ── Name / key resolution helpers ────────────────────────────────────────────
+// The assistant only ever knows people/projects by name (never by uuid), so
+// every write tool has to resolve a name to an id first via the same read
+// actions the UI uses, and report back candidates when the match isn't unique.
+
+type Resolved<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string; candidates?: string[] };
+
+function byNameIlike<T extends { name: string }>(rows: T[], query: string): Resolved<T> {
+  const q = query.trim().toLowerCase();
+  const exact = rows.filter((r) => r.name.trim().toLowerCase() === q);
+  if (exact.length === 1) return { ok: true, value: exact[0] };
+  const partial = rows.filter((r) => r.name.toLowerCase().includes(q));
+  if (partial.length === 1) return { ok: true, value: partial[0] };
+  if (partial.length === 0) {
+    return { ok: false, error: `No se encontró "${query}".` };
+  }
+  return {
+    ok: false,
+    error: `"${query}" es ambiguo, coincide con varios.`,
+    candidates: partial.slice(0, 10).map((r) => r.name),
+  };
+}
+
+async function resolveProject(name: string): Promise<Resolved<ProjectListItem>> {
+  const rows = await fetchProjectsAction({ search: name });
+  return byNameIlike(rows, name);
+}
+
+async function resolveStaff(name: string): Promise<Resolved<Staff>> {
+  const rows = await fetchStaffAction();
+  return byNameIlike(rows, name);
+}
+
+async function resolveWorkflowByKey(key: string): Promise<Resolved<WorkflowDetail>> {
+  const rows = await fetchWorkflowsAction();
+  const found = rows.find((w) => w.key === key);
+  if (!found) return { ok: false, error: `No existe el flujo "${WORKFLOW_LABELS[key] ?? key}".` };
+  return { ok: true, value: found };
+}
 
 export const list_projects = tool({
   description: `Lista proyectos de Cincel con su estado, etapa, avance y ${RISK_NOTE}. Filtra por estado, etapa o si están activos.`,
@@ -46,74 +98,49 @@ export const list_projects = tool({
     status: z.string().optional(),
   }),
   execute: async ({ activeOnly, stage, status }) => {
-    const where = and(
-      isNull(projects.deletedAt),
-      activeOnly ? eq(projects.active, true) : undefined,
-      stage ? sql`${projects.stage} ilike ${`%${stage}%`}` : undefined,
-      status ? eq(projects.status, status) : undefined
-    );
+    const projects = await fetchProjectsAction({});
 
-    const rows = await db
-      .select({
-        id: projects.id,
-        name: projects.name,
-        status: projects.status,
-        stage: projects.stage,
-        progress: projects.progress,
-        active: projects.active,
-      })
-      .from(projects)
-      .where(where)
-      .limit(50);
-
-    // Per-project overdue / blocked activity counts for the risk score. Grouped
-    // by project_id (ADR 0001) with a name-snapshot fallback for tasks whose
-    // project didn't resolve to an id.
+    // Per-project overdue / blocked open-task counts for the risk score.
+    // projectId is a real FK now, so no name-snapshot fallback is needed.
     const today = new Date().toISOString().slice(0, 10);
-    const counts = await db
-      .select({
-        projectId: activities.projectId,
-        project: activities.projectNameSnapshot,
-        overdue: sql<number>`count(*) filter (where ${activities.commitmentDate} < ${today} and ${activities.status} <> 'Completado')`,
-        blocked: sql<number>`count(*) filter (where ${activities.status} = 'Bloqueado')`,
-      })
-      .from(activities)
-      .where(and(isNull(activities.deletedAt), eq(activities.archived, false)))
-      .groupBy(activities.projectId, activities.projectNameSnapshot);
-
-    const byId = new Map<string, { overdue: number; blocked: number }>();
-    const byName = new Map<string, { overdue: number; blocked: number }>();
-    for (const c of counts) {
-      const v = { overdue: Number(c.overdue ?? 0), blocked: Number(c.blocked ?? 0) };
-      if (c.projectId) {
-        const cur = byId.get(c.projectId) ?? { overdue: 0, blocked: 0 };
-        byId.set(c.projectId, {
-          overdue: cur.overdue + v.overdue,
-          blocked: cur.blocked + v.blocked,
-        });
-      } else if (c.project) {
-        const cur = byName.get(c.project) ?? { overdue: 0, blocked: 0 };
-        byName.set(c.project, {
-          overdue: cur.overdue + v.overdue,
-          blocked: cur.blocked + v.blocked,
-        });
-      }
+    const openTasks = await fetchTasksAction({ status: ["pendiente", "en_proceso", "bloqueado"] });
+    const byProject = new Map<string, { overdue: number; blocked: number }>();
+    for (const t of openTasks) {
+      const cur = byProject.get(t.projectId) ?? { overdue: 0, blocked: 0 };
+      if (t.commitmentDate && t.commitmentDate < today) cur.overdue += 1;
+      if (t.status === "bloqueado") cur.blocked += 1;
+      byProject.set(t.projectId, cur);
     }
 
-    return rows.map((p) => {
-      const c = byId.get(p.id) ?? byName.get(p.name);
-      const overdue = Number(c?.overdue ?? 0);
-      const blocked = Number(c?.blocked ?? 0);
-      const risk =
-        blocked > 0 || overdue > 0 || p.progress < 45
-          ? "Alto"
-          : p.progress < 75
-            ? "Medio"
-            : "Bajo";
-      const { id: _id, ...rest } = p;
-      void _id;
-      return { ...rest, overdueTasks: overdue, blockedTasks: blocked, risk };
-    });
+    return projects
+      .filter((p) => (activeOnly ? p.status === "activo" : true))
+      .filter((p) =>
+        stage
+          ? (p.currentWorkflow?.name ?? "").toLowerCase().includes(stage.toLowerCase()) ||
+            (p.currentWorkflow?.key ?? "").toLowerCase().includes(stage.toLowerCase())
+          : true
+      )
+      .filter((p) => (status ? p.status.toLowerCase() === status.toLowerCase() : true))
+      .slice(0, 50)
+      .map((p) => {
+        const c = byProject.get(p.id) ?? { overdue: 0, blocked: 0 };
+        const risk =
+          c.blocked > 0 || c.overdue > 0 || p.progress < 45
+            ? "Alto"
+            : p.progress < 75
+              ? "Medio"
+              : "Bajo";
+        return {
+          name: p.name,
+          status: p.status,
+          stage: p.currentWorkflow?.name ?? null,
+          progress: p.progress,
+          active: p.status === "activo",
+          overdueTasks: c.overdue,
+          blockedTasks: c.blocked,
+          risk,
+        };
+      });
   },
 });
 
@@ -130,99 +157,71 @@ export const list_activities_due = tool({
     onlyBlocked: z.boolean().default(false),
   }),
   execute: async ({ withinDays, memberName, projectName, onlyBlocked }) => {
+    let projectId: string | undefined;
+    if (projectName) {
+      const resolved = await resolveProject(projectName);
+      if (!resolved.ok) return resolved;
+      projectId = resolved.value.id;
+    }
+
+    let managerId: string | undefined;
+    if (memberName) {
+      const resolved = await resolveStaff(memberName);
+      if (!resolved.ok) return resolved;
+      managerId = resolved.value.id;
+    }
+
     const today = new Date();
-    const end = new Date(today.getTime() + withinDays * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
+    const end = new Date(today.getTime() + withinDays * 86_400_000).toISOString().slice(0, 10);
     const start = today.toISOString().slice(0, 10);
 
-    const dateWindow = or(
-      and(gte(activities.commitmentDate, start), lte(activities.commitmentDate, end)),
-      and(gte(activities.reviewDate, start), lte(activities.reviewDate, end))
-    );
+    const rows = await fetchTasksAction({
+      projectId,
+      managerId,
+      status: onlyBlocked ? "bloqueado" : ["pendiente", "en_proceso", "bloqueado"],
+      // A named project lists everything regardless of dates (freshly-created
+      // tasks have no dates yet); otherwise scope to the window.
+      dateFrom: onlyBlocked || projectName ? undefined : start,
+      dateTo: onlyBlocked || projectName ? undefined : end,
+    });
 
-    // Scope: blocked-only wins; then a named project lists everything (no date
-    // filter — freshly-created tasks have no dates yet); otherwise the window.
-    const scope = onlyBlocked
-      ? eq(activities.status, "Bloqueado")
-      : projectName
-        ? undefined
-        : dateWindow;
-
-    const rows = await db
-      .select({
-        description: activities.description,
-        project: activities.projectNameSnapshot,
-        workflow: activities.workflow,
-        phase: activities.phase,
-        status: activities.status,
-        priority: activities.priority,
-        commitmentDate: activities.commitmentDate,
-        reviewDate: activities.reviewDate,
-        manager: activities.managerNameSnapshot,
-      })
-      .from(activities)
-      .where(
-        and(
-          isNull(activities.deletedAt),
-          eq(activities.archived, false),
-          ne(activities.status, "Completado"),
-          scope,
-          projectName
-            ? sql`${activities.projectNameSnapshot} ilike ${`%${projectName}%`}`
-            : undefined,
-          memberName
-            ? sql`${activities.managerNameSnapshot} ilike ${`%${memberName}%`}`
-            : undefined
-        )
-      )
-      .orderBy(asc(activities.commitmentDate), asc(activities.reviewDate))
-      .limit(80);
-
-    return rows;
+    return rows.slice(0, 80).map((t: TaskListItem) => ({
+      description: t.title,
+      project: t.project.name,
+      workflow: t.workflow?.name ?? null,
+      phase: t.phase,
+      status: t.status,
+      priority: t.priority,
+      commitmentDate: t.commitmentDate,
+      reviewDate: t.reviewDate,
+      manager: t.manager?.name ?? null,
+    }));
   },
 });
 
 export const team_workload_summary = tool({
   description:
-    "Resumen de carga del equipo: por colaborador activo, su área, capacidad, número de tareas activas asignadas y porcentaje de ocupación estimado. Útil para ver quién está saturado.",
+    "Resumen de carga del equipo: por colaborador activo, su rol, capacidad, número de tareas activas asignadas y porcentaje de ocupación estimado. Útil para ver quién está saturado.",
   inputSchema: z.object({}),
   execute: async () => {
-    const members = await db
-      .select({
-        name: teamMembers.name,
-        area: teamMembers.area,
-        capacity: teamMembers.capacity,
-      })
-      .from(teamMembers)
-      .where(and(isNull(teamMembers.deletedAt), eq(teamMembers.active, true)))
-      .limit(100);
+    const members = await fetchStaffAction();
+    const openTasks = await fetchTasksAction({ status: ["pendiente", "en_proceso", "bloqueado"] });
 
-    const load = await db
-      .select({
-        manager: activities.managerNameSnapshot,
-        activeTasks: sql<number>`count(*)`,
-      })
-      .from(activities)
-      .where(
-        and(
-          isNull(activities.deletedAt),
-          eq(activities.archived, false),
-          ne(activities.status, "Completado")
-        )
-      )
-      .groupBy(activities.managerNameSnapshot);
+    const byManager = new Map<string, number>();
+    for (const t of openTasks) {
+      if (!t.manager) continue;
+      byManager.set(t.manager.id, (byManager.get(t.manager.id) ?? 0) + 1);
+    }
 
-    const byManager = new Map(
-      load.map((l) => [l.manager ?? "", Number(l.activeTasks)])
-    );
-
-    return members.map((m) => {
-      const activeTasks = byManager.get(m.name) ?? 0;
+    return members.slice(0, 100).map((m) => {
+      const activeTasks = byManager.get(m.id) ?? 0;
       const cap = m.capacity > 0 ? m.capacity : 8;
       return {
         name: m.name,
-        area: m.area,
+        // Staff has no bulk "area" field (that lives in the areas join table,
+        // one query per staff member) — role is the closest free-text field
+        // available without an N+1 lookup for a summary tool like this one.
+        role: m.role,
         capacity: m.capacity,
         activeTasks,
         occupancyPct: Math.round((activeTasks / cap) * 100),
@@ -299,44 +298,112 @@ export const render_list = tool({
   },
 });
 
-const WORKFLOW_ENUM = z.enum(["Presale", "Diseño", "Construcción", "Decoración"]);
-// A brand-new project can only start life in one of these three stages
-// (Decoración is reached later, not chosen at onboarding) — projects.stage's
-// closed set, distinct from activities.workflow's WORKFLOW_ENUM above.
-const ONBOARD_WORKFLOW_ENUM = z.enum(["Presale", "Diseño", "Construcción"]);
-
 export const create_task = tool({
   description:
-    "Crea una nueva tarea/actividad en Cincel (estado inicial 'Pendiente') y opcionalmente le asigna un responsable. Úsalo solo cuando el usuario pida explícitamente crear o registrar trabajo. Verifica antes el nombre del proyecto y del responsable con list_projects / team_workload_summary; no los inventes.",
+    "Crea una nueva tarea/actividad en Cincel (estado inicial 'pendiente') y opcionalmente le asigna un responsable. Úsalo solo cuando el usuario pida explícitamente crear o registrar trabajo. Verifica antes el nombre del proyecto y del responsable con list_projects / team_workload_summary; no los inventes.",
   inputSchema: z.object({
     description: z.string().min(3).describe("Qué hay que hacer"),
+    project: z.string().min(2).describe("Nombre exacto del proyecto — toda tarea pertenece a un proyecto"),
     workflow: WORKFLOW_ENUM.describe("Flujo de trabajo"),
-    project: z.string().optional().describe("Nombre exacto del proyecto"),
     manager: z.string().optional().describe("Nombre del responsable"),
-    priority: z.enum(["Alta", "Media", "Baja"]).default("Media"),
+    priority: z.enum(["alta", "media", "baja"]).default("media"),
     phase: z.string().optional(),
     commitmentDate: z.string().optional().describe("Fecha de entrega YYYY-MM-DD"),
     reviewDate: z.string().optional().describe("Fecha de revisión YYYY-MM-DD"),
   }),
-  execute: async (input) => createActivityViaAssistantAction(input),
+  execute: async ({ description, project, workflow, manager, priority, phase, commitmentDate, reviewDate }) => {
+    const projectResolved = await resolveProject(project);
+    if (!projectResolved.ok) return projectResolved;
+
+    const workflowResolved = await resolveWorkflowByKey(workflow);
+    if (!workflowResolved.ok) return workflowResolved;
+
+    let managerId: string | null = null;
+    if (manager) {
+      const managerResolved = await resolveStaff(manager);
+      if (!managerResolved.ok) return managerResolved;
+      managerId = managerResolved.value.id;
+    }
+
+    const task = await createUserTaskAction({
+      projectId: projectResolved.value.id,
+      title: description,
+      workflowId: workflowResolved.value.id,
+      phase,
+      managerId,
+      priority: priority as TaskPriority,
+      commitmentDate,
+      reviewDate,
+    });
+
+    return {
+      ok: true as const,
+      id: task.id,
+      title: task.title,
+      project: task.project.name,
+      workflow: task.workflow?.name ?? null,
+      manager: task.manager?.name ?? null,
+      status: task.status,
+      priority: task.priority,
+    };
+  },
 });
 
 export const assign_task = tool({
   description:
-    "Reasigna el responsable de una tarea existente, localizándola por un fragmento de su descripción (y opcionalmente proyecto/flujo). Si hay 0 o varias coincidencias devuelve el motivo y los candidatos para que el usuario aclare.",
+    "Reasigna el responsable de una tarea existente, localizándola por un fragmento de su título (y opcionalmente proyecto/flujo). Si hay 0 o varias coincidencias devuelve el motivo y los candidatos para que el usuario aclare.",
   inputSchema: z.object({
-    descriptionContains: z
-      .string()
-      .min(3)
-      .describe("Fragmento de la descripción de la tarea"),
+    descriptionContains: z.string().min(3).describe("Fragmento del título de la tarea"),
     manager: z.string().min(2).describe("Nuevo responsable"),
     workflow: WORKFLOW_ENUM.optional(),
     project: z.string().optional(),
   }),
-  execute: async (input) => assignActivityViaAssistantAction(input),
+  execute: async ({ descriptionContains, manager, workflow, project }) => {
+    let projectId: string | undefined;
+    if (project) {
+      const resolved = await resolveProject(project);
+      if (!resolved.ok) return resolved;
+      projectId = resolved.value.id;
+    }
+
+    let workflowId: string | undefined;
+    if (workflow) {
+      const resolved = await resolveWorkflowByKey(workflow);
+      if (!resolved.ok) return resolved;
+      workflowId = resolved.value.id;
+    }
+
+    const matches = await fetchTasksAction({ search: descriptionContains, projectId, workflowId });
+    if (matches.length === 0) {
+      return { ok: false as const, error: `No se encontró ninguna tarea que contenga "${descriptionContains}".` };
+    }
+    if (matches.length > 1) {
+      return {
+        ok: false as const,
+        error: `"${descriptionContains}" es ambiguo, coincide con ${matches.length} tareas.`,
+        candidates: matches.slice(0, 10).map((t) => `${t.title} (${t.project.name})`),
+      };
+    }
+
+    const managerResolved = await resolveStaff(manager);
+    if (!managerResolved.ok) return managerResolved;
+
+    const task = await assignTaskAction(matches[0].id, managerResolved.value.id);
+    return {
+      ok: true as const,
+      id: task.id,
+      title: task.title,
+      project: task.project.name,
+      manager: task.manager?.name ?? null,
+    };
+  },
 });
 
 const CLIENT_KIND_ENUM = z.enum(["Empresa", "Particular"]);
+const CLIENT_KIND_MAP: Record<z.infer<typeof CLIENT_KIND_ENUM>, ContactKind> = {
+  Empresa: "empresa",
+  Particular: "particular",
+};
 
 export const create_client = tool({
   description:
@@ -353,7 +420,19 @@ export const create_client = tool({
     contactEmail: z.string().optional(),
     contactPhone: z.string().optional(),
   }),
-  execute: async (input) => createClientViaAssistantAction(input),
+  execute: async ({ name, kind, phone, acquisitionChannel, contactName, contactEmail, contactPhone }) => {
+    const contact = await createContactAction({
+      type: "cliente",
+      kind: CLIENT_KIND_MAP[kind],
+      name,
+      phone,
+      acquisitionChannel,
+      people: contactName
+        ? [{ name: contactName, email: contactEmail ?? null, phone: contactPhone ?? null, isPrimary: true, role: null }]
+        : undefined,
+    });
+    return { ok: true as const, id: contact.id, name: contact.name, kind: contact.kind };
+  },
 });
 
 export const onboard_client = tool({
@@ -368,7 +447,7 @@ export const onboard_client = tool({
     contactEmail: z.string().optional(),
     contactPhone: z.string().optional(),
     projectName: z.string().min(2).describe("Nombre del proyecto nuevo"),
-    workflow: ONBOARD_WORKFLOW_ENUM.default("Presale"),
+    workflow: ONBOARD_WORKFLOW_ENUM.default("presale"),
     manager: z
       .string()
       .optional()
@@ -379,7 +458,66 @@ export const onboard_client = tool({
       .optional()
       .describe("Tareas adicionales fuera de la plantilla"),
   }),
-  execute: async (input) => onboardClientViaAssistantAction(input),
+  execute: async ({
+    name,
+    kind,
+    phone,
+    acquisitionChannel,
+    contactName,
+    contactEmail,
+    contactPhone,
+    projectName,
+    workflow,
+    manager,
+    extraTasks,
+  }) => {
+    const workflowResolved = await resolveWorkflowByKey(workflow);
+    if (!workflowResolved.ok) return workflowResolved;
+
+    let managerId: string | null = null;
+    if (manager) {
+      const managerResolved = await resolveStaff(manager);
+      if (!managerResolved.ok) return managerResolved;
+      managerId = managerResolved.value.id;
+    }
+
+    const contact = await createContactAction({
+      type: "cliente",
+      kind: CLIENT_KIND_MAP[kind],
+      name,
+      phone,
+      acquisitionChannel,
+      people: contactName
+        ? [{ name: contactName, email: contactEmail ?? null, phone: contactPhone ?? null, isPrimary: true, role: null }]
+        : undefined,
+    });
+
+    const project = await createProjectAction({
+      name: projectName,
+      clientId: contact.id,
+      currentWorkflowId: workflowResolved.value.id,
+      managerId,
+    });
+
+    const createdTasks = await applyWorkflowAction(project.id, workflowResolved.value.id, { managerId });
+
+    for (const title of extraTasks ?? []) {
+      await createUserTaskAction({
+        projectId: project.id,
+        title,
+        workflowId: workflowResolved.value.id,
+        managerId,
+      });
+    }
+
+    return {
+      ok: true as const,
+      client: { id: contact.id, name: contact.name },
+      project: { id: project.id, name: project.name },
+      workflow: workflowResolved.value.name,
+      tasksCreated: createdTasks.length + (extraTasks?.length ?? 0),
+    };
+  },
 });
 
 export const create_rfc = tool({
@@ -436,29 +574,86 @@ export const create_rfc = tool({
 
 export const find_duplicates = tool({
   description:
-    "Escanea la base de datos en busca de registros duplicados: clientes con el mismo nombre, tareas idénticas en el mismo proyecto/flujo, y miembros repetidos en un proyecto. Solo lectura — devuelve los grupos para que el usuario decida.",
+    "Escanea la base de datos en busca de registros duplicados: clientes con el mismo nombre y tareas idénticas en el mismo proyecto/flujo. Solo lectura — devuelve los grupos para que el usuario decida.",
   inputSchema: z.object({}),
-  execute: async () => findDuplicatesAction(),
+  execute: async () => {
+    const contacts = await fetchContactsAction({});
+    const contactGroups = new Map<string, string[]>();
+    for (const c of contacts) {
+      const key = c.name.trim().toLowerCase();
+      contactGroups.set(key, [...(contactGroups.get(key) ?? []), c.id]);
+    }
+    const duplicateClients = [...contactGroups.entries()]
+      .filter(([, ids]) => ids.length > 1)
+      .map(([name, ids]) => ({ name, count: ids.length }));
+
+    const tasks = await fetchTasksAction({});
+    const taskGroups = new Map<string, { project: string; workflow: string | null; title: string; count: number }>();
+    for (const t of tasks) {
+      const key = `${t.projectId}::${t.workflowId ?? ""}::${t.title.trim().toLowerCase()}`;
+      const cur = taskGroups.get(key);
+      if (cur) {
+        cur.count += 1;
+      } else {
+        taskGroups.set(key, { project: t.project.name, workflow: t.workflow?.name ?? null, title: t.title, count: 1 });
+      }
+    }
+    const duplicateActivities = [...taskGroups.values()].filter((g) => g.count > 1);
+
+    return {
+      duplicateClients,
+      duplicateActivities,
+      // Dropped: "repeated member in the same project" detection. It existed
+      // pre-rebuild but there's no bulk repository query for project
+      // membership across all projects in the new layer (only per-project via
+      // fetchProjectAction), and looping fetchProjectAction over every
+      // project just for this check is an N+1 this read-only scan shouldn't
+      // pay for. Bring it back once a projects-repository helper exists that
+      // lists (projectId, staffId) duplicates directly.
+      note:
+        "No incluye colaboradores repetidos dentro de un mismo proyecto — ver comentario en el código.",
+    };
+  },
 });
 
 export const merge_duplicate_clients = tool({
   description:
-    "Fusiona todos los clientes activos que comparten un nombre (sin distinguir mayúsculas) en uno solo. Conserva el que tiene más proyectos; reasigna proyectos, contactos e historial al superviviente y archiva los demás. Pide confirmación antes de usarlo.",
+    "Antes fusionaba clientes duplicados; esa operación no existe todavía en el modelo nuevo. Devuelve un resultado explicando que no está disponible, sin tocar nada.",
   inputSchema: z.object({
     name: z.string().min(2).describe("Nombre del cliente duplicado"),
   }),
-  execute: async (input) => mergeDuplicateClientsAction(input),
+  // lib/actions/maintenance-actions.ts (mergeDuplicateClientsAction) was
+  // removed in the greenfield rebuild and lib/repositories/contacts-repository.ts
+  // has no merge equivalent yet — merging would mean reassigning every
+  // project/task/history row that references the losing contact id, which
+  // needs a dedicated transaction in the repository layer. Until that exists,
+  // fail closed with a clear message instead of silently doing nothing.
+  execute: async ({ name }) => {
+    return {
+      ok: false as const,
+      error: `Fusionar clientes duplicados ("${name}") no está disponible todavía en el modelo de datos nuevo. Usa find_duplicates para verlos y fusiónalos a mano por ahora.`,
+    };
+  },
 });
 
 export const merge_duplicate_activities = tool({
   description:
-    "Fusiona tareas duplicadas de un proyecto (misma descripción y flujo). Conserva la que tiene más bitácora; mueve historial, apoyos y checklist a esa y archiva las demás. Pide confirmación antes de usarlo.",
+    "Antes fusionaba tareas duplicadas de un proyecto; esa operación no existe todavía en el modelo nuevo. Devuelve un resultado explicando que no está disponible, sin tocar nada.",
   inputSchema: z.object({
     projectName: z.string().min(2),
     descriptionContains: z.string().min(3),
     workflow: WORKFLOW_ENUM.optional(),
   }),
-  execute: async (input) => mergeDuplicateActivitiesAction(input),
+  // Same situation as merge_duplicate_clients: mergeDuplicateActivitiesAction
+  // is gone and lib/repositories/tasks-repository.ts has no merge (move
+  // checklist/support/history to a survivor task, archive the rest)
+  // equivalent yet. Fail closed rather than pretend to merge.
+  execute: async ({ projectName, descriptionContains }) => {
+    return {
+      ok: false as const,
+      error: `Fusionar tareas duplicadas ("${descriptionContains}" en "${projectName}") no está disponible todavía en el modelo de datos nuevo. Usa find_duplicates para verlas y fusiónalas a mano por ahora.`,
+    };
+  },
 });
 
 export const discard_project = tool({
@@ -467,7 +662,12 @@ export const discard_project = tool({
   inputSchema: z.object({
     projectName: z.string().min(2).describe("Nombre exacto del proyecto a descartar"),
   }),
-  execute: async (input) => discardProjectViaAssistantAction(input),
+  execute: async ({ projectName }) => {
+    const resolved = await resolveProject(projectName);
+    if (!resolved.ok) return resolved;
+    await deleteProjectAction(resolved.value.id);
+    return { ok: true as const, id: resolved.value.id, name: resolved.value.name };
+  },
 });
 
 export const ASSISTANT_TOOLS = {
@@ -482,8 +682,8 @@ export const ASSISTANT_TOOLS = {
 
 /**
  * The tool set the assistant gets for a given caller. Read tools + render_chart
- * are always available; the write tools are gated by the same activities
- * capabilities the /tareas UI enforces:
+ * are always available; the write tools are gated by the same capabilities
+ * the corresponding UI enforces:
  * - create_task              → canCreateActivity
  * - assign_task              → canChangeResponsible
  * - create_client            → canCreateClient

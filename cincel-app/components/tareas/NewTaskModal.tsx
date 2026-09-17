@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { TaskStatus } from "@/lib/types/task";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
@@ -10,65 +9,66 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 
-type TaskFormValues = {
-  project: string;
+export type NewTaskFormValues = {
+  projectId: string;
   phase: string;
-  description: string;
-  manager: string;
-  support: string[];
-  status: TaskStatus;
+  title: string;
+  managerId: string | null;
+  supportIds: string[];
   notes: string;
   commitmentDate: string;
   reviewDate: string;
 };
 
+type ProjectOption = { id: string; name: string };
+type StaffOption = { id: string; name: string };
+
 type Props = {
   open: boolean;
-  projects: string[];
-  teamMembers: string[];
+  projects: ProjectOption[];
+  staff: StaffOption[];
   phaseOptions: string[];
   onClose: () => void;
-  onSave: (task: TaskFormValues) => void;
-  /** Ref to the trigger element so focus returns on close. */
-  triggerRef?: React.RefObject<HTMLElement | null>;
+  onSave: (task: NewTaskFormValues) => void;
 };
 
 export default function NewTaskModal({
   open,
   projects,
-  teamMembers,
+  staff,
   phaseOptions,
   onClose,
   onSave,
 }: Props) {
-  const [project, setProject] = useState(projects[0] ?? "Ensenada");
+  const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [phase, setPhase] = useState(phaseOptions[0] ?? "Inicial");
-  const [description, setDescription] = useState("");
-  const [manager, setManager] = useState(teamMembers[0] ?? "Sin responsable");
-  const [support, setSupport] = useState<string[]>([]);
-  const [status, setStatus] = useState<TaskStatus>("Pendiente");
+  const [title, setTitle] = useState("");
+  const [managerId, setManagerId] = useState<string | null>(staff[0]?.id ?? null);
+  const [supportNames, setSupportNames] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [commitmentDate, setCommitmentDate] = useState("");
   const [reviewDate, setReviewDate] = useState("");
 
-  const descriptionRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const commitmentDateRef = useRef<HTMLInputElement>(null);
   const reviewDateRef = useRef<HTMLInputElement>(null);
 
+  const staffNames = staff.map((s) => s.name);
+  const nameToId = new Map(staff.map((s) => [s.name, s.id]));
+
   const handleSave = () => {
-    const currentDescription = descriptionRef.current?.value ?? description;
-    const trimmedDescription = currentDescription.trim();
+    const currentTitle = titleRef.current?.value ?? title;
+    const trimmedTitle = currentTitle.trim();
 
-    if (!trimmedDescription) return;
+    if (!trimmedTitle || !projectId) return;
 
-    const nextValues: TaskFormValues = {
-      project,
+    const nextValues: NewTaskFormValues = {
+      projectId,
       phase,
-      description: trimmedDescription,
-      manager,
-      support,
-      status,
+      title: trimmedTitle,
+      managerId,
+      supportIds: supportNames.map((n) => nameToId.get(n)).filter((id): id is string => Boolean(id)),
       notes: notesRef.current?.value ?? notes,
       commitmentDate: commitmentDateRef.current?.value ?? commitmentDate,
       reviewDate: reviewDateRef.current?.value ?? reviewDate,
@@ -93,9 +93,9 @@ export default function NewTaskModal({
           <div>
             <Label className="mb-2 block text-foreground">Descripción</Label>
             <Input
-              ref={descriptionRef}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              ref={titleRef}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
               placeholder="Describe la tarea..."
               className="text-foreground placeholder:text-muted-foreground"
             />
@@ -104,30 +104,39 @@ export default function NewTaskModal({
           <div className="grid grid-cols-2 gap-5">
             <div>
               <Label className="mb-2 block text-foreground">Proyecto</Label>
-              <Select value={project} onValueChange={(v) => setProject(v as string)}>
-                <SelectTrigger className="w-full text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {projects.length === 0 ? (
+                <p className="w-full rounded-xl border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+                  No hay proyectos activos disponibles
+                </p>
+              ) : (
+                <Select value={projectId} onValueChange={(v) => setProjectId(v as string)}>
+                  <SelectTrigger className="w-full text-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div>
               <Label className="mb-2 block text-foreground">Responsable</Label>
-              <Select value={manager} onValueChange={(v) => setManager(v as string)}>
+              <Select
+                value={managerId ?? ""}
+                onValueChange={(v) => setManagerId((v as string) || null)}
+              >
                 <SelectTrigger className="w-full text-foreground">
-                  <SelectValue />
+                  <SelectValue placeholder="Sin responsable" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teamMembers.map((member) => (
-                    <SelectItem key={member} value={member}>
-                      {member}
+                  {staff.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -136,9 +145,9 @@ export default function NewTaskModal({
             <div className="flex flex-col gap-2">
               <Label className="mb-2 block text-foreground">Equipo</Label>
               <TeamMultiSelect
-                options={teamMembers}
-                selected={support}
-                onChange={setSupport}
+                options={staffNames}
+                selected={supportNames}
+                onChange={setSupportNames}
               />
             </div>
 
@@ -173,22 +182,10 @@ export default function NewTaskModal({
                 </SelectContent>
               </Select>
             </div>
-
-            <div>
-              <Label className="mb-2 block text-foreground">Estado</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as TaskStatus)}>
-                <SelectTrigger className="w-full text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Pendiente">Pendiente</SelectItem>
-                  <SelectItem value="En proceso">En proceso</SelectItem>
-                  <SelectItem value="Completado">Completado</SelectItem>
-                  <SelectItem value="Bloqueado">Bloqueado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
+          {/* New tasks always start "pendiente" — UserTaskInput has no status field,
+              so there is nothing to pick here; status is changed from the table
+              afterwards. */}
 
           <div>
             <Label className="mb-2 block text-foreground">Seguimiento</Label>
@@ -220,7 +217,7 @@ export default function NewTaskModal({
             Cancelar
           </Button>
 
-          <Button onClick={handleSave}>
+          <Button onClick={handleSave} disabled={!projectId}>
             Guardar
           </Button>
         </SheetFooter>

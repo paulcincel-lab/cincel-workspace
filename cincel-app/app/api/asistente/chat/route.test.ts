@@ -41,7 +41,7 @@ import type { SystemAccessRole } from "@/lib/data/roles";
 function userWithAccess(access: SystemAccessRole): AuthenticatedUser {
   return {
     member: {
-      id: 1,
+      id: "1",
       name: "Test",
       role: access,
       area: "",

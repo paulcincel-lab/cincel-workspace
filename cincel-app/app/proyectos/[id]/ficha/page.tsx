@@ -1,276 +1,133 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import AppAvatar from "@/components/ui/AppAvatar";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
-import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
+import { useDriveEnabled } from "@/lib/google/use-drive-enabled";
 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
-import { projects } from "@/lib/data/projects";
-import { teamMembersPublic as teamMembers } from "@/lib/data/team-public";
-import { presaleTasks } from "@/lib/data/presale";
-import { disenoTasks } from "@/lib/data/diseno";
-import { operativasTasks } from "@/lib/data/operativas";
-import { loadLinkedTasks } from "@/lib/utils/tasks-linking";
-import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
-import { fetchProjects, saveProjects } from "@/lib/repositories/projects-repository";
-import { fetchClients } from "@/lib/repositories/clients-repository";
-import { fetchTeamMembersPublic } from "@/lib/repositories/team-repository";
-import { fetchActivities } from "@/lib/repositories/activities-repository";
+import {
+  fetchProjectAction,
+  updateProjectAction,
+  setProjectStageAction,
+  setProjectMembersAction,
+  setProjectContactsAction,
+  setProjectLinkAction,
+  previewApplyWorkflowAction,
+  applyWorkflowAction,
+} from "@/lib/actions/projects-actions";
+import { fetchStaffAction } from "@/lib/actions/staff-actions";
+import { fetchContactsAction } from "@/lib/actions/contacts-actions";
+import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
+import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
-import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
-import { useDriveEnabled } from "@/lib/google/use-drive-enabled";
-import { departamentoSlugForStage } from "@/lib/actividades/departamento";
-import type { Task } from "@/lib/types/task";
+import type {
+  ApplyWorkflowPreview,
+  ContactListItem,
+  ProjectDetail,
+  Staff,
+  TaskListItem,
+  Workflow,
+} from "@/lib/types/core";
 
-type ProjectItem = (typeof projects)[number];
-type ActiveClientOption = {
-  id: number;
-  name: string;
-  kind: "Empresa" | "Particular";
+const PROJECT_LINK_KINDS: Array<{ key: string; label: string }> = [
+  { key: "administrativo", label: "Administrativo" },
+  { key: "planos", label: "Planos" },
+  { key: "renders", label: "Renders" },
+  { key: "reportes", label: "Reportes" },
+];
+
+const NO_VALUE = "__none__";
+
+const PROJECT_STATUS_LABEL: Record<ProjectDetail["status"], string> = {
+  activo: "Activo",
+  pausado: "Pausado",
+  completado: "Completado",
+  cancelado: "Cancelado",
 };
-type ManualClientOption = ActiveClientOption;
-
-const SECONDARY_COORDINATOR_STORAGE_KEY = "cincel.projects.secondary-coordinator.v1";
-
-/** Pre-hydration seed — real data comes from `fetchProjects()`. */
-function loadPersistedProjects(): ProjectItem[] {
-  return projects;
-}
-
-function loadActiveClients(
-  projectsData: ProjectItem[],
-  manualClients: ManualClientOption[] = []
-): ActiveClientOption[] {
-  const fromProjects: ActiveClientOption[] = projectsData.map((project) => ({
-    id: project.client.id,
-    name: project.client.name,
-    kind: project.client.kind === "Empresa" ? "Empresa" : "Particular",
-  }));
-
-  const deduped = new Map<string, ActiveClientOption>();
-  for (const client of [...fromProjects, ...manualClients]) {
-    const key = client.name.toLowerCase();
-    if (client.name && !deduped.has(key)) deduped.set(key, client);
-  }
-
-  return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** Pre-hydration seed — real names come from `fetchTeamMembersPublic()`. */
-function loadActiveTeamNames(): string[] {
-  return teamMembers.filter((member) => member.active).map((member) => member.name);
-}
-
-function loadSecondaryCoordinatorMap(): Record<number, string> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  const stored = readStorage(SECONDARY_COORDINATOR_STORAGE_KEY);
-
-  if (!stored) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Record<number, string>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-const PROJECT_TYPES = ["Habitacional", "Oficinas", "Comercial", "Mobiliario", "Mantenimiento", "Otro"];
-const STAGE_OPTIONS_FICHA = ["Presale", "Diseño", "Construcción"];
-/** shadcn Select (base-ui) doesn't support an empty-string item value. */
-const NO_COORDINATOR_VALUE = "__none__";
-
-type EditDraft = {
-  clientName: string;
-  type: string;
-  stages: string[];
-  phase: string;
-  street: string;
-  city: string;
-  addrState: string;
-  startDate: string;
-  coordinator: string;
-  constructionCoordinator: string;
-  driveAdministrativo: string;
-  driveReportes: string;
-};
-
-function buildEditDraft(project: ProjectItem, constructionCoordinator: string): EditDraft {
-  return {
-    clientName: project.client.name,
-    type: project.type,
-    stages: project.stage.split("/").map((s) => s.trim()).filter(Boolean),
-    phase: project.phase,
-    street: project.address.street || "",
-    city: project.address.city,
-    addrState: project.address.state,
-    startDate: project.startDate || "",
-    coordinator: project.coordinator || "",
-    constructionCoordinator,
-    driveAdministrativo: project.drive?.administrativo || "",
-    driveReportes: project.drive?.reportes || "",
-  };
-}
 
 export default function ProjectFichaPage() {
   const params = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
-  const projectId = Number(params.id);
+  const projectId = params.id;
 
-  const [projectsData, setProjectsData] = useState<ProjectItem[]>(() => loadPersistedProjects());
-  const [manualClients, setManualClients] = useState<ManualClientOption[]>([]);
-  const [tasksByWorkflow, setTasksByWorkflow] = useState<{ presale: Task[]; diseno: Task[]; construccion: Task[] }>(() => ({
-    presale: loadLinkedTasks("Presale", presaleTasks),
-    diseno: loadLinkedTasks("Diseño", disenoTasks),
-    construccion: loadLinkedTasks("Construcción", operativasTasks),
-  }));
-  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
-  const [activeTeamNames, setActiveTeamNames] = useState<string[]>(() => loadActiveTeamNames());
-  const [secondaryCoordinatorByProject, setSecondaryCoordinatorByProject] = useState<Record<number, string>>(() => loadSecondaryCoordinatorMap());
+  const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [tasks, setTasks] = useState<TaskListItem[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [contacts, setContacts] = useState<ContactListItem[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
-  const [drivePickerFor, setDrivePickerFor] = useState<
-    "driveAdministrativo" | "driveReportes" | null
-  >(null);
+  const [draft, setDraft] = useState<Partial<ProjectDetail>>({});
+  const [drivePickerFor, setDrivePickerFor] = useState<string | null>(null);
+  const [applyPreview, setApplyPreview] = useState<ApplyWorkflowPreview | null>(null);
+  const [applyWorkflowId, setApplyWorkflowId] = useState("");
   const driveEnabled = useDriveEnabled();
-  const [inlineEditingCoordinator, setInlineEditingCoordinator] = useState(false);
-  const [inlineEditingConstructionCoordinator, setInlineEditingConstructionCoordinator] = useState(false);
-  const [inlineEditingAddress, setInlineEditingAddress] = useState(false);
-  const [inlineAddressValue, setInlineAddressValue] = useState<{ street: string; city: string; state: string }>({ street: "", city: "", state: "" });
+  const authenticatedUser = getCurrentAuthenticatedUser();
+  const caps = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
 
-  const lastSavedRef = useRef<ProjectItem[]>(projectsData);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Debounced diffed save of project edits to Postgres.
-  useEffect(() => {
-    const changed = projectsData.filter((p) => {
-      const saved = lastSavedRef.current.find((s) => s.id === p.id);
-      return !saved || JSON.stringify(p) !== JSON.stringify(saved);
-    });
-    if (changed.length === 0) return;
-    if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      lastSavedRef.current = projectsData;
-      saveProjects(changed).catch((err: unknown) => {
-        if (err instanceof RepositoryError) reportRepositoryError(err);
-      });
-    }, 800);
-    return () => {
-      if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
-    };
-  }, [projectsData]);
-
-  useEffect(() => {
-    writeStorage(SECONDARY_COORDINATOR_STORAGE_KEY, JSON.stringify(secondaryCoordinatorByProject));
-  }, [secondaryCoordinatorByProject]);
-
-  useEffect(() => {
-    const refreshLocal = () => setAuthenticatedUser(getCurrentAuthenticatedUser());
-    const hydrate = () => {
-      void fetchProjects()
-        .then((rows) => {
-          if (rows.length > 0) {
-            lastSavedRef.current = rows;
-            setProjectsData(rows);
-          }
-        })
-        .catch(() => undefined);
-      void fetchClients()
-        .then((rows) =>
-          setManualClients(
-            rows
-              .filter((c) => c.hasActiveProject)
-              .map((c) => ({ id: c.id, name: c.name, kind: c.kind }))
-          )
-        )
-        .catch(() => undefined);
-      void fetchTeamMembersPublic()
-        .then((rows) => {
-          const names = rows.filter((m) => m.active).map((m) => m.name).filter(Boolean);
-          if (names.length > 0) setActiveTeamNames(names);
-        })
-        .catch(() => undefined);
-      void Promise.all([
-        fetchActivities("Presale"),
-        fetchActivities("Diseño"),
-        fetchActivities("Construcción"),
-      ])
-        .then(([p, d, c]) => {
-          setTasksByWorkflow({
-            presale: loadLinkedTasks("Presale", p.length > 0 ? p : presaleTasks),
-            diseno: loadLinkedTasks("Diseño", d.length > 0 ? d : disenoTasks),
-            construccion: loadLinkedTasks("Construcción", c.length > 0 ? c : operativasTasks),
-          });
-        })
-        .catch(() => undefined);
-    };
-
-    refreshLocal();
-    hydrate();
-
-    const onExternalChange = () => {
-      refreshLocal();
-      hydrate();
-    };
-    window.addEventListener("focus", onExternalChange);
-    window.addEventListener("storage", onExternalChange);
-
-    return () => {
-      window.removeEventListener("focus", onExternalChange);
-      window.removeEventListener("storage", onExternalChange);
-    };
-  }, []);
-
-  const projectsCapabilities = useMemo(() => {
-    return resolveProjectsCapabilities(authenticatedUser);
-  }, [authenticatedUser]);
-
-  const project = projectsData.find((item) => item.id === projectId) ?? null;
-  const activeClients = useMemo(
-    () => loadActiveClients(projectsData, manualClients),
-    [projectsData, manualClients]
-  );
-  const constructionCoordinator = project ? secondaryCoordinatorByProject[project.id] || "Sin encargado" : "Sin encargado";
-  const shouldAutoEditDocs = searchParams.get("edit") === "docs";
-
-  useEffect(() => {
-    if (!project || !shouldAutoEditDocs || isEditing || !projectsCapabilities.canEditProjectGeneral) {
-      return;
+  async function reload() {
+    try {
+      const [row, taskRows, staffRows, contactRows, workflowRows] = await Promise.all([
+        fetchProjectAction(projectId),
+        fetchTasksAction({ projectId }),
+        fetchStaffAction(),
+        fetchContactsAction(),
+        fetchWorkflowsAction(),
+      ]);
+      if (!row) {
+        setNotFound(true);
+        return;
+      }
+      setProject(row);
+      setTasks(taskRows);
+      setStaff(staffRows);
+      setContacts(contactRows.filter((c) => c.type !== "cliente"));
+      setWorkflows(workflowRows);
+    } catch (err) {
+      if (err instanceof RepositoryError) reportRepositoryError(err);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    const timeoutId = window.setTimeout(() => {
-      setEditDraft(buildEditDraft(project, constructionCoordinator));
-      setIsEditing(true);
-    }, 0);
+  useEffect(() => {
+    // Load the project on mount and whenever the route id changes — reload()
+    // is also reused by the save handlers, so it can't be inlined here
+    // without duplicating the fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [constructionCoordinator, isEditing, project, projectsCapabilities.canEditProjectGeneral, shouldAutoEditDocs]);
-
-  if (!project) {
+  if (loading) {
     return (
       <main className="flex min-h-screen bg-background text-foreground">
         <Sidebar />
-
         <section className="flex-1 overflow-y-auto p-10">
           <Header />
+          <p className="text-sm text-muted-foreground">Cargando proyecto…</p>
+        </section>
+      </main>
+    );
+  }
 
+  if (notFound || !project) {
+    return (
+      <main className="flex min-h-screen bg-background text-foreground">
+        <Sidebar />
+        <section className="flex-1 overflow-y-auto p-10">
+          <Header />
           <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <h1 className="text-2xl font-bold text-foreground">Proyecto no encontrado</h1>
             <p className="mt-2 text-sm text-muted-foreground">No existe un proyecto con este identificador.</p>
@@ -283,577 +140,360 @@ export default function ProjectFichaPage() {
     );
   }
 
-  const projectActivities = [
-    { label: "Presale", tasks: tasksByWorkflow.presale },
-    { label: "Diseño", tasks: tasksByWorkflow.diseno },
-    { label: "Construcción", tasks: tasksByWorkflow.construccion },
-  ].filter((activity) => activity.tasks.some((task) => task.project === project.name));
-
-  const internalDocsUrl = project.drive?.administrativo ?? "";
-  const clientDocsUrl = project.drive?.reportes ?? "";
-
-  const startEditing = () => {
-    if (!projectsCapabilities.canEditProjectGeneral) {
-      return;
-    }
-
-    setEditDraft(buildEditDraft(project, constructionCoordinator));
+  function startEditing() {
+    if (!project || !caps.canEditProjectGeneral) return;
+    setDraft({
+      projectType: project.projectType,
+      phase: project.phase,
+      addressStreet: project.addressStreet,
+      addressCity: project.addressCity,
+      addressState: project.addressState,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      contractAmountMxn: project.contractAmountMxn,
+      managerId: project.manager?.id ?? null,
+      coordinatorId: project.coordinator?.id ?? null,
+    });
     setIsEditing(true);
-  };
+  }
 
-  const cancelEditing = () => {
-    setIsEditing(false);
-    setEditDraft(null);
-  };
+  async function saveEditing() {
+    if (!project) return;
+    try {
+      await updateProjectAction(project.id, draft);
+      setIsEditing(false);
+      await reload();
+    } catch (err) {
+      if (err instanceof RepositoryError) reportRepositoryError(err);
+    }
+  }
 
-  const saveEditing = () => {
-    if (!editDraft) return;
+  async function changeStage(workflowId: string) {
+    if (!project) return;
+    try {
+      await setProjectStageAction(project.id, workflowId);
+      await reload();
+    } catch (err) {
+      if (err instanceof RepositoryError) reportRepositoryError(err);
+    }
+  }
 
-    const selectedClient = activeClients.find((c) => c.name === editDraft.clientName);
+  async function toggleMember(staffId: string) {
+    if (!project) return;
+    const already = project.members.some((m) => m.id === staffId);
+    const next = already
+      ? project.members.filter((m) => m.id !== staffId).map((m) => ({ staffId: m.id, role: m.role }))
+      : [...project.members.map((m) => ({ staffId: m.id, role: m.role })), { staffId, role: null }];
+    try {
+      await setProjectMembersAction(project.id, next);
+      await reload();
+    } catch (err) {
+      if (err instanceof RepositoryError) reportRepositoryError(err);
+    }
+  }
 
-    setProjectsData((current) =>
-      current.map((item) => {
-        if (item.id !== project.id) return item;
-        return {
-          ...item,
-          type: editDraft.type,
-          stage: projectsCapabilities.canChangeProjectStage ? editDraft.stages.join(" / ") : item.stage,
-          phase: editDraft.phase,
-          startDate: editDraft.startDate,
-          coordinator: editDraft.coordinator,
-          client: projectsCapabilities.canEditProtectedProjectData && selectedClient
-            ? { ...item.client, id: selectedClient.id, name: selectedClient.name, kind: selectedClient.kind }
-            : item.client,
-          address: {
-            ...item.address,
-            street: editDraft.street,
-            city: editDraft.city,
-            state: editDraft.addrState,
-          },
-          drive: {
-            ...item.drive,
-            administrativo: editDraft.driveAdministrativo,
-            reportes: editDraft.driveReportes,
-          },
-        };
-      })
-    );
+  async function toggleContact(contactId: string) {
+    if (!project) return;
+    const already = project.contacts.some((c) => c.id === contactId);
+    const next = already
+      ? project.contacts.filter((c) => c.id !== contactId).map((c) => ({ contactId: c.id, role: c.role }))
+      : [...project.contacts.map((c) => ({ contactId: c.id, role: c.role })), { contactId, role: null }];
+    try {
+      await setProjectContactsAction(project.id, next);
+      await reload();
+    } catch (err) {
+      if (err instanceof RepositoryError) reportRepositoryError(err);
+    }
+  }
 
-    setSecondaryCoordinatorByProject((current) => ({
-      ...current,
-      [project.id]: editDraft.constructionCoordinator,
-    }));
+  async function pickDriveEntry(entry: DrivePickerEntry) {
+    if (!project || !drivePickerFor) return;
+    try {
+      await setProjectLinkAction(project.id, drivePickerFor, {
+        url: entry.webViewLink,
+        title: entry.name,
+        drive: {
+          googleFileId: entry.id,
+          fileName: entry.name,
+          mimeType: entry.mimeType,
+          iconLink: entry.iconLink,
+          thumbnailLink: entry.thumbnailLink,
+          webViewLink: entry.webViewLink,
+          syncedAt: new Date().toISOString(),
+        },
+      });
+      setDrivePickerFor(null);
+      await reload();
+    } catch (err) {
+      if (err instanceof RepositoryError) reportRepositoryError(err);
+    }
+  }
 
-    setIsEditing(false);
-    setEditDraft(null);
-  };
+  async function openApplyPreview() {
+    if (!project || !applyWorkflowId) return;
+    const preview = await previewApplyWorkflowAction(project.id, applyWorkflowId);
+    setApplyPreview(preview);
+  }
 
-  const d = editDraft;
+  async function confirmApply() {
+    if (!project || !applyWorkflowId) return;
+    try {
+      await applyWorkflowAction(project.id, applyWorkflowId, { managerId: project.manager?.id });
+      setApplyPreview(null);
+      await reload();
+    } catch (err) {
+      if (err instanceof RepositoryError) reportRepositoryError(err);
+    }
+  }
 
   return (
     <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
-
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
 
-        <div className="space-y-6">
-          {/* Encabezado */}
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">{project.code}</p>
-                <h1 className="mt-1 text-3xl font-bold text-foreground">Ficha del proyecto</h1>
-                <p className="mt-1 text-muted-foreground">{project.name}</p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {isEditing ? (
-                  <>
-                    <Button variant="outline" onClick={cancelEditing}>
-                      Cancelar
-                    </Button>
-                    <Button onClick={saveEditing}>
-                      Guardar cambios
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      href="/proyectos"
-                      className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
-                    >
-                      Cerrar
-                    </Link>
-                    <Button
-                      variant="outline"
-                      onClick={startEditing}
-                      disabled={!projectsCapabilities.canEditProjectGeneral}
-                      title={projectsCapabilities.canEditProjectGeneral ? "" : "No tienes permiso para editar información general"}
-                    >
-                      Editar ficha
-                    </Button>
-                    <Link
-                      href={`/actividades/${departamentoSlugForStage(project.stage)}?project=${encodeURIComponent(project.name)}`}
-                      className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80"
-                    >
-                      Ver actividades
-                    </Link>
-                  </>
-                )}
-              </div>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
+              <Badge variant="secondary">{PROJECT_STATUS_LABEL[project.status]}</Badge>
             </div>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-border bg-muted p-4 md:col-span-1">
-                <p className="text-xs text-muted-foreground">Actividades donde participa</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {projectActivities.length === 0 ? (
-                    <span className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
-                      Sin actividades
-                    </span>
-                  ) : (
-                    projectActivities.map((activity) => (
-                      <span key={`${project.id}-${activity.label}`} className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground">
-                        {activity.label}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Google Drive */}
-              <div className="rounded-xl border border-border bg-muted p-4 md:col-span-2">
-                <p className="text-xs text-muted-foreground">Documentos en Google Drive</p>
-                {isEditing && d ? (
-                  <div className="mt-2 space-y-3">
-                    <div className="block text-xs text-muted-foreground">
-                      <div className="flex items-center justify-between">
-                        <span>Link — Documentos internos</span>
-                        {driveEnabled ? (
-                          <Button
-                            variant="link"
-                            onClick={() => setDrivePickerFor("driveAdministrativo")}
-                            className="h-auto p-0 font-medium"
-                          >
-                            Elegir de Google Drive
-                          </Button>
-                        ) : null}
-                      </div>
-                      <Input
-                        type="url"
-                        value={d.driveAdministrativo}
-                        onChange={(e) => setEditDraft({ ...d, driveAdministrativo: e.target.value })}
-                        placeholder="https://drive.google.com/..."
-                        className="mt-1"
-                      />
-                    </div>
-                    <div className="block text-xs text-muted-foreground">
-                      <div className="flex items-center justify-between">
-                        <span>Link — Documentos vista cliente</span>
-                        {driveEnabled ? (
-                          <Button
-                            variant="link"
-                            onClick={() => setDrivePickerFor("driveReportes")}
-                            className="h-auto p-0 font-medium"
-                          >
-                            Elegir de Google Drive
-                          </Button>
-                        ) : null}
-                      </div>
-                      <Input
-                        type="url"
-                        value={d.driveReportes}
-                        onChange={(e) => setEditDraft({ ...d, driveReportes: e.target.value })}
-                        placeholder="https://drive.google.com/..."
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {internalDocsUrl ? (
-                      <a href={internalDocsUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted">
-                        Documentos internos
-                      </a>
-                    ) : (
-                      <span className="rounded-lg border border-border bg-muted px-4 py-2 text-sm text-muted-foreground">
-                        Documentos internos
-                      </span>
-                    )}
-                    {clientDocsUrl ? (
-                      <a href={clientDocsUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted">
-                        Documentos vista cliente
-                      </a>
-                    ) : (
-                      <span className="rounded-lg border border-border bg-muted px-4 py-2 text-sm text-muted-foreground">
-                        Documentos vista cliente
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cliente:{" "}
+              <Link href={`/directorio?contact=${project.client.id}`} className="underline">
+                {project.client.name}
+              </Link>
+            </p>
           </div>
+          {caps.canEditProjectGeneral ? (
+            isEditing ? (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setIsEditing(false)}>Cancelar</Button>
+                <Button onClick={() => void saveEditing()}>Guardar</Button>
+              </div>
+            ) : (
+              <Button variant="outline" onClick={startEditing}>Editar</Button>
+            )
+          ) : null}
+        </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Datos generales */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-2">
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-foreground">Datos generales</h2>
-
-              {isEditing && d ? (
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <Label className="text-sm font-normal text-foreground">
-                    Cliente
-                    <Select
-                      value={d.clientName}
-                      onValueChange={(v) => setEditDraft({ ...d, clientName: v as string })}
-                      disabled={!projectsCapabilities.canEditProtectedProjectData}
-                    >
-                      <SelectTrigger className="mt-1 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeClients.map((c) => (
-                          <SelectItem key={`ficha-client-${c.id}`} value={c.name}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Label>
-                  <Label className="text-sm font-normal text-foreground">
-                    Tipo
-                    <Select value={d.type} onValueChange={(v) => setEditDraft({ ...d, type: v as string })}>
-                      <SelectTrigger className="mt-1 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PROJECT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </Label>
-                  <Label className="text-sm font-normal text-foreground md:col-span-2">
-                    Etapas
-                    <div className="mt-2 space-y-2 rounded-lg border border-border bg-card px-3 py-2">
-                      {STAGE_OPTIONS_FICHA.map((stage) => (
-                        <Label key={`stage-${stage}`} className="flex items-center gap-2 text-sm font-normal text-foreground">
-                          <Checkbox
-                            checked={d.stages.includes(stage)}
-                            disabled={!projectsCapabilities.canChangeProjectStage}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setEditDraft({ ...d, stages: [...d.stages, stage] });
-                              } else {
-                                setEditDraft({ ...d, stages: d.stages.filter((s) => s !== stage) });
-                              }
-                            }}
-                          />
-                          {stage}
-                        </Label>
-                      ))}
-                    </div>
-                  </Label>
-                  <Label className="text-sm font-normal text-foreground">
-                    Fase
+              {isEditing ? (
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <Label className="text-sm font-normal text-muted-foreground">
+                    Tipo de proyecto
                     <Input
-                      type="text"
-                      value={d.phase}
-                      onChange={(e) => setEditDraft({ ...d, phase: e.target.value })}
+                      value={draft.projectType ?? ""}
+                      onChange={(e) => setDraft((d) => ({ ...d, projectType: e.target.value }))}
                       className="mt-1"
                     />
                   </Label>
-                  <Label className="text-sm font-normal text-foreground">
+                  <Label className="text-sm font-normal text-muted-foreground">
+                    Fase
+                    <Input
+                      value={draft.phase ?? ""}
+                      onChange={(e) => setDraft((d) => ({ ...d, phase: e.target.value }))}
+                      className="mt-1"
+                    />
+                  </Label>
+                  <Label className="text-sm font-normal text-muted-foreground">
+                    Calle
+                    <Input
+                      value={draft.addressStreet ?? ""}
+                      onChange={(e) => setDraft((d) => ({ ...d, addressStreet: e.target.value }))}
+                      className="mt-1"
+                    />
+                  </Label>
+                  <Label className="text-sm font-normal text-muted-foreground">
+                    Ciudad
+                    <Input
+                      value={draft.addressCity ?? ""}
+                      onChange={(e) => setDraft((d) => ({ ...d, addressCity: e.target.value }))}
+                      className="mt-1"
+                    />
+                  </Label>
+                  <Label className="text-sm font-normal text-muted-foreground">
                     Fecha de inicio
                     <Input
                       type="date"
-                      value={d.startDate}
-                      onChange={(e) => setEditDraft({ ...d, startDate: e.target.value })}
+                      value={draft.startDate ?? ""}
+                      onChange={(e) => setDraft((d) => ({ ...d, startDate: e.target.value }))}
                       className="mt-1"
                     />
                   </Label>
-                  <Label className="text-sm font-normal text-foreground">
-                    Calle
-                    <Input
-                      type="text"
-                      value={d.street}
-                      onChange={(e) => setEditDraft({ ...d, street: e.target.value })}
-                      className="mt-1"
-                    />
-                  </Label>
-                  <Label className="text-sm font-normal text-foreground">
-                    Ciudad
-                    <Input
-                      type="text"
-                      value={d.city}
-                      onChange={(e) => setEditDraft({ ...d, city: e.target.value })}
-                      className="mt-1"
-                    />
-                  </Label>
-                  <Label className="text-sm font-normal text-foreground md:col-span-2">
-                    Estado
-                    <Input
-                      type="text"
-                      value={d.addrState}
-                      onChange={(e) => setEditDraft({ ...d, addrState: e.target.value })}
-                      className="mt-1"
-                    />
+                  <Label className="text-sm font-normal text-muted-foreground">
+                    Encargado
+                    <Select
+                      value={draft.managerId ?? NO_VALUE}
+                      onValueChange={(v) => setDraft((d) => ({ ...d, managerId: v === NO_VALUE ? null : (v as string) }))}
+                    >
+                      <SelectTrigger className="mt-1 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_VALUE}>Sin encargado</SelectItem>
+                        {staff.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </Label>
                 </div>
               ) : (
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-xl border border-border bg-muted p-4">
-                    <p className="text-xs text-muted-foreground">Cliente</p>
-                    <Link href={`/directorio?cliente=${project.client.id}`} className="mt-1 font-medium text-primary hover:underline">
-                      {project.client.name}
-                    </Link>
-                  </div>
-                  <div className="rounded-xl border border-border bg-muted p-4">
-                    <p className="text-xs text-muted-foreground">Tipo</p>
-                    <p className="mt-1 font-medium text-foreground">{project.type}</p>
-                  </div>
-                  <div className="rounded-xl border border-border bg-muted p-4">
-                    <p className="text-xs text-muted-foreground">Etapas</p>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {project.stage
-                        .split("/")
-                        .map((s) => s.trim())
-                        .filter(Boolean)
-                        .map((stage) => (
-                          <span key={stage} className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                            {stage}
-                          </span>
-                        ))}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border bg-muted p-4">
-                    <p className="text-xs text-muted-foreground">Fase</p>
-                    <p className="mt-1 font-medium text-foreground">{project.phase}</p>
-                  </div>
-                  <div className="rounded-xl border border-border bg-muted p-4">
-                    <p className="text-xs text-muted-foreground">Fecha de inicio</p>
-                    <p className="mt-1 font-medium text-foreground">{project.startDate || "Sin fecha"}</p>
-                  </div>
-                  <div className="rounded-xl border border-border bg-muted p-4 md:col-span-2">
-                    <p className="text-xs text-muted-foreground">Dirección</p>
-                    {inlineEditingAddress ? (
-                      <div className="mt-2 space-y-2">
-                        <Input
-                          type="text"
-                          value={inlineAddressValue.street}
-                          onChange={(e) => setInlineAddressValue({ ...inlineAddressValue, street: e.target.value })}
-                          placeholder="Calle"
-                        />
-                        <Input
-                          type="text"
-                          value={inlineAddressValue.city}
-                          onChange={(e) => setInlineAddressValue({ ...inlineAddressValue, city: e.target.value })}
-                          placeholder="Ciudad"
-                        />
-                        <Input
-                          type="text"
-                          value={inlineAddressValue.state}
-                          onChange={(e) => setInlineAddressValue({ ...inlineAddressValue, state: e.target.value })}
-                          placeholder="Estado"
-                        />
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => {
-                              if (!projectsCapabilities.canEditProjectGeneral) {
-                                return;
-                              }
-
-                              setProjectsData((current) =>
-                                current.map((item) =>
-                                  item.id === project.id
-                                    ? {
-                                        ...item,
-                                        address: {
-                                          ...item.address,
-                                          street: inlineAddressValue.street,
-                                          city: inlineAddressValue.city,
-                                          state: inlineAddressValue.state,
-                                        },
-                                      }
-                                    : item
-                                )
-                              );
-                              setInlineEditingAddress(false);
-                            }}
-                          >
-                            Guardar
-                          </Button>
-                          <Button variant="outline" className="flex-1" onClick={() => setInlineEditingAddress(false)}>
-                            Cancelar
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className={`mt-1 font-medium text-foreground ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer hover:text-primary" : ""}`} onClick={() => {
-                        if (!projectsCapabilities.canEditProjectGeneral) {
-                          return;
-                        }
-
-                        setInlineAddressValue({
-                          street: project.address.street || "",
-                          city: project.address.city,
-                          state: project.address.state,
-                        });
-                        setInlineEditingAddress(true);
-                      }}>
-                        {project.address.street ? `${project.address.street}, ` : ""}
-                        {project.address.city}, {project.address.state}
-                      </p>
-                    )}
-                  </div>
-                </div>
+                <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
+                  <div><dt className="text-muted-foreground">Tipo</dt><dd>{project.projectType || "—"}</dd></div>
+                  <div><dt className="text-muted-foreground">Fase</dt><dd>{project.phase || "—"}</dd></div>
+                  <div><dt className="text-muted-foreground">Dirección</dt><dd>{[project.addressStreet, project.addressCity, project.addressState].filter(Boolean).join(", ") || "—"}</dd></div>
+                  <div><dt className="text-muted-foreground">Inicio</dt><dd>{project.startDate || "—"}</dd></div>
+                  <div><dt className="text-muted-foreground">Encargado</dt><dd>{project.manager?.name ?? "Sin encargado"}</dd></div>
+                  <div><dt className="text-muted-foreground">Coordinador</dt><dd>{project.coordinator?.name ?? "Sin encargado"}</dd></div>
+                </dl>
               )}
-            </div>
+            </section>
 
-            {/* Equipo asignado */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-foreground">Equipo asignado</h2>
-
-              <div className="mt-4 space-y-4">
-                <div className="rounded-xl border border-border bg-muted p-3">
-                  <p className="text-xs text-muted-foreground">Líder de diseño</p>
-                  {isEditing && d ? (
-                    <Select
-                      value={d.coordinator || NO_COORDINATOR_VALUE}
-                      onValueChange={(v) =>
-                        setEditDraft({ ...d, coordinator: v === NO_COORDINATOR_VALUE ? "" : (v as string) })
-                      }
-                    >
-                      <SelectTrigger className="mt-2 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_COORDINATOR_VALUE}>Sin encargado</SelectItem>
-                        {activeTeamNames.map((member) => (
-                          <SelectItem key={`coordinator-${member}`} value={member}>{member}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : inlineEditingCoordinator ? (
-                    <Select
-                      value={project.coordinator || NO_COORDINATOR_VALUE}
-                      onValueChange={(v) => {
-                        if (!projectsCapabilities.canEditProjectGeneral) {
-                          return;
-                        }
-
-                        const nextValue = v === NO_COORDINATOR_VALUE ? "" : (v as string);
-                        setProjectsData((current) =>
-                          current.map((item) =>
-                            item.id === project.id ? { ...item, coordinator: nextValue } : item
-                          )
-                        );
-                        setInlineEditingCoordinator(false);
-                      }}
-                      onOpenChange={(open) => {
-                        if (!open) setInlineEditingCoordinator(false);
-                      }}
-                      defaultOpen
-                    >
-                      <SelectTrigger className="mt-2 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_COORDINATOR_VALUE}>Sin encargado</SelectItem>
-                        {activeTeamNames.map((member) => (
-                          <SelectItem key={`coordinator-inline-${member}`} value={member}>{member}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className={`mt-2 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer" : ""}`} onClick={() => {
-                      if (!projectsCapabilities.canEditProjectGeneral) {
-                        return;
-                      }
-
-                      setInlineEditingCoordinator(true);
-                    }}>
-                      <AppAvatar name={project.coordinator || "Sin encargado"} />
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-border bg-muted p-3">
-                  <p className="text-xs text-muted-foreground">Líder de construcción</p>
-                  {isEditing && d ? (
-                    <Select
-                      value={d.constructionCoordinator}
-                      onValueChange={(v) => setEditDraft({ ...d, constructionCoordinator: v as string })}
-                    >
-                      <SelectTrigger className="mt-2 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Sin encargado">Sin encargado</SelectItem>
-                        {activeTeamNames.map((member) => (
-                          <SelectItem key={`construction-coordinator-${member}`} value={member}>{member}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : inlineEditingConstructionCoordinator ? (
-                    <Select
-                      value={constructionCoordinator}
-                      onValueChange={(v) => {
-                        if (!projectsCapabilities.canEditProjectGeneral) {
-                          return;
-                        }
-
-                        setSecondaryCoordinatorByProject((current) => ({
-                          ...current,
-                          [project.id]: v as string,
-                        }));
-                        setInlineEditingConstructionCoordinator(false);
-                      }}
-                      onOpenChange={(open) => {
-                        if (!open) setInlineEditingConstructionCoordinator(false);
-                      }}
-                      defaultOpen
-                    >
-                      <SelectTrigger className="mt-2 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Sin encargado">Sin encargado</SelectItem>
-                        {activeTeamNames.map((member) => (
-                          <SelectItem key={`construction-coordinator-inline-${member}`} value={member}>{member}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className={`mt-2 ${projectsCapabilities.canEditProjectGeneral ? "cursor-pointer" : ""}`} onClick={() => {
-                      if (!projectsCapabilities.canEditProjectGeneral) {
-                        return;
-                      }
-
-                      setInlineEditingConstructionCoordinator(true);
-                    }}>
-                      <AppAvatar name={constructionCoordinator} />
-                    </div>
-                  )}
-                </div>
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-foreground">Etapa</h2>
+                <Badge variant="outline">{project.currentWorkflow?.name ?? "Sin etapa"}</Badge>
               </div>
-            </div>
+              {caps.canChangeProjectStage ? (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <Select value={project.currentWorkflow?.id ?? ""} onValueChange={(v) => void changeStage(v as string)}>
+                    <SelectTrigger className="w-56"><SelectValue placeholder="Cambiar etapa" /></SelectTrigger>
+                    <SelectContent>
+                      {workflows.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={applyWorkflowId} onValueChange={(v) => setApplyWorkflowId(v as string)}>
+                    <SelectTrigger className="w-56"><SelectValue placeholder="Aplicar workflow" /></SelectTrigger>
+                    <SelectContent>
+                      {workflows.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" disabled={!applyWorkflowId} onClick={() => void openApplyPreview()}>
+                    Ver preview
+                  </Button>
+                </div>
+              ) : null}
+
+              {applyPreview ? (
+                <div className="mt-4 rounded-lg border border-border p-4 text-sm">
+                  <p className="font-medium">{applyPreview.workflow.name}</p>
+                  <p className="mt-2 text-muted-foreground">Se crearán {applyPreview.create.length} tareas:</p>
+                  <ul className="mt-1 list-inside list-disc">
+                    {applyPreview.create.map((t) => <li key={t.id}>{t.title}</li>)}
+                  </ul>
+                  {applyPreview.skip.length > 0 ? (
+                    <p className="mt-2 text-muted-foreground">Ya aplicadas ({applyPreview.skip.length}): {applyPreview.skip.map((t) => t.title).join(", ")}</p>
+                  ) : null}
+                  <div className="mt-4 flex gap-2">
+                    <Button variant="outline" onClick={() => setApplyPreview(null)}>Cancelar</Button>
+                    <Button onClick={() => void confirmApply()}>Confirmar</Button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-foreground">Tareas ({tasks.length})</h2>
+              <ul className="mt-4 divide-y divide-border text-sm">
+                {tasks.map((t) => (
+                  <li key={t.id} className="flex items-center justify-between py-2">
+                    <span>{t.title}</span>
+                    <Badge variant="outline">{t.status}</Badge>
+                  </li>
+                ))}
+                {tasks.length === 0 ? <li className="py-2 text-muted-foreground">Sin tareas todavía.</li> : null}
+              </ul>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-foreground">Enlaces de Drive</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {PROJECT_LINK_KINDS.map((kind) => {
+                  const link = project.links.find((l) => l.kind === kind.key);
+                  return (
+                    <div key={kind.key} className="rounded-lg border border-border p-3 text-sm">
+                      <p className="font-medium">{kind.label}</p>
+                      {link ? (
+                        <a href={link.url} target="_blank" rel="noreferrer" className="mt-1 block truncate text-primary underline">
+                          {link.title || link.url}
+                        </a>
+                      ) : (
+                        <p className="mt-1 text-muted-foreground">Sin vincular</p>
+                      )}
+                      {driveEnabled ? (
+                        <Button variant="outline" size="sm" className="mt-2" onClick={() => setDrivePickerFor(kind.key)}>
+                          Elegir de Drive
+                        </Button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+
+          <div className="space-y-6">
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-foreground">Equipo del proyecto</h2>
+              <ul className="mt-4 space-y-2 text-sm">
+                {staff.map((s) => {
+                  const isMember = project.members.some((m) => m.id === s.id);
+                  return (
+                    <li key={s.id} className="flex items-center justify-between">
+                      <span>{s.name}</span>
+                      {caps.canEditProjectGeneral ? (
+                        <Button variant={isMember ? "destructive" : "outline"} size="sm" onClick={() => void toggleMember(s.id)}>
+                          {isMember ? "Quitar" : "Agregar"}
+                        </Button>
+                      ) : (
+                        isMember ? <Badge variant="secondary">En equipo</Badge> : null
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-foreground">Socios y proveedores</h2>
+              <ul className="mt-4 space-y-2 text-sm">
+                {contacts.map((c) => {
+                  const isLinked = project.contacts.some((pc) => pc.id === c.id);
+                  return (
+                    <li key={c.id} className="flex items-center justify-between">
+                      <span>{c.name}</span>
+                      {caps.canEditProjectGeneral ? (
+                        <Button variant={isLinked ? "destructive" : "outline"} size="sm" onClick={() => void toggleContact(c.id)}>
+                          {isLinked ? "Quitar" : "Agregar"}
+                        </Button>
+                      ) : (
+                        isLinked ? <Badge variant="secondary">Vinculado</Badge> : null
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           </div>
         </div>
-      </section>
 
-      <DrivePickerDialog
-        open={drivePickerFor !== null}
-        onClose={() => setDrivePickerFor(null)}
-        onPick={(entry: DrivePickerEntry) => {
-          const field = drivePickerFor;
-          setDrivePickerFor(null);
-          if (!field) return;
-          setEditDraft((current) =>
-            current ? { ...current, [field]: entry.webViewLink } : current
-          );
-        }}
-      />
+        {drivePickerFor ? (
+          <DrivePickerDialog
+            open
+            onClose={() => setDrivePickerFor(null)}
+            onPick={(entry) => void pickDriveEntry(entry)}
+          />
+        ) : null}
+      </section>
     </main>
   );
 }
