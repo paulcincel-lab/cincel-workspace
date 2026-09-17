@@ -62,6 +62,23 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
       return;
     }
 
+    // `router.replace()` is a client-side transition: the App Router keeps
+    // reusing the root layout's cached RSC output (and with it the
+    // `serverResolution` this guard reads) across it -- the layout only
+    // re-runs `getSessionAccess()` (which reads the session cookie against
+    // the DB) on a hard navigation, or when something calls
+    // `router.refresh()`. Normal login/logout goes through a Server Action
+    // that calls `revalidatePath()`, which covers that case -- but if the
+    // session becomes invalid for any other reason (the backing DB was
+    // reset/reseeded under an already-open tab, the session row expired
+    // server-side, etc.), the guard would otherwise keep redirecting based
+    // on a decision from before that change and could get stuck bouncing
+    // between routes, or stuck rendering "Validando acceso..." here.
+    // `router.refresh()` forces that server data to be re-fetched for the
+    // destination route, so every redirect this guard issues is always
+    // re-checked against the current session/DB state.
+    router.refresh();
+
     if (resolution.status === "pending_first_access") {
       router.replace(PUBLIC_FIRST_ACCESS_ROUTE);
       return;
