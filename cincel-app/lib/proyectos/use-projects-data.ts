@@ -7,6 +7,7 @@ import {
   fetchProjectsAction,
   createProjectAction,
   updateProjectAction,
+  archiveProjectAction,
   deleteProjectAction,
 } from "@/lib/actions/projects-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
@@ -25,6 +26,7 @@ export interface UseProjectsDataReturn {
   refresh: () => Promise<ProjectItem[]>;
   addProject: (input: ProjectInput) => Promise<ProjectItem | null>;
   updateProject: (id: string, patch: Partial<ProjectInput>) => Promise<void>;
+  archiveProject: (id: string, status: "completado" | "cancelado") => Promise<void>;
   removeProject: (id: string) => Promise<void>;
 }
 
@@ -110,6 +112,20 @@ export function useProjectsData(
     [refresh]
   );
 
+  const archiveProject = useCallback(
+    async (id: string, status: "completado" | "cancelado") => {
+      setProjectsData((current) => current.map((p) => (p.id === id ? { ...p, status } : p)));
+      try {
+        await archiveProjectAction(id, status);
+      } catch (err) {
+        if (err instanceof RepositoryError) reportRepositoryError(err);
+        await refresh();
+        throw err;
+      }
+    },
+    [refresh]
+  );
+
   const removeProject = useCallback(
     async (id: string) => {
       setProjectsData((current) => current.filter((p) => p.id !== id));
@@ -133,6 +149,7 @@ export function useProjectsData(
     refresh,
     addProject,
     updateProject,
+    archiveProject,
     removeProject,
   };
 }

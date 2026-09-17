@@ -9,7 +9,7 @@ import { ProjectCreateModal } from "@/components/proyectos/ProjectCreateModal";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
-import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
+import { createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
 import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -19,6 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
+import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import type { ProjectInput, ProjectStatus } from "@/lib/types/core";
 
 interface ProyectosClientProps {
@@ -34,7 +35,9 @@ const STATUS_LABEL: Record<ProjectStatus, string> = {
 
 export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
   const router = useRouter();
-  const { projectsData, isLoadingData, updateProject, addProject } = useProjectsData(initialProjects);
+  const { projectsData, isLoadingData, authenticatedUser, updateProject, archiveProject, removeProject, addProject } =
+    useProjectsData(initialProjects);
+  const capabilities = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
   const [view, setView] = useState<"activos" | "archivados">("activos");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [showCreate, setShowCreate] = useState(false);
@@ -64,7 +67,7 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
   }
 
   function bulkArchive() {
-    selected.forEach((id) => void updateProject(String(id), { status: "completado" }));
+    selected.forEach((id) => void archiveProject(String(id), "completado"));
     setSelected(new Set());
   }
 
@@ -154,17 +157,50 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
         header: "Estado",
         cell: ({ row }) => <Badge variant="secondary">{STATUS_LABEL[row.original.status]}</Badge>,
       },
-      createRowActionsColumn<ProjectItem>((project) => [
-        { label: "Ver ficha", onSelect: (p) => router.push(`/proyectos/${p.id}/ficha`) },
-        {
-          label: project.status === "activo" || project.status === "pausado" ? "Archivar" : "Reactivar",
-          separatorBefore: true,
-          variant: project.status === "activo" || project.status === "pausado" ? "destructive" : "default",
-          onSelect: (p) => void updateProject(p.id, { status: p.status === "activo" || p.status === "pausado" ? "completado" : "activo" }),
-        },
-      ]),
+      createRowActionsColumn<ProjectItem>((project) => {
+        const isActive = project.status === "activo" || project.status === "pausado";
+        const actions: RowAction<ProjectItem>[] = [
+          { label: "Ver ficha", onSelect: (p) => router.push(`/proyectos/${p.id}/ficha`) },
+        ];
+        if (capabilities.canArchiveProject) {
+          if (isActive) {
+            actions.push(
+              {
+                label: "Archivar",
+                separatorBefore: true,
+                variant: "destructive",
+                onSelect: (p) => void archiveProject(p.id, "completado"),
+              },
+              {
+                label: "Cancelar",
+                variant: "destructive",
+                onSelect: (p) => void archiveProject(p.id, "cancelado"),
+              }
+            );
+          } else {
+            actions.push({
+              label: "Reactivar",
+              separatorBefore: true,
+              onSelect: (p) => void updateProject(p.id, { status: "activo" }),
+            });
+          }
+        }
+        if (capabilities.canDeleteProject) {
+          actions.push({
+            label: "Eliminar",
+            separatorBefore: true,
+            variant: "destructive",
+            onSelect: (p) => {
+              if (window.confirm(`Se eliminará el proyecto "${p.name}". Esta acción no se puede deshacer. ¿Deseas continuar?`)) {
+                void removeProject(p.id);
+              }
+            },
+          });
+        }
+        return actions;
+      }),
     ],
-    [router, updateProject, selected]
+    [router, updateProject, archiveProject, removeProject, capabilities, selected]
   );
 
   async function handleCreate(input: ProjectInput) {
@@ -193,7 +229,9 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
               </TabsList>
             </Tabs>
             <ExportMenu onExport={exportProjects} />
-            <Button onClick={() => setShowCreate(true)}>+ Nuevo proyecto</Button>
+            {capabilities.canCreateProject ? (
+              <Button onClick={() => setShowCreate(true)}>+ Nuevo proyecto</Button>
+            ) : null}
           </>
         }
       />
@@ -205,15 +243,17 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
         ]}
       />
 
-      <BulkActionBar
-        selectedCount={selected.size}
-        itemLabel="proyectos"
-        actions={
-          view === "activos"
-            ? [{ label: "Archivar", onClick: bulkArchive, variant: "destructive" }]
-            : [{ label: "Reactivar", onClick: bulkReactivate }]
-        }
-      />
+      {capabilities.canArchiveProject ? (
+        <BulkActionBar
+          selectedCount={selected.size}
+          itemLabel="proyectos"
+          actions={
+            view === "activos"
+              ? [{ label: "Archivar", onClick: bulkArchive, variant: "destructive" }]
+              : [{ label: "Reactivar", onClick: bulkReactivate }]
+          }
+        />
+      ) : null}
       <DataTable
         columns={columns}
         data={visible}
