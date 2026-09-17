@@ -63,7 +63,7 @@ test.describe("Directorio", () => {
 
     await fieldContainer(page, "Nombre").locator("input").fill(TEST_CLIENT_NAME);
     await fieldContainer(page, "Teléfono").locator("input").fill("+52 646 000 9999");
-    await fieldContainer(page, "Email(s)").locator("input").fill(`e2e.${RUN_ID}@cincel.test`);
+    await fieldContainer(page, "Email").locator("input").fill(`e2e.${RUN_ID}@cincel.test`);
     await page.getByRole("button", { name: "Guardar" }).click();
 
     await page
@@ -118,6 +118,8 @@ test.describe("Directorio", () => {
     await page.getByRole("heading", { name: "Nuevo contacto" }).waitFor({ state: "visible" });
 
     await fieldContainer(page, "Tipo de contacto").getByRole("combobox").click();
+    await page.getByRole("option", { name: "Proveedor", exact: true }).click();
+    await fieldContainer(page, "Subtipo").getByRole("combobox").click();
     await page.getByRole("option", { name: "Contratista", exact: true }).click();
     await fieldContainer(page, "Nombre").locator("input").fill(PROVIDER_NAME);
     await page.getByRole("button", { name: "Guardar" }).click();
