@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-
 import { db } from "@/lib/db/client";
 import {
   contacts,
+  historyEvents,
   projects,
   staff,
   taskChecklistItems,
@@ -276,6 +277,103 @@ export async function softDeleteTask(id: string, actorId: string): Promise<void>
     after: { deleted: true },
     fields: ["deleted"],
   });
+}
+
+/**
+ * Merge `duplicateIds` into `keepId`: move their checklist/support rows to
+ * the survivor, then soft-delete the duplicates (same mechanism as
+ * `softDeleteTask`, per duplicate).
+ *
+ * Conflict resolution:
+ * - task_support (PK task_id+staff_id): a duplicate's support row is
+ *   dropped when the keep task already has that staff member as support;
+ *   moved otherwise.
+ * - task_checklist_items: free-standing rows with their own id — all move,
+ *   no dedupe needed.
+ * - history_events: never deleted — entity_id is repointed at keepId so the
+ *   bitácora is preserved in full on the surviving task.
+ */
+export async function mergeTasks(
+  keepId: string,
+  duplicateIds: string[],
+  actorId: string
+): Promise<TaskDetail> {
+  const ids = [...new Set(duplicateIds)].filter((id) => id !== keepId);
+  if (ids.length === 0) throw new Error("TASK_MERGE_NO_DUPLICATES");
+
+  await loadLiveTask(keepId);
+  const dupRows = await db
+    .select()
+    .from(tasks)
+    .where(and(inArray(tasks.id, ids), isNull(tasks.deletedAt)));
+  if (dupRows.length !== ids.length) throw new Error("TASK_NOT_FOUND");
+
+  await db.transaction(async (tx) => {
+    // task_support: drop collisions with support the keep task already has.
+    const keepSupport = await tx
+      .select({ staffId: taskSupport.staffId })
+      .from(taskSupport)
+      .where(eq(taskSupport.taskId, keepId));
+    const keepStaffIds = new Set(keepSupport.map((r) => r.staffId));
+    const dupSupport = await tx
+      .select({ taskId: taskSupport.taskId, staffId: taskSupport.staffId })
+      .from(taskSupport)
+      .where(inArray(taskSupport.taskId, ids));
+    for (const row of dupSupport) {
+      if (keepStaffIds.has(row.staffId)) {
+        await tx
+          .delete(taskSupport)
+          .where(and(eq(taskSupport.taskId, row.taskId), eq(taskSupport.staffId, row.staffId)));
+      } else {
+        await tx
+          .update(taskSupport)
+          .set({ taskId: keepId })
+          .where(and(eq(taskSupport.taskId, row.taskId), eq(taskSupport.staffId, row.staffId)));
+        keepStaffIds.add(row.staffId);
+      }
+    }
+
+    // task_checklist_items: free-standing, move all, no dedupe.
+    await tx
+      .update(taskChecklistItems)
+      .set({ taskId: keepId })
+      .where(inArray(taskChecklistItems.taskId, ids));
+
+    // history_events: never deleted, only repointed to the survivor.
+    await tx
+      .update(historyEvents)
+      .set({ entityId: keepId })
+      .where(and(eq(historyEvents.entity, "task"), inArray(historyEvents.entityId, ids)));
+
+    // Soft-delete the duplicates, recording it like a normal delete.
+    await tx.update(tasks).set({ deletedAt: new Date() }).where(inArray(tasks.id, ids));
+    for (const dup of dupRows) {
+      await recordChanges(
+        {
+          entity: "task",
+          entityId: dup.id,
+          actorId,
+          before: { deleted: false },
+          after: { deleted: true },
+          fields: ["deleted"],
+        },
+        tx
+      );
+    }
+    await recordComment(
+      {
+        entity: "task",
+        entityId: keepId,
+        actorId,
+        comment: `Fusión: se combinaron ${dupRows.length} tarea(s) duplicada(s) (${dupRows
+          .map((r) => r.title)
+          .join(", ")}) en esta tarea.`,
+      },
+      tx
+    );
+  });
+
+  return (await getTask(keepId))!;
 }
 
 export async function setTaskSupport(

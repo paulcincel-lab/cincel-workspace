@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 
 vi.mock("@/lib/repositories/browser-state-repository", () => ({
@@ -15,6 +15,36 @@ vi.mock("@/lib/github/client", () => ({
   createGithubIssue: (...args: unknown[]) => createGithubIssueMock(...args),
 }));
 
+const fetchContactsActionMock = vi.fn();
+const mergeContactsActionMock = vi.fn();
+vi.mock("@/lib/actions/contacts-actions", () => ({
+  fetchContactsAction: (...args: unknown[]) => fetchContactsActionMock(...args),
+  createContactAction: vi.fn(),
+  mergeContactsAction: (...args: unknown[]) => mergeContactsActionMock(...args),
+}));
+
+const fetchTasksActionMock = vi.fn();
+const mergeTasksActionMock = vi.fn();
+vi.mock("@/lib/actions/tasks-actions", () => ({
+  fetchTasksAction: (...args: unknown[]) => fetchTasksActionMock(...args),
+  createUserTaskAction: vi.fn(),
+  assignTaskAction: vi.fn(),
+  mergeTasksAction: (...args: unknown[]) => mergeTasksActionMock(...args),
+}));
+
+const fetchProjectsActionMock = vi.fn();
+vi.mock("@/lib/actions/projects-actions", () => ({
+  fetchProjectsAction: (...args: unknown[]) => fetchProjectsActionMock(...args),
+  createProjectAction: vi.fn(),
+  applyWorkflowAction: vi.fn(),
+  deleteProjectAction: vi.fn(),
+}));
+
+const fetchWorkflowsActionMock = vi.fn();
+vi.mock("@/lib/actions/workflows-actions", () => ({
+  fetchWorkflowsAction: (...args: unknown[]) => fetchWorkflowsActionMock(...args),
+}));
+
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import type { SystemAccessRole } from "@/lib/data/roles";
 import {
@@ -28,6 +58,8 @@ import {
   create_client,
   onboard_client,
   create_rfc,
+  merge_duplicate_clients,
+  merge_duplicate_activities,
   ASSISTANT_TOOLS,
   buildAssistantTools,
 } from "./tools";
@@ -342,5 +374,141 @@ describe("render_list", () => {
       { toolCallId: "t", messages: [] } as never
     );
     expect(out).toEqual({ ok: true });
+  });
+});
+
+describe("merge_duplicate_clients", () => {
+  const ctx = { toolCallId: "t", messages: [] } as never;
+
+  it("returns ok:false when fewer than 2 contacts share the name", async () => {
+    fetchContactsActionMock.mockResolvedValue([
+      { id: "c1", name: "Casa Roma", type: "cliente", createdAt: "2024-01-01T00:00:00Z" },
+    ]);
+
+    const out = await merge_duplicate_clients.execute!({ name: "Casa Roma" }, ctx);
+
+    expect((out as { ok: boolean }).ok).toBe(false);
+    expect(mergeContactsActionMock).not.toHaveBeenCalled();
+  });
+
+  it("errors when the name matches duplicates across more than one type", async () => {
+    fetchContactsActionMock.mockResolvedValue([
+      { id: "c1", name: "Ana López", type: "cliente", createdAt: "2024-01-01T00:00:00Z" },
+      { id: "c2", name: "Ana López", type: "cliente", createdAt: "2024-01-02T00:00:00Z" },
+      { id: "c3", name: "Ana López", type: "proveedor", createdAt: "2024-01-01T00:00:00Z" },
+      { id: "c4", name: "Ana López", type: "proveedor", createdAt: "2024-01-02T00:00:00Z" },
+    ]);
+
+    const out = await merge_duplicate_clients.execute!({ name: "Ana López" }, ctx);
+
+    expect((out as { ok: boolean }).ok).toBe(false);
+    expect(mergeContactsActionMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the oldest contact and merges the rest by exact name + type", async () => {
+    fetchContactsActionMock.mockResolvedValue([
+      { id: "c-new", name: "Casa Roma", type: "cliente", createdAt: "2024-03-01T00:00:00Z" },
+      { id: "c-old", name: "Casa Roma", type: "cliente", createdAt: "2024-01-01T00:00:00Z" },
+      { id: "c-mid", name: "Casa Roma", type: "cliente", createdAt: "2024-02-01T00:00:00Z" },
+      { id: "c-other", name: "Otro", type: "cliente", createdAt: "2024-01-01T00:00:00Z" },
+    ]);
+    mergeContactsActionMock.mockResolvedValue({ id: "c-old", name: "Casa Roma", type: "cliente" });
+
+    const out = await merge_duplicate_clients.execute!({ name: "Casa Roma" }, ctx);
+
+    expect(mergeContactsActionMock).toHaveBeenCalledWith("c-old", ["c-mid", "c-new"]);
+    expect(out).toEqual({ ok: true, keptId: "c-old", name: "Casa Roma", type: "cliente", mergedCount: 2 });
+  });
+
+  it("respects an explicit type filter", async () => {
+    fetchContactsActionMock.mockResolvedValue([
+      { id: "p1", name: "Ana López", type: "proveedor", createdAt: "2024-01-01T00:00:00Z" },
+      { id: "p2", name: "Ana López", type: "proveedor", createdAt: "2024-01-02T00:00:00Z" },
+    ]);
+    mergeContactsActionMock.mockResolvedValue({ id: "p1", name: "Ana López", type: "proveedor" });
+
+    const out = await merge_duplicate_clients.execute!({ name: "Ana López", type: "proveedor" }, ctx);
+
+    expect(fetchContactsActionMock).toHaveBeenCalledWith({ type: "proveedor" });
+    expect(mergeContactsActionMock).toHaveBeenCalledWith("p1", ["p2"]);
+    expect((out as { ok: boolean }).ok).toBe(true);
+  });
+});
+
+describe("merge_duplicate_activities", () => {
+  const ctx = { toolCallId: "t", messages: [] } as never;
+
+  beforeEach(() => {
+    fetchProjectsActionMock.mockResolvedValue([{ id: "proj-1", name: "Casa Roma" }]);
+  });
+
+  it("returns ok:false when the project can't be resolved", async () => {
+    fetchProjectsActionMock.mockResolvedValue([]);
+
+    const out = await merge_duplicate_activities.execute!(
+      { projectName: "No existe", descriptionContains: "Renders" },
+      ctx
+    );
+
+    expect((out as { ok: boolean }).ok).toBe(false);
+    expect(mergeTasksActionMock).not.toHaveBeenCalled();
+  });
+
+  it("returns ok:false when fewer than 2 tasks match", async () => {
+    fetchTasksActionMock.mockResolvedValue([
+      { id: "t1", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-01T00:00:00Z" },
+    ]);
+
+    const out = await merge_duplicate_activities.execute!(
+      { projectName: "Casa Roma", descriptionContains: "renders" },
+      ctx
+    );
+
+    expect((out as { ok: boolean }).ok).toBe(false);
+    expect(mergeTasksActionMock).not.toHaveBeenCalled();
+  });
+
+  it("errors when matches span more than one distinct title", async () => {
+    fetchTasksActionMock.mockResolvedValue([
+      { id: "t1", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-01T00:00:00Z" },
+      { id: "t2", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-02T00:00:00Z" },
+      { id: "t3", title: "Revisar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-01T00:00:00Z" },
+      { id: "t4", title: "Revisar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-02T00:00:00Z" },
+    ]);
+
+    const out = await merge_duplicate_activities.execute!(
+      { projectName: "Casa Roma", descriptionContains: "renders" },
+      ctx
+    );
+
+    expect((out as { ok: boolean }).ok).toBe(false);
+    expect(mergeTasksActionMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the oldest task and merges the rest with the exact same title", async () => {
+    fetchTasksActionMock.mockResolvedValue([
+      { id: "t-new", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-03-01T00:00:00Z" },
+      { id: "t-old", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-01T00:00:00Z" },
+    ]);
+    mergeTasksActionMock.mockResolvedValue({ id: "t-old", title: "Enviar renders" });
+
+    const out = await merge_duplicate_activities.execute!(
+      { projectName: "Casa Roma", descriptionContains: "Enviar renders" },
+      ctx
+    );
+
+    expect(fetchTasksActionMock).toHaveBeenCalledWith({
+      search: "Enviar renders",
+      projectId: "proj-1",
+      workflowId: undefined,
+    });
+    expect(mergeTasksActionMock).toHaveBeenCalledWith("t-old", ["t-new"]);
+    expect(out).toEqual({
+      ok: true,
+      keptId: "t-old",
+      title: "Enviar renders",
+      project: "Casa Roma",
+      mergedCount: 1,
+    });
   });
 });

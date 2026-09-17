@@ -38,6 +38,14 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
 
 const COLUMN_ORDER: TaskStatus[] = ["pendiente", "en_proceso", "completado", "bloqueado"];
 
+// The board query itself stays cheap even with thousands of tasks (see
+// docs/phases/rebuild-phase-8-hardening.md profiling notes), but rendering
+// every card as DOM at once does not: a column can hold hundreds of tasks
+// with no per-view scoping. Cap the initial render per column and let the
+// user page in more, rather than adding a virtualization dependency for a
+// board that is usually a few dozen cards deep.
+const PAGE_SIZE = 50;
+
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
   alta: "Alta",
   media: "Media",
@@ -57,6 +65,12 @@ interface TableroClientProps {
 
 export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
   const [board, setBoard] = useState<Record<TaskStatus, TaskListItem[]>>(initialBoard);
+  const [visibleCount, setVisibleCount] = useState<Record<TaskStatus, number>>({
+    pendiente: PAGE_SIZE,
+    en_proceso: PAGE_SIZE,
+    completado: PAGE_SIZE,
+    bloqueado: PAGE_SIZE,
+  });
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
@@ -81,6 +95,12 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
       const workflowId = departmentFilter ? workflowIdBySlug.get(departmentFilter) : undefined;
       const rows = await fetchBoardAction(workflowId ? { workflowId } : {});
       setBoard(rows);
+      setVisibleCount({
+        pendiente: PAGE_SIZE,
+        en_proceso: PAGE_SIZE,
+        completado: PAGE_SIZE,
+        bloqueado: PAGE_SIZE,
+      });
     } catch (err) {
       console.error(err);
     }
@@ -231,7 +251,10 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {COLUMN_ORDER.map((status) => {
-          const tasks = board[status] ?? [];
+          const allTasks = board[status] ?? [];
+          const visible = visibleCount[status];
+          const tasks = allTasks.slice(0, visible);
+          const remaining = allTasks.length - tasks.length;
           const isDragOver = dragOverStatus === status;
           return (
             <div
@@ -252,7 +275,7 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
             >
               <div className="mb-1 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">{STATUS_LABEL[status]}</h2>
-                <span className="text-xs text-muted-foreground">{tasks.length}</span>
+                <span className="text-xs text-muted-foreground">{allTasks.length}</span>
               </div>
 
               {tasks.length === 0 ? (
@@ -293,6 +316,18 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
                   );
                 })
               )}
+
+              {remaining > 0 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVisibleCount((cur) => ({ ...cur, [status]: cur[status] + PAGE_SIZE }))
+                  }
+                  className="rounded-md border border-dashed border-border p-2 text-center text-xs text-muted-foreground hover:border-primary hover:text-foreground"
+                >
+                  Cargar más ({remaining})
+                </button>
+              ) : null}
             </div>
           );
         })}

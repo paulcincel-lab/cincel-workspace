@@ -128,6 +128,21 @@ export async function deleteTaskAction(id: string): Promise<void> {
   revalidateTareas();
 }
 
+/**
+ * Merge duplicate tasks into `keepId`: checklist/support/history move to
+ * the survivor, then the duplicates are soft-deleted. Same capability as a
+ * plain task delete — merging is destructive to the losing records.
+ */
+export async function mergeTasksAction(keepId: string, duplicateIds: string[]): Promise<TaskDetail> {
+  const user = await requireCapabilityUser();
+  if (!resolveActivitiesCapabilities(user).canDeleteActivity) {
+    throw new Error("FORBIDDEN: task merge");
+  }
+  const row = await tasksRepository.mergeTasks(keepId, duplicateIds, user.member.id);
+  revalidateTareas();
+  return row;
+}
+
 export async function setTaskSupportAction(taskId: string, staffIds: string[]) {
   const user = await requireCapabilityUser();
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {

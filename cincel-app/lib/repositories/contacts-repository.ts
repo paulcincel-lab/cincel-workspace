@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -6,10 +6,12 @@ import {
   contactPeople,
   contactTags,
   contacts,
+  historyEvents,
+  projectContacts,
   projects,
   providerProfiles,
 } from "@/lib/db/schema";
-import { recordChanges } from "@/lib/repositories/history-repository";
+import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
 import type {
   ClientStats,
   Contact,
@@ -20,6 +22,7 @@ import type {
   ContactPersonInput,
   ContactTag,
   ContactType,
+  HistoryEvent,
   ProviderProfile,
 } from "@/lib/types/core";
 
@@ -339,6 +342,242 @@ export async function upsertProviderProfile(
     .onConflictDoUpdate({ target: providerProfiles.contactId, set: values })
     .returning();
   return toProviderProfile(row);
+}
+
+/**
+ * Merge `duplicateIds` into `keepId`: every FK reference moves to the
+ * survivor, then the duplicates are soft-deleted. All contacts must share
+ * the same `type` (contacts_id_type_uq / the projects/provider_profiles FKs
+ * are type-scoped, so a cross-type merge would just fail at the DB).
+ *
+ * Conflict resolution, one per table with a uniqueness constraint on
+ * contact_id:
+ * - project_contacts (PK project_id+contact_id): if the keep contact is
+ *   already linked to a project a duplicate was also linked to, the
+ *   duplicate's row is dropped (its `role` doesn't survive); otherwise the
+ *   row moves over.
+ * - contact_people: all rows move; if that leaves more than one
+ *   is_primary=true (partial unique index), every primary but the first
+ *   (by sort_order) is cleared.
+ * - contact_tags (PK contact_id+kind+value): a duplicate's tag is dropped
+ *   when the keep contact already carries that exact (kind, value); moved
+ *   otherwise.
+ * - provider_profiles (1:1, PK contact_id): if the keep contact already has
+ *   a profile, every duplicate's profile is dropped; otherwise the first
+ *   duplicate's profile is moved onto the keep contact (any further
+ *   duplicate profiles, which shouldn't normally exist, are dropped too —
+ *   a contact can only have one).
+ * - history_events: never deleted — entity_id is repointed at keepId so the
+ *   bitácora is preserved in full on the surviving contact.
+ */
+export async function mergeContacts(
+  keepId: string,
+  duplicateIds: string[],
+  actorId: string
+): Promise<ContactDetail> {
+  const ids = [...new Set(duplicateIds)].filter((id) => id !== keepId);
+  if (ids.length === 0) throw new Error("CONTACT_MERGE_NO_DUPLICATES");
+
+  const [keep] = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.id, keepId), isNull(contacts.deletedAt)))
+    .limit(1);
+  if (!keep) throw new Error("CONTACT_NOT_FOUND");
+
+  const dupRows = await db
+    .select()
+    .from(contacts)
+    .where(and(inArray(contacts.id, ids), isNull(contacts.deletedAt)));
+  if (dupRows.length !== ids.length) throw new Error("CONTACT_NOT_FOUND");
+  if (dupRows.some((r) => r.type !== keep.type)) {
+    throw new Error("CONTACT_MERGE_TYPE_MISMATCH");
+  }
+
+  await db.transaction(async (tx) => {
+    // 1. Projects only ever belong to "cliente" contacts.
+    if (keep.type === "cliente") {
+      await tx.update(projects).set({ clientId: keepId }).where(inArray(projects.clientId, ids));
+    }
+
+    // 2. project_contacts: move, dropping collisions with a project the
+    // keep contact is already linked to.
+    const keepProjectLinks = await tx
+      .select({ projectId: projectContacts.projectId })
+      .from(projectContacts)
+      .where(eq(projectContacts.contactId, keepId));
+    const keepProjectIds = new Set(keepProjectLinks.map((r) => r.projectId));
+    const dupProjectLinks = await tx
+      .select({ projectId: projectContacts.projectId, contactId: projectContacts.contactId })
+      .from(projectContacts)
+      .where(inArray(projectContacts.contactId, ids));
+    for (const link of dupProjectLinks) {
+      if (keepProjectIds.has(link.projectId)) {
+        await tx
+          .delete(projectContacts)
+          .where(
+            and(
+              eq(projectContacts.projectId, link.projectId),
+              eq(projectContacts.contactId, link.contactId)
+            )
+          );
+      } else {
+        await tx
+          .update(projectContacts)
+          .set({ contactId: keepId })
+          .where(
+            and(
+              eq(projectContacts.projectId, link.projectId),
+              eq(projectContacts.contactId, link.contactId)
+            )
+          );
+        keepProjectIds.add(link.projectId);
+      }
+    }
+
+    // 3. contact_people: move everything, then collapse back to a single
+    // primary (partial unique index on contact_id where is_primary=true).
+    await tx
+      .update(contactPeople)
+      .set({ contactId: keepId })
+      .where(inArray(contactPeople.contactId, ids));
+    const primaries = await tx
+      .select({ id: contactPeople.id })
+      .from(contactPeople)
+      .where(and(eq(contactPeople.contactId, keepId), eq(contactPeople.isPrimary, true)))
+      .orderBy(asc(contactPeople.sortOrder));
+    if (primaries.length > 1) {
+      await tx
+        .update(contactPeople)
+        .set({ isPrimary: false })
+        .where(
+          inArray(
+            contactPeople.id,
+            primaries.slice(1).map((p) => p.id)
+          )
+        );
+    }
+
+    // 4. contact_tags: move, dropping (kind, value) pairs the keep contact
+    // already has.
+    const keepTags = await tx
+      .select({ kind: contactTags.kind, value: contactTags.value })
+      .from(contactTags)
+      .where(eq(contactTags.contactId, keepId));
+    const keepTagKeys = new Set(keepTags.map((t) => `${t.kind}|${t.value}`));
+    const dupTags = await tx
+      .select({ contactId: contactTags.contactId, kind: contactTags.kind, value: contactTags.value })
+      .from(contactTags)
+      .where(inArray(contactTags.contactId, ids));
+    for (const t of dupTags) {
+      const key = `${t.kind}|${t.value}`;
+      if (keepTagKeys.has(key)) {
+        await tx
+          .delete(contactTags)
+          .where(
+            and(
+              eq(contactTags.contactId, t.contactId),
+              eq(contactTags.kind, t.kind),
+              eq(contactTags.value, t.value)
+            )
+          );
+      } else {
+        await tx
+          .update(contactTags)
+          .set({ contactId: keepId })
+          .where(
+            and(
+              eq(contactTags.contactId, t.contactId),
+              eq(contactTags.kind, t.kind),
+              eq(contactTags.value, t.value)
+            )
+          );
+        keepTagKeys.add(key);
+      }
+    }
+
+    // 5. provider_profiles: strictly 1:1 with a contact — keep the survivor's
+    // profile if it has one and drop every duplicate's; otherwise move the
+    // first duplicate profile onto the survivor and drop any further ones.
+    if (keep.type === "proveedor") {
+      const [keepProfile] = await tx
+        .select({ contactId: providerProfiles.contactId })
+        .from(providerProfiles)
+        .where(eq(providerProfiles.contactId, keepId));
+      const dupProfiles = await tx
+        .select({ contactId: providerProfiles.contactId })
+        .from(providerProfiles)
+        .where(inArray(providerProfiles.contactId, ids));
+      if (dupProfiles.length > 0) {
+        if (keepProfile) {
+          await tx
+            .delete(providerProfiles)
+            .where(
+              inArray(
+                providerProfiles.contactId,
+                dupProfiles.map((p) => p.contactId)
+              )
+            );
+        } else {
+          const [first, ...rest] = dupProfiles;
+          await tx
+            .update(providerProfiles)
+            .set({ contactId: keepId })
+            .where(eq(providerProfiles.contactId, first.contactId));
+          if (rest.length > 0) {
+            await tx
+              .delete(providerProfiles)
+              .where(
+                inArray(
+                  providerProfiles.contactId,
+                  rest.map((p) => p.contactId)
+                )
+              );
+          }
+        }
+      }
+    }
+
+    // 6. history_events: never deleted, only repointed to the survivor.
+    await tx
+      .update(historyEvents)
+      .set({ entityId: keepId })
+      .where(and(eq(historyEvents.entity, "contact"), inArray(historyEvents.entityId, ids)));
+
+    // 7. Soft-delete the duplicates, recording it like a normal delete.
+    await tx.update(contacts).set({ deletedAt: new Date() }).where(inArray(contacts.id, ids));
+    for (const dup of dupRows) {
+      await recordChanges(
+        {
+          entity: "contact",
+          entityId: dup.id,
+          actorId,
+          before: { deleted: false },
+          after: { deleted: true },
+          fields: ["deleted"],
+        },
+        tx
+      );
+    }
+    await recordComment(
+      {
+        entity: "contact",
+        entityId: keepId,
+        actorId,
+        comment: `Fusión: se combinaron ${dupRows.length} contacto(s) duplicado(s) (${dupRows
+          .map((r) => r.name)
+          .join(", ")}) en este registro.`,
+      },
+      tx
+    );
+  });
+
+  return (await getContact(keepId))!;
+}
+
+/** Chronological bitácora for one contact, oldest first (see listHistory for the raw order). */
+export async function listContactHistory(contactId: string): Promise<HistoryEvent[]> {
+  return listHistory("contact", contactId);
 }
 
 export async function listClientStats(): Promise<Map<string, ClientStats>> {

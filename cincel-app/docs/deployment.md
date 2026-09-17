@@ -121,3 +121,43 @@ cookie-less request for a protected route to `/login`; full session validation
 - **Migrations**: drizzle-kit has no down-migrations. To undo, write a new
   forward migration. Take a `pg_dump` before applying migrations on a database
   that holds real data (see `docs/backup-recovery.md`).
+
+## Rebuild cutover (future, not yet executed)
+
+**This section describes a future operation. No production data is moved by
+anything in Rebuild Phase 9 — it only documents the mechanism.** The real
+cutover (migrating existing production rows from the old schema into the new
+one, populating `core.legacy_refs`) is a separate, explicit piece of work
+that must be planned and requested on its own; do not run any of the steps
+below against production until that plan exists and has been approved.
+
+The app is pointed at whichever database `DATABASE_URL` names — switching
+schemas is a `DATABASE_URL` swap, not a code deploy. See
+`docs/rebuild-table-inventory.md` for the full old-table → new-table mapping
+that a real migration script would use to populate `core.legacy_refs`.
+
+**Pre-flight checks, before ever swapping `DATABASE_URL` in production:**
+1. The target (new-schema) database has all migrations applied
+   (`npm run db:migrate`) and, if this is a first deploy, is seeded
+   (`npm run db:seed`).
+2. A real data-migration script has run against the target database,
+   populating `core.legacy_refs` with every row's old id → new id mapping,
+   and every legacy table's data has been copied into its `core.*`
+   replacement per `docs/rebuild-table-inventory.md`.
+3. A `pg_dump` of the *old* production database has been taken and verified
+   restorable (see `docs/backup-recovery.md`) — this is the rollback path.
+4. The app has been smoke-tested against the target database in a
+   non-production environment (see "Post-deploy smoke check" above).
+
+**The swap:**
+1. Update `DATABASE_URL` (in the deploy environment's secrets/env, e.g. the
+   `.env`/`docker-compose.prod.yml` environment on the deploy host) to point
+   at the new-schema database.
+2. Redeploy/restart the app so it picks up the new `DATABASE_URL`.
+3. Run the post-deploy smoke check above against production.
+
+**Rollback:** swap `DATABASE_URL` back to the old database and
+redeploy/restart. Since the old database was never modified during the
+cutover (only read from, by the migration script), rolling back is just
+pointing the app back at it — no restore needed unless the old database
+itself was separately touched for an unrelated reason.

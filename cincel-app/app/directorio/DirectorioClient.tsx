@@ -40,6 +40,7 @@ import {
 } from "@/lib/actions/contacts-actions";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
+import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 import type { ContactDetail, ContactListItem, ContactType, ProviderStatus, ProviderSubtype } from "@/lib/types/core";
 
 interface DirectorioClientProps {
@@ -64,6 +65,32 @@ const RATING_FILTER_OPTIONS = [
 ];
 
 const emptyFilters = { subtype: "" as ProviderSubtype | "", status: "" as ProviderStatus | "", minRating: 0 };
+
+const COLUMN_ORDER_STORAGE_KEY = "cincel.directorio.column.order.v1";
+type ColumnKey = "name" | "type" | "category" | "contact" | "status" | "rating";
+const DEFAULT_COLUMN_ORDER: ColumnKey[] = ["name", "type", "category", "contact", "status", "rating"];
+const COLUMN_LABEL: Record<ColumnKey, string> = {
+  name: "Nombre",
+  type: "Tipo",
+  category: "Categoría",
+  contact: "Contacto",
+  status: "Estado",
+  rating: "Calificación",
+};
+
+function loadColumnOrder(): ColumnKey[] {
+  const stored = readStorage(COLUMN_ORDER_STORAGE_KEY);
+  if (!stored) return DEFAULT_COLUMN_ORDER;
+  try {
+    const parsed = JSON.parse(stored) as ColumnKey[];
+    if (!Array.isArray(parsed)) return DEFAULT_COLUMN_ORDER;
+    const known = parsed.filter((key): key is ColumnKey => DEFAULT_COLUMN_ORDER.includes(key));
+    const missing = DEFAULT_COLUMN_ORDER.filter((key) => !known.includes(key));
+    return [...known, ...missing];
+  } catch {
+    return DEFAULT_COLUMN_ORDER;
+  }
+}
 
 function draftFromDetail(detail: ContactDetail): ContactDraft {
   const provider = detail.providerProfile;
@@ -115,6 +142,23 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
   const searchParams = useSearchParams();
   const [detailContactId, setDetailContactId] = useState<string | null>(() => searchParams.get("cliente"));
   const [detailContact, setDetailContact] = useState<ContactDetail | null>(null);
+
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() => loadColumnOrder());
+  const [draggedColumn, setDraggedColumn] = useState<ColumnKey | null>(null);
+
+  const reorderColumn = (sourceKey: ColumnKey, targetKey: ColumnKey) => {
+    const sourceIdx = columnOrder.indexOf(sourceKey);
+    const targetIdx = columnOrder.indexOf(targetKey);
+    if (sourceIdx === -1 || targetIdx === -1 || sourceIdx === targetIdx) return;
+
+    const newOrder = [...columnOrder];
+    newOrder.splice(sourceIdx, 1);
+    const adjustedTargetIdx = sourceIdx < targetIdx ? targetIdx - 1 : targetIdx;
+    newOrder.splice(adjustedTargetIdx, 0, sourceKey);
+
+    setColumnOrder(newOrder);
+    writeStorage(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+  };
 
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const clientsCapabilities = useMemo(() => resolveClientsCapabilities(authenticatedUser), [authenticatedUser]);
@@ -269,30 +313,41 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
 
   const activeFiltersCount = [filters.subtype, filters.status, filters.minRating > 0].filter(Boolean).length;
 
-  const columns = useMemo<ColumnDef<DirectorioRow, unknown>[]>(
-    () => [
-      createSelectionColumn<DirectorioRow>({
-        getId: (r) => r.id,
-        selectedIds: selected,
-        onToggle: toggle,
-        onToggleAll: toggleAll,
-      }),
-      {
+  const draggableHeader = (key: ColumnKey) => (
+    <div
+      draggable
+      onDragStart={() => setDraggedColumn(key)}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={() => {
+        if (draggedColumn) reorderColumn(draggedColumn, key);
+        setDraggedColumn(null);
+      }}
+      onDragEnd={() => setDraggedColumn(null)}
+      className={`cursor-move ${draggedColumn === key ? "text-primary" : ""}`}
+      title="Arrastra para reordenar"
+    >
+      {COLUMN_LABEL[key]}
+    </div>
+  );
+
+  const dataColumnsByKey = useMemo<Record<ColumnKey, ColumnDef<DirectorioRow, unknown>>>(
+    () => ({
+      name: {
         id: "name",
         accessorKey: "name",
-        header: "Nombre",
+        header: () => draggableHeader("name"),
         cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
       },
-      {
+      type: {
         id: "type",
         accessorKey: "type",
-        header: "Tipo",
+        header: () => draggableHeader("type"),
         cell: ({ row }) => <Badge variant="secondary">{CONTACT_TYPE_LABEL[row.original.type]}</Badge>,
       },
-      {
+      category: {
         id: "category",
         accessorKey: "category",
-        header: "Categoría",
+        header: () => draggableHeader("category"),
         cell: ({ row }) => {
           const r = row.original;
           if (r.type !== "proveedor") return <span>{r.category}</span>;
@@ -304,19 +359,19 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
           );
         },
       },
-      {
+      contact: {
         id: "contact",
         accessorKey: "contact",
-        header: "Contacto",
+        header: () => draggableHeader("contact"),
         cell: ({ row }) => {
           const r = row.original;
           return <EditableCell value={r.contact === "—" ? "" : r.contact} onSave={(v) => void updateContactAction(r.id, { phone: v }).then(refreshContacts)} />;
         },
       },
-      {
+      status: {
         id: "status",
         accessorKey: "status",
-        header: "Estado",
+        header: () => draggableHeader("status"),
         cell: ({ row }) => {
           const r = row.original;
           if (r.type !== "proveedor") return <span className="text-muted-foreground">—</span>;
@@ -333,16 +388,30 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
           );
         },
       },
-      {
+      rating: {
         id: "rating",
         accessorKey: "rating",
-        header: "Calificación",
+        header: () => draggableHeader("rating"),
         cell: ({ row }) => {
           const r = row.original;
           if (r.type !== "proveedor") return <span className="text-muted-foreground">—</span>;
           return <StarRating rating={r.rating ?? 0} onRate={(v) => void updateProviderField(r.id, { rating: v })} />;
         },
       },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draggedColumn, contacts]
+  );
+
+  const columns = useMemo<ColumnDef<DirectorioRow, unknown>[]>(
+    () => [
+      createSelectionColumn<DirectorioRow>({
+        getId: (r) => r.id,
+        selectedIds: selected,
+        onToggle: toggle,
+        onToggleAll: toggleAll,
+      }),
+      ...columnOrder.map((key) => dataColumnsByKey[key]),
       createRowActionsColumn<DirectorioRow>((row) => {
         const isCliente = row.type === "cliente";
         const canEdit = !isCliente || clientsCapabilities.canEditClient;
@@ -364,7 +433,7 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
       }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected, contacts, clientsCapabilities]
+    [selected, columnOrder, dataColumnsByKey, clientsCapabilities]
   );
 
   return (

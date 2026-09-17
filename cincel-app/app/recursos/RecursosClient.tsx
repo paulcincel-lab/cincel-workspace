@@ -21,12 +21,14 @@ import {
   createResourceLinkAction,
   deleteResourceLinkAction,
   fetchResourceLinksAction,
+  updateResourceLinkAction,
 } from "@/lib/actions/resources-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import {
   canCreateResourceInSection,
   canDeleteResourceInSection,
+  canEditResourceInSection,
   canViewResourceSection,
   resolveResourcesCapabilities,
 } from "@/lib/auth/permissions";
@@ -71,6 +73,7 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
   const [previewLink, setPreviewLink] = useState<ResourceLink | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [editingLink, setEditingLink] = useState<ResourceLink | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftUrl, setDraftUrl] = useState("");
   const [draftSection, setDraftSection] = useState<ResourceSection>("mis-documentos");
@@ -123,6 +126,23 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
 
   const createSection = draftSection;
   const canCreateInSection = canCreateResourceInSection({ capabilities: resourcesCapabilities, section: createSection });
+  const canEditInSection = editingLink
+    ? canEditResourceInSection({ capabilities: resourcesCapabilities, section: editingLink.section, viewerId: authenticatedUser?.member.id ?? null, ownerId: editingLink.owner?.id ?? null, personalForId: editingLink.personalFor?.id ?? null })
+    : false;
+
+  const openEdit = useCallback(
+    (link: ResourceLink) => {
+      if (!canEditResourceInSection({ capabilities: resourcesCapabilities, section: link.section, viewerId: authenticatedUser?.member.id ?? null, ownerId: link.owner?.id ?? null, personalForId: link.personalFor?.id ?? null })) return;
+      setEditingLink(link);
+      setDraftTitle(link.title);
+      setDraftUrl(link.url);
+      setDraftSection(link.section);
+      setDraftDrive(null);
+      setCreateError(null);
+      setCreateOpen(true);
+    },
+    [resourcesCapabilities, authenticatedUser]
+  );
 
   const applyDrivePick = (entry: DrivePickerEntry) => {
     setShowDrivePicker(false);
@@ -139,15 +159,41 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
     });
   };
 
-  async function createResource() {
+  function closeResourceSheet() {
+    setCreateOpen(false);
+    setEditingLink(null);
+    setDraftTitle("");
+    setDraftUrl("");
+    setDraftDrive(null);
+  }
+
+  async function saveResource() {
     const title = draftTitle.trim();
     const url = draftUrl.trim();
     if (!title || !url) return;
-    if (!canCreateInSection) return;
-
-    const isPersonal = draftSection === "mis-documentos" ? effectiveSelectedStaffId : null;
 
     setCreateError(null);
+
+    if (editingLink) {
+      if (!canEditInSection) return;
+      try {
+        const updated = await updateResourceLinkAction(editingLink.id, {
+          title,
+          url,
+          section: draftSection,
+          linkType: inferLinkTypeFromUrl(url, "web"),
+          drive: draftDrive ?? undefined,
+        });
+        setLinks((cur) => cur.map((l) => (l.id === updated.id ? updated : l)));
+        closeResourceSheet();
+      } catch (err) {
+        setCreateError(err instanceof Error ? err.message : "No se pudo editar el recurso.");
+      }
+      return;
+    }
+
+    if (!canCreateInSection) return;
+    const isPersonal = draftSection === "mis-documentos" ? effectiveSelectedStaffId : null;
     try {
       const created = await createResourceLinkAction({
         title,
@@ -159,10 +205,7 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
         drive: draftDrive,
       });
       setLinks((cur) => [...cur, created]);
-      setCreateOpen(false);
-      setDraftTitle("");
-      setDraftUrl("");
-      setDraftDrive(null);
+      closeResourceSheet();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "No se pudo crear el recurso.");
     }
@@ -248,13 +291,16 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
           { label: "Vista previa", onSelect: setPreviewLink },
           { label: "Abrir en Drive", onSelect: (l) => window.open(l.url, "_blank", "noopener") },
         ];
+        if (canEditResourceInSection({ capabilities: resourcesCapabilities, section: link.section, viewerId: authenticatedUser?.member.id ?? null, ownerId: link.owner?.id ?? null, personalForId: link.personalFor?.id ?? null })) {
+          actions.push({ label: "Editar", separatorBefore: true, onSelect: openEdit });
+        }
         if (canDeleteResourceInSection({ capabilities: resourcesCapabilities, section: link.section })) {
           actions.push({ label: "Quitar", separatorBefore: true, variant: "destructive", onSelect: removeResource });
         }
         return actions;
       }),
     ],
-    [selected, resourcesCapabilities, removeResource]
+    [selected, resourcesCapabilities, removeResource, openEdit, authenticatedUser]
   );
 
   if (!resourcesCapabilities.canViewResources) {
@@ -301,7 +347,7 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
               </TabsList>
             </Tabs>
             <Button
-              onClick={() => setCreateOpen(true)}
+              onClick={() => { setEditingLink(null); setDraftTitle(""); setDraftUrl(""); setDraftDrive(null); setCreateOpen(true); }}
               disabled={!canCreateResourceInSection({ capabilities: resourcesCapabilities, section: "mis-documentos" }) && !resourcesCapabilities.canManageFavoritesSection && !resourcesCapabilities.enterprise.canCreate}
             >
               + Agregar recurso
@@ -349,10 +395,10 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
         </SheetContent>
       </Sheet>
 
-      <Sheet open={createOpen} onOpenChange={(next) => { setCreateOpen(next); if (!next) setCreateError(null); }}>
+      <Sheet open={createOpen} onOpenChange={(next) => { if (!next) closeResourceSheet(); }}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Agregar recurso</SheetTitle>
+            <SheetTitle>{editingLink ? "Editar recurso" : "Agregar recurso"}</SheetTitle>
           </SheetHeader>
           <div className="space-y-4 p-4">
             <div>
@@ -395,10 +441,13 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
             {createError ? <p className="text-sm text-destructive">{createError}</p> : null}
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button variant="outline" onClick={closeResourceSheet}>
               Cancelar
             </Button>
-            <Button onClick={createResource} disabled={!draftTitle.trim() || !draftUrl.trim() || !canCreateInSection}>
+            <Button
+              onClick={saveResource}
+              disabled={!draftTitle.trim() || !draftUrl.trim() || !(editingLink ? canEditInSection : canCreateInSection)}
+            >
               Guardar
             </Button>
           </SheetFooter>
