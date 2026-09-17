@@ -12,6 +12,7 @@ import type {
   ContactPersonInput,
   ContactTag,
   ContactType,
+  HistoryEvent,
 } from "@/lib/types/core";
 
 /**
@@ -39,6 +40,12 @@ export async function fetchContactAction(id: string): Promise<ContactDetail | nu
   const caps = await requireContactsCapabilities();
   if (!caps.canViewClients) return null;
   return contactsRepository.getContact(id);
+}
+
+export async function fetchContactHistoryAction(contactId: string): Promise<HistoryEvent[]> {
+  const caps = await requireContactsCapabilities();
+  if (!caps.canViewClients) return [];
+  return contactsRepository.listContactHistory(contactId);
 }
 
 export async function createContactAction(input: ContactInput): Promise<ContactDetail> {
@@ -92,4 +99,23 @@ export async function setContactTagsAction(contactId: string, tags: ContactTag[]
   }
   await contactsRepository.setContactTags(contactId, tags);
   revalidateDirectorio();
+}
+
+/**
+ * Merge duplicate contacts into `keepId`: every FK reference (projects,
+ * project links, people, tags, provider profile, history) moves to the
+ * survivor, then the duplicates are soft-deleted. Same capability as a
+ * plain contact delete — merging is destructive to the losing records.
+ */
+export async function mergeContactsAction(
+  keepId: string,
+  duplicateIds: string[]
+): Promise<ContactDetail> {
+  const user = await requireCapabilityUser();
+  if (!resolveClientsCapabilities(user).canDeleteClient) {
+    throw new Error("FORBIDDEN: contact merge");
+  }
+  const row = await contactsRepository.mergeContacts(keepId, duplicateIds, user.member.id);
+  revalidateDirectorio();
+  return row;
 }

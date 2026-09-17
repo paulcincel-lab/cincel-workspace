@@ -10,8 +10,8 @@ import {
   resolveProjectsCapabilities,
 } from "@/lib/auth/permissions";
 import { fetchProjectsAction, createProjectAction, applyWorkflowAction, deleteProjectAction } from "@/lib/actions/projects-actions";
-import { fetchTasksAction, createUserTaskAction, assignTaskAction } from "@/lib/actions/tasks-actions";
-import { fetchContactsAction, createContactAction } from "@/lib/actions/contacts-actions";
+import { fetchTasksAction, createUserTaskAction, assignTaskAction, mergeTasksAction } from "@/lib/actions/tasks-actions";
+import { fetchContactsAction, createContactAction, mergeContactsAction } from "@/lib/actions/contacts-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { createGithubIssue, isGithubConfigured } from "@/lib/github/client";
@@ -616,42 +616,123 @@ export const find_duplicates = tool({
   },
 });
 
+const CONTACT_TYPE_ENUM = z.enum(["cliente", "socio", "proveedor"]);
+
 export const merge_duplicate_clients = tool({
   description:
-    "Antes fusionaba clientes duplicados; esa operación no existe todavía en el modelo nuevo. Devuelve un resultado explicando que no está disponible, sin tocar nada.",
+    "Fusiona contactos duplicados (clientes/socios/proveedores) que comparten el mismo nombre exacto: conserva el más antiguo, reasigna proyectos/personas/tags/historial de los demás y los elimina de forma reversible. Usa find_duplicates primero para ver los grupos. Pide confirmación explícita antes de usarlo — es destructivo para los registros perdedores.",
   inputSchema: z.object({
-    name: z.string().min(2).describe("Nombre del cliente duplicado"),
+    name: z.string().min(2).describe("Nombre exacto del contacto duplicado"),
+    type: CONTACT_TYPE_ENUM.optional().describe(
+      "Tipo del contacto si hay duplicados de más de un tipo con ese nombre"
+    ),
   }),
-  // lib/actions/maintenance-actions.ts (mergeDuplicateClientsAction) was
-  // removed in the greenfield rebuild and lib/repositories/contacts-repository.ts
-  // has no merge equivalent yet — merging would mean reassigning every
-  // project/task/history row that references the losing contact id, which
-  // needs a dedicated transaction in the repository layer. Until that exists,
-  // fail closed with a clear message instead of silently doing nothing.
-  execute: async ({ name }) => {
+  execute: async ({ name, type }) => {
+    const all = await fetchContactsAction(type ? { type } : {});
+    const q = name.trim().toLowerCase();
+    const matches = all.filter((c) => c.name.trim().toLowerCase() === q);
+    if (matches.length < 2) {
+      return {
+        ok: false as const,
+        error: `No se encontraron al menos 2 contactos llamados "${name}"${type ? ` de tipo ${type}` : ""}.`,
+      };
+    }
+    const groups = new Map<string, typeof matches>();
+    for (const c of matches) groups.set(c.type, [...(groups.get(c.type) ?? []), c]);
+    const dupGroups = [...groups.entries()].filter(([, g]) => g.length > 1);
+    if (dupGroups.length === 0) {
+      return {
+        ok: false as const,
+        error: `"${name}" coincide con varios contactos pero de tipos distintos, ninguno duplicado entre sí.`,
+      };
+    }
+    if (dupGroups.length > 1) {
+      return {
+        ok: false as const,
+        error: `"${name}" tiene duplicados en más de un tipo (${dupGroups.map(([t]) => t).join(", ")}). Especifica el tipo.`,
+      };
+    }
+    const [, group] = dupGroups[0];
+    const sorted = [...group].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const [keep, ...duplicates] = sorted;
+    const merged = await mergeContactsAction(
+      keep.id,
+      duplicates.map((d) => d.id)
+    );
     return {
-      ok: false as const,
-      error: `Fusionar clientes duplicados ("${name}") no está disponible todavía en el modelo de datos nuevo. Usa find_duplicates para verlos y fusiónalos a mano por ahora.`,
+      ok: true as const,
+      keptId: merged.id,
+      name: merged.name,
+      type: merged.type,
+      mergedCount: duplicates.length,
     };
   },
 });
 
 export const merge_duplicate_activities = tool({
   description:
-    "Antes fusionaba tareas duplicadas de un proyecto; esa operación no existe todavía en el modelo nuevo. Devuelve un resultado explicando que no está disponible, sin tocar nada.",
+    "Fusiona tareas duplicadas (mismo proyecto/flujo y título exacto): conserva la más antigua, reasigna checklist/apoyo/historial de las demás y las elimina de forma reversible. Usa find_duplicates primero para ver los grupos. Pide confirmación explícita antes de usarlo — es destructivo para los registros perdedores.",
   inputSchema: z.object({
     projectName: z.string().min(2),
-    descriptionContains: z.string().min(3),
+    descriptionContains: z.string().min(3).describe("Título (o fragmento) de la tarea duplicada"),
     workflow: WORKFLOW_ENUM.optional(),
   }),
-  // Same situation as merge_duplicate_clients: mergeDuplicateActivitiesAction
-  // is gone and lib/repositories/tasks-repository.ts has no merge (move
-  // checklist/support/history to a survivor task, archive the rest)
-  // equivalent yet. Fail closed rather than pretend to merge.
-  execute: async ({ projectName, descriptionContains }) => {
+  execute: async ({ projectName, descriptionContains, workflow }) => {
+    const resolved = await resolveProject(projectName);
+    if (!resolved.ok) return resolved;
+
+    let workflowId: string | undefined;
+    if (workflow) {
+      const resolvedWorkflow = await resolveWorkflowByKey(workflow);
+      if (!resolvedWorkflow.ok) return resolvedWorkflow;
+      workflowId = resolvedWorkflow.value.id;
+    }
+
+    const matches = await fetchTasksAction({
+      search: descriptionContains,
+      projectId: resolved.value.id,
+      workflowId,
+    });
+    if (matches.length < 2) {
+      return {
+        ok: false as const,
+        error: `No se encontraron al menos 2 tareas que contengan "${descriptionContains}" en "${resolved.value.name}".`,
+      };
+    }
+
+    const groups = new Map<string, typeof matches>();
+    for (const t of matches) {
+      const key = t.title.trim().toLowerCase();
+      groups.set(key, [...(groups.get(key) ?? []), t]);
+    }
+    const dupGroups = [...groups.values()].filter((g) => g.length > 1);
+    if (dupGroups.length === 0) {
+      return {
+        ok: false as const,
+        error: `"${descriptionContains}" coincide con varias tareas en "${resolved.value.name}" pero ninguna con título exactamente igual.`,
+      };
+    }
+    if (dupGroups.length > 1) {
+      return {
+        ok: false as const,
+        error: `"${descriptionContains}" tiene más de un grupo de tareas duplicadas en "${resolved.value.name}". Sé más específico.`,
+        candidates: dupGroups.map((g) => g[0].title),
+      };
+    }
+
+    const group = dupGroups[0];
+    const sorted = [...group].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const [keep, ...duplicates] = sorted;
+    const merged = await mergeTasksAction(
+      keep.id,
+      duplicates.map((d) => d.id)
+    );
     return {
-      ok: false as const,
-      error: `Fusionar tareas duplicadas ("${descriptionContains}" en "${projectName}") no está disponible todavía en el modelo de datos nuevo. Usa find_duplicates para verlas y fusiónalas a mano por ahora.`,
+      ok: true as const,
+      keptId: merged.id,
+      title: merged.title,
+      project: resolved.value.name,
+      mergedCount: duplicates.length,
     };
   },
 });

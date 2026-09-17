@@ -100,7 +100,19 @@ export const resourceLinks = core.table(
   ]
 );
 
-/** Old id → new id, filled only at cutover. Empty until then. */
+/**
+ * Old id → new id mapping for the production data cutover (rebuild Phase 9).
+ * Empty on every environment until the cutover actually runs -- this table
+ * is prepared ahead of time, not populated by this phase.
+ *
+ *   entity    -- which legacy table the row came from, e.g. "activities",
+ *                "clients", "team_members" (see docs/rebuild-table-inventory.md
+ *                for the full old-table → new-table mapping)
+ *   legacy_id -- the row's numeric id in the old (pre-rebuild) schema
+ *   row_id    -- the same row's uuid in the corresponding `core.*` table
+ *
+ * (entity, legacy_id) is the primary key -- one mapping per legacy row.
+ */
 export const legacyRefs = core.table(
   "legacy_refs",
   {
