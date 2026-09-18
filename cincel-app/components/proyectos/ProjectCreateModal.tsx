@@ -103,7 +103,19 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
 
             <Label className="text-sm font-normal text-muted-foreground">
               Cliente
-              <Select value={clientId || NO_VALUE} onValueChange={(value) => setClientId(value === NO_VALUE ? "" : (value as string))}>
+              <Select
+                items={{
+                  [NO_VALUE]: clients.length === 0 ? "No hay clientes" : "Selecciona un cliente",
+                  ...Object.fromEntries(
+                    clients.map((client) => [
+                      client.id,
+                      `${client.name} (${client.kind === "empresa" ? "Empresa" : "Particular"})`,
+                    ])
+                  ),
+                }}
+                value={clientId || NO_VALUE}
+                onValueChange={(value) => setClientId(value === NO_VALUE ? "" : (value as string))}
+              >
                 <SelectTrigger className="mt-1 w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -122,7 +134,11 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
 
             <Label className="text-sm font-normal text-muted-foreground">
               Etapa inicial
-              <Select value={workflowId} onValueChange={(value) => setWorkflowId(value as string)}>
+              <Select
+                items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
+                value={workflowId}
+                onValueChange={(value) => setWorkflowId(value as string)}
+              >
                 <SelectTrigger className="mt-1 w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -136,7 +152,11 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
 
             <Label className="text-sm font-normal text-muted-foreground">
               Tipo de proyecto
-              <Select value={type} onValueChange={(value) => setType(value as string)}>
+              <Select
+                items={Object.fromEntries(PROJECT_TYPE_OPTIONS.map((t) => [t, t]))}
+                value={type}
+                onValueChange={(value) => setType(value as string)}
+              >
                 <SelectTrigger className="mt-1 w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -150,7 +170,11 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
 
             <Label className="text-sm font-normal text-muted-foreground">
               Encargado
-              <Select value={managerId || NO_VALUE} onValueChange={(value) => setManagerId(value === NO_VALUE ? "" : (value as string))}>
+              <Select
+                items={{ [NO_VALUE]: "Sin encargado", ...Object.fromEntries(staff.map((s) => [s.id, s.name])) }}
+                value={managerId || NO_VALUE}
+                onValueChange={(value) => setManagerId(value === NO_VALUE ? "" : (value as string))}
+              >
                 <SelectTrigger className="mt-1 w-full">
                   <SelectValue />
                 </SelectTrigger>
