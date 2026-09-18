@@ -21,7 +21,7 @@ export function AssistantStatGridMessage({ title, stats }: Props) {
       ) : null}
       <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
         {stats.map((stat) => (
-          <div key={stat.label} className="flex flex-col gap-1 bg-white p-3">
+          <div key={stat.label} className="flex flex-col gap-1 bg-card p-3">
             <p className="text-xs text-muted-foreground">{stat.label}</p>
             <p className="text-base font-semibold text-foreground">{stat.value}</p>
             {stat.badge ? (

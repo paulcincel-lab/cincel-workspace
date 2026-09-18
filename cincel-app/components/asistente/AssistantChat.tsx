@@ -167,7 +167,7 @@ export function AssistantChat() {
         </div>
       ) : null}
 
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-white p-4 shadow-sm">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-sm">
         {messages.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
             <p className="text-sm text-muted-foreground">Prueba con una de estas preguntas:</p>
