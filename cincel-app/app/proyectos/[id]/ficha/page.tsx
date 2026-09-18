@@ -327,6 +327,7 @@ export default function ProjectFichaPage() {
                   <Label className="text-sm font-normal text-muted-foreground">
                     Encargado
                     <Select
+                      items={{ [NO_VALUE]: "Sin encargado", ...Object.fromEntries(staff.map((s) => [s.id, s.name])) }}
                       value={draft.managerId ?? NO_VALUE}
                       onValueChange={(v) => setDraft((d) => ({ ...d, managerId: v === NO_VALUE ? null : (v as string) }))}
                     >
@@ -361,7 +362,11 @@ export default function ProjectFichaPage() {
               </div>
               {caps.canChangeProjectStage ? (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <Select value={project.currentWorkflow?.id ?? ""} onValueChange={(v) => void changeStage(v as string)}>
+                  <Select
+                    items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
+                    value={project.currentWorkflow?.id ?? ""}
+                    onValueChange={(v) => void changeStage(v as string)}
+                  >
                     <SelectTrigger className="w-56"><SelectValue placeholder="Cambiar etapa" /></SelectTrigger>
                     <SelectContent>
                       {workflows.map((w) => (
@@ -369,7 +374,11 @@ export default function ProjectFichaPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={applyWorkflowId} onValueChange={(v) => setApplyWorkflowId(v as string)}>
+                  <Select
+                    items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
+                    value={applyWorkflowId}
+                    onValueChange={(v) => setApplyWorkflowId(v as string)}
+                  >
                     <SelectTrigger className="w-56"><SelectValue placeholder="Aplicar workflow" /></SelectTrigger>
                     <SelectContent>
                       {workflows.map((w) => (

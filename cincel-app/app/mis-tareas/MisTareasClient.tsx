@@ -287,7 +287,12 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
               commitOnChange
               renderDisplay={(value) => <Badge variant={STATUS_VARIANT[value as TaskStatus]}>{STATUS_LABEL[value as TaskStatus]}</Badge>}
               renderEditor={({ onChange, onBlur }) => (
-                <Select defaultOpen value={task.status} onValueChange={(next) => { onChange(next as string); onBlur(); }}>
+                <Select
+                  defaultOpen
+                  items={Object.fromEntries(ALL_STATUSES.map((s) => [s, STATUS_LABEL[s]]))}
+                  value={task.status}
+                  onValueChange={(next) => { onChange(next as string); onBlur(); }}
+                >
                   <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {ALL_STATUSES.map((s) => (
@@ -348,7 +353,11 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
           </TabsList>
         </Tabs>
 
-        <Select value={statusFilter || "__all__"} onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : (v as TaskStatus))}>
+        <Select
+          items={{ __all__: "Estatus", ...Object.fromEntries(ALL_STATUSES.map((s) => [s, STATUS_LABEL[s]])) }}
+          value={statusFilter || "__all__"}
+          onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : (v as TaskStatus))}
+        >
           <SelectTrigger className="h-9 w-auto"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Estatus</SelectItem>
