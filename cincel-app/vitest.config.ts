@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     globals: true,
-    setupFiles: [],
+    setupFiles: ["./tests/setup/happy-dom-polyfills.ts"],
     include: [
       "tests/unit/**/*.{test,spec}.{ts,tsx}",
       "lib/**/*.{test,spec}.{ts,tsx}",

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/shadcn/button";
 import { fmtRange, weekBounds } from "@/lib/cronograma/week";
@@ -61,11 +62,15 @@ export function CronogramaHeader({
         </div>
         {readOnly ? null : (
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled title="Disponible en la siguiente fase">
+            <Button
+              variant="outline"
+              size="sm"
+              render={<a href={`/api/proyectos/${projectId}/cronograma/export`} download={`cronograma-${projectId}.json`} />}
+            >
               Exportar
             </Button>
             <ImportDialog projectId={projectId} scheduleId={scheduleId} onImported={onImported} />
-            <Button variant="outline" size="sm" disabled title="Disponible en la siguiente fase">
+            <Button variant="outline" size="sm" render={<Link href={`/proyectos/${projectId}/cronograma/reporte`} />}>
               Generar reporte
             </Button>
           </div>
