@@ -54,7 +54,15 @@ function SelectContent({
   Pick<React.ComponentProps<typeof SelectPrimitive.Positioner>, "sideOffset"> ) {
   return (
     <SelectPrimitive.Portal>
-      <SelectPrimitive.Positioner sideOffset={sideOffset} className="z-50">
+      {/*
+        Higher than every other floating layer (Sheet/Dialog/Popover/
+        DropdownMenu/Tooltip all use z-50) on purpose: a Select is commonly
+        opened from inside one of those, and with equal z-index the paint
+        order depends on portal mount order rather than "what's semantically
+        on top" -- observed rendering the option list behind a Sheet's own
+        content. A Select's popup should always win when open.
+      */}
+      <SelectPrimitive.Positioner sideOffset={sideOffset} className="z-[60]">
         <SelectPrimitive.Popup
           data-slot="select-content"
           className={cn(
