@@ -21,5 +21,6 @@
   "Rebuild M7 — Resources and Assistant": "rebuild:7",
   "Rebuild M8 — Hardening": "rebuild:8",
   "Rebuild M9 — Cutover Hooks": "rebuild:9",
-  "Code Cleanup — Dead Code Audit": "cleanup:dead-code"
+  "Code Cleanup — Dead Code Audit": "cleanup:dead-code",
+  "UI Bugs — Dropdown Review (Sept 2026)": "bugs:dropdown-review"
 }
