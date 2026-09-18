@@ -22,5 +22,9 @@
   "Rebuild M8 — Hardening": "rebuild:8",
   "Rebuild M9 — Cutover Hooks": "rebuild:9",
   "Code Cleanup — Dead Code Audit": "cleanup:dead-code",
-  "UI Bugs — Dropdown Review (Sept 2026)": "bugs:dropdown-review"
+  "UI Bugs — Dropdown Review (Sept 2026)": "bugs:dropdown-review",
+  "Cronograma Phase 1: Schema + Shared Library": "cronograma:1",
+  "Cronograma Phase 2: Read-Only View": "cronograma:2",
+  "Cronograma Phase 3: Mutations + Import": "cronograma:3",
+  "Cronograma Phase 4: Report, Export & Tests": "cronograma:4"
 }
