@@ -194,6 +194,7 @@ export function ContactEditorSheet({
             <div>
               <Label className="mb-2 block">Tipo de contacto</Label>
               <Select
+                items={Object.fromEntries(CONTACT_TYPES.map((t) => [t, CONTACT_TYPE_LABEL[t]]))}
                 value={draft.type}
                 onValueChange={(v) => set(onChangeDraft, "type", v as ContactType)}
                 disabled={isEditing}
@@ -208,7 +209,11 @@ export function ContactEditorSheet({
             </div>
             <div>
               <Label className="mb-2 block">Empresa o particular</Label>
-              <Select value={draft.kind} onValueChange={(v) => set(onChangeDraft, "kind", v as ContactKind)}>
+              <Select
+                items={{ particular: "Particular", empresa: "Empresa" }}
+                value={draft.kind}
+                onValueChange={(v) => set(onChangeDraft, "kind", v as ContactKind)}
+              >
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="particular">Particular</SelectItem>
@@ -281,7 +286,11 @@ export function ContactEditorSheet({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="mb-2 block">Subtipo</Label>
-                  <Select value={draft.providerSubtype} onValueChange={(v) => set(onChangeDraft, "providerSubtype", v as ProviderSubtype)}>
+                  <Select
+                    items={Object.fromEntries(PROVIDER_SUBTYPES.map((s) => [s, PROVIDER_SUBTYPE_LABEL[s]]))}
+                    value={draft.providerSubtype}
+                    onValueChange={(v) => set(onChangeDraft, "providerSubtype", v as ProviderSubtype)}
+                  >
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {PROVIDER_SUBTYPES.map((s) => <SelectItem key={s} value={s}>{PROVIDER_SUBTYPE_LABEL[s]}</SelectItem>)}
@@ -290,7 +299,11 @@ export function ContactEditorSheet({
                 </div>
                 <div>
                   <Label className="mb-2 block">Estado</Label>
-                  <Select value={draft.providerStatus} onValueChange={(v) => set(onChangeDraft, "providerStatus", v as ProviderStatus)}>
+                  <Select
+                    items={Object.fromEntries(PROVIDER_STATUSES.map((s) => [s, PROVIDER_STATUS_LABEL[s]]))}
+                    value={draft.providerStatus}
+                    onValueChange={(v) => set(onChangeDraft, "providerStatus", v as ProviderStatus)}
+                  >
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {PROVIDER_STATUSES.map((s) => <SelectItem key={s} value={s}>{PROVIDER_STATUS_LABEL[s]}</SelectItem>)}
@@ -307,6 +320,7 @@ export function ContactEditorSheet({
                       linking the wrong one visually duplicates them as both a
                       colaborador contact and a task-assignable staff member. */}
                   <Select
+                    items={{ [NO_STAFF_VALUE]: "Ninguno", ...Object.fromEntries(staffOptions.map((s) => [s.id, s.name])) }}
                     value={draft.staffId ?? NO_STAFF_VALUE}
                     onValueChange={(v) => {
                       const next = v as string;
