@@ -70,3 +70,28 @@ export interface SCurvePoint {
   real: number | null;
   pagos: number;
 }
+
+export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export interface NormalizedScheduleTask {
+  legacyId: string | null;
+  planta: string;
+  seccion: string;
+  responsable: string | null;
+  inicio: string;
+  fin: string;
+  tarea: string;
+  stableKey: string;
+}
+
+export interface ImportDiffSummary {
+  keptCount: number;
+  newCount: number;
+  removedCount: number;
+  removedTasks: Array<{ stableKey: string; tarea: string }>;
+}
+
+export interface LegacyStateApplyResult {
+  matchedCount: number;
+  unmatchedKeys: string[];
+}

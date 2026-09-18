@@ -3,16 +3,30 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/shadcn/button";
 import { fmtRange, weekBounds } from "@/lib/cronograma/week";
+import { ImportDialog } from "./import-dialog";
 
 interface CronogramaHeaderProps {
+  projectId: string;
+  scheduleId: string | null;
   projectName: string;
   address: string | null;
   today: Date;
   weekOffset: number;
+  onImported?: () => void;
+  readOnly?: boolean;
 }
 
-/** Project title + week navigation. The actions menu (Exportar / Importar / Generar reporte) lands in a later phase. */
-export function CronogramaHeader({ projectName, address, today, weekOffset }: CronogramaHeaderProps) {
+/** Project title, week navigation, and the actions menu (Exportar / Importar / Generar reporte). Exportar and Generar reporte are wired in Phase 4. */
+export function CronogramaHeader({
+  projectId,
+  scheduleId,
+  projectName,
+  address,
+  today,
+  weekOffset,
+  onImported,
+  readOnly = false,
+}: CronogramaHeaderProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -45,6 +59,17 @@ export function CronogramaHeader({ projectName, address, today, weekOffset }: Cr
             →
           </Button>
         </div>
+        {readOnly ? null : (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled title="Disponible en la siguiente fase">
+              Exportar
+            </Button>
+            <ImportDialog projectId={projectId} scheduleId={scheduleId} onImported={onImported} />
+            <Button variant="outline" size="sm" disabled title="Disponible en la siguiente fase">
+              Generar reporte
+            </Button>
+          </div>
+        )}
         <div className="text-right text-sm">
           <div className="font-medium text-foreground">{fmtRange(start, end)}</div>
           <div className="text-xs text-muted-foreground">

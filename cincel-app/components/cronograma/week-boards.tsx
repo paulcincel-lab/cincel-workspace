@@ -4,7 +4,7 @@ import { TaskCard } from "./task-card";
 import { tasksInRange } from "@/lib/cronograma/metrics";
 import { fmtRange, isoDate, mondayOf, weekBounds } from "@/lib/cronograma/week";
 import { sortSections } from "@/lib/cronograma/sections";
-import type { ScheduleTask } from "@/lib/types/schedule";
+import type { ScheduleStatus, ScheduleTask } from "@/lib/types/schedule";
 
 function groupBySeccion(tasks: ScheduleTask[]): Map<string, ScheduleTask[]> {
   const map = new Map<string, ScheduleTask[]>();
@@ -22,9 +22,12 @@ interface BoardColumnProps {
   start: Date;
   end: Date;
   isTodayWeek: boolean;
+  readOnly: boolean;
+  onCycleStatus?: (task: ScheduleTask, next: ScheduleStatus) => void;
+  onToggleFlag?: (task: ScheduleTask) => void;
 }
 
-function BoardColumn({ title, tasks, start, end, isTodayWeek }: BoardColumnProps) {
+function BoardColumn({ title, tasks, start, end, isTodayWeek, readOnly, onCycleStatus, onToggleFlag }: BoardColumnProps) {
   const doneCount = tasks.filter((t) => t.status === "done").length;
   const progressCount = tasks.filter((t) => t.status === "progress").length;
   const countLabel = `${doneCount} / ${tasks.length} completadas${progressCount ? ` · ${progressCount} en proceso` : ""}`;
@@ -56,7 +59,15 @@ function BoardColumn({ title, tasks, start, end, isTodayWeek }: BoardColumnProps
                   {seccion} · {grouped.get(seccion)?.length}
                 </p>
                 <div className="space-y-1.5">
-                  {grouped.get(seccion)?.map((t) => <TaskCard key={t.id} task={t} />)}
+                  {grouped.get(seccion)?.map((t) => (
+                    <TaskCard
+                      key={t.id}
+                      task={t}
+                      readOnly={readOnly}
+                      onCycleStatus={onCycleStatus}
+                      onToggleFlag={onToggleFlag}
+                    />
+                  ))}
                 </div>
               </div>
             ))}
@@ -71,10 +82,13 @@ interface WeekBoardsProps {
   tasks: ScheduleTask[];
   today: Date;
   weekOffset: number;
+  readOnly?: boolean;
+  onCycleStatus?: (task: ScheduleTask, next: ScheduleStatus) => void;
+  onToggleFlag?: (task: ScheduleTask) => void;
 }
 
 /** Semana anterior / esta semana / próxima semana, relative to `weekOffset` from the real current week. */
-export function WeekBoards({ tasks, today, weekOffset }: WeekBoardsProps) {
+export function WeekBoards({ tasks, today, weekOffset, readOnly = false, onCycleStatus, onToggleFlag }: WeekBoardsProps) {
   const realTodayWeekStart = isoDate(mondayOf(today));
   const columns = [
     { title: "Semana anterior", offset: weekOffset - 1 },
@@ -94,6 +108,9 @@ export function WeekBoards({ tasks, today, weekOffset }: WeekBoardsProps) {
             start={start}
             end={end}
             isTodayWeek={isoDate(start) === realTodayWeekStart}
+            readOnly={readOnly}
+            onCycleStatus={onCycleStatus}
+            onToggleFlag={onToggleFlag}
           />
         );
       })}
