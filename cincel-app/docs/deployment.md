@@ -63,10 +63,9 @@ npm ci
 DATABASE_URL='postgres://USER:PW@HOST:5432/DBNAME' npm run db:migrate
 ```
 
-Or use the **`migrate-remote-db`** job in
-`.github/workflows/cincel-app-build.yml`: Actions tab → *Run workflow*. It reads
-a `PROD_DATABASE_URL` secret from the repo's `production` environment — set that
-secret once in **Settings → Environments → production**.
+This is manual only — CI no longer runs migrations against a remote database
+on its own (the `migrate-remote-db` job was removed; run the command above
+from a checkout or a one-off CI step if you need it in a pipeline).
 
 ## First deploy — seed
 
@@ -97,9 +96,11 @@ history are entered through the app; there is no bulk importer.
 | `unit-tests` | `npm run test:unit` (vitest) |
 | `e2e-tests` | Spins a throwaway Postgres service, runs `db:migrate` + `db:seed`, then Playwright (`npm run test:e2e`) |
 | `docker-build` | `docker build` smoke |
-| `migrate-remote-db` | **manual only** (`workflow_dispatch`) — applies migrations to `secrets.PROD_DATABASE_URL` |
+| `docker-publish` | **push to `main` only**, on the self-hosted runner — builds and pushes the runtime and migrate images to `secrets.REGISTRY_URL` |
 
-CI does **not** deploy or migrate any real environment automatically.
+CI does not migrate any real environment automatically; publishing the images
+on push to `main` is the one exception, and it only builds/pushes images, it
+never runs them against a database.
 
 ## Post-deploy smoke check
 
