@@ -366,6 +366,13 @@ export default function Sidebar() {
           </div>
         </SidebarFooter>
       </SidebarPrimitive>
+
+      {/* On mobile, SidebarPrimitive renders its whole subtree (including the
+          in-header SidebarTrigger) inside a Sheet that starts closed — so
+          that trigger is invisible until opened, with no other way to open
+          it. This sibling trigger stays outside that Sheet, fixed onscreen,
+          so mobile users have something to tap. */}
+      <SidebarTrigger className="fixed top-3 left-3 z-40 bg-background shadow-sm md:hidden" />
     </SidebarProvider>
   );
 }
