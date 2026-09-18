@@ -1,0 +1,83 @@
+{
+  "2026-07-15": {
+    "total": 323,
+    "plannedCount": 64,
+    "plannedPct": 20,
+    "doneCount": 145,
+    "progressCount": 76,
+    "realPct": 57,
+    "pagosAvancePct": 26,
+    "pagosPagadoPct": 38,
+    "onTimePct": 20,
+    "aheadPct": 37,
+    "projectWeeks": 14.1429,
+    "delayVsObra": {
+      "kind": "ahead",
+      "weeks": 5.2
+    },
+    "delayVsPagos": {
+      "kind": "ahead",
+      "weeks": 4.4
+    },
+    "atrasadasCount": 0,
+    "atrasadasSample": []
+  },
+  "2026-08-20": {
+    "total": 323,
+    "plannedCount": 226,
+    "plannedPct": 70,
+    "doneCount": 145,
+    "progressCount": 76,
+    "realPct": 57,
+    "pagosAvancePct": 65,
+    "pagosPagadoPct": 77,
+    "onTimePct": 51,
+    "aheadPct": 5,
+    "projectWeeks": 14.1429,
+    "delayVsObra": {
+      "kind": "late",
+      "weeks": 1.8
+    },
+    "delayVsPagos": {
+      "kind": "late",
+      "weeks": 1.1
+    },
+    "atrasadasCount": 69,
+    "atrasadasSample": [
+      "PB-xe0zbn",
+      "PA-xe0zbn",
+      "PB-8hog5j",
+      "PA-pyrb6e",
+      "PA-8hog5j"
+    ]
+  },
+  "2026-09-18": {
+    "total": 323,
+    "plannedCount": 321,
+    "plannedPct": 99,
+    "doneCount": 145,
+    "progressCount": 76,
+    "realPct": 57,
+    "pagosAvancePct": 92,
+    "pagosPagadoPct": 97,
+    "onTimePct": 57,
+    "aheadPct": 0,
+    "projectWeeks": 14.1429,
+    "delayVsObra": {
+      "kind": "late",
+      "weeks": 5.9
+    },
+    "delayVsPagos": {
+      "kind": "late",
+      "weeks": 4.9
+    },
+    "atrasadasCount": 173,
+    "atrasadasSample": [
+      "PB-xe0zbn",
+      "PA-xe0zbn",
+      "PB-8hog5j",
+      "PA-pyrb6e",
+      "PA-8hog5j"
+    ]
+  }
+}
