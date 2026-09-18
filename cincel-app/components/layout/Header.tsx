@@ -384,7 +384,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
             </div>
           </div>
 
-          <div className="self-end sm:self-auto">
+          <div className="flex w-full justify-end sm:w-auto sm:justify-normal">
             <div className="flex items-center gap-2">
               <DevelopmentMenu isVisible={shouldShowDevelopmentMenu} />
               <HeaderActions links={headerLinks} />
@@ -419,7 +419,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
           </h1>
         </div>
 
-        <div className="self-end sm:self-auto">
+        <div className="flex w-full justify-end sm:w-auto sm:justify-normal">
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
               <DevelopmentMenu isVisible={shouldShowDevelopmentMenu} />
