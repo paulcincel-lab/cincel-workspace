@@ -640,7 +640,12 @@ export function ActividadesClient({
               commitOnChange
               renderDisplay={(value) => <Badge variant={STATUS_VARIANT[value as TaskStatus]}>{STATUS_LABEL[value as TaskStatus]}</Badge>}
               renderEditor={({ onChange, onBlur }) => (
-                <Select defaultOpen value={task.status} onValueChange={(next) => { onChange(next as string); onBlur(); }}>
+                <Select
+                  defaultOpen
+                  items={Object.fromEntries(ALL_STATUSES.map((s) => [s, STATUS_LABEL[s]]))}
+                  value={task.status}
+                  onValueChange={(next) => { onChange(next as string); onBlur(); }}
+                >
                   <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {ALL_STATUSES.map((s) => (
@@ -789,7 +794,11 @@ export function ActividadesClient({
           <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
             <Input type="text" placeholder="Buscar tarea..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 w-56" />
 
-            <Select value={projectFromQuery || "__all__"} onValueChange={(v) => updateProjectFilter(v === "__all__" ? "" : (v as string))}>
+            <Select
+              items={{ __all__: "Proyecto", ...Object.fromEntries(projectFilterOptions.map((p) => [p.id, p.name])) }}
+              value={projectFromQuery || "__all__"}
+              onValueChange={(v) => updateProjectFilter(v === "__all__" ? "" : (v as string))}
+            >
               <SelectTrigger className="h-9 w-auto"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Proyecto</SelectItem>
@@ -799,7 +808,11 @@ export function ActividadesClient({
               </SelectContent>
             </Select>
 
-            <Select value={managerFilter || "__all__"} onValueChange={(v) => setManagerFilter(v === "__all__" ? "" : (v as string))}>
+            <Select
+              items={{ __all__: "Responsable", ...Object.fromEntries(managerOptions.map((m) => [m.id, m.name])) }}
+              value={managerFilter || "__all__"}
+              onValueChange={(v) => setManagerFilter(v === "__all__" ? "" : (v as string))}
+            >
               <SelectTrigger className="h-9 w-auto"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Responsable</SelectItem>
@@ -809,7 +822,11 @@ export function ActividadesClient({
               </SelectContent>
             </Select>
 
-            <Select value={teamFilter || "__all__"} onValueChange={(v) => setTeamFilter(v === "__all__" ? "" : (v as string))}>
+            <Select
+              items={{ __all__: "Equipo", ...Object.fromEntries(teamOptions.map((t) => [t.id, t.name])) }}
+              value={teamFilter || "__all__"}
+              onValueChange={(v) => setTeamFilter(v === "__all__" ? "" : (v as string))}
+            >
               <SelectTrigger className="h-9 w-auto"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Equipo</SelectItem>
@@ -819,7 +836,11 @@ export function ActividadesClient({
               </SelectContent>
             </Select>
 
-            <Select value={statusFilter || "__all__"} onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : (v as TaskStatus))}>
+            <Select
+              items={{ __all__: "Estatus", ...Object.fromEntries(ALL_STATUSES.map((s) => [s, STATUS_LABEL[s]])) }}
+              value={statusFilter || "__all__"}
+              onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : (v as TaskStatus))}
+            >
               <SelectTrigger className="h-9 w-auto"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Estatus</SelectItem>

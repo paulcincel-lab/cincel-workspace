@@ -105,6 +105,7 @@ export function AreaEditorDrawer({
               <div>
                 <label className="mb-2 block text-sm font-medium text-foreground">Responsable</label>
                 <Select
+                  items={{ [NO_LEAD_VALUE]: "Sin responsable", ...Object.fromEntries(staffOptions.map((o) => [o.id, o.name])) }}
                   value={draft.leadId ?? NO_LEAD_VALUE}
                   disabled={!canManage}
                   onValueChange={(value) =>

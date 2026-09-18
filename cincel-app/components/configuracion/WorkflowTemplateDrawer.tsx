@@ -99,6 +99,7 @@ export function WorkflowTemplateDrawer({
           <div>
             <label className="mb-2 block text-sm font-medium text-foreground">Prioridad por defecto</label>
             <Select
+              items={Object.fromEntries(PRIORITY_OPTIONS.map((o) => [o.value, o.label]))}
               value={draft.defaultPriority}
               onValueChange={(value) => onChangeDraft((current) => ({ ...current, defaultPriority: value as TaskPriority }))}
             >

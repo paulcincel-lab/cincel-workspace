@@ -377,6 +377,7 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
           if (r.type !== "proveedor") return <span className="text-muted-foreground">—</span>;
           return (
             <Select
+              items={Object.fromEntries(PROVIDER_STATUSES.map((s) => [s, PROVIDER_STATUS_LABEL[s]]))}
               value={contacts.find((c) => c.id === r.id)?.providerProfile?.status ?? "activo"}
               onValueChange={(v) => void updateProviderField(r.id, { status: v as ProviderStatus })}
             >
@@ -468,21 +469,33 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
       {typeFilter === "proveedor" ? (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-4 py-2.5">
           <span className="mr-1 text-xs font-medium text-muted-foreground">Filtrar:</span>
-          <Select value={filters.subtype || "__all__"} onValueChange={(v) => setFilters((f) => ({ ...f, subtype: v === "__all__" ? "" : (v as ProviderSubtype) }))}>
+          <Select
+            items={{ __all__: "Subtipo: Todos", ...Object.fromEntries(PROVIDER_SUBTYPES.map((s) => [s, PROVIDER_SUBTYPE_LABEL[s]])) }}
+            value={filters.subtype || "__all__"}
+            onValueChange={(v) => setFilters((f) => ({ ...f, subtype: v === "__all__" ? "" : (v as ProviderSubtype) }))}
+          >
             <SelectTrigger className="h-auto w-auto px-2 py-1 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Subtipo: Todos</SelectItem>
               {PROVIDER_SUBTYPES.map((s) => <SelectItem key={s} value={s}>{PROVIDER_SUBTYPE_LABEL[s]}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={filters.status || "__all__"} onValueChange={(v) => setFilters((f) => ({ ...f, status: v === "__all__" ? "" : (v as ProviderStatus) }))}>
+          <Select
+            items={{ __all__: "Estado: Todos", ...Object.fromEntries(PROVIDER_STATUSES.map((s) => [s, PROVIDER_STATUS_LABEL[s]])) }}
+            value={filters.status || "__all__"}
+            onValueChange={(v) => setFilters((f) => ({ ...f, status: v === "__all__" ? "" : (v as ProviderStatus) }))}
+          >
             <SelectTrigger className="h-auto w-auto px-2 py-1 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Estado: Todos</SelectItem>
               {PROVIDER_STATUSES.map((s) => <SelectItem key={s} value={s}>{PROVIDER_STATUS_LABEL[s]}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={filters.minRating.toString()} onValueChange={(v) => setFilters((f) => ({ ...f, minRating: Number(v) }))}>
+          <Select
+            items={Object.fromEntries(RATING_FILTER_OPTIONS.map((o) => [o.value, o.label]))}
+            value={filters.minRating.toString()}
+            onValueChange={(v) => setFilters((f) => ({ ...f, minRating: Number(v) }))}
+          >
             <SelectTrigger className="h-auto w-auto px-2 py-1 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               {RATING_FILTER_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}

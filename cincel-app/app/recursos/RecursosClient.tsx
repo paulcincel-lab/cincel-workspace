@@ -320,6 +320,7 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
         actions={
           <>
             <Select
+              items={Object.fromEntries(activeStaff.map((s) => [s.id, s.name]))}
               value={effectiveSelectedStaffId ?? ""}
               onValueChange={(v) => setSelectedStaffId(v as string)}
             >
@@ -425,7 +426,11 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
             </div>
             <div>
               <Label className="mb-2 block">Sección</Label>
-              <Select value={draftSection} onValueChange={(v) => setDraftSection(v as ResourceSection)}>
+              <Select
+                items={Object.fromEntries(SECTIONS.map((s) => [s, SECTION_LABEL[s]]))}
+                value={draftSection}
+                onValueChange={(v) => setDraftSection(v as ResourceSection)}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>

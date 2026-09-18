@@ -305,7 +305,11 @@ export default function UnifiedCalendar({
         <div className="grid gap-0 xl:grid-cols-[1fr_320px]">
           <div>
             <div className="grid grid-cols-2 gap-2 border-b border-border px-4 py-3 md:grid-cols-4">
-              <Select value={filters.project} onValueChange={(value) => setFilters((current) => ({ ...current, project: value as string }))}>
+              <Select
+                items={Object.fromEntries(options.projects.map((v) => [v, v === "Todos" ? "Proyecto: Todos" : v]))}
+                value={filters.project}
+                onValueChange={(value) => setFilters((current) => ({ ...current, project: value as string }))}
+              >
                 <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {options.projects.map((value) => (
@@ -314,6 +318,7 @@ export default function UnifiedCalendar({
                 </SelectContent>
               </Select>
               <Select
+                items={Object.fromEntries(responsibleOptions.map((v) => [v, v === "Todos" ? "Responsable: Todos" : v]))}
                 value={effectiveResponsibleFilter}
                 onValueChange={(value) => setFilters((current) => ({ ...current, responsible: value as string }))}
                 disabled={!canViewTeamCalendar}
@@ -325,7 +330,11 @@ export default function UnifiedCalendar({
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={filters.type} onValueChange={(value) => setFilters((current) => ({ ...current, type: value as string }))}>
+              <Select
+                items={Object.fromEntries(options.types.map((v) => [v, v === "Todos" ? "Tipo: Todos" : v]))}
+                value={filters.type}
+                onValueChange={(value) => setFilters((current) => ({ ...current, type: value as string }))}
+              >
                 <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {options.types.map((value) => (
@@ -333,7 +342,11 @@ export default function UnifiedCalendar({
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={filters.stage} onValueChange={(value) => setFilters((current) => ({ ...current, stage: value as string }))}>
+              <Select
+                items={Object.fromEntries(options.stages.map((v) => [v, v === "Todas" ? "Etapa: Todas" : v]))}
+                value={filters.stage}
+                onValueChange={(value) => setFilters((current) => ({ ...current, stage: value as string }))}
+              >
                 <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {options.stages.map((value) => (

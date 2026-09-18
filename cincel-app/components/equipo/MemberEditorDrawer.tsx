@@ -163,6 +163,10 @@ export function MemberEditorDrawer({
               <div>
                 <label className="mb-2 block text-sm font-medium text-foreground">Disponibilidad</label>
                 <Select
+                  items={{
+                    ...Object.fromEntries(availabilityOptions.map((o) => [o, o])),
+                    [OTHER_AVAILABILITY_VALUE]: "Otros...",
+                  }}
                   value={draft.availability}
                   onValueChange={(value) => {
                     const selected = value as string;
