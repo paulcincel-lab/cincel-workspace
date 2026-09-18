@@ -2,14 +2,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn
 import { Separator } from "@/components/ui/shadcn/separator";
 import { TaskCard } from "./task-card";
 import { computeAlertas } from "@/lib/cronograma/metrics";
-import type { ScheduleTask } from "@/lib/types/schedule";
+import type { ScheduleStatus, ScheduleTask } from "@/lib/types/schedule";
 
 interface AlertasPanelProps {
   tasks: ScheduleTask[];
   today: Date;
+  readOnly?: boolean;
+  onCycleStatus?: (task: ScheduleTask, next: ScheduleStatus) => void;
+  onToggleFlag?: (task: ScheduleTask) => void;
 }
 
-export function AlertasPanel({ tasks, today }: AlertasPanelProps) {
+export function AlertasPanel({ tasks, today, readOnly = false, onCycleStatus, onToggleFlag }: AlertasPanelProps) {
   const { atrasadas, flagged } = computeAlertas({ tasks }, today);
 
   return (
@@ -27,7 +30,7 @@ export function AlertasPanel({ tasks, today }: AlertasPanelProps) {
           ) : (
             <div className="space-y-1.5">
               {atrasadas.map((t) => (
-                <TaskCard key={t.id} task={t} />
+                <TaskCard key={t.id} task={t} readOnly={readOnly} onCycleStatus={onCycleStatus} onToggleFlag={onToggleFlag} />
               ))}
             </div>
           )}
@@ -44,7 +47,7 @@ export function AlertasPanel({ tasks, today }: AlertasPanelProps) {
           ) : (
             <div className="space-y-1.5">
               {flagged.map((t) => (
-                <TaskCard key={t.id} task={t} />
+                <TaskCard key={t.id} task={t} readOnly={readOnly} onCycleStatus={onCycleStatus} onToggleFlag={onToggleFlag} />
               ))}
             </div>
           )}
