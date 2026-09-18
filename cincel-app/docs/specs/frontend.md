@@ -104,7 +104,7 @@ app/
 
 ## 5. Types consumed by the UI
 
-See `backend.md` §5 for the canonical definitions (`ScheduleStatus`, `ScheduleTask`, `PaymentRow`, `Imprevisto`, `Adicional`, `CronogramaData`, `ProgressMetrics`, `GapStatus`, `SCurvePoint`) — this frontend imports them from `features/cronograma/types.ts` rather than redeclaring them.
+See `backend.md` §5 for the canonical definitions (`ScheduleStatus`, `ScheduleTask`, `PaymentRow`, `Imprevisto`, `Adicional`, `CronogramaData`, `ProgressMetrics`, `GapStatus`, `SCurvePoint`) — this frontend imports them from `lib/types/schedule.ts` rather than redeclaring them.
 
 All metric functions take `(data, today: Date)` — `today` is injected, never read from `Date.now()` inside `lib/`, so the report page and component tests can pin it.
 
@@ -138,7 +138,7 @@ page.tsx (RSC)
        └─ <CronogramaView data today={serverNow} />   (client)
             ├─ useOptimistic(data.tasks)  → metrics recomputed with useMemo on every status/flag change
             ├─ week offset from useSearchParams
-            └─ server actions (backend.md §4 actions.ts) → revalidatePath(`/projects/${id}/cronograma`)
+            └─ server actions (backend.md §4 actions.ts) → revalidatePath(`/proyectos/${id}/cronograma`)
 ```
 
 - **Single read, client-side recompute.** Metrics are cheap (323 tasks × ~15 weeks); recompute on the client from optimistic state rather than round-tripping.
@@ -176,7 +176,7 @@ page.tsx (RSC)
 
 ## 11. Acceptance criteria (frontend-relevant)
 
-1. Opening `/projects/{md22}/cronograma` on 2026-09-18 shows the same planned %, programado %, real %, en tiempo %, adelantos %, and delay labels as the reference HTML with the client's latest exported state imported.
+1. Opening `/proyectos/{md22}/cronograma` on 2026-09-18 shows the same planned %, programado %, real %, en tiempo %, adelantos %, and delay labels as the reference HTML with the client's latest exported state imported.
 2. Status and flag changes persist and are visible to another user without file exchange.
 3. Week navigation, Gantt, donut, S-curve, boards, alertas, resumen, imprevistos, adicionales all present and visually consistent with the portal's shadcn theme.
 4. Report route prints cleanly and accepts `?asOf`.

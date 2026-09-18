@@ -305,7 +305,7 @@ A script `scripts/seed-madrid22.ts` that reads the reference HTML, extracts `RAW
 
 ## 10. Acceptance criteria (backend-relevant)
 
-1. Opening `/projects/{md22}/cronograma` on 2026-09-18 shows the same planned %, programado %, real %, en tiempo %, adelantos %, and delay labels as the reference HTML with the client's latest exported state imported.
+1. Opening `/proyectos/{md22}/cronograma` on 2026-09-18 shows the same planned %, programado %, real %, en tiempo %, adelantos %, and delay labels as the reference HTML with the client's latest exported state imported.
 2. Status and flag changes persist and are visible to another user without file exchange.
 3. Re-importing the Excel with moved rows keeps existing statuses.
 4. Report route prints cleanly and accepts `?asOf`.
