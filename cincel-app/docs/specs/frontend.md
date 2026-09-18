@@ -69,33 +69,36 @@ Unknown secciones from other projects fall back to the neutral token and sort af
 
 ## 4. Module layout (client + shared lib)
 
+This project has no `src/` or `features/` directory — the root is flat (`app/`, `lib/`, `components/`), and routes are Spanish (`app/proyectos/[id]/...`, matching the existing `app/proyectos/[id]/ficha/`).
+
 ```
-src/
-  features/cronograma/
-    lib/                        ── SHARED with backend.md §4, zero React/DOM/DB imports ──
-      week.ts            mondayOf, addDays, isoDate, weekBounds, fmtRange, fmtShort (Spanish months)
-      hash.ts            djb2 → stableKey
-      metrics.ts         PURE: computeProgress, computeSCurve, computeResumen, computeAlertas, tasksInRange, ganttBySeccion
-      sections.ts        SECTION_ORDER, SECTION_COLOR (Tailwind tokens)
-    components/
-      cronograma-view.tsx        client composition root; owns optimistic state
-      cronograma-header.tsx
-      gantt-chart.tsx
-      progress-donut.tsx
-      s-curve-chart.tsx
-      week-boards.tsx
-      task-card.tsx              status button + flag button + meta
-      alertas-panel.tsx
-      resumen-cards.tsx
-      imprevistos-panel.tsx
-      adicionales-panel.tsx
-      import-dialog.tsx
-    types.ts             ── SHARED with backend.md §5 ──
-  app/(portal)/projects/[projectId]/cronograma/page.tsx        server component → <CronogramaView data />
-  app/(portal)/projects/[projectId]/cronograma/reporte/page.tsx read-only snapshot (see backend.md §7)
+lib/
+  cronograma/                 ── SHARED with backend.md §4, zero React/DOM/DB imports ──
+    week.ts            mondayOf, addDays, isoDate, weekBounds, fmtRange, fmtShort (Spanish months)
+    hash.ts            djb2 → stableKey
+    metrics.ts         PURE: computeProgress, computeSCurve, computeResumen, computeAlertas, tasksInRange, ganttBySeccion
+    sections.ts        SECTION_ORDER, SECTION_COLOR (Tailwind tokens)
+  types/schedule.ts    ── SHARED with backend.md §5 ──
+components/
+  cronograma/
+    cronograma-view.tsx        client composition root; owns optimistic state
+    cronograma-header.tsx
+    gantt-chart.tsx
+    progress-donut.tsx
+    s-curve-chart.tsx
+    week-boards.tsx
+    task-card.tsx              status button + flag button + meta
+    alertas-panel.tsx
+    resumen-cards.tsx
+    imprevistos-panel.tsx
+    adicionales-panel.tsx
+    import-dialog.tsx
+app/
+  proyectos/[id]/cronograma/page.tsx        server component → <CronogramaView data />
+  proyectos/[id]/cronograma/reporte/page.tsx read-only snapshot (see backend.md §7)
 ```
 
-`lib/metrics.ts` must have **zero React/DOM/DB imports**. It is the single source of numbers for the view, the report, and any future API/PDF, imported directly by both server (`queries.ts`) and client (`cronograma-view.tsx`) code — see `backend.md` §4/§5 for the server-side half of this shared module.
+`lib/cronograma/metrics.ts` must have **zero React/DOM/DB imports**. It is the single source of numbers for the view, the report, and any future API/PDF, imported directly by both server (`lib/repositories/schedule-repository.ts`) and client (`components/cronograma/cronograma-view.tsx`) code — see `backend.md` §4/§5 for the server-side half of this shared module.
 
 ---
 
@@ -157,8 +160,8 @@ page.tsx (RSC)
 
 ## 9. Report / export (client-visible surface)
 
-- **`/cronograma/reporte`** — server-rendered, `readOnly`, `Accordion`s expanded, print stylesheet (`@media print`: no nav, one section per page break where sensible). Accepts `?asOf=YYYY-MM-DD` to reproduce a past week (see `backend.md` §7 for the server route contract).
-- **Exportar** — triggers `GET /api/projects/[id]/cronograma/export` (backend.md §7), same JSON shape the reference file exports.
+- **`/proyectos/[id]/cronograma/reporte`** — server-rendered, `readOnly`, `Accordion`s expanded, print stylesheet (`@media print`: no nav, one section per page break where sensible). Accepts `?asOf=YYYY-MM-DD` to reproduce a past week (see `backend.md` §7 for the server route contract).
+- **Exportar** — triggers `GET /api/proyectos/[id]/cronograma/export` (backend.md §7), same JSON shape the reference file exports.
 - **PDF** — out of scope v1; print-to-PDF from the report route is sufficient.
 
 ---

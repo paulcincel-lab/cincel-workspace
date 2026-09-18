@@ -81,22 +81,27 @@ Percentages are `Math.round`ed at display time only; the S-curve uses unrounded 
 
 The cronograma is **obra-level scheduling**, distinct from the workflow/user `tasks` already in the Cincel schema (which model office work). Do not merge them. A schedule task belongs to a project; an optional FK to a workflow task can be added later if a partida maps to office work.
 
-```ts
-// db/schema/schedule.ts
+All tables live in the `core` Postgres schema, like every other entity in this project — use `core.table()` / `core.enum()` from `lib/db/schema/_schema.ts`, not bare `pgTable()`/`pgEnum()`. The auth/identity entity in this project is `staff` (`staff.id`), not `users` — there is no `users` table. Mutable tables get the shared `...stamps` fragment (`createdAt`/`updatedAt` with `$onUpdate`); `...soft` is intentionally omitted from schedule tables because re-import does hard deletes of removed tasks (see §8.1).
 
-export const projectSchedules = pgTable('project_schedules', {
+```ts
+// lib/db/schema/schedule.ts
+import { core, stamps } from "./_schema";
+import { projects } from "./projects";
+import { staff } from "./staff";
+import { contacts } from "./contacts";
+
+export const projectSchedules = core.table('project_schedules', {
   id: uuid('id').primaryKey().defaultRandom(),
   projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   version: integer('version').notNull().default(1),          // bumped on each import
   sourceFileName: text('source_file_name'),
   paymentCalendarLabel: text('payment_calendar_label'),     // "Calendario de Pagos V1.4"
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  ...stamps,
 }, (t) => [uniqueIndex('project_schedules_project_idx').on(t.projectId)]);
 
-export const scheduleTaskStatus = pgEnum('schedule_task_status', ['pending', 'progress', 'done']);
+export const scheduleTaskStatus = core.enum('schedule_task_status', ['pending', 'progress', 'done']);
 
-export const scheduleTasks = pgTable('schedule_tasks', {
+export const scheduleTasks = core.table('schedule_tasks', {
   id: uuid('id').primaryKey().defaultRandom(),
   scheduleId: uuid('schedule_id').notNull().references(() => projectSchedules.id, { onDelete: 'cascade' }),
   stableKey: text('stable_key').notNull(),      // `${planta}-${djb2(tarea)}` — identity across imports
@@ -105,50 +110,56 @@ export const scheduleTasks = pgTable('schedule_tasks', {
   seccion: text('seccion').notNull(),
   seccionOrder: integer('seccion_order').notNull(),
   responsable: text('responsable'),
-  responsableContactId: uuid('responsable_contact_id').references(() => contacts.id), // optional link to CRM
+  responsableContactId: uuid('responsable_contact_id').references(() => contacts.id), // intentionally a bare FK, not the composite (id, type) pattern used for projects.clientId — the responsable can be any contact type, so it isn't constrained to one
   inicio: date('inicio').notNull(),
   fin: date('fin').notNull(),
   tarea: text('tarea').notNull(),
   status: scheduleTaskStatus('status').notNull().default('pending'),
   flagged: boolean('flagged').notNull().default(false),
   statusUpdatedAt: timestamp('status_updated_at', { withTimezone: true }),
-  statusUpdatedBy: uuid('status_updated_by').references(() => users.id),
+  statusUpdatedBy: uuid('status_updated_by').references(() => staff.id),
   sortOrder: integer('sort_order').notNull(),
+  ...stamps,
 }, (t) => [uniqueIndex('schedule_tasks_key_idx').on(t.scheduleId, t.stableKey)]);
 
-export const schedulePaymentRows = pgTable('schedule_payment_rows', {
+export const schedulePaymentRows = core.table('schedule_payment_rows', {
   id: uuid('id').primaryKey().defaultRandom(),
   scheduleId: uuid('schedule_id').notNull().references(() => projectSchedules.id, { onDelete: 'cascade' }),
   fecha: date('fecha').notNull(),
   pagadoPct: numeric('pagado_pct', { precision: 5, scale: 2 }).notNull(),
   avancePct: numeric('avance_pct', { precision: 5, scale: 2 }).notNull(),
-});
+}, (t) => [index('idx_schedule_payment_rows_schedule_fecha').on(t.scheduleId, t.fecha)]);
 
-export const scheduleImprevistos = pgTable('schedule_imprevistos', {
+export const scheduleImprevistos = core.table('schedule_imprevistos', {
   id: uuid('id').primaryKey().defaultRandom(),
   scheduleId: uuid('schedule_id').notNull().references(() => projectSchedules.id, { onDelete: 'cascade' }),
   fecha: date('fecha').notNull(),
   texto: text('texto').notNull(),
-  createdBy: uuid('created_by').references(() => users.id),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+  createdBy: uuid('created_by').references(() => staff.id),
+  ...stamps,
+}, (t) => [index('idx_schedule_imprevistos_schedule_id').on(t.scheduleId)]);
 
-export const scheduleAdicionales = pgTable('schedule_adicionales', {
+export const scheduleAdicionales = core.table('schedule_adicionales', {
   id: uuid('id').primaryKey().defaultRandom(),
   scheduleId: uuid('schedule_id').notNull().references(() => projectSchedules.id, { onDelete: 'cascade' }),
   partida: text('partida').notNull(),
-  items: jsonb('items').$type<string[]>().notNull(),
+  items: text('items').array().notNull(),   // Postgres text[], simpler and more queryable than jsonb for a flat string list
   quoteRef: text('quote_ref'),   // "MD22_04 · Adicionales 01"
   sortOrder: integer('sort_order').notNull(),
 });
 
-// Optional but recommended: audit trail for status changes (drives "who marked what, when")
-export const scheduleTaskEvents = pgTable('schedule_task_events', {
+// Audit trail for status changes (drives "who marked what, when"). Not FK'd to
+// scheduleTasks with onDelete:'cascade' — a re-import that removes a task must
+// not silently destroy its history. taskId is nullable and left dangling
+// (no FK) once its task is deleted by an import; stableKey is kept alongside
+// it so history remains attributable even after the task row is gone.
+export const scheduleTaskEvents = core.table('schedule_task_events', {
   id: uuid('id').primaryKey().defaultRandom(),
-  taskId: uuid('task_id').notNull().references(() => scheduleTasks.id, { onDelete: 'cascade' }),
+  taskId: uuid('task_id'),
+  taskStableKey: text('task_stable_key').notNull(),
   from: scheduleTaskStatus('from').notNull(),
   to: scheduleTaskStatus('to').notNull(),
-  userId: uuid('user_id').references(() => users.id),
+  userId: uuid('user_id').references(() => staff.id),
   at: timestamp('at', { withTimezone: true }).defaultNow().notNull(),
 });
 ```
@@ -159,31 +170,39 @@ export const scheduleTaskEvents = pgTable('schedule_task_events', {
 - `status` and `flagged` live on the task row (not a separate map). Simpler queries; the events table gives history.
 - Payment calendar is per-schedule rows, not a JSON blob, so it can be queried for the S-curve and edited by an admin later.
 - Week offset stays client-side (URL search param `?week=-1`), never persisted (see `frontend.md` §7).
+- Schema follows the project-wide `core` Postgres schema convention (`core.table()`/`core.enum()`) and reuses the shared `stamps` fragment — see `lib/db/schema/_schema.ts`.
+- Server code follows the existing actions/repository pattern (`lib/actions/`, `lib/repositories/`), not a bespoke `server/` directory — see §4.
+- Migration rollback: all six tables are new and additive, so a rollback is a straight `DROP TABLE` in FK-dependency order (`schedule_task_events`, `schedule_adicionales`, `schedule_imprevistos`, `schedule_payment_rows`, `schedule_tasks`, `project_schedules`) — no existing table is altered, so this feature carries no rollback risk to the rest of the schema.
 
 ---
 
 ## 4. Server module layout
 
+Follows the project's existing actions/repository pattern (`lib/actions/`, `lib/repositories/`) rather than a bespoke `server/` directory, and the flat `lib/` / `app/` / `components/` root — this project has no `src/` or `features/` directory.
+
 ```
-src/
-  features/cronograma/
-    lib/
-      week.ts            mondayOf, addDays, isoDate, weekBounds, fmtRange, fmtShort (Spanish months)
-      hash.ts            djb2 → stableKey
-      metrics.ts         PURE: computeProgress, computeSCurve, computeResumen, computeAlertas, tasksInRange, ganttBySeccion
-      sections.ts        SECTION_ORDER (canonical order); SECTION_COLOR lives in frontend.md's theming section but is co-located in this same file
-      import/
-        parse-excel.ts   xlsx/csv → NormalizedTask[]
-        parse-json.ts    legacy export JSON → status/flag/imprevisto maps
-    server/
-      queries.ts         getScheduleForProject(projectId) → CronogramaData (one round trip, all tables)
-      actions.ts         setTaskStatus, toggleTaskFlag, addImprevisto, deleteImprevisto, importSchedule, importLegacyState
-    types.ts
-  app/(portal)/projects/[projectId]/cronograma/page.tsx        server component → <CronogramaView data /> (frontend.md owns this component)
-  app/(portal)/projects/[projectId]/cronograma/reporte/page.tsx read-only snapshot (see §7 below)
+lib/
+  db/schema/schedule.ts              Drizzle schema — all schedule_* tables (§3)
+  actions/schedule-actions.ts        setTaskStatus, toggleTaskFlag, addImprevisto, deleteImprevisto,
+                                      importSchedule, importLegacyState — session-authorized, per project convention
+  repositories/schedule-repository.ts getScheduleForProject(projectId) → CronogramaData (one round trip, all tables)
+  cronograma/
+    week.ts            mondayOf, addDays, isoDate, weekBounds, fmtRange, fmtShort (Spanish months)
+    hash.ts            djb2 → stableKey
+    metrics.ts         PURE: computeProgress, computeSCurve, computeResumen, computeAlertas, tasksInRange, ganttBySeccion
+    sections.ts        SECTION_ORDER (canonical order); SECTION_COLOR lives here too, consumed by frontend.md's theming section
+    import/
+      parse-excel.ts   xlsx/csv → NormalizedTask[]
+      parse-json.ts    legacy export JSON → status/flag/imprevisto maps
+  types/schedule.ts    shared types (§5)
+app/
+  proyectos/[id]/cronograma/
+    page.tsx           server component → <CronogramaView data /> (frontend.md owns this component)
+    reporte/page.tsx   read-only snapshot (see §7 below)
+  api/proyectos/[id]/cronograma/export/route.ts   GET export (see §7)
 ```
 
-`lib/metrics.ts`, `lib/week.ts`, `lib/hash.ts`, `lib/sections.ts`, and `types.ts` are shared with the frontend (imported directly, not duplicated) — see `frontend.md` §4 for how the client composition root consumes them.
+`lib/cronograma/metrics.ts`, `week.ts`, `hash.ts`, `sections.ts`, and `lib/types/schedule.ts` are shared with the frontend (imported directly, not duplicated) — see `frontend.md` §4 for how the client composition root consumes them.
 
 ---
 
@@ -242,8 +261,8 @@ page.tsx (RSC)
 
 ## 7. Report / export (server routes)
 
-- **`/cronograma/reporte`** — server-rendered, `readOnly`, print stylesheet (`@media print`: no nav, one section per page break where sensible). Accepts `?asOf=YYYY-MM-DD` to reproduce a past week. This replaces "Generar reporte" (the cloned-HTML snapshot).
-- **Exportar** — `GET /api/projects/[id]/cronograma/export` returns the same JSON shape the reference file exports (`{done, flags, imprevistos, offset, today}`), so the client can keep using the old dashboard offline if they insist.
+- **`/proyectos/[id]/cronograma/reporte`** — server-rendered, `readOnly`, print stylesheet (`@media print`: no nav, one section per page break where sensible). Accepts `?asOf=YYYY-MM-DD` to reproduce a past week. This replaces "Generar reporte" (the cloned-HTML snapshot).
+- **Exportar** — `GET /api/proyectos/[id]/cronograma/export` returns the same JSON shape the reference file exports (`{done, flags, imprevistos, offset, today}`), so the client can keep using the old dashboard offline if they insist.
 - **PDF** — out of scope v1; print-to-PDF from the report route is sufficient.
 
 ---
