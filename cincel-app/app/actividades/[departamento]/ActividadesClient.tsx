@@ -759,7 +759,7 @@ export function ActividadesClient({
         </div>
       ) : (
         <>
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-5 rounded-lg border border-border bg-card p-4">
               {capacityByPerson.length === 0 ? (
                 <span className="text-sm text-muted-foreground">Sin tareas activas.</span>
@@ -769,7 +769,7 @@ export function ActividadesClient({
                 ))
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {capabilities.canCreateActivity ? (
                 <>
                   <Button variant="outline" onClick={() => setTemplateOpen(true)}>
