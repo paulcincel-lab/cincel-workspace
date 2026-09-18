@@ -109,7 +109,11 @@ export default function NewTaskModal({
                   No hay proyectos activos disponibles
                 </p>
               ) : (
-                <Select value={projectId} onValueChange={(v) => setProjectId(v as string)}>
+                <Select
+                  items={Object.fromEntries(projects.map((p) => [p.id, p.name]))}
+                  value={projectId}
+                  onValueChange={(v) => setProjectId(v as string)}
+                >
                   <SelectTrigger className="w-full text-foreground">
                     <SelectValue />
                   </SelectTrigger>
@@ -127,6 +131,7 @@ export default function NewTaskModal({
             <div>
               <Label className="mb-2 block text-foreground">Responsable</Label>
               <Select
+                items={Object.fromEntries(staff.map((s) => [s.id, s.name]))}
                 value={managerId ?? ""}
                 onValueChange={(v) => setManagerId((v as string) || null)}
               >

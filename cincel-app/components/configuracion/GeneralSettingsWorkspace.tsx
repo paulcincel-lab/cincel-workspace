@@ -349,6 +349,7 @@ export default function GeneralSettingsWorkspace() {
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-muted-foreground">Idioma</span>
                       <Select
+                        items={{ "es-MX": "Español (México)" }}
                         value={settings.regional.language}
                         onValueChange={(value) => updateRegionalField("language", value as GeneralSettings["regional"]["language"])}
                       >
@@ -388,6 +389,7 @@ export default function GeneralSettingsWorkspace() {
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-muted-foreground">Primer día de la semana</span>
                       <Select
+                        items={{ monday: "Lunes" }}
                         value={settings.regional.weekStartsOn}
                         onValueChange={(value) => updateRegionalField("weekStartsOn", value as GeneralSettings["regional"]["weekStartsOn"])}
                       >

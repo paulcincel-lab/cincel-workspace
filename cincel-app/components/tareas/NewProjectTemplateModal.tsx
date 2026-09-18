@@ -111,7 +111,11 @@ export default function NewProjectTemplateModal({
                 No hay proyectos activos disponibles
               </p>
             ) : (
-              <Select value={projectId} onValueChange={(v) => setProjectId(v as string)}>
+              <Select
+                items={Object.fromEntries(projectOptions.map((p) => [p.id, p.name]))}
+                value={projectId}
+                onValueChange={(v) => setProjectId(v as string)}
+              >
                 <SelectTrigger className="w-full text-foreground">
                   <SelectValue />
                 </SelectTrigger>

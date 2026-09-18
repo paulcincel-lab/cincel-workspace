@@ -495,6 +495,7 @@ export default function PermissionsWorkspace({ initialStaff }: PermissionsWorksp
                                   {action.label}
                                 </label>
                                 <Select
+                                  items={Object.fromEntries((action.options ?? []).map((o) => [o.value, o.label]))}
                                   value={String(value)}
                                   disabled={!canEditSelectedRole}
                                   onValueChange={(nextValue) =>

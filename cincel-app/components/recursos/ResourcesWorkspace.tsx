@@ -675,6 +675,7 @@ export default function ResourcesWorkspace({
                 />
 
                 <Select
+                  items={Object.fromEntries(activeStaff.map((m) => [m.id, m.name]))}
                   value={effectiveSelectedStaffId ?? ""}
                   onValueChange={(value) => setSelectedStaffId(value as string)}
                 >
