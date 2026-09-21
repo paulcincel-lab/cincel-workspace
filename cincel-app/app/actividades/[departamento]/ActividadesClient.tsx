@@ -8,7 +8,6 @@ import { DataTable } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { CapacityRing } from "@/components/v2/status/CapacityRing";
 import { LoadBar } from "@/components/v2/status/LoadBar";
-import { PhaseStepper } from "@/components/v2/status/PhaseStepper";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
@@ -478,9 +477,10 @@ export function ActividadesClient({
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
           const currentPhase = task.phase ?? "";
-          const idx = phases.indexOf(currentPhase);
           const display = (
-            <PhaseStepper steps={Math.max(phases.length, 1)} current={idx === -1 ? 1 : idx + 1} label={currentPhase || "Sin fase"} />
+            <span className="block max-w-24 truncate text-sm" title={currentPhase || undefined}>
+              {currentPhase || <span className="text-muted-foreground">Sin fase</span>}
+            </span>
           );
           if (!capabilities.canReorderPhases) return display;
           const selectablePhases = Array.from(new Set([...phaseOptionsWithOther, currentPhase].filter(Boolean)));
