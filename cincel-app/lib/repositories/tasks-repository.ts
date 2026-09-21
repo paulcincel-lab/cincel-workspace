@@ -7,6 +7,7 @@ import {
   projects,
   staff,
   taskChecklistItems,
+  taskStatuses,
   taskSupport,
   tasks,
   workflows,
@@ -45,6 +46,7 @@ export function toTask(row: TaskRow): Task {
     createdById: row.createdById,
     managerId: row.managerId,
     status: row.status,
+    customStatusId: row.customStatusId,
     priority: row.priority,
     commitmentDate: row.commitmentDate,
     reviewDate: row.reviewDate,
@@ -66,6 +68,7 @@ const TASK_TRACKED_FIELDS = [
   "workflowId",
   "managerId",
   "status",
+  "customStatusId",
   "priority",
   "commitmentDate",
   "reviewDate",
@@ -126,6 +129,7 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
       workflowKey: workflows.key,
       workflowName: workflows.name,
       managerName: staff.name,
+      customStatusName: taskStatuses.name,
       checklistTotal: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id})::int`,
       checklistDone: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id} and c.completed)::int`,
     })
@@ -134,12 +138,14 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     .innerJoin(contacts, eq(contacts.id, projects.clientId))
     .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
     .leftJoin(staff, eq(staff.id, tasks.managerId))
+    .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
     .where(whereFilters(filters))
     .orderBy(asc(tasks.commitmentDate), asc(tasks.title));
 
   const support = await loadSupport(rows.map((r) => r.task.id));
   return rows.map((r) => ({
     ...toTask(r.task),
+    customStatus: r.task.customStatusId && r.customStatusName ? { id: r.task.customStatusId, name: r.customStatusName } : null,
     project: { id: r.task.projectId, name: r.projectName, clientName: r.clientName },
     workflow: r.workflowId ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName! } : null,
     manager: r.task.managerId ? { id: r.task.managerId, name: r.managerName! } : null,
@@ -237,7 +243,11 @@ export async function updateTask(id: string, patch: TaskPatch, actorId: string):
   if (patch.notes !== undefined) set.notes = clean(patch.notes);
   if (patch.phase !== undefined) set.phase = clean(patch.phase);
   if (patch.priority !== undefined) set.priority = patch.priority;
-  if (patch.status !== undefined) set.status = patch.status;
+  // Picking a base status always clears the display-only custom one.
+  if (patch.status !== undefined) {
+    set.status = patch.status;
+    set.customStatusId = null;
+  }
   if (patch.managerId !== undefined) set.managerId = patch.managerId;
   if (patch.commitmentDate !== undefined) set.commitmentDate = clean(patch.commitmentDate);
   if (patch.reviewDate !== undefined) set.reviewDate = clean(patch.reviewDate);
@@ -252,6 +262,28 @@ export async function updateTask(id: string, patch: TaskPatch, actorId: string):
 
 export async function setTaskStatus(id: string, status: TaskStatus, actorId: string): Promise<TaskDetail> {
   return updateTask(id, { status }, actorId);
+}
+
+/** Select a custom status (sets base status too) or, with null, leave as-is. */
+export async function setTaskCustomStatus(
+  id: string,
+  customStatusId: string,
+  actorId: string
+): Promise<TaskDetail> {
+  const before = await loadLiveTask(id);
+  const [cs] = await db
+    .select()
+    .from(taskStatuses)
+    .where(and(eq(taskStatuses.id, customStatusId), isNull(taskStatuses.deletedAt)))
+    .limit(1);
+  if (!cs) throw new Error("TASK_STATUS_NOT_FOUND");
+  const [after] = await db
+    .update(tasks)
+    .set({ status: cs.baseStatus, customStatusId: cs.id })
+    .where(eq(tasks.id, id))
+    .returning();
+  await recordChanges({ entity: "task", entityId: id, actorId, before, after, fields: TASK_TRACKED_FIELDS });
+  return (await getTask(id))!;
 }
 
 export async function assignTask(id: string, managerId: string | null, actorId: string): Promise<TaskDetail> {

@@ -25,6 +25,16 @@ import NewTaskModal, { type NewTaskFormValues } from "@/components/tareas/NewTas
 import TaskDrawer from "@/components/tareas/TaskDrawer";
 import { DEPARTMENTOS, phasesFor } from "@/lib/actividades/departamento";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
+import {
+  BASE_STATUSES,
+  BASE_STATUS_LABEL,
+  BASE_STATUS_VARIANT,
+  parseStatusValue,
+  statusSelectItems,
+  statusSelectValue,
+  taskStatusLabel,
+} from "@/lib/tasks/status-options";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
@@ -34,6 +44,7 @@ import {
   createUserTaskAction,
   updateTaskAction,
   setTaskStatusAction,
+  setTaskCustomStatusAction,
   assignTaskAction,
   archiveTaskAction,
   deleteTaskAction,
@@ -53,24 +64,13 @@ import type {
   TaskPatch,
   TaskPriority,
   TaskStatus,
+  TaskStatusOption,
   WorkflowDetail,
 } from "@/lib/types/core";
 
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  pendiente: "Pendiente",
-  en_proceso: "En proceso",
-  completado: "Completado",
-  bloqueado: "Bloqueado",
-};
-
-const STATUS_VARIANT: Record<TaskStatus, "outline" | "secondary" | "success" | "destructive"> = {
-  pendiente: "outline",
-  en_proceso: "secondary",
-  completado: "success",
-  bloqueado: "destructive",
-};
-
-const ALL_STATUSES: TaskStatus[] = ["pendiente", "en_proceso", "completado", "bloqueado"];
+const STATUS_LABEL = BASE_STATUS_LABEL;
+const STATUS_VARIANT = BASE_STATUS_VARIANT;
+const ALL_STATUSES = BASE_STATUSES;
 
 const DEFAULT_PRIORITY: TaskPriority = "media";
 
@@ -134,6 +134,13 @@ export function ActividadesClient({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
+
+  const [customStatuses, setCustomStatuses] = useState<TaskStatusOption[]>([]);
+  useEffect(() => {
+    fetchTaskStatusesAction()
+      .then(setCustomStatuses)
+      .catch((err) => console.error(err));
+  }, []);
 
   useEffect(() => {
     if (!selectedTaskId) return;
@@ -283,8 +290,15 @@ export function ActividadesClient({
     await runAction(() => updateTaskAction(task.id, patch), applyDetailUpdate);
   }
 
-  async function changeStatus(task: TaskListItem, status: TaskStatus) {
-    await runAction(() => setTaskStatusAction(task.id, status), applyDetailUpdate);
+  async function changeStatus(task: TaskListItem, value: string) {
+    const parsed = parseStatusValue(value);
+    await runAction(
+      () =>
+        parsed.kind === "custom"
+          ? setTaskCustomStatusAction(task.id, parsed.id)
+          : setTaskStatusAction(task.id, parsed.status),
+      applyDetailUpdate
+    );
   }
 
   async function changeManager(task: TaskListItem, managerId: string | null) {
@@ -441,7 +455,7 @@ export function ActividadesClient({
       { key: "manager", header: "Responsable", getValue: (t) => t.manager?.name || "Sin responsable" },
       { key: "reviewDate", header: "Próxima revisión", isDate: true, getValue: (t) => t.reviewDate || "" },
       { key: "deliveryDate", header: "Fecha de entrega", isDate: true, getValue: (t) => t.deliveryDate || "" },
-      { key: "status", header: "Estatus", getValue: (t) => STATUS_LABEL[t.status] },
+      { key: "status", header: "Estatus", getValue: (t) => taskStatusLabel(t) },
     ],
     []
   );
@@ -646,24 +660,26 @@ export function ActividadesClient({
             task: { manager: task.manager, support: task.support },
             viewerId,
           });
-          if (!canChange) return <Badge variant={STATUS_VARIANT[task.status]}>{STATUS_LABEL[task.status]}</Badge>;
+          const badge = <Badge variant={STATUS_VARIANT[task.status]}>{taskStatusLabel(task)}</Badge>;
+          if (!canChange) return badge;
+          const items = statusSelectItems(customStatuses);
           return (
             <InlineEditable
-              value={task.status}
-              onCommit={(value) => changeStatus(task, value as TaskStatus)}
+              value={statusSelectValue(task)}
+              onCommit={(value) => changeStatus(task, value)}
               commitOnChange
-              renderDisplay={(value) => <Badge variant={STATUS_VARIANT[value as TaskStatus]}>{STATUS_LABEL[value as TaskStatus]}</Badge>}
+              renderDisplay={() => badge}
               renderEditor={({ onChange, onBlur }) => (
                 <Select
                   defaultOpen
-                  items={Object.fromEntries(ALL_STATUSES.map((s) => [s, STATUS_LABEL[s]]))}
-                  value={task.status}
+                  items={Object.fromEntries(items.map((i) => [i.value, i.label]))}
+                  value={statusSelectValue(task)}
                   onValueChange={(next) => { onChange(next as string); onBlur(); }}
                 >
                   <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {ALL_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
+                    {items.map((i) => (
+                      <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

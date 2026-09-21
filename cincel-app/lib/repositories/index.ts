@@ -5,6 +5,7 @@
  */
 export * as staffRepository from "./staff-repository";
 export * as areasRepository from "./areas-repository";
+export * as taskStatusesRepository from "./task-statuses-repository";
 export * as contactsRepository from "./contacts-repository";
 export * as workflowsRepository from "./workflows-repository";
 export * as projectsRepository from "./projects-repository";

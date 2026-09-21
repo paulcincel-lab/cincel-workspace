@@ -91,6 +91,15 @@ export type AreasCapabilities = {
 };
 
 /**
+ * Custom task statuses (`core.task_statuses`): everyone sees them in task
+ * pickers, only Administrador / Dirección manage the catalog.
+ */
+export type TaskStatusesCapabilities = {
+  canViewTaskStatuses: boolean;
+  canManageTaskStatuses: boolean;
+};
+
+/**
  * Workflows and their task templates (`core.workflows`,
  * `core.workflow_task_templates`) are the other half of the "method" admin
  * surface — same view-all / manage-admin-only shape as areas.
@@ -735,6 +744,14 @@ const AREAS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, AreasCapabilities> = 
   ])
 ) as Record<SystemAccessRole, AreasCapabilities>;
 
+const TASK_STATUSES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TaskStatusesCapabilities> =
+  Object.fromEntries(
+    SYSTEM_ACCESS_ROLES.map((role) => [
+      role,
+      { canViewTaskStatuses: true, canManageTaskStatuses: canManageCompanyStructureByRole(role) },
+    ])
+  ) as Record<SystemAccessRole, TaskStatusesCapabilities>;
+
 const WORKFLOWS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, WorkflowsCapabilities> = Object.fromEntries(
   SYSTEM_ACCESS_ROLES.map((role) => [
     role,
@@ -1093,6 +1110,29 @@ export function resolveTeamCapabilities(user: AuthenticatedUser | null): TeamCap
     canToggleCollaboratorActive: readBooleanOverride(moduleOverrides, "canToggleCollaboratorActive", defaults.canToggleCollaboratorActive),
     canDeleteCollaborator: readBooleanOverride(moduleOverrides, "canDeleteCollaborator", defaults.canDeleteCollaborator),
     canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
+  };
+}
+
+export function resolveTaskStatusesCapabilitiesFromDefaults(
+  user: AuthenticatedUser | null
+): TaskStatusesCapabilities {
+  return TASK_STATUSES_CAPABILITIES_BY_ROLE[resolveAccess(user)];
+}
+
+export function resolveTaskStatusesCapabilities(user: AuthenticatedUser | null): TaskStatusesCapabilities {
+  const access = resolveAccess(user);
+  const defaults = resolveTaskStatusesCapabilitiesFromDefaults(user);
+  const moduleOverrides = readRoleModuleOverrides(access, "taskStatuses");
+
+  if (!moduleOverrides) return defaults;
+
+  return {
+    canViewTaskStatuses: readBooleanOverride(moduleOverrides, "canViewTaskStatuses", defaults.canViewTaskStatuses),
+    canManageTaskStatuses: readBooleanOverride(
+      moduleOverrides,
+      "canManageTaskStatuses",
+      defaults.canManageTaskStatuses
+    ),
   };
 }
 

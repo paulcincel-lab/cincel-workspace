@@ -199,3 +199,13 @@ export async function fetchTaskHistoryAction(taskId: string): Promise<HistoryEve
   await requireCapabilityUser();
   return tasksRepository.listTaskHistory(taskId);
 }
+
+export async function setTaskCustomStatusAction(id: string, customStatusId: string): Promise<TaskDetail> {
+  const user = await requireCapabilityUser();
+  if (resolveActivitiesCapabilities(user).statusScope === "none") {
+    throw new Error("FORBIDDEN: task status change");
+  }
+  const row = await tasksRepository.setTaskCustomStatus(id, customStatusId, user.member.id);
+  revalidateTareas(row.projectId);
+  return row;
+}

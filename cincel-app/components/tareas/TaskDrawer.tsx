@@ -99,7 +99,7 @@ export default function TaskDrawer({
               <div className="mt-4 flex flex-wrap gap-2 text-sm text-muted-foreground">
                 <span className="rounded-full bg-muted px-3 py-1">{task.project.name}</span>
                 {task.phase ? <span className="rounded-full bg-muted px-3 py-1">{task.phase}</span> : null}
-                <span className="rounded-full bg-muted px-3 py-1">{STATUS_LABEL[task.status]}</span>
+                <span className="rounded-full bg-muted px-3 py-1">{task.customStatus?.name ?? STATUS_LABEL[task.status]}</span>
               </div>
             </SheetHeader>
 
@@ -127,7 +127,7 @@ export default function TaskDrawer({
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
                     <span className="text-muted-foreground">Estado</span>
-                    <span className="font-medium">{STATUS_LABEL[task.status]}</span>
+                    <span className="font-medium">{task.customStatus?.name ?? STATUS_LABEL[task.status]}</span>
                   </div>
                 </div>
               </section>

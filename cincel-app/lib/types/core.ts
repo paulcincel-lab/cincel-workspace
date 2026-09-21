@@ -323,6 +323,8 @@ export type Task = {
   createdById: string;
   managerId: string | null;
   status: TaskStatus;
+  /** Display-only custom status; `status` remains the base status. */
+  customStatusId: string | null;
   priority: TaskPriority;
   commitmentDate: string | null;
   reviewDate: string | null;
@@ -332,7 +334,21 @@ export type Task = {
   updatedAt: string;
 };
 
+export type TaskStatusOption = {
+  id: string;
+  name: string;
+  baseStatus: TaskStatus;
+  sortOrder: number;
+};
+
+export type TaskStatusInput = {
+  name: string;
+  baseStatus: TaskStatus;
+  sortOrder?: number;
+};
+
 export type TaskListItem = Task & {
+  customStatus: { id: string; name: string } | null;
   project: { id: string; name: string; clientName: string };
   workflow: WorkflowRef | null;
   manager: StaffRef | null;

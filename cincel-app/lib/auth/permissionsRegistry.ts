@@ -3,6 +3,8 @@ import {
   resolveActivitiesCapabilitiesFromDefaults,
   type ActivitiesCapabilities,
   resolveAreasCapabilitiesFromDefaults,
+  resolveTaskStatusesCapabilitiesFromDefaults,
+  type TaskStatusesCapabilities,
   type AreasCapabilities,
   resolveCalendarCapabilitiesFromDefaults,
   type CalendarCapabilities,
@@ -449,6 +451,27 @@ export const PERMISSIONS_MODULES_REGISTRY = ([
       },
     ],
     isEnabled: (values) => values.canViewAreas === true,
+  },
+  {
+    id: "taskStatuses",
+    name: "Estatus de tareas",
+    order: 9.5,
+    resolver: resolveTaskStatusesCapabilitiesFromDefaults,
+    actions: [
+      {
+        id: "canViewTaskStatuses",
+        label: "Ver estatus",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as TaskStatusesCapabilities).canViewTaskStatuses,
+      },
+      {
+        id: "canManageTaskStatuses",
+        label: "Administrar estatus",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as TaskStatusesCapabilities).canManageTaskStatuses,
+      },
+    ],
+    isEnabled: (values) => values.canViewTaskStatuses === true,
   },
   {
     id: "workflows",
