@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import InlineEditable from "@/components/ui/InlineEditable";
 import TaskDrawer from "@/components/tareas/TaskDrawer";
+import { TaskMemberProjectFilters, matchesMemberFilter, matchesProjectFilter } from "@/components/tareas/TaskMemberProjectFilters";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import {
@@ -58,6 +59,8 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("todas");
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [projectId, setProjectId] = useState("");
   const [view, setView] = useState<"activas" | "archivadas">("activas");
 
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
@@ -204,15 +207,17 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         roleFilter === "todas" ||
         (roleFilter === "encargado" && isManager(t)) ||
         (roleFilter === "apoyo" && isSupport(t));
-      return matchesSearch && matchesStatus && matchesRole;
+      return matchesSearch && matchesStatus && matchesRole && matchesMemberFilter(t, memberIds) && matchesProjectFilter(t, projectId);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, search, statusFilter, roleFilter, viewerId]);
+  }, [tasks, search, statusFilter, roleFilter, memberIds, projectId, viewerId]);
 
   function clearFilters() {
     setSearch("");
     setStatusFilter("");
     setRoleFilter("todas");
+    setMemberIds([]);
+    setProjectId("");
     setView("activas");
   }
 
@@ -366,6 +371,15 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
             ))}
           </SelectContent>
         </Select>
+
+        <TaskMemberProjectFilters
+          tasks={tasks}
+          memberIds={memberIds}
+          onMemberIdsChange={setMemberIds}
+          projectId={projectId}
+          onProjectIdChange={setProjectId}
+          showClear={false}
+        />
 
         <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
           <TabsList>
