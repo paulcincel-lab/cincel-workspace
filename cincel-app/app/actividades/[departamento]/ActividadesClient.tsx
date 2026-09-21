@@ -546,7 +546,7 @@ export function ActividadesClient({
       },
       {
         id: "notes",
-        header: "Seguimiento",
+        header: "Historial",
         enableSorting: false,
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;

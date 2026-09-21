@@ -133,7 +133,7 @@ export default function TaskDrawer({
               </section>
 
               <section>
-                <h3 className="text-lg font-semibold text-foreground">Seguimiento</h3>
+                <h3 className="text-lg font-semibold text-foreground">Historial</h3>
                 <div className="mt-3 space-y-3 rounded-2xl border border-border p-4">
                   {sortedHistory.length > 0 ? (
                     <div className="space-y-2">

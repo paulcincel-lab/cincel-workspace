@@ -299,7 +299,7 @@ import { DataTable } from "@/components/ui/DataTable";
 - Manager
 - Equipo (Team)
 - Compromiso (Commitment Date)
-- Seguimiento (Review Date)
+- Historial (Review Date)
 - Status
 
 ---

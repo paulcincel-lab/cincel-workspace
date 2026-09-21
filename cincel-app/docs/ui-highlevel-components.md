@@ -397,7 +397,7 @@ type Props = {
 **Sections:**
 1. **Header:** Task description, project, phase, status badges
 2. **Summary Grid:** Responsible, Team, Commitment Date, Review Date, Status
-3. **Seguimiento (Follow-up):** Chronological notes with date and author
+3. **Historial (Follow-up):** Chronological notes with date and author
 4. **Add Note:** Textarea for new follow-up notes
 
 **Design:**
@@ -649,7 +649,7 @@ type Props = {
 - Manager/Responsible
 - Support team (Equipo)
 - Commitment (Compromiso)
-- Review Date (Seguimiento)
+- Review Date (Historial)
 - Status
 
 **Features:**

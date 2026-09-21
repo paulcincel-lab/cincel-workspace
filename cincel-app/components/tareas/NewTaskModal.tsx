@@ -193,7 +193,7 @@ export default function NewTaskModal({
               afterwards. */}
 
           <div>
-            <Label className="mb-2 block text-foreground">Seguimiento</Label>
+            <Label className="mb-2 block text-foreground">Historial</Label>
             <Textarea
               ref={notesRef}
               rows={5}
