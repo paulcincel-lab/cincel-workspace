@@ -82,4 +82,16 @@ test.describe("Tareas — create task with commitmentDate and reviewDate", () =>
     await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
     await expect(page.getByText(TASK_DESC)).toBeVisible({ timeout: 15_000 });
   });
+
+  test("can add a task from the quick-entry row with Enter", async ({ page }) => {
+    // Runs after the test above, so the E2E project already has a task and therefore an accordion.
+    const quickTitle = `Tarea rapida E2E ${RUN_ID}`;
+    const quickInput = page.getByPlaceholder(/Nueva tarea \(Enter/i).first();
+    await expect(quickInput).toBeVisible({ timeout: 30_000 });
+    await quickInput.fill(quickTitle);
+    await quickInput.press("Enter");
+
+    await page.getByPlaceholder(/Buscar tarea/i).fill(quickTitle);
+    await expect(page.getByText(quickTitle)).toBeVisible({ timeout: 15_000 });
+  });
 });
