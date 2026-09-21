@@ -387,6 +387,22 @@ export function ActividadesClient({
     );
   }
 
+  async function addQuickTask(projectId: string) {
+    const title = (quickTitles[projectId] ?? "").trim();
+    if (!title) return;
+    setQuickTitles((prev) => ({ ...prev, [projectId]: "" }));
+    await addTask({
+      projectId,
+      title,
+      phase: phases[0] ?? "",
+      managerId: null,
+      supportIds: [],
+      notes: "",
+      commitmentDate: "",
+      reviewDate: "",
+    });
+  }
+
   async function addComment(comment: string) {
     if (!selectedTaskId) return;
     try {
@@ -474,6 +490,7 @@ export function ActividadesClient({
     });
   }
 
+  const [quickTitles, setQuickTitles] = useState<Record<string, string>>({});
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
 
   const projectGroups = useMemo(() => {
@@ -942,6 +959,21 @@ export function ActividadesClient({
                   </AccordionTrigger>
                   <AccordionContent>
                     <DataTable columns={groupedColumns} data={group.tasks} getRowId={(row) => row.id} />
+                    {capabilities.canCreateActivity && view === "activas" ? (
+                      <Input
+                        value={quickTitles[group.id] ?? ""}
+                        onChange={(e) => setQuickTitles((prev) => ({ ...prev, [group.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void addQuickTask(group.id);
+                          }
+                        }}
+                        placeholder="+ Nueva tarea (Enter para añadir)"
+                        aria-label={`Nueva tarea en ${group.name}`}
+                        className="mt-2 h-9 text-sm"
+                      />
+                    ) : null}
                   </AccordionContent>
                 </AccordionItem>
               ))}
