@@ -916,6 +916,7 @@ export function ActividadesClient({
             />
           ) : (
             <Accordion
+              className="gap-4"
               multiple
               value={projectGroups.filter((g) => !collapsedProjects.has(g.id)).map((g) => g.id)}
               onValueChange={(open) =>
@@ -923,15 +924,20 @@ export function ActividadesClient({
               }
             >
               {projectGroups.map((group) => (
-                <AccordionItem key={group.id} value={group.id}>
-                  <AccordionTrigger>
+                <AccordionItem key={group.id} value={group.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+                  <AccordionTrigger className="px-4 py-3">
                     <span>
                       {group.name}
                       <span className="ml-2 font-normal text-muted-foreground">{group.tasks.length}</span>
                     </span>
                   </AccordionTrigger>
-                  <AccordionContent>
-                    <DataTable columns={groupedColumns} data={group.tasks} getRowId={(row) => row.id} />
+                  <AccordionContent className="pb-0">
+                    <DataTable
+                      columns={groupedColumns}
+                      data={group.tasks}
+                      getRowId={(row) => row.id}
+                      wrapperClassName="rounded-none! border-x-0! border-b-0! shadow-none!"
+                    />
                     {capabilities.canCreateActivity && view === "activas" ? (
                       <Input
                         value={quickTitles[group.id] ?? ""}
@@ -944,7 +950,7 @@ export function ActividadesClient({
                         }}
                         placeholder="+ Nueva tarea (Enter para añadir)"
                         aria-label={`Nueva tarea en ${group.name}`}
-                        className="mt-2 h-9 text-sm"
+                        className="h-10 rounded-none border-0 border-t border-border text-sm shadow-none"
                       />
                     ) : null}
                   </AccordionContent>
