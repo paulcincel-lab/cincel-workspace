@@ -594,20 +594,6 @@ export function ActividadesClient({
         },
       },
       {
-        id: "checklist",
-        header: "Seguimiento",
-        enableSorting: false,
-        cell: ({ row }: CellContext<TaskListItem, unknown>) => {
-          const { total, completed } = row.original.checklist;
-          if (total === 0) return <span className="text-sm text-muted-foreground">Sin checklist</span>;
-          return (
-            <button type="button" className="text-sm tabular-nums hover:underline" onClick={() => setSelectedTaskId(row.original.id)} title="Ver checklist">
-              {completed}/{total} completados
-            </button>
-          );
-        },
-      },
-      {
         id: "manager",
         header: "Responsable",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
