@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/shadcn/accordion";
+import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { CapacityRing } from "@/components/v2/status/CapacityRing";
 import { LoadBar } from "@/components/v2/status/LoadBar";
@@ -491,7 +491,6 @@ export function ActividadesClient({
   }
 
   const [quickTitles, setQuickTitles] = useState<Record<string, string>>({});
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
 
   const projectGroups = useMemo(() => {
     const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
@@ -915,23 +914,13 @@ export function ActividadesClient({
               wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
             />
           ) : (
-            <Accordion
-              className="gap-4"
-              multiple
-              value={projectGroups.filter((g) => !collapsedProjects.has(g.id)).map((g) => g.id)}
-              onValueChange={(open) =>
-                setCollapsedProjects(new Set(projectGroups.filter((g) => !(open as string[]).includes(g.id)).map((g) => g.id)))
-              }
-            >
-              {projectGroups.map((group) => (
-                <AccordionItem key={group.id} value={group.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-                  <AccordionTrigger className="px-4 py-3">
-                    <span>
-                      {group.name}
-                      <span className="ml-2 font-normal text-muted-foreground">{group.tasks.length}</span>
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent className="pb-0">
+            <AccordionPanels
+              groups={projectGroups.map((group) => ({
+                id: group.id,
+                title: group.name,
+                count: group.tasks.length,
+                content: (
+                  <>
                     <DataTable
                       columns={groupedColumns}
                       data={group.tasks}
@@ -953,10 +942,10 @@ export function ActividadesClient({
                         className="h-10 rounded-none border-0 border-t border-border text-sm shadow-none"
                       />
                     ) : null}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+                  </>
+                ),
+              }))}
+            />
           )}
 
           <NewProjectTemplateModal

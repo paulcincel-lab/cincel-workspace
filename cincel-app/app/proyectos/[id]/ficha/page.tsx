@@ -6,7 +6,9 @@ import { useParams } from "next/navigation";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { Badge } from "@/components/ui/shadcn/badge";
+import { BASE_STATUS_VARIANT, taskStatusLabel } from "@/lib/tasks/status-options";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
@@ -62,6 +64,18 @@ export default function ProjectFichaPage() {
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
+
+  // Group by Fase in order of first appearance; tasks without one go last.
+  const phaseGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
+    for (const task of tasks) {
+      const name = task.phase?.trim() || "Sin fase";
+      const group = groups.get(name) ?? { id: name, name, tasks: [] };
+      group.tasks.push(task);
+      groups.set(name, group);
+    }
+    return [...groups.values()].sort((a, b) => Number(a.name === "Sin fase") - Number(b.name === "Sin fase"));
+  }, [tasks]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [contacts, setContacts] = useState<ContactListItem[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
@@ -410,17 +424,29 @@ export default function ProjectFichaPage() {
               ) : null}
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <section className="space-y-4">
               <h2 className="text-lg font-semibold text-foreground">Tareas ({tasks.length})</h2>
-              <ul className="mt-4 divide-y divide-border text-sm">
-                {tasks.map((t) => (
-                  <li key={t.id} className="flex items-center justify-between py-2">
-                    <span>{t.title}</span>
-                    <Badge variant="outline">{t.status}</Badge>
-                  </li>
-                ))}
-                {tasks.length === 0 ? <li className="py-2 text-muted-foreground">Sin tareas todavía.</li> : null}
-              </ul>
+              {tasks.length === 0 ? (
+                <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">Sin tareas todavía.</p>
+              ) : (
+                <AccordionPanels
+                  groups={phaseGroups.map((group) => ({
+                    id: group.id,
+                    title: group.name,
+                    count: group.tasks.length,
+                    content: (
+                      <ul className="divide-y divide-border border-t border-border text-sm">
+                        {group.tasks.map((t) => (
+                          <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                            <span>{t.title}</span>
+                            <Badge variant={BASE_STATUS_VARIANT[t.status]}>{taskStatusLabel(t)}</Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    ),
+                  }))}
+                />
+              )}
             </section>
 
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
