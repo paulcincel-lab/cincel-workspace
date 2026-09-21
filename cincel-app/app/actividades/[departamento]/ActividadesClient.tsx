@@ -577,28 +577,15 @@ export function ActividadesClient({
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
           return (
-            <InlineEditable
-              value={task.title}
-              onCommit={(value) => value.trim() && updateField(task, { title: value.trim() })}
-              renderDisplay={(value) => <span className="font-medium">{value}</span>}
-              renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                <Input autoFocus value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className="text-sm" />
-              )}
-            />
-          );
-        },
-      },
-      {
-        id: "notes",
-        header: "Historial",
-        enableSorting: false,
-        cell: ({ row }: CellContext<TaskListItem, unknown>) => {
-          const task = row.original;
-          return (
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-sm text-muted-foreground" title={task.notes || "Sin seguimiento"}>
-                {task.notes || "Sin seguimiento"}
-              </span>
+              <InlineEditable
+                value={task.title}
+                onCommit={(value) => value.trim() && updateField(task, { title: value.trim() })}
+                renderDisplay={(value) => <span className="font-medium">{value}</span>}
+                renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
+                  <Input autoFocus value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className="text-sm" />
+                )}
+              />
               <Button variant="outline" size="sm" className="h-6 w-6 shrink-0 rounded-full p-0 text-xs" onClick={() => setSelectedTaskId(task.id)} title="Ver detalle">
                 ⓘ
               </Button>
