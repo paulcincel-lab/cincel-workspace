@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/shadcn/accordion";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { CapacityRing } from "@/components/v2/status/CapacityRing";
 import { LoadBar } from "@/components/v2/status/LoadBar";
@@ -473,6 +474,18 @@ export function ActividadesClient({
     });
   }
 
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
+
+  const projectGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
+    for (const task of filteredTasks) {
+      const group = groups.get(task.project.id) ?? { id: task.project.id, name: task.project.name, tasks: [] };
+      group.tasks.push(task);
+      groups.set(task.project.id, group);
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [filteredTasks]);
+
   const columns = useMemo<ColumnDef<TaskListItem, unknown>[]>(() => {
     if (!workflow) return [];
 
@@ -765,6 +778,9 @@ export function ActividadesClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow, phases, selected, capabilities, viewerId, staffNames, nameToStaffId]);
 
+  // Each accordion already names the project, so the per-row Proyecto column is redundant.
+  const groupedColumns = useMemo(() => columns.filter((c) => c.id !== "project"), [columns]);
+
   return (
     <div>
       <PageHeader
@@ -901,13 +917,36 @@ export function ActividadesClient({
               { label: "Archivar", onClick: bulkArchive, variant: "destructive" },
             ]}
           />
-          <DataTable
-            columns={columns}
-            data={filteredTasks}
-            getRowId={(row) => row.id}
-            emptyMessage="No hay tareas que coincidan con los filtros actuales."
-            wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
-          />
+          {projectGroups.length === 0 ? (
+            <DataTable
+              columns={groupedColumns}
+              data={[]}
+              emptyMessage="No hay tareas que coincidan con los filtros actuales."
+              wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
+            />
+          ) : (
+            <Accordion
+              multiple
+              value={projectGroups.filter((g) => !collapsedProjects.has(g.id)).map((g) => g.id)}
+              onValueChange={(open) =>
+                setCollapsedProjects(new Set(projectGroups.filter((g) => !(open as string[]).includes(g.id)).map((g) => g.id)))
+              }
+            >
+              {projectGroups.map((group) => (
+                <AccordionItem key={group.id} value={group.id}>
+                  <AccordionTrigger>
+                    <span>
+                      {group.name}
+                      <span className="ml-2 font-normal text-muted-foreground">{group.tasks.length}</span>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <DataTable columns={groupedColumns} data={group.tasks} getRowId={(row) => row.id} />
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          )}
 
           <NewProjectTemplateModal
             open={templateOpen}
