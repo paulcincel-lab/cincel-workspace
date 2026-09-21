@@ -16,6 +16,28 @@ import { staff } from "./people";
 import { projects } from "./projects";
 import { workflows, workflowTaskTemplates } from "./workflows";
 
+/**
+ * Admin-defined task statuses. Each maps to one of the four base statuses,
+ * which stays the source of truth for logic and metrics; the custom one is
+ * display/selection only.
+ */
+export const taskStatuses = core.table(
+  "task_statuses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    baseStatus: taskStatus("base_status").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...stamps,
+    ...soft,
+  },
+  (t) => [
+    uniqueIndex("task_statuses_name_lower_uq")
+      .on(sql`lower(${t.name})`)
+      .where(sql`${t.deletedAt} is null`),
+  ]
+);
+
 /** Workflow task or user task; always on a project (Part C.4, rules 2–5). */
 export const tasks = core.table(
   "tasks",
@@ -37,6 +59,9 @@ export const tasks = core.table(
       .references(() => staff.id),
     managerId: uuid("manager_id").references(() => staff.id, { onDelete: "set null" }),
     status: taskStatus("status").notNull().default("pendiente"),
+    customStatusId: uuid("custom_status_id").references(() => taskStatuses.id, {
+      onDelete: "set null",
+    }),
     priority: taskPriority("priority").notNull().default("media"),
     // No ordering check between the three dates, by design.
     commitmentDate: date("commitment_date"),
@@ -67,6 +92,7 @@ export const tasks = core.table(
     index("idx_tasks_created_by_id").on(t.createdById),
     index("idx_tasks_workflow_id").on(t.workflowId),
     index("idx_tasks_status").on(t.status),
+    index("idx_tasks_custom_status_id").on(t.customStatusId),
     index("idx_tasks_commitment_date").on(t.commitmentDate),
     index("idx_tasks_review_date").on(t.reviewDate),
     index("idx_tasks_delivery_date").on(t.deliveryDate),

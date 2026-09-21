@@ -226,6 +226,7 @@ export default function Sidebar() {
               { label: "General", href: "/configuracion/general", icon: SettingsIcon },
               { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
               { label: "Áreas", href: "/configuracion/areas", icon: SettingsIcon },
+              { label: "Estatus", href: "/configuracion/estatus", icon: SettingsIcon },
               { label: "Workflows", href: "/configuracion/workflows", icon: SettingsIcon },
             ],
           } satisfies MenuGroupItem,
