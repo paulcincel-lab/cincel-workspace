@@ -11,6 +11,7 @@ import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
 import type { TaskListItem, TaskStatus } from "@/lib/types/core";
+import { taskStatusLabel } from "@/lib/tasks/status-options";
 
 interface DashboardClientProps {
   initialProjects: ProjectItem[];
@@ -161,6 +162,11 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
                     <span className="flex items-center gap-2">
                       <span className="size-1.5 rounded-full bg-destructive" />
                       {t.project.name} — {t.title}
+                      {t.customStatus ? (
+                        <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          {taskStatusLabel(t)}
+                        </span>
+                      ) : null}
                     </span>
                     <Link
                       href={`/proyectos/${t.projectId}/ficha`}

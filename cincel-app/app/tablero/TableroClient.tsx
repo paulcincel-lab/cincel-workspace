@@ -12,6 +12,7 @@ import { DEPARTMENTOS } from "@/lib/actividades/departamento";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { formatDateDMY } from "@/lib/utils/date";
+import { BASE_STATUS_VARIANT, taskStatusLabel } from "@/lib/tasks/status-options";
 import {
   fetchBoardAction,
   fetchTaskAction,
@@ -319,7 +320,14 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
                         draggingTaskId === task.id ? "opacity-50" : ""
                       } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
                     >
-                      <p className="font-medium">{task.title}</p>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium">{task.title}</p>
+                        {task.customStatus ? (
+                          <Badge variant={BASE_STATUS_VARIANT[task.status]} className="shrink-0">
+                            {taskStatusLabel(task)}
+                          </Badge>
+                        ) : null}
+                      </div>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">{task.project.name}</p>
 
                       <div className="mt-2 flex items-center justify-between gap-2">
