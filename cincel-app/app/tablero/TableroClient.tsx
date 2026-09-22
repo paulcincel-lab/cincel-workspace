@@ -7,6 +7,7 @@ import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import TaskDrawer from "@/components/tareas/TaskDrawer";
+import { TaskMemberProjectFilters, matchesMemberFilter, matchesProjectFilter } from "@/components/tareas/TaskMemberProjectFilters";
 import { DEPARTMENTOS } from "@/lib/actividades/departamento";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
@@ -72,6 +73,8 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
     bloqueado: PAGE_SIZE,
   });
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [projectId, setProjectId] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -89,6 +92,16 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
     });
     return map;
   }, [workflows]);
+
+  const allBoardTasks = useMemo(() => COLUMN_ORDER.flatMap((s) => board[s] ?? []), [board]);
+
+  const filteredBoard = useMemo(() => {
+    const next = {} as Record<TaskStatus, TaskListItem[]>;
+    COLUMN_ORDER.forEach((status) => {
+      next[status] = (board[status] ?? []).filter((t) => matchesMemberFilter(t, memberIds) && matchesProjectFilter(t, projectId));
+    });
+    return next;
+  }, [board, memberIds, projectId]);
 
   const refresh = useCallback(async () => {
     try {
@@ -249,9 +262,19 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
         }
       />
 
+      <div className="mb-4">
+        <TaskMemberProjectFilters
+          tasks={allBoardTasks}
+          memberIds={memberIds}
+          onMemberIdsChange={setMemberIds}
+          projectId={projectId}
+          onProjectIdChange={setProjectId}
+        />
+      </div>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {COLUMN_ORDER.map((status) => {
-          const allTasks = board[status] ?? [];
+          const allTasks = filteredBoard[status] ?? [];
           const visible = visibleCount[status];
           const tasks = allTasks.slice(0, visible);
           const remaining = allTasks.length - tasks.length;
