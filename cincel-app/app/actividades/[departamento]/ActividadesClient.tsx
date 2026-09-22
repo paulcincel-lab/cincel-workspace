@@ -203,9 +203,13 @@ export function ActividadesClient({
   const projectOptions = useMemo(
     () =>
       initialProjects
-        .filter((p) => p.status === "activo" && (!workflow || p.currentWorkflow?.id === workflow.id))
+        .filter(
+          (p) =>
+            p.status === "activo" &&
+            (departamento.allowTasksOnAnyActiveProject || !workflow || p.currentWorkflow?.id === workflow.id)
+        )
         .map((p) => ({ id: p.id, name: p.name })),
-    [initialProjects, workflow]
+    [initialProjects, workflow, departamento.allowTasksOnAnyActiveProject]
   );
 
   const projectFilterOptions = useMemo(() => {
