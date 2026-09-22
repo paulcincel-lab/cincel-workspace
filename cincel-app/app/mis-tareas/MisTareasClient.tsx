@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
+import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
@@ -221,6 +222,16 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
     setView("activas");
   }
 
+  const projectGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
+    for (const task of filteredTasks) {
+      const group = groups.get(task.project.id) ?? { id: task.project.id, name: task.project.name, tasks: [] };
+      group.tasks.push(task);
+      groups.set(task.project.id, group);
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [filteredTasks]);
+
   const columns = useMemo<ColumnDef<TaskListItem, unknown>[]>(() => {
     return [
       {
@@ -341,6 +352,9 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [capabilities, viewerId]);
 
+  // Each accordion already names the project, so the per-row Proyecto column is redundant.
+  const groupedColumns = useMemo(() => columns.filter((c) => c.id !== "project"), [columns]);
+
   return (
     <div>
       <PageHeader title="Mis tareas" description="Tareas donde eres encargado o apoyo." />
@@ -391,12 +405,22 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         <Button variant="outline" onClick={clearFilters}>Limpiar filtros</Button>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={filteredTasks}
-        getRowId={(row) => row.id}
-        emptyMessage="No tienes tareas asignadas con los filtros actuales."
-      />
+      {projectGroups.length === 0 ? (
+        <DataTable
+          columns={groupedColumns}
+          data={[]}
+          emptyMessage="No tienes tareas asignadas con los filtros actuales."
+        />
+      ) : (
+        <AccordionPanels
+          groups={projectGroups.map((group) => ({
+            id: group.id,
+            title: group.name,
+            count: group.tasks.length,
+            content: <DataTable columns={groupedColumns} data={group.tasks} getRowId={(row) => row.id} wrapperClassName="rounded-none! border-x-0! border-b-0! shadow-none!" />,
+          }))}
+        />
+      )}
 
       <TaskDrawer
         open={selectedTaskId !== null}
