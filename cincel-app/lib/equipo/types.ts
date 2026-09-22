@@ -4,6 +4,7 @@ import type { Staff } from "@/lib/types/core";
 
 export type MemberDraft = {
   name: string;
+  lastName: string;
   access: SystemAccessRole;
   systemAccessEnabled: boolean;
   temporaryPassword: string;

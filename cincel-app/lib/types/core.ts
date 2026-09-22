@@ -29,6 +29,7 @@ export type Staff = {
   id: string;
   kind: StaffKind;
   name: string;
+  lastName: string | null;
   phone: string | null;
   email: string | null;
   role: string | null;
@@ -73,6 +74,7 @@ export type StaffDetail = Staff & {
 export type StaffInput = {
   kind?: StaffKind;
   name: string;
+  lastName?: string | null;
   phone?: string | null;
   email?: string | null;
   role?: string | null;

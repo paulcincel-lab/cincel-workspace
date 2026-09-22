@@ -19,6 +19,7 @@ export const staff = core.table(
     id: uuid("id").primaryKey().defaultRandom(),
     kind: staffKind("kind").notNull().default("empleado"),
     name: text("name").notNull(),
+    lastName: text("last_name"),
     phone: text("phone"),
     email: text("email"),
     role: text("role"),

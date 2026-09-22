@@ -201,7 +201,10 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         id: "member",
         header: "Colaborador",
         cell: ({ row }) => (
-          <PersonAvatar name={row.original.name} subtitle={row.original.institutionalEmail} />
+          <PersonAvatar
+            name={[row.original.name, row.original.lastName].filter(Boolean).join(" ")}
+            subtitle={row.original.institutionalEmail}
+          />
         ),
       },
       { accessorKey: "role", header: "Puesto" },

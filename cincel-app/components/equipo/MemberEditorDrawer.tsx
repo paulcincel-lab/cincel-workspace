@@ -85,12 +85,21 @@ export function MemberEditorDrawer({
             <h3 className="text-sm font-semibold text-foreground">Información laboral</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="md:col-span-2">
+              <div>
                 <label className="mb-2 block text-sm font-medium text-foreground">Nombre</label>
                 <Input
                   type="text"
                   value={draft.name}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, name: event.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">Apellidos</label>
+                <Input
+                  type="text"
+                  value={draft.lastName}
+                  onChange={(event) => onChangeDraft((current) => ({ ...current, lastName: event.target.value }))}
                 />
               </div>
 

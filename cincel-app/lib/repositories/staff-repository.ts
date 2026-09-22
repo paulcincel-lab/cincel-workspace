@@ -25,6 +25,7 @@ export function toStaff(row: StaffRow): Staff {
     id: row.id,
     kind: row.kind,
     name: row.name,
+    lastName: row.lastName,
     phone: row.phone,
     email: row.email,
     role: row.role,
@@ -39,6 +40,7 @@ export function toStaff(row: StaffRow): Staff {
 const STAFF_TRACKED_FIELDS = [
   "kind",
   "name",
+  "lastName",
   "phone",
   "email",
   "role",
@@ -135,6 +137,7 @@ function toStaffValues(input: StaffInput) {
   return {
     kind: input.kind ?? "empleado",
     name: input.name.trim(),
+    lastName: clean(input.lastName),
     phone: clean(input.phone),
     email: clean(input.email)?.toLowerCase() ?? null,
     role: clean(input.role),
@@ -172,6 +175,7 @@ export async function updateStaff(
   const merged = toStaffValues({
     kind: patch.kind ?? before.kind,
     name: patch.name ?? before.name,
+    lastName: patch.lastName === undefined ? before.lastName : patch.lastName,
     phone: patch.phone === undefined ? before.phone : patch.phone,
     email: patch.email === undefined ? before.email : patch.email,
     role: patch.role === undefined ? before.role : patch.role,

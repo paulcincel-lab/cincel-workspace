@@ -41,6 +41,7 @@ import type { Staff } from "@/lib/types/core";
 
 export const emptyMemberDraft: MemberDraft = {
   name: "",
+  lastName: "",
   access: DEFAULT_SYSTEM_ACCESS_ROLE,
   systemAccessEnabled: false,
   temporaryPassword: "",
@@ -165,6 +166,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     );
     setDraft({
       name: detail.name,
+      lastName: detail.lastName ?? "",
       access,
       systemAccessEnabled: detail.access?.enabled ?? false,
       temporaryPassword: "",
@@ -202,6 +204,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     if (editingId !== null && !teamCapabilities.canEditCollaborator) return;
 
     const name = draft.name.trim();
+    const lastName = draft.lastName.trim();
     const institutionalEmail = draft.institutionalEmail.trim();
     const role = draft.role.trim();
     const normalizedEmail = normalizeEmail(institutionalEmail);
@@ -210,6 +213,10 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
 
     if (!name || !role || draft.areaIds.length === 0 || draft.capacity < 1) {
       setFormError("Completa nombre, puesto, al menos un área y una capacidad válida.");
+      return;
+    }
+    if (editingId === null && !lastName) {
+      setFormError("Los apellidos son obligatorios para un colaborador nuevo.");
       return;
     }
     if (!institutionalEmail || !institutionalEmail.includes("@")) {
@@ -248,6 +255,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     try {
       const staffInput = {
         name,
+        lastName: lastName || null,
         role: draft.access, // access and role share the same value — see module comment
         email: normalizedEmail,
         phone: draft.phone.trim() || null,
@@ -260,6 +268,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         (
           await createStaffAction({
             name: staffInput.name,
+            lastName: staffInput.lastName,
             role: staffInput.role,
             email: staffInput.email,
             phone: staffInput.phone,
@@ -271,6 +280,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
       if (editingId !== null) {
         await updateStaffAction(editingId, {
           name: staffInput.name,
+          lastName: staffInput.lastName,
           role: staffInput.role,
           email: staffInput.email,
           phone: staffInput.phone,
