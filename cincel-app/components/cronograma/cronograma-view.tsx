@@ -14,6 +14,7 @@ import { GanttChart } from "./gantt-chart";
 import { ProgressDonut } from "./progress-donut";
 import { SCurveChart } from "./s-curve-chart";
 import { WeekBoards } from "./week-boards";
+import { STATUS_LABEL } from "./task-card";
 import { AlertasPanel } from "./alertas-panel";
 import { ResumenCards } from "./resumen-cards";
 import { AdicionalesPanel } from "./adicionales-panel";
@@ -37,6 +38,7 @@ export default function CronogramaView({ projectId, initialView }: CronogramaVie
   const [loading, setLoading] = useState(!initialView);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState("");
+  const [announcement, setAnnouncement] = useState("");
   const [, startTransition] = useTransition();
 
   const loadSchedule = useCallback(() => {
@@ -95,6 +97,7 @@ export default function CronogramaView({ projectId, initialView }: CronogramaVie
   const handleCycleStatus = useCallback(
     (task: ScheduleTask, next: ScheduleStatus) => {
       setError("");
+      setAnnouncement(`${task.tarea}: ${STATUS_LABEL[next]}`);
       startTransition(async () => {
         applyOptimisticTask({ type: "status", taskId: task.id, status: next });
         const result = await setTaskStatusAction(task.id, next, task.status);
@@ -150,8 +153,12 @@ export default function CronogramaView({ projectId, initialView }: CronogramaVie
                 onImported={loadSchedule}
               />
 
+              <p className="sr-only" role="status" aria-live="polite">
+                {announcement}
+              </p>
+
               {error ? (
-                <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
                 </p>
               ) : null}

@@ -58,6 +58,11 @@ export function SCurveChart({ tasks, payments, today }: SCurveChartProps) {
   const todayXVal = xForDate(today);
   const todayX = todayXVal >= PAD_L - 0.5 && todayXVal <= W - PAD_R + 0.5 ? todayXVal : null;
 
+  const last = points[points.length - 1];
+  const chartLabel = `Proyectado vs. realizado: al final del periodo, planeado ${last.planned}%, calendario de pagos ${last.pagos}%${
+    last.real === null ? "" : `, real ${last.real}%`
+  }`;
+
   const gridlines = [0, 25, 50, 75, 100];
 
   const monthLabels: Array<{ x: number; label: string }> = [];
@@ -75,7 +80,7 @@ export function SCurveChart({ tasks, payments, today }: SCurveChartProps) {
         <CardTitle className="text-base">Proyectado vs. realizado — eje horizontal en semanas</CardTitle>
       </CardHeader>
       <CardContent>
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={210} preserveAspectRatio="xMidYMid meet">
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={210} preserveAspectRatio="xMidYMid meet" role="img" aria-label={chartLabel}>
           {gridlines.map((v) => (
             <g key={v}>
               <line x1={PAD_L} x2={W - PAD_R} y1={yPos(v)} y2={yPos(v)} className="stroke-border" strokeWidth={1} />

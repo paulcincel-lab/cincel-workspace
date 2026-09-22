@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { ScheduleStatus, ScheduleTask } from "@/lib/types/schedule";
 
-const STATUS_LABEL: Record<ScheduleStatus, string> = {
+export const STATUS_LABEL: Record<ScheduleStatus, string> = {
   pending: "Pendiente",
   progress: "En proceso",
   done: "Realizada",

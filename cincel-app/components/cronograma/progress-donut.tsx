@@ -27,7 +27,14 @@ export function ProgressDonut({ metrics }: ProgressDonutProps) {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-          <svg viewBox="0 0 180 180" width={200} height={200} className="shrink-0">
+          <svg
+            viewBox="0 0 180 180"
+            width={200}
+            height={200}
+            className="shrink-0"
+            role="img"
+            aria-label={`Avance del proyecto: planeado ${metrics.plannedPct}%, programado ${metrics.pagosAvancePct}%, real ${metrics.realPct}%`}
+          >
             <g transform="translate(90,90) rotate(-90)">
               <circle r={R_OUTER} fill="none" className="stroke-muted" strokeWidth={STROKE} />
               <circle
