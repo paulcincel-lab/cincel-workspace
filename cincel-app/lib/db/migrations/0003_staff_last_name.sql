@@ -1,0 +1,1 @@
+ALTER TABLE "core"."staff" ADD COLUMN "last_name" text;

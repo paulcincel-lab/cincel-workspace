@@ -37,6 +37,7 @@ const sampleStaff: Staff[] = [
     id: "s1",
     kind: "empleado",
     name: "Ana",
+    lastName: null,
     phone: null,
     email: "ana@cincel.mx",
     role: "Arquitecta",
