@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
+import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { CapacityRing } from "@/components/v2/status/CapacityRing";
@@ -594,6 +595,18 @@ export function ActividadesClient({
             </div>
           );
         },
+      },
+      {
+        id: "checklist",
+        header: "Checklist",
+        enableSorting: false,
+        cell: ({ row }: CellContext<TaskListItem, unknown>) => (
+          <ChecklistProgressCell
+            total={row.original.checklist.total}
+            completed={row.original.checklist.completed}
+            onClick={() => setSelectedTaskId(row.original.id)}
+          />
+        ),
       },
       {
         id: "manager",

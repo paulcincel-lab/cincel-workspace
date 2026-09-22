@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { AccordionPanels } from "@/components/ui/AccordionPanels";
+import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { BASE_STATUS_VARIANT, taskStatusLabel } from "@/lib/tasks/status-options";
 import { Button } from "@/components/ui/shadcn/button";
@@ -439,7 +440,10 @@ export default function ProjectFichaPage() {
                         {group.tasks.map((t) => (
                           <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-2">
                             <span>{t.title}</span>
-                            <Badge variant={BASE_STATUS_VARIANT[t.status]}>{taskStatusLabel(t)}</Badge>
+                            <div className="flex shrink-0 items-center gap-3">
+                              <ChecklistProgressCell total={t.checklist.total} completed={t.checklist.completed} />
+                              <Badge variant={BASE_STATUS_VARIANT[t.status]}>{taskStatusLabel(t)}</Badge>
+                            </div>
                           </li>
                         ))}
                       </ul>
