@@ -28,6 +28,7 @@ test.describe("Equipo — add team member", () => {
     // "Nombre" appears in both "Información laboral" and "Contacto de emergencia" sections;
     // target the first occurrence which is the collaborator's name field.
     await drawer.locator("label:has-text('Nombre') + input").first().fill(MEMBER_NAME);
+    await drawer.locator("label:has-text('Apellidos') + input").fill("E2E");
 
     // Fill other required fields: Puesto (free text), Áreas (multi-select
     // against real core.areas — search then click the matching option).
