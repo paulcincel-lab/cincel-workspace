@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -24,19 +23,11 @@ import {
 } from "@/lib/actions/workflows-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
-import type { WorkflowDetail, WorkflowTaskTemplate, WorkflowTaskTemplateInput } from "@/lib/types/core";
-
-const CONFIG_NAV_ITEMS: Array<{ key: string; label: string; href?: string; enabled: boolean }> = [
-  { key: "permisos", label: "Permisos", href: "/configuracion/permisos", enabled: true },
-  { key: "general", label: "General", href: "/configuracion/general", enabled: true },
-  { key: "areas", label: "Áreas", href: "/configuracion/areas", enabled: true },
-  { key: "workflows", label: "Workflows", href: "/configuracion/workflows", enabled: true },
-  { key: "catalogos", label: "Catalogos", enabled: false },
-  { key: "seguridad", label: "Seguridad", enabled: false },
-  { key: "integraciones", label: "Integraciones", enabled: false },
-  { key: "api-webhooks", label: "API / Webhooks", enabled: false },
-  { key: "notificaciones", label: "Notificaciones", enabled: false },
-];
+import type {
+  WorkflowDetail,
+  WorkflowTaskTemplate,
+  WorkflowTaskTemplateInput,
+} from "@/lib/types/core";
 
 const PRIORITY_LABEL: Record<string, string> = {
   alta: "Alta",
@@ -50,9 +41,18 @@ function toDraft(template: WorkflowTaskTemplate): TemplateDraft {
     phase: template.phase ?? "",
     notes: template.notes ?? "",
     defaultPriority: template.defaultPriority,
-    commitmentOffsetDays: template.commitmentOffsetDays === null ? "" : String(template.commitmentOffsetDays),
-    reviewOffsetDays: template.reviewOffsetDays === null ? "" : String(template.reviewOffsetDays),
-    deliveryOffsetDays: template.deliveryOffsetDays === null ? "" : String(template.deliveryOffsetDays),
+    commitmentOffsetDays:
+      template.commitmentOffsetDays === null
+        ? ""
+        : String(template.commitmentOffsetDays),
+    reviewOffsetDays:
+      template.reviewOffsetDays === null
+        ? ""
+        : String(template.reviewOffsetDays),
+    deliveryOffsetDays:
+      template.deliveryOffsetDays === null
+        ? ""
+        : String(template.deliveryOffsetDays),
     active: template.active,
   };
 }
@@ -82,28 +82,43 @@ interface WorkflowsClientProps {
 }
 
 export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
-  const [workflows, setWorkflows] = useState<WorkflowDetail[]>(initialWorkflows);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(initialWorkflows[0]?.id ?? null);
+  const [workflows, setWorkflows] =
+    useState<WorkflowDetail[]>(initialWorkflows);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(
+    initialWorkflows[0]?.id ?? null,
+  );
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TemplateDraft>(emptyTemplateDraft);
   const [formError, setFormError] = useState("");
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
 
-  const capabilities = useMemo(() => resolveWorkflowsCapabilities(authenticatedUser), [authenticatedUser]);
+  const capabilities = useMemo(
+    () => resolveWorkflowsCapabilities(authenticatedUser),
+    [authenticatedUser],
+  );
 
   const selectedWorkflow = useMemo(
-    () => workflows.find((w) => w.id === selectedWorkflowId) ?? workflows[0] ?? null,
-    [workflows, selectedWorkflowId]
+    () =>
+      workflows.find((w) => w.id === selectedWorkflowId) ??
+      workflows[0] ??
+      null,
+    [workflows, selectedWorkflowId],
   );
 
   const templates = useMemo(
-    () => [...(selectedWorkflow?.templates ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
-    [selectedWorkflow]
+    () =>
+      [...(selectedWorkflow?.templates ?? [])].sort(
+        (a, b) => a.sortOrder - b.sortOrder,
+      ),
+    [selectedWorkflow],
   );
 
   async function refresh() {
-    const rows = await fetchWorkflowsAction({ includeInactive: true, includeInactiveTemplates: true });
+    const rows = await fetchWorkflowsAction({
+      includeInactive: true,
+      includeInactiveTemplates: true,
+    });
     setWorkflows(rows);
   }
 
@@ -142,25 +157,41 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
       await refresh();
       setShowEditor(false);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "No se pudo guardar la plantilla.");
+      setFormError(
+        err instanceof Error ? err.message : "No se pudo guardar la plantilla.",
+      );
     }
   }
 
   async function deactivateTemplate(template: WorkflowTaskTemplate) {
-    if (!window.confirm(`¿Desactivar la plantilla "${template.title}"? Seguirá visible en el historial.`)) return;
+    if (
+      !window.confirm(
+        `¿Desactivar la plantilla "${template.title}"? Seguirá visible en el historial.`,
+      )
+    )
+      return;
     await deactivateTemplateAction(template.id);
     await refresh();
   }
 
-  async function moveTemplate(template: WorkflowTaskTemplate, direction: "up" | "down") {
+  async function moveTemplate(
+    template: WorkflowTaskTemplate,
+    direction: "up" | "down",
+  ) {
     if (!selectedWorkflow) return;
     const index = templates.findIndex((t) => t.id === template.id);
     const swapWith = direction === "up" ? index - 1 : index + 1;
     if (index < 0 || swapWith < 0 || swapWith >= templates.length) return;
 
     const reordered = [...templates];
-    [reordered[index], reordered[swapWith]] = [reordered[swapWith], reordered[index]];
-    await reorderTemplatesAction(selectedWorkflow.id, reordered.map((t) => t.id));
+    [reordered[index], reordered[swapWith]] = [
+      reordered[swapWith],
+      reordered[index],
+    ];
+    await reorderTemplatesAction(
+      selectedWorkflow.id,
+      reordered.map((t) => t.id),
+    );
     await refresh();
   }
 
@@ -170,19 +201,27 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
         id: "orden",
         header: "#",
         size: 40,
-        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.index + 1}</span>,
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground">{row.index + 1}</span>
+        ),
       },
       { accessorKey: "title", header: "Título" },
       {
         id: "phase",
         header: "Fase",
-        cell: ({ row }) => row.original.phase || <span className="text-muted-foreground">—</span>,
+        cell: ({ row }) =>
+          row.original.phase || (
+            <span className="text-muted-foreground">—</span>
+          ),
       },
       {
         id: "priority",
         header: "Prioridad",
         cell: ({ row }) => (
-          <Badge variant="outline">{PRIORITY_LABEL[row.original.defaultPriority] ?? row.original.defaultPriority}</Badge>
+          <Badge variant="outline">
+            {PRIORITY_LABEL[row.original.defaultPriority] ??
+              row.original.defaultPriority}
+          </Badge>
         ),
       },
       {
@@ -206,10 +245,16 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
               }> = [{ label: "Editar", onSelect: (t) => openEditEditor(t) }];
 
               if (index > 0) {
-                actions.push({ label: "Mover arriba", onSelect: (t) => void moveTemplate(t, "up") });
+                actions.push({
+                  label: "Mover arriba",
+                  onSelect: (t) => void moveTemplate(t, "up"),
+                });
               }
               if (index >= 0 && index < templates.length - 1) {
-                actions.push({ label: "Mover abajo", onSelect: (t) => void moveTemplate(t, "down") });
+                actions.push({
+                  label: "Mover abajo",
+                  onSelect: (t) => void moveTemplate(t, "down"),
+                });
               }
               if (template.active) {
                 actions.push({
@@ -226,7 +271,7 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
         : []),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [capabilities.canManageWorkflows, templates]
+    [capabilities.canManageWorkflows, templates],
   );
 
   return (
@@ -236,83 +281,50 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
         description="Plantillas de tareas por workflow — Presale, Diseño, Construcción y Decoración."
       />
 
-      <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
-        <aside className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Configuracion</h2>
-          <nav className="mt-4 space-y-1.5">
-            {CONFIG_NAV_ITEMS.map((item) => {
-              const isWorkflows = item.key === "workflows";
-
-              if (item.enabled && item.href) {
-                return (
-                  <Link
-                    key={item.key}
-                    href={item.href}
-                    className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-medium ${isWorkflows ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted"}`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              }
-
-              return (
-                <Button
-                  key={item.key}
-                  variant="ghost"
-                  disabled
-                  className="h-auto w-full justify-start px-3 py-2 text-left text-sm font-medium"
+      <div className="space-y-6">
+        {!capabilities.canViewWorkflows ? (
+          <section className="rounded-2xl border border-border bg-card p-8 shadow-sm text-sm text-muted-foreground">
+            No tienes permiso para ver los workflows.
+          </section>
+        ) : (
+          <>
+            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Tabs
+                  value={selectedWorkflow?.id ?? undefined}
+                  onValueChange={(value) => setSelectedWorkflowId(value)}
                 >
-                  {item.label}
-                  <span className="ml-2 text-xs text-muted-foreground">Proximamente</span>
-                </Button>
-              );
-            })}
-          </nav>
-        </aside>
+                  <TabsList>
+                    {workflows.map((workflow) => (
+                      <TabsTrigger key={workflow.id} value={workflow.id}>
+                        {workflow.name}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
 
-        <div className="space-y-6">
-          {!capabilities.canViewWorkflows ? (
-            <section className="rounded-2xl border border-border bg-card p-8 shadow-sm text-sm text-muted-foreground">
-              No tienes permiso para ver los workflows.
-            </section>
-          ) : (
-            <>
-              <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <Tabs
-                    value={selectedWorkflow?.id ?? undefined}
-                    onValueChange={(value) => setSelectedWorkflowId(value)}
-                  >
-                    <TabsList>
-                      {workflows.map((workflow) => (
-                        <TabsTrigger key={workflow.id} value={workflow.id}>
-                          {workflow.name}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </Tabs>
-
-                  {capabilities.canManageWorkflows ? (
-                    <Button onClick={openAddEditor} disabled={!selectedWorkflow}>
-                      + Nueva plantilla
-                    </Button>
-                  ) : null}
-                </div>
-
-                {selectedWorkflow?.description ? (
-                  <p className="mt-3 text-sm text-muted-foreground">{selectedWorkflow.description}</p>
+                {capabilities.canManageWorkflows ? (
+                  <Button onClick={openAddEditor} disabled={!selectedWorkflow}>
+                    + Nueva plantilla
+                  </Button>
                 ) : null}
-              </section>
+              </div>
 
-              <DataTable
-                columns={columns}
-                data={templates}
-                getRowId={(row) => row.id}
-                emptyMessage="Este workflow todavía no tiene plantillas de tareas."
-              />
-            </>
-          )}
-        </div>
+              {selectedWorkflow?.description ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {selectedWorkflow.description}
+                </p>
+              ) : null}
+            </section>
+
+            <DataTable
+              columns={columns}
+              data={templates}
+              getRowId={(row) => row.id}
+              emptyMessage="Este workflow todavía no tiene plantillas de tareas."
+            />
+          </>
+        )}
       </div>
 
       <WorkflowTemplateDrawer
