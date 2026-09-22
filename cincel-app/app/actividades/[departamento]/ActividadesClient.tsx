@@ -577,14 +577,17 @@ export function ActividadesClient({
           const task = row.original;
           return (
             <div className="flex items-center justify-between gap-2">
-              <InlineEditable
-                value={task.title}
-                onCommit={(value) => value.trim() && updateField(task, { title: value.trim() })}
-                renderDisplay={(value) => <span className="font-medium">{value}</span>}
-                renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
-                  <Input autoFocus value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className="text-sm" />
-                )}
-              />
+              <div className="min-w-0 flex-1">
+                <InlineEditable
+                  displayClassName="whitespace-normal"
+                  value={task.title}
+                  onCommit={(value) => value.trim() && updateField(task, { title: value.trim() })}
+                  renderDisplay={(value) => <span className="font-medium">{value}</span>}
+                  renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
+                    <Input autoFocus value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className="text-sm" />
+                  )}
+                />
+              </div>
               <Button variant="outline" size="sm" className="h-6 w-6 shrink-0 rounded-full p-0 text-xs" onClick={() => setSelectedTaskId(task.id)} title="Ver detalle">
                 ⓘ
               </Button>
