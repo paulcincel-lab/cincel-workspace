@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -9,7 +8,13 @@ import Sidebar from "@/components/layout/Sidebar";
 import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/shadcn/select";
 import { Switch } from "@/components/ui/shadcn/switch";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { PERMISSIONS_CUSTOM_STORAGE_KEY } from "@/lib/auth/permissions";
@@ -29,7 +34,11 @@ import {
 } from "@/lib/data/roles";
 import { teamMembersPublic } from "@/lib/data/team-public";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
-import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+import {
+  readStorage,
+  writeStorage,
+  removeStorage,
+} from "@/lib/repositories/browser-state-repository";
 import type { Staff } from "@/lib/types/core";
 
 type AccessSummary = {
@@ -49,34 +58,28 @@ type StoredPermissionsState = {
   roles: PermissionsState;
 };
 
-const CONFIG_NAV_ITEMS: Array<{ key: string; label: string; href?: string; enabled: boolean }> = [
-  { key: "permisos", label: "Permisos", href: "/configuracion/permisos", enabled: true },
-  { key: "general", label: "General", href: "/configuracion/general", enabled: true },
-  { key: "areas", label: "Áreas", href: "/configuracion/areas", enabled: true },
-  { key: "workflows", label: "Workflows", href: "/configuracion/workflows", enabled: true },
-  { key: "catalogos", label: "Catalogos", enabled: false },
-  { key: "seguridad", label: "Seguridad", enabled: false },
-  { key: "integraciones", label: "Integraciones", enabled: false },
-  { key: "api-webhooks", label: "API / Webhooks", enabled: false },
-  { key: "notificaciones", label: "Notificaciones", enabled: false },
-];
-
 const ACCESS_DESCRIPTIONS: Record<SystemAccessRole, string> = {
   Administrador: "Control total del ERP y configuración protegida del sistema.",
-  "Dirección": "Gestion estratégica con administración avanzada de módulos.",
-  "Jefe de Taller": "Coordinación operativa de diseño y seguimiento de proyectos.",
+  Dirección: "Gestion estratégica con administración avanzada de módulos.",
+  "Jefe de Taller":
+    "Coordinación operativa de diseño y seguimiento de proyectos.",
   "Jefe de Construcción": "Supervisión de obra y coordinación de ejecución.",
-  "Arquitecto Senior": "Ejecución experta con alcance transversal en proyectos.",
+  "Arquitecto Senior":
+    "Ejecución experta con alcance transversal en proyectos.",
   "Arquitecto Junior": "Ejecución y colaboración dentro de flujos asignados.",
   Colaborador: "Apoyo operativo con alcance delimitado por asignación.",
-  "Pasante / Servicio Social": "Participación asistida con alcance de consulta y apoyo.",
+  "Pasante / Servicio Social":
+    "Participación asistida con alcance de consulta y apoyo.",
   Otros: "Acceso restringido para casos especiales de colaboración.",
 };
 
 /** Access role mirrors the server resolution in `lib/auth/session.ts`: it comes
  * straight from `staff.role`, not a separate client-side override. */
 function resolveMemberAccess(member: Staff): SystemAccessRole {
-  if (isAdministratorRole(member.role) || hasDefaultSystemAdministratorAccess(member.email)) {
+  if (
+    isAdministratorRole(member.role) ||
+    hasDefaultSystemAdministratorAccess(member.email)
+  ) {
     return SYSTEM_ADMIN_ROLE;
   }
 
@@ -115,13 +118,20 @@ function buildDefaultPermissionsState(): PermissionsState {
   return next;
 }
 
-function sanitizePermissionsState(defaultState: PermissionsState, storedState: unknown): PermissionsState {
+function sanitizePermissionsState(
+  defaultState: PermissionsState,
+  storedState: unknown,
+): PermissionsState {
   if (!storedState || typeof storedState !== "object") {
     return defaultState;
   }
 
   const candidate = storedState as StoredPermissionsState;
-  if (candidate.version !== 1 || !candidate.roles || typeof candidate.roles !== "object") {
+  if (
+    candidate.version !== 1 ||
+    !candidate.roles ||
+    typeof candidate.roles !== "object"
+  ) {
     return defaultState;
   }
 
@@ -142,12 +152,16 @@ function sanitizePermissionsState(defaultState: PermissionsState, storedState: u
         const rawValue = moduleCandidate[action.id];
 
         if (action.type === "boolean") {
-          moduleNext[action.id] = typeof rawValue === "boolean" ? rawValue : defaultValue;
+          moduleNext[action.id] =
+            typeof rawValue === "boolean" ? rawValue : defaultValue;
           continue;
         }
 
-        const validOption = action.options?.some((option) => option.value === rawValue);
-        moduleNext[action.id] = validOption && typeof rawValue === "string" ? rawValue : defaultValue;
+        const validOption = action.options?.some(
+          (option) => option.value === rawValue,
+        );
+        moduleNext[action.id] =
+          validOption && typeof rawValue === "string" ? rawValue : defaultValue;
       }
 
       roleNext[moduleDefinition.id] = moduleNext;
@@ -159,7 +173,10 @@ function sanitizePermissionsState(defaultState: PermissionsState, storedState: u
   return merged;
 }
 
-function loadPermissionsState(defaultState: PermissionsState): { state: PermissionsState; hasCustom: boolean } {
+function loadPermissionsState(defaultState: PermissionsState): {
+  state: PermissionsState;
+  hasCustom: boolean;
+} {
   if (typeof window === "undefined") {
     return { state: defaultState, hasCustom: false };
   }
@@ -189,7 +206,10 @@ function savePermissionsState(state: PermissionsState): void {
   writeStorage(PERMISSIONS_CUSTOM_STORAGE_KEY, JSON.stringify(payload));
 }
 
-function getModuleDetails(moduleDefinition: PermissionsModuleDefinition, moduleState: ModulePermissionsState): string | null {
+function getModuleDetails(
+  moduleDefinition: PermissionsModuleDefinition,
+  moduleState: ModulePermissionsState,
+): string | null {
   if (!moduleDefinition.detailsLabel || !moduleDefinition.detailsValueLabel) {
     return null;
   }
@@ -197,17 +217,27 @@ function getModuleDetails(moduleDefinition: PermissionsModuleDefinition, moduleS
   return `${moduleDefinition.detailsLabel}: ${moduleDefinition.detailsValueLabel(moduleState)}`;
 }
 
-function buildAccessColumns(setSelectedAccess: (role: SystemAccessRole) => void): ColumnDef<AccessSummary, unknown>[] {
+function buildAccessColumns(
+  setSelectedAccess: (role: SystemAccessRole) => void,
+): ColumnDef<AccessSummary, unknown>[] {
   return [
     {
       accessorKey: "role",
       header: "Acceso",
-      cell: ({ row }) => <span className="font-semibold text-foreground">{row.original.role}</span>,
+      cell: ({ row }) => (
+        <span className="font-semibold text-foreground">
+          {row.original.role}
+        </span>
+      ),
     },
     {
       accessorKey: "description",
       header: "Descripcion",
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.description}</span>,
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {row.original.description}
+        </span>
+      ),
     },
     {
       accessorKey: "usersCount",
@@ -225,7 +255,10 @@ function buildAccessColumns(setSelectedAccess: (role: SystemAccessRole) => void)
       cell: ({ row }) => (
         <div className="flex flex-wrap gap-1.5">
           {row.original.enabledModules.map((module) => (
-            <span key={`${row.original.role}-${module}`} className="rounded-full border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">
+            <span
+              key={`${row.original.role}-${module}`}
+              className="rounded-full border border-border bg-muted px-2 py-1 text-xs text-muted-foreground"
+            >
               {module}
             </span>
           ))}
@@ -254,7 +287,11 @@ function buildAccessColumns(setSelectedAccess: (role: SystemAccessRole) => void)
             className="h-auto px-3 py-2 text-xs"
             onClick={() => setSelectedAccess(row.original.role)}
             disabled={row.original.protectedRole}
-            title={row.original.protectedRole ? "Administrador mantiene acceso completo y no puede editarse." : "Abrir editor de permisos"}
+            title={
+              row.original.protectedRole
+                ? "Administrador mantiene acceso completo y no puede editarse."
+                : "Abrir editor de permisos"
+            }
           >
             Configurar
           </Button>
@@ -268,14 +305,27 @@ interface PermissionsWorkspaceProps {
   initialStaff: Staff[];
 }
 
-export default function PermissionsWorkspace({ initialStaff }: PermissionsWorkspaceProps) {
-  const defaultPermissionsState = useMemo(() => buildDefaultPermissionsState(), []);
-  const loadedPermissions = useMemo(() => loadPermissionsState(defaultPermissionsState), [defaultPermissionsState]);
+export default function PermissionsWorkspace({
+  initialStaff,
+}: PermissionsWorkspaceProps) {
+  const defaultPermissionsState = useMemo(
+    () => buildDefaultPermissionsState(),
+    [],
+  );
+  const loadedPermissions = useMemo(
+    () => loadPermissionsState(defaultPermissionsState),
+    [defaultPermissionsState],
+  );
 
   const [members, setMembers] = useState<Staff[]>(initialStaff);
-  const [selectedAccess, setSelectedAccess] = useState<SystemAccessRole>("Dirección");
-  const [permissionsState, setPermissionsState] = useState<PermissionsState>(loadedPermissions.state);
-  const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(loadedPermissions.hasCustom);
+  const [selectedAccess, setSelectedAccess] =
+    useState<SystemAccessRole>("Dirección");
+  const [permissionsState, setPermissionsState] = useState<PermissionsState>(
+    loadedPermissions.state,
+  );
+  const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(
+    loadedPermissions.hasCustom,
+  );
 
   useEffect(() => {
     const refresh = () => {
@@ -301,7 +351,9 @@ export default function PermissionsWorkspace({ initialStaff }: PermissionsWorksp
   }, [defaultPermissionsState]);
 
   const usersByAccess = useMemo(() => {
-    const initial = Object.fromEntries(SYSTEM_ACCESS_ROLES.map((role) => [role, 0])) as Record<SystemAccessRole, number>;
+    const initial = Object.fromEntries(
+      SYSTEM_ACCESS_ROLES.map((role) => [role, 0]),
+    ) as Record<SystemAccessRole, number>;
 
     for (const member of members) {
       const access = resolveMemberAccess(member);
@@ -314,9 +366,10 @@ export default function PermissionsWorkspace({ initialStaff }: PermissionsWorksp
   const accessSummary = useMemo<AccessSummary[]>(() => {
     return SYSTEM_ACCESS_ROLES.map((role) => {
       const roleState = permissionsState[role] ?? {};
-      const enabledModules = PERMISSIONS_MODULES_REGISTRY
-        .filter((moduleDefinition) => moduleDefinition.isEnabled(roleState[moduleDefinition.id] ?? {}))
-        .map((moduleDefinition) => moduleDefinition.name);
+      const enabledModules = PERMISSIONS_MODULES_REGISTRY.filter(
+        (moduleDefinition) =>
+          moduleDefinition.isEnabled(roleState[moduleDefinition.id] ?? {}),
+      ).map((moduleDefinition) => moduleDefinition.name);
 
       return {
         role,
@@ -328,13 +381,21 @@ export default function PermissionsWorkspace({ initialStaff }: PermissionsWorksp
     });
   }, [permissionsState, usersByAccess]);
 
-  const accessColumns = useMemo(() => buildAccessColumns(setSelectedAccess), []);
+  const accessColumns = useMemo(
+    () => buildAccessColumns(setSelectedAccess),
+    [],
+  );
 
-  const selectedRoleInfo = accessSummary.find((access) => access.role === selectedAccess) ?? accessSummary[0];
+  const selectedRoleInfo =
+    accessSummary.find((access) => access.role === selectedAccess) ??
+    accessSummary[0];
   const selectedRoleState = permissionsState[selectedAccess] ?? {};
 
   const isDirty = useMemo(() => {
-    return JSON.stringify(permissionsState) !== JSON.stringify(defaultPermissionsState);
+    return (
+      JSON.stringify(permissionsState) !==
+      JSON.stringify(defaultPermissionsState)
+    );
   }, [defaultPermissionsState, permissionsState]);
 
   const canEditSelectedRole = selectedAccess !== SYSTEM_ADMIN_ROLE;
@@ -384,172 +445,179 @@ export default function PermissionsWorkspace({ initialStaff }: PermissionsWorksp
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
 
-        <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
-          <aside className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Configuracion</h2>
-            <nav className="mt-4 space-y-1.5">
-              {CONFIG_NAV_ITEMS.map((item) => {
-                const isActive = item.key === "permisos";
+        <div className="space-y-6">
+          <section className="rounded-2xl border border-border bg-card p-8 shadow-sm">
+            <h1 className="text-3xl font-bold text-foreground">Permisos</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Administra los accesos y capacidades del sistema.
+            </p>
+          </section>
 
-                if (item.enabled && item.href) {
-                  return (
-                    <Link
-                      key={item.key}
-                      href={item.href}
-                      className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-medium ${isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted"}`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                }
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <DataTable
+              columns={accessColumns}
+              data={accessSummary}
+              getRowId={(access) => access.role}
+              tableClassName="min-w-[960px]"
+            />
+          </section>
+
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-foreground">
+                  Editor de permisos
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Configuración activa para el acceso:{" "}
+                  <span className="font-semibold text-foreground">
+                    {selectedRoleInfo?.role}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Fuente actual:{" "}
+                  {hasCustomConfig
+                    ? "Configuración personalizada"
+                    : "Valores por defecto de permissions.ts"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-auto px-3 py-2 text-xs"
+                  onClick={restoreDefaults}
+                  disabled={!hasCustomConfig}
+                >
+                  Restaurar permisos por defecto
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-auto px-3 py-2 text-xs"
+                  onClick={saveChanges}
+                  disabled={!isDirty || !canEditSelectedRole}
+                >
+                  Guardar cambios
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              {PERMISSIONS_MODULES_REGISTRY.map((moduleDefinition) => {
+                const moduleState =
+                  selectedRoleState[moduleDefinition.id] ?? {};
+                const moduleDetails = getModuleDetails(
+                  moduleDefinition,
+                  moduleState,
+                );
 
                 return (
-                  <Button
-                    key={item.key}
-                    variant="ghost"
-                    disabled
-                    className="h-auto w-full justify-start px-3 py-2 text-left text-sm font-medium"
+                  <article
+                    key={moduleDefinition.id}
+                    className="rounded-xl border border-border bg-muted p-4"
                   >
-                    {item.label}
-                    <span className="ml-2 text-xs text-muted-foreground">Proximamente</span>
-                  </Button>
-                );
-              })}
-            </nav>
-          </aside>
-
-          <div className="space-y-6">
-            <section className="rounded-2xl border border-border bg-card p-8 shadow-sm">
-              <h1 className="text-3xl font-bold text-foreground">Permisos</h1>
-              <p className="mt-2 text-sm text-muted-foreground">Administra los accesos y capacidades del sistema.</p>
-            </section>
-
-            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-              <DataTable
-                columns={accessColumns}
-                data={accessSummary}
-                getRowId={(access) => access.role}
-                tableClassName="min-w-[960px]"
-              />
-            </section>
-
-            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-foreground">Editor de permisos</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Configuración activa para el acceso: <span className="font-semibold text-foreground">{selectedRoleInfo?.role}</span>
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Fuente actual: {hasCustomConfig ? "Configuración personalizada" : "Valores por defecto de permissions.ts"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-auto px-3 py-2 text-xs"
-                    onClick={restoreDefaults}
-                    disabled={!hasCustomConfig}
-                  >
-                    Restaurar permisos por defecto
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="h-auto px-3 py-2 text-xs"
-                    onClick={saveChanges}
-                    disabled={!isDirty || !canEditSelectedRole}
-                  >
-                    Guardar cambios
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                {PERMISSIONS_MODULES_REGISTRY.map((moduleDefinition) => {
-                  const moduleState = selectedRoleState[moduleDefinition.id] ?? {};
-                  const moduleDetails = getModuleDetails(moduleDefinition, moduleState);
-
-                  return (
-                    <article key={moduleDefinition.id} className="rounded-xl border border-border bg-muted p-4">
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-lg font-semibold tracking-tight text-foreground">{moduleDefinition.name}</h3>
-                          {moduleDetails ? (
-                            <p className="mt-1 text-xs text-muted-foreground">{moduleDetails}</p>
-                          ) : null}
-                        </div>
-                        <span className="rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
-                          {moduleDefinition.actions.length} acciones
-                        </span>
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-semibold tracking-tight text-foreground">
+                          {moduleDefinition.name}
+                        </h3>
+                        {moduleDetails ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {moduleDetails}
+                          </p>
+                        ) : null}
                       </div>
+                      <span className="rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                        {moduleDefinition.actions.length} acciones
+                      </span>
+                    </div>
 
-                      <div className="space-y-2">
-                        {moduleDefinition.actions.map((action) => {
-                          const value = moduleState[action.id];
+                    <div className="space-y-2">
+                      {moduleDefinition.actions.map((action) => {
+                        const value = moduleState[action.id];
 
-                          if (action.type === "select") {
-                            return (
-                              <div key={`${moduleDefinition.id}-${action.id}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
-                                <label className="text-sm text-foreground" htmlFor={`${moduleDefinition.id}-${action.id}`}>
-                                  {action.label}
-                                </label>
-                                <Select
-                                  items={Object.fromEntries((action.options ?? []).map((o) => [o.value, o.label]))}
-                                  value={String(value)}
-                                  disabled={!canEditSelectedRole}
-                                  onValueChange={(nextValue) =>
-                                    updatePermissionValue({
-                                      role: selectedAccess,
-                                      moduleId: moduleDefinition.id,
-                                      actionId: action.id,
-                                      nextValue: nextValue as string,
-                                    })
-                                  }
-                                >
-                                  <SelectTrigger id={`${moduleDefinition.id}-${action.id}`} className="h-auto px-2 py-1 text-xs">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {(action.options ?? []).map((option) => (
-                                      <SelectItem key={`${action.id}-${option.value}`} value={option.value}>
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            );
-                          }
-
+                        if (action.type === "select") {
                           return (
-                            <label
+                            <div
                               key={`${moduleDefinition.id}-${action.id}`}
-                              className={`flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 ${canEditSelectedRole ? "cursor-pointer hover:bg-muted" : "cursor-not-allowed"}`}
+                              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
                             >
-                              <p className={`text-sm ${canEditSelectedRole ? "text-foreground" : "text-muted-foreground"}`}>{action.label}</p>
-                              <Switch
-                                checked={Boolean(value)}
+                              <label
+                                className="text-sm text-foreground"
+                                htmlFor={`${moduleDefinition.id}-${action.id}`}
+                              >
+                                {action.label}
+                              </label>
+                              <Select
+                                items={Object.fromEntries(
+                                  (action.options ?? []).map((o) => [
+                                    o.value,
+                                    o.label,
+                                  ]),
+                                )}
+                                value={String(value)}
                                 disabled={!canEditSelectedRole}
-                                onCheckedChange={(checked) =>
+                                onValueChange={(nextValue) =>
                                   updatePermissionValue({
                                     role: selectedAccess,
                                     moduleId: moduleDefinition.id,
                                     actionId: action.id,
-                                    nextValue: checked,
+                                    nextValue: nextValue as string,
                                   })
                                 }
-                              />
-                            </label>
+                              >
+                                <SelectTrigger
+                                  id={`${moduleDefinition.id}-${action.id}`}
+                                  className="h-auto px-2 py-1 text-xs"
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(action.options ?? []).map((option) => (
+                                    <SelectItem
+                                      key={`${action.id}-${option.value}`}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           );
-                        })}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
+                        }
+
+                        return (
+                          <label
+                            key={`${moduleDefinition.id}-${action.id}`}
+                            className={`flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 ${canEditSelectedRole ? "cursor-pointer hover:bg-muted" : "cursor-not-allowed"}`}
+                          >
+                            <p
+                              className={`text-sm ${canEditSelectedRole ? "text-foreground" : "text-muted-foreground"}`}
+                            >
+                              {action.label}
+                            </p>
+                            <Switch
+                              checked={Boolean(value)}
+                              disabled={!canEditSelectedRole}
+                              onCheckedChange={(checked) =>
+                                updatePermissionValue({
+                                  role: selectedAccess,
+                                  moduleId: moduleDefinition.id,
+                                  actionId: action.id,
+                                  nextValue: checked,
+                                })
+                              }
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         </div>
       </section>
     </main>
