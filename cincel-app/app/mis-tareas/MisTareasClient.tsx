@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
+import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
@@ -268,6 +269,18 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
             </div>
           );
         },
+      },
+      {
+        id: "checklist",
+        header: "Checklist",
+        enableSorting: false,
+        cell: ({ row }: CellContext<TaskListItem, unknown>) => (
+          <ChecklistProgressCell
+            total={row.original.checklist.total}
+            completed={row.original.checklist.completed}
+            onClick={() => setSelectedTaskId(row.original.id)}
+          />
+        ),
       },
       {
         id: "manager",

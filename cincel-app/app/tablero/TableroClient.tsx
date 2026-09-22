@@ -13,6 +13,7 @@ import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { formatDateDMY } from "@/lib/utils/date";
 import { BASE_STATUS_VARIANT, taskStatusLabel } from "@/lib/tasks/status-options";
+import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import {
   fetchBoardAction,
   fetchTaskAction,
@@ -343,6 +344,12 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
                         {task.commitmentDate ? <span>Compromiso: {formatDateDMY(task.commitmentDate)}</span> : null}
                         {task.deliveryDate ? <span>Entrega: {formatDateDMY(task.deliveryDate)}</span> : null}
                       </div>
+
+                      {task.checklist.total > 0 ? (
+                        <div className="mt-1.5 text-[11px] text-muted-foreground">
+                          <ChecklistProgressCell total={task.checklist.total} completed={task.checklist.completed} />
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })
