@@ -375,6 +375,8 @@ export type TaskAttachment = {
   mimeType: string;
   sizeBytes: number;
   uploadedBy: StaffRef | null;
+  /** Set when this is a photo attached to a specific checklist item. */
+  checklistItemId: string | null;
   createdAt: string;
 };
 

@@ -215,6 +215,7 @@ export async function fetchTaskHistoryAction(taskId: string): Promise<HistoryEve
 const ATTACHMENT_ERROR_MESSAGES: Record<string, string> = {
   TASK_ATTACHMENT_TYPE_NOT_ALLOWED: "Solo se permiten imágenes o archivos .txt.",
   TASK_ATTACHMENT_TOO_LARGE: "El archivo supera el límite de 10MB.",
+  CHECKLIST_ITEM_NOT_FOUND: "Ese punto del checklist ya no existe.",
 };
 
 /** Attaches a file to a task as a comment (#425). Images and .txt only, up to 10MB. */
@@ -228,10 +229,12 @@ export async function addTaskAttachmentAction(taskId: string, formData: FormData
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
+    const checklistItemId = formData.get("checklistItemId");
     const row = await tasksRepository.addTaskAttachment(
       taskId,
       { name: file.name, mimeType: file.type || "application/octet-stream", data: buffer },
-      user.member.id
+      user.member.id,
+      typeof checklistItemId === "string" && checklistItemId ? checklistItemId : null
     );
     revalidateTareas();
     return row;

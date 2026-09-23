@@ -158,9 +158,14 @@ export const taskAttachments = core.table(
     sizeBytes: integer("size_bytes").notNull(),
     data: bytea("data").notNull(),
     uploadedById: uuid("uploaded_by_id").references(() => staff.id, { onDelete: "set null" }),
+    // Set when the file is a photo evidencing a specific checklist item (#436).
+    // `set null` if the item is removed: the photo stays on the task (history
+    // is never deleted) and simply shows under the task's general attachments.
+    checklistItemId: uuid("checklist_item_id").references(() => taskChecklistItems.id, { onDelete: "set null" }),
     ...stamps,
   },
   (t) => [
+    index("idx_task_attachments_checklist_item_id").on(t.checklistItemId),
     check("task_attachments_mime_check", sql`${t.mimeType} like 'image/%' or ${t.mimeType} = 'text/plain'`),
     check("task_attachments_size_check", sql`${t.sizeBytes} > 0 and ${t.sizeBytes} <= 10485760`),
     index("idx_task_attachments_task_id").on(t.taskId),
