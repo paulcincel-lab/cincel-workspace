@@ -274,13 +274,16 @@ export type ProjectListItem = Project & {
   taskCounts: { total: number; open: number; blocked: number };
 };
 
+/** Same audiences as task links: for the internal team or for the client. */
 export type ProjectLink = {
   id: string;
-  kind: string;
-  title: string | null;
+  kind: TaskLinkKind;
+  title: string;
   url: string;
   driveFileId: string | null;
 };
+
+export type ProjectLinkInput = { kind: TaskLinkKind; title: string; url: string };
 
 export type ProjectDetail = Project & {
   client: ContactRef;

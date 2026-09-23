@@ -8,7 +8,6 @@ import {
   numeric,
   primaryKey,
   text,
-  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -120,6 +119,10 @@ export const projectContacts = core.table(
 );
 
 /** Drive folders by purpose (administrativo, planos, renders, reportes, ...). */
+/**
+ * Links on a project, like task_links: `kind` says who the folder/file is
+ * for — the internal team or the client. A project can have several of each.
+ */
 export const projectLinks = core.table(
   "project_links",
   {
@@ -128,14 +131,17 @@ export const projectLinks = core.table(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
-    title: text("title"),
+    title: text("title").notNull(),
     url: text("url").notNull(),
     driveFileId: uuid("drive_file_id").references(() => driveFiles.id, {
       onDelete: "set null",
     }),
     ...stamps,
   },
-  (t) => [unique("project_links_project_kind_uq").on(t.projectId, t.kind)]
+  (t) => [
+    check("project_links_kind_check", sql`${t.kind} in ('interno', 'cliente')`),
+    index("idx_project_links_project_id").on(t.projectId),
+  ]
 );
 
 /** Derived client rollups; replaces stored counters (Part B.5). */
