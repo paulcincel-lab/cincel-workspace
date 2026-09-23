@@ -66,3 +66,17 @@ export const googleOauthAccounts = core.table("google_oauth_accounts", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   ...stamps,
 });
+
+/**
+ * Secret URL token for a staff member's subscribable calendar feed (ICS).
+ * Google Calendar can't send a session cookie, so the feed URL itself is the
+ * credential: only its sha256 is stored (like `sessions`), one row per staff —
+ * regenerating replaces it and kills the old URL.
+ */
+export const calendarFeedTokens = core.table("calendar_feed_tokens", {
+  staffId: uuid("staff_id")
+    .primaryKey()
+    .references(() => staff.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  ...stamps,
+});

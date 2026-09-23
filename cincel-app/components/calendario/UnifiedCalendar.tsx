@@ -64,13 +64,25 @@ function typePrefix(type: string): string {
   return "O";
 }
 
+/**
+ * Tasks only store dates, so the calendar shows an estimated time (see
+ * calendar-service.ts). The leading "≈" marks it as approximate everywhere.
+ */
+function approxTime(time: string): string {
+  return `≈${time}`;
+}
+
 function monthLabel(date: Date): string {
   return date.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
 }
 
 const UPCOMING_EVENTS_COLUMNS: ColumnDef<CalendarEvent, unknown>[] = [
   { accessorKey: "date", header: "Fecha" },
-  { accessorKey: "time", header: "Hora" },
+  {
+    accessorKey: "time",
+    header: "Hora (estimada)",
+    cell: ({ row }) => approxTime(row.original.time),
+  },
   {
     accessorKey: "title",
     header: "Actividad",
@@ -390,7 +402,7 @@ export default function UnifiedCalendar({
                                 onClick={(event) => event.stopPropagation()}
                                 className={`block truncate rounded border-l-4 px-2 py-1 text-[11px] font-semibold md:text-xs ${typeClassName(entry.type)}`}
                                 style={{ borderLeftColor: projectColorMap.get(entry.project) || "#6b6b6b" }}
-                                title={`${entry.time} · ${entry.title} · ${entry.project}`}
+                                title={`${approxTime(entry.time)} · ${entry.title} · ${entry.project}`}
                               >
                                 {typePrefix(entry.type)}. {entry.title}
                               </Link>
@@ -416,7 +428,7 @@ export default function UnifiedCalendar({
                         {day.events.length === 0 ? <p className="text-xs text-muted-foreground">Sin eventos</p> : null}
                         {day.events.map((entry) => (
                           <Link key={entry.id} href={entry.href} className={`block rounded-lg px-2 py-1 text-xs font-semibold ${typeClassName(entry.type)}`}>
-                            {entry.time} · {entry.title}
+                            {approxTime(entry.time)} · {entry.title}
                           </Link>
                         ))}
                       </div>
@@ -438,7 +450,7 @@ export default function UnifiedCalendar({
                     {selectedDayEvents.map((entry) => (
                       <Link key={entry.id} href={entry.href} className="flex items-start justify-between rounded-xl border border-border px-3 py-2 hover:bg-muted">
                         <div>
-                          <p className="text-xs font-semibold text-muted-foreground">{entry.time}</p>
+                          <p className="text-xs font-semibold text-muted-foreground">{approxTime(entry.time)}</p>
                           <p className="text-sm font-semibold text-foreground">{entry.title}</p>
                           <p className="text-xs text-foreground">{entry.project} · {entry.responsible}</p>
                         </div>
@@ -465,7 +477,7 @@ export default function UnifiedCalendar({
                   <div className="mt-2 space-y-2">
                     {selectedDayEvents.slice(0, 5).map((entry) => (
                       <div key={`agenda-${entry.id}`} className="rounded-lg border border-border bg-muted px-2 py-1">
-                        <p className="text-xs font-semibold text-foreground">{entry.time} · {entry.project}</p>
+                        <p className="text-xs font-semibold text-foreground">{approxTime(entry.time)} · {entry.project}</p>
                         <p className="text-xs text-muted-foreground">{entry.title}</p>
                       </div>
                     ))}
@@ -575,7 +587,7 @@ export default function UnifiedCalendar({
                     className="rounded-xl border border-border bg-card px-3 py-2 hover:bg-muted"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold text-muted-foreground">{entry.time}</span>
+                      <span className="text-xs font-semibold text-muted-foreground">{approxTime(entry.time)}</span>
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${typeClassName(entry.type)}`}>{entry.type}</span>
                     </div>
                     <p className="mt-1 text-sm font-semibold text-foreground">{entry.title}</p>
