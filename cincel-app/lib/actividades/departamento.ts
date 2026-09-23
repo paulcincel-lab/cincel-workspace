@@ -1,7 +1,6 @@
 import { presaleTemplate } from "@/lib/templates/presale";
 import { disenoTemplate } from "@/lib/templates/diseno";
 import { operativasTemplate } from "@/lib/templates/operativas";
-import { decoracionTemplate } from "@/lib/templates/decoracion";
 import type { WorkflowType } from "@/lib/types/task";
 import type { ProjectStage } from "@/lib/types/enums";
 
@@ -11,8 +10,8 @@ export interface TemplateItem {
 }
 
 /**
- * The firm's internal departments — Presale → Diseño → Construcción →
- * Decoración — each keyed by its URL slug.
+ * The firm's internal departments — Presale → Diseño → Construcción — each
+ * keyed by its URL slug. (Decoración was retired; see migration 0010.)
  */
 export const DEPARTMENTOS: Array<{
   slug: string;
@@ -45,14 +44,6 @@ export const DEPARTMENTOS: Array<{
     label: "Construcción",
     description: "Flujo de residencia de obra y postventa.",
     template: operativasTemplate,
-  },
-  {
-    slug: "decoracion",
-    stage: "Decoración",
-    workflow: "Decoración",
-    label: "Decoración",
-    description: "Flujo de selección de mobiliario, adquisición e instalación final.",
-    template: decoracionTemplate,
   },
 ];
 

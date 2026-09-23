@@ -23,7 +23,7 @@ import type { TaskListItem, TaskStatus } from "@/lib/types/core";
 
 /**
  * One read-only view of every activity across all stages (Presale → Diseño →
- * Construcción → Decoración), grouped by project. Editing stays in each
+ * Construcción), grouped by project. Editing stays in each
  * department's own page — every task title links straight there.
  */
 export function TodasActividadesClient({ initialTasks }: { initialTasks: TaskListItem[] }) {
@@ -140,7 +140,7 @@ export function TodasActividadesClient({ initialTasks }: { initialTasks: TaskLis
     <div>
       <PageHeader
         title="Todas las actividades"
-        description="Todas las etapas en una sola vista: Presale, Taller de Diseño, Construcción y Decoración."
+        description="Todas las etapas en una sola vista: Presale, Taller de Diseño y Construcción."
         actions={
           <Tabs value="todas" onValueChange={(v) => router.push(`/actividades/${v}`)}>
             <TabsList>

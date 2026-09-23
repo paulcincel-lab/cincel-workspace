@@ -2,9 +2,9 @@
  * Database seed (rebuild Phase 1).
  *
  * Populates the minimum to log in and start using the app:
- *   - the four workflows (Presale, Diseño, Construcción, Decoración), zero
+ *   - the three workflows (Presale, Diseño, Construcción), zero
  *     templates until the client supplies them (Phase 0)
- *   - areas, derived from the roster plus Decoración, each owning its workflow
+ *   - areas, derived from the roster, each owning its workflow
  *   - the staff roster with HR profiles and area memberships
  *   - one admin login
  *
@@ -44,7 +44,6 @@ const WORKFLOWS = [
   { key: "presale", name: "Presale", area: "Presale" },
   { key: "diseno", name: "Diseño", area: "Diseño" },
   { key: "construccion", name: "Construcción", area: "Construcción" },
-  { key: "decoracion", name: "Decoración", area: "Decoración" },
 ] as const;
 
 const orNull = (v: string | undefined) => (v && v.trim() ? v.trim() : null);

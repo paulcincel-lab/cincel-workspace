@@ -46,6 +46,10 @@ test.describe("Actividades — vista unificada Todas", () => {
     await page.getByRole("button", { name: "Actividades" }).click();
     await page.getByRole("link", { name: "Todas", exact: true }).click();
     await expect(page).toHaveURL(/\/actividades\/todas$/, { timeout: 15_000 });
+
+    // Decoración was retired: no sidebar entry, no tab, and its URL is not found.
+    await expect(page.getByRole("link", { name: "Decoración", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Decoración" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Todas las actividades" })).toBeVisible();
 
     // One project panel holding a task from each stage, each labelled with its stage.
@@ -64,5 +68,8 @@ test.describe("Actividades — vista unificada Todas", () => {
     // A task title links to its department page.
     await page.getByRole("link", { name: DISENO_TASK }).click();
     await expect(page).toHaveURL(/\/actividades\/diseno\?project=/, { timeout: 15_000 });
+
+    await page.goto(`${BASE_URL}/actividades/decoracion`);
+    await expect(page.getByText("This page could not be found")).toBeVisible({ timeout: 15_000 });
   });
 });

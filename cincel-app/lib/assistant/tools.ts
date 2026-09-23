@@ -37,15 +37,12 @@ const RISK_NOTE =
   "riesgo derivado del avance y de tareas vencidas/bloqueadas (Alto/Medio/Bajo)";
 
 // Firm departments / workflow slugs, matching lib/actividades/departamento.ts.
-const WORKFLOW_ENUM = z.enum(["presale", "diseno", "construccion", "decoracion"]);
-// A brand-new project can only start life in one of these three (Decoración
-// is reached later, not chosen at onboarding).
-const ONBOARD_WORKFLOW_ENUM = z.enum(["presale", "diseno", "construccion"]);
+const WORKFLOW_ENUM = z.enum(["presale", "diseno", "construccion"]);
+const ONBOARD_WORKFLOW_ENUM = WORKFLOW_ENUM;
 const WORKFLOW_LABELS: Record<string, string> = {
   presale: "Presale",
   diseno: "Diseño",
   construccion: "Construcción",
-  decoracion: "Decoración",
 };
 
 // ── Name / key resolution helpers ────────────────────────────────────────────

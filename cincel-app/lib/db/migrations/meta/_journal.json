@@ -71,6 +71,13 @@
       "when": 1790195613108,
       "tag": "0009_checklist_item_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790196570905,
+      "tag": "0010_retire_decoracion",
+      "breakpoints": true
     }
   ]
 }
