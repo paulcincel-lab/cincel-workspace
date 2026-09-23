@@ -3,9 +3,19 @@
 import { revalidatePath } from "next/cache";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { resolveTeamCapabilities } from "@/lib/auth/permissions";
+import { canViewSensitiveStaffData, resolveTeamCapabilities } from "@/lib/auth/permissions";
 import * as staffRepository from "@/lib/repositories/staff-repository";
-import type { Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
+import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
+
+/**
+ * Everyone's emergency contact, for quick access in Equipo (#451). `null`
+ * when the caller may not see staff PII — see canViewSensitiveStaffData.
+ */
+export async function fetchEmergencyContactsAction(): Promise<Record<string, EmergencyContact> | null> {
+  const user = await requireCapabilityUser();
+  if (!canViewSensitiveStaffData(user)) return null;
+  return staffRepository.listEmergencyContacts();
+}
 
 async function requireTeamCapabilities() {
   return resolveTeamCapabilities(await requireCapabilityUser());

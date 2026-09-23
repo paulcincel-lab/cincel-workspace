@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { staff, staffProfiles } from "@/lib/db/schema";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { isAdministratorRole } from "@/lib/data/roles";
+import { canViewSensitiveStaffData } from "@/lib/auth/permissions";
 
 /**
  * GET /api/team/sensitive/[id]
@@ -34,7 +34,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isAdministratorRole(caller.member.role) && caller.access !== "Dirección") {
+  if (!canViewSensitiveStaffData(caller)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
