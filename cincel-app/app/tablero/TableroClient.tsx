@@ -19,7 +19,6 @@ import {
   fetchTaskAction,
   setTaskStatusAction,
   addTaskCommentAction,
-  addTaskAttachmentAction,
   addChecklistItemAction,
   updateChecklistItemAction,
   removeChecklistItemAction,
@@ -210,20 +209,6 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
     }
   }
 
-  async function addAttachment(file: File) {
-    if (!selectedTaskId) return;
-    try {
-      const formData = new FormData();
-      formData.set("file", file);
-      await addTaskAttachmentAction(selectedTaskId, formData);
-      const detail = await fetchTaskAction(selectedTaskId);
-      setSelectedTaskDetail(detail);
-      if (detail) applyDetailUpdate(detail);
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "No se pudo adjuntar el archivo.");
-    }
-  }
-
   async function addChecklistItem(title: string) {
     if (!selectedTaskId) return;
     try {
@@ -391,7 +376,6 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
         task={activeTaskDetail}
         onClose={() => setSelectedTaskId(null)}
         onAddComment={(comment) => void addComment(comment)}
-        onAddAttachment={(file) => void addAttachment(file)}
         onAddChecklistItem={(title) => void addChecklistItem(title)}
         onToggleChecklistItem={(item) => void toggleChecklistItem(item)}
         onRemoveChecklistItem={(item) => void removeChecklistItem(item)}

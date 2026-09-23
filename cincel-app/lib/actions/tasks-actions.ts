@@ -7,7 +7,6 @@ import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import type {
   HistoryEvent,
-  TaskAttachment,
   TaskChecklistItem,
   TaskDetail,
   TaskFilters,
@@ -208,35 +207,6 @@ export async function addTaskCommentAction(taskId: string, comment: string): Pro
 export async function fetchTaskHistoryAction(taskId: string): Promise<HistoryEvent[]> {
   await requireCapabilityUser();
   return tasksRepository.listTaskHistory(taskId);
-}
-
-const ATTACHMENT_ERROR_MESSAGES: Record<string, string> = {
-  TASK_ATTACHMENT_TYPE_NOT_ALLOWED: "Solo se permiten imágenes o archivos .txt.",
-  TASK_ATTACHMENT_TOO_LARGE: "El archivo supera el límite de 10MB.",
-};
-
-/** Attaches a file to a task as a comment (#425). Images and .txt only, up to 10MB. */
-export async function addTaskAttachmentAction(taskId: string, formData: FormData): Promise<TaskAttachment> {
-  const user = await requireCapabilityUser();
-
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    throw new Error("No se recibió ningún archivo.");
-  }
-
-  try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const row = await tasksRepository.addTaskAttachment(
-      taskId,
-      { name: file.name, mimeType: file.type || "application/octet-stream", data: buffer },
-      user.member.id
-    );
-    revalidateTareas();
-    return row;
-  } catch (err) {
-    const message = err instanceof Error ? ATTACHMENT_ERROR_MESSAGES[err.message] : undefined;
-    throw new Error(message ?? "No se pudo adjuntar el archivo.");
-  }
 }
 
 export async function setTaskCustomStatusAction(id: string, customStatusId: string): Promise<TaskDetail> {

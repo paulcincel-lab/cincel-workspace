@@ -57,7 +57,6 @@ import {
   reorderChecklistAction,
   reorderProjectTasksAction,
   addTaskCommentAction,
-  addTaskAttachmentAction,
 } from "@/lib/actions/tasks-actions";
 import type {
   ProjectListItem,
@@ -427,19 +426,6 @@ export function ActividadesClient({
       setSelectedTaskDetail(detail);
     } catch (err) {
       console.error(err);
-    }
-  }
-
-  async function addAttachment(file: File) {
-    if (!selectedTaskId) return;
-    try {
-      const formData = new FormData();
-      formData.set("file", file);
-      await addTaskAttachmentAction(selectedTaskId, formData);
-      const detail = await fetchTaskAction(selectedTaskId);
-      setSelectedTaskDetail(detail);
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "No se pudo adjuntar el archivo.");
     }
   }
 
@@ -1023,7 +1009,6 @@ export function ActividadesClient({
             staffOptions={staffOptions}
             onClose={() => setSelectedTaskId(null)}
             onAddComment={(comment) => void addComment(comment)}
-            onAddAttachment={(file) => void addAttachment(file)}
             onAddChecklistItem={(title) => void addChecklistItem(title)}
             onToggleChecklistItem={(item) => void toggleChecklistItem(item)}
             onRemoveChecklistItem={(item) => void removeChecklistItem(item)}

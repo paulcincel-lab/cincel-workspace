@@ -36,13 +36,6 @@
       "when": 1790121775139,
       "tag": "0004_tasks_sort_order",
       "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1790124818612,
-      "tag": "0005_task_attachments",
-      "breakpoints": true
     }
   ]
 }

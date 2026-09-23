@@ -30,7 +30,6 @@ import {
   removeChecklistItemAction,
   reorderProjectTasksAction,
   addTaskCommentAction,
-  addTaskAttachmentAction,
 } from "@/lib/actions/tasks-actions";
 import type { TaskChecklistItem, TaskDetail, TaskListItem, TaskStatus } from "@/lib/types/core";
 
@@ -141,19 +140,6 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
       setSelectedTaskDetail(detail);
     } catch (err) {
       console.error(err);
-    }
-  }
-
-  async function addAttachment(file: File) {
-    if (!selectedTaskId) return;
-    try {
-      const formData = new FormData();
-      formData.set("file", file);
-      await addTaskAttachmentAction(selectedTaskId, formData);
-      const detail = await fetchTaskAction(selectedTaskId);
-      setSelectedTaskDetail(detail);
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "No se pudo adjuntar el archivo.");
     }
   }
 
@@ -476,7 +462,6 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         task={activeTaskDetail}
         onClose={() => setSelectedTaskId(null)}
         onAddComment={(comment) => void addComment(comment)}
-        onAddAttachment={(file) => void addAttachment(file)}
         onAddChecklistItem={(title) => void addChecklistItem(title)}
         onToggleChecklistItem={(item) => void toggleChecklistItem(item)}
         onRemoveChecklistItem={(item) => void removeChecklistItem(item)}
