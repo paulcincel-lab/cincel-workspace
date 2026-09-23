@@ -847,7 +847,6 @@ export function ActividadesClient({
         actions={
           <Tabs value={slug} onValueChange={(v) => router.push(`/actividades/${v}`)}>
             <TabsList>
-              <TabsTrigger value="todas">Todas</TabsTrigger>
               {DEPARTMENTOS.map((d) => (
                 <TabsTrigger key={d.slug} value={d.slug}>
                   {d.label}
