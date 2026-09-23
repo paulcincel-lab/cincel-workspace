@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { canViewSensitiveStaffData, resolveTeamCapabilities } from "@/lib/auth/permissions";
+import {
+  canViewSensitiveStaffData,
+  resolveAreasCapabilities,
+  resolveTeamCapabilities,
+} from "@/lib/auth/permissions";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
 
@@ -110,5 +114,18 @@ export async function setStaffCredentialAction(
     throw new Error("FORBIDDEN: staff access");
   }
   await staffRepository.setStaffCredential(staffId, options);
+  revalidatePath("/equipo");
+}
+
+/**
+ * Manual team order (#452) — part of the company structure, so only those
+ * who manage áreas (Administrador / Dirección) can change it.
+ */
+export async function reorderStaffAction(orderedIds: string[]): Promise<void> {
+  const user = await requireCapabilityUser();
+  if (!resolveAreasCapabilities(user).canManageAreas) {
+    throw new Error("FORBIDDEN: staff reorder");
+  }
+  await staffRepository.reorderStaff(orderedIds);
   revalidatePath("/equipo");
 }
