@@ -367,21 +367,9 @@ export type TaskChecklistItem = {
   sortOrder: number;
 };
 
-/** Metadata only — the file bytes are fetched separately via the download route. */
-export type TaskAttachment = {
-  id: string;
-  taskId: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  uploadedBy: StaffRef | null;
-  createdAt: string;
-};
-
 export type TaskDetail = TaskListItem & {
   createdBy: StaffRef;
   checklistItems: TaskChecklistItem[];
-  attachments: TaskAttachment[];
   history: HistoryEvent[];
 };
 

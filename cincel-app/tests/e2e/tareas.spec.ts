@@ -23,32 +23,23 @@ const connectionString =
  * so this spec seeds its own client + active "presale" project directly,
  * tagged "E2E" so global-cleanup.ts purges it like every other spec's rows.
  */
-// Every test in this file shares the same RUN_ID and calls this from its own
-// beforeEach — memoize so the client/project are only ever inserted once per
-// run, instead of every test's beforeEach re-inserting the same name and
-// hitting contacts_type_name_lower_uq.
-let presaleProjectReady: Promise<void> | null = null;
-
 async function ensurePresaleProject(): Promise<void> {
-  presaleProjectReady ??= (async () => {
-    const sql = postgres(connectionString, { max: 1 });
-    try {
-      const [workflow] = await sql`select id from core.workflows where key = 'presale' limit 1`;
-      if (!workflow) throw new Error("presale workflow not seeded");
-      const [client] = await sql`
-        insert into core.contacts (type, kind, name)
-        values ('cliente', 'particular', ${`Cliente E2E ${RUN_ID}`})
-        returning id
-      `;
-      await sql`
-        insert into core.projects (name, client_id, current_workflow_id, status)
-        values (${`Proyecto E2E ${RUN_ID}`}, ${client.id}, ${workflow.id}, 'activo')
-      `;
-    } finally {
-      await sql.end();
-    }
-  })();
-  return presaleProjectReady;
+  const sql = postgres(connectionString, { max: 1 });
+  try {
+    const [workflow] = await sql`select id from core.workflows where key = 'presale' limit 1`;
+    if (!workflow) throw new Error("presale workflow not seeded");
+    const [client] = await sql`
+      insert into core.contacts (type, kind, name)
+      values ('cliente', 'particular', ${`Cliente E2E ${RUN_ID}`})
+      returning id
+    `;
+    await sql`
+      insert into core.projects (name, client_id, current_workflow_id, status)
+      values (${`Proyecto E2E ${RUN_ID}`}, ${client.id}, ${workflow.id}, 'activo')
+    `;
+  } finally {
+    await sql.end();
+  }
 }
 
 test.describe("Tareas — create task with commitmentDate and reviewDate", () => {
@@ -102,32 +93,5 @@ test.describe("Tareas — create task with commitmentDate and reviewDate", () =>
 
     await page.getByPlaceholder(/Buscar tarea/i).fill(quickTitle);
     await expect(page.getByText(quickTitle)).toBeVisible({ timeout: 15_000 });
-  });
-
-  test("can attach a .txt file to a task as a comment (#425)", async ({ page }) => {
-    // Runs after the first test, so TASK_DESC already exists as a row.
-    await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
-    await page.getByTitle("Ver detalle").first().click();
-    await page.getByText("Detalle de tarea").waitFor({ state: "visible", timeout: 15_000 });
-
-    const fileName = `adjunto-${RUN_ID}.txt`;
-    const drawer = page.locator('[data-slot="sheet-content"]');
-    await drawer.locator('input[type="file"]').setInputFiles({
-      name: fileName,
-      mimeType: "text/plain",
-      buffer: Buffer.from("contenido de prueba E2E"),
-    });
-
-    // Uploading also logs a "Adjuntó un archivo: ..." history comment, so the
-    // filename appears twice — the attachment card has its own title attribute
-    // set to exactly the filename, unlike the history entry's prose sentence.
-    await expect(drawer.getByTitle(fileName)).toBeVisible({ timeout: 15_000 });
-
-    // Reload and reopen — confirm it persisted to Postgres, not just optimistic state.
-    await page.goto(`${BASE_URL}/actividades/presale`, { waitUntil: "domcontentloaded" });
-    await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
-    await page.getByTitle("Ver detalle").first().click();
-    await page.getByText("Detalle de tarea").waitFor({ state: "visible", timeout: 15_000 });
-    await expect(drawer.getByTitle(fileName)).toBeVisible({ timeout: 15_000 });
   });
 });

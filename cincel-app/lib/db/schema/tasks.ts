@@ -11,7 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { bytea, core, soft, stamps, taskKind, taskPriority, taskStatus } from "./_schema";
+import { core, soft, stamps, taskKind, taskPriority, taskStatus } from "./_schema";
 import { staff } from "./people";
 import { projects } from "./projects";
 import { workflows, workflowTaskTemplates } from "./workflows";
@@ -140,33 +140,6 @@ export const taskChecklistItems = core.table(
   (t) => [index("idx_task_checklist_items_task_id").on(t.taskId)]
 );
 
-/**
- * Files attached to a task as a comment (#425). Bytes live in Postgres
- * (`bytea`) — the app has no object storage service, and the 10MB cap keeps
- * that acceptable. Never deleted: an attachment is a comment, and comments
- * are append-only history (AGENTS.md — "nunca eliminar historial").
- */
-export const taskAttachments = core.table(
-  "task_attachments",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    taskId: uuid("task_id")
-      .notNull()
-      .references(() => tasks.id, { onDelete: "cascade" }),
-    fileName: text("file_name").notNull(),
-    mimeType: text("mime_type").notNull(),
-    sizeBytes: integer("size_bytes").notNull(),
-    data: bytea("data").notNull(),
-    uploadedById: uuid("uploaded_by_id").references(() => staff.id, { onDelete: "set null" }),
-    ...stamps,
-  },
-  (t) => [
-    check("task_attachments_mime_check", sql`${t.mimeType} like 'image/%' or ${t.mimeType} = 'text/plain'`),
-    check("task_attachments_size_check", sql`${t.sizeBytes} > 0 and ${t.sizeBytes} <= 10485760`),
-    index("idx_task_attachments_task_id").on(t.taskId),
-  ]
-);
-
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
   project: one(projects, { fields: [tasks.projectId], references: [projects.id] }),
   template: one(workflowTaskTemplates, {
@@ -186,7 +159,6 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
   }),
   support: many(taskSupport),
   checklist: many(taskChecklistItems),
-  attachments: many(taskAttachments),
 }));
 
 export const taskSupportRelations = relations(taskSupport, ({ one }) => ({
@@ -196,9 +168,4 @@ export const taskSupportRelations = relations(taskSupport, ({ one }) => ({
 
 export const taskChecklistItemsRelations = relations(taskChecklistItems, ({ one }) => ({
   task: one(tasks, { fields: [taskChecklistItems.taskId], references: [tasks.id] }),
-}));
-
-export const taskAttachmentsRelations = relations(taskAttachments, ({ one }) => ({
-  task: one(tasks, { fields: [taskAttachments.taskId], references: [tasks.id] }),
-  uploadedBy: one(staff, { fields: [taskAttachments.uploadedById], references: [staff.id] }),
 }));
