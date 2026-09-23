@@ -48,6 +48,7 @@ export function toTask(row: TaskRow): Task {
     status: row.status,
     customStatusId: row.customStatusId,
     priority: row.priority,
+    sortOrder: row.sortOrder,
     commitmentDate: row.commitmentDate,
     reviewDate: row.reviewDate,
     deliveryDate: row.deliveryDate,
@@ -140,7 +141,7 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     .leftJoin(staff, eq(staff.id, tasks.managerId))
     .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
     .where(whereFilters(filters))
-    .orderBy(asc(tasks.commitmentDate), asc(tasks.title));
+    .orderBy(sql`${tasks.sortOrder} is null`, asc(tasks.sortOrder), asc(tasks.commitmentDate), asc(tasks.title));
 
   const support = await loadSupport(rows.map((r) => r.task.id));
   return rows.map((r) => ({
@@ -478,6 +479,23 @@ export async function reorderChecklist(taskId: string, orderedIds: string[]): Pr
         .update(taskChecklistItems)
         .set({ sortOrder: i })
         .where(and(eq(taskChecklistItems.id, id), eq(taskChecklistItems.taskId, taskId)));
+    }
+  });
+}
+
+/**
+ * Persists a manual drag-and-drop order for a project's tasks (Actividades).
+ * Rewrites sortOrder for every id given, scoped to that project so a stray
+ * id from another project can't be repositioned by mistake. Not a tracked
+ * field — reordering doesn't change any task content, just display order.
+ */
+export async function reorderProjectTasks(projectId: string, orderedTaskIds: string[]): Promise<void> {
+  await db.transaction(async (tx) => {
+    for (const [i, id] of orderedTaskIds.entries()) {
+      await tx
+        .update(tasks)
+        .set({ sortOrder: i })
+        .where(and(eq(tasks.id, id), eq(tasks.projectId, projectId), isNull(tasks.deletedAt)));
     }
   });
 }

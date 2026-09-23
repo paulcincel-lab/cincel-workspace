@@ -48,6 +48,14 @@ type DataTableProps<T> = {
   tableClassName?: string;
   /** Extra classes on the outer scroll/border wrapper. */
   wrapperClassName?: string;
+  /**
+   * Opts into a manual drag-and-drop grip column at the left edge. Called
+   * with every visible row's id (via `getRowId`), in its new order, once a
+   * drag finishes. Disabled automatically while a column sort or the
+   * built-in search filter is active, since dragging a filtered/sorted view
+   * can't produce a single well-defined order to persist.
+   */
+  onReorderRows?: (orderedIds: string[]) => void;
 };
 
 function SortIcon({ direction }: { direction: "asc" | "desc" | false }) {
@@ -72,9 +80,13 @@ export function DataTable<T>({
   searchPlaceholder,
   tableClassName = "",
   wrapperClassName = "",
+  onReorderRows,
 }: DataTableProps<T>): ReactNode {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [globalFilter, setGlobalFilter] = useState("");
+  const [dragRowId, setDragRowId] = useState<string | null>(null);
+  const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
+  const reorderEnabled = Boolean(onReorderRows) && sorting.length === 0 && !globalFilter;
 
   const table = useReactTable({
     data,
@@ -108,6 +120,7 @@ export function DataTable<T>({
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
+              {reorderEnabled ? <TableHead className="w-8" aria-hidden /> : null}
               {headerGroup.headers.map((header) => {
                 const sortable = header.column.getCanSort();
                 return (
@@ -138,13 +151,13 @@ export function DataTable<T>({
         <TableBody>
           {isLoading ? (
             <TableRow>
-              <TableCell colSpan={columns.length} className="py-8 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={columns.length + (reorderEnabled ? 1 : 0)} className="py-8 text-center text-sm text-muted-foreground">
                 {loadingMessage}
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={columns.length} className="py-8 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={columns.length + (reorderEnabled ? 1 : 0)} className="py-8 text-center text-sm text-muted-foreground">
                 {emptyMessage}
               </TableCell>
             </TableRow>
@@ -153,8 +166,52 @@ export function DataTable<T>({
               <TableRow
                 key={row.id}
                 onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                className={`${onRowClick ? "cursor-pointer" : ""} ${rowClassName?.(row.original) ?? ""}`}
+                onDragOver={
+                  reorderEnabled && dragRowId
+                    ? (e) => {
+                        e.preventDefault();
+                        setDragOverRowId(row.id);
+                      }
+                    : undefined
+                }
+                onDragLeave={reorderEnabled ? () => setDragOverRowId((cur) => (cur === row.id ? null : cur)) : undefined}
+                onDrop={
+                  reorderEnabled && dragRowId
+                    ? (e) => {
+                        e.preventDefault();
+                        setDragOverRowId(null);
+                        const fromId = dragRowId;
+                        setDragRowId(null);
+                        if (!onReorderRows || fromId === row.id) return;
+                        const ids = rows.map((r) => r.id);
+                        const fromIndex = ids.indexOf(fromId);
+                        const toIndex = ids.indexOf(row.id);
+                        if (fromIndex === -1 || toIndex === -1) return;
+                        ids.splice(toIndex, 0, ids.splice(fromIndex, 1)[0]);
+                        onReorderRows(ids);
+                      }
+                    : undefined
+                }
+                className={`${onRowClick ? "cursor-pointer" : ""} ${dragOverRowId === row.id ? "bg-muted" : ""} ${rowClassName?.(row.original) ?? ""}`}
               >
+                {reorderEnabled ? (
+                  <TableCell
+                    className="w-8 cursor-grab text-muted-foreground active:cursor-grabbing"
+                    draggable
+                    onClick={(e) => e.stopPropagation()}
+                    onDragStart={(e) => {
+                      e.stopPropagation();
+                      setDragRowId(row.id);
+                    }}
+                    onDragEnd={() => {
+                      setDragRowId(null);
+                      setDragOverRowId(null);
+                    }}
+                    title="Arrastra para reordenar"
+                  >
+                    ⠿
+                  </TableCell>
+                ) : null}
                 {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}

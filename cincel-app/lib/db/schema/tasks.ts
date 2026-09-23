@@ -63,6 +63,9 @@ export const tasks = core.table(
       onDelete: "set null",
     }),
     priority: taskPriority("priority").notNull().default("media"),
+    // Manual drag-and-drop order within a project (Actividades). Null means
+    // "not manually ordered yet" — those tasks keep sorting by commitmentDate.
+    sortOrder: integer("sort_order"),
     // No ordering check between the three dates, by design.
     commitmentDate: date("commitment_date"),
     reviewDate: date("review_date"),

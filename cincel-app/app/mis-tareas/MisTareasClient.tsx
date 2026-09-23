@@ -28,6 +28,7 @@ import {
   addChecklistItemAction,
   updateChecklistItemAction,
   removeChecklistItemAction,
+  reorderProjectTasksAction,
   addTaskCommentAction,
 } from "@/lib/actions/tasks-actions";
 import type { TaskChecklistItem, TaskDetail, TaskListItem, TaskStatus } from "@/lib/types/core";
@@ -120,6 +121,15 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
 
   async function changeStatus(task: TaskListItem, status: TaskStatus) {
     await runAction(() => setTaskStatusAction(task.id, status), applyDetailUpdate);
+  }
+
+  async function reorderProjectTasks(groupProjectId: string, orderedTaskIds: string[]) {
+    try {
+      await reorderProjectTasksAction(groupProjectId, orderedTaskIds);
+      await refresh();
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   async function addComment(comment: string) {
@@ -430,7 +440,19 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
             id: group.id,
             title: group.name,
             count: group.tasks.length,
-            content: <DataTable columns={groupedColumns} data={group.tasks} getRowId={(row) => row.id} wrapperClassName="rounded-none! border-x-0! border-b-0! shadow-none!" />,
+            content: (
+              <DataTable
+                columns={groupedColumns}
+                data={group.tasks}
+                getRowId={(row) => row.id}
+                wrapperClassName="rounded-none! border-x-0! border-b-0! shadow-none!"
+                onReorderRows={
+                  capabilities.canReorderPhases && view === "activas"
+                    ? (ids) => void reorderProjectTasks(group.id, ids)
+                    : undefined
+                }
+              />
+            ),
           }))}
         />
       )}

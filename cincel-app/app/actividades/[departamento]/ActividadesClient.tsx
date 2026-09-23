@@ -55,6 +55,7 @@ import {
   updateChecklistItemAction,
   removeChecklistItemAction,
   reorderChecklistAction,
+  reorderProjectTasksAction,
   addTaskCommentAction,
 } from "@/lib/actions/tasks-actions";
 import type {
@@ -406,6 +407,15 @@ export function ActividadesClient({
       commitmentDate: "",
       reviewDate: "",
     });
+  }
+
+  async function reorderProjectTasks(projectId: string, orderedTaskIds: string[]) {
+    try {
+      await reorderProjectTasksAction(projectId, orderedTaskIds);
+      await refresh();
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   async function addComment(comment: string) {
@@ -946,6 +956,11 @@ export function ActividadesClient({
                       data={group.tasks}
                       getRowId={(row) => row.id}
                       wrapperClassName="rounded-none! border-x-0! border-b-0! shadow-none!"
+                      onReorderRows={
+                        capabilities.canReorderPhases && view === "activas"
+                          ? (ids) => void reorderProjectTasks(group.id, ids)
+                          : undefined
+                      }
                     />
                     {capabilities.canCreateActivity && view === "activas" ? (
                       <Input

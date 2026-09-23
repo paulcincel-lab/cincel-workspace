@@ -29,6 +29,13 @@
       "when": 1790120597358,
       "tag": "0003_staff_last_name",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790121775139,
+      "tag": "0004_tasks_sort_order",
+      "breakpoints": true
     }
   ]
 }
