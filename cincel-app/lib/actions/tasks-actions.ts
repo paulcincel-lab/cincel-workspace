@@ -11,6 +11,8 @@ import type {
   TaskChecklistItem,
   TaskDetail,
   TaskFilters,
+  TaskLink,
+  TaskLinkInput,
   TaskListItem,
   TaskPatch,
   TaskStatus,
@@ -247,4 +249,29 @@ export async function setTaskCustomStatusAction(id: string, customStatusId: stri
   const row = await tasksRepository.setTaskCustomStatus(id, customStatusId, user.member.id);
   revalidateTareas(row.projectId);
   return row;
+}
+
+const LINK_ERROR_MESSAGES: Record<string, string> = {
+  TASK_LINK_TITLE_REQUIRED: "Escribe un nombre para el enlace.",
+  TASK_LINK_URL_INVALID: "El enlace debe ser una URL válida que empiece con http:// o https://.",
+  TASK_LINK_KIND_INVALID: "Elige si el enlace es interno o del cliente.",
+};
+
+/** Adds an internal or client Drive/web link to a task (#436). */
+export async function addTaskLinkAction(taskId: string, input: TaskLinkInput): Promise<TaskLink> {
+  const user = await requireCapabilityUser();
+  try {
+    const row = await tasksRepository.addTaskLink(taskId, input, user.member.id);
+    revalidateTareas();
+    return row;
+  } catch (err) {
+    const message = err instanceof Error ? LINK_ERROR_MESSAGES[err.message] : undefined;
+    throw new Error(message ?? "No se pudo agregar el enlace.");
+  }
+}
+
+export async function removeTaskLinkAction(id: string): Promise<void> {
+  const user = await requireCapabilityUser();
+  await tasksRepository.removeTaskLink(id, user.member.id);
+  revalidateTareas();
 }

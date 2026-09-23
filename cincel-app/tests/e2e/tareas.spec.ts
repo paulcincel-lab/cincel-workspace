@@ -130,4 +130,47 @@ test.describe("Tareas — create task with commitmentDate and reviewDate", () =>
     await page.getByText("Detalle de tarea").waitFor({ state: "visible", timeout: 15_000 });
     await expect(drawer.getByTitle(fileName)).toBeVisible({ timeout: 15_000 });
   });
+
+  test("can add internal and client Drive links to a task, and remove one (#436)", async ({ page }) => {
+    // Runs after the first test, so TASK_DESC already exists as a row.
+    await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
+    await page.getByTitle("Ver detalle").first().click();
+    await page.getByText("Detalle de tarea").waitFor({ state: "visible", timeout: 15_000 });
+    const drawer = page.locator('[data-slot="sheet-content"]');
+
+    const addLink = async (kind: "interno" | "cliente", title: string, url: string) => {
+      await drawer.getByLabel("Tipo de enlace").selectOption(kind);
+      await drawer.getByPlaceholder("Nombre del enlace").fill(title);
+      await drawer.getByPlaceholder(/drive\.google\.com/).fill(url);
+      await drawer.getByRole("button", { name: "Agregar enlace" }).click();
+    };
+
+    // A non-web URL is refused client-side and nothing is added.
+    await addLink("interno", "Trampa", "javascript:alert(1)");
+    await expect(drawer.getByText("El enlace debe empezar con http")).toBeVisible();
+    await expect(drawer.getByRole("link", { name: "Trampa" })).toHaveCount(0);
+
+    const internal = `Planos internos ${RUN_ID}`;
+    const client = `Carpeta del cliente ${RUN_ID}`;
+    await addLink("interno", internal, "https://drive.google.com/drive/folders/interno1");
+    await addLink("cliente", client, "https://drive.google.com/drive/folders/cliente1");
+
+    const internalLink = drawer.getByRole("link", { name: internal });
+    const clientLink = drawer.getByRole("link", { name: client });
+    await expect(internalLink).toHaveAttribute("href", "https://drive.google.com/drive/folders/interno1");
+    await expect(clientLink).toHaveAttribute("rel", /noopener/);
+
+    // Persisted: reload, reopen, both are still there.
+    await page.goto(`${BASE_URL}/actividades/presale`, { waitUntil: "domcontentloaded" });
+    await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
+    await page.getByTitle("Ver detalle").first().click();
+    await page.getByText("Detalle de tarea").waitFor({ state: "visible", timeout: 15_000 });
+    await expect(drawer.getByRole("link", { name: internal })).toBeVisible({ timeout: 15_000 });
+    await expect(drawer.getByRole("link", { name: client })).toBeVisible();
+
+    // Removing one leaves the other.
+    await drawer.locator("li").filter({ hasText: client }).getByRole("button", { name: "Quitar" }).click();
+    await expect(drawer.getByRole("link", { name: client })).toHaveCount(0, { timeout: 15_000 });
+    await expect(drawer.getByRole("link", { name: internal })).toBeVisible();
+  });
 });
