@@ -58,6 +58,8 @@ import {
   reorderProjectTasksAction,
   addTaskCommentAction,
   addTaskAttachmentAction,
+  addTaskLinkAction,
+  removeTaskLinkAction,
 } from "@/lib/actions/tasks-actions";
 import type {
   ProjectListItem,
@@ -69,6 +71,7 @@ import type {
   TaskPriority,
   TaskStatus,
   TaskStatusOption,
+  TaskLinkInput,
   WorkflowDetail,
 } from "@/lib/types/core";
 
@@ -422,6 +425,28 @@ export function ActividadesClient({
     if (!selectedTaskId) return;
     try {
       await addTaskCommentAction(selectedTaskId, comment);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function addLink(input: TaskLinkInput) {
+    if (!selectedTaskId) return;
+    try {
+      await addTaskLinkAction(selectedTaskId, input);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "No se pudo agregar el enlace.");
+    }
+  }
+
+  async function removeLink(linkId: string) {
+    if (!selectedTaskId) return;
+    try {
+      await removeTaskLinkAction(linkId);
       const detail = await fetchTaskAction(selectedTaskId);
       setSelectedTaskDetail(detail);
     } catch (err) {
@@ -1023,6 +1048,8 @@ export function ActividadesClient({
             onClose={() => setSelectedTaskId(null)}
             onAddComment={(comment) => void addComment(comment)}
             onAddAttachment={(file) => void addAttachment(file)}
+        onAddLink={(input) => void addLink(input)}
+        onRemoveLink={(id) => void removeLink(id)}
             onAddChecklistItem={(title) => void addChecklistItem(title)}
             onToggleChecklistItem={(item) => void toggleChecklistItem(item)}
             onRemoveChecklistItem={(item) => void removeChecklistItem(item)}

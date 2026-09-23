@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 
-import type { StaffRef, TaskChecklistItem, TaskDetail } from "@/lib/types/core";
+import type { StaffRef, TaskChecklistItem, TaskDetail, TaskLinkInput, TaskLinkKind } from "@/lib/types/core";
+import { TASK_LINK_KIND_LABEL, normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
+import { useDriveEnabled } from "@/lib/google/use-drive-enabled";
+import DrivePickerDialog from "@/components/recursos/DrivePickerDialog";
 import { formatDateDMY } from "@/lib/utils/date";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
@@ -39,6 +42,9 @@ type Props = {
   onReorderChecklist?: (orderedIds: string[]) => void;
   /** Uploads a file as a task comment (#425). Optional — the attach control is hidden when omitted. */
   onAddAttachment?: (file: File) => void;
+  /** Adds an internal or client Drive/web link (#436). Optional — the links section is hidden when omitted. */
+  onAddLink?: (input: TaskLinkInput) => void;
+  onRemoveLink?: (linkId: string) => void;
   /** Active staff available to assign as support. Optional — support editing is hidden when omitted. */
   staffOptions?: StaffRef[];
   onChangeSupport?: (staffIds: string[]) => void;
@@ -54,12 +60,20 @@ export default function TaskDrawer({
   onRemoveChecklistItem,
   onReorderChecklist,
   onAddAttachment,
+  onAddLink,
+  onRemoveLink,
   staffOptions = [],
   onChangeSupport,
 }: Props) {
   const [newNote, setNewNote] = useState("");
   const [newChecklistItem, setNewChecklistItem] = useState("");
   const [attachmentError, setAttachmentError] = useState("");
+  const [linkKind, setLinkKind] = useState<TaskLinkKind>("interno");
+  const [linkTitle, setLinkTitle] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState("");
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
+  const driveEnabled = useDriveEnabled();
 
   const nameToStaffId = useMemo(() => new Map(staffOptions.map((s) => [s.name, s.id])), [staffOptions]);
   const staffNames = useMemo(() => staffOptions.map((s) => s.name), [staffOptions]);
@@ -100,6 +114,22 @@ export default function TaskDrawer({
 
     setAttachmentError("");
     onAddAttachment(file);
+  };
+
+  const handleAddLink = () => {
+    if (!onAddLink) return;
+    if (!linkTitle.trim()) {
+      setLinkError("Escribe un nombre para el enlace.");
+      return;
+    }
+    if (!normalizeTaskLinkUrl(linkUrl)) {
+      setLinkError("El enlace debe empezar con http:// o https://.");
+      return;
+    }
+    setLinkError("");
+    onAddLink({ kind: linkKind, title: linkTitle.trim(), url: linkUrl.trim() });
+    setLinkTitle("");
+    setLinkUrl("");
   };
 
   const moveChecklistItem = (item: TaskChecklistItem, direction: "up" | "down") => {
@@ -293,6 +323,99 @@ export default function TaskDrawer({
                 </section>
               ) : null}
 
+
+              {onAddLink ? (
+                <section>
+                  <h3 className="text-lg font-semibold text-foreground">Enlaces de Drive</h3>
+                  <div className="mt-3 space-y-4 rounded-2xl border border-border p-4">
+                    {(["interno", "cliente"] as const).map((kind) => {
+                      const links = task.links.filter((l) => l.kind === kind);
+                      return (
+                        <div key={kind}>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                            {TASK_LINK_KIND_LABEL[kind]}
+                          </p>
+                          {links.length > 0 ? (
+                            <ul className="mt-2 space-y-1">
+                              {links.map((link) => (
+                                <li key={link.id} className="flex items-center justify-between gap-2 text-sm">
+                                  <a
+                                    href={link.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="truncate text-foreground underline"
+                                    title={link.url}
+                                  >
+                                    {link.title}
+                                  </a>
+                                  {onRemoveLink ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                      onClick={() => onRemoveLink(link.id)}
+                                    >
+                                      Quitar
+                                    </Button>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-1 text-sm text-muted-foreground">Sin enlaces.</p>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    <div className="space-y-2 rounded-xl border border-dashed border-border p-3">
+                      <div className="flex gap-2">
+                        <select
+                          value={linkKind}
+                          onChange={(e) => setLinkKind(e.target.value as TaskLinkKind)}
+                          aria-label="Tipo de enlace"
+                          className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="interno">{TASK_LINK_KIND_LABEL.interno}</option>
+                          <option value="cliente">{TASK_LINK_KIND_LABEL.cliente}</option>
+                        </select>
+                        <Input
+                          value={linkTitle}
+                          onChange={(e) => setLinkTitle(e.target.value)}
+                          placeholder="Nombre del enlace"
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <Input
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        placeholder="https://drive.google.com/…"
+                        className="h-8 text-sm"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddLink();
+                          }
+                        }}
+                      />
+                      <div className="flex items-center justify-between">
+                        {driveEnabled ? (
+                          <Button variant="link" className="h-auto p-0 text-xs" onClick={() => setShowDrivePicker(true)}>
+                            Elegir de Google Drive
+                          </Button>
+                        ) : (
+                          <span />
+                        )}
+                        <Button variant="outline" size="sm" className="h-8" onClick={handleAddLink}>
+                          Agregar enlace
+                        </Button>
+                      </div>
+                      {linkError ? <p className="text-xs text-destructive">{linkError}</p> : null}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
               {onAddAttachment ? (
                 <section>
                   <h3 className="text-lg font-semibold text-foreground">Adjuntos</h3>
@@ -349,6 +472,15 @@ export default function TaskDrawer({
           <div className="p-6 text-sm text-muted-foreground">Cargando tarea...</div>
         )}
       </SheetContent>
+      <DrivePickerDialog
+        open={showDrivePicker}
+        onClose={() => setShowDrivePicker(false)}
+        onPick={(entry) => {
+          setLinkTitle((cur) => cur.trim() || entry.name);
+          setLinkUrl(entry.webViewLink);
+          setShowDrivePicker(false);
+        }}
+      />
     </Sheet>
   );
 }

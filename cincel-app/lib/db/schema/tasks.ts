@@ -167,6 +167,29 @@ export const taskAttachments = core.table(
   ]
 );
 
+/**
+ * Drive/web links attached to a task, split by whose they are: `interno`
+ * (the studio's own files) or `cliente` (files shared by/with the client).
+ */
+export const taskLinks = core.table(
+  "task_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    createdById: uuid("created_by_id").references(() => staff.id, { onDelete: "set null" }),
+    ...stamps,
+  },
+  (t) => [
+    check("task_links_kind_check", sql`${t.kind} in ('interno', 'cliente')`),
+    index("idx_task_links_task_id").on(t.taskId),
+  ]
+);
+
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
   project: one(projects, { fields: [tasks.projectId], references: [projects.id] }),
   template: one(workflowTaskTemplates, {
@@ -187,6 +210,7 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
   support: many(taskSupport),
   checklist: many(taskChecklistItems),
   attachments: many(taskAttachments),
+  links: many(taskLinks),
 }));
 
 export const taskSupportRelations = relations(taskSupport, ({ one }) => ({
@@ -201,4 +225,8 @@ export const taskChecklistItemsRelations = relations(taskChecklistItems, ({ one 
 export const taskAttachmentsRelations = relations(taskAttachments, ({ one }) => ({
   task: one(tasks, { fields: [taskAttachments.taskId], references: [tasks.id] }),
   uploadedBy: one(staff, { fields: [taskAttachments.uploadedById], references: [staff.id] }),
+}));
+
+export const taskLinksRelations = relations(taskLinks, ({ one }) => ({
+  task: one(tasks, { fields: [taskLinks.taskId], references: [tasks.id] }),
 }));

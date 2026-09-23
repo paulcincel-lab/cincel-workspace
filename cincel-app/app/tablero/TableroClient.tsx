@@ -20,6 +20,8 @@ import {
   setTaskStatusAction,
   addTaskCommentAction,
   addTaskAttachmentAction,
+  addTaskLinkAction,
+  removeTaskLinkAction,
   addChecklistItemAction,
   updateChecklistItemAction,
   removeChecklistItemAction,
@@ -30,6 +32,7 @@ import type {
   TaskListItem,
   TaskPriority,
   TaskStatus,
+  TaskLinkInput,
   WorkflowDetail,
 } from "@/lib/types/core";
 
@@ -202,6 +205,30 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
     if (!selectedTaskId) return;
     try {
       await addTaskCommentAction(selectedTaskId, comment);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function addLink(input: TaskLinkInput) {
+    if (!selectedTaskId) return;
+    try {
+      await addTaskLinkAction(selectedTaskId, input);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "No se pudo agregar el enlace.");
+    }
+  }
+
+  async function removeLink(linkId: string) {
+    if (!selectedTaskId) return;
+    try {
+      await removeTaskLinkAction(linkId);
       const detail = await fetchTaskAction(selectedTaskId);
       setSelectedTaskDetail(detail);
       if (detail) applyDetailUpdate(detail);
@@ -392,6 +419,8 @@ export function TableroClient({ initialBoard, workflows }: TableroClientProps) {
         onClose={() => setSelectedTaskId(null)}
         onAddComment={(comment) => void addComment(comment)}
         onAddAttachment={(file) => void addAttachment(file)}
+        onAddLink={(input) => void addLink(input)}
+        onRemoveLink={(id) => void removeLink(id)}
         onAddChecklistItem={(title) => void addChecklistItem(title)}
         onToggleChecklistItem={(item) => void toggleChecklistItem(item)}
         onRemoveChecklistItem={(item) => void removeChecklistItem(item)}

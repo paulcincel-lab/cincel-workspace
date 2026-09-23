@@ -8,12 +8,14 @@ import {
   staff,
   taskAttachments,
   taskChecklistItems,
+  taskLinks,
   taskStatuses,
   taskSupport,
   tasks,
   workflows,
 } from "@/lib/db/schema";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
+import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import type {
   HistoryEvent,
   StaffRef,
@@ -22,6 +24,8 @@ import type {
   TaskChecklistItem,
   TaskDetail,
   TaskFilters,
+  TaskLink,
+  TaskLinkInput,
   TaskListItem,
   TaskPatch,
   TaskStatus,
@@ -159,6 +163,53 @@ export async function getTaskAttachmentData(
   return row ?? null;
 }
 
+function toTaskLink(row: typeof taskLinks.$inferSelect): TaskLink {
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    kind: row.kind as TaskLink["kind"],
+    title: row.title,
+    url: row.url,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function listTaskLinks(taskId: string): Promise<TaskLink[]> {
+  const rows = await db.select().from(taskLinks).where(eq(taskLinks.taskId, taskId)).orderBy(asc(taskLinks.createdAt));
+  return rows.map(toTaskLink);
+}
+
+const TASK_LINK_KIND_LABEL = { interno: "interno", cliente: "del cliente" } as const;
+
+export async function addTaskLink(taskId: string, input: TaskLinkInput, actorId: string): Promise<TaskLink> {
+  const title = input.title.trim();
+  if (!title) throw new Error("TASK_LINK_TITLE_REQUIRED");
+  const url = normalizeTaskLinkUrl(input.url);
+  if (!url) throw new Error("TASK_LINK_URL_INVALID");
+  if (input.kind !== "interno" && input.kind !== "cliente") throw new Error("TASK_LINK_KIND_INVALID");
+
+  await loadLiveTask(taskId);
+  const [row] = await db.insert(taskLinks).values({ taskId, kind: input.kind, title, url, createdById: actorId }).returning();
+  await recordComment({
+    entity: "task",
+    entityId: taskId,
+    actorId,
+    comment: `Agregó un enlace ${TASK_LINK_KIND_LABEL[input.kind]}: ${title}`,
+  });
+  return toTaskLink(row);
+}
+
+export async function removeTaskLink(id: string, actorId: string): Promise<void> {
+  const [row] = await db.delete(taskLinks).where(eq(taskLinks.id, id)).returning();
+  if (!row) return;
+  await recordComment({
+    entity: "task",
+    entityId: row.taskId,
+    actorId,
+    comment: `Quitó un enlace ${TASK_LINK_KIND_LABEL[row.kind as TaskLink["kind"]]}: ${row.title}`,
+  });
+}
+
 const TASK_TRACKED_FIELDS = [
   "title",
   "notes",
@@ -277,12 +328,14 @@ export async function getTask(id: string): Promise<TaskDetail | null> {
     .orderBy(asc(taskChecklistItems.sortOrder));
   const history = await listHistory("task", id);
   const attachments = await listTaskAttachments(id);
+  const links = await listTaskLinks(id);
 
   return {
     ...base,
     createdBy: creator ?? { id: base.createdById, name: "" },
     checklistItems: checklist.map(toChecklistItem),
     attachments,
+    links,
     history,
   };
 }

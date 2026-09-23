@@ -378,10 +378,24 @@ export type TaskAttachment = {
   createdAt: string;
 };
 
+export type TaskLinkKind = "interno" | "cliente";
+
+export type TaskLink = {
+  id: string;
+  taskId: string;
+  kind: TaskLinkKind;
+  title: string;
+  url: string;
+  createdAt: string;
+};
+
+export type TaskLinkInput = { kind: TaskLinkKind; title: string; url: string };
+
 export type TaskDetail = TaskListItem & {
   createdBy: StaffRef;
   checklistItems: TaskChecklistItem[];
   attachments: TaskAttachment[];
+  links: TaskLink[];
   history: HistoryEvent[];
 };
 
