@@ -82,3 +82,21 @@ export function driveWebViewLink(id: string, isFolder: boolean): string {
     ? `https://drive.google.com/drive/folders/${id}`
     : `https://drive.google.com/file/d/${id}/view`;
 }
+
+/**
+ * Whether the app's proxied content route can render this MIME type inline:
+ * PDFs, raster images and plain text as-is, and Google-native docs (which the
+ * server exports to PDF). An unknown type is tried optimistically; anything
+ * else (Office files, archives…) is download-only.
+ */
+export function canPreviewInline(mimeType: string | null | undefined): boolean {
+  if (!mimeType) return true;
+  if (mimeType === "application/vnd.google-apps.folder") return false;
+  if (mimeType.startsWith("application/vnd.google-apps.")) return true;
+  return /^(application\/pdf|image\/(png|jpe?g|gif|webp|bmp)|text\/plain)$/.test(mimeType);
+}
+
+/** Same-origin URL that streams a Drive file via the caller's connected account. */
+export function driveContentUrl(fileId: string): string {
+  return `/api/google/drive/file/${encodeURIComponent(fileId)}/content`;
+}

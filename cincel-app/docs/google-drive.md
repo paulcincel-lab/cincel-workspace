@@ -140,3 +140,24 @@ Unset `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET` and redeploy — `isOauthConfigured()`
 goes false, the account bar disappears, and every caller falls back to
 impersonation. Connected accounts' rows are left in place (harmless — nothing
 reads them while unconfigured) so re-enabling later doesn't lose them.
+
+## Recursos: Drive view and account-based previews
+
+- **Drive tab** in `/recursos` (only when Drive is configured): an inline file
+  browser (`components/recursos/DriveBrowser.tsx`, the same component the
+  picker sheet uses) — folders, search, breadcrumbs and the connect / switch /
+  disconnect account bar. Clicking a file opens the preview sheet.
+- **Previews go through the app**, not `drive.google.com`. The old iframe of
+  Drive's own `/preview` page only works if the browser is already signed into
+  a Google account with access ("Sign in to your Google Account" otherwise).
+  `GET /api/google/drive/file/[id]/content` fetches the bytes as the caller's
+  connected account (or institutional identity) and streams them back; the
+  sheet iframes that same-origin URL. Google-native docs/sheets/slides are
+  exported to PDF; folders open the Drive browser at that folder.
+- Only PDFs, raster images (not SVG) and plain text render inline
+  (`INLINE_SAFE` in the route, `canPreviewInline` on the client). Everything
+  else is a forced download with `nosniff`, since this is user-controlled
+  content served from the app's own origin. Files over 25 MB are refused
+  (`MAX_PREVIEW_BYTES`, 413).
+- Resources that aren't Drive links, or any deployment without Drive
+  configured, keep the previous iframe behaviour.
