@@ -27,6 +27,8 @@ async function purgeE2ERows(): Promise<void> {
       where task_id in (select id from core.tasks where title like '%E2E%')
     `;
     await sql`delete from core.tasks where title like '%E2E%'`;
+    // Tasks pointing at them are gone above; FK is ON DELETE SET NULL anyway.
+    await sql`delete from core.task_statuses where name like '%E2E%'`;
     await sql`
       delete from core.project_members
       where project_id in (select id from core.projects where name like '%E2E%')

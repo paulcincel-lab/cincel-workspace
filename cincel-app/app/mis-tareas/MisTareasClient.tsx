@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
-import InlineEditable from "@/components/ui/InlineEditable";
 import TaskDrawer from "@/components/tareas/TaskDrawer";
 import { TaskMemberProjectFilters, matchesMemberFilter, matchesProjectFilter } from "@/components/tareas/TaskMemberProjectFilters";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
@@ -25,6 +24,7 @@ import {
   fetchMyTasksAction,
   fetchTaskAction,
   setTaskStatusAction,
+  setTaskCustomStatusAction,
   addChecklistItemAction,
   updateChecklistItemAction,
   removeChecklistItemAction,
@@ -34,23 +34,10 @@ import {
   addTaskLinkAction,
   removeTaskLinkAction,
 } from "@/lib/actions/tasks-actions";
-import type { TaskChecklistItem, TaskDetail, TaskListItem, TaskStatus, TaskLinkInput } from "@/lib/types/core";
-
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  pendiente: "Pendiente",
-  en_proceso: "En proceso",
-  completado: "Completado",
-  bloqueado: "Bloqueado",
-};
-
-const STATUS_VARIANT: Record<TaskStatus, "outline" | "secondary" | "success" | "destructive"> = {
-  pendiente: "outline",
-  en_proceso: "secondary",
-  completado: "success",
-  bloqueado: "destructive",
-};
-
-const ALL_STATUSES: TaskStatus[] = ["pendiente", "en_proceso", "completado", "bloqueado"];
+import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
+import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
+import { parseStatusValue, statusSelectItems, statusSelectValue, taskStatusLabel } from "@/lib/tasks/status-options";
+import type { TaskChecklistItem, TaskDetail, TaskListItem, TaskLinkInput, TaskStatusOption } from "@/lib/types/core";
 
 type RoleFilter = "todas" | "encargado" | "apoyo";
 
@@ -63,7 +50,15 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
+  // A built-in status or a custom one, as a status select value (see status-options.ts).
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [customStatuses, setCustomStatuses] = useState<TaskStatusOption[]>([]);
+
+  useEffect(() => {
+    fetchTaskStatusesAction()
+      .then(setCustomStatuses)
+      .catch((err) => console.error(err));
+  }, []);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("todas");
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [projectId, setProjectId] = useState("");
@@ -122,8 +117,15 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
     setSelectedTaskDetail((cur) => (cur && cur.id === updated.id ? updated : cur));
   }
 
-  async function changeStatus(task: TaskListItem, status: TaskStatus) {
-    await runAction(() => setTaskStatusAction(task.id, status), applyDetailUpdate);
+  async function changeStatus(task: TaskListItem, value: string) {
+    const parsed = parseStatusValue(value);
+    await runAction(
+      () =>
+        parsed.kind === "custom"
+          ? setTaskCustomStatusAction(task.id, parsed.id)
+          : setTaskStatusAction(task.id, parsed.status),
+      applyDetailUpdate
+    );
   }
 
   async function reorderProjectTasks(groupProjectId: string, orderedTaskIds: string[]) {
@@ -252,8 +254,8 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         t.project.name.toLowerCase().includes(query) ||
         t.title.toLowerCase().includes(query) ||
         (t.phase ?? "").toLowerCase().includes(query) ||
-        t.status.toLowerCase().includes(query);
-      const matchesStatus = !statusFilter || t.status === statusFilter;
+        taskStatusLabel(t).toLowerCase().includes(query);
+      const matchesStatus = !statusFilter || statusSelectValue(t) === statusFilter;
       const matchesRole =
         roleFilter === "todas" ||
         (roleFilter === "encargado" && isManager(t)) ||
@@ -357,28 +359,12 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
             task: { manager: task.manager, support: task.support },
             viewerId,
           });
-          if (!canChange) return <Badge variant={STATUS_VARIANT[task.status]}>{STATUS_LABEL[task.status]}</Badge>;
           return (
-            <InlineEditable
-              value={task.status}
-              onCommit={(value) => changeStatus(task, value as TaskStatus)}
-              commitOnChange
-              renderDisplay={(value) => <Badge variant={STATUS_VARIANT[value as TaskStatus]}>{STATUS_LABEL[value as TaskStatus]}</Badge>}
-              renderEditor={({ onChange, onBlur }) => (
-                <Select
-                  defaultOpen
-                  items={Object.fromEntries(ALL_STATUSES.map((s) => [s, STATUS_LABEL[s]]))}
-                  value={task.status}
-                  onValueChange={(next) => { onChange(next as string); onBlur(); }}
-                >
-                  <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {ALL_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+            <TaskStatusCell
+              task={task}
+              customStatuses={customStatuses}
+              canChange={canChange}
+              onChange={(value) => void changeStatus(task, value)}
             />
           );
         },
@@ -412,7 +398,7 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [capabilities, viewerId]);
+  }, [capabilities, viewerId, customStatuses]);
 
   // Each accordion already names the project, so the per-row Proyecto column is redundant.
   const groupedColumns = useMemo(() => columns.filter((c) => c.id !== "project"), [columns]);
@@ -435,15 +421,18 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         </Tabs>
 
         <Select
-          items={{ __all__: "Estatus", ...Object.fromEntries(ALL_STATUSES.map((s) => [s, STATUS_LABEL[s]])) }}
+          items={{
+            __all__: "Estatus",
+            ...Object.fromEntries(statusSelectItems(customStatuses).map((i) => [i.value, i.label])),
+          }}
           value={statusFilter || "__all__"}
-          onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : (v as TaskStatus))}
+          onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : (v as string))}
         >
           <SelectTrigger className="h-9 w-auto"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Estatus</SelectItem>
-            {ALL_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
+            {statusSelectItems(customStatuses).map((i) => (
+              <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>

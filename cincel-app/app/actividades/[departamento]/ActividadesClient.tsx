@@ -15,7 +15,6 @@ import { createRowActionsColumn, type RowAction } from "@/components/v2/table/Ro
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
 import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
-import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
@@ -28,10 +27,8 @@ import TaskDrawer from "@/components/tareas/TaskDrawer";
 import { DEPARTMENTOS, phasesFor } from "@/lib/actividades/departamento";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
+import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
 import {
-  BASE_STATUSES,
-  BASE_STATUS_LABEL,
-  BASE_STATUS_VARIANT,
   parseStatusValue,
   statusSelectItems,
   statusSelectValue,
@@ -69,15 +66,11 @@ import type {
   TaskListItem,
   TaskPatch,
   TaskPriority,
-  TaskStatus,
   TaskStatusOption,
   TaskLinkInput,
   WorkflowDetail,
 } from "@/lib/types/core";
 
-const STATUS_LABEL = BASE_STATUS_LABEL;
-const STATUS_VARIANT = BASE_STATUS_VARIANT;
-const ALL_STATUSES = BASE_STATUSES;
 
 const DEFAULT_PRIORITY: TaskPriority = "media";
 
@@ -111,7 +104,8 @@ export function ActividadesClient({
   const [search, setSearch] = useState("");
   const [managerFilter, setManagerFilter] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
+  // A built-in status or a custom one, as a status select value (see status-options.ts).
+  const [statusFilter, setStatusFilter] = useState<string>("");
   const [deliveryDateFilter, setDeliveryDateFilter] = useState("");
   const [view, setView] = useState<"activas" | "archivadas">("activas");
 
@@ -257,7 +251,7 @@ export function ActividadesClient({
       const matchesProject = !projectFromQuery || t.project.id === projectFromQuery;
       const matchesManager = !managerFilter || t.manager?.id === managerFilter;
       const matchesTeam = !teamFilter || t.support.some((s) => s.id === teamFilter);
-      const matchesStatus = !statusFilter || t.status === statusFilter;
+      const matchesStatus = !statusFilter || statusSelectValue(t) === statusFilter;
       const matchesDeliveryDate = !deliveryDateFilter || (t.deliveryDate || "") === deliveryDateFilter;
       return matchesSearch && matchesProject && matchesManager && matchesTeam && matchesStatus && matchesDeliveryDate;
     });
@@ -731,30 +725,12 @@ export function ActividadesClient({
             task: { manager: task.manager, support: task.support },
             viewerId,
           });
-          const badge = <Badge variant={STATUS_VARIANT[task.status]}>{taskStatusLabel(task)}</Badge>;
-          if (!canChange) return badge;
-          const items = statusSelectItems(customStatuses);
           return (
-            <InlineEditable
-              value={statusSelectValue(task)}
-              onCommit={(value) => changeStatus(task, value)}
-              commitOnChange
-              renderDisplay={() => badge}
-              renderEditor={({ onChange, onBlur }) => (
-                <Select
-                  defaultOpen
-                  items={Object.fromEntries(items.map((i) => [i.value, i.label]))}
-                  value={statusSelectValue(task)}
-                  onValueChange={(next) => { onChange(next as string); onBlur(); }}
-                >
-                  <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {items.map((i) => (
-                      <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+            <TaskStatusCell
+              task={task}
+              customStatuses={customStatuses}
+              canChange={canChange}
+              onChange={(value) => void changeStatus(task, value)}
             />
           );
         },
@@ -941,15 +917,18 @@ export function ActividadesClient({
             </Select>
 
             <Select
-              items={{ __all__: "Estatus", ...Object.fromEntries(ALL_STATUSES.map((s) => [s, STATUS_LABEL[s]])) }}
+              items={{
+                __all__: "Estatus",
+                ...Object.fromEntries(statusSelectItems(customStatuses).map((i) => [i.value, i.label])),
+              }}
               value={statusFilter || "__all__"}
-              onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : (v as TaskStatus))}
+              onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : (v as string))}
             >
               <SelectTrigger className="h-9 w-auto"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Estatus</SelectItem>
-                {ALL_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
+                {statusSelectItems(customStatuses).map((i) => (
+                  <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -11,7 +11,7 @@ import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
 import type { TaskListItem, TaskStatus } from "@/lib/types/core";
-import { taskStatusLabel } from "@/lib/tasks/status-options";
+import { statusSelectValue, taskStatusLabel } from "@/lib/tasks/status-options";
 
 interface DashboardClientProps {
   initialProjects: ProjectItem[];
@@ -106,13 +106,19 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     return { activeProjects, overdue, blocked, reviews, noOwner };
   }, [scopedProjectsData, activeTasks, today]);
 
+  // Built-in statuses always listed; custom statuses are their own rows, when in use.
   const statusMix = useMemo(() => {
     const total = activeTasks.length || 1;
-    return STATUS_ORDER.map((status) => ({
-      status,
-      count: activeTasks.filter((t) => t.status === status).length,
-      percent: (activeTasks.filter((t) => t.status === status).length / total) * 100,
-    }));
+    const rows = new Map<string, { status: string; label: string; count: number }>(
+      STATUS_ORDER.map((status) => [status, { status, label: STATUS_LABEL[status], count: 0 }])
+    );
+    activeTasks.forEach((t) => {
+      const key = statusSelectValue(t);
+      const row = rows.get(key) ?? { status: key, label: taskStatusLabel(t), count: 0 };
+      row.count += 1;
+      rows.set(key, row);
+    });
+    return [...rows.values()].map((row) => ({ ...row, percent: (row.count / total) * 100 }));
   }, [activeTasks]);
 
   const weeklyProgress = useMemo(() => {
@@ -193,7 +199,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
               <div key={s.status} className="flex items-center justify-between text-[12.5px]">
                 <span className="flex items-center gap-2">
                   <span className="size-1.5 rounded-full bg-foreground" />
-                  {STATUS_LABEL[s.status]}
+                  {s.label}
                 </span>
                 <span className="tabular-nums text-muted-foreground">{Math.round(s.percent)}%</span>
               </div>

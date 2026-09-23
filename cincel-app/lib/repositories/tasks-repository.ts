@@ -15,6 +15,7 @@ import {
   workflows,
 } from "@/lib/db/schema";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
+import { underlyingStatus } from "@/lib/repositories/task-statuses-repository";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import type {
   HistoryEvent,
@@ -304,6 +305,7 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
       workflowName: workflows.name,
       managerName: staff.name,
       customStatusName: taskStatuses.name,
+      customStatusCloses: taskStatuses.closes,
       checklistTotal: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id})::int`,
       checklistDone: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id} and c.completed)::int`,
     })
@@ -319,7 +321,10 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
   const support = await loadSupport(rows.map((r) => r.task.id));
   return rows.map((r) => ({
     ...toTask(r.task),
-    customStatus: r.task.customStatusId && r.customStatusName ? { id: r.task.customStatusId, name: r.customStatusName } : null,
+    customStatus:
+      r.task.customStatusId && r.customStatusName
+        ? { id: r.task.customStatusId, name: r.customStatusName, closes: Boolean(r.customStatusCloses) }
+        : null,
     project: { id: r.task.projectId, name: r.projectName, clientName: r.clientName },
     workflow: r.workflowId ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName! } : null,
     manager: r.task.managerId ? { id: r.task.managerId, name: r.managerName! } : null,
@@ -421,7 +426,7 @@ export async function updateTask(id: string, patch: TaskPatch, actorId: string):
   if (patch.notes !== undefined) set.notes = clean(patch.notes);
   if (patch.phase !== undefined) set.phase = clean(patch.phase);
   if (patch.priority !== undefined) set.priority = patch.priority;
-  // Picking a base status always clears the display-only custom one.
+  // Picking a built-in status leaves any custom one.
   if (patch.status !== undefined) {
     set.status = patch.status;
     set.customStatusId = null;
@@ -442,7 +447,7 @@ export async function setTaskStatus(id: string, status: TaskStatus, actorId: str
   return updateTask(id, { status }, actorId);
 }
 
-/** Select a custom status (sets base status too) or, with null, leave as-is. */
+/** Move a task into a custom status (see underlyingStatus for what `tasks.status` keeps). */
 export async function setTaskCustomStatus(
   id: string,
   customStatusId: string,
@@ -457,7 +462,7 @@ export async function setTaskCustomStatus(
   if (!cs) throw new Error("TASK_STATUS_NOT_FOUND");
   const [after] = await db
     .update(tasks)
-    .set({ status: cs.baseStatus, customStatusId: cs.id })
+    .set({ status: underlyingStatus(cs), customStatusId: cs.id })
     .where(eq(tasks.id, id))
     .returning();
   await recordChanges({ entity: "task", entityId: id, actorId, before, after, fields: TASK_TRACKED_FIELDS });

@@ -24,7 +24,7 @@ describe("task status options", () => {
   });
 
   it("lists base statuses first, then custom ones", () => {
-    const items = statusSelectItems([{ id: "x", name: "En revisión", baseStatus: "en_proceso", sortOrder: 0 }]);
+    const items = statusSelectItems([{ id: "x", name: "En revisión", closes: false, sortOrder: 0 }]);
     expect(items.map((i) => i.value)).toEqual([
       "pendiente",
       "en_proceso",

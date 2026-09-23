@@ -17,16 +17,16 @@ import { projects } from "./projects";
 import { workflows, workflowTaskTemplates } from "./workflows";
 
 /**
- * Admin-defined task statuses. Each maps to one of the four base statuses,
- * which stays the source of truth for logic and metrics; the custom one is
- * display/selection only.
+ * Admin-defined task statuses: statuses of their own, next to the four
+ * built-in ones — not variants of them. `closes` marks a status that counts
+ * as finished work (like Completado) for metrics and overdue checks.
  */
 export const taskStatuses = core.table(
   "task_statuses",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
-    baseStatus: taskStatus("base_status").notNull(),
+    closes: boolean("closes").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
     ...stamps,
     ...soft,
