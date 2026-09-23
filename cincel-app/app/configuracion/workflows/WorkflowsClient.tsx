@@ -278,7 +278,7 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
     <div>
       <PageHeader
         title="Workflows"
-        description="Plantillas de tareas por workflow — Presale, Diseño, Construcción y Decoración."
+        description="Plantillas de tareas por workflow — Presale, Diseño y Construcción."
       />
 
       <div className="space-y-6">

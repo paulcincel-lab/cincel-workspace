@@ -196,7 +196,6 @@ export default function Sidebar() {
         { label: "Presale", href: "/actividades/presale", icon: ActivityIcon },
         { label: "Taller de diseño", href: "/actividades/diseno", icon: ActivityIcon },
         { label: "Construcción", href: "/actividades/construccion", icon: ActivityIcon },
-        { label: "Decoración", href: "/actividades/decoracion", icon: ActivityIcon },
       ],
     },
     { label: "Tablero", href: "/tablero", icon: BoardIcon },

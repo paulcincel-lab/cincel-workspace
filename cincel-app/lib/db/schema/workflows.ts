@@ -12,7 +12,7 @@ import {
 import { core, soft, stamps, taskPriority } from "./_schema";
 import { areas } from "./people";
 
-/** Presale, Diseño, Construcción, Decoración, ... (Part C.3). */
+/** Presale, Diseño, Construcción, ... (Part C.3). Decoración was retired (migration 0010). */
 export const workflows = core.table(
   "workflows",
   {
