@@ -10,7 +10,7 @@ import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { BASE_STATUS_VARIANT, taskStatusLabel } from "@/lib/tasks/status-options";
-import { Button } from "@/components/ui/shadcn/button";
+import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
@@ -288,16 +288,23 @@ export default function ProjectFichaPage() {
               </Link>
             </p>
           </div>
-          {caps.canEditProjectGeneral ? (
-            isEditing ? (
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setIsEditing(false)}>Cancelar</Button>
-                <Button onClick={() => void saveEditing()}>Guardar</Button>
-              </div>
-            ) : (
-              <Button variant="outline" onClick={startEditing}>Editar</Button>
-            )
-          ) : null}
+          <div className="flex gap-2">
+            {caps.canEditProjectGeneral ? (
+              isEditing ? (
+                <>
+                  <Button variant="outline" onClick={() => setIsEditing(false)}>Cancelar</Button>
+                  <Button onClick={() => void saveEditing()}>Guardar</Button>
+                </>
+              ) : (
+                <Button variant="outline" onClick={startEditing}>Editar</Button>
+              )
+            ) : null}
+            {isEditing ? null : (
+              <Link href="/proyectos" className={buttonVariants({ variant: "outline" })}>
+                Cerrar
+              </Link>
+            )}
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">

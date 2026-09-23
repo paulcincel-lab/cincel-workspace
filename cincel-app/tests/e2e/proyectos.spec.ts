@@ -64,7 +64,12 @@ test.describe("Proyectos — create and edit", () => {
     await expect(page).toHaveURL(/\/proyectos\/[^/]+\/ficha$/, { timeout: 20_000 });
     await expect(page.getByRole("heading", { name: PROJECT_NAME })).toBeVisible({ timeout: 20_000 });
 
-    // Navigate back to the list and verify the project persists (real localStorage)
+    // The ficha's Cerrar button returns to the project list.
+    await page.getByRole("link", { name: "Cerrar" }).click();
+    await expect(page).toHaveURL(/\/proyectos$/, { timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "Proyectos", exact: true })).toBeVisible({ timeout: 15_000 });
+
+    // Verify the project persists in the list
     await page.goto(`${BASE_URL}/proyectos`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "Proyectos", exact: true })).toBeVisible({ timeout: 15_000 });
     await page.getByPlaceholder(/filtrar/i).fill(PROJECT_NAME);
