@@ -43,6 +43,13 @@
       "when": 1790124818612,
       "tag": "0005_task_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790129934189,
+      "tag": "0006_google_oauth_accounts",
+      "breakpoints": true
     }
   ]
 }

@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
+import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 import { getDrivePreviewUrl, inferLinkTypeFromUrl } from "@/lib/google/drive-url";
 import {
   createResourceLinkAction,
@@ -67,6 +68,7 @@ const SECTIONS = Object.keys(SECTION_LABEL) as ResourceSection[];
  * of the same underlying data, still gated by the same capability checks.
  */
 export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientProps) {
+  const googleConnectResult = useGoogleConnectResult();
   const [links, setLinks] = useState<ResourceLink[]>(initialLinks);
   const [section, setSection] = useState<"Todo" | ResourceSection>("Todo");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
@@ -314,6 +316,11 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
 
   return (
     <div>
+      {googleConnectResult ? (
+        <p className={`mb-3 text-sm ${googleConnectResult.success ? "text-muted-foreground" : "text-destructive"}`}>
+          {googleConnectResult.message}
+        </p>
+      ) : null}
       <PageHeader
         title="Recursos"
         description="Acceso rápido a las áreas de recursos del despacho."

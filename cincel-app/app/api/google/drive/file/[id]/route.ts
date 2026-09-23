@@ -6,7 +6,9 @@ import {
   resolveResourcesCapabilities,
 } from "@/lib/auth/permissions";
 import { isDriveConfigured } from "@/lib/google/client";
-import { getFileMeta } from "@/lib/google/drive-repository";
+import { isOauthConfigured } from "@/lib/google/oauth";
+import { getGoogleOauthAccount } from "@/lib/repositories/google-oauth-repository";
+import { getFileMeta, type DriveCaller } from "@/lib/google/drive-repository";
 
 /**
  * GET /api/google/drive/file/[id] — metadata for a single Drive file/folder.
@@ -32,27 +34,28 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (!isDriveConfigured()) {
+  if (!isDriveConfigured() && !isOauthConfigured()) {
     return NextResponse.json(
       { error: "Google Drive is not configured on this server." },
       { status: 503 }
     );
   }
 
-  const userEmail = caller.email;
-  if (!userEmail) {
+  const oauthAccount = await getGoogleOauthAccount(caller.member.id);
+  if (!oauthAccount && !caller.email) {
     return NextResponse.json(
-      { error: "Tu cuenta no tiene un correo institucional configurado." },
+      { error: "Conecta tu cuenta de Google o configura un correo institucional." },
       { status: 403 }
     );
   }
+  const driveCaller: DriveCaller = { staffId: caller.member.id, email: caller.email ?? "" };
 
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
   }
 
   try {
-    return NextResponse.json(await getFileMeta(userEmail, id));
+    return NextResponse.json(await getFileMeta(driveCaller, id));
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";
     if (message.startsWith("DRIVE_API_404")) {

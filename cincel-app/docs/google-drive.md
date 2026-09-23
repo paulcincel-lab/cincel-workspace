@@ -2,7 +2,22 @@
 
 `/recursos` and each project's ficha can browse and pick real Drive files
 instead of pasting a URL. Built in Phase 4; the auth model was corrected in
-Phase 6 to match how Cincel actually shares documents.
+Phase 6 to match how Cincel actually shares documents. A second, independent
+auth path — real OAuth account choice — was added afterward; see below.
+
+## Two ways to authenticate to Drive
+
+1. **Per-user impersonation** (service account, domain-wide delegation) —
+   always the caller's institutional email, no choice involved. Section
+   below.
+2. **Real "Sign in with Google"** (`lib/google/oauth.ts`) — a user connects
+   their own Google account (any account, personal or work) through Google's
+   real account chooser, and can switch to a different one anytime. Optional;
+   configured independently via `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`.
+
+When a user has a connected OAuth account, every Drive call in this app uses
+it; impersonation is the fallback for everyone else. See "OAuth account
+choice" below for setup and code pointers.
 
 ## Model: per-user impersonation, not a shared identity
 
@@ -67,16 +82,61 @@ no code change or redeploy needed. `isDriveConfigured()` still reports "on"
 until the env vars are also cleared, but every actual Drive call will fail and
 degrade to the picker's empty/error state.
 
-## Code
+## Code (impersonation)
 
 - `lib/google/client.ts` — `getDriveClientFor(userEmail)` builds (and caches,
   per email) a JWT impersonating that user. `isDriveConfigured()` is a static
   check of the service-account credentials only.
 - `lib/google/drive-repository.ts` — `listFolder` / `getFileMeta` /
-  `searchFiles` all take `userEmail` as their first argument.
+  `searchFiles` take a `DriveCaller` (`{ staffId, email }`); `staffId` is
+  tried against a connected OAuth account first, `email` is the impersonation
+  fallback.
 - `app/api/google/drive/{list,file/[id]}/route.ts` — resolve the caller via
-  `requireCapabilityUser()` and pass `caller.email` through. `status/route.ts`
-  stays a static "is the SA configured" check (`getSession()` only).
-- `components/recursos/DrivePickerDialog.tsx` / `lib/google/use-drive-enabled.ts`
-  — unchanged; they already just render whatever the API returns, which is
-  now naturally per-user.
+  `requireCapabilityUser()` and build the `DriveCaller` from it.
+  `status/route.ts` also reports OAuth availability and the caller's
+  connected email, for the picker's account bar.
+- `components/recursos/DrivePickerDialog.tsx` — renders that account bar
+  (connect / switch / disconnect) alongside the file browser.
+
+## OAuth account choice
+
+A staff member connects their own Google account from the account bar at the
+top of the Drive picker — "Conectar cuenta de Google". Clicking it (or later
+"Cambiar cuenta") always shows Google's real account chooser
+(`prompt=select_account consent`), so switching accounts never silently
+reuses whichever one was signed in last. "Desconectar" removes it and reverts
+that person to institutional impersonation.
+
+### 1. Google Cloud Console
+
+APIs & Services → Credentials → Create an **OAuth client ID** (Web
+application). Add `<app origin>/api/google/oauth/callback` as an authorized
+redirect URI for every environment this runs in (local, staging, prod each
+need their own origin registered).
+
+### 2. Environment
+
+```
+GOOGLE_OAUTH_CLIENT_ID=<oauth client id>
+GOOGLE_OAUTH_CLIENT_SECRET=<oauth client secret>
+```
+
+Leave both unset to keep only the service-account picker — the account bar
+doesn't render at all in that case.
+
+### 3. Storage
+
+One row per staff member in `core.google_oauth_accounts` (access token,
+refresh token, scope, expiry). Tokens are stored in plain text — this app has
+no secrets-encryption layer yet (the service-account key isn't encrypted at
+rest either); protect this table the same way as `auth_credentials`. A
+refresh happens transparently (`lib/google/oauth.ts#getOauthAccessToken`)
+whenever the stored token is within a minute of expiring, and the new token
+is persisted back.
+
+### Kill switch
+
+Unset `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET` and redeploy — `isOauthConfigured()`
+goes false, the account bar disappears, and every caller falls back to
+impersonation. Connected accounts' rows are left in place (harmless — nothing
+reads them while unconfigured) so re-enabling later doesn't lose them.

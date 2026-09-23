@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
+import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 import { useDriveEnabled } from "@/lib/google/use-drive-enabled";
 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
@@ -62,6 +63,7 @@ const PROJECT_STATUS_LABEL: Record<ProjectDetail["status"], string> = {
 export default function ProjectFichaPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
+  const googleConnectResult = useGoogleConnectResult();
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
@@ -266,6 +268,12 @@ export default function ProjectFichaPage() {
       <Sidebar />
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
+
+        {googleConnectResult ? (
+          <p className={`mb-3 text-sm ${googleConnectResult.success ? "text-muted-foreground" : "text-destructive"}`}>
+            {googleConnectResult.message}
+          </p>
+        ) : null}
 
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>

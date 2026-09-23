@@ -25,6 +25,7 @@ import {
   inferLinkTypeFromUrl,
 } from "@/lib/google/drive-url";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
+import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 import type { DriveFileMeta, Staff } from "@/lib/types/core";
 import type {
   ResourceAppliesTo,
@@ -288,6 +289,7 @@ export default function ResourcesWorkspace({
   initialLinks?: ResourceLink[];
   driveEnabled?: boolean;
 }) {
+  const googleConnectResult = useGoogleConnectResult();
   const [staff, setStaff] = useState<Staff[]>([]);
   const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>(() => initialLinks ?? []);
   const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>(() => loadRecentDocuments());
@@ -657,6 +659,11 @@ export default function ResourcesWorkspace({
         <Header />
 
         <div className="space-y-6">
+          {googleConnectResult ? (
+            <p className={`text-sm ${googleConnectResult.success ? "text-muted-foreground" : "text-destructive"}`}>
+              {googleConnectResult.message}
+            </p>
+          ) : null}
           <section className="rounded-[32px] border border-border bg-card p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
