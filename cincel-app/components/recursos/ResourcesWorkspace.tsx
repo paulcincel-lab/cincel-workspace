@@ -11,19 +11,30 @@ import { Input } from "@/components/ui/shadcn/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { canCreateResourceInSection, canDeleteResourceInSection, canViewResourceSection, resolveResourcesCapabilities } from "@/lib/auth/permissions";
+import {
+  canCreateResourceInSection,
+  canDeleteResourceInSection,
+  canEditResourceInSection,
+  canViewResourceSection,
+  resolveResourcesCapabilities,
+} from "@/lib/auth/permissions";
 import {
   createResourceLinkAction,
   deleteResourceLinkAction,
   fetchResourceLinksAction,
+  updateResourceLinkAction,
 } from "@/lib/actions/resources-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import {
+  canPreviewInline,
+  driveContentUrl,
+  getDriveId,
   getDrivePreviewUrl,
   hasDriveUrl,
   inferLinkTypeFromUrl,
 } from "@/lib/google/drive-url";
+import DriveBrowser, { type DriveBrowserEntry } from "@/components/recursos/DriveBrowser";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 import type { DriveFileMeta, Staff } from "@/lib/types/core";
@@ -297,6 +308,10 @@ export default function ResourcesWorkspace({
   const [search, setSearch] = useState("");
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [creating, setCreating] = useState<CreateDraft | null>(null);
+  // Set while the create sheet is editing an existing resource instead.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // A file opened from the overview's Drive browser, previewed in a sheet.
+  const [drivePreview, setDrivePreview] = useState<DriveBrowserEntry | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [showDrivePicker, setShowDrivePicker] = useState(false);
 
@@ -472,6 +487,57 @@ export default function ResourcesWorkspace({
     return result;
   }, [filteredLinks]);
 
+  const openEditor = (link: ResourceLink) => {
+    if (
+      !canEditResourceInSection({
+        capabilities: resourcesCapabilities,
+        section: link.section,
+        viewerId: authenticatedUser?.member.id ?? null,
+        ownerId: link.owner?.id ?? null,
+        personalForId: link.personalFor?.id ?? null,
+      })
+    ) {
+      return;
+    }
+    setCreateError(null);
+    setEditingId(link.id);
+    setCreating({
+      title: link.title,
+      url: link.url,
+      section: link.section,
+      subsection: link.subsection,
+      linkType: link.linkType,
+      appliesTo: link.appliesTo,
+      ownerId: link.owner?.id ?? null,
+      personalForId: link.personalFor?.id ?? null,
+      status: link.status,
+      drive: null,
+    });
+  };
+
+  const closeCreator = () => {
+    setCreating(null);
+    setEditingId(null);
+    setCreateError(null);
+  };
+
+  const saveEdit = async (id: string, draft: CreateDraft) => {
+    setCreateError(null);
+    try {
+      const updated = await updateResourceLinkAction(id, {
+        title: draft.title.trim(),
+        url: draft.url.trim(),
+        section: draft.section,
+        linkType: inferLinkTypeFromUrl(draft.url, draft.linkType),
+        drive: draft.drive ?? undefined,
+      });
+      setResourceLinks((current) => current.map((link) => (link.id === updated.id ? updated : link)));
+      closeCreator();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "No se pudo editar el recurso.");
+    }
+  };
+
   const openCreator = (seed: Partial<CreateDraft>) => {
     const targetSection = seed.section ?? (mode === "overview" ? "empresa" : mode);
 
@@ -490,6 +556,10 @@ export default function ResourcesWorkspace({
   const saveCreate = () => {
     if (!creating) return;
     if (!creating.title.trim() || !creating.url.trim()) return;
+    if (editingId) {
+      void saveEdit(editingId, creating);
+      return;
+    }
     if (!canCreateResourceInSection({ capabilities: resourcesCapabilities, section: creating.section })) return;
 
     void createResource({
@@ -584,6 +654,22 @@ export default function ResourcesWorkspace({
   const fallbackPageDocument = pageDocuments.find((link) => getDrivePreviewUrl(link.url, link.linkType)) ?? pageDocuments[0] ?? null;
   const pagePreviewSource = selectedPageDocument ?? fallbackPageDocument;
   const pagePreviewUrl = pagePreviewSource ? getDrivePreviewUrl(pagePreviewSource.url, pagePreviewSource.linkType) : null;
+  // With Drive configured, preview Drive links through the app as the caller's
+  // connected Google account (#433) instead of iframing drive.google.com,
+  // which only works if the browser is signed into the right account.
+  const pageDriveFileId =
+    driveEnabled && pagePreviewSource && pagePreviewSource.linkType !== "web"
+      ? (pagePreviewSource.drive?.googleFileId ?? getDriveId(pagePreviewSource.url))
+      : null;
+  const canEditPagePreview = pagePreviewSource
+    ? canEditResourceInSection({
+        capabilities: resourcesCapabilities,
+        section: pagePreviewSource.section,
+        viewerId: authenticatedUser?.member.id ?? null,
+        ownerId: pagePreviewSource.owner?.id ?? null,
+        personalForId: pagePreviewSource.personalFor?.id ?? null,
+      })
+    : false;
   const pagePreviewUnavailableReason = !pagePreviewSource
     ? `No hay recursos en ${pageLabel.toLowerCase()}.`
     : pagePreviewUrl
@@ -720,7 +806,7 @@ export default function ResourcesWorkspace({
                     <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Carpetas principales</h2>
                   </div>
                   <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
-                    5 carpetas visibles
+                    {folderTiles.length} carpetas visibles
                   </span>
                 </div>
 
@@ -768,6 +854,19 @@ export default function ResourcesWorkspace({
               </>
             )}
           </section>
+
+          {mode === "overview" && driveEnabled ? (
+            <section className="rounded-[32px] border border-border bg-card p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] lg:p-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Google Drive</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Explorar Drive</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Navega tu Drive con la cuenta de Google conectada. Haz clic en un archivo para verlo.
+              </p>
+              <div className="mt-6 flex h-[480px] flex-col overflow-hidden rounded-2xl border border-border">
+                <DriveBrowser active selectedId={drivePreview?.id ?? null} onFileClick={setDrivePreview} />
+              </div>
+            </section>
+          ) : null}
 
           {mode === "overview" ? (
             <section className="grid gap-6 xl:grid-cols-3">
@@ -872,6 +971,16 @@ export default function ResourcesWorkspace({
                           variant="outline"
                           size="sm"
                           className="h-auto rounded-full px-3 py-1.5 text-xs"
+                          disabled={!canEditPagePreview}
+                          onClick={() => pagePreviewSource && openEditor(pagePreviewSource)}
+                          title={canEditPagePreview ? `Editar ${pagePreviewSource?.title ?? ""}` : "No tienes permiso para editar este recurso"}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-auto rounded-full px-3 py-1.5 text-xs"
                           disabled={!canCreateInCurrentSection}
                           onClick={openPageCreator}
                           title={canCreateInCurrentSection ? "" : "No tienes permiso para agregar recursos en esta sección"}
@@ -919,7 +1028,26 @@ export default function ResourcesWorkspace({
                 </div>
 
                 <div className="mt-6 overflow-hidden rounded-[28px] border border-border bg-muted">
-                  {pagePreviewUrl ? (
+                  {pageDriveFileId && pagePreviewSource?.linkType === "drive_folder" ? (
+                    <div className="flex h-[620px] flex-col bg-card">
+                      <DriveBrowser active rootFolderId={pageDriveFileId} onFileClick={setDrivePreview} />
+                    </div>
+                  ) : pageDriveFileId ? (
+                    canPreviewInline(pagePreviewSource?.drive?.mimeType) ? (
+                      <iframe
+                        title={pagePreviewSource?.title ?? pageLabel}
+                        src={driveContentUrl(pageDriveFileId)}
+                        className="h-[620px] w-full"
+                      />
+                    ) : (
+                      <div className="flex h-[620px] flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
+                        <p>Este tipo de archivo no tiene vista previa en la app.</p>
+                        <a href={driveContentUrl(pageDriveFileId)} className="font-medium text-foreground underline">
+                          Descargar
+                        </a>
+                      </div>
+                    )
+                  ) : pagePreviewUrl ? (
                     <iframe
                       title={pagePreviewSource?.title ?? pageLabel}
                       src={pagePreviewUrl}
@@ -968,10 +1096,12 @@ export default function ResourcesWorkspace({
         </div>
       </section>
 
-      <Sheet open={creating !== null} onOpenChange={(next) => { if (!next) { setCreating(null); setCreateError(null); } }}>
+      <Sheet open={creating !== null} onOpenChange={(next) => { if (!next) closeCreator(); }}>
         <SheetContent className="gap-6 overflow-y-auto p-6">
-          <SheetTitle>Agregar recurso</SheetTitle>
-          <p className="text-sm text-muted-foreground">Completa la información del nuevo recurso.</p>
+          <SheetTitle>{editingId ? "Editar recurso" : "Agregar recurso"}</SheetTitle>
+          <p className="text-sm text-muted-foreground">
+            {editingId ? "Actualiza el título o el enlace del recurso." : "Completa la información del nuevo recurso."}
+          </p>
 
           {creating ? (
             <div className="space-y-3">
@@ -1019,11 +1149,11 @@ export default function ResourcesWorkspace({
           ) : null}
 
           <div className="mt-2 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => { setCreating(null); setCreateError(null); }}>
+            <Button variant="outline" onClick={closeCreator}>
               Cancelar
             </Button>
             <Button onClick={saveCreate}>
-              Crear recurso
+              {editingId ? "Guardar cambios" : "Crear recurso"}
             </Button>
           </div>
         </SheetContent>
@@ -1034,6 +1164,31 @@ export default function ResourcesWorkspace({
         onClose={() => setShowDrivePicker(false)}
         onPick={applyDrivePick}
       />
+
+      <Sheet open={drivePreview !== null} onOpenChange={(next) => { if (!next) setDrivePreview(null); }}>
+        <SheetContent className="w-[90vw] max-w-5xl p-0" side="right">
+          <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+            <SheetTitle className="truncate">{drivePreview?.name}</SheetTitle>
+            {drivePreview ? (
+              <Button variant="outline" size="sm" onClick={() => window.open(drivePreview.webViewLink, "_blank", "noopener")}>
+                Abrir en Drive
+              </Button>
+            ) : null}
+          </div>
+          {drivePreview ? (
+            canPreviewInline(drivePreview.mimeType) ? (
+              <iframe title={drivePreview.name} src={driveContentUrl(drivePreview.id)} className="h-full w-full" />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
+                <p>Este tipo de archivo no tiene vista previa en la app.</p>
+                <a href={driveContentUrl(drivePreview.id)} className="font-medium text-foreground underline">
+                  Descargar
+                </a>
+              </div>
+            )
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={removeDraft !== null} onOpenChange={(next) => { if (!next) setRemoveDraft(null); }}>
         <SheetContent className="overflow-y-auto p-6">
