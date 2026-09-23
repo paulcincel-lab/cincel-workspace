@@ -202,16 +202,15 @@ export function ActividadesClient({
     [tasks, phases, view]
   );
 
+  // "Nueva tarea" and the quick-add row list every active project, not only
+  // ones whose currentWorkflow is this department — a project already
+  // advanced to a later stage (e.g. one now in Construcción) can still need
+  // a Presale/Diseño task logged retroactively (#420 narrowed this to
+  // Diseño/Construcción only; the same problem showed up on Presale too, so
+  // it now applies to every department).
   const projectOptions = useMemo(
-    () =>
-      initialProjects
-        .filter(
-          (p) =>
-            p.status === "activo" &&
-            (departamento.allowTasksOnAnyActiveProject || !workflow || p.currentWorkflow?.id === workflow.id)
-        )
-        .map((p) => ({ id: p.id, name: p.name })),
-    [initialProjects, workflow, departamento.allowTasksOnAnyActiveProject]
+    () => initialProjects.filter((p) => p.status === "activo").map((p) => ({ id: p.id, name: p.name })),
+    [initialProjects]
   );
 
   const projectFilterOptions = useMemo(() => {

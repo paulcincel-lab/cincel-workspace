@@ -21,13 +21,6 @@ export const DEPARTMENTOS: Array<{
   label: string;
   description: string;
   template: readonly TemplateItem[];
-  /**
-   * When true, "Nueva tarea" and the quick-add row list every active
-   * project, not only the ones whose currentWorkflow is this department's.
-   * A project already advanced to a later stage (e.g. Construcción) can
-   * still need a Taller de Diseño task logged retroactively — see #420.
-   */
-  allowTasksOnAnyActiveProject?: boolean;
 }> = [
   {
     slug: "presale",
@@ -44,7 +37,6 @@ export const DEPARTMENTOS: Array<{
     label: "Taller de Diseño",
     description: "Flujo de anteproyecto, proyecto arquitectónico y ejecutivo.",
     template: disenoTemplate,
-    allowTasksOnAnyActiveProject: true,
   },
   {
     slug: "construccion",
@@ -53,7 +45,6 @@ export const DEPARTMENTOS: Array<{
     label: "Construcción",
     description: "Flujo de residencia de obra y postventa.",
     template: operativasTemplate,
-    allowTasksOnAnyActiveProject: true,
   },
   {
     slug: "decoracion",
