@@ -16,8 +16,9 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
+import DriveBrowser, { type DriveBrowserEntry } from "@/components/recursos/DriveBrowser";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
-import { getDrivePreviewUrl, inferLinkTypeFromUrl } from "@/lib/google/drive-url";
+import { canPreviewInline, driveContentUrl, getDriveId, getDrivePreviewUrl, inferLinkTypeFromUrl } from "@/lib/google/drive-url";
 import {
   createResourceLinkAction,
   deleteResourceLinkAction,
@@ -58,6 +59,7 @@ const LINK_TYPE_LABEL: Record<ResourceLink["linkType"], string> = {
 };
 
 const SECTIONS = Object.keys(SECTION_LABEL) as ResourceSection[];
+const DRIVE_TAB = "__drive__";
 
 /**
  * Was 6 separate routes (app/recursos/{mis-documentos,mis-favoritos,...})
@@ -73,6 +75,8 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
   const [section, setSection] = useState<"Todo" | ResourceSection>("Todo");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [previewLink, setPreviewLink] = useState<ResourceLink | null>(null);
+  const [driveView, setDriveView] = useState(false);
+  const [drivePreview, setDrivePreview] = useState<DriveBrowserEntry | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<ResourceLink | null>(null);
@@ -82,6 +86,38 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
   const [draftDrive, setDraftDrive] = useState<Omit<DriveFileMeta, "id"> | null>(null);
   const [showDrivePicker, setShowDrivePicker] = useState(false);
   const previewUrl = previewLink ? getDrivePreviewUrl(previewLink.url, previewLink.linkType) : null;
+
+  // One preview sheet for both a saved resource and a file opened from the
+  // inline Drive view. With Drive configured, Drive content goes through the
+  // app (as the connected Google account) instead of an iframe of drive.google.com,
+  // which only works if the browser happens to be signed into the right account.
+  const previewTarget = useMemo(() => {
+    if (drivePreview) {
+      return {
+        title: drivePreview.name,
+        openUrl: drivePreview.webViewLink,
+        fileId: drivePreview.id,
+        isFolder: false,
+        mimeType: drivePreview.mimeType,
+      };
+    }
+    if (previewLink) {
+      const isDriveLink = previewLink.linkType !== "web";
+      const fileId = isDriveLink ? (previewLink.drive?.googleFileId ?? getDriveId(previewLink.url)) : null;
+      return {
+        title: previewLink.title,
+        openUrl: previewLink.url,
+        fileId,
+        isFolder: previewLink.linkType === "drive_folder",
+        mimeType: previewLink.drive?.mimeType ?? null,
+      };
+    }
+    return null;
+  }, [drivePreview, previewLink]);
+  const closePreview = () => {
+    setPreviewLink(null);
+    setDrivePreview(null);
+  };
 
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const resourcesCapabilities = useMemo(() => resolveResourcesCapabilities(authenticatedUser), [authenticatedUser]);
@@ -339,10 +375,15 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
               </SelectContent>
             </Select>
             <Tabs
-              value={section}
+              value={driveView ? DRIVE_TAB : section}
               onValueChange={(v) => {
-                setSection(v as typeof section);
                 setSelected(new Set());
+                if (v === DRIVE_TAB) {
+                  setDriveView(true);
+                  return;
+                }
+                setDriveView(false);
+                setSection(v as typeof section);
               }}
             >
               <TabsList>
@@ -352,6 +393,7 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
                     {SECTION_LABEL[s]}
                   </TabsTrigger>
                 ))}
+                {driveEnabled ? <TabsTrigger value={DRIVE_TAB}>Drive</TabsTrigger> : null}
               </TabsList>
             </Tabs>
             <Button
@@ -364,6 +406,16 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
         }
       />
 
+      {driveView && driveEnabled ? (
+        <div className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card">
+          <DriveBrowser
+            active
+            selectedId={drivePreview?.id ?? null}
+            onFileClick={setDrivePreview}
+          />
+        </div>
+      ) : (
+        <>
       <BulkActionBar
         selectedCount={selected.size}
         itemLabel="recursos"
@@ -379,22 +431,54 @@ export function RecursosClient({ initialLinks, driveEnabled }: RecursosClientPro
         emptyMessage="No hay recursos en esta vista."
       />
 
-      <Sheet open={previewLink !== null} onOpenChange={(next) => { if (!next) setPreviewLink(null); }}>
+        </>
+      )}
+
+      <Sheet open={previewTarget !== null} onOpenChange={(next) => { if (!next) closePreview(); }}>
         <SheetContent className="w-[90vw] max-w-5xl p-0" side="right">
           <SheetHeader className="flex-row items-center justify-between gap-3 border-b border-border p-4">
-            <SheetTitle className="truncate">{previewLink?.title}</SheetTitle>
-            {previewLink ? (
+            <SheetTitle className="truncate">{previewTarget?.title}</SheetTitle>
+            {previewTarget ? (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => window.open(previewLink.url, "_blank", "noopener")}
+                onClick={() => window.open(previewTarget.openUrl, "_blank", "noopener")}
               >
                 Abrir en Drive
               </Button>
             ) : null}
           </SheetHeader>
-          {previewUrl ? (
-            <iframe title={previewLink?.title} src={previewUrl} className="h-full w-full" />
+          {previewTarget && driveEnabled && previewTarget.fileId && previewTarget.isFolder ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <DriveBrowser
+                active
+                rootFolderId={previewTarget.fileId}
+                onFileClick={(entry) => {
+                  setPreviewLink(null);
+                  setDrivePreview(entry);
+                }}
+              />
+            </div>
+          ) : previewTarget && driveEnabled && previewTarget.fileId ? (
+            canPreviewInline(previewTarget.mimeType) ? (
+              <iframe
+                title={previewTarget.title}
+                src={driveContentUrl(previewTarget.fileId)}
+                className="h-full w-full"
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
+                <p>Este tipo de archivo no tiene vista previa en la app.</p>
+                <a
+                  href={driveContentUrl(previewTarget.fileId)}
+                  className="font-medium text-foreground underline"
+                >
+                  Descargar
+                </a>
+              </div>
+            )
+          ) : previewUrl ? (
+            <iframe title={previewTarget?.title} src={previewUrl} className="h-full w-full" />
           ) : (
             <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
               No hay vista previa disponible para este recurso — usa &ldquo;Abrir en Drive&rdquo;.

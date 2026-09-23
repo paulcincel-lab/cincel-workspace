@@ -143,3 +143,49 @@ export async function searchFiles(
   });
   return (data.files ?? []).map(normalize);
 }
+
+const GOOGLE_NATIVE_PREFIX = "application/vnd.google-apps.";
+/** Largest file we'll proxy through the app for in-page preview. */
+export const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
+
+export type DriveFileContent = {
+  name: string;
+  /** What the bytes actually are — a PDF for Google-native docs, which get exported. */
+  mimeType: string;
+  body: ReadableStream<Uint8Array>;
+};
+
+/**
+ * The bytes of a file, fetched as `caller`'s connected Google account (or
+ * institutional identity), so previews work regardless of which Google
+ * account the browser happens to be signed into. Google-native docs/sheets/
+ * slides can't be downloaded directly, so they're exported as PDF.
+ */
+export async function getFileContent(caller: DriveCaller, fileId: string): Promise<DriveFileContent> {
+  const meta = await driveFetch<RawFile & { size?: string }>(
+    caller,
+    `/files/${encodeURIComponent(fileId)}`,
+    { fields: "id,name,mimeType,size" }
+  );
+  const mimeType = meta.mimeType ?? "application/octet-stream";
+  if (mimeType === FOLDER_MIME) throw new Error("DRIVE_IS_FOLDER");
+  if (meta.size && Number(meta.size) > MAX_PREVIEW_BYTES) throw new Error("DRIVE_TOO_LARGE");
+
+  const isNative = mimeType.startsWith(GOOGLE_NATIVE_PREFIX);
+  const token = await resolveAccessToken(caller);
+  const url = isNative
+    ? `${DRIVE_API}/files/${encodeURIComponent(fileId)}/export?mimeType=application/pdf`
+    : `${DRIVE_API}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`DRIVE_API_${res.status}: ${text.slice(0, 300)}`);
+  }
+
+  return {
+    name: isNative && !meta.name?.toLowerCase().endsWith(".pdf") ? `${meta.name ?? "documento"}.pdf` : (meta.name ?? "archivo"),
+    mimeType: isNative ? "application/pdf" : mimeType,
+    body: res.body,
+  };
+}
