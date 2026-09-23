@@ -83,6 +83,7 @@ export default function ProjectFichaPage() {
   }, [tasks]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [contacts, setContacts] = useState<ContactListItem[]>([]);
+  const [clients, setClients] = useState<ContactListItem[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -113,6 +114,7 @@ export default function ProjectFichaPage() {
       setTasks(taskRows);
       setStaff(staffRows);
       setContacts(contactRows.filter((c) => c.type !== "cliente"));
+      setClients(contactRows.filter((c) => c.type === "cliente"));
       setWorkflows(workflowRows);
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
@@ -163,6 +165,7 @@ export default function ProjectFichaPage() {
   function startEditing() {
     if (!project || !caps.canEditProjectGeneral) return;
     setDraft({
+      clientId: project.client.id,
       projectType: project.projectType,
       phases: project.phases,
       addressStreet: project.addressStreet,
@@ -179,6 +182,13 @@ export default function ProjectFichaPage() {
 
   async function saveEditing() {
     if (!project) return;
+    const newClient = draft.clientId && draft.clientId !== project.client.id ? clients.find((c) => c.id === draft.clientId) : null;
+    if (
+      newClient &&
+      !window.confirm(`¿Cambiar el cliente de "${project.name}" de ${project.client.name} a ${newClient.name}?`)
+    ) {
+      return;
+    }
     try {
       await updateProjectAction(project.id, draft);
       setIsEditing(false);
@@ -334,6 +344,23 @@ export default function ProjectFichaPage() {
               <h2 className="text-lg font-semibold text-foreground">Datos generales</h2>
               {isEditing ? (
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <Label className="text-sm font-normal text-muted-foreground sm:col-span-2">
+                    Cliente
+                    <Select
+                      items={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
+                      value={draft.clientId ?? project.client.id}
+                      onValueChange={(v) => setDraft((d) => ({ ...d, clientId: v as string }))}
+                    >
+                      <SelectTrigger className="mt-1 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Label>
                   <Label className="text-sm font-normal text-muted-foreground">
                     Tipo de proyecto
                     <Input

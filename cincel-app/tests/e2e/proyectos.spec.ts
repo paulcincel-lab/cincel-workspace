@@ -140,4 +140,40 @@ test.describe("Proyectos — create and edit", () => {
     await expect(row.getByText("Presale", { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(row.getByText("Diseño", { exact: true })).toBeVisible();
   });
+
+  test("the client of a project can be changed from its ficha (#453)", async ({ page }) => {
+    const stamp = Date.now();
+    const name = `Proyecto cambio cliente E2E ${stamp}`;
+    const oldClient = `Cliente viejo E2E ${stamp}`;
+    const newClient = `Cliente nuevo E2E ${stamp}`;
+    const sql = postgres(connectionString, { max: 1 });
+    let projectId = "";
+    try {
+      const [presale] = await sql`select id from core.workflows where key = 'presale' limit 1`;
+      const [old] = await sql`
+        insert into core.contacts (type, kind, name) values ('cliente', 'particular', ${oldClient}) returning id`;
+      await sql`insert into core.contacts (type, kind, name) values ('cliente', 'particular', ${newClient})`;
+      const [project] = await sql`
+        insert into core.projects (name, client_id, current_workflow_id, status)
+        values (${name}, ${old.id}, ${presale.id}, 'activo') returning id`;
+      await sql`insert into core.project_stages (project_id, workflow_id) values (${project.id}, ${presale.id})`;
+      projectId = project.id;
+    } finally {
+      await sql.end();
+    }
+
+    await page.goto(`${BASE_URL}/proyectos/${projectId}/ficha`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("link", { name: oldClient })).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole("button", { name: "Editar" }).click();
+    // First field of "Datos generales" in edit mode.
+    await page.locator("label").filter({ hasText: /^Cliente/ }).first().getByRole("combobox").click();
+    await page.getByRole("option", { name: newClient }).click();
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Guardar" }).click();
+
+    await expect(page.getByRole("link", { name: newClient })).toBeVisible({ timeout: 15_000 });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("link", { name: newClient })).toBeVisible({ timeout: 30_000 });
+  });
 });
