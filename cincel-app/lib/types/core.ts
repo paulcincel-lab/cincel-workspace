@@ -345,21 +345,22 @@ export type Task = {
   updatedAt: string;
 };
 
+/** An admin-defined status of its own; `closes` = counts as finished work. */
 export type TaskStatusOption = {
   id: string;
   name: string;
-  baseStatus: TaskStatus;
+  closes: boolean;
   sortOrder: number;
 };
 
 export type TaskStatusInput = {
   name: string;
-  baseStatus: TaskStatus;
+  closes?: boolean;
   sortOrder?: number;
 };
 
 export type TaskListItem = Task & {
-  customStatus: { id: string; name: string } | null;
+  customStatus: { id: string; name: string; closes: boolean } | null;
   project: { id: string; name: string; clientName: string };
   workflow: WorkflowRef | null;
   manager: StaffRef | null;

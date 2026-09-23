@@ -18,12 +18,22 @@ export const BASE_STATUSES: TaskStatus[] = ["pendiente", "en_proceso", "completa
 
 const CUSTOM_PREFIX = "custom:";
 
+/** Badge variant for a custom status: finished ones read as done, the rest as in progress. */
+export function customStatusVariant(status: { closes: boolean }): "success" | "secondary" {
+  return status.closes ? "success" : "secondary";
+}
+
+/** Select value (and Tablero column key) for a custom status. */
+export function customStatusValue(id: string): string {
+  return CUSTOM_PREFIX + id;
+}
+
 /** Select value for a task: its custom status when set, else its base status. */
 export function statusSelectValue(task: {
   status: TaskStatus;
   customStatus?: { id: string } | null;
 }): string {
-  return task.customStatus ? CUSTOM_PREFIX + task.customStatus.id : task.status;
+  return task.customStatus ? customStatusValue(task.customStatus.id) : task.status;
 }
 
 export type ParsedStatusValue =
@@ -45,6 +55,6 @@ export function taskStatusLabel(task: { status: TaskStatus; customStatus?: { nam
 export function statusSelectItems(custom: TaskStatusOption[]): Array<{ value: string; label: string }> {
   return [
     ...BASE_STATUSES.map((s) => ({ value: s, label: BASE_STATUS_LABEL[s] })),
-    ...custom.map((c) => ({ value: CUSTOM_PREFIX + c.id, label: c.name })),
+    ...custom.map((c) => ({ value: customStatusValue(c.id), label: c.name })),
   ];
 }

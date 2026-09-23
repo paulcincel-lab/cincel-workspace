@@ -7,14 +7,8 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Label } from "@/components/ui/shadcn/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/shadcn/select";
 import {
   Dialog,
   DialogContent,
@@ -31,12 +25,8 @@ import {
   fetchTaskStatusesAction,
   updateTaskStatusAction,
 } from "@/lib/actions/task-statuses-actions";
-import {
-  BASE_STATUSES,
-  BASE_STATUS_LABEL,
-  BASE_STATUS_VARIANT,
-} from "@/lib/tasks/status-options";
-import type { TaskStatus, TaskStatusOption } from "@/lib/types/core";
+import { customStatusVariant } from "@/lib/tasks/status-options";
+import type { TaskStatusOption } from "@/lib/types/core";
 
 const ERROR_MESSAGES: Record<string, string> = {
   TASK_STATUS_NAME_REQUIRED: "El nombre del estatus es obligatorio.",
@@ -63,7 +53,7 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
   const [showEditor, setShowEditor] = useState(false);
   const [editing, setEditing] = useState<TaskStatusOption | null>(null);
   const [name, setName] = useState("");
-  const [baseStatus, setBaseStatus] = useState<TaskStatus>("pendiente");
+  const [closes, setCloses] = useState(false);
   const [formError, setFormError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -79,7 +69,7 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
   function openEditor(status: TaskStatusOption | null) {
     setEditing(status);
     setName(status?.name ?? "");
-    setBaseStatus(status?.baseStatus ?? "pendiente");
+    setCloses(status?.closes ?? false);
     setFormError("");
     setShowEditor(true);
   }
@@ -93,11 +83,11 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
     setFormError("");
     try {
       if (editing)
-        await updateTaskStatusAction(editing.id, { name, baseStatus });
+        await updateTaskStatusAction(editing.id, { name, closes });
       else
         await createTaskStatusAction({
           name,
-          baseStatus,
+          closes,
           sortOrder: statuses.length,
         });
       await refresh();
@@ -112,7 +102,7 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
   async function remove(status: TaskStatusOption) {
     if (
       !window.confirm(
-        `¿Eliminar el estatus "${status.name}"? Las tareas que lo usan volverán a su estatus base (${BASE_STATUS_LABEL[status.baseStatus]}).`,
+        `¿Eliminar el estatus "${status.name}"? Las tareas que lo usan pasarán a "${status.closes ? "Completado" : "En proceso"}".`,
       )
     ) {
       return;
@@ -127,17 +117,17 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
         accessorKey: "name",
         header: "Estatus",
         cell: ({ row }) => (
-          <Badge variant={BASE_STATUS_VARIANT[row.original.baseStatus]}>
+          <Badge variant={customStatusVariant(row.original)}>
             {row.original.name}
           </Badge>
         ),
       },
       {
-        id: "base",
-        header: "Estatus base",
+        id: "closes",
+        header: "Cierra la tarea",
         cell: ({ row }) => (
           <span className="text-sm text-foreground">
-            {BASE_STATUS_LABEL[row.original.baseStatus]}
+            {row.original.closes ? "Sí" : "No"}
           </span>
         ),
       },
@@ -168,8 +158,8 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
               Estatus de tareas
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Estatus personalizados para las tareas. Cada uno se mapea a un
-              estatus base, que se usa para métricas y reportes.
+              Estatus propios para las tareas, además de Pendiente, En proceso,
+              Completado y Bloqueado. Cada uno tiene su columna en el Tablero.
             </p>
           </div>
           {capabilities.canManageTaskStatuses ? (
@@ -208,27 +198,19 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Estatus base</Label>
-              <Select
-                items={Object.fromEntries(
-                  BASE_STATUSES.map((s) => [s, BASE_STATUS_LABEL[s]]),
-                )}
-                value={baseStatus}
-                onValueChange={(v) => setBaseStatus(v as TaskStatus)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BASE_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {BASE_STATUS_LABEL[s]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                checked={closes}
+                onCheckedChange={(checked) => setCloses(Boolean(checked))}
+              />
+              <span>
+                Cuenta como terminado
+                <span className="block text-muted-foreground">
+                  Las tareas en este estatus cuentan como completadas en
+                  métricas y dejan de vencer.
+                </span>
+              </span>
+            </label>
             {formError ? (
               <p className="text-sm text-destructive">{formError}</p>
             ) : null}

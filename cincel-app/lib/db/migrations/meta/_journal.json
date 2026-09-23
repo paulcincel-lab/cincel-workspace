@@ -92,6 +92,13 @@
       "when": 1790197791079,
       "tag": "0012_google_calendar_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790202744329,
+      "tag": "0013_standalone_task_statuses",
+      "breakpoints": true
     }
   ]
 }
