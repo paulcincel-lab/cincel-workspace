@@ -13,6 +13,8 @@ import { BASE_STATUS_VARIANT, taskStatusLabel } from "@/lib/tasks/status-options
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { normalizePhases, projectPhaseOptions } from "@/lib/proyectos/phases";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
@@ -23,7 +25,7 @@ import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import {
   fetchProjectAction,
   updateProjectAction,
-  setProjectStageAction,
+  setProjectStagesAction,
   setProjectMembersAction,
   setProjectContactsAction,
   setProjectLinkAction,
@@ -89,6 +91,7 @@ export default function ProjectFichaPage() {
   const [drivePickerFor, setDrivePickerFor] = useState<string | null>(null);
   const [applyPreview, setApplyPreview] = useState<ApplyWorkflowPreview | null>(null);
   const [applyWorkflowId, setApplyWorkflowId] = useState("");
+  const [customPhase, setCustomPhase] = useState("");
   const driveEnabled = useDriveEnabled();
   const authenticatedUser = getCurrentAuthenticatedUser();
   const caps = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
@@ -161,7 +164,7 @@ export default function ProjectFichaPage() {
     if (!project || !caps.canEditProjectGeneral) return;
     setDraft({
       projectType: project.projectType,
-      phase: project.phase,
+      phases: project.phases,
       addressStreet: project.addressStreet,
       addressCity: project.addressCity,
       addressState: project.addressState,
@@ -185,14 +188,32 @@ export default function ProjectFichaPage() {
     }
   }
 
-  async function changeStage(workflowId: string) {
+  async function toggleStage(workflowId: string) {
     if (!project) return;
+    const current = project.stages.map((s) => s.id);
+    const next = current.includes(workflowId) ? current.filter((id) => id !== workflowId) : [...current, workflowId];
+    if (next.length === 0) return; // a project always keeps at least one stage
     try {
-      await setProjectStageAction(project.id, workflowId);
+      await setProjectStagesAction(project.id, next);
       await reload();
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
     }
+  }
+
+  function toggleDraftPhase(phase: string) {
+    setDraft((d) => {
+      const current = d.phases ?? [];
+      const has = current.some((p) => p.toLowerCase() === phase.toLowerCase());
+      return { ...d, phases: has ? current.filter((p) => p.toLowerCase() !== phase.toLowerCase()) : [...current, phase] };
+    });
+  }
+
+  function addCustomPhase() {
+    const value = customPhase.trim();
+    if (!value) return;
+    setDraft((d) => ({ ...d, phases: normalizePhases([...(d.phases ?? []), value]) }));
+    setCustomPhase("");
   }
 
   async function toggleMember(staffId: string) {
@@ -321,14 +342,37 @@ export default function ProjectFichaPage() {
                       className="mt-1"
                     />
                   </Label>
-                  <Label className="text-sm font-normal text-muted-foreground">
-                    Fase
-                    <Input
-                      value={draft.phase ?? ""}
-                      onChange={(e) => setDraft((d) => ({ ...d, phase: e.target.value }))}
-                      className="mt-1"
-                    />
-                  </Label>
+                  <fieldset className="text-sm text-muted-foreground sm:col-span-2">
+                    <legend>Fases (puedes elegir varias)</legend>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                      {projectPhaseOptions(draft.phases ?? []).map((phase) => (
+                        <label key={phase} className="flex items-center gap-2 text-foreground">
+                          <Checkbox
+                            checked={(draft.phases ?? []).some((p) => p.toLowerCase() === phase.toLowerCase())}
+                            onCheckedChange={() => toggleDraftPhase(phase)}
+                          />
+                          {phase}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <Input
+                        value={customPhase}
+                        onChange={(e) => setCustomPhase(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addCustomPhase();
+                          }
+                        }}
+                        placeholder="Otra fase…"
+                        className="h-8 max-w-xs"
+                      />
+                      <Button type="button" variant="outline" size="sm" className="h-8" onClick={addCustomPhase}>
+                        Agregar fase
+                      </Button>
+                    </div>
+                  </fieldset>
                   <Label className="text-sm font-normal text-muted-foreground">
                     Calle
                     <Input
@@ -376,7 +420,14 @@ export default function ProjectFichaPage() {
               ) : (
                 <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
                   <div><dt className="text-muted-foreground">Tipo</dt><dd>{project.projectType || "—"}</dd></div>
-                  <div><dt className="text-muted-foreground">Fase</dt><dd>{project.phase || "—"}</dd></div>
+                  <div>
+                    <dt className="text-muted-foreground">Fases</dt>
+                    <dd className="mt-0.5 flex flex-wrap gap-1">
+                      {project.phases.length > 0
+                        ? project.phases.map((phase) => <Badge key={phase} variant="outline">{phase}</Badge>)
+                        : "—"}
+                    </dd>
+                  </div>
                   <div><dt className="text-muted-foreground">Dirección</dt><dd>{[project.addressStreet, project.addressCity, project.addressState].filter(Boolean).join(", ") || "—"}</dd></div>
                   <div><dt className="text-muted-foreground">Inicio</dt><dd>{project.startDate || "—"}</dd></div>
                   <div><dt className="text-muted-foreground">Encargado</dt><dd>{project.manager?.name ?? "Sin encargado"}</dd></div>
@@ -387,23 +438,29 @@ export default function ProjectFichaPage() {
 
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-foreground">Etapa</h2>
-                <Badge variant="outline">{project.currentWorkflow?.name ?? "Sin etapa"}</Badge>
+                <h2 className="text-lg font-semibold text-foreground">Etapas</h2>
+                <div className="flex flex-wrap gap-1">
+                  {project.stages.length > 0
+                    ? project.stages.map((stage) => <Badge key={stage.id} variant="outline">{stage.name}</Badge>)
+                    : <Badge variant="outline">Sin etapa</Badge>}
+                </div>
               </div>
               {caps.canChangeProjectStage ? (
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2" role="group" aria-label="Etapas del proyecto">
+                  {workflows.map((w) => {
+                    const checked = project.stages.some((s) => s.id === w.id);
+                    const isOnlyStage = checked && project.stages.length === 1;
+                    return (
+                      <label key={w.id} className="flex items-center gap-2 text-sm text-foreground" title={isOnlyStage ? "Un proyecto necesita al menos una etapa" : undefined}>
+                        <Checkbox checked={checked} disabled={isOnlyStage} onCheckedChange={() => void toggleStage(w.id)} />
+                        {w.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {caps.canChangeProjectStage ? (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <Select
-                    items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
-                    value={project.currentWorkflow?.id ?? ""}
-                    onValueChange={(v) => void changeStage(v as string)}
-                  >
-                    <SelectTrigger className="w-56"><SelectValue placeholder="Cambiar etapa" /></SelectTrigger>
-                    <SelectContent>
-                      {workflows.map((w) => (
-                        <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                   <Select
                     items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
                     value={applyWorkflowId}

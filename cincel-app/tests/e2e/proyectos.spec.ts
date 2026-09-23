@@ -21,17 +21,25 @@ function fieldContainer(page: Page, labelText: string) {
   return page.locator("label").filter({ hasText: labelText }).last();
 }
 
-/** Seeds a client contact directly (skips the directorio UI, out of scope here). */
+/**
+ * Seeds a client contact directly (skips the directorio UI, out of scope here).
+ * Memoized: every test's beforeEach calls it with the same per-run name, and a
+ * second insert would hit contacts_type_name_lower_uq.
+ */
+let clientSeeded: Promise<void> | null = null;
 async function seedClient(): Promise<void> {
-  const sql = postgres(connectionString, { max: 1 });
-  try {
-    await sql`
-      insert into core.contacts (type, kind, name)
-      values ('cliente', 'empresa', ${CLIENT_NAME})
-    `;
-  } finally {
-    await sql.end();
-  }
+  clientSeeded ??= (async () => {
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      await sql`
+        insert into core.contacts (type, kind, name)
+        values ('cliente', 'empresa', ${CLIENT_NAME})
+      `;
+    } finally {
+      await sql.end();
+    }
+  })();
+  return clientSeeded;
 }
 
 test.describe("Proyectos — create and edit", () => {
@@ -74,5 +82,62 @@ test.describe("Proyectos — create and edit", () => {
     await expect(page.getByRole("heading", { name: "Proyectos", exact: true })).toBeVisible({ timeout: 15_000 });
     await page.getByPlaceholder(/filtrar/i).fill(PROJECT_NAME);
     await expect(page.getByText(PROJECT_NAME).first()).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("a project can be in several stages and have several phases (#435)", async ({ page }) => {
+    const name = `Proyecto multietapa E2E ${Date.now()}`;
+    const sql = postgres(connectionString, { max: 1 });
+    let projectId = "";
+    try {
+      const [presale] = await sql`select id from core.workflows where key = 'presale' limit 1`;
+      const [client] = await sql`
+        insert into core.contacts (type, kind, name) values ('cliente', 'particular', ${`Cliente multietapa E2E ${Date.now()}`}) returning id`;
+      const [project] = await sql`
+        insert into core.projects (name, client_id, current_workflow_id, status)
+        values (${name}, ${client.id}, ${presale.id}, 'activo') returning id`;
+      await sql`insert into core.project_stages (project_id, workflow_id) values (${project.id}, ${presale.id})`;
+      projectId = project.id;
+    } finally {
+      await sql.end();
+    }
+
+    await page.goto(`${BASE_URL}/proyectos/${projectId}/ficha`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name })).toBeVisible({ timeout: 30_000 });
+
+    const stages = page.getByRole("group", { name: "Etapas del proyecto" });
+    const stageBox = (label: string) => stages.locator("label").filter({ hasText: label }).getByRole("checkbox");
+
+    // The only stage can't be unticked.
+    await expect(stageBox("Presale")).toBeChecked();
+    await expect(stageBox("Presale")).toBeDisabled();
+
+    // Add Diseño in parallel: both are shown and Presale becomes untickable.
+    await stageBox("Diseño").click();
+    await expect(stageBox("Diseño")).toBeChecked({ timeout: 15_000 });
+    await expect(stageBox("Presale")).toBeEnabled();
+
+    // Several phases: tick a known one, add a custom one, save.
+    await page.getByRole("button", { name: "Editar" }).click();
+    const phases = page.locator("fieldset").filter({ hasText: "Fases" });
+    await phases.locator("label").filter({ hasText: /^Inicial$/ }).getByRole("checkbox").click();
+    await phases.getByPlaceholder("Otra fase…").fill("Fase especial E2E");
+    await phases.getByRole("button", { name: "Agregar fase" }).click();
+    await page.getByRole("button", { name: "Guardar" }).click();
+
+    // Persisted after reload.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name })).toBeVisible({ timeout: 30_000 });
+    await expect(stageBox("Presale")).toBeChecked();
+    await expect(stageBox("Diseño")).toBeChecked();
+    const phaseList = page.locator("dd").filter({ hasText: "Fase especial E2E" });
+    await expect(phaseList.getByText("Inicial", { exact: true })).toBeVisible();
+    await expect(phaseList.getByText("Fase especial E2E", { exact: true })).toBeVisible();
+
+    // The project list shows every stage.
+    await page.goto(`${BASE_URL}/proyectos`, { waitUntil: "domcontentloaded" });
+    await page.getByPlaceholder(/filtrar/i).fill(name);
+    const row = page.getByRole("row").filter({ hasText: name });
+    await expect(row.getByText("Presale", { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(row.getByText("Diseño", { exact: true })).toBeVisible();
   });
 });
