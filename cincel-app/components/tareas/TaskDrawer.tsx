@@ -18,6 +18,15 @@ const STATUS_LABEL: Record<TaskDetail["status"], string> = {
   bloqueado: "Bloqueado",
 };
 
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+const ATTACHMENT_ACCEPT = "image/*,.txt,text/plain";
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 type Props = {
   open: boolean;
   task: TaskDetail | null;
@@ -28,6 +37,8 @@ type Props = {
   onRemoveChecklistItem: (item: TaskChecklistItem) => void;
   /** Reorders the checklist to the given id order (top to bottom). Optional so other callers can skip it. */
   onReorderChecklist?: (orderedIds: string[]) => void;
+  /** Uploads a file as a task comment (#425). Optional — the attach control is hidden when omitted. */
+  onAddAttachment?: (file: File) => void;
   /** Active staff available to assign as support. Optional — support editing is hidden when omitted. */
   staffOptions?: StaffRef[];
   onChangeSupport?: (staffIds: string[]) => void;
@@ -42,11 +53,13 @@ export default function TaskDrawer({
   onToggleChecklistItem,
   onRemoveChecklistItem,
   onReorderChecklist,
+  onAddAttachment,
   staffOptions = [],
   onChangeSupport,
 }: Props) {
   const [newNote, setNewNote] = useState("");
   const [newChecklistItem, setNewChecklistItem] = useState("");
+  const [attachmentError, setAttachmentError] = useState("");
 
   const nameToStaffId = useMemo(() => new Map(staffOptions.map((s) => [s.name, s.id])), [staffOptions]);
   const staffNames = useMemo(() => staffOptions.map((s) => s.name), [staffOptions]);
@@ -68,6 +81,25 @@ export default function TaskDrawer({
     if (!trimmed) return;
     onAddChecklistItem(trimmed);
     setNewChecklistItem("");
+  };
+
+  const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !onAddAttachment) return;
+
+    const isAllowedType = file.type.startsWith("image/") || file.type === "text/plain";
+    if (!isAllowedType) {
+      setAttachmentError("Solo se permiten imágenes o archivos .txt.");
+      return;
+    }
+    if (file.size > ATTACHMENT_MAX_BYTES) {
+      setAttachmentError("El archivo supera el límite de 10MB.");
+      return;
+    }
+
+    setAttachmentError("");
+    onAddAttachment(file);
   };
 
   const moveChecklistItem = (item: TaskChecklistItem, direction: "up" | "down") => {
@@ -260,9 +292,51 @@ export default function TaskDrawer({
                   </div>
                 </section>
               ) : null}
-              {/* Per-task attachments have no equivalent in the new schema (file links
-                  now live only at the project level via ProjectLink) — dropped rather
-                  than faked. */}
+
+              {onAddAttachment ? (
+                <section>
+                  <h3 className="text-lg font-semibold text-foreground">Adjuntos</h3>
+                  <div className="mt-3 space-y-3 rounded-2xl border border-border p-4">
+                    {task.attachments.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {task.attachments.map((attachment) => {
+                          const href = `/api/tareas/${task.id}/adjuntos/${attachment.id}`;
+                          const isImage = attachment.mimeType.startsWith("image/");
+                          return (
+                            <a
+                              key={attachment.id}
+                              href={href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="group rounded-xl border border-border p-2 text-xs hover:border-primary"
+                              title={attachment.fileName}
+                            >
+                              {isImage ? (
+                                // eslint-disable-next-line @next/next/no-img-element -- arbitrary uploaded content, not an optimizable static asset
+                                <img src={href} alt={attachment.fileName} className="h-20 w-full rounded-lg object-cover" />
+                              ) : (
+                                <div className="flex h-20 w-full items-center justify-center rounded-lg bg-muted text-2xl">📄</div>
+                              )}
+                              <p className="mt-1 truncate font-medium text-foreground group-hover:underline">{attachment.fileName}</p>
+                              <p className="text-muted-foreground">{formatBytes(attachment.sizeBytes)}</p>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Sin archivos adjuntos.</p>
+                    )}
+
+                    <div>
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:border-primary hover:text-foreground">
+                        + Adjuntar imagen o .txt (máx. 10MB)
+                        <input type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={handleAttachmentChange} />
+                      </label>
+                      {attachmentError ? <p className="mt-2 text-xs text-destructive">{attachmentError}</p> : null}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
             </div>
 
             <SheetFooter>
