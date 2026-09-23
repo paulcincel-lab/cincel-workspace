@@ -51,6 +51,25 @@ function defaultTimeByType(type: CalendarEventType): string {
   return "08:00";
 }
 
+/**
+ * Tasks only store dates, not times, so the calendar has always had to
+ * synthesize one for display/sorting. A fixed hour per event type (e.g.
+ * every Compromiso always at 09:00) doesn't reflect when the task was
+ * actually created and clusters unrelated tasks at the same arbitrary slot —
+ * use the task's own creation time instead, falling back to the old
+ * per-type constant only if that timestamp is somehow unparseable.
+ */
+function defaultTimeFor(task: TaskListItem, type: CalendarEventType): string {
+  const created = new Date(task.createdAt);
+  if (Number.isNaN(created.getTime())) {
+    return defaultTimeByType(type);
+  }
+
+  const hours = String(created.getHours()).padStart(2, "0");
+  const minutes = String(created.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
 function inferAdditionalType(task: TaskListItem): CalendarEventType | null {
   const phase = (task.phase || "").toLowerCase();
 
@@ -101,7 +120,7 @@ export function buildCalendarEvents(tasks: TaskListItem[]): CalendarEvent[] {
         id: `${suffix}-${workflowKey ?? "sin-area"}-${task.id}-${date}`,
         taskId: task.id,
         date,
-        time: defaultTimeByType(type),
+        time: defaultTimeFor(task, type),
         title: eventTitle(task, type),
         project: task.project.name,
         responsible: task.manager?.name || "Sin responsable",
