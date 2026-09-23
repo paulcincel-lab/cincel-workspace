@@ -161,3 +161,33 @@ reads them while unconfigured) so re-enabling later doesn't lose them.
   (`MAX_PREVIEW_BYTES`, 413).
 - Resources that aren't Drive links, or any deployment without Drive
   configured, keep the previous iframe behaviour.
+
+## Google Calendar sync (#434)
+
+Two ways to get tasks (compromisos, revisiones, entregas) into Google
+Calendar, both from Calendario → "Sincronizar con Google Calendar":
+
+1. **Direct sync** (needs the OAuth client above). The user connects their
+   Google account with the extra scope
+   `https://www.googleapis.com/auth/calendar.app.created`, requested only at
+   that moment (`/api/google/oauth/start?scope=calendar`, an incremental grant
+   with `include_granted_scopes`). That scope only lets the app see and edit
+   calendars it created — never the rest of the user's agenda. The app creates
+   a calendar named "Cincel" and pushes one all-day event per task date.
+2. **Subscription link** (ICS, always available). A private URL Google polls
+   every few hours; see `app/api/calendario/feed/[file]/route.ts`.
+
+Direct sync is one-way (the app is the source of truth) and incremental:
+`google_calendar_events` stores which Google event mirrors which app event
+plus a hash of what was pushed, so a sync only creates, patches or deletes
+what changed (`lib/google/calendar-sync.ts`). It runs when the user presses
+"Sincronizar ahora" and automatically when they open Calendario (at most every
+5 minutes). If the user deletes the "Cincel" calendar in Google, the next sync
+creates a new one; events deleted by hand are put back when they change.
+Turning sync off leaves the calendar in Google.
+
+### Google Cloud Console
+
+Enable the **Google Calendar API** in the same project as the OAuth client,
+and add the `calendar.app.created` scope to the OAuth consent screen. No new
+environment variables.

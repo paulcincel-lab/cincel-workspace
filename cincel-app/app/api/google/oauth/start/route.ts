@@ -4,7 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { buildAuthUrl } from "@/lib/google/oauth";
+import { CALENDAR_SCOPE, buildAuthUrl } from "@/lib/google/oauth";
 
 export const OAUTH_STATE_COOKIE = "google_oauth_state";
 export const OAUTH_RETURN_TO_COOKIE = "google_oauth_return_to";
@@ -24,7 +24,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const redirectUri = new URL("/api/google/oauth/callback", request.nextUrl.origin).toString();
   const state = randomBytes(24).toString("hex");
-  const authUrl = buildAuthUrl(redirectUri, state);
+  // `?scope=calendar` adds Google Calendar access on top of Drive (#434).
+  const extraScopes = request.nextUrl.searchParams.get("scope") === "calendar" ? [CALENDAR_SCOPE] : [];
+  const authUrl = buildAuthUrl(redirectUri, state, { extraScopes });
   if (!authUrl) {
     return NextResponse.json({ error: "Google OAuth is not configured on this server." }, { status: 503 });
   }
