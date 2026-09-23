@@ -85,6 +85,13 @@
       "when": 1790197014147,
       "tag": "0011_project_stages_and_phases",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790197791079,
+      "tag": "0012_google_calendar_sync",
+      "breakpoints": true
     }
   ]
 }

@@ -151,3 +151,12 @@ describe("getOauthAccessToken", () => {
     expect(getGoogleOauthAccountMock).not.toHaveBeenCalled();
   });
 });
+
+describe("calendar scope", () => {
+  it("hasScope matches a whole scope in a space-separated list", async () => {
+    const { hasScope, CALENDAR_SCOPE } = await import("@/lib/google/oauth");
+    expect(hasScope(`openid ${CALENDAR_SCOPE} email`, CALENDAR_SCOPE)).toBe(true);
+    expect(hasScope("openid email", CALENDAR_SCOPE)).toBe(false);
+    expect(hasScope(null, CALENDAR_SCOPE)).toBe(false);
+  });
+});

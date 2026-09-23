@@ -17,6 +17,17 @@ import {
  */
 const SCOPES = ["https://www.googleapis.com/auth/drive.readonly", "openid", "email"];
 
+/**
+ * Asked for only when someone turns on Google Calendar sync (#434), as an
+ * incremental grant — Drive-only users are never asked for calendar access.
+ */
+export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
+
+/** Whether a stored space-separated OAuth scope string includes `scope`. */
+export function hasScope(granted: string | null | undefined, scope: string): boolean {
+  return (granted ?? "").split(/\s+/).includes(scope);
+}
+
 function credentials(): { clientId: string; clientSecret: string } | null {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
@@ -40,12 +51,18 @@ function client(redirectUri: string): OAuth2Client | null {
  * guarantees a refresh_token comes back, so reconnecting with a different
  * account always works cleanly.
  */
-export function buildAuthUrl(redirectUri: string, state: string): string | null {
+export function buildAuthUrl(
+  redirectUri: string,
+  state: string,
+  options: { extraScopes?: string[] } = {}
+): string | null {
   const oauth2 = client(redirectUri);
   if (!oauth2) return null;
   return oauth2.generateAuthUrl({
     access_type: "offline",
-    scope: SCOPES,
+    scope: [...SCOPES, ...(options.extraScopes ?? [])],
+    // Keep previously granted scopes (e.g. Drive) when adding Calendar.
+    include_granted_scopes: true,
     prompt: "select_account consent",
     state,
   });

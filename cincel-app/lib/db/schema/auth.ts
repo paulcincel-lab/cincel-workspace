@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { core, stamps } from "./_schema";
 import { staff } from "./people";
 
@@ -80,3 +80,37 @@ export const calendarFeedTokens = core.table("calendar_feed_tokens", {
   tokenHash: text("token_hash").notNull().unique(),
   ...stamps,
 });
+
+/**
+ * Google Calendar sync state per staff member (#434): the dedicated "Cincel"
+ * calendar created in their Google account, and the last sync outcome.
+ */
+export const googleCalendarSyncs = core.table("google_calendar_syncs", {
+  staffId: uuid("staff_id")
+    .primaryKey()
+    .references(() => staff.id, { onDelete: "cascade" }),
+  calendarId: text("calendar_id"),
+  enabled: boolean("enabled").notNull().default(true),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  ...stamps,
+});
+
+/**
+ * Which Google event mirrors which app calendar event (keyed by the stable id
+ * `buildCalendarEvents` produces), plus a hash of what was last pushed so a
+ * sync only touches events that actually changed.
+ */
+export const googleCalendarEvents = core.table(
+  "google_calendar_events",
+  {
+    staffId: uuid("staff_id")
+      .notNull()
+      .references(() => staff.id, { onDelete: "cascade" }),
+    eventKey: text("event_key").notNull(),
+    googleEventId: text("google_event_id").notNull(),
+    contentHash: text("content_hash").notNull(),
+    ...stamps,
+  },
+  (t) => [primaryKey({ columns: [t.staffId, t.eventKey] })]
+);

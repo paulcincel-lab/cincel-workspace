@@ -14,11 +14,122 @@ import {
 } from "@/components/ui/shadcn/dialog";
 import {
   disableCalendarFeedAction,
+  disableGoogleCalendarSyncAction,
+  enableGoogleCalendarSyncAction,
   fetchCalendarFeedStatusAction,
+  fetchGoogleCalendarSyncStatusAction,
   generateCalendarFeedAction,
+  syncGoogleCalendarAction,
+  type GoogleCalendarSyncStatus,
 } from "@/lib/actions/calendar-actions";
 
 type Props = { open: boolean; onClose: () => void };
+
+function formatSyncedAt(iso: string): string {
+  return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * Direct sync (#434): with the user's own Google account connected (Calendar
+ * scope), tasks are pushed into a "Cincel" calendar the app creates there —
+ * updates land within minutes instead of Google's hours-long ICS polling.
+ */
+function GoogleCalendarSyncSection({ open }: { open: boolean }) {
+  const [status, setStatus] = useState<GoogleCalendarSyncStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const refresh = () =>
+    fetchGoogleCalendarSyncStatusAction()
+      .then(setStatus)
+      .catch(() => setError("No se pudo consultar la sincronización."));
+
+  useEffect(() => {
+    if (open) void refresh();
+  }, [open]);
+
+  async function run(action: () => Promise<{ ok: boolean; error?: string } | null | void>, done: string) {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const outcome = await action();
+      if (outcome && !outcome.ok) setError(outcome.error ?? "No se pudo sincronizar.");
+      else setMessage(done);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo sincronizar.");
+    } finally {
+      setBusy(false);
+      await refresh();
+    }
+  }
+
+  function connect() {
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    window.location.href = `/api/google/oauth/start?scope=calendar&return_to=${encodeURIComponent(returnTo)}`;
+  }
+
+  if (!status?.oauthAvailable) return null;
+
+  return (
+    <section className="space-y-3 text-sm" aria-label="Sincronización directa">
+      <h3 className="font-medium">Sincronización directa</h3>
+      {!status.hasCalendarScope ? (
+        <>
+          <p className="text-muted-foreground">
+            Conecta tu cuenta de Google y crearemos un calendario «Cincel» con tus tareas. Solo podemos ver y editar ese
+            calendario, nunca el resto de tu agenda.
+          </p>
+          <Button onClick={connect}>Conectar Google Calendar</Button>
+        </>
+      ) : !status.enabled ? (
+        <>
+          <p className="text-muted-foreground">
+            Cuenta conectada: <span className="text-foreground">{status.connectedEmail}</span>. Activa la
+            sincronización para crear el calendario «Cincel».
+          </p>
+          <Button disabled={busy} onClick={() => void run(enableGoogleCalendarSyncAction, "Sincronización activada.")}>
+            Activar sincronización
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-muted-foreground">
+            Sincronizando con <span className="text-foreground">{status.connectedEmail}</span> en el calendario
+            «Cincel».{" "}
+            {status.lastSyncedAt ? `Última sincronización: ${formatSyncedAt(status.lastSyncedAt)}.` : null}
+          </p>
+          {status.lastError && !error && !message ? (
+            <p className="text-destructive">Último error: {status.lastError}</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={busy} onClick={() => void run(() => syncGoogleCalendarAction(), "Calendario actualizado.")}>
+              {busy ? "Sincronizando…" : "Sincronizar ahora"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                if (!window.confirm("¿Dejar de sincronizar? El calendario «Cincel» se queda en Google; puedes borrarlo ahí.")) return;
+                void run(disableGoogleCalendarSyncAction, "Sincronización desactivada.");
+              }}
+            >
+              Desactivar
+            </Button>
+            {error || status.lastError ? (
+              <Button variant="ghost" disabled={busy} onClick={connect}>
+                Reconectar cuenta
+              </Button>
+            ) : null}
+          </div>
+        </>
+      )}
+      {message ? <p className="text-muted-foreground">{message}</p> : null}
+      {error ? <p className="text-destructive">{error}</p> : null}
+    </section>
+  );
+}
 
 /**
  * Subscribe Google Calendar (or any calendar app) to the user's tasks through
@@ -90,12 +201,14 @@ export default function CalendarFeedDialog({ open, onClose }: Props) {
         <DialogHeader>
           <DialogTitle>Sincronizar con Google Calendar</DialogTitle>
           <DialogDescription>
-            Suscribe tu Google Calendar a tus tareas (compromisos, revisiones y entregas). Aparecen como eventos de
-            todo el día y se actualizan solos.
+            Lleva tus tareas (compromisos, revisiones y entregas) a Google Calendar como eventos de todo el día.
           </DialogDescription>
         </DialogHeader>
 
+        <GoogleCalendarSyncSection open={open} />
+
         <div className="space-y-3 text-sm">
+          <h3 className="font-medium">Enlace de suscripción</h3>
           {feedUrl ? (
             <>
               <p className="text-muted-foreground">

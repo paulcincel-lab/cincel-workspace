@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/shadcn/button";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import { fetchCalendarAction } from "@/lib/actions/tasks-actions";
+import { syncGoogleCalendarAction } from "@/lib/actions/calendar-actions";
+import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 import { addDays, buildCalendarEvents, dateKey } from "@/lib/calendar/calendar-service";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import type { CalendarEvent } from "@/lib/types/calendar";
@@ -29,6 +31,18 @@ export default function CalendarWorkspace() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [range, setRange] = useState<DateRange | null>(null);
   const [feedOpen, setFeedOpen] = useState(false);
+  const connectResult = useGoogleConnectResult();
+
+  // Back from connecting Google Calendar: reopen the dialog to finish turning sync on.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (connectResult?.success) setFeedOpen(true);
+  }, [connectResult]);
+
+  // Keeps the user's Google "Cincel" calendar current; the server skips it when sync is off or ran recently.
+  useEffect(() => {
+    void syncGoogleCalendarAction({ auto: true }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const refreshUser = () => setAuthenticatedUser(getCurrentAuthenticatedUser());
@@ -97,6 +111,12 @@ export default function CalendarWorkspace() {
               </Button>
             ) : null}
           </section>
+
+          {connectResult && !connectResult.success ? (
+            <section className="rounded-2xl border border-border bg-muted px-4 py-3 text-sm text-foreground">
+              {connectResult.message}
+            </section>
+          ) : null}
 
           {fetchError ? (
             <section className="rounded-2xl border border-border bg-muted px-4 py-3 text-sm text-foreground">
