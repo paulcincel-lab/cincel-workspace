@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -78,5 +78,59 @@ describe("DataTable", () => {
     );
     fireEvent.click(screen.getByText("Beto"));
     expect(clicked).toEqual({ name: "Beto", age: 30 });
+  });
+
+  describe("drag-and-drop reordering (onReorderRows)", () => {
+    const getRowId = (row: Row) => row.name;
+
+    function dragRow(fromText: string, toText: string) {
+      const grips = screen.getAllByTitle("Arrastra para reordenar");
+      const rows = screen.getAllByRole("row").slice(1);
+      const fromCell = screen.getByText(fromText).closest("tr")!;
+      const toCell = screen.getByText(toText).closest("tr")!;
+      const fromGrip = grips[rows.indexOf(fromCell)];
+      const toRow = toCell;
+
+      const dataTransfer = {};
+      fireEvent.dragStart(fromGrip, { dataTransfer });
+      fireEvent.dragOver(toRow, { dataTransfer });
+      fireEvent.drop(toRow, { dataTransfer });
+    }
+
+    it("renders a grip column and reports the new row order on drop", () => {
+      const onReorderRows = vi.fn();
+      render(<DataTable columns={columns} data={data} getRowId={getRowId} onReorderRows={onReorderRows} />);
+
+      expect(screen.getAllByTitle("Arrastra para reordenar")).toHaveLength(3);
+
+      dragRow("Beto", "Cris");
+
+      expect(onReorderRows).toHaveBeenCalledWith(["Ana", "Cris", "Beto"]);
+    });
+
+    it("does not render the grip column when onReorderRows is not passed", () => {
+      render(<DataTable columns={columns} data={data} getRowId={getRowId} />);
+      expect(screen.queryAllByTitle("Arrastra para reordenar")).toHaveLength(0);
+    });
+
+    it("disables reordering while a column sort is active", () => {
+      render(<DataTable columns={columns} data={data} getRowId={getRowId} onReorderRows={vi.fn()} />);
+      expect(screen.getAllByTitle("Arrastra para reordenar")).toHaveLength(3);
+
+      fireEvent.click(screen.getByText("Nombre"));
+
+      expect(screen.queryAllByTitle("Arrastra para reordenar")).toHaveLength(0);
+    });
+
+    it("disables reordering while the search filter is active", () => {
+      render(
+        <DataTable columns={columns} data={data} getRowId={getRowId} onReorderRows={vi.fn()} searchPlaceholder="Buscar…" />
+      );
+      expect(screen.getAllByTitle("Arrastra para reordenar")).toHaveLength(3);
+
+      fireEvent.change(screen.getByPlaceholderText("Buscar…"), { target: { value: "an" } });
+
+      expect(screen.queryAllByTitle("Arrastra para reordenar")).toHaveLength(0);
+    });
   });
 });

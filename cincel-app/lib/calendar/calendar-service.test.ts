@@ -18,6 +18,7 @@ function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
     status: "pendiente",
     customStatusId: null,
     priority: "media",
+    sortOrder: null,
     commitmentDate: "2026-06-01",
     reviewDate: null,
     deliveryDate: null,

@@ -328,6 +328,8 @@ export type Task = {
   /** Display-only custom status; `status` remains the base status. */
   customStatusId: string | null;
   priority: TaskPriority;
+  /** Manual drag order within a project; null = not manually ordered. */
+  sortOrder: number | null;
   commitmentDate: string | null;
   reviewDate: string | null;
   deliveryDate: string | null;

@@ -1,0 +1,1 @@
+ALTER TABLE "core"."tasks" ADD COLUMN "sort_order" integer;
