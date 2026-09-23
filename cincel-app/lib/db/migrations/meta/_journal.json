@@ -57,6 +57,13 @@
       "when": 1790187640395,
       "tag": "0007_task_links",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790190808392,
+      "tag": "0008_calendar_feed_tokens",
+      "breakpoints": true
     }
   ]
 }

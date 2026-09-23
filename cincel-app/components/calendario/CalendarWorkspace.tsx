@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
+import CalendarFeedDialog from "@/components/calendario/CalendarFeedDialog";
 import UnifiedCalendar from "@/components/calendario/UnifiedCalendar";
+import { Button } from "@/components/ui/shadcn/button";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import { fetchCalendarAction } from "@/lib/actions/tasks-actions";
@@ -26,6 +28,7 @@ export default function CalendarWorkspace() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [range, setRange] = useState<DateRange | null>(null);
+  const [feedOpen, setFeedOpen] = useState(false);
 
   useEffect(() => {
     const refreshUser = () => setAuthenticatedUser(getCurrentAuthenticatedUser());
@@ -80,9 +83,19 @@ export default function CalendarWorkspace() {
         <Header />
 
         <div className="space-y-6">
-          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <h1 className="text-3xl font-bold text-foreground">Calendario</h1>
-            <p className="mt-2 text-muted-foreground">Vista integral de actividades, compromisos y agenda del equipo.</p>
+          <section className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Calendario</h1>
+              <p className="mt-2 text-muted-foreground">Vista integral de actividades, compromisos y agenda del equipo.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Las tareas solo guardan fecha: las horas marcadas con ≈ son estimadas.
+              </p>
+            </div>
+            {capabilities.canViewCalendar ? (
+              <Button variant="outline" onClick={() => setFeedOpen(true)}>
+                Sincronizar con Google Calendar
+              </Button>
+            ) : null}
           </section>
 
           {fetchError ? (
@@ -107,6 +120,7 @@ export default function CalendarWorkspace() {
           )}
         </div>
       </section>
+      <CalendarFeedDialog open={feedOpen} onClose={() => setFeedOpen(false)} />
     </main>
   );
 }
