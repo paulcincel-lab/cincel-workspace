@@ -173,4 +173,42 @@ test.describe("Tareas — create task with commitmentDate and reviewDate", () =>
     await expect(drawer.getByRole("link", { name: client })).toHaveCount(0, { timeout: 15_000 });
     await expect(drawer.getByRole("link", { name: internal })).toBeVisible();
   });
+
+  test("can attach a photo to a checklist item and still check it off (#436)", async ({ page }) => {
+    // Runs after the first test, so TASK_DESC already exists as a row.
+    await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
+    await page.getByTitle("Ver detalle").first().click();
+    await page.getByText("Detalle de tarea").waitFor({ state: "visible", timeout: 15_000 });
+    const drawer = page.locator('[data-slot="sheet-content"]');
+
+    const itemTitle = `Colar losa ${RUN_ID}`;
+    await drawer.getByPlaceholder("Nuevo punto...").fill(itemTitle);
+    await drawer.getByRole("button", { name: "Agregar", exact: true }).click();
+    await expect(drawer.getByText(itemTitle)).toBeVisible({ timeout: 15_000 });
+
+    // 1x1 transparent PNG.
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    const photoName = `evidencia-${RUN_ID}.png`;
+    await drawer.getByLabel(`Adjuntar foto a ${itemTitle}`).setInputFiles({ name: photoName, mimeType: "image/png", buffer: png });
+
+    const row = drawer.locator("div.rounded-lg").filter({ hasText: itemTitle });
+    await expect(row.getByTitle(photoName)).toBeVisible({ timeout: 15_000 });
+
+    // The reported bug: an item with a photo couldn't be closed.
+    await row.getByRole("checkbox").click();
+    await expect(row.getByRole("checkbox")).toBeChecked({ timeout: 15_000 });
+
+    // Persisted after reload: still checked, photo still under the item, not in the general attachments.
+    await page.goto(`${BASE_URL}/actividades/presale`, { waitUntil: "domcontentloaded" });
+    await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
+    await page.getByTitle("Ver detalle").first().click();
+    await page.getByText("Detalle de tarea").waitFor({ state: "visible", timeout: 15_000 });
+    const rowAfter = drawer.locator("div.rounded-lg").filter({ hasText: itemTitle });
+    await expect(rowAfter.getByTitle(photoName)).toBeVisible({ timeout: 15_000 });
+    await expect(rowAfter.getByRole("checkbox")).toBeChecked();
+    await expect(drawer.getByTitle(photoName)).toHaveCount(1);
+  });
 });

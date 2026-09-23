@@ -1,0 +1,3 @@
+ALTER TABLE "core"."task_attachments" ADD COLUMN "checklist_item_id" uuid;--> statement-breakpoint
+ALTER TABLE "core"."task_attachments" ADD CONSTRAINT "task_attachments_checklist_item_id_task_checklist_items_id_fk" FOREIGN KEY ("checklist_item_id") REFERENCES "core"."task_checklist_items"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "idx_task_attachments_checklist_item_id" ON "core"."task_attachments" USING btree ("checklist_item_id");

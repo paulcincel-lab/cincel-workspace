@@ -168,11 +168,12 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
     }
   }
 
-  async function addAttachment(file: File) {
+  async function addAttachment(file: File, checklistItemId?: string) {
     if (!selectedTaskId) return;
     try {
       const formData = new FormData();
       formData.set("file", file);
+      if (checklistItemId) formData.set("checklistItemId", checklistItemId);
       await addTaskAttachmentAction(selectedTaskId, formData);
       const detail = await fetchTaskAction(selectedTaskId);
       setSelectedTaskDetail(detail);
@@ -500,7 +501,7 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         task={activeTaskDetail}
         onClose={() => setSelectedTaskId(null)}
         onAddComment={(comment) => void addComment(comment)}
-        onAddAttachment={(file) => void addAttachment(file)}
+        onAddAttachment={(file, checklistItemId) => void addAttachment(file, checklistItemId)}
         onAddLink={(input) => void addLink(input)}
         onRemoveLink={(id) => void removeLink(id)}
         onAddChecklistItem={(title) => void addChecklistItem(title)}

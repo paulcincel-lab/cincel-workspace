@@ -41,7 +41,7 @@ type Props = {
   /** Reorders the checklist to the given id order (top to bottom). Optional so other callers can skip it. */
   onReorderChecklist?: (orderedIds: string[]) => void;
   /** Uploads a file as a task comment (#425). Optional — the attach control is hidden when omitted. */
-  onAddAttachment?: (file: File) => void;
+  onAddAttachment?: (file: File, checklistItemId?: string) => void;
   /** Adds an internal or client Drive/web link (#436). Optional — the links section is hidden when omitted. */
   onAddLink?: (input: TaskLinkInput) => void;
   onRemoveLink?: (linkId: string) => void;
@@ -114,6 +114,22 @@ export default function TaskDrawer({
 
     setAttachmentError("");
     onAddAttachment(file);
+  };
+
+  const handleChecklistPhotoChange = (item: TaskChecklistItem, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !onAddAttachment) return;
+    if (!file.type.startsWith("image/")) {
+      setAttachmentError("Las fotos del checklist deben ser imágenes.");
+      return;
+    }
+    if (file.size > ATTACHMENT_MAX_BYTES) {
+      setAttachmentError("El archivo supera el límite de 10MB.");
+      return;
+    }
+    setAttachmentError("");
+    onAddAttachment(file, item.id);
   };
 
   const handleAddLink = () => {
@@ -241,48 +257,81 @@ export default function TaskDrawer({
                 <h3 className="text-lg font-semibold text-foreground">Checklist</h3>
                 <div className="mt-3 space-y-2 rounded-2xl border border-border p-4">
                   {task.checklistItems.length > 0 ? (
-                    task.checklistItems.map((item, index) => (
-                      <div key={item.id} className="flex items-center gap-1 rounded-lg px-2 py-1.5 hover:bg-muted">
-                        {onReorderChecklist ? (
-                          <div className="flex flex-col">
+                    task.checklistItems.map((item, index) => {
+                      const photos = task.attachments.filter((a) => a.checklistItemId === item.id);
+                      return (
+                        <div key={item.id} className="rounded-lg px-2 py-1.5 hover:bg-muted">
+                          <div className="flex items-center gap-1">
+                            {onReorderChecklist ? (
+                              <div className="flex flex-col">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-4 w-5 p-0 text-xs text-muted-foreground disabled:opacity-30"
+                                  disabled={index === 0}
+                                  onClick={() => moveChecklistItem(item, "up")}
+                                  title="Mover arriba"
+                                >
+                                  ↑
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-4 w-5 p-0 text-xs text-muted-foreground disabled:opacity-30"
+                                  disabled={index === task.checklistItems.length - 1}
+                                  onClick={() => moveChecklistItem(item, "down")}
+                                  title="Mover abajo"
+                                >
+                                  ↓
+                                </Button>
+                              </div>
+                            ) : null}
+                            <label className="flex flex-1 items-center gap-3">
+                              <Checkbox checked={item.completed} onCheckedChange={() => onToggleChecklistItem(item)} />
+                              <span className={`flex-1 text-sm ${item.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                                {item.title}
+                              </span>
+                            </label>
+                            {onAddAttachment ? (
+                              <label
+                                className="inline-flex h-6 cursor-pointer items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-background hover:text-foreground"
+                                title="Adjuntar foto a este punto"
+                              >
+                                📷
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  aria-label={`Adjuntar foto a ${item.title}`}
+                                  onChange={(e) => handleChecklistPhotoChange(item, e)}
+                                />
+                              </label>
+                            ) : null}
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-4 w-5 p-0 text-xs text-muted-foreground disabled:opacity-30"
-                              disabled={index === 0}
-                              onClick={() => moveChecklistItem(item, "up")}
-                              title="Mover arriba"
+                              className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                              onClick={() => onRemoveChecklistItem(item)}
                             >
-                              ↑
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-4 w-5 p-0 text-xs text-muted-foreground disabled:opacity-30"
-                              disabled={index === task.checklistItems.length - 1}
-                              onClick={() => moveChecklistItem(item, "down")}
-                              title="Mover abajo"
-                            >
-                              ↓
+                              Quitar
                             </Button>
                           </div>
-                        ) : null}
-                        <label className="flex flex-1 items-center gap-3">
-                          <Checkbox checked={item.completed} onCheckedChange={() => onToggleChecklistItem(item)} />
-                          <span className={`flex-1 text-sm ${item.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                            {item.title}
-                          </span>
-                        </label>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
-                          onClick={() => onRemoveChecklistItem(item)}
-                        >
-                          Quitar
-                        </Button>
-                      </div>
-                    ))
+                          {photos.length > 0 ? (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5 pl-8">
+                              {photos.map((photo) => {
+                                const href = `/api/tareas/${task.id}/adjuntos/${photo.id}`;
+                                return (
+                                  <a key={photo.id} href={href} target="_blank" rel="noreferrer" title={photo.fileName}>
+                                    {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary uploaded content */}
+                                    <img src={href} alt={photo.fileName} className="h-12 w-12 rounded-md border border-border object-cover" />
+                                  </a>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })
                   ) : (
                     <p className="text-sm text-muted-foreground">Sin puntos de checklist.</p>
                   )}
@@ -420,9 +469,9 @@ export default function TaskDrawer({
                 <section>
                   <h3 className="text-lg font-semibold text-foreground">Adjuntos</h3>
                   <div className="mt-3 space-y-3 rounded-2xl border border-border p-4">
-                    {task.attachments.length > 0 ? (
+                    {task.attachments.some((a) => !a.checklistItemId) ? (
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        {task.attachments.map((attachment) => {
+                        {task.attachments.filter((a) => !a.checklistItemId).map((attachment) => {
                           const href = `/api/tareas/${task.id}/adjuntos/${attachment.id}`;
                           const isImage = attachment.mimeType.startsWith("image/");
                           return (

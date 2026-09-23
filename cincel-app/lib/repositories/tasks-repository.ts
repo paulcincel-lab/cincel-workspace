@@ -80,6 +80,7 @@ function toAttachment(row: {
   createdAt: Date;
   uploadedById: string | null;
   uploadedByName: string | null;
+  checklistItemId: string | null;
 }): TaskAttachment {
   return {
     id: row.id,
@@ -88,6 +89,7 @@ function toAttachment(row: {
     mimeType: row.mimeType,
     sizeBytes: row.sizeBytes,
     uploadedBy: row.uploadedById ? { id: row.uploadedById, name: row.uploadedByName ?? "" } : null,
+    checklistItemId: row.checklistItemId,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -103,6 +105,7 @@ async function listTaskAttachments(taskId: string): Promise<TaskAttachment[]> {
       createdAt: taskAttachments.createdAt,
       uploadedById: taskAttachments.uploadedById,
       uploadedByName: staff.name,
+      checklistItemId: taskAttachments.checklistItemId,
     })
     .from(taskAttachments)
     .leftJoin(staff, eq(staff.id, taskAttachments.uploadedById))
@@ -119,13 +122,27 @@ async function listTaskAttachments(taskId: string): Promise<TaskAttachment[]> {
 export async function addTaskAttachment(
   taskId: string,
   file: { name: string; mimeType: string; data: Buffer },
-  actorId: string
+  actorId: string,
+  checklistItemId: string | null = null
 ): Promise<TaskAttachment> {
   if (!ALLOWED_ATTACHMENT_MIME.test(file.mimeType)) {
     throw new Error("TASK_ATTACHMENT_TYPE_NOT_ALLOWED");
   }
   if (file.data.byteLength === 0 || file.data.byteLength > MAX_ATTACHMENT_BYTES) {
     throw new Error("TASK_ATTACHMENT_TOO_LARGE");
+  }
+
+  let checklistItemTitle: string | null = null;
+  if (checklistItemId) {
+    // A checklist photo must be an image and belong to this same task.
+    if (!file.mimeType.startsWith("image/")) throw new Error("TASK_ATTACHMENT_TYPE_NOT_ALLOWED");
+    const [item] = await db
+      .select({ title: taskChecklistItems.title })
+      .from(taskChecklistItems)
+      .where(and(eq(taskChecklistItems.id, checklistItemId), eq(taskChecklistItems.taskId, taskId)))
+      .limit(1);
+    if (!item) throw new Error("CHECKLIST_ITEM_NOT_FOUND");
+    checklistItemTitle = item.title;
   }
 
   const [row] = await db
@@ -137,10 +154,18 @@ export async function addTaskAttachment(
       sizeBytes: file.data.byteLength,
       data: file.data,
       uploadedById: actorId,
+      checklistItemId,
     })
     .returning();
 
-  await recordComment({ entity: "task", entityId: taskId, actorId, comment: `Adjuntó un archivo: ${row.fileName}` });
+  await recordComment({
+    entity: "task",
+    entityId: taskId,
+    actorId,
+    comment: checklistItemTitle
+      ? `Adjuntó una foto al punto "${checklistItemTitle}": ${row.fileName}`
+      : `Adjuntó un archivo: ${row.fileName}`,
+  });
 
   const [uploader] = await db.select({ name: staff.name }).from(staff).where(eq(staff.id, actorId));
   return toAttachment({ ...row, uploadedByName: uploader?.name ?? null });
