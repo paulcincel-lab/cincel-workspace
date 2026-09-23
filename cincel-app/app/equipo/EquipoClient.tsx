@@ -18,7 +18,13 @@ import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { Button } from "@/components/ui/shadcn/button";
 import ExportMenu from "@/components/ui/ExportMenu";
-import { fetchEmergencyContactsAction, fetchStaffAction, setStaffActiveAction } from "@/lib/actions/staff-actions";
+import { resolveAreasCapabilities } from "@/lib/auth/permissions";
+import {
+  fetchEmergencyContactsAction,
+  fetchStaffAction,
+  reorderStaffAction,
+  setStaffActiveAction,
+} from "@/lib/actions/staff-actions";
 import type { EmergencyContact } from "@/lib/types/core";
 import { fetchAreasAction } from "@/lib/actions/areas-actions";
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
@@ -136,6 +142,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     closeEditor,
     saveMember,
   } = useMemberEditor({ authenticatedUser, onSaved: refresh });
+  const areasCapabilities = useMemo(() => resolveAreasCapabilities(authenticatedUser), [authenticatedUser]);
 
   function toggle(id: string | number) {
     setSelected((cur) => {
@@ -301,6 +308,20 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     [selected, openEditEditor, view, teamCapabilities.canToggleCollaboratorActive, emergencyContacts]
   );
 
+  // Drag-and-drop in the Activos list; deactivated members keep their place.
+  async function reorderTeam(orderedIds: string[]) {
+    const position = new Map(orderedIds.map((id, i) => [id, i]));
+    setStaff((cur) =>
+      [...cur].sort((a, b) => (position.get(a.id) ?? Infinity) - (position.get(b.id) ?? Infinity))
+    );
+    try {
+      await reorderStaffAction(orderedIds);
+    } catch (err) {
+      console.error(err);
+      await refresh();
+    }
+  }
+
   async function toggleMemberActive(member: TeamMemberWithWorkload) {
     const deactivating = member.active;
     if (member.id === authenticatedUser?.member.id) {
@@ -385,6 +406,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         data={visible}
         getRowId={(row) => row.id}
         onRowClick={(row) => setProfileMemberId(row.id)}
+        onReorderRows={areasCapabilities.canManageAreas && view === "activos" ? (ids) => void reorderTeam(ids) : undefined}
         wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage={view === "activos" ? "No hay colaboradores activos." : "No hay colaboradores desactivados."}
       />

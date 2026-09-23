@@ -26,6 +26,8 @@ export const staff = core.table(
     capacity: integer("capacity").notNull().default(0),
     availability: text("availability"),
     active: boolean("active").notNull().default(true),
+    // Manual order in Equipo (#452); null = not placed yet, listed after the placed ones by name.
+    sortOrder: integer("sort_order"),
     ...stamps,
     ...soft,
   },

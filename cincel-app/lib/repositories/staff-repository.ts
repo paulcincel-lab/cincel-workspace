@@ -49,6 +49,9 @@ const STAFF_TRACKED_FIELDS = [
   "active",
 ] as const;
 
+/** Manual order first (#452); members never placed go last, alphabetically. */
+const STAFF_ORDER = [sql`${staff.sortOrder} is null`, asc(staff.sortOrder), asc(staff.name)];
+
 export async function listStaff(options: { includeInactive?: boolean } = {}): Promise<Staff[]> {
   const rows = await db
     .select()
@@ -56,7 +59,7 @@ export async function listStaff(options: { includeInactive?: boolean } = {}): Pr
     .where(
       and(isNull(staff.deletedAt), options.includeInactive ? undefined : eq(staff.active, true))
     )
-    .orderBy(asc(staff.name));
+    .orderBy(...STAFF_ORDER);
   return rows.map(toStaff);
 }
 
@@ -76,6 +79,15 @@ export async function listEmergencyContacts(): Promise<Record<string, EmergencyC
     if (contact.name || contact.phone) contacts[staffId] = contact;
   }
   return contacts;
+}
+
+/** Save the manual order of the team: `orderedIds[i]` gets position i. */
+export async function reorderStaff(orderedIds: string[]): Promise<void> {
+  await db.transaction(async (tx) => {
+    for (const [i, id] of orderedIds.entries()) {
+      await tx.update(staff).set({ sortOrder: i }).where(and(eq(staff.id, id), isNull(staff.deletedAt)));
+    }
+  });
 }
 
 /**

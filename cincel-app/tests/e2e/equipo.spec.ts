@@ -117,4 +117,49 @@ test.describe("Equipo — add team member", () => {
 
     await expect(page.getByRole("row").filter({ hasText: withoutContact }).getByText("Sin registrar")).toBeVisible();
   });
+
+  test("admins reorder the team by dragging, and the order persists (#452)", async ({ page }) => {
+    const first = `Orden A E2E ${RUN_ID}`;
+    const second = `Orden B E2E ${RUN_ID}`;
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      await sql`insert into core.staff (name, kind, capacity) values (${first}, 'empleado', 5), (${second}, 'empleado', 5)`;
+    } finally {
+      await sql.end();
+    }
+    await page.reload({ waitUntil: "domcontentloaded" });
+
+    const rowOf = (name: string) => page.getByRole("row").filter({ hasText: name });
+    const indexOf = async (name: string) => {
+      const names = await page.getByRole("row").allInnerTexts();
+      return names.findIndex((text) => text.includes(name));
+    };
+    await expect(rowOf(second)).toBeVisible({ timeout: 30_000 });
+    // Never placed: alphabetical, A before B.
+    expect(await indexOf(first)).toBeLessThan(await indexOf(second));
+
+    // Drag B's handle onto A's row (fired directly: a mouse drag inside a scrolling table is flaky).
+    await rowOf(second).getByTitle("Arrastra para reordenar").dispatchEvent("dragstart");
+    await rowOf(first).dispatchEvent("dragover");
+    await rowOf(first).dispatchEvent("drop");
+    await expect.poll(async () => (await indexOf(second)) < (await indexOf(first))).toBe(true);
+
+    // Saved server-side (reloading earlier would cancel the in-flight save).
+    await expect
+      .poll(async () => {
+        const db = postgres(connectionString, { max: 1 });
+        try {
+          const rows = await db`select name, sort_order from core.staff where name in (${first}, ${second})`;
+          const order = Object.fromEntries(rows.map((r) => [r.name, r.sort_order]));
+          return order[second] !== null && order[first] !== null && order[second] < order[first];
+        } finally {
+          await db.end();
+        }
+      })
+      .toBe(true);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(rowOf(second)).toBeVisible({ timeout: 30_000 });
+    expect(await indexOf(second)).toBeLessThan(await indexOf(first));
+  });
 });
