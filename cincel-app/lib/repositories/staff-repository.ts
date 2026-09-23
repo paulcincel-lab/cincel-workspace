@@ -11,7 +11,7 @@ import {
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { recordChanges } from "@/lib/repositories/history-repository";
-import type { Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
+import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
 
 type StaffRow = typeof staff.$inferSelect;
 
@@ -58,6 +58,24 @@ export async function listStaff(options: { includeInactive?: boolean } = {}): Pr
     )
     .orderBy(asc(staff.name));
   return rows.map(toStaff);
+}
+
+/** Emergency contact per staff id; only members who have one registered. */
+export async function listEmergencyContacts(): Promise<Record<string, EmergencyContact>> {
+  const rows = await db
+    .select({
+      staffId: staffProfiles.staffId,
+      name: staffProfiles.emergencyContactName,
+      relation: staffProfiles.emergencyContactRelation,
+      phone: staffProfiles.emergencyContactPhone,
+      address: staffProfiles.emergencyContactAddress,
+    })
+    .from(staffProfiles);
+  const contacts: Record<string, EmergencyContact> = {};
+  for (const { staffId, ...contact } of rows) {
+    if (contact.name || contact.phone) contacts[staffId] = contact;
+  }
+  return contacts;
 }
 
 /**

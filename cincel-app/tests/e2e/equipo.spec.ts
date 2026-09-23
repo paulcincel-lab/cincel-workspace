@@ -88,4 +88,33 @@ test.describe("Equipo — add team member", () => {
     await page.getByRole("menuitem", { name: "Reactivar" }).click();
     await expect(page.getByText(name)).toHaveCount(0, { timeout: 15_000 });
   });
+
+  test("admins see each collaborator's emergency contact with a call link (#451)", async ({ page }) => {
+    const withContact = `Con emergencia E2E ${RUN_ID}`;
+    const withoutContact = `Sin emergencia E2E ${RUN_ID}`;
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      const [member] = await sql`
+        insert into core.staff (name, kind, capacity) values (${withContact}, 'empleado', 5) returning id`;
+      await sql`
+        insert into core.staff_profiles (staff_id, emergency_contact_name, emergency_contact_relation, emergency_contact_phone)
+        values (${member.id}, 'Lucía Pérez', 'Madre', '+52 55 1234 5678')`;
+      await sql`insert into core.staff (name, kind, capacity) values (${withoutContact}, 'empleado', 5)`;
+    } finally {
+      await sql.end();
+    }
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("columnheader", { name: "Emergencia" })).toBeVisible({ timeout: 30_000 });
+
+    const row = page.getByRole("row").filter({ hasText: withContact });
+    await expect(row.getByText("Lucía Pérez")).toBeVisible({ timeout: 15_000 });
+    await expect(row.getByText("· Madre")).toBeVisible();
+    await expect(row.getByRole("link", { name: `Llamar al contacto de emergencia de ${withContact}` })).toHaveAttribute(
+      "href",
+      "tel:+525512345678"
+    );
+
+    await expect(page.getByRole("row").filter({ hasText: withoutContact }).getByText("Sin registrar")).toBeVisible();
+  });
 });

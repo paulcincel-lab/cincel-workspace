@@ -18,7 +18,8 @@ import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { Button } from "@/components/ui/shadcn/button";
 import ExportMenu from "@/components/ui/ExportMenu";
-import { fetchStaffAction, setStaffActiveAction } from "@/lib/actions/staff-actions";
+import { fetchEmergencyContactsAction, fetchStaffAction, setStaffActiveAction } from "@/lib/actions/staff-actions";
+import type { EmergencyContact } from "@/lib/types/core";
 import { fetchAreasAction } from "@/lib/actions/areas-actions";
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
@@ -69,6 +70,8 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
   const [profileMemberId, setProfileMemberId] = useState<string | null>(null);
   const [coordinatorMemberId, setCoordinatorMemberId] = useState<string | null>(null);
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  // null = the viewer may not see staff PII, so the column isn't shown at all.
+  const [emergencyContacts, setEmergencyContacts] = useState<Record<string, EmergencyContact> | null>(null);
 
   async function refresh() {
     const [staffRows, areaRows, taskRows, projectRows] = await Promise.all([
@@ -114,6 +117,9 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     // here without duplicating the fetch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
+    fetchEmergencyContactsAction()
+      .then(setEmergencyContacts)
+      .catch((err) => console.error(err));
   }, []);
 
   const {
@@ -236,6 +242,38 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
           </Badge>
         ),
       },
+      ...(emergencyContacts
+        ? [
+            {
+              id: "emergency",
+              header: "Emergencia",
+              cell: ({ row }: { row: { original: TeamMemberWithWorkload } }) => {
+                const contact = emergencyContacts[row.original.id];
+                if (!contact) return <Badge variant="outline">Sin registrar</Badge>;
+                return (
+                  <div className="text-sm">
+                    <p className="text-foreground">
+                      {contact.name || "Sin nombre"}
+                      {contact.relation ? <span className="text-muted-foreground"> · {contact.relation}</span> : null}
+                    </p>
+                    {contact.phone ? (
+                      <a
+                        href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-foreground underline"
+                        aria-label={`Llamar al contacto de emergencia de ${row.original.name}`}
+                      >
+                        {contact.phone}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">Sin teléfono</span>
+                    )}
+                  </div>
+                );
+              },
+            } satisfies ColumnDef<TeamMemberWithWorkload, unknown>,
+          ]
+        : []),
       createRowActionsColumn<TeamMemberWithWorkload>(() => [
         { label: "Ver ficha", onSelect: (m) => setProfileMemberId(m.id) },
         { label: "Editar", onSelect: (m) => void openEditEditor(m) },
@@ -260,7 +298,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
       ]),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected, openEditEditor, view, teamCapabilities.canToggleCollaboratorActive]
+    [selected, openEditEditor, view, teamCapabilities.canToggleCollaboratorActive, emergencyContacts]
   );
 
   async function toggleMemberActive(member: TeamMemberWithWorkload) {

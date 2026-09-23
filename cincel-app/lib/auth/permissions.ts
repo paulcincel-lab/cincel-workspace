@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
-import { SYSTEM_ACCESS_ROLES, type SystemAccessRole } from "@/lib/data/roles";
+import { SYSTEM_ACCESS_ROLES, isAdministratorRole, type SystemAccessRole } from "@/lib/data/roles";
 import type { ResourceSection } from "@/lib/types/resource";
 import { readStorage } from "@/lib/repositories/browser-state-repository";
 
@@ -1323,4 +1323,14 @@ export function scopeDashboardTasks<TTask extends DashboardTaskShape>({
   }
 
   return tasks.filter((task) => allowedProjectIds.has(task.project.id));
+}
+
+/**
+ * Staff PII (CURP, RFC, address, emergency contact…) is visible to global
+ * admins only: Administrador or Dirección. Project-scoped roles never see
+ * other members' personal data.
+ */
+export function canViewSensitiveStaffData(user: AuthenticatedUser | null): boolean {
+  if (!user) return false;
+  return isAdministratorRole(user.member.role) || user.access === "Dirección";
 }

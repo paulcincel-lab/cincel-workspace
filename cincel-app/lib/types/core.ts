@@ -40,6 +40,9 @@ export type Staff = {
   updatedAt: string;
 };
 
+/** A collaborator's emergency contact, for quick access in Equipo (#451). */
+export type EmergencyContact = { name: string | null; relation: string | null; phone: string | null; address: string | null };
+
 export type StaffProfile = {
   personalEmail: string | null;
   homePhone: string | null;
