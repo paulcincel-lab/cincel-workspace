@@ -8,6 +8,7 @@ import {
   projectContacts,
   projectLinks,
   projectMembers,
+  projectStages,
   projects,
   staff,
   tasks,
@@ -26,8 +27,10 @@ import type {
   ProjectListItem,
   ProjectStatus,
   Task,
+  WorkflowRef,
 } from "@/lib/types/core";
 import { toTask } from "@/lib/repositories/tasks-repository";
+import { normalizePhases } from "@/lib/proyectos/phases";
 
 type ProjectRow = typeof projects.$inferSelect;
 
@@ -45,6 +48,7 @@ export function toProject(row: ProjectRow): Project {
     status: row.status,
     currentWorkflowId: row.currentWorkflowId,
     phase: row.phase,
+    phases: row.phases,
     projectType: row.projectType,
     addressStreet: row.addressStreet,
     addressCity: row.addressCity,
@@ -78,6 +82,24 @@ const PROJECT_TRACKED_FIELDS = [
   "endDate",
   "contractAmountMxn",
 ] as const;
+
+/** Every stage of each project, in workflow order (Presale → Diseño → …). */
+async function loadStages(projectIds: string[]): Promise<Map<string, WorkflowRef[]>> {
+  const out = new Map<string, WorkflowRef[]>();
+  if (projectIds.length === 0) return out;
+  const rows = await db
+    .select({ projectId: projectStages.projectId, id: workflows.id, key: workflows.key, name: workflows.name })
+    .from(projectStages)
+    .innerJoin(workflows, eq(workflows.id, projectStages.workflowId))
+    .where(and(inArray(projectStages.projectId, projectIds), isNull(workflows.deletedAt)))
+    .orderBy(asc(workflows.sortOrder), asc(workflows.name));
+  for (const r of rows) {
+    const list = out.get(r.projectId) ?? [];
+    list.push({ id: r.id, key: r.key, name: r.name });
+    out.set(r.projectId, list);
+  }
+  return out;
+}
 
 const manager = alias(staff, "manager");
 const coordinator = alias(staff, "coordinator");
@@ -125,7 +147,10 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
         statuses && statuses.length > 0 ? inArray(projects.status, statuses) : undefined,
         filters.clientId ? eq(projects.clientId, filters.clientId) : undefined,
         filters.managerId ? eq(projects.managerId, filters.managerId) : undefined,
-        filters.currentWorkflowId ? eq(projects.currentWorkflowId, filters.currentWorkflowId) : undefined,
+        // A project is "in" every one of its stages, not only its primary one.
+        filters.currentWorkflowId
+          ? sql`exists (select 1 from core.project_stages ps where ps.project_id = ${projects.id} and ps.workflow_id = ${filters.currentWorkflowId})`
+          : undefined,
         filters.involvesStaffId
           ? sql`(${projects.managerId} = ${filters.involvesStaffId} or ${projects.coordinatorId} = ${filters.involvesStaffId} or exists (select 1 from core.project_members pm where pm.project_id = ${projects.id} and pm.staff_id = ${filters.involvesStaffId}))`
           : undefined,
@@ -136,12 +161,14 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
     )
     .orderBy(asc(projects.name));
 
+  const stagesByProject = await loadStages(rows.map((r) => r.project.id));
   return rows.map((r) => ({
     ...toProject(r.project),
     client: { id: r.project.clientId, name: r.clientName, type: r.clientType },
     currentWorkflow: r.workflowId
       ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName! }
       : null,
+    stages: stagesByProject.get(r.project.id) ?? [],
     manager: r.managerId ? { id: r.managerId, name: r.managerName! } : null,
     coordinator: r.coordinatorId ? { id: r.coordinatorId, name: r.coordinatorName! } : null,
     taskCounts: { total: r.totalTasks, open: r.openTasks, blocked: r.blockedTasks },
@@ -162,12 +189,14 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     },
   });
   if (!row) return null;
+  const stages = (await loadStages([row.id])).get(row.id) ?? [];
   return {
     ...toProject(row),
     client: { id: row.client.id, name: row.client.name, type: row.client.type },
     currentWorkflow: row.currentWorkflow
       ? { id: row.currentWorkflow.id, key: row.currentWorkflow.key, name: row.currentWorkflow.name }
       : null,
+    stages,
     manager: row.manager ? { id: row.manager.id, name: row.manager.name } : null,
     coordinator: row.coordinator ? { id: row.coordinator.id, name: row.coordinator.name } : null,
     members: row.members
@@ -186,13 +215,15 @@ function toLink(row: typeof projectLinks.$inferSelect): ProjectLink {
 }
 
 function toValues(input: ProjectInput) {
+  const phases = normalizePhases(input.phases ?? [input.phase]);
   return {
     code: clean(input.code),
     name: input.name.trim(),
     clientId: input.clientId,
     status: input.status ?? "activo",
     currentWorkflowId: input.currentWorkflowId ?? null,
-    phase: clean(input.phase),
+    phases,
+    phase: phases.length > 0 ? phases.join(", ") : null,
     projectType: clean(input.projectType),
     addressStreet: clean(input.addressStreet),
     addressCity: clean(input.addressCity),
@@ -216,6 +247,7 @@ export async function createProject(input: ProjectInput, actorId: string): Promi
   if (!input.currentWorkflowId) throw new Error("PROJECT_STAGE_REQUIRED");
 
   const [row] = await db.insert(projects).values(toValues(input)).returning();
+  await db.insert(projectStages).values({ projectId: row.id, workflowId: input.currentWorkflowId }).onConflictDoNothing();
   await recordChanges({
     entity: "project",
     entityId: row.id,
@@ -248,7 +280,13 @@ export async function updateProject(
     clientId: pick("clientId") ?? before.clientId,
     status: pick("status"),
     currentWorkflowId: pick("currentWorkflowId") ?? null,
-    phase: pick("phase"),
+    // `phases` wins; a caller that only sends the legacy single `phase` replaces the list with it.
+    phases:
+      patch.phases !== undefined
+        ? patch.phases
+        : patch.phase !== undefined
+          ? normalizePhases([patch.phase])
+          : before.phases,
     projectType: pick("projectType"),
     addressStreet: pick("addressStreet"),
     addressCity: pick("addressCity"),
@@ -272,12 +310,71 @@ export async function updateProject(
   return (await getProject(id))!;
 }
 
+/** Adds `workflowId` to the project's stages and makes it the primary one. */
 export async function setProjectStage(
   id: string,
   workflowId: string,
   actorId: string
 ): Promise<ProjectDetail> {
+  await db.insert(projectStages).values({ projectId: id, workflowId }).onConflictDoNothing();
   return updateProject(id, { currentWorkflowId: workflowId }, actorId);
+}
+
+/**
+ * Replaces the set of stages a project is in (#435). At least one is required.
+ * The most advanced selected stage (highest workflow sort order) becomes the
+ * primary `currentWorkflowId`, which the rest of the app still reads.
+ */
+export async function setProjectStages(
+  id: string,
+  workflowIds: string[],
+  actorId: string
+): Promise<ProjectDetail> {
+  const wanted = Array.from(new Set(workflowIds));
+  if (wanted.length === 0) throw new Error("PROJECT_STAGE_REQUIRED");
+
+  const [project] = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, id), isNull(projects.deletedAt)))
+    .limit(1);
+  if (!project) throw new Error("PROJECT_NOT_FOUND");
+
+  const selected = await db
+    .select({ id: workflows.id, name: workflows.name, sortOrder: workflows.sortOrder })
+    .from(workflows)
+    .where(and(inArray(workflows.id, wanted), isNull(workflows.deletedAt)))
+    .orderBy(asc(workflows.sortOrder), asc(workflows.name));
+  if (selected.length !== wanted.length) throw new Error("WORKFLOW_NOT_FOUND");
+
+  const before = (await loadStages([id])).get(id) ?? [];
+  const primary = selected[selected.length - 1].id;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(projectStages)
+      .where(and(eq(projectStages.projectId, id), sql`${projectStages.workflowId} not in (${sql.join(wanted.map((w) => sql`${w}`), sql`, `)})`));
+    await tx
+      .insert(projectStages)
+      .values(wanted.map((workflowId) => ({ projectId: id, workflowId })))
+      .onConflictDoNothing();
+    if (project.currentWorkflowId !== primary) {
+      await tx.update(projects).set({ currentWorkflowId: primary }).where(eq(projects.id, id));
+    }
+    await recordChanges(
+      {
+        entity: "project",
+        entityId: id,
+        actorId,
+        before: { stages: before.map((s) => s.name).join(", ") || null },
+        after: { stages: selected.map((s) => s.name).join(", ") },
+        fields: ["stages"],
+      },
+      tx
+    );
+  });
+
+  return (await getProject(id))!;
 }
 
 /** Soft delete. Tasks stay linked; they disappear with the project on read. */
@@ -489,6 +586,9 @@ export async function applyWorkflow(
             .onConflictDoNothing()
             .returning();
 
+    if (options.setAsStage) {
+      await tx.insert(projectStages).values({ projectId, workflowId }).onConflictDoNothing();
+    }
     if (options.setAsStage && project.currentWorkflowId !== workflowId) {
       await tx.update(projects).set({ currentWorkflowId: workflowId }).where(eq(projects.id, projectId));
       await recordChanges(

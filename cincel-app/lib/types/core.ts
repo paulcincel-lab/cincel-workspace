@@ -244,6 +244,8 @@ export type Project = {
   status: ProjectStatus;
   currentWorkflowId: string | null;
   phase: string | null;
+  /** Several phases can be active at once (#435). */
+  phases: string[];
   projectType: string | null;
   addressStreet: string | null;
   addressCity: string | null;
@@ -265,6 +267,8 @@ export type WorkflowRef = { id: string; key: string; name: string };
 export type ProjectListItem = Project & {
   client: ContactRef;
   currentWorkflow: WorkflowRef | null;
+  /** Every stage the project is in, in workflow order; includes `currentWorkflow`. */
+  stages: WorkflowRef[];
   manager: StaffRef | null;
   coordinator: StaffRef | null;
   taskCounts: { total: number; open: number; blocked: number };
@@ -281,6 +285,8 @@ export type ProjectLink = {
 export type ProjectDetail = Project & {
   client: ContactRef;
   currentWorkflow: WorkflowRef | null;
+  /** Every stage the project is in, in workflow order; includes `currentWorkflow`. */
+  stages: WorkflowRef[];
   manager: StaffRef | null;
   coordinator: StaffRef | null;
   members: Array<StaffRef & { role: string | null; active: boolean }>;
@@ -295,6 +301,7 @@ export type ProjectInput = {
   status?: ProjectStatus;
   currentWorkflowId: string | null;
   phase?: string | null;
+  phases?: string[];
   projectType?: string | null;
   addressStreet?: string | null;
   addressCity?: string | null;

@@ -69,6 +69,17 @@ export async function setProjectStageAction(id: string, workflowId: string): Pro
   return row;
 }
 
+/** Sets every stage the project is in (#435); the most advanced becomes the primary one. */
+export async function setProjectStagesAction(id: string, workflowIds: string[]): Promise<ProjectDetail> {
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canChangeProjectStage) {
+    throw new Error("FORBIDDEN: project stage change");
+  }
+  const row = await projectsRepository.setProjectStages(id, workflowIds, user.member.id);
+  revalidateProyectos(id);
+  return row;
+}
+
 export async function archiveProjectAction(id: string, status: "completado" | "cancelado"): Promise<ProjectDetail> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canArchiveProject) {

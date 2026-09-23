@@ -30,11 +30,16 @@ export const projects = core.table(
       .notNull()
       .generatedAlwaysAs(sql`'cliente'::core.contact_type`),
     status: projectStatus("status").notNull().default("activo"),
-    // The stage.
+    // The primary (most advanced) stage. All active stages — a project can run
+    // several in parallel (#435) — live in `project_stages`; this one is kept in
+    // sync as the most advanced of them, for everything that needs just one.
     currentWorkflowId: uuid("current_workflow_id").references(() => workflows.id, {
       onDelete: "set null",
     }),
+    /** Legacy single phase, kept in sync as `phases` joined with ", ". */
     phase: text("phase"),
+    /** Project phases (#435) — several can be active at once. */
+    phases: text("phases").array().notNull().default(sql`'{}'::text[]`),
     projectType: text("project_type"),
     addressStreet: text("address_street"),
     addressCity: text("address_city"),
@@ -154,6 +159,26 @@ export const clientStats = core.view("client_stats").as((qb) =>
     .groupBy(projects.clientId)
 );
 
+/** Every stage a project is actively in (#435). */
+export const projectStages = core.table(
+  "project_stages",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    workflowId: uuid("workflow_id")
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    ...stamps,
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.workflowId] }), index("idx_project_stages_workflow_id").on(t.workflowId)]
+);
+
+export const projectStagesRelations = relations(projectStages, ({ one }) => ({
+  project: one(projects, { fields: [projectStages.projectId], references: [projects.id] }),
+  workflow: one(workflows, { fields: [projectStages.workflowId], references: [workflows.id] }),
+}));
+
 export const projectsRelations = relations(projects, ({ one, many }) => ({
   client: one(contacts, { fields: [projects.clientId], references: [contacts.id] }),
   currentWorkflow: one(workflows, {
@@ -173,6 +198,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   members: many(projectMembers),
   contacts: many(projectContacts),
   links: many(projectLinks),
+  stages: many(projectStages),
 }));
 
 export const projectMembersRelations = relations(projectMembers, ({ one }) => ({

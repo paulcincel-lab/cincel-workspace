@@ -113,8 +113,10 @@ export const list_projects = tool({
       .filter((p) => (activeOnly ? p.status === "activo" : true))
       .filter((p) =>
         stage
-          ? (p.currentWorkflow?.name ?? "").toLowerCase().includes(stage.toLowerCase()) ||
-            (p.currentWorkflow?.key ?? "").toLowerCase().includes(stage.toLowerCase())
+          ? p.stages.some(
+              (s) =>
+                s.name.toLowerCase().includes(stage.toLowerCase()) || s.key.toLowerCase().includes(stage.toLowerCase())
+            )
           : true
       )
       .filter((p) => (status ? p.status.toLowerCase() === status.toLowerCase() : true))
@@ -131,6 +133,7 @@ export const list_projects = tool({
           name: p.name,
           status: p.status,
           stage: p.currentWorkflow?.name ?? null,
+          stages: p.stages.map((s) => s.name),
           progress: p.progress,
           active: p.status === "activo",
           overdueTasks: c.overdue,

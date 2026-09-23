@@ -80,7 +80,7 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
     () => [
       { key: "project", header: "Proyecto", getValue: (p) => p.name },
       { key: "client", header: "Cliente", getValue: (p) => p.client.name },
-      { key: "stage", header: "Etapa", getValue: (p) => p.currentWorkflow?.name ?? "Sin etapa" },
+      { key: "stage", header: "Etapas", getValue: (p) => p.stages.map((s) => s.name).join(", ") || "Sin etapa" },
       { key: "manager", header: "Encargado", getValue: (p) => p.manager?.name ?? "Sin encargado" },
       { key: "status", header: "Estado", getValue: (p) => STATUS_LABEL[p.status] },
       { key: "openTasks", header: "Tareas abiertas", getValue: (p) => p.taskCounts.open },
@@ -127,8 +127,17 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
       },
       {
         id: "stage",
-        header: "Etapa",
-        cell: ({ row }) => <Badge variant="outline">{row.original.currentWorkflow?.name ?? "Sin etapa"}</Badge>,
+        header: "Etapas",
+        cell: ({ row }) =>
+          row.original.stages.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {row.original.stages.map((stage) => (
+                <Badge key={stage.id} variant="outline">{stage.name}</Badge>
+              ))}
+            </div>
+          ) : (
+            <Badge variant="outline">Sin etapa</Badge>
+          ),
       },
       {
         id: "manager",
