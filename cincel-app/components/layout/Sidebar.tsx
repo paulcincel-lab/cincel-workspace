@@ -192,7 +192,6 @@ export default function Sidebar() {
       label: "Actividades",
       icon: ActivityIcon,
       submenu: [
-        { label: "Todas", href: "/actividades/todas", icon: ActivityIcon },
         { label: "Presale", href: "/actividades/presale", icon: ActivityIcon },
         { label: "Taller de diseño", href: "/actividades/diseno", icon: ActivityIcon },
         { label: "Construcción", href: "/actividades/construccion", icon: ActivityIcon },
