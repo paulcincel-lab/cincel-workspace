@@ -1,13 +1,27 @@
 import { NextResponse } from "next/server";
 
-import { getSession } from "@/lib/auth/session";
+import { requireCapabilityUser } from "@/lib/auth/session";
 import { isDriveConfigured } from "@/lib/google/client";
+import { isOauthConfigured } from "@/lib/google/oauth";
+import { getGoogleOauthAccount } from "@/lib/repositories/google-oauth-repository";
 
-/** GET /api/google/drive/status → { configured } — for hiding the picker button. */
+/**
+ * GET /api/google/drive/status — for the picker's connect/switch-account UI
+ * and for hiding the picker button entirely when nothing is configured.
+ */
 export async function GET(): Promise<NextResponse> {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ configured: false }, { status: 401 });
+  let caller;
+  try {
+    caller = await requireCapabilityUser();
+  } catch {
+    return NextResponse.json({ configured: false, oauthAvailable: false, connectedEmail: null }, { status: 401 });
   }
-  return NextResponse.json({ configured: isDriveConfigured() });
+
+  const account = isOauthConfigured() ? await getGoogleOauthAccount(caller.member.id) : null;
+
+  return NextResponse.json({
+    configured: isDriveConfigured() || isOauthConfigured(),
+    oauthAvailable: isOauthConfigured(),
+    connectedEmail: account?.email ?? null,
+  });
 }

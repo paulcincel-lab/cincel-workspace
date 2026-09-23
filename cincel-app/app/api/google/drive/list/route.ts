@@ -6,16 +6,21 @@ import {
   resolveResourcesCapabilities,
 } from "@/lib/auth/permissions";
 import { isDriveConfigured, getDriveRootFolderId } from "@/lib/google/client";
-import { listFolder, searchFiles } from "@/lib/google/drive-repository";
+import { isOauthConfigured } from "@/lib/google/oauth";
+import { getGoogleOauthAccount } from "@/lib/repositories/google-oauth-repository";
+import { listFolder, searchFiles, type DriveCaller } from "@/lib/google/drive-repository";
 
 /**
  * GET /api/google/drive/list?folderId=&q=&pageToken=
  *
- * Browse the service-account Drive. Auth gating mirrors
- * app/api/team/sensitive/[id]/route.ts:
- *   - no session         -> 401
- *   - no Drive capability -> 403
- *   - Drive not configured -> 503
+ * Browses Drive as the caller's own connected Google account when they have
+ * one (lib/google/oauth.ts); otherwise falls back to the service-account
+ * impersonation of their institutional email (lib/google/client.ts). Auth
+ * gating mirrors app/api/team/sensitive/[id]/route.ts:
+ *   - no session                -> 401
+ *   - no Drive capability       -> 403
+ *   - nothing configured at all -> 503
+ *   - no usable identity        -> 403
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   let caller;
@@ -32,20 +37,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (!isDriveConfigured()) {
+  if (!isDriveConfigured() && !isOauthConfigured()) {
     return NextResponse.json(
       { error: "Google Drive is not configured on this server." },
       { status: 503 }
     );
   }
 
-  const userEmail = caller.email;
-  if (!userEmail) {
+  const oauthAccount = await getGoogleOauthAccount(caller.member.id);
+  if (!oauthAccount && !caller.email) {
     return NextResponse.json(
-      { error: "Tu cuenta no tiene un correo institucional configurado." },
+      { error: "Conecta tu cuenta de Google o configura un correo institucional." },
       { status: 403 }
     );
   }
+  const driveCaller: DriveCaller = { staffId: caller.member.id, email: caller.email ?? "" };
 
   const params = request.nextUrl.searchParams;
   const folderId = params.get("folderId") || getDriveRootFolderId();
@@ -61,10 +67,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     if (query) {
-      const entries = await searchFiles(userEmail, query, folderId ?? undefined);
+      const entries = await searchFiles(driveCaller, query, folderId ?? undefined);
       return NextResponse.json({ entries, nextPageToken: null });
     }
-    const listing = await listFolder(userEmail, folderId as string, pageToken);
+    const listing = await listFolder(driveCaller, folderId as string, pageToken);
     return NextResponse.json(listing);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";

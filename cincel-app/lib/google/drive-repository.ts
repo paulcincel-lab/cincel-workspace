@@ -1,7 +1,11 @@
 import "server-only";
 
 import { getDriveClientFor } from "@/lib/google/client";
+import { getOauthAccessToken } from "@/lib/google/oauth";
 import { driveWebViewLink } from "@/lib/google/drive-url";
+
+/** Whoever is browsing Drive: their own connected OAuth account is tried first. */
+export type DriveCaller = { staffId: string; email: string };
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
@@ -48,16 +52,23 @@ function normalize(raw: RawFile): DriveEntry {
   };
 }
 
+async function resolveAccessToken(caller: DriveCaller): Promise<string> {
+  const oauth = await getOauthAccessToken(caller.staffId);
+  if (oauth) return oauth.token;
+
+  const client = getDriveClientFor(caller.email);
+  if (!client) throw new Error("DRIVE_NOT_CONFIGURED");
+  const { token } = await client.getAccessToken();
+  if (!token) throw new Error("DRIVE_AUTH_FAILED");
+  return token;
+}
+
 async function driveFetch<T>(
-  userEmail: string,
+  caller: DriveCaller,
   path: string,
   params: Record<string, string>
 ): Promise<T> {
-  const client = getDriveClientFor(userEmail);
-  if (!client) throw new Error("DRIVE_NOT_CONFIGURED");
-
-  const { token } = await client.getAccessToken();
-  if (!token) throw new Error("DRIVE_AUTH_FAILED");
+  const token = await resolveAccessToken(caller);
 
   const qs = new URLSearchParams({
     supportsAllDrives: "true",
@@ -76,16 +87,17 @@ async function driveFetch<T>(
 
 /**
  * Immediate children of `folderId`, folders first then files, name-sorted.
- * `userEmail` is the caller's institutional email — every listing is scoped
- * to what that person can see in Drive (see lib/google/client.ts).
+ * Scoped to `caller`'s own connected Google account when they have one,
+ * else to what their institutional identity can see in Drive (see
+ * lib/google/client.ts and lib/google/oauth.ts).
  */
 export async function listFolder(
-  userEmail: string,
+  caller: DriveCaller,
   folderId: string,
   pageToken?: string
 ): Promise<DriveListing> {
   const data = await driveFetch<{ files?: RawFile[]; nextPageToken?: string }>(
-    userEmail,
+    caller,
     "/files",
     {
       q: `'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false`,
@@ -102,20 +114,20 @@ export async function listFolder(
 }
 
 export async function getFileMeta(
-  userEmail: string,
+  caller: DriveCaller,
   fileId: string
 ): Promise<DriveEntry> {
   const raw = await driveFetch<RawFile>(
-    userEmail,
+    caller,
     `/files/${encodeURIComponent(fileId)}`,
     { fields: FILE_FIELDS }
   );
   return normalize(raw);
 }
 
-/** Full-text search, optionally scoped to a folder. Scoped per `userEmail`. */
+/** Full-text search, optionally scoped to a folder. Scoped per `caller`. */
 export async function searchFiles(
-  userEmail: string,
+  caller: DriveCaller,
   query: string,
   folderId?: string
 ): Promise<DriveEntry[]> {
@@ -123,7 +135,7 @@ export async function searchFiles(
   const clauses = [`name contains '${escaped}'`, "trashed = false"];
   if (folderId) clauses.push(`'${folderId.replace(/'/g, "\\'")}' in parents`);
 
-  const data = await driveFetch<{ files?: RawFile[] }>(userEmail, "/files", {
+  const data = await driveFetch<{ files?: RawFile[] }>(caller, "/files", {
     q: clauses.join(" and "),
     fields: `files(${FILE_FIELDS})`,
     orderBy: "folder,name",

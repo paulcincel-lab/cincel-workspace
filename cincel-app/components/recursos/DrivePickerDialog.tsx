@@ -34,6 +34,8 @@ function formatModified(iso: string | null): string {
     : d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+type AccountStatus = { oauthAvailable: boolean; connectedEmail: string | null };
+
 export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId }: Props) {
   const [path, setPath] = useState<Crumb[]>([]);
   const [entries, setEntries] = useState<DrivePickerEntry[]>([]);
@@ -41,7 +43,41 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [account, setAccount] = useState<AccountStatus | null>(null);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadAccountStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/google/drive/status");
+      const body = await res.json().catch(() => ({}));
+      setAccount({ oauthAvailable: Boolean(body?.oauthAvailable), connectedEmail: body?.connectedEmail ?? null });
+    } catch {
+      setAccount(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (open) void loadAccountStatus();
+  }, [open, loadAccountStatus]);
+
+  const connectGoogleAccount = () => {
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    window.location.href = `/api/google/oauth/start?return_to=${encodeURIComponent(returnTo)}`;
+  };
+
+  const disconnectGoogleAccount = async () => {
+    setSwitchingAccount(true);
+    try {
+      await fetch("/api/google/oauth/disconnect", { method: "POST" });
+      await loadAccountStatus();
+      setPath([]);
+      setSearch("");
+    } finally {
+      setSwitchingAccount(false);
+    }
+  };
 
   const currentFolderId = path.length > 0 ? path[path.length - 1].id : rootFolderId;
 
@@ -104,6 +140,38 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
             Cerrar
           </Button>
         </SheetHeader>
+
+        {account?.oauthAvailable ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+            {account.connectedEmail ? (
+              <>
+                <span>
+                  Conectado como <span className="font-medium text-foreground">{account.connectedEmail}</span>
+                </span>
+                <span className="flex gap-2">
+                  <Button variant="link" className="h-auto p-0 text-xs" onClick={connectGoogleAccount}>
+                    Cambiar cuenta
+                  </Button>
+                  <Button
+                    variant="link"
+                    className="h-auto p-0 text-xs text-destructive"
+                    disabled={switchingAccount}
+                    onClick={() => void disconnectGoogleAccount()}
+                  >
+                    Desconectar
+                  </Button>
+                </span>
+              </>
+            ) : (
+              <>
+                <span>Usando el correo institucional. Puedes conectar tu propia cuenta de Google.</span>
+                <Button variant="link" className="h-auto p-0 text-xs" onClick={connectGoogleAccount}>
+                  Conectar cuenta de Google
+                </Button>
+              </>
+            )}
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-sm">
           <Button variant="link" className="h-auto p-0 font-medium" onClick={() => goToCrumb(-1)}>
