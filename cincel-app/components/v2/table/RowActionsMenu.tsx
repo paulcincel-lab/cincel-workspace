@@ -47,7 +47,13 @@ export function RowActionsMenu<T>({ row, actions }: RowActionsMenuProps<T>) {
             {action.separatorBefore && i > 0 ? <DropdownMenuSeparator /> : null}
             <DropdownMenuItem
               variant={action.variant === "destructive" ? "destructive" : "default"}
-              onClick={() => action.onSelect(row)}
+              onClick={(e: MouseEvent) => {
+                // The menu is portaled, but React events still bubble through the
+                // component tree to the row's onRowClick — picking an action must
+                // not also open the row (e.g. Equipo's profile sheet).
+                e.stopPropagation();
+                action.onSelect(row);
+              }}
             >
               {action.label}
             </DropdownMenuItem>

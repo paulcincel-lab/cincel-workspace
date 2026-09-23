@@ -4,11 +4,13 @@
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { test, expect } from "@playwright/test";
+import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
 const MEMBER_NAME = `Colaborador E2E ${RUN_ID}`;
+const connectionString = process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
 
 test.describe("Equipo — add team member", () => {
   test.beforeEach(async ({ page }) => {
@@ -50,5 +52,40 @@ test.describe("Equipo — add team member", () => {
 
     // The new member should appear in the list (name can appear in multiple elements — first is enough)
     await expect(page.getByText(MEMBER_NAME).first()).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("deactivate a collaborator, find them under Desactivados, and reactivate them", async ({ page }) => {
+    // Seeds its own collaborator (tagged E2E so global-cleanup purges it) instead
+    // of relying on the test above — a retry runs in a fresh worker with a new RUN_ID.
+    const name = `Baja E2E ${Date.now()}`;
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      await sql`insert into core.staff (name, email, role, capacity, active) values (${name}, ${`baja.${Date.now()}@cincel.test`}, 'Colaborador', 8, true)`;
+    } finally {
+      await sql.end();
+    }
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByText(name).first()).toBeVisible({ timeout: 30_000 });
+    // The page's own refresh() (areas, tasks, projects) re-renders the table
+    // as each fetch lands, which would detach an already-open row menu.
+    await page.waitForLoadState("networkidle");
+
+    const rowMenu = (who: string) => page.getByRole("row").filter({ hasText: who }).getByLabel("Acciones");
+
+    page.once("dialog", (dialog) => void dialog.accept());
+    await rowMenu(name).click();
+    await page.getByRole("menuitem", { name: "Desactivar" }).click();
+
+    // Gone from Activos…
+    await expect(page.getByText(name)).toHaveCount(0, { timeout: 15_000 });
+
+    // …present under Desactivados, where the same menu now offers Reactivar.
+    await page.getByRole("tab", { name: "Desactivados" }).click();
+    await expect(page.getByText(name).first()).toBeVisible({ timeout: 15_000 });
+
+    page.once("dialog", (dialog) => void dialog.accept());
+    await rowMenu(name).click();
+    await page.getByRole("menuitem", { name: "Reactivar" }).click();
+    await expect(page.getByText(name)).toHaveCount(0, { timeout: 15_000 });
   });
 });

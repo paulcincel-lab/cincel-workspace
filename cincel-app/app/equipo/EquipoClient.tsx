@@ -18,7 +18,7 @@ import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { Button } from "@/components/ui/shadcn/button";
 import ExportMenu from "@/components/ui/ExportMenu";
-import { fetchStaffAction } from "@/lib/actions/staff-actions";
+import { fetchStaffAction, setStaffActiveAction } from "@/lib/actions/staff-actions";
 import { fetchAreasAction } from "@/lib/actions/areas-actions";
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
@@ -247,10 +247,41 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
             void navigator.clipboard.writeText(m.institutionalEmail);
           },
         },
+        ...(teamCapabilities.canToggleCollaboratorActive
+          ? [
+              {
+                label: view === "activos" ? "Desactivar" : "Reactivar",
+                variant: view === "activos" ? ("destructive" as const) : ("default" as const),
+                separatorBefore: true,
+                onSelect: (m: TeamMemberWithWorkload) => void toggleMemberActive(m),
+              },
+            ]
+          : []),
       ]),
     ],
-    [selected, openEditEditor]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, openEditEditor, view, teamCapabilities.canToggleCollaboratorActive]
   );
+
+  async function toggleMemberActive(member: TeamMemberWithWorkload) {
+    const deactivating = member.active;
+    if (member.id === authenticatedUser?.member.id) {
+      window.alert("No puedes desactivar tu propia cuenta.");
+      return;
+    }
+    const fullName = [member.name, member.lastName].filter(Boolean).join(" ");
+    const message = deactivating
+      ? `¿Desactivar a ${fullName}? Dejará de poder iniciar sesión y de aparecer para asignar tareas. Su historial se conserva y puedes reactivarlo cuando quieras.`
+      : `¿Reactivar a ${fullName}?`;
+    if (!window.confirm(message)) return;
+    try {
+      await setStaffActiveAction(member.id, !deactivating);
+      await refresh();
+    } catch (err) {
+      const text = err instanceof Error ? err.message : "";
+      window.alert(text.startsWith("FORBIDDEN:") ? "No tienes permiso para realizar esta acción." : "No se pudo actualizar al colaborador.");
+    }
+  }
 
   function bulkCopyEmails() {
     const emails = withWorkload
