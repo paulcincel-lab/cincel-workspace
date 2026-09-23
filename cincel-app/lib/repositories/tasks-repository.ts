@@ -6,6 +6,7 @@ import {
   historyEvents,
   projects,
   staff,
+  taskAttachments,
   taskChecklistItems,
   taskStatuses,
   taskSupport,
@@ -17,6 +18,7 @@ import type {
   HistoryEvent,
   StaffRef,
   Task,
+  TaskAttachment,
   TaskChecklistItem,
   TaskDetail,
   TaskFilters,
@@ -60,6 +62,101 @@ export function toTask(row: TaskRow): Task {
 
 function toChecklistItem(row: typeof taskChecklistItems.$inferSelect): TaskChecklistItem {
   return { id: row.id, title: row.title, completed: row.completed, sortOrder: row.sortOrder };
+}
+
+const ALLOWED_ATTACHMENT_MIME = /^image\/|^text\/plain$/;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+function toAttachment(row: {
+  id: string;
+  taskId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: Date;
+  uploadedById: string | null;
+  uploadedByName: string | null;
+}): TaskAttachment {
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    fileName: row.fileName,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    uploadedBy: row.uploadedById ? { id: row.uploadedById, name: row.uploadedByName ?? "" } : null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function listTaskAttachments(taskId: string): Promise<TaskAttachment[]> {
+  const rows = await db
+    .select({
+      id: taskAttachments.id,
+      taskId: taskAttachments.taskId,
+      fileName: taskAttachments.fileName,
+      mimeType: taskAttachments.mimeType,
+      sizeBytes: taskAttachments.sizeBytes,
+      createdAt: taskAttachments.createdAt,
+      uploadedById: taskAttachments.uploadedById,
+      uploadedByName: staff.name,
+    })
+    .from(taskAttachments)
+    .leftJoin(staff, eq(staff.id, taskAttachments.uploadedById))
+    .where(eq(taskAttachments.taskId, taskId))
+    .orderBy(asc(taskAttachments.createdAt));
+  return rows.map(toAttachment);
+}
+
+/**
+ * Attaches a file to a task as a comment (#425): validates type/size, stores
+ * the bytes, and — matching how a plain-text comment is recorded — logs a
+ * "comentario" history entry so it shows in the task's timeline.
+ */
+export async function addTaskAttachment(
+  taskId: string,
+  file: { name: string; mimeType: string; data: Buffer },
+  actorId: string
+): Promise<TaskAttachment> {
+  if (!ALLOWED_ATTACHMENT_MIME.test(file.mimeType)) {
+    throw new Error("TASK_ATTACHMENT_TYPE_NOT_ALLOWED");
+  }
+  if (file.data.byteLength === 0 || file.data.byteLength > MAX_ATTACHMENT_BYTES) {
+    throw new Error("TASK_ATTACHMENT_TOO_LARGE");
+  }
+
+  const [row] = await db
+    .insert(taskAttachments)
+    .values({
+      taskId,
+      fileName: file.name.slice(0, 255) || "archivo",
+      mimeType: file.mimeType,
+      sizeBytes: file.data.byteLength,
+      data: file.data,
+      uploadedById: actorId,
+    })
+    .returning();
+
+  await recordComment({ entity: "task", entityId: taskId, actorId, comment: `Adjuntó un archivo: ${row.fileName}` });
+
+  const [uploader] = await db.select({ name: staff.name }).from(staff).where(eq(staff.id, actorId));
+  return toAttachment({ ...row, uploadedByName: uploader?.name ?? null });
+}
+
+/** File bytes for the download route — kept out of every other query so list views never load them. */
+export async function getTaskAttachmentData(
+  id: string
+): Promise<{ taskId: string; fileName: string; mimeType: string; data: Buffer } | null> {
+  const [row] = await db
+    .select({
+      taskId: taskAttachments.taskId,
+      fileName: taskAttachments.fileName,
+      mimeType: taskAttachments.mimeType,
+      data: taskAttachments.data,
+    })
+    .from(taskAttachments)
+    .where(eq(taskAttachments.id, id))
+    .limit(1);
+  return row ?? null;
 }
 
 const TASK_TRACKED_FIELDS = [
@@ -179,11 +276,13 @@ export async function getTask(id: string): Promise<TaskDetail | null> {
     .where(eq(taskChecklistItems.taskId, id))
     .orderBy(asc(taskChecklistItems.sortOrder));
   const history = await listHistory("task", id);
+  const attachments = await listTaskAttachments(id);
 
   return {
     ...base,
     createdBy: creator ?? { id: base.createdById, name: "" },
     checklistItems: checklist.map(toChecklistItem),
+    attachments,
     history,
   };
 }

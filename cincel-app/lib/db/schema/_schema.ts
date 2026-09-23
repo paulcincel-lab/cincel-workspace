@@ -1,10 +1,17 @@
-import { pgSchema, timestamp } from "drizzle-orm/pg-core";
+import { customType, pgSchema, timestamp } from "drizzle-orm/pg-core";
 
 /**
  * All Cincel business tables live in the `core` Postgres schema.
  * Greenfield model (rebuild plan Part C); no legacy tables, no legacy ids.
  */
 export const core = pgSchema("core");
+
+/** Raw file bytes (Postgres `bytea`) — drizzle-orm has no built-in helper for it. */
+export const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 // ── Enums (Part C.0) ────────────────────────────────────────────────────────
 // Values are ASCII codes; display labels live in the UI (Part B.5).
