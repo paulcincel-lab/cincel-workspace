@@ -24,12 +24,14 @@ import type {
   ProjectDetail,
   ProjectInput,
   ProjectLink,
+  ProjectLinkInput,
   ProjectListItem,
   ProjectStatus,
   Task,
   WorkflowRef,
 } from "@/lib/types/core";
 import { toTask } from "@/lib/repositories/tasks-repository";
+import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import { normalizePhases } from "@/lib/proyectos/phases";
 
 type ProjectRow = typeof projects.$inferSelect;
@@ -185,7 +187,7 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
       coordinator: true,
       members: { with: { staff: true } },
       contacts: { with: { contact: true } },
-      links: { orderBy: asc(projectLinks.kind) },
+      links: { orderBy: asc(projectLinks.createdAt) },
     },
   });
   if (!row) return null;
@@ -211,7 +213,7 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
 }
 
 function toLink(row: typeof projectLinks.$inferSelect): ProjectLink {
-  return { id: row.id, kind: row.kind, title: row.title, url: row.url, driveFileId: row.driveFileId };
+  return { id: row.id, kind: row.kind as ProjectLink["kind"], title: row.title, url: row.url, driveFileId: row.driveFileId };
 }
 
 function toValues(input: ProjectInput) {
@@ -461,27 +463,19 @@ export async function setProjectContacts(
   });
 }
 
-/** Set or replace the link of one kind (administrativo, planos, ...). Empty url removes it. */
-export async function setProjectLink(
-  projectId: string,
-  kind: string,
-  link: { url: string; title?: string | null; drive?: DriveFileInput | null }
-): Promise<ProjectLink | null> {
-  const url = link.url.trim();
-  if (!url) {
-    await db
-      .delete(projectLinks)
-      .where(and(eq(projectLinks.projectId, projectId), eq(projectLinks.kind, kind)));
-    return null;
-  }
-  const driveFileId = link.drive ? await upsertDriveFile(link.drive) : null;
-  const values = { title: clean(link.title), url, driveFileId };
-  const [row] = await db
-    .insert(projectLinks)
-    .values({ projectId, kind, ...values })
-    .onConflictDoUpdate({ target: [projectLinks.projectId, projectLinks.kind], set: values })
-    .returning();
+/** Add a link to a project; only http(s) URLs (see normalizeTaskLinkUrl). */
+export async function addProjectLink(projectId: string, input: ProjectLinkInput): Promise<ProjectLink> {
+  const title = input.title.trim();
+  if (!title) throw new Error("PROJECT_LINK_TITLE_REQUIRED");
+  const url = normalizeTaskLinkUrl(input.url);
+  if (!url) throw new Error("PROJECT_LINK_URL_INVALID");
+  if (input.kind !== "interno" && input.kind !== "cliente") throw new Error("PROJECT_LINK_KIND_INVALID");
+  const [row] = await db.insert(projectLinks).values({ projectId, kind: input.kind, title, url }).returning();
   return toLink(row);
+}
+
+export async function removeProjectLink(projectId: string, linkId: string): Promise<void> {
+  await db.delete(projectLinks).where(and(eq(projectLinks.id, linkId), eq(projectLinks.projectId, projectId)));
 }
 
 export async function upsertDriveFile(input: DriveFileInput): Promise<string> {

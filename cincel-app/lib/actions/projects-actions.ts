@@ -7,10 +7,10 @@ import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
 import type {
   ApplyWorkflowPreview,
-  DriveFileInput,
   ProjectDetail,
   ProjectInput,
   ProjectLink,
+  ProjectLinkInput,
   ProjectListItem,
 } from "@/lib/types/core";
 import type { ProjectFilters } from "@/lib/repositories/projects-repository";
@@ -123,18 +123,34 @@ export async function setProjectContactsAction(
   revalidateProyectos(projectId);
 }
 
-export async function setProjectLinkAction(
-  projectId: string,
-  kind: string,
-  link: { url: string; title?: string | null; drive?: DriveFileInput | null }
-): Promise<ProjectLink | null> {
+const PROJECT_LINK_ERROR_MESSAGES: Record<string, string> = {
+  PROJECT_LINK_TITLE_REQUIRED: "Escribe un nombre para el enlace.",
+  PROJECT_LINK_URL_INVALID: "El enlace debe ser una URL válida que empiece con http:// o https://.",
+  PROJECT_LINK_KIND_INVALID: "Elige si el enlace es interno o del cliente.",
+};
+
+export async function addProjectLinkAction(projectId: string, input: ProjectLinkInput): Promise<ProjectLink> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canEditProtectedProjectData) {
     throw new Error("FORBIDDEN: project links edit");
   }
-  const row = await projectsRepository.setProjectLink(projectId, kind, link);
+  try {
+    const row = await projectsRepository.addProjectLink(projectId, input);
+    revalidateProyectos(projectId);
+    return row;
+  } catch (err) {
+    const message = err instanceof Error ? PROJECT_LINK_ERROR_MESSAGES[err.message] : undefined;
+    throw new Error(message ?? "No se pudo agregar el enlace.");
+  }
+}
+
+export async function removeProjectLinkAction(projectId: string, linkId: string): Promise<void> {
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canEditProtectedProjectData) {
+    throw new Error("FORBIDDEN: project links edit");
+  }
+  await projectsRepository.removeProjectLink(projectId, linkId);
   revalidateProyectos(projectId);
-  return row;
 }
 
 export async function previewApplyWorkflowAction(

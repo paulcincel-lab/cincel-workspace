@@ -176,4 +176,54 @@ test.describe("Proyectos — create and edit", () => {
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByRole("link", { name: newClient })).toBeVisible({ timeout: 30_000 });
   });
+
+  test("Drive links can be added to a project by URL, split into Interno / Cliente (#450)", async ({ page }) => {
+    const stamp = Date.now();
+    const name = `Proyecto enlaces E2E ${stamp}`;
+    const sql = postgres(connectionString, { max: 1 });
+    let projectId = "";
+    try {
+      const [presale] = await sql`select id from core.workflows where key = 'presale' limit 1`;
+      const [client] = await sql`
+        insert into core.contacts (type, kind, name) values ('cliente', 'particular', ${`Cliente enlaces E2E ${stamp}`}) returning id`;
+      const [project] = await sql`
+        insert into core.projects (name, client_id, current_workflow_id, status)
+        values (${name}, ${client.id}, ${presale.id}, 'activo') returning id`;
+      await sql`insert into core.project_stages (project_id, workflow_id) values (${project.id}, ${presale.id})`;
+      projectId = project.id;
+    } finally {
+      await sql.end();
+    }
+
+    await page.goto(`${BASE_URL}/proyectos/${projectId}/ficha`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name })).toBeVisible({ timeout: 30_000 });
+
+    const addLink = async (kind: "interno" | "cliente", title: string, url: string) => {
+      await page.getByLabel("Tipo de enlace").selectOption(kind);
+      await page.getByPlaceholder("Nombre del enlace").fill(title);
+      await page.getByPlaceholder(/drive\.google\.com/).fill(url);
+      await page.getByRole("button", { name: "Agregar enlace" }).click();
+    };
+
+    // Works without Google Drive configured, and refuses non-web URLs.
+    await addLink("interno", "Trampa", "javascript:alert(1)");
+    await expect(page.getByText("El enlace debe empezar con http")).toBeVisible();
+
+    await addLink("interno", "Planos internos", "https://drive.google.com/drive/folders/planos");
+    await expect(page.getByRole("link", { name: "Planos internos" })).toBeVisible({ timeout: 15_000 });
+    await addLink("cliente", "Carpeta del cliente", "https://drive.google.com/drive/folders/cliente");
+    await expect(page.getByRole("link", { name: "Carpeta del cliente" })).toBeVisible({ timeout: 15_000 });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("link", { name: "Planos internos" })).toHaveAttribute(
+      "href",
+      "https://drive.google.com/drive/folders/planos",
+      { timeout: 30_000 }
+    );
+    await expect(page.getByRole("link", { name: "Carpeta del cliente" })).toBeVisible();
+
+    await page.locator("li").filter({ hasText: "Carpeta del cliente" }).getByRole("button", { name: "Quitar" }).click();
+    await expect(page.getByRole("link", { name: "Carpeta del cliente" })).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByRole("link", { name: "Planos internos" })).toBeVisible();
+  });
 });

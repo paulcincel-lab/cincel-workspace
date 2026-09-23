@@ -16,9 +16,8 @@ import { Label } from "@/components/ui/shadcn/label";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { normalizePhases, projectPhaseOptions } from "@/lib/proyectos/phases";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
-import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
+import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
-import { useDriveEnabled } from "@/lib/google/use-drive-enabled";
 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
@@ -28,7 +27,8 @@ import {
   setProjectStagesAction,
   setProjectMembersAction,
   setProjectContactsAction,
-  setProjectLinkAction,
+  addProjectLinkAction,
+  removeProjectLinkAction,
   previewApplyWorkflowAction,
   applyWorkflowAction,
 } from "@/lib/actions/projects-actions";
@@ -44,14 +44,8 @@ import type {
   Staff,
   TaskListItem,
   Workflow,
+  TaskLinkInput,
 } from "@/lib/types/core";
-
-const PROJECT_LINK_KINDS: Array<{ key: string; label: string }> = [
-  { key: "administrativo", label: "Administrativo" },
-  { key: "planos", label: "Planos" },
-  { key: "renders", label: "Renders" },
-  { key: "reportes", label: "Reportes" },
-];
 
 const NO_VALUE = "__none__";
 
@@ -89,11 +83,9 @@ export default function ProjectFichaPage() {
   const [notFound, setNotFound] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Partial<ProjectDetail>>({});
-  const [drivePickerFor, setDrivePickerFor] = useState<string | null>(null);
   const [applyPreview, setApplyPreview] = useState<ApplyWorkflowPreview | null>(null);
   const [applyWorkflowId, setApplyWorkflowId] = useState("");
   const [customPhase, setCustomPhase] = useState("");
-  const driveEnabled = useDriveEnabled();
   const authenticatedUser = getCurrentAuthenticatedUser();
   const caps = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
 
@@ -254,23 +246,20 @@ export default function ProjectFichaPage() {
     }
   }
 
-  async function pickDriveEntry(entry: DrivePickerEntry) {
-    if (!project || !drivePickerFor) return;
+  async function addLink(input: TaskLinkInput) {
+    if (!project) return;
     try {
-      await setProjectLinkAction(project.id, drivePickerFor, {
-        url: entry.webViewLink,
-        title: entry.name,
-        drive: {
-          googleFileId: entry.id,
-          fileName: entry.name,
-          mimeType: entry.mimeType,
-          iconLink: entry.iconLink,
-          thumbnailLink: entry.thumbnailLink,
-          webViewLink: entry.webViewLink,
-          syncedAt: new Date().toISOString(),
-        },
-      });
-      setDrivePickerFor(null);
+      await addProjectLinkAction(project.id, input);
+      await reload();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "No se pudo agregar el enlace.");
+    }
+  }
+
+  async function removeLink(linkId: string) {
+    if (!project) return;
+    try {
+      await removeProjectLinkAction(project.id, linkId);
       await reload();
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
@@ -554,27 +543,12 @@ export default function ProjectFichaPage() {
 
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-foreground">Enlaces de Drive</h2>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {PROJECT_LINK_KINDS.map((kind) => {
-                  const link = project.links.find((l) => l.kind === kind.key);
-                  return (
-                    <div key={kind.key} className="rounded-lg border border-border p-3 text-sm">
-                      <p className="font-medium">{kind.label}</p>
-                      {link ? (
-                        <a href={link.url} target="_blank" rel="noreferrer" className="mt-1 block truncate text-primary underline">
-                          {link.title || link.url}
-                        </a>
-                      ) : (
-                        <p className="mt-1 text-muted-foreground">Sin vincular</p>
-                      )}
-                      {driveEnabled ? (
-                        <Button variant="outline" size="sm" className="mt-2" onClick={() => setDrivePickerFor(kind.key)}>
-                          Elegir de Drive
-                        </Button>
-                      ) : null}
-                    </div>
-                  );
-                })}
+              <div className="mt-4">
+                <DriveLinksEditor
+                  links={project.links}
+                  onAdd={caps.canEditProtectedProjectData ? (input) => void addLink(input) : undefined}
+                  onRemove={caps.canEditProtectedProjectData ? (id) => void removeLink(id) : undefined}
+                />
               </div>
             </section>
           </div>
@@ -624,13 +598,6 @@ export default function ProjectFichaPage() {
           </div>
         </div>
 
-        {drivePickerFor ? (
-          <DrivePickerDialog
-            open
-            onClose={() => setDrivePickerFor(null)}
-            onPick={(entry) => void pickDriveEntry(entry)}
-          />
-        ) : null}
       </section>
     </main>
   );
