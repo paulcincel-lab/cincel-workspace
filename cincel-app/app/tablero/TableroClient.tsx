@@ -81,7 +81,6 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
   const [boardTasks, setBoardTasks] = useState<TaskListItem[]>(() => flattenBoard(initialBoard));
   const [visibleCount, setVisibleCount] = useState<Record<string, number>>({});
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
-  const [memberIds, setMemberIds] = useState<string[]>([]);
   const [projectId, setProjectId] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
@@ -91,6 +90,8 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const capabilities = useMemo(() => resolveActivitiesCapabilities(authenticatedUser), [authenticatedUser]);
   const viewerId = authenticatedUser?.member.id || "";
+  // Open on the viewer's own tasks; clearing the member filter shows everyone's.
+  const [memberIds, setMemberIds] = useState<string[]>(() => (viewerId ? [viewerId] : []));
 
   const workflowIdBySlug = useMemo(() => {
     const map = new Map<string, string>();
@@ -302,7 +303,7 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
         actions={
           <Tabs value={departmentFilter || "__all__"} onValueChange={(v) => setDepartmentFilter(v === "__all__" ? "" : (v as string))}>
             <TabsList>
-              <TabsTrigger value="__all__">Todos</TabsTrigger>
+              <TabsTrigger value="__all__">General</TabsTrigger>
               {DEPARTMENTOS.map((d) => (
                 <TabsTrigger key={d.slug} value={d.slug}>
                   {d.label}
@@ -320,6 +321,7 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
           onMemberIdsChange={setMemberIds}
           projectId={projectId}
           onProjectIdChange={setProjectId}
+          extraMembers={authenticatedUser ? [{ id: viewerId, name: authenticatedUser.member.name }] : []}
         />
       </div>
 

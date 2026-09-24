@@ -682,6 +682,20 @@ export async function reorderProjectTasks(projectId: string, orderedTaskIds: str
   });
 }
 
+/**
+ * Rewrites sortOrder for every id given, across projects — used by the
+ * Actividades General view, where one área panel mixes several projects.
+ * Relative order inside each project is preserved, so the per-department
+ * project panels keep showing a consistent order too.
+ */
+export async function reorderTasks(orderedTaskIds: string[]): Promise<void> {
+  await db.transaction(async (tx) => {
+    for (const [i, id] of orderedTaskIds.entries()) {
+      await tx.update(tasks).set({ sortOrder: i }).where(and(eq(tasks.id, id), isNull(tasks.deletedAt)));
+    }
+  });
+}
+
 // ── Comments and history ────────────────────────────────────────────────────
 export async function addTaskComment(taskId: string, comment: string, actorId: string): Promise<HistoryEvent> {
   const text = comment.trim();

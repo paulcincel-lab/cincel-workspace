@@ -25,7 +25,7 @@ import TeamMultiSelect, { TeamMembersCompact } from "@/components/ui/TeamMultiSe
 import NewProjectTemplateModal from "@/components/tareas/NewProjectTemplateModal";
 import NewTaskModal, { type NewTaskFormValues } from "@/components/tareas/NewTaskModal";
 import TaskDrawer from "@/components/tareas/TaskDrawer";
-import { DEPARTMENTOS, phasesFor } from "@/lib/actividades/departamento";
+import { DEPARTMENTOS, GENERAL_SLUG, phasesFor } from "@/lib/actividades/departamento";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
@@ -55,6 +55,7 @@ import {
   removeChecklistItemAction,
   reorderChecklistAction,
   reorderProjectTasksAction,
+  reorderTasksAction,
   addTaskCommentAction,
   addTaskAttachmentAction,
   addTaskLinkAction,
@@ -76,6 +77,16 @@ import type {
 
 const DEFAULT_PRIORITY: TaskPriority = "media";
 
+const GENERAL_LABEL = "General";
+const GENERAL_DESCRIPTION = "Todas las tareas de todas las áreas, incluidas las que no tienen área.";
+const SIN_AREA_GROUP_ID = "sin-area";
+
+/** Phase list for a task's own department — the General view mixes several. */
+function phasesForTask(task: TaskListItem): string[] {
+  const departamento = DEPARTMENTOS.find((d) => d.slug === task.workflow?.key);
+  return departamento ? phasesFor(departamento.template) : [];
+}
+
 interface ActividadesClientProps {
   slug: string;
   workflow: WorkflowDetail | null;
@@ -96,7 +107,12 @@ export function ActividadesClient({
   const searchParams = useSearchParams();
   const projectFromQuery = searchParams.get("project") || "";
 
-  const departamento = DEPARTMENTOS.find((d) => d.slug === slug)!;
+  // The General view isn't a department: it lists every área's tasks plus
+  // the ones with no área, grouped by área instead of by project.
+  const isGeneral = slug === GENERAL_SLUG;
+  const departamento = DEPARTMENTOS.find((d) => d.slug === slug);
+  const pageLabel = departamento?.label ?? GENERAL_LABEL;
+  const pageDescription = departamento?.description ?? GENERAL_DESCRIPTION;
   const [tasks, setTasks] = useState<TaskListItem[]>(initialTasks);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -117,20 +133,23 @@ export function ActividadesClient({
   const capabilities = useMemo(() => resolveActivitiesCapabilities(authenticatedUser), [authenticatedUser]);
   const viewerId = authenticatedUser?.member.id || "";
 
-  const phases = useMemo(() => phasesFor(departamento.template), [departamento.template]);
+  const phases = useMemo(() => (departamento ? phasesFor(departamento.template) : []), [departamento]);
   const staffNames = useMemo(() => initialStaff.map((m) => m.name), [initialStaff]);
   const staffOptions = useMemo(() => initialStaff.map((m) => ({ id: m.id, name: m.name })), [initialStaff]);
   const nameToStaffId = useMemo(() => new Map(initialStaff.map((s) => [s.name, s.id])), [initialStaff]);
 
   const refresh = useCallback(async () => {
-    if (!workflow) return;
+    if (!workflow && !isGeneral) return;
     try {
-      const rows = await fetchTasksAction({ workflowId: workflow.id, archived: view === "archivadas" });
+      const rows = await fetchTasksAction({
+        ...(workflow && !isGeneral ? { workflowId: workflow.id } : {}),
+        archived: view === "archivadas",
+      });
       setTasks(rows);
     } catch (err) {
       console.error(err);
     }
-  }, [workflow, view]);
+  }, [workflow, isGeneral, view]);
 
   useEffect(() => {
     // Sync the task list with the server on mount and whenever workflow/view
@@ -194,13 +213,13 @@ export function ActividadesClient({
 
   const phaseMix = useMemo(
     () =>
-      view !== "activas"
+      view !== "activas" || isGeneral
         ? []
         : phases.map((phase) => ({
             phase,
             percent: tasks.length === 0 ? 0 : (tasks.filter((t) => t.phase === phase).length / tasks.length) * 100,
           })),
-    [tasks, phases, view]
+    [tasks, phases, view, isGeneral]
   );
 
   // "Nueva tarea" and the quick-add row list every active project, not only
@@ -430,6 +449,15 @@ export function ActividadesClient({
     }
   }
 
+  async function reorderTasks(orderedTaskIds: string[]) {
+    try {
+      await reorderTasksAction(orderedTaskIds);
+      await refresh();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   async function addComment(comment: string) {
     if (!selectedTaskId) return;
     try {
@@ -543,7 +571,7 @@ export function ActividadesClient({
   async function exportActivities(format: "xlsx" | "pdf") {
     const { settings } = loadGeneralSettings();
     await exportTableData({
-      moduleName: `Actividades ${departamento.label}`,
+      moduleName: `Actividades ${pageLabel}`,
       fileName: `actividades-${slug}-${Date.now()}`,
       format,
       companyName: settings.company.tradeName || settings.company.legalName,
@@ -556,6 +584,7 @@ export function ActividadesClient({
   const [quickTitles, setQuickTitles] = useState<Record<string, string>>({});
 
   const projectGroups = useMemo(() => {
+    if (isGeneral) return [];
     const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
     for (const task of filteredTasks) {
       const group = groups.get(task.project.id) ?? { id: task.project.id, name: task.project.name, tasks: [] };
@@ -563,12 +592,38 @@ export function ActividadesClient({
       groups.set(task.project.id, group);
     }
     return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
-  }, [filteredTasks]);
+  }, [filteredTasks, isGeneral]);
+
+  // General view: one panel per department (always shown, in business-flow
+  // order), then any other workflow a task belongs to, then "Sin área".
+  const areaGroups = useMemo(() => {
+    if (!isGeneral) return [];
+    const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>(
+      DEPARTMENTOS.map((d) => [d.slug, { id: d.slug, name: d.label, tasks: [] }])
+    );
+    const others = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
+    const sinArea = { id: SIN_AREA_GROUP_ID, name: "Sin área", tasks: [] as TaskListItem[] };
+    for (const task of filteredTasks) {
+      if (!task.workflow) {
+        sinArea.tasks.push(task);
+        continue;
+      }
+      const group =
+        groups.get(task.workflow.key) ??
+        others.get(task.workflow.key) ??
+        { id: task.workflow.key, name: task.workflow.name, tasks: [] };
+      group.tasks.push(task);
+      if (!groups.has(task.workflow.key)) others.set(task.workflow.key, group);
+    }
+    return [
+      ...groups.values(),
+      ...[...others.values()].sort((a, b) => a.name.localeCompare(b.name, "es")),
+      sinArea,
+    ];
+  }, [filteredTasks, isGeneral]);
 
   const columns = useMemo<ColumnDef<TaskListItem, unknown>[]>(() => {
-    if (!workflow) return [];
-
-    const phaseOptionsWithOther = [...phases, "Otro..."];
+    if (!workflow && !isGeneral) return [];
 
     return [
       createSelectionColumn<TaskListItem>({
@@ -580,6 +635,7 @@ export function ActividadesClient({
       {
         id: "phase",
         header: "Fase",
+        accessorFn: (t) => t.phase ?? "",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
           const currentPhase = task.phase ?? "";
@@ -589,7 +645,8 @@ export function ActividadesClient({
             </span>
           );
           if (!capabilities.canReorderPhases) return display;
-          const selectablePhases = Array.from(new Set([...phaseOptionsWithOther, currentPhase].filter(Boolean)));
+          const taskPhases = isGeneral ? phasesForTask(task) : phases;
+          const selectablePhases = Array.from(new Set([...taskPhases, "Otro...", currentPhase].filter(Boolean)));
           return (
             <InlineEditable
               value={currentPhase}
@@ -627,6 +684,7 @@ export function ActividadesClient({
       {
         id: "project",
         header: "Proyecto",
+        accessorFn: (t) => t.project.name,
         // The project a task belongs to is set at creation and can't be moved
         // afterwards (TaskPatch has no projectId) — display only.
         cell: ({ row }: CellContext<TaskListItem, unknown>) => (
@@ -636,6 +694,7 @@ export function ActividadesClient({
       {
         id: "title",
         header: "Tarea",
+        accessorFn: (t) => t.title,
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
           return (
@@ -673,6 +732,7 @@ export function ActividadesClient({
       {
         id: "manager",
         header: "Responsable",
+        accessorFn: (t) => t.manager?.name ?? "",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
           if (!capabilities.canChangeResponsible) {
@@ -733,6 +793,7 @@ export function ActividadesClient({
       {
         id: "status",
         header: "Estado",
+        accessorFn: (t) => taskStatusLabel(t),
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
           const canChange = canChangeActivityStatus({
@@ -752,6 +813,7 @@ export function ActividadesClient({
       },
       {
         id: "commitmentDate",
+        accessorFn: (t) => t.commitmentDate ?? "",
         header: "Compromiso",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
@@ -769,6 +831,7 @@ export function ActividadesClient({
       },
       {
         id: "reviewDate",
+        accessorFn: (t) => t.reviewDate ?? "",
         header: "Próxima revisión",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
@@ -786,6 +849,7 @@ export function ActividadesClient({
       },
       {
         id: "deliveryDate",
+        accessorFn: (t) => t.deliveryDate ?? "",
         header: "Fecha de entrega",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
@@ -825,19 +889,25 @@ export function ActividadesClient({
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflow, phases, selected, capabilities, viewerId, staffNames, nameToStaffId]);
+  }, [workflow, isGeneral, phases, selected, capabilities, viewerId, staffNames, nameToStaffId]);
 
-  // Each accordion already names the project, so the per-row Proyecto column is redundant.
-  const groupedColumns = useMemo(() => columns.filter((c) => c.id !== "project"), [columns]);
+  // Each project accordion already names the project, so the per-row Proyecto
+  // column is redundant there — but an área panel mixes projects, so General keeps it.
+  const groupedColumns = useMemo(
+    () => (isGeneral ? columns : columns.filter((c) => c.id !== "project")),
+    [columns, isGeneral]
+  );
+  const canReorder = capabilities.canReorderPhases && view === "activas";
 
   return (
     <div>
       <PageHeader
-        title={departamento.label}
-        description={departamento.description}
+        title={pageLabel}
+        description={pageDescription}
         actions={
           <Tabs value={slug} onValueChange={(v) => router.push(`/actividades/${v}`)}>
             <TabsList>
+              <TabsTrigger value={GENERAL_SLUG}>{GENERAL_LABEL}</TabsTrigger>
               {DEPARTMENTOS.map((d) => (
                 <TabsTrigger key={d.slug} value={d.slug}>
                   {d.label}
@@ -848,9 +918,9 @@ export function ActividadesClient({
         }
       />
 
-      {!workflow ? (
+      {!workflow && !isGeneral ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-          {departamento.description}
+          {pageDescription}
         </div>
       ) : (
         <>
@@ -867,9 +937,11 @@ export function ActividadesClient({
             <div className="flex flex-wrap gap-2">
               {capabilities.canCreateActivity ? (
                 <>
-                  <Button variant="outline" onClick={() => setTemplateOpen(true)}>
-                    Iniciar plantilla de {departamento.label}
-                  </Button>
+                  {departamento ? (
+                    <Button variant="outline" onClick={() => setTemplateOpen(true)}>
+                      Iniciar plantilla de {departamento.label}
+                    </Button>
+                  ) : null}
                   <Button onClick={() => setNewTaskOpen(true)}>+ Nueva tarea</Button>
                 </>
               ) : null}
@@ -974,7 +1046,25 @@ export function ActividadesClient({
               { label: "Archivar", onClick: bulkArchive, variant: "destructive" },
             ]}
           />
-          {projectGroups.length === 0 ? (
+          {isGeneral ? (
+            <AccordionPanels
+              groups={areaGroups.map((group) => ({
+                id: group.id,
+                title: group.name,
+                count: group.tasks.length,
+                content: (
+                  <DataTable
+                    columns={groupedColumns}
+                    data={group.tasks}
+                    getRowId={(row) => row.id}
+                    emptyMessage="Sin tareas en esta área."
+                    wrapperClassName="rounded-none! border-x-0! border-b-0! shadow-none!"
+                    onReorderRows={canReorder ? (ids) => void reorderTasks(ids) : undefined}
+                  />
+                ),
+              }))}
+            />
+          ) : projectGroups.length === 0 ? (
             <DataTable
               columns={groupedColumns}
               data={[]}
@@ -994,11 +1084,7 @@ export function ActividadesClient({
                       data={group.tasks}
                       getRowId={(row) => row.id}
                       wrapperClassName="rounded-none! border-x-0! border-b-0! shadow-none!"
-                      onReorderRows={
-                        capabilities.canReorderPhases && view === "activas"
-                          ? (ids) => void reorderProjectTasks(group.id, ids)
-                          : undefined
-                      }
+                      onReorderRows={canReorder ? (ids) => void reorderProjectTasks(group.id, ids) : undefined}
                     />
                     {capabilities.canCreateActivity && view === "activas" ? (
                       <Input
@@ -1023,7 +1109,7 @@ export function ActividadesClient({
 
           <NewProjectTemplateModal
             open={templateOpen}
-            templateItems={[...departamento.template]}
+            templateItems={[...(departamento?.template ?? [])]}
             projectOptions={projectOptions}
             onClose={() => setTemplateOpen(false)}
             onCreate={applyTemplate}
