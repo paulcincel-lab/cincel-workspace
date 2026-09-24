@@ -31,7 +31,6 @@ export type RegionalSettings = {
 
 export type AppearanceSettings = {
   systemLogoUrl: string;
-  primaryColor: string;
 };
 
 export type SystemInformationSettings = {
@@ -71,7 +70,6 @@ export const GENERAL_SETTINGS_DEFAULTS: GeneralSettings = {
   },
   appearance: {
     systemLogoUrl: "/favicon.ico",
-    primaryColor: "#0A0A0A",
   },
   system: {
     systemName: "Cincel Workspace",
@@ -166,7 +164,6 @@ export function sanitizeGeneralSettings(candidate: unknown): GeneralSettings {
     },
     appearance: {
       systemLogoUrl: sanitizeString(appearanceCandidate.systemLogoUrl, defaults.appearance.systemLogoUrl),
-      primaryColor: sanitizeString(appearanceCandidate.primaryColor, defaults.appearance.primaryColor),
     },
     system: {
       systemName: sanitizeString(systemCandidate.systemName, defaults.system.systemName),

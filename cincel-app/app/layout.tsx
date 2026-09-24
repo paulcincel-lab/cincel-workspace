@@ -5,6 +5,8 @@ import SessionHydrator from "@/components/auth/SessionHydrator";
 import QueryProvider from "@/components/providers/QueryProvider";
 import { SessionAccessProvider } from "@/lib/auth/session-context";
 import { getSessionAccess } from "@/lib/auth/session";
+import { primaryColorCss } from "@/lib/theme/primary-color";
+import { getPrimaryColor } from "@/lib/theme/primary-color-server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +29,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const sessionAccess = await getSessionAccess();
+  const [sessionAccess, primaryColor] = await Promise.all([getSessionAccess(), getPrimaryColor()]);
+  const primaryCss = primaryColorCss(primaryColor);
 
   return (
     <html
@@ -35,6 +38,7 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {primaryCss ? <style id="primary-color">{primaryCss}</style> : null}
         <QueryProvider>
           <SessionAccessProvider value={sessionAccess}>
             <SessionHydrator value={sessionAccess} />

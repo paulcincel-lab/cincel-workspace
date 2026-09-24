@@ -15,6 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/shadcn/select";
 import { Switch } from "@/components/ui/shadcn/switch";
+import { PrimaryColorPicker } from "@/components/configuracion/PrimaryColorPicker";
+import type { AppearanceState } from "@/lib/actions/app-settings-actions";
 import {
   buildDefaultGeneralSettings,
   type GeneralSettings,
@@ -45,7 +47,11 @@ function loadImageAsDataUrl(file: File): Promise<string> {
   });
 }
 
-export default function GeneralSettingsWorkspace() {
+interface GeneralSettingsWorkspaceProps {
+  appearance: AppearanceState;
+}
+
+export default function GeneralSettingsWorkspace({ appearance }: GeneralSettingsWorkspaceProps) {
   const defaultSettings = useMemo(() => buildDefaultGeneralSettings(), []);
   const initialState = useMemo(() => loadGeneralSettings(), []);
 
@@ -478,7 +484,7 @@ export default function GeneralSettingsWorkspace() {
                   Apariencia
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Bloque simplificado para Beta. Sin sistema completo de temas.
+                  Logo y color principal del sistema.
                 </p>
 
                 <div className="mt-4 space-y-3">
@@ -520,30 +526,15 @@ export default function GeneralSettingsWorkspace() {
                     ) : null}
                   </label>
 
-                  <label className="space-y-1">
+                  <div className="space-y-1">
                     <span className="text-xs font-medium text-muted-foreground">
-                      Color principal (opcional)
+                      Color principal
                     </span>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="text"
-                        value={settings.appearance.primaryColor}
-                        onChange={(event) =>
-                          updateAppearanceField(
-                            "primaryColor",
-                            event.target.value,
-                          )
-                        }
-                      />
-                      <span
-                        className="inline-flex h-8 w-8 rounded-md border border-border"
-                        style={{
-                          backgroundColor:
-                            settings.appearance.primaryColor || "#ffffff",
-                        }}
-                      />
-                    </div>
-                  </label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Paleta de Tailwind. Se guarda al elegirlo y aplica a toda la empresa.
+                    </p>
+                    <PrimaryColorPicker value={appearance.primaryColor} canManage={appearance.canManage} />
+                  </div>
                 </div>
               </article>
 
