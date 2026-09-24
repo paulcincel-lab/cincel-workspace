@@ -129,6 +129,30 @@ test.describe("Tareas — create task with commitmentDate and reviewDate", () =>
     await expect(page.getByText(doneTitle)).toHaveCount(0);
   });
 
+  test("Mis tareas also hides completed tasks until 'Mostrar completadas' is on", async ({ page }) => {
+    const doneTitle = `Mi tarea completada E2E ${RUN_ID}`;
+    const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "paul@cincel.mx";
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      await sql`
+        insert into core.tasks (project_id, workflow_id, kind, title, status, created_by_id, manager_id)
+        select p.id, p.current_workflow_id, 'usuario', ${doneTitle}, 'completado', s.id, s.id
+        from core.projects p, core.staff s
+        where p.name = ${`Proyecto E2E ${RUN_ID}`} and lower(s.email) = lower(${adminEmail}) and s.deleted_at is null`;
+    } finally {
+      await sql.end();
+    }
+
+    await page.goto(`${BASE_URL}/mis-tareas`, { waitUntil: "domcontentloaded" });
+    const toggle = page.getByRole("switch", { name: "Mostrar completadas" });
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    await page.getByPlaceholder(/Buscar/i).first().fill(doneTitle);
+    await expect(page.getByText(doneTitle)).toHaveCount(0);
+
+    await toggle.click();
+    await expect(page.getByText(doneTitle)).toBeVisible({ timeout: 15_000 });
+  });
+
   test("can attach a .txt file to a task as a comment (#425)", async ({ page }) => {
     // Runs after the first test, so TASK_DESC already exists as a row.
     await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
