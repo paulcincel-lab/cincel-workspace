@@ -1,6 +1,6 @@
 /**
  * E2E: Actividades — the General view shows one panel per área plus the
- * tasks with no área, with sortable columns.
+ * tasks with no área, with sortable columns, and can regroup by project.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -65,5 +65,16 @@ test.describe("Actividades — vista General", () => {
     const titleHeader = sinAreaPanel.getByRole("columnheader", { name: "Tarea" });
     await titleHeader.click();
     await expect(titleHeader).toHaveAttribute("aria-sort", "ascending");
+
+    // "Proyecto" regroups into one panel per project, each row naming its área.
+    await page.getByRole("tab", { name: "Proyecto", exact: true }).click();
+    const projectPanel = page.getByRole("region").filter({ hasText: PRESALE_TASK });
+    await expect(projectPanel.getByText(DISENO_TASK)).toBeVisible({ timeout: 15_000 });
+    await expect(projectPanel.getByRole("row").filter({ hasText: SIN_AREA_TASK }).getByText("Sin área", { exact: true })).toBeVisible();
+    await expect(projectPanel.getByRole("row").filter({ hasText: DISENO_TASK }).getByText("Taller de Diseño", { exact: true })).toBeVisible();
+
+    // And "Actividad" goes back to the área panels.
+    await page.getByRole("tab", { name: "Actividad", exact: true }).click();
+    await expect(page.getByRole("region").filter({ hasText: PRESALE_TASK }).getByText(DISENO_TASK)).toHaveCount(0);
   });
 });
