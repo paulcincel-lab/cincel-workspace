@@ -51,6 +51,15 @@ export function taskStatusLabel(task: { status: TaskStatus; customStatus?: { nam
   return task.customStatus?.name ?? BASE_STATUS_LABEL[task.status];
 }
 
+/**
+ * Whether a task counts as finished: base Completado or a custom status that
+ * closes. (A closing custom status already stores `completado` underneath;
+ * checking both keeps this true for rows built without that mapping.)
+ */
+export function isTaskClosed(task: { status: TaskStatus; customStatus?: { closes: boolean } | null }): boolean {
+  return task.status === "completado" || Boolean(task.customStatus?.closes);
+}
+
 /** Select items (value -> label) for base + custom statuses. */
 export function statusSelectItems(custom: TaskStatusOption[]): Array<{ value: string; label: string }> {
   return [

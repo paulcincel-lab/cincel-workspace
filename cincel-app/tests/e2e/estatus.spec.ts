@@ -90,6 +90,8 @@ test.describe("Estatus propios de tareas", () => {
     // Mis tareas / Actividades show the custom status by name, not a built-in one.
     await page.goto(`${BASE_URL}/actividades/presale`, { waitUntil: "domcontentloaded" });
     await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_TITLE);
+    // The status closes the task now, and finished tasks are hidden by default.
+    await page.getByRole("switch", { name: "Mostrar completadas" }).click();
     await expect(page.getByRole("row").filter({ hasText: TASK_TITLE }).getByText(STATUS_NAME)).toBeVisible({
       timeout: 30_000,
     });

@@ -104,6 +104,31 @@ test.describe("Tareas — create task with commitmentDate and reviewDate", () =>
     await expect(page.getByText(quickTitle)).toBeVisible({ timeout: 15_000 });
   });
 
+  test("hides completed tasks until 'Mostrar completadas' is on (#458)", async ({ page }) => {
+    const doneTitle = `Tarea completada E2E ${RUN_ID}`;
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      await sql`
+        insert into core.tasks (project_id, workflow_id, kind, title, status, created_by_id)
+        select p.id, p.current_workflow_id, 'usuario', ${doneTitle}, 'completado', (select id from core.staff limit 1)
+        from core.projects p where p.name = ${`Proyecto E2E ${RUN_ID}`}`;
+    } finally {
+      await sql.end();
+    }
+
+    await page.goto(`${BASE_URL}/actividades/presale`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("button", { name: /Nueva tarea/i }).first()).toBeVisible({ timeout: 30_000 });
+    await page.getByPlaceholder(/Buscar tarea/i).fill(doneTitle);
+    await expect(page.getByText(doneTitle)).toHaveCount(0);
+
+    const toggle = page.getByRole("switch", { name: "Mostrar completadas" });
+    await toggle.click();
+    await expect(page.getByText(doneTitle)).toBeVisible({ timeout: 15_000 });
+
+    await toggle.click();
+    await expect(page.getByText(doneTitle)).toHaveCount(0);
+  });
+
   test("can attach a .txt file to a task as a comment (#425)", async ({ page }) => {
     // Runs after the first test, so TASK_DESC already exists as a row.
     await page.getByPlaceholder(/Buscar tarea/i).fill(TASK_DESC);
