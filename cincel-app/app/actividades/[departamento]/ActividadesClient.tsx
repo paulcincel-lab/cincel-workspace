@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Switch } from "@/components/ui/shadcn/switch";
 import ExportMenu from "@/components/ui/ExportMenu";
 import InlineEditable from "@/components/ui/InlineEditable";
 import TeamMultiSelect, { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
@@ -29,6 +30,7 @@ import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
 import {
+  isTaskClosed,
   parseStatusValue,
   statusSelectItems,
   statusSelectValue,
@@ -107,6 +109,8 @@ export function ActividadesClient({
   // A built-in status or a custom one, as a status select value (see status-options.ts).
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [deliveryDateFilter, setDeliveryDateFilter] = useState("");
+  // Finished tasks are hidden by default so the list stays short to read.
+  const [showCompleted, setShowCompleted] = useState(false);
   const [view, setView] = useState<"activas" | "archivadas">("activas");
 
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
@@ -252,10 +256,20 @@ export function ActividadesClient({
       const matchesManager = !managerFilter || t.manager?.id === managerFilter;
       const matchesTeam = !teamFilter || t.support.some((s) => s.id === teamFilter);
       const matchesStatus = !statusFilter || statusSelectValue(t) === statusFilter;
+      // An explicit status filter wins, so picking Completado still shows those tasks.
+      const matchesCompletion = showCompleted || !!statusFilter || !isTaskClosed(t);
       const matchesDeliveryDate = !deliveryDateFilter || (t.deliveryDate || "") === deliveryDateFilter;
-      return matchesSearch && matchesProject && matchesManager && matchesTeam && matchesStatus && matchesDeliveryDate;
+      return (
+        matchesSearch &&
+        matchesProject &&
+        matchesManager &&
+        matchesTeam &&
+        matchesStatus &&
+        matchesCompletion &&
+        matchesDeliveryDate
+      );
     });
-  }, [tasks, search, projectFromQuery, managerFilter, teamFilter, statusFilter, deliveryDateFilter]);
+  }, [tasks, search, projectFromQuery, managerFilter, teamFilter, statusFilter, showCompleted, deliveryDateFilter]);
 
   function clearFilters() {
     setSearch("");
@@ -264,6 +278,7 @@ export function ActividadesClient({
     setTeamFilter("");
     setStatusFilter("");
     setDeliveryDateFilter("");
+    setShowCompleted(false);
     setView("activas");
   }
 
@@ -934,6 +949,11 @@ export function ActividadesClient({
             </Select>
 
             <Input type="date" value={deliveryDateFilter} onChange={(e) => setDeliveryDateFilter(e.target.value)} aria-label="Filtrar por fecha de entrega" className="h-9 w-auto" />
+
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Switch checked={showCompleted} onCheckedChange={setShowCompleted} />
+              Mostrar completadas
+            </label>
 
             <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
               <TabsList>

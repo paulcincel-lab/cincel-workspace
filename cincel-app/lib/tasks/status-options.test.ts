@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isTaskClosed,
   parseStatusValue,
   statusSelectItems,
   statusSelectValue,
@@ -16,6 +17,13 @@ describe("task status options", () => {
   it("round-trips select values", () => {
     expect(parseStatusValue("completado")).toEqual({ kind: "base", status: "completado" });
     expect(parseStatusValue("custom:abc")).toEqual({ kind: "custom", id: "abc" });
+  });
+
+  it("treats Completado and closing custom statuses as finished", () => {
+    expect(isTaskClosed({ status: "completado", customStatus: null })).toBe(true);
+    expect(isTaskClosed({ status: "en_proceso", customStatus: { closes: true } })).toBe(true);
+    expect(isTaskClosed({ status: "en_proceso", customStatus: { closes: false } })).toBe(false);
+    expect(isTaskClosed({ status: "bloqueado" })).toBe(false);
   });
 
   it("labels with the custom name when set", () => {
