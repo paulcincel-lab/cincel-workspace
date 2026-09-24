@@ -6,7 +6,7 @@ import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import { getDepartamento } from "@/lib/actividades/departamento";
+import { GENERAL_SLUG, getDepartamento } from "@/lib/actividades/departamento";
 import type { WorkflowDetail } from "@/lib/types/core";
 import { ActividadesClient } from "./ActividadesClient";
 
@@ -16,8 +16,8 @@ export default async function ActividadesPage({
   params: Promise<{ departamento: string }>;
 }) {
   const { departamento: slug } = await params;
-  const departamento = getDepartamento(slug);
-  if (!departamento) notFound();
+  const isGeneral = slug === GENERAL_SLUG;
+  if (!isGeneral && !getDepartamento(slug)) notFound();
 
   let workflow: WorkflowDetail | null = null;
   let initialTasks: Awaited<ReturnType<typeof fetchTasksAction>> = [];
@@ -27,7 +27,14 @@ export default async function ActividadesPage({
   try {
     const workflows = await fetchWorkflowsAction();
     workflow = workflows.find((w) => w.key === slug) ?? null;
-    if (workflow) {
+    if (isGeneral) {
+      // Every área's tasks plus the ones with no área at all.
+      [initialTasks, initialProjects, initialStaff] = await Promise.all([
+        fetchTasksAction(),
+        fetchProjectsAction(),
+        fetchAssignableStaffAction(null),
+      ]);
+    } else if (workflow) {
       [initialTasks, initialProjects, initialStaff] = await Promise.all([
         fetchTasksAction({ workflowId: workflow.id }),
         fetchProjectsAction(),

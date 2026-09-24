@@ -68,6 +68,9 @@ test.describe("Estatus propios de tareas", () => {
     await page.goto(`${BASE_URL}/tablero`, { waitUntil: "domcontentloaded" });
     const column = page.getByRole("group", { name: STATUS_NAME, exact: true });
     await expect(column).toBeVisible({ timeout: 30_000 });
+    // The board opens on the viewer's own tasks; this one has no responsable.
+    await expect(page.getByRole("group", { name: "Filtrar por miembro" }).locator('[aria-pressed="true"]')).toHaveCount(1);
+    await page.getByRole("button", { name: "Limpiar" }).click();
     const card = page.locator('[draggable="true"]').filter({ hasText: TASK_TITLE });
     // The board scrolls sideways once custom columns are added, and a mouse
     // drag across a scrolling container is flaky — fire the drag events instead.

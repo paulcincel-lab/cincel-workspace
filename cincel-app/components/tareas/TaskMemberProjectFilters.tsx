@@ -31,6 +31,8 @@ type Props = {
   onProjectIdChange: (id: string) => void;
   /** Hide the built-in "Limpiar" button when the page has its own clear-all. */
   showClear?: boolean;
+  /** Members listed even with no task in the list — e.g. the viewer a page pre-selects. */
+  extraMembers?: StaffRef[];
 };
 
 /**
@@ -38,8 +40,16 @@ type Props = {
  * assigned to them (several can be combined), and pick a project. Options are
  * derived from the tasks passed in, so it works for any task list.
  */
-export function TaskMemberProjectFilters({ tasks, memberIds, onMemberIdsChange, projectId, onProjectIdChange, showClear = true }: Props) {
-  const members = new Map<string, StaffRef>();
+export function TaskMemberProjectFilters({
+  tasks,
+  memberIds,
+  onMemberIdsChange,
+  projectId,
+  onProjectIdChange,
+  showClear = true,
+  extraMembers = [],
+}: Props) {
+  const members = new Map<string, StaffRef>(extraMembers.map((m) => [m.id, m]));
   const projects = new Map<string, string>();
   for (const task of tasks) {
     for (const person of taskAssignees(task)) members.set(person.id, person);

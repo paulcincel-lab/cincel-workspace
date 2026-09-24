@@ -200,6 +200,15 @@ export async function reorderProjectTasksAction(projectId: string, orderedTaskId
   revalidateTareas();
 }
 
+export async function reorderTasksAction(orderedTaskIds: string[]): Promise<void> {
+  const user = await requireCapabilityUser();
+  if (!resolveActivitiesCapabilities(user).canReorderPhases) {
+    throw new Error("FORBIDDEN: tasks reorder");
+  }
+  await tasksRepository.reorderTasks(orderedTaskIds);
+  revalidateTareas();
+}
+
 export async function addTaskCommentAction(taskId: string, comment: string): Promise<HistoryEvent> {
   const user = await requireCapabilityUser();
   const row = await tasksRepository.addTaskComment(taskId, comment, user.member.id);

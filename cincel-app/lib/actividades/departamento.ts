@@ -47,6 +47,12 @@ export const DEPARTMENTOS: Array<{
   },
 ];
 
+/**
+ * Slug of the Actividades "General" view: every department's tasks in one
+ * page, one panel per área, plus the tasks that have no área.
+ */
+export const GENERAL_SLUG = "general";
+
 export function getDepartamento(slug: string) {
   return DEPARTMENTOS.find((d) => d.slug === slug);
 }
