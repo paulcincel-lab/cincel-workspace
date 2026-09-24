@@ -81,6 +81,11 @@ const GENERAL_LABEL = "General";
 const GENERAL_DESCRIPTION = "Todas las tareas de todas las áreas, incluidas las que no tienen área.";
 const SIN_AREA_GROUP_ID = "sin-area";
 
+/** Label of a task's área: its department's name, else its workflow's, else "Sin área". */
+function areaLabel(task: TaskListItem): string {
+  return DEPARTMENTOS.find((d) => d.slug === task.workflow?.key)?.label ?? task.workflow?.name ?? "Sin área";
+}
+
 /** Phase list for a task's own department — the General view mixes several. */
 function phasesForTask(task: TaskListItem): string[] {
   const departamento = DEPARTMENTOS.find((d) => d.slug === task.workflow?.key);
@@ -112,6 +117,9 @@ export function ActividadesClient({
   const isGeneral = slug === GENERAL_SLUG;
   const departamento = DEPARTMENTOS.find((d) => d.slug === slug);
   const pageLabel = departamento?.label ?? GENERAL_LABEL;
+  // General can group its panels by área ("Actividad") or by project.
+  const [groupBy, setGroupBy] = useState<"actividad" | "proyecto">("actividad");
+  const groupByArea = isGeneral && groupBy === "actividad";
   const pageDescription = departamento?.description ?? GENERAL_DESCRIPTION;
   const [tasks, setTasks] = useState<TaskListItem[]>(initialTasks);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -584,7 +592,7 @@ export function ActividadesClient({
   const [quickTitles, setQuickTitles] = useState<Record<string, string>>({});
 
   const projectGroups = useMemo(() => {
-    if (isGeneral) return [];
+    if (groupByArea) return [];
     const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
     for (const task of filteredTasks) {
       const group = groups.get(task.project.id) ?? { id: task.project.id, name: task.project.name, tasks: [] };
@@ -592,12 +600,12 @@ export function ActividadesClient({
       groups.set(task.project.id, group);
     }
     return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
-  }, [filteredTasks, isGeneral]);
+  }, [filteredTasks, groupByArea]);
 
   // General view: one panel per department (always shown, in business-flow
   // order), then any other workflow a task belongs to, then "Sin área".
   const areaGroups = useMemo(() => {
-    if (!isGeneral) return [];
+    if (!groupByArea) return [];
     const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>(
       DEPARTMENTOS.map((d) => [d.slug, { id: d.slug, name: d.label, tasks: [] }])
     );
@@ -620,7 +628,7 @@ export function ActividadesClient({
       ...[...others.values()].sort((a, b) => a.name.localeCompare(b.name, "es")),
       sinArea,
     ];
-  }, [filteredTasks, isGeneral]);
+  }, [filteredTasks, groupByArea]);
 
   const columns = useMemo<ColumnDef<TaskListItem, unknown>[]>(() => {
     if (!workflow && !isGeneral) return [];
@@ -691,6 +699,19 @@ export function ActividadesClient({
           <span className="font-medium">{row.original.project.name}</span>
         ),
       },
+      // Only General mixes áreas in one table (when grouped by project).
+      ...(isGeneral
+        ? [
+            {
+              id: "area",
+              header: "Área",
+              accessorFn: (t: TaskListItem) => areaLabel(t),
+              cell: ({ row }: CellContext<TaskListItem, unknown>) => (
+                <span className="text-sm">{areaLabel(row.original)}</span>
+              ),
+            },
+          ]
+        : []),
       {
         id: "title",
         header: "Tarea",
@@ -891,11 +912,11 @@ export function ActividadesClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow, isGeneral, phases, selected, capabilities, viewerId, staffNames, nameToStaffId]);
 
-  // Each project accordion already names the project, so the per-row Proyecto
-  // column is redundant there — but an área panel mixes projects, so General keeps it.
+  // The panel already names its project (or área), so that column is
+  // redundant; the other one stays since the panel mixes them.
   const groupedColumns = useMemo(
-    () => (isGeneral ? columns : columns.filter((c) => c.id !== "project")),
-    [columns, isGeneral]
+    () => columns.filter((c) => c.id !== (groupByArea ? "area" : "project")),
+    [columns, groupByArea]
   );
   const canReorder = capabilities.canReorderPhases && view === "activas";
 
@@ -1027,6 +1048,15 @@ export function ActividadesClient({
               Mostrar completadas
             </label>
 
+            {isGeneral ? (
+              <Tabs value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)} aria-label="Agrupar por">
+                <TabsList>
+                  <TabsTrigger value="proyecto">Proyecto</TabsTrigger>
+                  <TabsTrigger value="actividad">Actividad</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            ) : null}
+
             <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
               <TabsList>
                 <TabsTrigger value="activas">Activas</TabsTrigger>
@@ -1046,7 +1076,7 @@ export function ActividadesClient({
               { label: "Archivar", onClick: bulkArchive, variant: "destructive" },
             ]}
           />
-          {isGeneral ? (
+          {groupByArea ? (
             <AccordionPanels
               groups={areaGroups.map((group) => ({
                 id: group.id,
