@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Switch } from "@/components/ui/shadcn/switch";
 import TaskDrawer from "@/components/tareas/TaskDrawer";
 import { TaskMemberProjectFilters, matchesMemberFilter, matchesProjectFilter } from "@/components/tareas/TaskMemberProjectFilters";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
@@ -36,7 +37,7 @@ import {
 } from "@/lib/actions/tasks-actions";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
-import { parseStatusValue, statusSelectItems, statusSelectValue, taskStatusLabel } from "@/lib/tasks/status-options";
+import { isTaskClosed, parseStatusValue, statusSelectItems, statusSelectValue, taskStatusLabel } from "@/lib/tasks/status-options";
 import type { TaskChecklistItem, TaskDetail, TaskListItem, TaskLinkInput, TaskStatusOption } from "@/lib/types/core";
 
 type RoleFilter = "todas" | "encargado" | "apoyo";
@@ -52,6 +53,8 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
   const [search, setSearch] = useState("");
   // A built-in status or a custom one, as a status select value (see status-options.ts).
   const [statusFilter, setStatusFilter] = useState<string>("");
+  // Finished tasks are hidden by default so the list stays short to read.
+  const [showCompleted, setShowCompleted] = useState(false);
   const [customStatuses, setCustomStatuses] = useState<TaskStatusOption[]>([]);
 
   useEffect(() => {
@@ -235,7 +238,7 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
     const asManager = activeTasks.filter(isManager).length;
     const asSupport = activeTasks.filter(isSupport).length;
     const overdue = activeTasks.filter(
-      (t) => t.status !== "completado" && !!t.commitmentDate && t.commitmentDate < today
+      (t) => !isTaskClosed(t) && !!t.commitmentDate && t.commitmentDate < today
     ).length;
     return [
       { label: "Mis tareas activas", value: activeTasks.length },
@@ -256,18 +259,28 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         (t.phase ?? "").toLowerCase().includes(query) ||
         taskStatusLabel(t).toLowerCase().includes(query);
       const matchesStatus = !statusFilter || statusSelectValue(t) === statusFilter;
+      // An explicit status filter wins, so picking Completado still shows those tasks.
+      const matchesCompletion = showCompleted || !!statusFilter || !isTaskClosed(t);
       const matchesRole =
         roleFilter === "todas" ||
         (roleFilter === "encargado" && isManager(t)) ||
         (roleFilter === "apoyo" && isSupport(t));
-      return matchesSearch && matchesStatus && matchesRole && matchesMemberFilter(t, memberIds) && matchesProjectFilter(t, projectId);
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesCompletion &&
+        matchesRole &&
+        matchesMemberFilter(t, memberIds) &&
+        matchesProjectFilter(t, projectId)
+      );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, search, statusFilter, roleFilter, memberIds, projectId, viewerId]);
+  }, [tasks, search, statusFilter, showCompleted, roleFilter, memberIds, projectId, viewerId]);
 
   function clearFilters() {
     setSearch("");
     setStatusFilter("");
+    setShowCompleted(false);
     setRoleFilter("todas");
     setMemberIds([]);
     setProjectId("");
@@ -445,6 +458,11 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
           onProjectIdChange={setProjectId}
           showClear={false}
         />
+
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Switch checked={showCompleted} onCheckedChange={setShowCompleted} />
+          Mostrar completadas
+        </label>
 
         <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
           <TabsList>
