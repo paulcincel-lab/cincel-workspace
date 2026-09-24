@@ -1334,3 +1334,8 @@ export function canViewSensitiveStaffData(user: AuthenticatedUser | null): boole
   if (!user) return false;
   return isAdministratorRole(user.member.role) || user.access === "Dirección";
 }
+
+/** Company-wide appearance (primary color) applies to everyone: admins only, like the data above. */
+export function canManageAppearance(user: AuthenticatedUser | null): boolean {
+  return canViewSensitiveStaffData(user);
+}

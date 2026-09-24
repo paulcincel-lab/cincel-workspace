@@ -146,3 +146,10 @@ export const resourceLinksRelations = relations(resourceLinks, ({ one }) => ({
     references: [driveFiles.id],
   }),
 }));
+
+/** Company-wide settings as key → value (e.g. the primary color). */
+export const appSettings = core.table("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  ...stamps,
+});
