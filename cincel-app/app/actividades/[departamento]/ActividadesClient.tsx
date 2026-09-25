@@ -39,6 +39,7 @@ import {
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
+import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 import {
   fetchTasksAction,
   fetchTaskAction,
@@ -80,6 +81,13 @@ const DEFAULT_PRIORITY: TaskPriority = "media";
 const GENERAL_LABEL = "General";
 const GENERAL_DESCRIPTION = "Todas las tareas de todas las áreas, incluidas las que no tienen área.";
 const SIN_AREA_GROUP_ID = "sin-area";
+const GROUP_BY_STORAGE_KEY = "cincel.actividades.general.groupBy.v1";
+
+type GeneralGroupBy = "actividad" | "proyecto";
+
+function isGeneralGroupBy(value: string | null): value is GeneralGroupBy {
+  return value === "actividad" || value === "proyecto";
+}
 
 /** Label of a task's área: its department's name, else its workflow's, else "Sin área". */
 function areaLabel(task: TaskListItem): string {
@@ -118,7 +126,28 @@ export function ActividadesClient({
   const departamento = DEPARTMENTOS.find((d) => d.slug === slug);
   const pageLabel = departamento?.label ?? GENERAL_LABEL;
   // General can group its panels by área ("Actividad") or by project.
-  const [groupBy, setGroupBy] = useState<"actividad" | "proyecto">("actividad");
+  // Remembered per browser, so a refresh keeps the last grouping.
+  const [groupBy, setGroupBy] = useState<GeneralGroupBy>("actividad");
+  useEffect(() => {
+    // Read after mount: localStorage isn't available during SSR, and reading
+    // it in the initializer would mismatch the server-rendered grouping.
+    try {
+      const stored = readStorage(GROUP_BY_STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (isGeneralGroupBy(stored)) setGroupBy(stored);
+    } catch {
+      // Storage blocked (private mode, etc.) — keep the default.
+    }
+  }, []);
+
+  function changeGroupBy(value: GeneralGroupBy) {
+    setGroupBy(value);
+    try {
+      writeStorage(GROUP_BY_STORAGE_KEY, value);
+    } catch {
+      // Storage blocked — the choice just won't survive a refresh.
+    }
+  }
   const groupByArea = isGeneral && groupBy === "actividad";
   const pageDescription = departamento?.description ?? GENERAL_DESCRIPTION;
   const [tasks, setTasks] = useState<TaskListItem[]>(initialTasks);
@@ -1049,7 +1078,7 @@ export function ActividadesClient({
             </label>
 
             {isGeneral ? (
-              <Tabs value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)} aria-label="Agrupar por">
+              <Tabs value={groupBy} onValueChange={(v) => changeGroupBy(v as GeneralGroupBy)} aria-label="Agrupar por">
                 <TabsList>
                   <TabsTrigger value="proyecto">Proyecto</TabsTrigger>
                   <TabsTrigger value="actividad">Actividad</TabsTrigger>
