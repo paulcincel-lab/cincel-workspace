@@ -62,11 +62,16 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
   const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(
     initialState.hasCustom,
   );
+  // What's stored now — "Guardar cambios" enables on any difference from it.
+  const [savedSettings, setSavedSettings] = useState<GeneralSettings>(
+    initialState.settings,
+  );
 
   useEffect(() => {
     const refresh = () => {
       const loaded = loadGeneralSettings();
       setSettings(loaded.settings);
+      setSavedSettings(loaded.settings);
       setHasCustomConfig(loaded.hasCustom);
     };
 
@@ -81,8 +86,8 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
   }, []);
 
   const isDirty = useMemo(() => {
-    return JSON.stringify(settings) !== JSON.stringify(defaultSettings);
-  }, [defaultSettings, settings]);
+    return JSON.stringify(settings) !== JSON.stringify(savedSettings);
+  }, [savedSettings, settings]);
 
   const updateCompanyField = <TKey extends keyof GeneralSettings["company"]>(
     key: TKey,
@@ -170,12 +175,14 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
 
   const saveChanges = () => {
     saveGeneralSettings(settings);
+    setSavedSettings(settings);
     setHasCustomConfig(true);
   };
 
   const restoreDefaults = () => {
     restoreDefaultGeneralSettings();
     setSettings(defaultSettings);
+    setSavedSettings(defaultSettings);
     setHasCustomConfig(false);
   };
 
