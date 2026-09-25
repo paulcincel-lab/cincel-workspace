@@ -25,6 +25,7 @@ import {
   restoreDefaultGeneralSettings,
   saveGeneralSettings,
 } from "@/lib/settings/general-settings";
+import { APP_VERSION } from "@/lib/version";
 
 function loadImageAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -564,9 +565,11 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
                     <span className="text-xs font-medium text-muted-foreground">
                       Versión
                     </span>
+                    {/* A release build carries its own version, so it isn't editable there. */}
                     <Input
                       type="text"
-                      value={settings.system.version}
+                      value={APP_VERSION ? `v${APP_VERSION}` : settings.system.version}
+                      disabled={Boolean(APP_VERSION)}
                       onChange={(event) =>
                         updateSystemField("version", event.target.value)
                       }

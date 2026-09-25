@@ -96,7 +96,27 @@ history are entered through the app; there is no bulk importer.
 | `unit-tests` | `npm run test:unit` (vitest) |
 | `e2e-tests` | Spins a throwaway Postgres service, runs `db:migrate` + `db:seed`, then Playwright (`npm run test:e2e`) |
 | `docker-build` | `docker build` smoke |
-| `docker-publish` | **push to `main` only**, on the self-hosted runner — builds and pushes the runtime and migrate images to `secrets.REGISTRY_URL` |
+| `docker-publish` | **push to `main` only**, once every other job passed, on the self-hosted runner — builds and pushes the runtime and migrate images to `secrets.REGISTRY_URL`, then cuts a GitHub release |
+
+### Releases and versions
+
+Each successful publish cuts a GitHub release tagged `cincel-app-vX.Y.Z`.
+`.github/scripts/next-version.sh` computes the version from the Conventional
+Commits that touched `cincel-app/` since the previous tag (baseline: the
+`package.json` version, 0.1.0):
+
+- breaking (`type!:` or `BREAKING CHANGE:`) → major, or minor while still 0.x
+- `feat` → minor
+- anything else → patch
+
+The release notes list those commits. To go to 1.0.0, push the tag
+`cincel-app-v1.0.0` by hand; later releases continue from it.
+
+Both images are tagged with the version, the commit SHA and `latest`, so
+`IMAGE_TAG=0.2.0` pins a deploy to a release. The version is also baked into
+the build (`APP_VERSION` build arg → `NEXT_PUBLIC_APP_VERSION`) and shown in
+the sidebar footer; local builds fall back to the text set in
+Configuración → General.
 
 CI does not migrate any real environment automatically; publishing the images
 on push to `main` is the one exception, and it only builds/pushes images, it
@@ -116,7 +136,7 @@ cookie-less request for a protected route to `/login`; full session validation
 
 ## Rollback
 
-- **App**: redeploy the previous image tag. The schema is forward-compatible
+- **App**: redeploy the previous image tag (e.g. the previous release's `X.Y.Z`). The schema is forward-compatible
   within a release train, but a rollback across a migration that dropped/renamed
   a column will break — check `lib/db/migrations` between the two versions.
 - **Migrations**: drizzle-kit has no down-migrations. To undo, write a new

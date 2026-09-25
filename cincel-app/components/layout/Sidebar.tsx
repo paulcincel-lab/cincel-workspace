@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
+import { APP_VERSION } from "@/lib/version";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import {
   Sidebar as SidebarPrimitive,
@@ -252,7 +253,8 @@ export default function Sidebar() {
   const currentProfileInitial = currentProfileRole.charAt(0).toUpperCase();
 
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
-  const versionLabel = generalSettings.system.version.trim();
+  // A release build shows its own version; dev builds fall back to the settings text.
+  const versionLabel = APP_VERSION ? `v${APP_VERSION}` : generalSettings.system.version.trim();
   const companyName = "Cincel";
   const [systemNamePrimary, ...systemNameRest] = systemName.split(" ");
   const systemNameSecondary = systemNameRest.join(" ");

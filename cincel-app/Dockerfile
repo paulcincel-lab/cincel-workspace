@@ -10,6 +10,11 @@ RUN npm ci
 # Copy all other project files to working directory
 COPY . .
 
+# Release version (set by CI, e.g. 0.2.0). NEXT_PUBLIC_* is inlined into the
+# client bundle at build time, so it has to be a build arg, not a runtime env.
+ARG APP_VERSION=""
+ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
+
 RUN npm run build
 
 FROM node:23-alpine
