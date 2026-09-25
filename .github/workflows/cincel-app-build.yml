@@ -5,12 +5,14 @@ on:
     paths:
       - "cincel-app/**"
       - ".github/workflows/cincel-app-build.yml"
+      - ".github/scripts/next-version.sh"
   push:
     branches:
       - main
     paths:
       - "cincel-app/**"
       - ".github/workflows/cincel-app-build.yml"
+      - ".github/scripts/next-version.sh"
   workflow_dispatch:
 
 defaults:
@@ -144,16 +146,54 @@ jobs:
   #
   # Publishes to this team's own registry (REGISTRY_URL) on the self-hosted
   # runner, using the REGISTRY_USERNAME/REGISTRY_PASSWORD repo secrets.
+  #
+  # Once both images are pushed, cuts a GitHub release tagged
+  # cincel-app-vX.Y.Z, versioned from the Conventional Commits since the
+  # previous one (.github/scripts/next-version.sh). The same version is baked
+  # into the image (shown in the sidebar) and added as an image tag. Releases
+  # are serialized so two quick merges can't compute the same version.
   docker-publish:
-    needs: [verify, docker-build]
+    needs: [verify, unit-tests, e2e-tests, docker-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: self-hosted
+    concurrency:
+      group: cincel-app-release
+      cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
+        with:
+          # Full history and tags: the version is computed from the commits
+          # since the last cincel-app-v* tag.
+          fetch-depth: 0
+
+      # Fails with the name of the missing secret instead of docker/login-action's
+      # opaque "Username and password required".
+      - name: Check registry secrets
+        env:
+          REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        working-directory: .
+        run: |
+          missing=0
+          for name in REGISTRY_URL REGISTRY_USERNAME REGISTRY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository secret $name (Settings → Secrets and variables → Actions)"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Compute release version
+        id: version
+        working-directory: .
+        run: |
+          .github/scripts/next-version.sh cincel-app "$RUNNER_TEMP/release-notes.md" \
+            .github/workflows/cincel-app-build.yml .github/scripts/next-version.sh | tee -a "$GITHUB_OUTPUT"
 
       # Strips a trailing slash and an accidental http(s):// scheme from the
       # REGISTRY_URL secret before it's used to build an image reference --
@@ -185,7 +225,10 @@ jobs:
           context: cincel-app
           file: cincel-app/Dockerfile
           push: true
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
+            ${{ steps.registry.outputs.registry }}/cincel-app:${{ steps.version.outputs.version }}
             ${{ steps.registry.outputs.registry }}/cincel-app:${{ github.sha }}
             ${{ steps.registry.outputs.registry }}/cincel-app:latest
           cache-from: type=gha,scope=cincel-app-runtime
@@ -198,8 +241,23 @@ jobs:
           file: cincel-app/Dockerfile
           target: build
           push: true
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
+            ${{ steps.registry.outputs.registry }}/cincel-app-migrate:${{ steps.version.outputs.version }}
             ${{ steps.registry.outputs.registry }}/cincel-app-migrate:${{ github.sha }}
             ${{ steps.registry.outputs.registry }}/cincel-app-migrate:latest
           cache-from: type=gha,scope=cincel-app-migrate
           cache-to: type=gha,mode=max,scope=cincel-app-migrate
+
+      # Only reached once both images are pushed. Skipped when nothing under
+      # cincel-app/ (or this pipeline) changed since the last release.
+      - name: Create GitHub release
+        if: steps.version.outputs.release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: cincel-app v${{ steps.version.outputs.version }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          make_latest: true
