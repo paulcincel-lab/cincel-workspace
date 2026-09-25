@@ -50,9 +50,9 @@ export function CronogramaReport({ data, asOf }: CronogramaReportProps) {
 
       <Card className="print:hidden">
         <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">Software desarrollado por</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Co-creado con</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">Cincel despacho de Arquitectura</CardContent>
+        <CardContent className="text-sm text-muted-foreground">Cloudketer</CardContent>
       </Card>
     </div>
   );
