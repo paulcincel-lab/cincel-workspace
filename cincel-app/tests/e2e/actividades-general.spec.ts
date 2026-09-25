@@ -73,6 +73,12 @@ test.describe("Actividades — vista General", () => {
     await expect(projectPanel.getByRole("row").filter({ hasText: SIN_AREA_TASK }).getByText("Sin área", { exact: true })).toBeVisible();
     await expect(projectPanel.getByRole("row").filter({ hasText: DISENO_TASK }).getByText("Taller de Diseño", { exact: true })).toBeVisible();
 
+    // The grouping survives a refresh.
+    await page.reload({ waitUntil: "load" });
+    await page.getByPlaceholder("Buscar tarea...").fill(`E2E ${RUN_ID}`);
+    await expect(page.getByRole("tab", { name: "Proyecto", exact: true })).toHaveAttribute("aria-selected", "true", { timeout: 15_000 });
+    await expect(page.getByRole("region").filter({ hasText: PRESALE_TASK }).getByText(DISENO_TASK)).toBeVisible({ timeout: 15_000 });
+
     // And "Actividad" goes back to the área panels.
     await page.getByRole("tab", { name: "Actividad", exact: true }).click();
     await expect(page.getByRole("region").filter({ hasText: PRESALE_TASK }).getByText(DISENO_TASK)).toHaveCount(0);
