@@ -21,10 +21,7 @@ services:
   # that layer still has drizzle-kit + the migration SQL (the runtime image
   # does not). Safe to re-run — drizzle tracks applied migrations.
   migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: build
+    image: ${REGISTRY_URL}/cincel-app-migrate:${IMAGE_TAG}
     command: ["npm", "run", "db:migrate"]
     env_file:
       - .env
@@ -40,9 +37,7 @@ services:
       resources:
         limits:
           memory: 1G
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${REGISTRY_URL}/cincel-app:${IMAGE_TAG}
     ports:
       - "${APP_PORT:-3000}:3000"
     env_file:
