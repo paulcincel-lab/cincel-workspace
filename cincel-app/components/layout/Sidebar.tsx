@@ -364,7 +364,7 @@ export default function Sidebar() {
           </div>
           <div className="text-center group-data-[collapsible=icon]:hidden">
             <p className="text-[11px] leading-5 font-medium text-sidebar-foreground/70">
-              Software desarrollado por: Cincel despacho de Arquitectura
+              Co-creado con Cloudketer
             </p>
             {versionLabel ? (
               <p className="mt-1 text-[10px] font-semibold tracking-[0.16em] text-sidebar-foreground/50 uppercase">
