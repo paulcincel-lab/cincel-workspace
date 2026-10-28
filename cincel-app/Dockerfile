@@ -17,6 +17,16 @@ ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 
 RUN npm run build
 
+# Keter Console recipe for the cincel-app-migrate image (this stage, published
+# with `target: build`).
+COPY kcd-migrate.yml /kcd.yml
+ARG KCD_DIGEST KCD_CONTENT GIT_SHA
+LABEL dev.keter.kcd.schema="1" \
+      dev.keter.kcd.digest="${KCD_DIGEST}" \
+      dev.keter.kcd.content="${KCD_CONTENT}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.source="https://github.com/paulcincel-lab/cincel-workspace"
+
 FROM node:23-alpine
 RUN apk update && apk upgrade && apk add dumb-init && adduser -D nextuser
 
@@ -25,6 +35,13 @@ WORKDIR /app
 COPY --from=build --chown=nextuser:nextuser /app/public ./public
 COPY --from=build --chown=nextuser:nextuser /app/.next/standalone ./
 COPY --from=build --chown=nextuser:nextuser /app/.next/static ./.next/static
+COPY kcd.yml /kcd.yml
+ARG KCD_DIGEST KCD_CONTENT GIT_SHA
+LABEL dev.keter.kcd.schema="1" \
+      dev.keter.kcd.digest="${KCD_DIGEST}" \
+      dev.keter.kcd.content="${KCD_CONTENT}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.source="https://github.com/paulcincel-lab/cincel-workspace"
 
 # set non root user
 USER nextuser

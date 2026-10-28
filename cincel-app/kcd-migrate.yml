@@ -1,0 +1,10 @@
+name: "Cincel Workspace"
+command: "npm run db:migrate"
+needs:
+  postgres: { version: "17" }
+stack:
+  id: cincel-app
+  name: "Cincel Workspace"
+  service: migrate
+  members:
+    app: { repository: cincel-app }

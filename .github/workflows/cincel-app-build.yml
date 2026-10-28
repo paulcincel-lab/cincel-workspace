@@ -219,6 +219,18 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
+      # Keter Console reads each image's recipe from these labels without
+      # pulling it. Each digest hashes the exact file that image copies to
+      # /kcd.yml: kcd.yml for cincel-app, kcd-migrate.yml for cincel-app-migrate.
+      - name: Compute Keter recipe labels
+        id: kcd
+        working-directory: .
+        run: |
+          echo "digest=sha256:$(sha256sum cincel-app/kcd.yml | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "content=$(gzip -9n < cincel-app/kcd.yml | base64 -w0)" >> "$GITHUB_OUTPUT"
+          echo "migrate_digest=sha256:$(sha256sum cincel-app/kcd-migrate.yml | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "migrate_content=$(gzip -9n < cincel-app/kcd-migrate.yml | base64 -w0)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push runtime image
         uses: docker/build-push-action@v6
         with:
@@ -227,6 +239,9 @@ jobs:
           push: true
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
+            GIT_SHA=${{ github.sha }}
+            KCD_DIGEST=${{ steps.kcd.outputs.digest }}
+            KCD_CONTENT=${{ steps.kcd.outputs.content }}
           tags: |
             ${{ steps.registry.outputs.registry }}/cincel-app:${{ steps.version.outputs.version }}
             ${{ steps.registry.outputs.registry }}/cincel-app:${{ github.sha }}
@@ -243,6 +258,9 @@ jobs:
           push: true
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
+            GIT_SHA=${{ github.sha }}
+            KCD_DIGEST=${{ steps.kcd.outputs.migrate_digest }}
+            KCD_CONTENT=${{ steps.kcd.outputs.migrate_content }}
           tags: |
             ${{ steps.registry.outputs.registry }}/cincel-app-migrate:${{ steps.version.outputs.version }}
             ${{ steps.registry.outputs.registry }}/cincel-app-migrate:${{ github.sha }}
