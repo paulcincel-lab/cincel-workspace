@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   date,
@@ -71,6 +72,11 @@ export const tasks = core.table(
     reviewDate: date("review_date"),
     deliveryDate: date("delivery_date"),
     archived: boolean("archived").notNull().default(false),
+    // Child task. One level of nesting: a task with a parent can't be a
+    // parent (checked in the actions and the import, not here).
+    parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => tasks.id, {
+      onDelete: "set null",
+    }),
     ...stamps,
     ...soft,
   },
@@ -99,6 +105,7 @@ export const tasks = core.table(
     index("idx_tasks_commitment_date").on(t.commitmentDate),
     index("idx_tasks_review_date").on(t.reviewDate),
     index("idx_tasks_delivery_date").on(t.deliveryDate),
+    index("idx_tasks_parent_task_id").on(t.parentTaskId),
     index("idx_tasks_title_trgm").using("gin", sql`${t.title} gin_trgm_ops`),
     // The hot set: live, unarchived tasks by status and commitment.
     index("idx_tasks_hot")
@@ -195,6 +202,33 @@ export const taskLinks = core.table(
   ]
 );
 
+export const dependencyKind = core.enum("dependency_kind", ["finish_to_start"]);
+export type DependencyKind = (typeof dependencyKind.enumValues)[number];
+
+/** `task_id` waits on `depends_on_task_id`. */
+export const taskDependencies = core.table(
+  "task_dependencies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    dependsOnTaskId: uuid("depends_on_task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    kind: dependencyKind("kind").notNull().default("finish_to_start"),
+    ...stamps,
+  },
+  (t) => [
+    uniqueIndex("task_dependencies_pair_uq").on(t.taskId, t.dependsOnTaskId),
+    index("idx_task_dependencies_depends_on").on(t.dependsOnTaskId),
+    check("task_dependencies_not_self", sql`${t.taskId} <> ${t.dependsOnTaskId}`),
+  ]
+);
+
+export type TaskDependency = typeof taskDependencies.$inferSelect;
+export type NewTaskDependency = typeof taskDependencies.$inferInsert;
+
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
   project: one(projects, { fields: [tasks.projectId], references: [projects.id] }),
   template: one(workflowTaskTemplates, {
@@ -216,6 +250,27 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
   checklist: many(taskChecklistItems),
   attachments: many(taskAttachments),
   links: many(taskLinks),
+  parent: one(tasks, {
+    fields: [tasks.parentTaskId],
+    references: [tasks.id],
+    relationName: "task_parent",
+  }),
+  children: many(tasks, { relationName: "task_parent" }),
+  dependencies: many(taskDependencies, { relationName: "task_dependency_task" }),
+  dependents: many(taskDependencies, { relationName: "task_dependency_depends_on" }),
+}));
+
+export const taskDependenciesRelations = relations(taskDependencies, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskDependencies.taskId],
+    references: [tasks.id],
+    relationName: "task_dependency_task",
+  }),
+  dependsOn: one(tasks, {
+    fields: [taskDependencies.dependsOnTaskId],
+    references: [tasks.id],
+    relationName: "task_dependency_depends_on",
+  }),
 }));
 
 export const taskSupportRelations = relations(taskSupport, ({ one }) => ({
