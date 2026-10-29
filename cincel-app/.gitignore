@@ -47,3 +47,7 @@ next-env.d.ts
 
 # backups — binary archives must live in external storage (Drive/bucket), not git
 backups/*.tar.gz
+
+# monday migration — exports hold client PII and files; keep them off git
+/exports/
+.env.monday

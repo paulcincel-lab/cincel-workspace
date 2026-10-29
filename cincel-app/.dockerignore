@@ -18,3 +18,6 @@ playwright/.cache
 
 *.log
 npm-debug.log*
+
+# monday migration exports (client PII and files)
+exports
