@@ -4,9 +4,10 @@
  * (docs/specs/monday-migration/backend.md §2, §8).
  *
  * Every function takes `db` as a parameter, so the same code runs with the
- * app's client (lib/db/client.ts), the monday CLI's own client
- * (scripts/monday/db.ts) or a transaction of either. Nothing here may import
- * `server-only` or lib/db/client.ts.
+ * app's drizzle client, the monday CLI's own client (scripts/monday/db.ts) or
+ * a transaction of either. Nothing in lib/import may import the app's db
+ * client module or the RSC-only guard package; tests/unit/monday/refs.test.ts
+ * checks this.
  */
 import { and, eq, inArray } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
