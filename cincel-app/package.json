@@ -16,7 +16,8 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:madrid22": "tsx scripts/seed-madrid22.ts",
     "db:setup": "drizzle-kit migrate && tsx scripts/seed.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "monday": "tsx scripts/monday/cli.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.51",

@@ -74,6 +74,23 @@ GOOGLE_DRIVE_ROOT_FOLDER_ID=<a folder id the picker starts in>
 not grant access. Each user still only sees what they can already see under
 it.
 
+### 5. Shared Drive for project folders
+
+Project folders (`<project>` with `01 Interno` / `02 Cliente` /
+`03 Del cliente`) live in a company **Shared Drive**, written by the service
+account itself (not by impersonation). Used by the monday migration CLI
+(`npm run monday`); Staff SSO reuses it.
+
+1. In Google Drive, create a Shared Drive (e.g. *Cincel — Proyectos*).
+2. Manage members → add the service account's email
+   (`GOOGLE_SA_CLIENT_EMAIL`) as **Content manager**.
+3. Copy the Shared Drive id from its URL
+   (`https://drive.google.com/drive/folders/<id>`) into:
+
+```
+GOOGLE_SHARED_DRIVE_ID=<shared drive id>
+```
+
 ## Kill switch
 
 Revoke the domain-wide delegation authorization in the Workspace Admin
