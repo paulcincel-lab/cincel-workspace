@@ -17,6 +17,10 @@ import { staff } from "./people";
 import { driveFiles } from "./shared";
 import { workflows } from "./workflows";
 
+/** Provisioning state of a project's Drive folder tree. */
+export const driveFolderStatus = core.enum("drive_folder_status", ["pending", "ready", "failed"]);
+export type DriveFolderStatus = (typeof driveFolderStatus.enumValues)[number];
+
 /** Part C.4. A project belongs to a client, and only a client (rule 1). */
 export const projects = core.table(
   "projects",
@@ -52,6 +56,19 @@ export const projects = core.table(
     endDate: date("end_date"),
     // The only money in the model.
     contractAmountMxn: numeric("contract_amount_mxn", { precision: 14, scale: 2 }),
+    // The project's folder in the Shared Drive and its subfolders. Shared by
+    // the monday import and Staff SSO.
+    driveFolderId: text("drive_folder_id"),
+    /** "01 Interno" */
+    driveInternalFolderId: text("drive_internal_folder_id"),
+    /** "02 Cliente" */
+    driveClientFolderId: text("drive_client_folder_id"),
+    /** "03 Del cliente" */
+    driveInboundFolderId: text("drive_inbound_folder_id"),
+    /** "01 Interno/Importado de monday" */
+    driveImportFolderId: text("drive_import_folder_id"),
+    driveFolderStatus: driveFolderStatus("drive_folder_status").notNull().default("pending"),
+    driveFolderError: text("drive_folder_error"),
     ...stamps,
     ...soft,
   },
