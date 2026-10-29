@@ -26,5 +26,11 @@
   "Cronograma Phase 1: Schema + Shared Library": "cronograma:1",
   "Cronograma Phase 2: Read-Only View": "cronograma:2",
   "Cronograma Phase 3: Mutations + Import": "cronograma:3",
-  "Cronograma Phase 4: Report, Export & Tests": "cronograma:4"
+  "Cronograma Phase 4: Report, Export & Tests": "cronograma:4",
+  "Staff SSO Phase 1: Google Sign-in + Access Gate": "staff-sso:1",
+  "Staff SSO Phase 2: Access Re-check + Cutover": "staff-sso:2",
+  "Staff SSO Phase 3: Project Drive Folders + Staff Drive": "staff-sso:3",
+  "Staff SSO Phase 4: Legacy Cleanup Release": "staff-sso:4",
+  "Client Portal Phase 1: Portal Sign-in + Invitations": "client-portal:1",
+  "Client Portal Phase 2: Files + Uploads": "client-portal:2"
 }
