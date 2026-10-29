@@ -12,6 +12,8 @@
  * "not implemented yet" message.
  */
 
+import { exportCommand } from "./export";
+
 export const USAGE = `Usage: npm run monday -- <command> [options]
 
 Commands:
@@ -44,7 +46,7 @@ function notImplemented(name: CommandName): CommandHandler {
 }
 
 export const COMMANDS: Record<CommandName, CommandHandler> = {
-  export: notImplemented("export"),
+  export: exportCommand,
   init: notImplemented("init"),
   plan: notImplemented("plan"),
   apply: notImplemented("apply"),

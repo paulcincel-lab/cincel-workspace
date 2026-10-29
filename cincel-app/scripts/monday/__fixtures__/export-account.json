@@ -1,0 +1,657 @@
+{
+  "me": {
+    "data": {
+      "me": {
+        "id": "9",
+        "name": "Ana Admin",
+        "email": "ana@acme.mx",
+        "account": {
+          "id": "555",
+          "slug": "acme",
+          "name": "Acme"
+        }
+      }
+    }
+  },
+  "boards": {
+    "data": {
+      "boards": [
+        {
+          "id": "101",
+          "name": "Proyectos",
+          "type": "board",
+          "hierarchy_type": "classic",
+          "workspace_id": null,
+          "items_count": 3,
+          "columns": [
+            {
+              "id": "name",
+              "title": "Name",
+              "type": "name",
+              "settings": {}
+            },
+            {
+              "id": "status",
+              "title": "Estado",
+              "type": "status",
+              "settings": {
+                "labels": [
+                  {
+                    "id": 1,
+                    "label": "Listo",
+                    "index": 1
+                  }
+                ]
+              }
+            },
+            {
+              "id": "subitems",
+              "title": "Subelementos",
+              "type": "subtasks",
+              "settings": {
+                "allowMultipleItems": true,
+                "boardIds": [
+                  901
+                ]
+              }
+            }
+          ],
+          "groups": [
+            {
+              "id": "topics",
+              "title": "Diseño",
+              "position": "65536"
+            },
+            {
+              "id": "group_b",
+              "title": "Obra",
+              "position": "131072"
+            }
+          ]
+        },
+        {
+          "id": "202",
+          "name": "Casas",
+          "type": "board",
+          "hierarchy_type": "multi_level",
+          "workspace_id": "7",
+          "items_count": 1,
+          "columns": [
+            {
+              "id": "name",
+              "title": "Name",
+              "type": "name",
+              "settings": {}
+            },
+            {
+              "id": "status",
+              "title": "Estado",
+              "type": "status",
+              "settings": {
+                "labels": [
+                  {
+                    "id": 1,
+                    "label": "Listo",
+                    "index": 1
+                  }
+                ]
+              }
+            }
+          ],
+          "groups": [
+            {
+              "id": "g1",
+              "title": "Grupo",
+              "position": "1"
+            }
+          ]
+        },
+        {
+          "id": "901",
+          "name": "Subelementos de Proyectos",
+          "type": "sub_items_board",
+          "hierarchy_type": "classic",
+          "workspace_id": null,
+          "items_count": 1,
+          "columns": [],
+          "groups": []
+        }
+      ]
+    }
+  },
+  "subitemColumns": {
+    "data": {
+      "boards": [
+        {
+          "id": "901",
+          "columns": [
+            {
+              "id": "name",
+              "title": "Name",
+              "type": "name",
+              "settings": {}
+            },
+            {
+              "id": "date0",
+              "title": "Fecha",
+              "type": "date",
+              "settings": {}
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "users": {
+    "data": {
+      "users": [
+        {
+          "id": "9",
+          "name": "Ana Admin",
+          "email": "ana@acme.mx",
+          "status": "ACTIVE",
+          "kind": "admin"
+        },
+        {
+          "id": "10",
+          "name": "Beto",
+          "email": "beto@acme.mx",
+          "status": "INACTIVE",
+          "kind": "member"
+        }
+      ]
+    }
+  },
+  "workspaces": {
+    "data": {
+      "workspaces": [
+        {
+          "id": "7",
+          "name": "Obras",
+          "kind": "open",
+          "description": null
+        }
+      ]
+    }
+  },
+  "classicFirstPage": {
+    "data": {
+      "boards": [
+        {
+          "items_page": {
+            "cursor": "c-101-2",
+            "items": [
+              {
+                "id": "1001",
+                "name": "Muros",
+                "state": "active",
+                "created_at": "2026-01-02T03:04:05Z",
+                "updated_at": "2026-01-03T03:04:05Z",
+                "creator_id": "9",
+                "group": {
+                  "id": "topics"
+                },
+                "parent_item": null,
+                "assets": [
+                  {
+                    "id": "77",
+                    "name": "plano.pdf",
+                    "file_extension": ".pdf",
+                    "file_size": 1234
+                  }
+                ],
+                "column_values": [
+                  {
+                    "__typename": "StatusValue",
+                    "id": "status",
+                    "type": "status",
+                    "text": "Listo",
+                    "label": "Listo",
+                    "index": 1,
+                    "is_done": true
+                  },
+                  {
+                    "__typename": "TimelineValue",
+                    "id": "timeline",
+                    "type": "timeline",
+                    "text": "2026-03-01 - 2026-03-10",
+                    "from": "2026-03-01T00:00:00Z",
+                    "to": "2026-03-10T00:00:00Z",
+                    "visualization_type": null
+                  },
+                  {
+                    "__typename": "TextValue",
+                    "id": "text",
+                    "type": "text",
+                    "text": "nota"
+                  }
+                ],
+                "subitems": [
+                  {
+                    "id": "1101",
+                    "name": "Cimbra",
+                    "state": "active",
+                    "created_at": "2026-01-02T03:04:05Z",
+                    "updated_at": "2026-01-03T03:04:05Z",
+                    "creator_id": "9",
+                    "group": {
+                      "id": "topics"
+                    },
+                    "parent_item": {
+                      "id": "1001"
+                    },
+                    "assets": [],
+                    "column_values": [
+                      {
+                        "__typename": "StatusValue",
+                        "id": "status",
+                        "type": "status",
+                        "text": "Listo",
+                        "label": "Listo",
+                        "index": 1,
+                        "is_done": true
+                      },
+                      {
+                        "__typename": "TimelineValue",
+                        "id": "timeline",
+                        "type": "timeline",
+                        "text": "2026-03-01 - 2026-03-10",
+                        "from": "2026-03-01T00:00:00Z",
+                        "to": "2026-03-10T00:00:00Z",
+                        "visualization_type": null
+                      },
+                      {
+                        "__typename": "TextValue",
+                        "id": "text",
+                        "type": "text",
+                        "text": "nota"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "1002",
+                "name": "Losa",
+                "state": "active",
+                "created_at": "2026-01-02T03:04:05Z",
+                "updated_at": "2026-01-03T03:04:05Z",
+                "creator_id": "9",
+                "group": {
+                  "id": "topics"
+                },
+                "parent_item": null,
+                "assets": [],
+                "column_values": [
+                  {
+                    "__typename": "StatusValue",
+                    "id": "status",
+                    "type": "status",
+                    "text": "Listo",
+                    "label": "Listo",
+                    "index": 1,
+                    "is_done": true
+                  },
+                  {
+                    "__typename": "TimelineValue",
+                    "id": "timeline",
+                    "type": "timeline",
+                    "text": "2026-03-01 - 2026-03-10",
+                    "from": "2026-03-01T00:00:00Z",
+                    "to": "2026-03-10T00:00:00Z",
+                    "visualization_type": null
+                  },
+                  {
+                    "__typename": "TextValue",
+                    "id": "text",
+                    "type": "text",
+                    "text": "nota"
+                  }
+                ],
+                "subitems": []
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "classicNextPage": {
+    "data": {
+      "next_items_page": {
+        "cursor": null,
+        "items": [
+          {
+            "id": "1003",
+            "name": "Acabados",
+            "state": "active",
+            "created_at": "2026-01-02T03:04:05Z",
+            "updated_at": "2026-01-03T03:04:05Z",
+            "creator_id": "9",
+            "group": {
+              "id": "group_b"
+            },
+            "parent_item": null,
+            "assets": [],
+            "column_values": [
+              {
+                "__typename": "StatusValue",
+                "id": "status",
+                "type": "status",
+                "text": "Listo",
+                "label": "Listo",
+                "index": 1,
+                "is_done": true
+              },
+              {
+                "__typename": "TimelineValue",
+                "id": "timeline",
+                "type": "timeline",
+                "text": "2026-03-01 - 2026-03-10",
+                "from": "2026-03-01T00:00:00Z",
+                "to": "2026-03-10T00:00:00Z",
+                "visualization_type": null
+              },
+              {
+                "__typename": "TextValue",
+                "id": "text",
+                "type": "text",
+                "text": "nota"
+              }
+            ],
+            "subitems": []
+          }
+        ]
+      }
+    }
+  },
+  "multiLevelFirstPage": {
+    "data": {
+      "boards": [
+        {
+          "items_page": {
+            "cursor": null,
+            "items": [
+              {
+                "id": "2000",
+                "name": "Casa Norte",
+                "state": "active",
+                "created_at": "2026-01-02T03:04:05Z",
+                "updated_at": "2026-01-03T03:04:05Z",
+                "creator_id": "9",
+                "group": {
+                  "id": "g1"
+                },
+                "parent_item": null,
+                "assets": [],
+                "column_values": [
+                  {
+                    "__typename": "StatusValue",
+                    "id": "status",
+                    "type": "status",
+                    "text": "Listo",
+                    "label": "Listo",
+                    "index": 1,
+                    "is_done": true
+                  },
+                  {
+                    "__typename": "TimelineValue",
+                    "id": "timeline",
+                    "type": "timeline",
+                    "text": "2026-03-01 - 2026-03-10",
+                    "from": "2026-03-01T00:00:00Z",
+                    "to": "2026-03-10T00:00:00Z",
+                    "visualization_type": null
+                  },
+                  {
+                    "__typename": "TextValue",
+                    "id": "text",
+                    "type": "text",
+                    "text": "nota"
+                  }
+                ],
+                "subitems": [
+                  {
+                    "id": "2010",
+                    "name": "Nivel 1",
+                    "state": "active",
+                    "created_at": "2026-01-02T03:04:05Z",
+                    "updated_at": "2026-01-03T03:04:05Z",
+                    "creator_id": "9",
+                    "group": {
+                      "id": "g1"
+                    },
+                    "parent_item": {
+                      "id": "2000"
+                    },
+                    "assets": [],
+                    "column_values": [
+                      {
+                        "__typename": "StatusValue",
+                        "id": "status",
+                        "type": "status",
+                        "text": "Listo",
+                        "label": "Listo",
+                        "index": 1,
+                        "is_done": true
+                      },
+                      {
+                        "__typename": "TimelineValue",
+                        "id": "timeline",
+                        "type": "timeline",
+                        "text": "2026-03-01 - 2026-03-10",
+                        "from": "2026-03-01T00:00:00Z",
+                        "to": "2026-03-10T00:00:00Z",
+                        "visualization_type": null
+                      },
+                      {
+                        "__typename": "TextValue",
+                        "id": "text",
+                        "type": "text",
+                        "text": "nota"
+                      }
+                    ],
+                    "subitems": [
+                      {
+                        "id": "2020",
+                        "name": "Nivel 2",
+                        "state": "active",
+                        "created_at": "2026-01-02T03:04:05Z",
+                        "updated_at": "2026-01-03T03:04:05Z",
+                        "creator_id": "9",
+                        "group": {
+                          "id": "g1"
+                        },
+                        "parent_item": {
+                          "id": "2010"
+                        },
+                        "assets": [],
+                        "column_values": [
+                          {
+                            "__typename": "StatusValue",
+                            "id": "status",
+                            "type": "status",
+                            "text": "Listo",
+                            "label": "Listo",
+                            "index": 1,
+                            "is_done": true
+                          },
+                          {
+                            "__typename": "TimelineValue",
+                            "id": "timeline",
+                            "type": "timeline",
+                            "text": "2026-03-01 - 2026-03-10",
+                            "from": "2026-03-01T00:00:00Z",
+                            "to": "2026-03-10T00:00:00Z",
+                            "visualization_type": null
+                          },
+                          {
+                            "__typename": "TextValue",
+                            "id": "text",
+                            "type": "text",
+                            "text": "nota"
+                          }
+                        ],
+                        "subitems": [
+                          {
+                            "id": "2030",
+                            "name": "Nivel 3",
+                            "state": "active",
+                            "created_at": "2026-01-02T03:04:05Z",
+                            "updated_at": "2026-01-03T03:04:05Z",
+                            "creator_id": "9",
+                            "group": {
+                              "id": "g1"
+                            },
+                            "parent_item": {
+                              "id": "2020"
+                            },
+                            "assets": [],
+                            "column_values": [
+                              {
+                                "__typename": "StatusValue",
+                                "id": "status",
+                                "type": "status",
+                                "text": "Listo",
+                                "label": "Listo",
+                                "index": 1,
+                                "is_done": true
+                              },
+                              {
+                                "__typename": "TimelineValue",
+                                "id": "timeline",
+                                "type": "timeline",
+                                "text": "2026-03-01 - 2026-03-10",
+                                "from": "2026-03-01T00:00:00Z",
+                                "to": "2026-03-10T00:00:00Z",
+                                "visualization_type": null
+                              },
+                              {
+                                "__typename": "TextValue",
+                                "id": "text",
+                                "type": "text",
+                                "text": "nota"
+                              }
+                            ],
+                            "subitems": [
+                              {
+                                "id": "2040",
+                                "name": "Nivel 4",
+                                "state": "active",
+                                "created_at": "2026-01-02T03:04:05Z",
+                                "updated_at": "2026-01-03T03:04:05Z",
+                                "creator_id": "9",
+                                "group": {
+                                  "id": "g1"
+                                },
+                                "parent_item": {
+                                  "id": "2030"
+                                },
+                                "assets": [],
+                                "column_values": [
+                                  {
+                                    "__typename": "StatusValue",
+                                    "id": "status",
+                                    "type": "status",
+                                    "text": "Listo",
+                                    "label": "Listo",
+                                    "index": 1,
+                                    "is_done": true
+                                  },
+                                  {
+                                    "__typename": "TimelineValue",
+                                    "id": "timeline",
+                                    "type": "timeline",
+                                    "text": "2026-03-01 - 2026-03-10",
+                                    "from": "2026-03-01T00:00:00Z",
+                                    "to": "2026-03-10T00:00:00Z",
+                                    "visualization_type": null
+                                  },
+                                  {
+                                    "__typename": "TextValue",
+                                    "id": "text",
+                                    "type": "text",
+                                    "text": "nota"
+                                  }
+                                ],
+                                "subitems": [
+                                  {
+                                    "id": "2050",
+                                    "name": "Nivel 5",
+                                    "state": "active",
+                                    "created_at": "2026-01-02T03:04:05Z",
+                                    "updated_at": "2026-01-03T03:04:05Z",
+                                    "creator_id": "9",
+                                    "group": {
+                                      "id": "g1"
+                                    },
+                                    "parent_item": {
+                                      "id": "2040"
+                                    },
+                                    "assets": [],
+                                    "column_values": [
+                                      {
+                                        "__typename": "StatusValue",
+                                        "id": "status",
+                                        "type": "status",
+                                        "text": "Listo",
+                                        "label": "Listo",
+                                        "index": 1,
+                                        "is_done": true
+                                      },
+                                      {
+                                        "__typename": "TimelineValue",
+                                        "id": "timeline",
+                                        "type": "timeline",
+                                        "text": "2026-03-01 - 2026-03-10",
+                                        "from": "2026-03-01T00:00:00Z",
+                                        "to": "2026-03-10T00:00:00Z",
+                                        "visualization_type": null
+                                      },
+                                      {
+                                        "__typename": "TextValue",
+                                        "id": "text",
+                                        "type": "text",
+                                        "text": "nota"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "cursorExpired": {
+    "errors": [
+      {
+        "message": "CursorExpiredError: The cursor provided has expired.",
+        "extensions": {
+          "code": "CursorExpiredError",
+          "status_code": 200
+        }
+      }
+    ]
+  },
+  "dailyLimit": {
+    "errors": [
+      {
+        "message": "Daily limit exceeded",
+        "extensions": {
+          "code": "DAILY_LIMIT_EXCEEDED",
+          "status_code": 429
+        }
+      }
+    ]
+  }
+}

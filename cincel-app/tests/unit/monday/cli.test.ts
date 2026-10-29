@@ -36,7 +36,7 @@ describe("monday CLI dispatch", () => {
     expect(handler).toHaveBeenCalledWith(["--export", "exports/acme"], c.io);
   });
 
-  it.each(COMMAND_NAMES)("stub %s exits with a clear message", async (name) => {
+  it.each(COMMAND_NAMES.filter((n) => n !== "export"))("stub %s exits with a clear message", async (name) => {
     const c = captureIo();
     expect(await run([name], c.io)).toBe(2);
     expect(c.err()).toBe(`monday: "${name}" is not implemented yet.\n`);
