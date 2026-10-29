@@ -16,9 +16,12 @@ export {
   AssetsDocument,
   BoardsDocument,
   FirstPageDocument,
+  MeDocument,
   NextPageDocument,
+  SubitemColumnsDocument,
   UpdatesDocument,
   UsersDocument,
+  WorkspacesDocument,
   TypedDocumentString,
 } from "./generated/graphql";
 export type {
@@ -30,12 +33,18 @@ export type {
   FirstPageQueryVariables,
   ItemFieldsFragment,
   ItemTreeFragment,
+  MeQuery,
+  MeQueryVariables,
   NextPageQuery,
   NextPageQueryVariables,
+  SubitemColumnsQuery,
+  SubitemColumnsQueryVariables,
   UpdatesQuery,
   UpdatesQueryVariables,
   UsersQuery,
   UsersQueryVariables,
+  WorkspacesQuery,
+  WorkspacesQueryVariables,
 } from "./generated/graphql";
 
 /** One item as written to items.ndjson: its fields plus subitems nested to 5 levels. */

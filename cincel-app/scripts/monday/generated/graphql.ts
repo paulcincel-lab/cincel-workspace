@@ -4,6 +4,24 @@ type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 /** Internal type. DO NOT USE DIRECTLY. */
 export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import type { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
+/** The board hierarchy type */
+export type BoardHierarchy =
+  /** classic */
+  | 'classic'
+  /** multilevel of items */
+  | 'multi_level';
+
+/** The board object types. */
+export type BoardObjectType =
+  /** Parent Board. */
+  | 'board'
+  /** Custom Object. */
+  | 'custom_object'
+  /** Document. */
+  | 'document'
+  /** Sub Items Board. */
+  | 'sub_items_board';
+
 /** Types of columns supported by the API */
 export type ColumnType =
   /** Number items according to their order in the group/board */
@@ -127,6 +145,15 @@ export type UserStatus =
   | 'INACTIVE'
   /** The user has not yet accepted the invitation. */
   | 'PENDING';
+
+/** The workspace kinds available. */
+export type WorkspaceKind =
+  /** Closed workspace, available to enterprise only. */
+  | 'closed'
+  /** Open workspace. */
+  | 'open'
+  /** Template workspace. */
+  | 'template';
 
 export type ItemFieldsFragment = { id: string, name: string, state: State | null, created_at: string | null, updated_at: string | null, creator_id: string, group: { id: string } | null, parent_item: { id: string } | null, assets: Array<{ id: string, name: string, file_extension: string, file_size: number } | null> | null, column_values: Array<
     | { __typename: 'BatteryValue', id: string, type: ColumnType, text: string | null }
@@ -431,7 +458,14 @@ export type BoardsQueryVariables = Exact<{
 }>;
 
 
-export type BoardsQuery = { boards: Array<{ id: string, name: string, workspace_id: string | null, items_count: number | null, columns: Array<{ id: string, title: string, type: ColumnType, settings: unknown } | null> | null, groups: Array<{ id: string, title: string, position: string } | null> | null } | null> | null };
+export type BoardsQuery = { boards: Array<{ id: string, name: string, type: BoardObjectType | null, hierarchy_type: BoardHierarchy | null, workspace_id: string | null, items_count: number | null, columns: Array<{ id: string, title: string, type: ColumnType, settings: unknown } | null> | null, groups: Array<{ id: string, title: string, position: string } | null> | null } | null> | null };
+
+export type SubitemColumnsQueryVariables = Exact<{
+  ids?: Array<string> | string | null | undefined;
+}>;
+
+
+export type SubitemColumnsQuery = { boards: Array<{ id: string, columns: Array<{ id: string, title: string, type: ColumnType, settings: unknown } | null> | null } | null> | null };
 
 export type FirstPageQueryVariables = Exact<{
   board?: Array<string> | string | null | undefined;
@@ -975,6 +1009,18 @@ export type UsersQueryVariables = Exact<{
 
 export type UsersQuery = { users: Array<{ id: string, name: string, email: string, status: UserStatus, kind: string }> | null };
 
+export type MeQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MeQuery = { me: { id: string, name: string, email: string, account: { id: string, slug: string, name: string } } | null };
+
+export type WorkspacesQueryVariables = Exact<{
+  page: number;
+}>;
+
+
+export type WorkspacesQuery = { workspaces: Array<{ id: string | null, name: string, kind: WorkspaceKind | null, description: string | null } | null> | null };
+
 export class TypedDocumentString<TResult, TVariables>
   extends String
   implements DocumentTypeDecoration<TResult, TVariables>
@@ -1168,6 +1214,8 @@ export const BoardsDocument = new TypedDocumentString(`
   ) {
     id
     name
+    type
+    hierarchy_type
     workspace_id
     items_count
     columns {
@@ -1184,6 +1232,19 @@ export const BoardsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BoardsQuery, BoardsQueryVariables>;
+export const SubitemColumnsDocument = new TypedDocumentString(`
+    query SubitemColumns($ids: [ID!]) {
+  boards(ids: $ids, limit: 100) {
+    id
+    columns {
+      id
+      title
+      type
+      settings
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<SubitemColumnsQuery, SubitemColumnsQueryVariables>;
 export const FirstPageDocument = new TypedDocumentString(`
     query FirstPage($board: [ID!], $limit: Int!) {
   boards(ids: $board) {
@@ -1421,7 +1482,7 @@ export const AssetsDocument = new TypedDocumentString(`
     `) as unknown as TypedDocumentString<AssetsQuery, AssetsQueryVariables>;
 export const UsersDocument = new TypedDocumentString(`
     query Users($page: Int!) {
-  users(limit: 1000, page: $page) {
+  users(limit: 1000, page: $page, status: [ACTIVE, INACTIVE, PENDING]) {
     id
     name
     email
@@ -1430,3 +1491,27 @@ export const UsersDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UsersQuery, UsersQueryVariables>;
+export const MeDocument = new TypedDocumentString(`
+    query Me {
+  me {
+    id
+    name
+    email
+    account {
+      id
+      slug
+      name
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<MeQuery, MeQueryVariables>;
+export const WorkspacesDocument = new TypedDocumentString(`
+    query Workspaces($page: Int!) {
+  workspaces(limit: 100, page: $page, state: active) {
+    id
+    name
+    kind
+    description
+  }
+}
+    `) as unknown as TypedDocumentString<WorkspacesQuery, WorkspacesQueryVariables>;

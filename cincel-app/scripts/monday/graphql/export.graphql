@@ -100,6 +100,8 @@ query Boards($page: Int!) {
   boards(limit: 100, page: $page, state: active, hierarchy_types: [classic, multi_level]) {
     id
     name
+    type
+    hierarchy_type
     workspace_id
     items_count
     columns {
@@ -112,6 +114,19 @@ query Boards($page: Int!) {
       id
       title
       position
+    }
+  }
+}
+
+# Columns of the subitems boards, for board.json.subitem_columns.
+query SubitemColumns($ids: [ID!]) {
+  boards(ids: $ids, limit: 100) {
+    id
+    columns {
+      id
+      title
+      type
+      settings
     }
   }
 }
@@ -169,12 +184,37 @@ query Assets($ids: [ID!]!) {
   }
 }
 
+# Deactivated users are asked for too (the default is [ACTIVE, PENDING]):
+# old items and updates still name them as creators.
 query Users($page: Int!) {
-  users(limit: 1000, page: $page) {
+  users(limit: 1000, page: $page, status: [ACTIVE, INACTIVE, PENDING]) {
     id
     name
     email
     status
     kind
+  }
+}
+
+# Who the token belongs to and its account, for manifest.json.
+query Me {
+  me {
+    id
+    name
+    email
+    account {
+      id
+      slug
+      name
+    }
+  }
+}
+
+query Workspaces($page: Int!) {
+  workspaces(limit: 100, page: $page, state: active) {
+    id
+    name
+    kind
+    description
   }
 }
