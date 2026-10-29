@@ -653,5 +653,68 @@
         }
       }
     ]
+  },
+  "updates": {
+    "1001": [
+      {
+        "id": "u1",
+        "body": "<p>Plano <b>actualizado</b></p>",
+        "text_body": "Plano actualizado",
+        "created_at": "2026-02-01T10:00:00Z",
+        "creator_id": "9",
+        "replies": [
+          {
+            "id": "r1",
+            "body": "<p>Gracias</p>",
+            "created_at": "2026-02-01T11:00:00Z",
+            "creator_id": "10",
+            "assets": [
+              {
+                "id": "89",
+                "name": "foto.jpg",
+                "file_extension": ".jpg",
+                "file_size": 5
+              }
+            ]
+          }
+        ],
+        "assets": [
+          {
+            "id": "88",
+            "name": "medidas.xlsx",
+            "file_extension": ".xlsx",
+            "file_size": 4
+          }
+        ]
+      }
+    ],
+    "1101": [
+      {
+        "id": "u2",
+        "body": "<p>Subelemento</p>",
+        "text_body": "Subelemento",
+        "created_at": "2026-02-02T10:00:00Z",
+        "creator_id": "9",
+        "replies": [],
+        "assets": []
+      }
+    ]
+  },
+  "assets": {
+    "77": {
+      "id": "77",
+      "name": "plano.pdf",
+      "public_url": "https://files.monday.test/77?sig=a"
+    },
+    "88": {
+      "id": "88",
+      "name": "medidas.xlsx",
+      "public_url": "https://files.monday.test/88?sig=b"
+    },
+    "89": {
+      "id": "89",
+      "name": "foto.jpg",
+      "public_url": "https://files.monday.test/89?sig=c"
+    }
   }
 }

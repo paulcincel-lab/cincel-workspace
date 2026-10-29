@@ -10,19 +10,29 @@
  *   boards/<board_id>/
  *     board.json           {id, name, workspace_id, hierarchy_type, columns, groups, subitem_columns}
  *     items.ndjson         one item per line in API order, subitems nested to 5 levels
+ *     updates.ndjson       one update per line ({item_id, ...update}), replies nested
  *     .done                written last; a re-run skips boards that have it
+ *   files/
+ *     index.json           asset_id → {name, size, sha256, path, board_id, item_id | update_id}
+ *     <asset_id>/<original-name>
  *
  * Before anything is written, the call estimate (§4.3) is printed and the run
  * only starts after a "y" answer. A run that stops part way (killed, daily
  * limit, network) is resumed by running the same command again: boards with
  * `.done` are skipped, an unfinished board starts over.
  *
- * Updates and files (§4.2) are not exported by this module yet.
+ * Updates are read 100 items per call; an item that returned a full page of
+ * 100 is asked for again alone, page by page, until a page comes back short.
+ * Assets are downloaded right after their `public_url` is fetched (it
+ * expires); a download that still fails after 3 retries is recorded in
+ * `manifest.errors[]` and the board still completes. `--no-updates` and
+ * `--no-files` skip those stages.
  *
  * The token is never printed or written: only the client holds it.
  */
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
@@ -34,15 +44,18 @@ import {
   type MondayClient,
 } from "./client";
 import {
+  AssetsDocument,
   BoardsDocument,
   FirstPageDocument,
   MeDocument,
   NextPageDocument,
   SubitemColumnsDocument,
+  UpdatesDocument,
   UsersDocument,
   WorkspacesDocument,
   type MondayBoard,
   type MondayItem,
+  type MondayUpdate,
   type MondayUser,
   type WorkspacesQuery,
 } from "./queries";
@@ -58,9 +71,15 @@ const USERS_PER_PAGE = 1000;
 const WORKSPACES_PER_PAGE = 100;
 const SUBITEM_BOARDS_PER_CALL = 100;
 const UPDATES_ITEMS_PER_CALL = 100;
+/** Updates per item per page; monday's maximum. */
+export const UPDATES_PER_PAGE = 100;
 const ASSETS_PER_CALL = 50;
+/** A failed download is retried this many times before it is recorded as an error. */
+export const DOWNLOAD_RETRIES = 3;
 
 export const DONE_FILE = ".done";
+export const FILES_DIR = "files";
+export const FILES_INDEX = "index.json";
 
 export interface ExportOptions {
   /** Output folder, e.g. exports/acme. */
@@ -79,7 +98,28 @@ export interface ExportDeps {
   /** Asks a yes/no question; true only for an explicit yes. */
   confirm: (question: string) => Promise<boolean>;
   now?: () => Date;
+  /** Downloads an asset's public_url; plain fetch by default (no token is sent). */
+  download?: (url: string) => Promise<Uint8Array>;
+  /** Waits between download retries. */
+  sleep?: (ms: number) => Promise<void>;
 }
+
+/** One entry of files/index.json. */
+export interface FileIndexEntry {
+  name: string;
+  size: number;
+  sha256: string;
+  /** Relative to the export folder, e.g. files/77/plano.pdf. */
+  path: string;
+  board_id: string;
+  item_id?: string;
+  update_id?: string;
+}
+
+export type FileIndex = Record<string, FileIndexEntry>;
+
+/** A line of updates.ndjson. */
+export type UpdateLine = { item_id: string } & MondayUpdate;
 
 export interface ManifestBoard {
   id: string;
@@ -335,6 +375,84 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Every item id in a tree, parents before their subitems. */
+export function itemIds(items: MondayItem[]): string[] {
+  const ids: string[] = [];
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") return;
+    const n = node as { id?: string; subitems?: unknown[] | null };
+    if (n.id) ids.push(n.id);
+    for (const child of n.subitems ?? []) walk(child);
+  };
+  for (const item of items) walk(item);
+  return ids;
+}
+
+type AssetRef = { item_id: string } | { update_id: string };
+
+function addAssetRefs(refs: Map<string, AssetRef>, assets: unknown, ref: AssetRef) {
+  if (!Array.isArray(assets)) return;
+  for (const a of assets as ({ id?: string } | null)[]) {
+    if (a?.id && !refs.has(a.id)) refs.set(a.id, ref);
+  }
+}
+
+/** Assets referenced by items (and their subitems), keyed by asset id. */
+function itemAssetRefs(items: MondayItem[], refs: Map<string, AssetRef>) {
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") return;
+    const n = node as { id: string; assets?: unknown; subitems?: unknown[] | null };
+    addAssetRefs(refs, n.assets, { item_id: n.id });
+    for (const child of n.subitems ?? []) walk(child);
+  };
+  for (const item of items) walk(item);
+}
+
+/**
+ * Updates of the given items: page 1 for 100 items per call, then every item
+ * that returned a full page is asked for alone with the next page until a
+ * page comes back short. Returns the updates per item id, in API order.
+ */
+export async function fetchUpdates(client: MondayClient, ids: string[]): Promise<Map<string, MondayUpdate[]>> {
+  const byItem = new Map<string, MondayUpdate[]>();
+  const full: string[] = [];
+  for (const part of chunk(ids, UPDATES_ITEMS_PER_CALL)) {
+    const data = await client.request(UpdatesDocument, { ids: part, page: 1 });
+    for (const item of data.items ?? []) {
+      if (!item) continue;
+      const updates = item.updates ?? [];
+      byItem.set(item.id, [...(byItem.get(item.id) ?? []), ...updates]);
+      if (updates.length >= UPDATES_PER_PAGE) full.push(item.id);
+    }
+  }
+  for (const id of full) {
+    for (let page = 2; ; page++) {
+      const data = await client.request(UpdatesDocument, { ids: [id], page });
+      const updates = data.items?.find((i) => i?.id === id)?.updates ?? [];
+      byItem.get(id)!.push(...updates);
+      if (updates.length < UPDATES_PER_PAGE) break;
+    }
+  }
+  return byItem;
+}
+
+/** A file name safe to use inside files/<asset_id>/. */
+export function safeFileName(name: string, fallback: string): string {
+  const cleaned = name
+    .replace(/[/\\]/g, "_")
+    .replace(/[\u0000-\u001f]/g, "")
+    .trim();
+  return cleaned === "" || cleaned === "." || cleaned === ".." ? fallback : cleaned;
+}
+
+async function defaultDownload(url: string): Promise<Uint8Array> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 // ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
@@ -376,13 +494,13 @@ export async function runExport(options: ExportOptions, deps: ExportDeps): Promi
   const pending = selected.filter((b) => !isDone(b.id));
   const subitemIds = [...new Set(pending.flatMap((b) => subitemBoardIds(b)))];
 
-  // Updates and files are not exported by this version, so they cost nothing yet.
+  // Assets are only known once items are read, so files add to this as they come in.
   const estimate = estimateCalls({
     totalBoards: visible.length,
     boards: pending.map((b) => ({ items_count: b.items_count ?? null, pageSize: pageSizeFor(b) })),
     subitemBoards: subitemIds.length,
-    updates: false,
-    files: false,
+    updates: options.updates,
+    files: options.files,
   });
 
   io.stdout(
@@ -391,7 +509,13 @@ export async function runExport(options: ExportOptions, deps: ExportDeps): Promi
       (options.boards ? `, selected: ${selected.length}` : "") +
       `, already done: ${selected.length - pending.length}, to export: ${pending.length}\n` +
       `Estimated monday API calls: ~${estimate.total} ` +
-      `(boards ${estimate.boards}, items ${estimate.items}, users ${estimate.users}, other ${estimate.other})\n`,
+      `(boards ${estimate.boards}, items ${estimate.items}, ` +
+      (options.updates ? `updates ${estimate.updates}, ` : "") +
+      `users ${estimate.users}, other ${estimate.other}` +
+      (options.files ? ", plus 1 per 50 files" : "") +
+      ")\n" +
+      (options.updates ? "" : "Updates are skipped (--no-updates).\n") +
+      (options.files ? "" : "Files are skipped (--no-files).\n"),
   );
 
   if (!(await deps.confirm("Start the export? [y/N] "))) {
@@ -423,6 +547,72 @@ export async function runExport(options: ExportOptions, deps: ExportDeps): Promi
     errors,
   });
   const saveManifest = () => writeJson(manifestPath, manifest());
+
+  const download = deps.download ?? defaultDownload;
+  const sleep = deps.sleep ?? defaultSleep;
+  const filesDir = join(out, FILES_DIR);
+  const indexPath = join(filesDir, FILES_INDEX);
+  const fileIndex: FileIndex = (await readJson<FileIndex>(indexPath)) ?? {};
+
+  /** Downloads one asset, retrying DOWNLOAD_RETRIES times; returns the bytes or the last error. */
+  const downloadWithRetries = async (
+    url: string,
+  ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; error: string }> => {
+    let last = "";
+    for (let attempt = 0; attempt <= DOWNLOAD_RETRIES; attempt++) {
+      if (attempt > 0) await sleep(1000 * 2 ** (attempt - 1));
+      try {
+        return { ok: true, bytes: await download(url) };
+      } catch (err) {
+        last = errorMessage(err);
+      }
+    }
+    return { ok: false, error: last };
+  };
+
+  /** Fetches public_urls 50 at a time and downloads each one right away. */
+  const exportFiles = async (boardId: string, refs: Map<string, AssetRef>): Promise<{ saved: number; failed: number }> => {
+    let saved = 0;
+    let failed = 0;
+    const fail = (id: string, message: string) => {
+      failed++;
+      errors.push({ at: now().toISOString(), board_id: boardId, message: `asset ${id}: ${message}` });
+    };
+    // An asset saved by an earlier, interrupted run of this board is not downloaded again.
+    const todo = [...refs.keys()].filter((id) => !(fileIndex[id] && existsSync(join(out, fileIndex[id].path))));
+    for (const part of chunk(todo, ASSETS_PER_CALL)) {
+      const data = await client.request(AssetsDocument, { ids: part });
+      const byId = new Map((data.assets ?? []).filter((a) => a != null).map((a) => [a.id, a]));
+      for (const id of part) {
+        const asset = byId.get(id);
+        if (!asset?.public_url) {
+          fail(id, "monday returned no public_url");
+          continue;
+        }
+        const result = await downloadWithRetries(asset.public_url);
+        if (!result.ok) {
+          fail(id, `download failed after ${DOWNLOAD_RETRIES} retries: ${result.error}`);
+          continue;
+        }
+        const rel = `${FILES_DIR}/${id}/${safeFileName(asset.name, id)}`;
+        const target = join(out, rel);
+        await mkdir(join(filesDir, id), { recursive: true });
+        await writeFile(`${target}.part`, result.bytes);
+        await rename(`${target}.part`, target);
+        fileIndex[id] = {
+          name: asset.name,
+          size: result.bytes.byteLength,
+          sha256: createHash("sha256").update(result.bytes).digest("hex"),
+          path: rel,
+          board_id: boardId,
+          ...refs.get(id)!,
+        };
+        saved++;
+      }
+      await writeJson(indexPath, fileIndex);
+    }
+    return { saved, failed };
+  };
 
   let currentBoard: string | undefined;
   try {
@@ -466,6 +656,8 @@ export async function runExport(options: ExportOptions, deps: ExportDeps): Promi
       const itemsPath = join(dir, "items.ndjson");
       await writeFile(itemsPath, "");
       let count = 0;
+      let ids: string[] = [];
+      let assetRefs = new Map<string, AssetRef>();
       await paginateItems<MondayItem>(client, {
         boardId: board.id,
         pageSize: pageSizeFor(board),
@@ -475,21 +667,59 @@ export async function runExport(options: ExportOptions, deps: ExportDeps): Promi
           if (items.length === 0) return;
           await appendFile(itemsPath, items.map((item) => `${JSON.stringify(item)}\n`).join(""));
           count += items.length;
+          ids.push(...itemIds(items));
+          itemAssetRefs(items, assetRefs);
         },
         onRestart: async ({ restart }) => {
           io.stderr(`monday: board ${board.id}: cursor expired, starting the board again (restart ${restart})\n`);
           await writeFile(itemsPath, "");
           count = 0;
+          ids = [];
+          assetRefs = new Map();
         },
         onPageSizeChange: ({ from, to }) => {
           io.stderr(`monday: board ${board.id}: query too complex, page size ${from} → ${to}\n`);
         },
       });
 
-      await writeJson(join(dir, DONE_FILE), { items: count, finished_at: now().toISOString() });
+      const updatesPath = join(dir, "updates.ndjson");
+      let updateCount = 0;
+      if (options.updates) {
+        const byItem = await fetchUpdates(client, ids);
+        const lines: string[] = [];
+        for (const id of ids) {
+          for (const update of byItem.get(id) ?? []) {
+            const line: UpdateLine = { item_id: id, ...update };
+            lines.push(`${JSON.stringify(line)}\n`);
+            addAssetRefs(assetRefs, update.assets, { update_id: update.id });
+            for (const reply of update.replies ?? []) addAssetRefs(assetRefs, reply.assets, { update_id: reply.id });
+          }
+        }
+        await writeFile(updatesPath, lines.join(""));
+        updateCount = lines.length;
+      } else {
+        await rm(updatesPath, { force: true });
+      }
+
+      let files = { saved: 0, failed: 0 };
+      if (options.files) files = await exportFiles(board.id, assetRefs);
+
+      await writeJson(join(dir, DONE_FILE), {
+        items: count,
+        updates: options.updates ? updateCount : null,
+        files: options.files ? files.saved : null,
+        finished_at: now().toISOString(),
+      });
       boardEntries.set(board.id, { ...boardEntries.get(board.id)!, done: true });
       await saveManifest();
-      io.stdout(`board ${board.id} ${board.name}: ${count} items\n`);
+      io.stdout(
+        `board ${board.id} ${board.name}: ${count} items` +
+          (options.updates ? `, ${updateCount} updates` : "") +
+          (options.files
+            ? `, ${files.saved} files` + (files.failed ? ` (${files.failed} failed, see manifest errors)` : "")
+            : "") +
+          "\n",
+      );
     }
     currentBoard = undefined;
   } catch (err) {
