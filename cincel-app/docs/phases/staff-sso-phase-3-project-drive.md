@@ -6,8 +6,8 @@ Every project gets its Shared Drive folder (`01 Interno` / `02 Cliente` / `03 De
 ## Deliverables
 
 ### Backend
-- [ ] `lib/google/drive-admin.ts`: service-account Drive client (create folder, rename, get parents, list, get media, export, resumable upload) with `supportsAllDrives` (BE §A.6.1). Part B reuses it
-- [ ] `ensureProjectFolders(projectId)` idempotent; called via `after()` from `createProject`; failure → `failed` + `drive_folder_error`; folder name rules; rename on name/code change (BE §A.6.1)
+- [x] `lib/google/drive-admin.ts` and `ensureProjectFolders`: built by monday Migration Phase 1 (docs/specs/monday-migration/backend.md §10); not in this phase
+- [ ] Call `ensureProjectFolders` via `after()` from `createProject`; failure → `failed` + `drive_folder_error`; folder name rules; rename on name/code change (BE §A.6.1)
 - [ ] `retryProjectFolderAction(projectId)` (`canEditProjectGeneral`) and `ensureMissingProjectFoldersAction()` (Administrador) (BE §A.6.1, §A.7)
 - [ ] Incremental consent: `/api/auth/google/start?scope=drive|calendar&return_to=` with `include_granted_scopes`, `access_type=offline`, `prompt=consent`, `login_hint`; callback for a signed-in staff member updates tokens/scope, `sub` must match; password-session staff run the full gate and get linked (BE §A.6.2)
 - [ ] Consent-callback gate denial for a password session: keep the session, store no tokens, redirect to `return_to?google_connected=error&motivo=…` (review NB 6)
@@ -43,7 +43,7 @@ Every project gets its Shared Drive folder (`01 Interno` / `02 Cliente` / `03 De
 - FE picker / Calendar changes run alongside BE picker-route mode switch
 
 ## Phase dependencies
-- Requires: Staff SSO Phase 1 (schema drive columns, service account, staff OAuth, token crypto, Configuración → Google page)
+- Requires: monday Migration Phase 1 (project drive columns, `drive-admin.ts`, `ensureProjectFolders`, `GOOGLE_SHARED_DRIVE_ID`), Staff SSO Phase 1 (service account, staff OAuth, token crypto, Configuración → Google page)
 
 ## Complexity
 - Backend: L

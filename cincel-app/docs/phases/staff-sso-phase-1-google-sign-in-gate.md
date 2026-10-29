@@ -6,7 +6,7 @@ Staff sign in with **Entrar con Google** (behind `AUTH_GOOGLE_ENABLED`), Workspa
 ## Deliverables
 
 ### Backend
-- [ ] Part A migration (BE §A.3), additive only: `core.staff` (`google_sub` + partial unique index, `access_checked_at`, `access_revoked_at`, `access_revoked_reason`, `last_login_at`), `core.workspace_group_mappings` + `group_mapping_kind` enum, `core.area_members.source`, `core.projects` drive columns + `drive_folder_status` enum, `core.google_oauth_accounts.google_sub`, `core.auth_events`. One migration so Phases 2 and 3 don't touch the schema
+- [ ] Part A migration (BE §A.3), additive only: `core.staff` (`google_sub` + partial unique index, `access_checked_at`, `access_revoked_at`, `access_revoked_reason`, `last_login_at`), `core.workspace_group_mappings` + `group_mapping_kind` enum, `core.area_members.source`, `core.google_oauth_accounts.google_sub`, `core.auth_events`. One migration so Phases 2 and 3 don't touch the schema
 - [ ] `accessRevokedReason` comment points at the shared denial-reason list of §A.4 (review NB 11); export the `motivo` list as a shared constant in `lib/types/workspace-access.ts`
 - [ ] `lib/google/service-account.ts` (no subject) and `lib/google/directory.ts` (`getUserStatus`, `hasMember`, `getGroup`), parallel calls with 5 s timeouts (BE §A.4)
 - [ ] `lib/google/token-crypto.ts`: AES-256-GCM, `v1:<iv>:<tag>:<data>`, `TOKEN_ENCRYPTION_KEY` (BE §A.3, §A.9)

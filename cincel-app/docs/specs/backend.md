@@ -134,7 +134,8 @@ source: text("source").notNull().default("manual"),      // "manual" | "workspac
 ```
 
 ```ts
-// lib/db/schema/projects.ts — additions to core.projects
+// lib/db/schema/projects.ts — core.projects Drive columns. ALREADY ADDED by the monday migration
+// (docs/specs/monday-migration/backend.md §8, §10), which ships first; Part A's migration doesn't add them.
 export const driveFolderStatus = core.enum("drive_folder_status", ["pending", "ready", "failed"]);
 driveFolderId: text("drive_folder_id"),
 driveInternalFolderId: text("drive_internal_folder_id"),   // "01 Interno"
@@ -303,7 +304,7 @@ sequenceDiagram
 - Folder name: `<code> · <name>`, or `<name>` when the project has no code; `/` and control characters replaced by spaces, max 200 chars.
 - `retryProjectFolderAction(projectId)` in `lib/actions/projects-actions.ts`: staff session + projects capability `canEditProjectGeneral`; runs `ensureProjectFolders(projectId)` synchronously; returns `{ ok: true, status: "ready" | "failed", error?: string }` or `{ ok: false, error: "forbidden" | "not_found" }`.
 - Existing projects: an admin action **Crear carpetas faltantes** (Configuración → Google) runs `ensureProjectFolders` for every project with status `pending` or `failed`, sequentially, and reports counts.
-- Module: `lib/google/drive-admin.ts` (service-account Drive client: create folder, rename, get parents, list, get media, export, resumable upload).
+- Module: `lib/google/drive-admin.ts` (service-account Drive client: create folder, rename, get parents, list, get media, export, resumable upload, trash) and the `ensureProjectFolders` function are **built by the monday migration** (its §10), which ships first. Part A adds the `createProject` `after()` hook, rename sync, retry action and admin UI on top of them.
 
 ### A.6.2 Incremental consent (staff)
 
@@ -378,7 +379,7 @@ GOOGLE_WORKSPACE_DOMAIN=cincel.mx
 GOOGLE_WORKSPACE_CUSTOMER_ID=…               # optional, for groups.get
 GOOGLE_SA_CLIENT_EMAIL=…                     # service account (existing var)
 GOOGLE_SA_PRIVATE_KEY=…                      # existing var; never committed
-GOOGLE_SHARED_DRIVE_ID=…
+GOOGLE_SHARED_DRIVE_ID=…                     # introduced by the monday migration
 TOKEN_ENCRYPTION_KEY=<64 hex chars>          # AES-256 key (32 bytes as hex, = kcd generate: hex32). Ciphertext is prefixed "v1:" so a later key rotation can add "v2"; rotation itself is out of scope
 ACCESS_RECHECK_HOURS=4
 ```
