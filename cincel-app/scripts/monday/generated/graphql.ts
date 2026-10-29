@@ -993,7 +993,7 @@ export type UpdatesQueryVariables = Exact<{
 }>;
 
 
-export type UpdatesQuery = { items: Array<{ id: string, updates: Array<{ id: string, body: string, text_body: string | null, created_at: string | null, creator_id: string | null, replies: Array<{ id: string, body: string, created_at: string | null, creator_id: string | null }> | null, assets: Array<{ id: string, name: string, file_extension: string, file_size: number } | null> | null }> | null } | null> | null };
+export type UpdatesQuery = { items: Array<{ id: string, updates: Array<{ id: string, body: string, text_body: string | null, created_at: string | null, creator_id: string | null, replies: Array<{ id: string, body: string, created_at: string | null, creator_id: string | null, assets: Array<{ id: string, name: string, file_extension: string, file_size: number } | null> | null }> | null, assets: Array<{ id: string, name: string, file_extension: string, file_size: number } | null> | null }> | null } | null> | null };
 
 export type AssetsQueryVariables = Exact<{
   ids: Array<string> | string;
@@ -1460,6 +1460,12 @@ export const UpdatesDocument = new TypedDocumentString(`
         body
         created_at
         creator_id
+        assets {
+          id
+          name
+          file_extension
+          file_size
+        }
       }
       assets {
         id

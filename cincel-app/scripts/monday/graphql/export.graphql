@@ -165,6 +165,12 @@ query Updates($ids: [ID!], $page: Int!) {
         body
         created_at
         creator_id
+        assets {
+          id
+          name
+          file_extension
+          file_size
+        }
       }
       assets {
         id
