@@ -32,5 +32,9 @@
   "Staff SSO Phase 3: Project Drive Folders + Staff Drive": "staff-sso:3",
   "Staff SSO Phase 4: Legacy Cleanup Release": "staff-sso:4",
   "Client Portal Phase 1: Portal Sign-in + Invitations": "client-portal:1",
-  "Client Portal Phase 2: Files + Uploads": "client-portal:2"
+  "Client Portal Phase 2: Files + Uploads": "client-portal:2",
+  "monday Migration Phase 1: Schema, Drive Foundations + Export": "monday-migration:1",
+  "monday Migration Phase 2: Mapping, Translate + Plan": "monday-migration:2",
+  "monday Migration Phase 3: Apply + Rollback": "monday-migration:3",
+  "monday Migration Phase 4: Subtasks, Dependencies, Datos de monday + Project Bitácora": "monday-migration:4"
 }
