@@ -17,6 +17,8 @@
  * log line built here includes it.
  */
 
+import type { TypedDocumentString } from "./generated/graphql";
+
 export const MONDAY_API_URL = "https://api.monday.com/v2";
 export const MONDAY_API_VERSION = "2026-07";
 export const MAX_ATTEMPTS = 5;
@@ -129,7 +131,15 @@ export interface MondayClientOptions {
   onRetry?: (info: { attempt: number; delayMs: number; reason: string }) => void;
 }
 
+/** A query: plain text, or a generated typed document (scripts/monday/queries.ts). */
+export type MondayQuery = string | TypedDocumentString<unknown, never>;
+
 export interface MondayClient {
+  /** Runs one typed query; result and variables are checked against the 2026-07 schema. */
+  request<TResult, TVariables>(
+    query: TypedDocumentString<TResult, TVariables>,
+    variables: TVariables,
+  ): Promise<TResult>;
   /** Runs one query and returns `data`, or throws a MondayApiError. Never returns partial data. */
   request<T>(query: string, variables?: Record<string, unknown>): Promise<T>;
   /** Number of HTTP requests sent so far (retries included). */
@@ -305,8 +315,8 @@ export function createMondayClient(options: MondayClientOptions): MondayClient {
 
   let callCount = 0;
 
-  async function request<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
-    const body = JSON.stringify({ query, variables });
+  async function request<T>(query: MondayQuery, variables: object = {}): Promise<T> {
+    const body = JSON.stringify({ query: query.toString(), variables });
     let last: MondayApiError | undefined;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -375,9 +385,9 @@ export interface PaginateItemsOptions<Item> {
   /** Smallest page size to fall back to on "query too complex" before giving up. */
   minPageSize?: number;
   /** `query FirstPage($board: [ID!], $limit: Int!)` (backend.md §4.2). */
-  firstPageQuery: string;
+  firstPageQuery: MondayQuery;
   /** `query NextPage($cursor: String!, $limit: Int!)` (backend.md §4.2). */
-  nextPageQuery: string;
+  nextPageQuery: MondayQuery;
   /** How many times an expired cursor may restart the board before giving up. */
   maxRestarts?: number;
   /** Called once per complete page, in order. */
@@ -426,7 +436,7 @@ export async function paginateItems<Item>(
     try {
       let page = 1;
       const first = await withSmallerPages((limit) =>
-        client.request<FirstPageData<Item>>(options.firstPageQuery, {
+        client.request<FirstPageData<Item>>(options.firstPageQuery.toString(), {
           board: [options.boardId],
           limit,
         }),
@@ -445,7 +455,7 @@ export async function paginateItems<Item>(
         const cursor = current.cursor;
         page++;
         const next = await withSmallerPages((limit) =>
-          client.request<NextPageData<Item>>(options.nextPageQuery, { cursor, limit }),
+          client.request<NextPageData<Item>>(options.nextPageQuery.toString(), { cursor, limit }),
         );
         current = next.next_items_page;
       }

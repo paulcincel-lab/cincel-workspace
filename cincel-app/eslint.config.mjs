@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // graphql-codegen output (npm run monday:codegen).
+    "scripts/monday/generated/**",
   ]),
 ]);
 
