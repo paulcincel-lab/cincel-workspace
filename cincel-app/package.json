@@ -17,7 +17,9 @@
     "db:seed:madrid22": "tsx scripts/seed-madrid22.ts",
     "db:setup": "drizzle-kit migrate && tsx scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "monday": "tsx scripts/monday/cli.ts"
+    "monday": "tsx scripts/monday/cli.ts",
+    "monday:codegen": "graphql-codegen --config scripts/monday/codegen.ts",
+    "monday:schema": "tsx scripts/monday/fetch-schema.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.51",
@@ -50,6 +52,9 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@graphql-codegen/cli": "^7.4.6",
+    "@graphql-codegen/client-preset": "^6.2.3",
+    "@graphql-typed-document-node/core": "^3.2.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.3",
@@ -61,6 +66,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "graphql": "^17.0.2",
     "happy-dom": "^20.11.6",
     "playwright": "^1.62.0",
     "tailwindcss": "^4",

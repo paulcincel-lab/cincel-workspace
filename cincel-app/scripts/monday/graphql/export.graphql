@@ -1,0 +1,180 @@
+# Export queries (docs/specs/monday-migration/backend.md §4.2), checked
+# against the monday API 2026-07 schema in ./schema.graphql.
+# After editing, run `npm run monday:codegen` to refresh ../generated/.
+
+fragment ItemFields on Item {
+  id
+  name
+  state
+  created_at
+  updated_at
+  creator_id
+  group {
+    id
+  }
+  parent_item {
+    id
+  }
+  assets {
+    id
+    name
+    file_extension
+    file_size
+  }
+  column_values {
+    # Lets code narrow a column value to its typed fragment (`cv.__typename === "DateValue"`).
+    __typename
+    id
+    type
+    text
+    ... on StatusValue {
+      label
+      index
+      is_done
+    }
+    ... on PeopleValue {
+      persons_and_teams {
+        id
+        kind
+      }
+    }
+    ... on TimelineValue {
+      from
+      to
+      visualization_type
+    }
+    ... on BoardRelationValue {
+      linked_item_ids
+      display_value
+    }
+    ... on DependencyValue {
+      linked_item_ids
+    }
+    ... on MirrorValue {
+      display_value
+    }
+    ... on DateValue {
+      date
+      time
+    }
+    ... on CheckboxValue {
+      checked
+    }
+    ... on NumbersValue {
+      number
+      symbol
+      direction
+    }
+    ... on EmailValue {
+      email
+      label
+    }
+    ... on PhoneValue {
+      phone
+      country_short_name
+    }
+  }
+}
+
+# Subitems nested to 5 levels (multi-level boards).
+fragment ItemTree on Item {
+  ...ItemFields
+  subitems {
+    ...ItemFields
+    subitems {
+      ...ItemFields
+      subitems {
+        ...ItemFields
+        subitems {
+          ...ItemFields
+          subitems {
+            ...ItemFields
+          }
+        }
+      }
+    }
+  }
+}
+
+query Boards($page: Int!) {
+  boards(limit: 100, page: $page, state: active, hierarchy_types: [classic, multi_level]) {
+    id
+    name
+    workspace_id
+    items_count
+    columns {
+      id
+      title
+      type
+      settings
+    }
+    groups {
+      id
+      title
+      position
+    }
+  }
+}
+
+query FirstPage($board: [ID!], $limit: Int!) {
+  boards(ids: $board) {
+    items_page(limit: $limit) {
+      cursor
+      items {
+        ...ItemTree
+      }
+    }
+  }
+}
+
+query NextPage($cursor: String!, $limit: Int!) {
+  next_items_page(cursor: $cursor, limit: $limit) {
+    cursor
+    items {
+      ...ItemTree
+    }
+  }
+}
+
+query Updates($ids: [ID!], $page: Int!) {
+  items(ids: $ids, limit: 100) {
+    id
+    updates(limit: 100, page: $page) {
+      id
+      body
+      text_body
+      created_at
+      creator_id
+      replies {
+        id
+        body
+        created_at
+        creator_id
+      }
+      assets {
+        id
+        name
+        file_extension
+        file_size
+      }
+    }
+  }
+}
+
+query Assets($ids: [ID!]!) {
+  assets(ids: $ids) {
+    id
+    name
+    public_url
+  }
+}
+
+query Users($page: Int!) {
+  users(limit: 1000, page: $page) {
+    id
+    name
+    email
+    status
+    kind
+  }
+}
