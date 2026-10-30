@@ -68,7 +68,8 @@ export async function getSessionAccess(): Promise<SessionAccess> {
   if (!access) return { status: "no_system_access", user: null };
 
   const user = { ...session.user, access };
-  if (session.user.mustChangePassword) {
+  // Google staff have no password state (BE §A.4): never forced to /change-password.
+  if (session.user.mustChangePassword && !session.user.googleLinked) {
     return { status: "pending_first_access", user };
   }
   return { status: "active", user };
