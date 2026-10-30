@@ -14,7 +14,7 @@ export default async function DashboardPage() {
   return (
     <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
-      <section className="flex-1 overflow-y-auto p-10">
+      <section className="min-w-0 flex-1 overflow-y-auto px-4 py-14 md:p-10">
         <Header variant="profile" />
         <DashboardClient initialProjects={initialProjects} />
       </section>

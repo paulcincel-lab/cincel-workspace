@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { AlertTriangleIcon, CalendarCheckIcon, ListChecksIcon } from "lucide-react";
+
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
 
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
@@ -11,12 +15,14 @@ import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
-import { StatusDot } from "@/components/v2/status/StatusBadge";
+import { StatusBadge, StatusDot } from "@/components/v2/status/StatusBadge";
+import { cn } from "@/lib/utils";
 import type { TaskListItem } from "@/lib/types/core";
 import {
   BASE_STATUSES,
   BASE_STATUS_COLOR,
   BASE_STATUS_LABEL,
+  isDueDateLate,
   statusColorToken,
   statusSelectValue,
   taskStatusLabel,
@@ -31,6 +37,23 @@ function toDate(value: string | null): Date | null {
   if (!value) return null;
   const parsed = new Date(`${value}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** Small mono uppercase label used for the widget table headers. */
+const SECTION_LABEL = "font-mono text-[11px] font-normal tracking-wider uppercase";
+
+const SHORT_DATE = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" });
+
+function toIsoDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatShortDate(value: string | null): string {
+  const date = toDate(value);
+  return date ? SHORT_DATE.format(date).replace(".", "") : "Sin fecha";
 }
 
 function effectiveDueDate(task: TaskListItem): string | null {
@@ -139,8 +162,10 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
 
   const attention = [...kpis.overdue, ...kpis.blocked, ...kpis.noOwner].slice(0, 5);
 
+  const todayIso = toIsoDate(today);
+
   return (
-    <div>
+    <div className="min-w-0">
       <PageHeader
         title="Dashboard ejecutivo"
         description="Vista unificada de riesgo, agenda y carga operativa."
@@ -155,70 +180,142 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         ]}
       />
 
-      <div className="grid gap-3.5 sm:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card">
-          <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5 text-sm font-semibold">
-            Necesita atención hoy
-            <span className="font-mono text-[11px] font-normal text-muted-foreground">
-              {attention.length}
-            </span>
-          </div>
-          <div className="p-3.5">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
+        <Card className="min-w-0 lg:col-span-2">
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center gap-2.5 font-semibold">
+              <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                <AlertTriangleIcon className="size-4" />
+              </span>
+              Necesita atención hoy
+            </CardTitle>
+            <CardAction>
+              <Link href="/actividades/general" className="text-sm text-muted-foreground hover:text-foreground">
+                Ver todas →
+              </Link>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="px-0">
             {attention.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Todo al día — nada requiere atención inmediata.</p>
+              <p className="px-4 text-sm text-muted-foreground">Todo al día — nada requiere atención inmediata.</p>
             ) : (
-              <ul className="flex flex-col gap-2.5">
-                {attention.map((t) => (
-                  <li key={t.id} className="flex items-center justify-between text-[12.5px]">
-                    <span className="flex items-center gap-2">
-                      <StatusDot token={statusColorToken(t)} />
-                      {t.project.name} — {t.title}
-                      {t.workflow ? <AreaBadge name={t.workflow.name} colorSlot={t.areaColorSlot} /> : null}
-                      <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                        {taskStatusLabel(t)}
-                      </span>
-                    </span>
-                    <Link
-                      href={`/proyectos/${t.projectId}/ficha`}
-                      className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
-                    >
-                      ver
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <Table className="min-w-[640px]">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className={cn(SECTION_LABEL, "pl-4")}>Tarea</TableHead>
+                    <TableHead className={SECTION_LABEL}>Área</TableHead>
+                    <TableHead className={SECTION_LABEL}>Estatus</TableHead>
+                    <TableHead className={SECTION_LABEL}>Responsable</TableHead>
+                    <TableHead className={cn(SECTION_LABEL, "pr-4 text-right")}>Fecha</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attention.map((t) => {
+                    const due = effectiveDueDate(t);
+                    return (
+                      <TableRow key={t.id}>
+                        <TableCell className="pl-4">
+                          <div className="flex flex-col">
+                            <Link href={`/proyectos/${t.projectId}/ficha`} className="font-medium hover:underline">
+                              {t.title}
+                            </Link>
+                            <span className="text-xs text-muted-foreground">{t.project.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {t.workflow ? (
+                            <AreaBadge name={t.workflow.name} colorSlot={t.areaColorSlot} />
+                          ) : (
+                            <span className="text-muted-foreground">Sin área</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge label={taskStatusLabel(t)} token={statusColorToken(t)} />
+                        </TableCell>
+                        <TableCell>
+                          {t.manager ? t.manager.name : <span className="text-muted-foreground">Sin responsable</span>}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            "pr-4 text-right font-mono text-xs",
+                            isDueDateLate(due, todayIso, t) ? "text-destructive" : "text-muted-foreground"
+                          )}
+                        >
+                          {formatShortDate(due)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="rounded-lg border border-border bg-card">
-          <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5 text-sm font-semibold">
-            Estatus de actividades
-            <span className="font-mono text-[11px] font-normal text-muted-foreground">
-              {activeTasks.length} tareas
-            </span>
-          </div>
-          <div className="flex flex-col gap-2.5 p-3.5">
-            {statusMix.map((s) => (
-              <div key={s.status} className="flex items-center justify-between text-[12.5px]">
-                <span className="flex items-center gap-2">
-                  <StatusDot token={s.token} />
-                  {s.label}
-                </span>
-                <span className="tabular-nums text-muted-foreground">{Math.round(s.percent)}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+        <Card className="min-w-0">
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center gap-2.5 font-semibold">
+              <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-chart-1/10 text-chart-1">
+                <ListChecksIcon className="size-4" />
+              </span>
+              Estatus de actividades
+            </CardTitle>
+            <CardAction>
+              <span className="font-mono text-xs text-muted-foreground">{activeTasks.length} tareas</span>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="px-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className={cn(SECTION_LABEL, "pl-4")}>Estatus</TableHead>
+                  <TableHead className={cn(SECTION_LABEL, "text-right")}>Tareas</TableHead>
+                  <TableHead className={cn(SECTION_LABEL, "pr-4 text-right")}>%</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {statusMix.map((s) => (
+                  <TableRow key={s.status}>
+                    <TableCell className="pl-4">
+                      <span className="flex items-center gap-2">
+                        <StatusDot token={s.token} />
+                        {s.label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{s.count}</TableCell>
+                    <TableCell className="pr-4 text-right font-mono tabular-nums text-muted-foreground">
+                      {Math.round(s.percent)}%
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-      <div className="mt-3.5 rounded-lg border border-border bg-card p-3.5">
-        <div className="mb-1.5 flex items-center justify-between text-[12.5px]">
-          <span>
-            {weeklyProgress.completed} / {weeklyProgress.total || 0} tareas completadas esta semana
-          </span>
-        </div>
-        <LoadBar segments={[{ percent: weeklyProgress.total ? (weeklyProgress.completed / weeklyProgress.total) * 100 : 0 }]} />
+        <Card className="min-w-0">
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center gap-2.5 font-semibold">
+              <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-chart-2/10 text-chart-2">
+                <CalendarCheckIcon className="size-4" />
+              </span>
+              Avance semanal
+            </CardTitle>
+            <CardAction>
+              <span className="font-mono text-xs text-muted-foreground">
+                {weeklyProgress.completed} / {weeklyProgress.total}
+              </span>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            <p>
+              {weeklyProgress.completed} / {weeklyProgress.total} tareas completadas esta semana
+            </p>
+            <LoadBar
+              segments={[{ percent: weeklyProgress.total ? (weeklyProgress.completed / weeklyProgress.total) * 100 : 0 }]}
+            />
+          </CardContent>
+        </Card>
       </div>
 
       {isLoadingData ? (
