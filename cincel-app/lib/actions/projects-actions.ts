@@ -7,6 +7,7 @@ import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
 import type {
   ApplyWorkflowPreview,
+  HistoryEvent,
   ProjectDetail,
   ProjectInput,
   ProjectLink,
@@ -150,6 +151,25 @@ export async function removeProjectLinkAction(projectId: string, linkId: string)
     throw new Error("FORBIDDEN: project links edit");
   }
   await projectsRepository.removeProjectLink(projectId, linkId);
+  revalidateProyectos(projectId);
+}
+
+/** Project bitácora (comments and changes), newest first; same shape as fetchTaskHistoryAction. */
+export async function fetchProjectHistoryAction(projectId: string): Promise<HistoryEvent[]> {
+  const caps = await requireProjectsCapabilities();
+  if (!caps.canViewProjects) return [];
+  if (!(await projectsRepository.projectExists(projectId))) return [];
+  return projectsRepository.listProjectHistory(projectId);
+}
+
+/** Adds a comment to the project bitácora. Throws FORBIDDEN, EMPTY or NOT_FOUND. */
+export async function addProjectCommentAction(projectId: string, text: string): Promise<void> {
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canViewProjects) throw new Error("FORBIDDEN");
+  const comment = (text ?? "").trim();
+  if (!comment) throw new Error("EMPTY");
+  if (!(await projectsRepository.projectExists(projectId))) throw new Error("NOT_FOUND");
+  await projectsRepository.addProjectComment(projectId, comment, user.member.id);
   revalidateProyectos(projectId);
 }
 
