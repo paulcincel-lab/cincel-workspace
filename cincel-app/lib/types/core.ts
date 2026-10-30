@@ -279,6 +279,8 @@ export type ProjectListItem = Project & {
   manager: StaffRef | null;
   coordinator: StaffRef | null;
   taskCounts: { total: number; open: number; blocked: number };
+  /** Área that owns the primary stage (`currentWorkflowId`); null when none. */
+  area: { id: string; name: string; colorSlot: number | null } | null;
 };
 
 /** Same audiences as task links: for the internal team or for the client. */

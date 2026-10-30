@@ -76,9 +76,18 @@ describe("DashboardClient widgets", () => {
     expect(screen.getByRole("link", { name: "Ver todas →" }).getAttribute("href")).toBe("/actividades/general");
 
     const cards = container.querySelectorAll('[data-slot="card"]');
-    expect(cards.length).toBe(3);
+    expect(cards.length).toBe(4);
     cards.forEach((card) => expect(card.querySelector('[data-slot="card-title"]')).not.toBeNull());
-    expect(container.querySelectorAll('[data-slot="table"]').length).toBe(2);
+    expect(container.querySelectorAll('[data-slot="table"]').length).toBe(1);
+  });
+
+  it("shows the status donut legend and the projects empty state", async () => {
+    render(<DashboardClient initialProjects={[]} />);
+
+    const statusCard = (await screen.findByText("Tareas por estatus")).closest('[data-slot="card"]') as HTMLElement;
+    const legend = within(statusCard).getByText("Pendiente").closest("li");
+    expect(legend?.textContent).toContain("100%");
+    expect(screen.getByText("Sin proyectos activos.")).toBeTruthy();
   });
 });
 

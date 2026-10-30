@@ -106,6 +106,8 @@ async function loadStages(projectIds: string[]): Promise<Map<string, WorkflowRef
 const manager = alias(staff, "manager");
 const coordinator = alias(staff, "coordinator");
 
+const primaryAreaFrom = sql`from core.area_workflows aw join core.areas a on a.id = aw.area_id where aw.workflow_id = ${projects.currentWorkflowId} and a.deleted_at is null order by a.sort_order, a.name limit 1`;
+
 export type ProjectFilters = {
   status?: ProjectStatus | ProjectStatus[];
   clientId?: string;
@@ -137,6 +139,10 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
       totalTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false)::int`,
       openTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status <> 'completado')::int`,
       blockedTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status = 'bloqueado')::int`,
+      // Área that owns the primary stage (first by sort order), as on tasks.
+      areaId: sql<string | null>`(select a.id ${primaryAreaFrom})`,
+      areaName: sql<string | null>`(select a.name ${primaryAreaFrom})`,
+      areaColorSlot: sql<number | null>`(select a.color_slot ${primaryAreaFrom})`,
     })
     .from(projects)
     .innerJoin(contacts, eq(contacts.id, projects.clientId))
@@ -174,6 +180,7 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
     manager: r.managerId ? { id: r.managerId, name: r.managerName! } : null,
     coordinator: r.coordinatorId ? { id: r.coordinatorId, name: r.coordinatorName! } : null,
     taskCounts: { total: r.totalTasks, open: r.openTasks, blocked: r.blockedTasks },
+    area: r.areaId ? { id: r.areaId, name: r.areaName!, colorSlot: r.areaColorSlot ?? null } : null,
   }));
 }
 
