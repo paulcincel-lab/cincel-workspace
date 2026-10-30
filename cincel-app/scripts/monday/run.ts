@@ -8,10 +8,10 @@
  *   apply    --export exports/<client> --by <staff email>
  *   rollback --batch <import_batch_id> [--drive-only]
  *
- * Each command is a handler in COMMANDS; the ones not built yet exit with a
- * "not implemented yet" message.
+ * Each command is a handler in COMMANDS.
  */
 
+import { applyCommand } from "./apply";
 import { exportCommand } from "./export";
 import { initCommand } from "./init";
 import { planCommand } from "./plan";
@@ -41,18 +41,11 @@ export type CommandHandler = (args: string[], io: CliIo) => Promise<number>;
 export const COMMAND_NAMES = ["export", "init", "plan", "apply", "rollback"] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
-function notImplemented(name: CommandName): CommandHandler {
-  return async (_args, io) => {
-    io.stderr(`monday: "${name}" is not implemented yet.\n`);
-    return 2;
-  };
-}
-
 export const COMMANDS: Record<CommandName, CommandHandler> = {
   export: exportCommand,
   init: initCommand,
   plan: planCommand,
-  apply: notImplemented("apply"),
+  apply: applyCommand,
   rollback: rollbackCommand,
 };
 

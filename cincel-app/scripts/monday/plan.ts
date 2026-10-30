@@ -62,6 +62,7 @@ import {
   translate,
   type CincelLookups,
   type ExportData,
+  type PlannedImportFile,
   type PlannedProject,
   type RowRef,
   type TranslateResult,
@@ -159,10 +160,22 @@ export interface PlanTotals extends Record<CountKey, number> {
   projectSchedules: number;
 }
 
+/** What `apply` writes: the translation and what of it exists already. */
+export interface PlanTranslation {
+  mapping: Mapping;
+  result: TranslateResult;
+  /** entity → externalId → row id of the planned rows `import_refs` has already. */
+  imported: Map<ImportEntity, Map<string, string>>;
+  /** The files to upload: not in `import_files` yet and on disk. */
+  files: PlannedImportFile[];
+}
+
 export interface Plan {
   issues: PlanIssue[];
   boards: BoardCounts[];
   totals: PlanTotals;
+  /** Absent when the mapping is invalid (nothing was translated). */
+  translation?: PlanTranslation;
 }
 
 function emptyTotals(): PlanTotals {
@@ -467,6 +480,8 @@ export interface BuildPlanOptions {
   fileExists?: (localPath: string) => boolean;
   /** Returns why Drive isn't usable, or null. Called only when `options.includeFiles` is on. */
   checkDrive?: () => Promise<string | null>;
+  /** `created_by_id` and fallback comment author; `apply` passes the `--by` staff. Default: PLAN_IMPORTER_ID. */
+  importedById?: string;
 }
 
 const PROJECT_STRATEGIES = new Set<BoardMapping["strategy"]>([
@@ -638,7 +653,7 @@ export async function buildPlan(
 
   // --- translate ----------------------------------------------------------
   const result = translate(data, mapping, translateLookups, {
-    importedById: PLAN_IMPORTER_ID,
+    importedById: options.importedById ?? PLAN_IMPORTER_ID,
   });
   for (const i of result.issues) add(i.code, i.message, i.boardId, i.itemId);
 
@@ -960,7 +975,17 @@ export async function buildPlan(
     "projectSchedules",
   );
 
-  return { issues, boards: [...boards.values()], totals };
+  return {
+    issues,
+    boards: [...boards.values()],
+    totals,
+    translation: {
+      mapping,
+      result,
+      imported: imported.refs,
+      files: uploadable,
+    },
+  };
 }
 
 function groupBy<T>(
@@ -1183,6 +1208,13 @@ async function readMapping(
       ),
     };
   }
+}
+
+/** Reads `<exportDir>/mapping.json`: the parsed JSON, or a MAPPING_INVALID issue. */
+export function readMappingFile(
+  exportDir: string,
+): Promise<{ raw: unknown } | { issue: PlanIssue }> {
+  return readMapping(join(exportDir, MAPPING_FILE));
 }
 
 export interface PlanDeps {
