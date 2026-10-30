@@ -4,7 +4,7 @@ health: /api/healthz
 env:
   ACCESS_RECHECK_HOURS: { default: "4", description: "Hours between Workspace access re-checks of a signed-in staff member." }
   APP_ORIGIN: { description: "Public origin of the app (e.g. https://app.example.com). Builds the staff Google sign-in redirect URI <APP_ORIGIN>/api/auth/google/callback; never taken from the request." }
-  AUTH_GOOGLE_ENABLED: { default: "false", description: "Staff login flag (true/false): shows \"Entrar con Google\" and enables /api/auth/google/*. Read server-side." }
+  AUTH_GOOGLE_ENABLED: { default: "true", description: "Staff login flag (true/false): shows \"Entrar con Google\" and enables /api/auth/google/*. Read server-side." }
   AUTH_PASSWORD_ENABLED: { default: "true", description: "Staff login flag (true/false): shows the email/password form and enables login, first access and change password. Read server-side." }
   CINCEL_ADMIN_EMAILS: {}
   GITHUB_PAT: { description: "── GitHub RFCs (assistant `create_rfc` tool, optional) ───────────────────── Fine-grained personal access token scoped to Issues: write on GITHUB_REPO only (no other repo/org scope). Used to file RFCs the assistant drafts as GitHub Issues labeled \"rfc\". Leave unset to disable the tool — it tells the user GitHub isn't configured instead of failing silently." }
