@@ -1,190 +1,250 @@
-# Spec — Cronograma de Obra (Project Schedule View) — Frontend
+# Spec: Staff Google Sign-in + Client Portal (Frontend)
 
-**Project:** Cincel Workspace portal
-**Stack:** Next.js (App Router) · TypeScript · Tailwind CSS · shadcn/ui
-**Reference implementation:** `Cronograma_Madrid_22_-_Dashboard.html` (single-file vanilla JS dashboard by Arq. José Ulloa for Casa Madrid 22)
-**Status:** Draft v1 — 2026-09-18
-**Companion doc:** `docs/specs/backend.md` (domain model, server actions, import, metrics contract for this same feature — read it first for the calculations and types this doc renders)
+**Status:** Ready for review · **Owner:** Oscar · **Date:** 2026-10-28
+**Companion:** `docs/specs/backend.md`. Decisions, data model and server behavior are there; this file covers screens, components, states and the contract the UI calls.
+
+Conventions (from `AGENTS.md` and the existing app): Next.js App Router, React 19, TypeScript, Tailwind 4, plain shadcn/ui components and variants in `components/ui/shadcn` (no custom-colored wrappers), monochrome palette (color only for status), drawers for editing, existing `AppAvatar`, `Badge`, `DataTable` and layout components. All UI copy is Spanish (Mexico). Types live in `lib/types/`. The app has no toast library: feedback is inline (an `Alert` near the action, or a status line), not toasts.
 
 ---
 
-## 1. Purpose
+## 1. Goals
 
-Port the standalone Madrid 22 cronograma dashboard into a reusable, per-project schedule view inside the Cincel Workspace portal. The reference file is a one-off with data hardcoded in JS and state in `localStorage`; this spec turns it into a **generic, multi-user, database-backed feature** that any Cincel project can use, while preserving the calculations and visual language site staff already know.
-
-### Goals
-
-1. One `Cronograma` view per project, reachable from the project page.
-2. Task progress is shared: any staff member marks a task and everyone sees it.
-3. All metrics (donut, S-curve, resumen, alertas) computed from the same pure functions as the reference file (see `backend.md` §2.2), so numbers match what the client has been reading.
-4. Schedule data is imported, not hand-typed: Excel/CSV import with stable task identity across re-imports.
-5. Read-only snapshot ("Generar reporte") survives as a shareable/printable report.
+- Staff: sign in with Google, see why they were refused, browse a project's Drive folder, and manage which clients see a project.
+- Admins: map Workspace groups to roles and areas, check Google health, re-check a person's access, create missing project folders.
+- Clients: sign in with an emailed code on a phone, see their projects, cronograma summary and files, and send files.
 
 ### Non-goals (v1)
-
-- Editing task dates/text in the UI (schedule changes happen in Excel → re-import).
-- Dependencies between tasks, critical path, resource leveling.
-- Cost tracking beyond the fixed payment calendar percentages.
-- Notifications.
+- Uploading or editing Drive files from the staff UI.
+- Client messaging, approvals, branding, Google sign-in for clients.
 
 ---
 
-## 2. Sections of the view (in order)
+## 2. Staff screens
 
-1. **Header** — project name, address, week navigation (← Hoy →), actions (Exportar / Importar / Generar reporte).
-2. **Cronograma general** — Gantt by sección with month ticks and a dashed "today" line.
-3. **Avance del proyecto** — triple-ring donut (planeado / programado / real) + legend; S-curve with the same three series and today marker.
-4. **Tareas por semana** — three columns: semana anterior / esta semana / próxima semana. Each card cycles status on click; ⚠ toggles flag. Column header shows `done / total completadas · n en proceso`. The column matching the real current week gets a `HOY` badge.
-5. **Alertas** — Tareas atrasadas + Atención especial. Same card control as boards.
-6. **Resumen** — two cards: Resumen 1 (planeado vs programado vs real + delay labels), Resumen 2 (en tiempo + adelantos = total).
-7. **Trabajos realizados imprevistos** — list newest-first, add form (texto + fecha), delete.
-8. **Adicionales de obra** — grouped list, read-only.
-9. **Footer** — credits.
+### 2.1 `/login` (existing page, changed)
+- With `AUTH_GOOGLE_ENABLED`: a primary `Button` **Entrar con Google** (Google "G" icon from `lucide`-compatible inline SVG) linking to `/api/auth/google/start`.
+- With `AUTH_PASSWORD_ENABLED`: the current email/password form stays below a `Separator` labeled "o con contraseña". Without it, the form isn't rendered.
+- The flags reach the page as server props (read in the server component), never `NEXT_PUBLIC_*`.
+- Errors from the callback arrive as `?error=` and show in an `Alert`: `state` ("La sesión de inicio expiró. Intenta de nuevo."), `retry` ("No pudimos verificar tu acceso con Google. Intenta de nuevo.").
+
+### 2.2 `/login/denegado` (new, public)
+- Card with a title and a message per `motivo`:
+  - `no_role_group`: "Tu cuenta no tiene acceso a Cincel. Pide a tu administrador de Google Workspace que te agregue a un grupo de Cincel."
+  - `workspace_suspended` / `workspace_deleted`: "Tu cuenta de Google Workspace está suspendida."
+  - `domain`: "Usa tu cuenta de la empresa (@{dominio})."
+  - `inactive`: "Tu usuario está desactivado en Cincel."
+  - `sub_mismatch`: "Esta cuenta de Google no coincide con tu usuario. Contacta al administrador."
+  - `needs_link`: "Tu usuario de Cincel no tiene este correo. Pide a un administrador que registre {email} en tu ficha de Equipo."
+  - `revoked`: "Tu acceso a Cincel fue retirado en Google Workspace."
+  - Unknown or missing `motivo`: the `no_role_group` text.
+- Button **Volver a intentar** → `/login`. Public in both `middleware.ts` and `AppRouteGuard` (backend §A.5.1). The page never reads the staff session, so a stale cookie can't bounce it.
+
+### 2.3 Project pages: `/proyectos/[id]/archivos` (new)
+- Sits next to `ficha` and `cronograma`. There's no shared project nav today, so add `components/proyectos/ProjectSectionNav.tsx` (shadcn `Tabs` rendered as links: Ficha · Cronograma · Archivos · Clientes; Clientes only with `portal.manageAccess`) and use it at the top of all four pages.
+- States:
+  - Folder `pending`: "Creando la carpeta del proyecto…" + **Reintentar carpeta** for users with the projects capability `canEditProjectGeneral`.
+  - Folder `failed`: `Alert` with the error and **Reintentar carpeta** (`retryProjectFolderAction`).
+  - No Drive grant: **Conectar Google Drive** → `/api/auth/google/start?scope=drive&return_to=/proyectos/[id]/archivos`.
+  - `no_drive_access`: "No tienes acceso a esta carpeta en Drive."
+  - Ready: breadcrumbs (`Breadcrumb`), table (`DataTable`) of name with icon, modified date, size; folders navigate (`?folder=`), files open `webViewLink` in a new tab. Header link **Abrir en Drive** to the project folder.
+- The three subfolders show a one-line hint: `01 Interno` "Solo el equipo", `02 Cliente` "Lo ven los clientes invitados", `03 Del cliente` "Archivos que envían los clientes".
+
+### 2.4 Project pages: `/proyectos/[id]/clientes` (new; permission `portal.manageAccess`)
+- Without the permission the link is hidden and the page returns the existing "sin permiso" state.
+- Hint `Alert`: "Todo lo que pongas en 02 Cliente lo verán los clientes invitados a este proyecto." + link **Abrir carpeta del cliente en Drive**.
+- Table: nombre, correo, contacto, estado (`Badge`: Invitado / Activo / Deshabilitado / Sin acceso), invitado por, último acceso. Row actions (`DropdownMenu`): **Reenviar invitación**, **Quitar acceso**, **Deshabilitar** (only with `portal.disableUsers`). Destructive actions confirm in an `AlertDialog`.
+- **Invitar cliente** opens a `Sheet` (drawer):
+  - Contact `Combobox` limited to the project's client and its `project_contacts` of type `cliente` / `socio`.
+  - Email (prefilled from the contact if present) and name (prefilled).
+  - A `socio` shows a warning `Alert` and requires a checkbox "Entiendo que es un socio, no el cliente".
+  - Server errors inline (codes below).
+  - Success (inline in the sheet, then it closes): "Invitación enviada" or, when `emailSent` is false, "Se dio acceso pero el correo no salió. Usa Reenviar invitación."
+- Error codes → copy: `staff_domain` "Este correo es de tu equipo; usa el acceso con Google." · `disabled` "Este cliente está deshabilitado." · `already_active` "Este cliente ya tiene acceso a este proyecto." · `not_project_contact` "El contacto no pertenece a este proyecto." · `socio_unconfirmed` (shows the socio checkbox) · `invalid_email` "Correo inválido." · `rate_limited` "Ya reenviaste esta invitación varias veces; espera una hora." · `forbidden` "No tienes permiso."
+- Disabled users show **Habilitar** (with `portal.disableUsers`) instead of **Deshabilitar**.
+- **Actividad** card: last 50 portal file events (cliente, archivo, acción, fecha).
+
+### 2.5 Configuración → **Google** (`/configuracion/google`, new; Administrador only, like every `/configuracion` page)
+Sections, in order:
+1. **Estado:** service account email, Shared Drive ID, token key configured (yes/no), last Directory error, last Drive error, and "N de M colaboradores activos ya entraron con Google".
+2. **Grupos de Google:** table of mappings (grupo, tipo Rol/Área, valor, rango). **Agregar grupo** `Sheet`: group email, type (`Select`), role (`Select` of `OFFICIAL_CINCEL_ROLES`) or area (`Select` of areas), rank (number, role only). Errors: "El grupo no existe", duplicate. Edit and delete from the row menu.
+3. **Carpetas de proyectos:** **Crear carpetas faltantes** with a result summary ("12 creadas, 1 con error").
+- Banner at top: "Los roles y las áreas se administran en grupos de Google Workspace."
+
+### 2.6 Equipo and Áreas (existing, changed)
+- For staff with `googleManaged: true`: role and area fields are read-only with a `Badge` "Google Workspace" and a tooltip "Se administra en Google Workspace". Other fields stay editable.
+- Staff detail adds **Revisar acceso ahora** (Administrador only) with the result inline ("Acceso confirmado" / "Acceso retirado: {motivo}" / "No pudimos consultar Google; intenta más tarde").
+- Staff list shows "Último acceso" and, when revoked, a `Badge` "Sin acceso".
+
+### 2.7 Recursos picker and Calendario (existing, changed)
+- The Drive picker reads `GET /api/google/drive/status` (`{ configured, mode, hasDriveGrant, googleLinked }`). With `mode = "delegation"` (flag off) it behaves exactly as today. With `mode = "staff_token"`: no grant → **Conectar Google Drive** instead of the old "Conectar cuenta de Google", and a 403 `needs_consent` from any picker route shows the same button; the account switcher UI is hidden.
+- Calendar sync's connect button goes to `/api/auth/google/start?scope=calendar&return_to=/calendario`.
 
 ---
 
-## 3. Section color palette
+## 3. Portal screens (`/portal`, Spanish, mobile-first)
 
-Section order and color (fixed palette; the order itself is canonical in `backend.md` §2.1 since it drives `seccionOrder` at import time — this doc owns the color mapping):
+Layout `app/portal/layout.tsx`: its own minimal shell (logo, client name, **Salir**), not the staff sidebar or header. Max width `max-w-3xl`, single column on phones. Loaded with `requirePortalUser()` except `/portal/login`.
 
-```ts
-// sections.ts (co-located with backend's lib/sections.ts export of SECTION_ORDER)
-export const SECTION_COLOR: Record<string, string> = {
-  'Preliminares': 'bg-orange-500',
-  'Albañilerías': 'bg-violet-500',
-  'Instalaciones eléctricas': 'bg-yellow-400',
-  'Suministro apagadores y contactos': 'bg-fuchsia-500',
-  'Instalaciones hidrosanitarias': 'bg-cyan-500',
-  'Instalación de gas': 'bg-red-500',
-  'Acabados': 'bg-blue-500',
-  'Carpinterías': 'bg-green-500',
-  'Cancelerías y herrerías': 'bg-red-500',
-};
-export const UNKNOWN_SECTION_COLOR = 'bg-muted-foreground';
-```
+### 3.1 `/portal/login`
+- Step 1: email `Input` (prefilled from `?email=`), **Enviarme un código**. Always shows "Si tu correo tiene acceso, te enviamos un código." then step 2.
+- Step 2: 6-digit `InputOTP` (paste-friendly, `inputMode="numeric"`, `autoComplete="one-time-code"`), **Entrar**, **Reenviar código** (disabled 60 s with a countdown), **Cambiar correo**.
+- Errors: 400 `invalid_code` → "Código inválido o vencido. Pide uno nuevo."; 429 `rate_limited` → "Demasiados intentos. Espera unos minutos."
+- Success → `/portal`.
 
-Unknown secciones from other projects fall back to the neutral token and sort after known ones (alphabetically). Dark mode via existing portal theme; SVG charts use `currentColor` / CSS vars, not hardcoded hex.
+### 3.2 `/portal`
+- Cards per project: name, code, progress (`Progress`), end date, manager name + mailto link.
+- Empty: "No tienes proyectos activos. Si crees que es un error, contacta a tu equipo de Cincel."
+
+### 3.3 `/portal/proyectos/[id]`
+`Tabs` (state in `?tab=`):
+- **Resumen:** status `Badge`, progress, start/end dates, address, manager contact.
+- **Cronograma:** read-only list grouped by `planta`, one row per section: name, dates, `Progress`. Built from `PortalScheduleDTO` only. Reuses the cronograma's presentational pieces where they accept plain props; never imports the staff cronograma data hooks. Empty: "El cronograma aún no está disponible."
+- **Archivos:** breadcrumbs + list (icon, name, modified, size). Folders navigate. Files: **Descargar** (always), **Ver** (PDF and images; opens the preview route in a new tab). Google-native files show a `Badge` "PDF". `pending`: "Los archivos estarán disponibles pronto." `export_too_large`: inline `Alert` "Este documento es muy grande; pide el PDF a tu equipo." **Ver** only for PDF, JPEG, PNG, WebP and GIF.
+- **Enviar archivos:** drop zone + file button (`accept` from the allowlist), per-file progress via `XMLHttpRequest` upload events, one request per file, errors per file (413 "El archivo supera 50 MB", 415 "Tipo de archivo no permitido", 409 "Aún no puedes enviar archivos a este proyecto"). Below it, **Mis envíos**: my uploads (name, size, date).
+- Unknown or revoked project → Next `notFound()` (404 page in Spanish, link to `/portal`).
+
+### 3.4 Portal 404 and errors
+- `app/portal/not-found.tsx` and `app/portal/error.tsx` in Spanish, inside the portal shell.
 
 ---
 
-## 4. Module layout (client + shared lib)
-
-This project has no `src/` or `features/` directory — the root is flat (`app/`, `lib/`, `components/`), and routes are Spanish (`app/proyectos/[id]/...`, matching the existing `app/proyectos/[id]/ficha/`).
+## 4. Module layout
 
 ```
-lib/
-  cronograma/                 ── SHARED with backend.md §4, zero React/DOM/DB imports ──
-    week.ts            mondayOf, addDays, isoDate, weekBounds, fmtRange, fmtShort (Spanish months)
-    hash.ts            djb2 → stableKey
-    metrics.ts         PURE: computeProgress, computeSCurve, computeResumen, computeAlertas, tasksInRange, ganttBySeccion
-    sections.ts        SECTION_ORDER, SECTION_COLOR (Tailwind tokens)
-  types/schedule.ts    ── SHARED with backend.md §5 ──
-components/
-  cronograma/
-    cronograma-view.tsx        client composition root; owns optimistic state
-    cronograma-header.tsx
-    gantt-chart.tsx
-    progress-donut.tsx
-    s-curve-chart.tsx
-    week-boards.tsx
-    task-card.tsx              status button + flag button + meta
-    alertas-panel.tsx
-    resumen-cards.tsx
-    imprevistos-panel.tsx
-    adicionales-panel.tsx
-    import-dialog.tsx
-app/
-  proyectos/[id]/cronograma/page.tsx        server component → <CronogramaView data />
-  proyectos/[id]/cronograma/reporte/page.tsx read-only snapshot (see backend.md §7)
+app/login/page.tsx                         (changed)
+app/login/denegado/page.tsx                (new)
+app/proyectos/[id]/archivos/page.tsx       (new) + components/proyectos/ProjectFilesBrowser.tsx
+app/proyectos/[id]/clientes/page.tsx       (new) + components/proyectos/PortalAccessPanel.tsx, InvitePortalClientSheet.tsx
+app/configuracion/google/page.tsx          (new) + components/configuracion/GoogleWorkspaceSettings.tsx
+app/portal/layout.tsx · login/page.tsx · page.tsx · proyectos/[id]/page.tsx · not-found.tsx · error.tsx
+components/portal/ (PortalShell, PortalProjectCard, PortalSchedule, PortalFileBrowser, PortalUploader, OtpForm)
+lib/types/portal.ts · lib/types/workspace-access.ts
 ```
-
-`lib/cronograma/metrics.ts` must have **zero React/DOM/DB imports**. It is the single source of numbers for the view, the report, and any future API/PDF, imported directly by both server (`lib/repositories/schedule-repository.ts`) and client (`components/cronograma/cronograma-view.tsx`) code — see `backend.md` §4/§5 for the server-side half of this shared module.
+Portal components never import from `components/` subfolders that read staff data; shared shadcn primitives in `components/ui` are fine.
 
 ---
 
 ## 5. Types consumed by the UI
 
-See `backend.md` §5 for the canonical definitions (`ScheduleStatus`, `ScheduleTask`, `PaymentRow`, `Imprevisto`, `Adicional`, `CronogramaData`, `ProgressMetrics`, `GapStatus`, `SCurvePoint`) — this frontend imports them from `lib/types/schedule.ts` rather than redeclaring them.
+From `lib/types/portal.ts` (defined in backend §B.4.3): `PortalProjectDTO`, `PortalScheduleDTO`, `PortalFileDTO`, `PortalFolderDTO`, `PortalUploadDTO`.
 
-All metric functions take `(data, today: Date)` — `today` is injected, never read from `Date.now()` inside `lib/`, so the report page and component tests can pin it.
+```ts
+// lib/types/portal.ts (staff side)
+type PortalAccessRow = {
+  accessId: string; portalUserId: string; name: string; email: string;
+  contact: { id: string; name: string; type: "cliente" | "socio" };
+  status: "invited" | "active" | "disabled" | "revoked";
+  invitedBy: string; lastLoginAt: string | null;
+};
+type PortalActionError = "forbidden" | "not_found" | "staff_domain" | "disabled" | "already_active"
+  | "not_project_contact" | "socio_unconfirmed" | "invalid_email" | "rate_limited";
+type PortalActivityRow = { id: string; clientName: string; fileName: string; action: "download" | "preview" | "upload"; at: string };
+
+// lib/types/workspace-access.ts
+type GroupMapping = { id: string; groupEmail: string; kind: "role" | "area"; role: string | null; areaId: string | null; areaName: string | null; rank: number };
+type GoogleHealth = { serviceAccountEmail: string | null; sharedDriveId: string | null; tokenKeyConfigured: boolean;
+  lastDirectoryError: { at: string; message: string } | null; lastDriveError: { at: string; message: string } | null;
+  googleLinkedStaff: number; activeStaff: number };
+type StaffFilesResult =
+  | { status: "pending" | "failed"; error?: string }
+  | { status: "needs_consent" }
+  | { status: "no_drive_access" }
+  | { status: "ok"; folderId: string; breadcrumbs: { id: string; name: string }[];
+      items: { id: string; name: string; mimeType: string; sizeBytes: number | null; modifiedAt: string; iconLink: string | null; webViewLink: string | null; kind: "file" | "folder" }[] };
+```
 
 ---
 
 ## 6. Components (shadcn mapping)
 
-| Component | shadcn primitives | Behavior |
+| Need | Component |
+|---|---|
+| OTP entry | `InputOTP` (add via shadcn CLI if missing) |
+| Drawers for invite and group mapping | `Sheet` |
+| Confirm revoke / disable / delete mapping | `AlertDialog` |
+| Tables | existing `DataTable` |
+| Status | `Badge` (variants only; no custom colors) |
+| Portal tabs | `Tabs` |
+| Progress | `Progress` |
+| Inline feedback | `Alert` |
+| Breadcrumbs | `Breadcrumb` |
+| Contact picker | Combobox pattern: `Popover` + `Command` |
+
+Missing from `components/ui/shadcn` today and added with the shadcn CLI (no custom components): `alert`, `breadcrumb`, `command`, `input-otp`.
+
+---
+
+## 7. API contract (what the UI calls)
+
+### 7.1 Staff (session cookie)
+
+| Call | Kind | Request | Response / errors |
+|---|---|---|---|
+| `/api/auth/google/start?scope=&return_to=` | GET route | `scope` ∈ `drive`, `calendar` (optional); `return_to` validated by `safeReturnTo` | 302 to Google |
+| `/api/auth/signout?next=` | GET route | | clears the staff cookie and session, 302 to `next` (validated) |
+| `/api/auth/google/callback` | GET route | Google `code`, `state` | 302 `/dashboard`, `return_to`, `/login?error=…` or `/login/denegado?motivo=…` |
+| `GET /api/proyectos/[id]/archivos?folder=` | route | | 200 `StaffFilesResult`; 401 no session; 404 unknown project or folder outside it |
+| `retryProjectFolderAction(projectId)` | server action | | `{ ok: true, status }` / `{ ok: false, error }` |
+| `listProjectPortalAccessAction(projectId)` | server action | | `PortalAccessRow[]` |
+| `invitePortalClientAction({ projectId, contactId, email, name, confirmSocio? })` | server action | | `{ ok: true, emailSent }` / `{ ok: false, error: PortalActionError }` (backend §B.4.1) |
+| `resendPortalInviteAction(portalUserId, projectId)` | server action | | `{ ok: true, emailSent }` / `{ ok: false, error: "forbidden" \| "not_found" \| "rate_limited" }` |
+| `revokePortalAccessAction(accessId)` | server action | | `{ ok: true }` / `{ ok: false, error: "forbidden" \| "not_found" }` |
+| `disablePortalUserAction(portalUserId)` / `enablePortalUserAction(portalUserId)` | server action | | `{ ok: true }` / `{ ok: false, error: "forbidden" \| "not_found" }` |
+| `listProjectPortalActivityAction(projectId)` | server action | | `PortalActivityRow[]` |
+| `listGroupMappingsAction()` / `create…` / `update…` / `deleteGroupMappingAction` | server actions | `GroupMapping` fields | `GroupMapping[]` / `{ ok: true, mapping }` / `{ ok: false, error: "group_not_found" \| "duplicate" \| "invalid" \| "directory_error" \| "forbidden" }` |
+| `recheckStaffAccessAction(staffId)` | server action | | `{ ok: true, allowed, reason? }` / `{ ok: false, error: "directory_error" \| "not_google_linked" \| "forbidden" }` |
+| `ensureMissingProjectFoldersAction()` | server action | | `{ created, failed, skipped }` |
+| `getGoogleHealthAction()` | server action | | `GoogleHealth` |
+
+Existing Drive picker routes (`/api/google/drive/*`) keep their request/response shapes. With `mode = "staff_token"` they answer **403 `{ error: "needs_consent" }`** without a Drive grant; 401 still means "no session". `GET /api/google/drive/status` → `{ configured: boolean, mode: "delegation" | "staff_token", hasDriveGrant: boolean, googleLinked: boolean }`.
+
+### 7.2 Portal (portal cookie)
+
+| Call | Request | Response / errors |
 |---|---|---|
-| `CronogramaHeader` | `Button`, `ButtonGroup`, `DropdownMenu`, `Badge` | Week nav updates `?week=`; "Hoy" resets. Actions menu: Exportar JSON, Importar, Generar reporte. |
-| `GanttChart` | `Card`, `Tooltip` | Pure SVG/CSS-grid, one row per sección. Month ticks, today line. Tooltip on bar: range + task count. Horizontal scroll on mobile. |
-| `ProgressDonut` | `Card` | Inline SVG, three concentric rings (planned/pagos/real), center = real %. Legend as list with `Badge` dots. |
-| `SCurveChart` | `Card` | SVG polyline ×3, gridlines 0/25/50/75/100, month labels, today marker. Uses Recharts is acceptable if it does not change the look; default to hand SVG for parity. |
-| `WeekBoards` | `Card` ×3, `ScrollArea` | Three columns; on `md+` side by side, stacked on mobile with current week first. Preserve scroll position across re-renders (`ScrollArea` ref). |
-| `TaskCard` | `Button` (status), `Toggle` (flag), `Badge` | Click status → cycles `pending → progress → done → pending`. Optimistic; reverts with `toast` on failure. Disabled in report mode. Keyboard: Space/Enter cycles, `F` toggles flag. |
-| `AlertasPanel` | `Card`, `Separator` | Two groups. Reuses `TaskCard`. Empty states copied from reference. |
-| `ResumenCards` | `Card` | Formula rows (formulas defined in `backend.md` §2.2). Delay label colored red/aqua/muted. |
-| `ImprevistosPanel` | `Card`, `Form`, `Input`, `Textarea`, `Calendar`/`Popover` date picker, `AlertDialog` (delete) | Newest first. Add via server action (`backend.md` §4 `actions.ts`), `useOptimistic`. |
-| `AdicionalesPanel` | `Card`, `Accordion` | Collapsed by default except on report. |
-| `ImportDialog` | `Dialog`, `Tabs`, `Table`, `Alert` | Tab 1: Excel/CSV schedule (preview with diff: new/kept/removed tasks — diff algorithm in `backend.md` §8.1). Tab 2: legacy JSON state (`backend.md` §8.2). |
+| `POST /api/portal/auth/code` | `{ email }` | 200 `{ message }` always; 429 |
+| `POST /api/portal/auth/verify` | `{ email, code }` | 200 `{ redirect }` + cookie; 400 `invalid_code`; 429 |
+| `POST /api/portal/auth/logout` | | 204 |
+| `GET /api/portal/auth/logout?next=` | | clears the cookie, 302 to `next` (validated) |
+| `GET /api/portal/projects/[pid]/files?folder=` | | `PortalFolderDTO` or `{ pending: true }`; 404 |
+| `GET /api/portal/projects/[pid]/files/[fileId]/download` | | file stream; 404; 422 `export_too_large` |
+| `GET /api/portal/projects/[pid]/files/[fileId]/preview` | | inline stream; 404; 415; 422 |
+| `POST /api/portal/projects/[pid]/uploads` | multipart `file` | 201 `PortalUploadDTO`; 404; 409; 413; 415 |
+| `GET /api/portal/projects/[pid]/uploads` | | `PortalUploadDTO[]`; 404 |
 
-Reuse existing shadcn primitives already in `components/ui/shadcn/` per project convention (see root `AGENTS.md` — do not create new components where a reusable one exists).
+Portal pages read projects, summary and cronograma in server components through `lib/portal/queries.ts` (`listPortalProjects(user)`, `getPortalProject(user, pid)`, `getPortalSchedule(user, pid)`); they don't need extra HTTP routes.
 
----
-
-## 7. Data flow & client state
-
-```
-page.tsx (RSC)
-  └─ getScheduleForProject(projectId)  (backend.md §6) ── one query, joins 5 tables ──▶ CronogramaData
-       └─ <CronogramaView data today={serverNow} />   (client)
-            ├─ useOptimistic(data.tasks)  → metrics recomputed with useMemo on every status/flag change
-            ├─ week offset from useSearchParams
-            └─ server actions (backend.md §4 actions.ts) → revalidatePath(`/proyectos/${id}/cronograma`)
-```
-
-- **Single read, client-side recompute.** Metrics are cheap (323 tasks × ~15 weeks); recompute on the client from optimistic state rather than round-tripping.
-- **Concurrency.** Actions accept `expectedStatus`; if the DB row differs, the action returns `{ conflict: true, current }` (see `backend.md` §6) and the client re-syncs instead of overwriting.
-- **Authorization.** Any project member with `staff` role can change status/flags/imprevistos. Client-role users (CRM contact types) get the read-only variant — same component, `readOnly` prop, identical to report mode.
-- **`today`** comes from the server (project timezone `America/Mexico_City`); the client never uses its own clock, so numbers match for every viewer.
-- **No `localStorage` usage anywhere in this feature** — this is an explicit acceptance criterion (backend.md §10.5), since it's the exact anti-pattern this port is replacing.
+Every portal call answers 401 `{ redirect: "/portal/login" }` without a valid portal session; client code redirects on it.
 
 ---
 
-## 8. Responsiveness & a11y
+## 8. Data flow and client state
 
-- Mobile: boards stack (current week first), Gantt scrolls horizontally inside its card, charts scale via `viewBox`.
-- Status button is a real `<button>` with `aria-label="Estado: en proceso — clic para marcar realizada"`; flag is `aria-pressed`.
-- All numbers in the donut/S-curve are also present as text in the legend (screen readers).
-- Color is never the only signal: status uses icon + text, delay label uses text.
+- Server components load initial data (staff: session helpers; portal: `requirePortalUser` + portal queries). Client components handle only interaction (folder navigation via `router.push` with `?folder=`, uploads, dialogs).
+- Mutations are server actions followed by `router.refresh()`; no client cache library is introduced.
+- Portal file lists fetch from the route on folder change with `fetch` and `AbortController`.
 
----
+## 9. Responsiveness and a11y
 
-## 9. Report / export (client-visible surface)
-
-- **`/proyectos/[id]/cronograma/reporte`** — server-rendered, `readOnly`, `Accordion`s expanded, print stylesheet (`@media print`: no nav, one section per page break where sensible). Accepts `?asOf=YYYY-MM-DD` to reproduce a past week (see `backend.md` §7 for the server route contract).
-- **Exportar** — triggers `GET /api/proyectos/[id]/cronograma/export` (backend.md §7), same JSON shape the reference file exports.
-- **PDF** — out of scope v1; print-to-PDF from the report route is sufficient.
-
----
+- Portal designed at 360 px first; touch targets ≥ 44 px; tables become stacked lists below `sm`.
+- OTP input announces errors via `aria-live`; upload progress uses `role="progressbar"` with values.
+- All icons that act as buttons have Spanish `aria-label`s.
 
 ## 10. Testing (frontend)
 
-- **Component** — `TaskCard` cycles status and reverts on action failure; `readOnly` disables both controls.
-- **Component** — `GanttChart`, `ProgressDonut`, `SCurveChart` render correctly against the golden MD22 dataset fixtures used by `backend.md` §9's metrics tests (shared fixtures, not re-derived).
-- **E2E (Playwright)** — mark a task in one browser context, reload in a second, see it updated (exercises the full client → server action → revalidate loop).
-
----
+- Vitest + Testing Library: `AppRouteGuard` renders `/login/denegado` and `/portal/*` without a staff session; OTP form steps and errors; uploader allowlist, size check and progress states; Archivos states (`pending`, `failed`, `needs_consent`, `no_drive_access`, `ok`); invite sheet `socio` confirmation; read-only role/area fields for Google-managed staff.
+- Playwright (local, not CI): portal login with a code read from Mailpit, invite → login → see one project → download → upload, revoke → 404; login page with each flag combination.
 
 ## 11. Acceptance criteria (frontend-relevant)
 
-1. Opening `/proyectos/{md22}/cronograma` on 2026-09-18 shows the same planned %, programado %, real %, en tiempo %, adelantos %, and delay labels as the reference HTML with the client's latest exported state imported.
-2. Status and flag changes persist and are visible to another user without file exchange.
-3. Week navigation, Gantt, donut, S-curve, boards, alertas, resumen, imprevistos, adicionales all present and visually consistent with the portal's shadcn theme.
-4. Report route prints cleanly and accepts `?asOf`.
-5. No `localStorage` usage anywhere in the feature.
-
----
+1. `/login` shows only the methods enabled by the flags.
+2. Each `motivo` on `/login/denegado` shows its message.
+3. Archivos shows the right state for pending, failed, no consent, no Drive access and ready folders.
+4. The Clientes page hides actions the user lacks permissions for, and the server refuses them anyway.
+5. The portal is usable at 360 px: login, project list, tabs, download and upload.
+6. Portal responses rendered in the UI contain no task names, assignees or Drive links.
+7. Role and area fields of Google-managed staff are read-only in Equipo.
 
 ## 12. Open questions
 
-1. Should clients (external contacts with portal access) see the imprevistos/adicionales panels? Default: yes, read-only — that's the point of the report today.
-2. (Shared with backend.md — see that doc's §11 for the `responsable`/CRM-linking and payment-calendar-ownership questions, which are backend-scoped but affect how `ImprevistosPanel`/`ResumenCards` eventually render if answered differently.)
+1. Should the portal reuse the cronograma's Gantt bars, or is the section list enough for v1? This spec assumes the list.
