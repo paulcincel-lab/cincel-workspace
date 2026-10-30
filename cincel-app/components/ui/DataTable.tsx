@@ -103,7 +103,7 @@ export function DataTable<T>({
   const rows = table.getRowModel().rows;
 
   return (
-    <div className={`overflow-hidden rounded-2xl border border-border bg-background shadow-sm ${wrapperClassName}`}>
+    <div className={`overflow-hidden rounded-2xl border border-border bg-card shadow-sm ${wrapperClassName}`}>
       {searchPlaceholder ? (
         <div className="border-b border-border p-3">
           <Input

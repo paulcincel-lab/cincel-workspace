@@ -371,7 +371,7 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
                       onDragStart={() => handleDragStart(task)}
                       onDragEnd={handleDragEnd}
                       onClick={() => setSelectedTaskId(task.id)}
-                      className={`cursor-pointer rounded-md border border-border bg-background p-3 text-sm shadow-sm transition-opacity hover:border-primary ${
+                      className={`cursor-pointer rounded-md border border-border bg-card p-3 text-sm shadow-sm transition-opacity hover:border-primary ${
                         draggingTaskId === task.id ? "opacity-50" : ""
                       } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
                     >

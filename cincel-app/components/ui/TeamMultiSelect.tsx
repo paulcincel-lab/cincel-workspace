@@ -84,7 +84,7 @@ export default function TeamMultiSelect({
 
   return (
     <div
-      className="w-full rounded-xl border border-border bg-background p-2"
+      className="w-full rounded-xl border border-border bg-transparent p-2"
       tabIndex={-1}
       onBlur={(event) => {
         const nextFocused = event.relatedTarget as Node | null;
