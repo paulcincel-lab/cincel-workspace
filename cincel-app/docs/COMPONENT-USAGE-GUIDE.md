@@ -230,6 +230,72 @@ export default function DashboardOverview() {
 
 ---
 
+### "I need to show a chart..."
+→ **Use: shadcn `chart` (`ChartContainer`, `ChartTooltip`, `ChartTooltipContent`, `ChartLegend`, `ChartLegendContent`) with `recharts`**
+
+```tsx
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/shadcn/chart";
+
+const config = {
+  planned: { label: "Planeado", color: "var(--chart-1)" },
+  actual: { label: "Real", color: "var(--chart-2)" },
+} satisfies ChartConfig;
+
+// Point marker: 8px dot with a ring in the card surface color.
+const point = (key: string) => ({
+  r: 4,
+  fill: `var(--color-${key})`,
+  stroke: "var(--card)",
+  strokeWidth: 2,
+});
+
+export function AvanceChart({ data }: { data: { week: string; planned: number; actual: number }[] }) {
+  return (
+    <ChartContainer config={config} className="aspect-auto h-64 w-full">
+      <LineChart accessibilityLayer data={data}>
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="week" tickLine={false} axisLine={false} tickMargin={8} />
+        <YAxis tickLine={false} axisLine={false} width={32} />
+        <ChartTooltip content={<ChartTooltipContent />} />
+        <ChartLegend content={<ChartLegendContent />} />
+        <Line dataKey="planned" stroke="var(--color-planned)" strokeWidth={2} dot={point("planned")} activeDot={point("planned")} />
+        <Line dataKey="actual" stroke="var(--color-actual)" strokeWidth={2} dot={point("actual")} activeDot={point("actual")} />
+      </LineChart>
+    </ChartContainer>
+  );
+}
+```
+
+For a donut, use `Pie` with `innerRadius`, give each slice its color through `fill` in the data row, and set `stroke="var(--card)"` with `strokeWidth={2}` for the 2px gap between segments:
+
+```tsx
+<ChartContainer config={config} className="aspect-square h-56">
+  <PieChart>
+    <ChartTooltip content={<ChartTooltipContent hideLabel nameKey="area" />} />
+    <Pie data={rows} dataKey="count" nameKey="area" innerRadius={56} stroke="var(--card)" strokeWidth={2} />
+    <ChartLegend content={<ChartLegendContent nameKey="area" />} />
+  </PieChart>
+</ChartContainer>
+```
+
+**Rules:**
+- `components/ui/shadcn/chart.tsx` is the stock shadcn component. Don't edit it; configure it through `ChartConfig` and props.
+- Series colors come from `ChartConfig` entries pointing at `var(--chart-N)` (in the fixed order from [Color](#color)). Inside the chart, refer to them as `var(--color-<key>)`. For área series, use `areaColorVar(slot)` from `lib/areas/area-color.ts`.
+- `ChartContainer` has `aspect-video` by default; pass `className="aspect-auto"` plus a height when the chart needs a fixed height.
+- Mark specs: 2px lines, point markers at least 8px (`r: 4`) with a `var(--card)` ring, a recessive grid (`CartesianGrid` with `vertical={false}` gets the muted border stroke from `ChartContainer`), a single y-axis, and a 2px gap between donut segments.
+- Every chart with 2+ series shows a `ChartLegend`; line charts get a `ChartTooltip`. Slots `chart-3` and `chart-4` are under 3:1 on white, so charts that use them need the legend with values or direct labels.
+- Example in the app: `components/asistente/AssistantChartMessage.tsx`.
+
+---
+
 ### "I need to show a project card with progress..."
 → **Use: `ProjectCard`**
 

@@ -60,4 +60,10 @@ describe("chart color tokens", () => {
     expect(componentSrc).toContain("var(--chart-1)");
     expect(componentSrc).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
+
+  it("AssistantChartMessage renders through the shadcn ChartContainer", () => {
+    expect(componentSrc).toContain('from "@/components/ui/shadcn/chart"');
+    expect(componentSrc).toContain("<ChartContainer");
+    expect(componentSrc).not.toContain("ResponsiveContainer");
+  });
 });
