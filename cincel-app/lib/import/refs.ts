@@ -9,7 +9,7 @@
  * client module or the RSC-only guard package; tests/unit/monday/refs.test.ts
  * checks this.
  */
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 
 import type * as schema from "../db/schema";
@@ -200,4 +200,30 @@ export async function findImportRefs(
     for (const row of rows) found.set(row.externalId, row);
   }
   return found;
+}
+
+/**
+ * Looks up the import ref that created a Cincel row, by `(entity, row_id)`.
+ * When several refs point at the same row, the oldest one wins. `null` when
+ * the row was not imported.
+ */
+export async function findImportRefByRow(
+  db: ImportDb,
+  source: string,
+  entity: ImportEntity,
+  rowId: string,
+): Promise<ImportRef | null> {
+  const [row] = await db
+    .select()
+    .from(importRefs)
+    .where(
+      and(
+        eq(importRefs.source, source),
+        eq(importRefs.entity, entity),
+        eq(importRefs.rowId, rowId),
+      ),
+    )
+    .orderBy(asc(importRefs.createdAt), asc(importRefs.externalId))
+    .limit(1);
+  return row ?? null;
 }
