@@ -131,4 +131,14 @@ describe("AppRouteGuard", () => {
 
     expect(nav.replace).toHaveBeenCalledWith("/dashboard");
   });
+
+  it("keeps /configuracion/google for Administrador only", () => {
+    const view = renderAt("/configuracion/google", { status: "active", user: activeUser() });
+    expect(screen.queryByText("contenido")).toBeNull();
+    expect(nav.replace).toHaveBeenCalledWith("/dashboard");
+    view.unmount();
+
+    renderAt("/configuracion/google", { status: "active", user: activeUser("Administrador") });
+    expect(screen.getByText("contenido")).toBeTruthy();
+  });
 });
