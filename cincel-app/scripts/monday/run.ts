@@ -13,6 +13,7 @@
  */
 
 import { exportCommand } from "./export";
+import { rollbackCommand } from "./rollback";
 
 export const USAGE = `Usage: npm run monday -- <command> [options]
 
@@ -50,7 +51,7 @@ export const COMMANDS: Record<CommandName, CommandHandler> = {
   init: notImplemented("init"),
   plan: notImplemented("plan"),
   apply: notImplemented("apply"),
-  rollback: notImplemented("rollback"),
+  rollback: rollbackCommand,
 };
 
 const defaultIo: CliIo = {
