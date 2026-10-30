@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { isPublicPath, LOGIN_ROUTE } from "@/lib/auth/public-routes";
 import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
-
-const PUBLIC_ROUTES = new Set(["/login", "/change-password"]);
 
 /**
  * Enforces authentication before any protected page renders.
@@ -10,6 +9,11 @@ const PUBLIC_ROUTES = new Set(["/login", "/change-password"]);
  * (expiry, member still active, role) happens server-side in `getSession()` /
  * `getSessionAccess()` and the client-side `AppRouteGuard` (which uses the
  * server-resolved decision hydrated by the root layout).
+ *
+ * A request with a cookie is never redirected away from `/login`: the cookie
+ * may be stale (expired or deleted session row), and bouncing it to
+ * `/dashboard` would loop. Public paths (including `/portal/*`) are outside
+ * the staff redirect.
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -23,18 +27,11 @@ export function middleware(request: NextRequest) {
   }
 
   const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
-  const isPublicRoute = PUBLIC_ROUTES.has(pathname);
 
-  if (!hasSession && !isPublicRoute) {
+  if (!hasSession && !isPublicPath(pathname)) {
     const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
+    loginUrl.pathname = LOGIN_ROUTE;
     return NextResponse.redirect(loginUrl);
-  }
-
-  if (hasSession && pathname === "/login") {
-    const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = "/dashboard";
-    return NextResponse.redirect(dashboardUrl);
   }
 
   return NextResponse.next();
