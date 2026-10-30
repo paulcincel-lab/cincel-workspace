@@ -1,11 +1,10 @@
 "use client";
 
-import { Badge } from "@/components/ui/shadcn/badge";
 import InlineEditable from "@/components/ui/InlineEditable";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import {
-  BASE_STATUS_VARIANT,
-  customStatusVariant,
+  statusColorToken,
   statusSelectItems,
   statusSelectValue,
   taskStatusLabel,
@@ -23,9 +22,7 @@ type Props = {
 /** A task's status badge, editable in place over the built-in and custom statuses. */
 export function TaskStatusCell({ task, customStatuses, canChange, onChange }: Props) {
   const badge = (
-    <Badge variant={task.customStatus ? customStatusVariant(task.customStatus) : BASE_STATUS_VARIANT[task.status]}>
-      {taskStatusLabel(task)}
-    </Badge>
+    <StatusBadge label={taskStatusLabel(task)} token={statusColorToken(task)} />
   );
   if (!canChange) return badge;
 

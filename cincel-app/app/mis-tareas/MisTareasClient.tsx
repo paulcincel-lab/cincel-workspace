@@ -38,7 +38,8 @@ import {
 } from "@/lib/actions/tasks-actions";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
-import { isTaskClosed, parseStatusValue, statusSelectItems, statusSelectValue, taskStatusLabel } from "@/lib/tasks/status-options";
+import { isDueDateLate, isTaskClosed, parseStatusValue, statusSelectItems, statusSelectValue, taskStatusLabel } from "@/lib/tasks/status-options";
+import { cn } from "@/lib/utils";
 import type { TaskChecklistItem, TaskDetail, TaskListItem, TaskLinkInput, TaskStatusOption } from "@/lib/types/core";
 
 type RoleFilter = "todas" | "encargado" | "apoyo";
@@ -390,7 +391,9 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         id: "commitmentDate",
         header: "Compromiso",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => (
-          <span className="text-sm">{row.original.commitmentDate || "Sin fecha"}</span>
+          <span className={cn("text-sm", isDueDateLate(row.original.commitmentDate, today, row.original) && "text-destructive")}>
+            {row.original.commitmentDate || "Sin fecha"}
+          </span>
         ),
       },
       {
@@ -404,7 +407,9 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         id: "deliveryDate",
         header: "Fecha de entrega",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => (
-          <span className="text-sm">{row.original.deliveryDate || "Sin fecha"}</span>
+          <span className={cn("text-sm", isDueDateLate(row.original.deliveryDate, today, row.original) && "text-destructive")}>
+            {row.original.deliveryDate || "Sin fecha"}
+          </span>
         ),
       },
       createRowActionsColumn<TaskListItem>(() => {
@@ -415,7 +420,7 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [capabilities, viewerId, customStatuses]);
+  }, [capabilities, viewerId, customStatuses, today]);
 
   // Each accordion already names the project, so the per-row Proyecto column is redundant.
   const groupedColumns = useMemo(() => columns.filter((c) => c.id !== "project"), [columns]);

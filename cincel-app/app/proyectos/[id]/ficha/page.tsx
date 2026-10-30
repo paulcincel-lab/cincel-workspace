@@ -9,7 +9,8 @@ import Header from "@/components/layout/Header";
 import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import { Badge } from "@/components/ui/shadcn/badge";
-import { BASE_STATUS_VARIANT, taskStatusLabel } from "@/lib/tasks/status-options";
+import { statusColorToken, taskStatusLabel } from "@/lib/tasks/status-options";
+import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
@@ -530,7 +531,7 @@ export default function ProjectFichaPage() {
                             <span>{t.title}</span>
                             <div className="flex shrink-0 items-center gap-3">
                               <ChecklistProgressCell total={t.checklist.total} completed={t.checklist.completed} />
-                              <Badge variant={BASE_STATUS_VARIANT[t.status]}>{taskStatusLabel(t)}</Badge>
+                              <StatusBadge label={taskStatusLabel(t)} token={statusColorToken(t)} />
                             </div>
                           </li>
                         ))}

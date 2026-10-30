@@ -31,12 +31,14 @@ import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
 import {
+  isDueDateLate,
   isTaskClosed,
   parseStatusValue,
   statusSelectItems,
   statusSelectValue,
   taskStatusLabel,
 } from "@/lib/tasks/status-options";
+import { cn } from "@/lib/utils";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { loadGeneralSettings } from "@/lib/settings/general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
@@ -660,6 +662,12 @@ export function ActividadesClient({
     ];
   }, [filteredTasks, groupByArea]);
 
+  // Local calendar day (YYYY-MM-DD), to flag late dates in the table.
+  const today = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+
   const columns = useMemo<ColumnDef<TaskListItem, unknown>[]>(() => {
     if (!workflow && !isGeneral) return [];
 
@@ -875,7 +883,11 @@ export function ActividadesClient({
             <InlineEditable
               value={task.commitmentDate || ""}
               onCommit={(value) => updateField(task, { commitmentDate: value || null })}
-              renderDisplay={(value) => <span className="text-sm">{value || "Sin fecha"}</span>}
+              renderDisplay={(value) => (
+                <span className={cn("text-sm", isDueDateLate(value, today, task) && "text-destructive")}>
+                  {value || "Sin fecha"}
+                </span>
+              )}
               renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
                 <Input autoFocus type="date" value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className="text-sm" />
               )}
@@ -911,7 +923,11 @@ export function ActividadesClient({
             <InlineEditable
               value={task.deliveryDate || ""}
               onCommit={(value) => updateField(task, { deliveryDate: value || null })}
-              renderDisplay={(value) => <span className="text-sm">{value || "Sin fecha"}</span>}
+              renderDisplay={(value) => (
+                <span className={cn("text-sm", isDueDateLate(value, today, task) && "text-destructive")}>
+                  {value || "Sin fecha"}
+                </span>
+              )}
               renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
                 <Input autoFocus type="date" value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className="text-sm" />
               )}
@@ -943,7 +959,7 @@ export function ActividadesClient({
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflow, isGeneral, phases, selected, capabilities, viewerId, staffNames, nameToStaffId]);
+  }, [workflow, isGeneral, phases, selected, capabilities, viewerId, staffNames, nameToStaffId, today]);
 
   // The panel already names its project (or área), so that column is
   // redundant; the other one stays since the panel mixes them.
