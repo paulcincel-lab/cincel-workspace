@@ -422,6 +422,7 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
         open={selectedTaskId !== null}
         task={activeTaskDetail}
         onClose={() => setSelectedTaskId(null)}
+        onOpenTask={setSelectedTaskId}
         onAddComment={(comment) => void addComment(comment)}
         onAddAttachment={(file, checklistItemId) => void addAttachment(file, checklistItemId)}
         onAddLink={(input) => void addLink(input)}
