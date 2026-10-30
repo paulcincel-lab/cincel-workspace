@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -730,3 +730,70 @@ export async function listCalendar(dateFrom: string, dateTo: string, filters: Ta
 }
 
 export const newestFirst = desc(tasks.createdAt);
+
+export interface TaskTrendSourceTask {
+  id: string;
+  createdAt: Date;
+  project: { id: string; name: string; managerId: string | null };
+  manager: { id: string } | null;
+  support: StaffRef[];
+}
+
+/**
+ * Dashboard "Avance de tareas" source (#601): live tasks created in the window
+ * or moved to completado in it, plus those completion events. Archived and
+ * deleted tasks (and tasks of deleted projects) are left out.
+ */
+export async function listTaskTrendSource(
+  from: Date,
+  to: Date
+): Promise<{ tasks: TaskTrendSourceTask[]; completions: Array<{ taskId: string; at: Date }> }> {
+  const events = await db
+    .select({ taskId: historyEvents.entityId, at: historyEvents.eventAt })
+    .from(historyEvents)
+    .where(
+      and(
+        eq(historyEvents.entity, "task"),
+        eq(historyEvents.kind, "cambio"),
+        eq(historyEvents.field, "status"),
+        eq(historyEvents.afterValue, "completado"),
+        gte(historyEvents.eventAt, from),
+        lt(historyEvents.eventAt, to)
+      )
+    );
+
+  const completedIds = [...new Set(events.map((e) => e.taskId))];
+  const createdInWindow = and(gte(tasks.createdAt, from), lt(tasks.createdAt, to));
+  const rows = await db
+    .select({
+      id: tasks.id,
+      createdAt: tasks.createdAt,
+      managerId: tasks.managerId,
+      projectId: projects.id,
+      projectName: projects.name,
+      projectManagerId: projects.managerId,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(
+      and(
+        isNull(tasks.deletedAt),
+        isNull(projects.deletedAt),
+        eq(tasks.archived, false),
+        completedIds.length > 0 ? or(createdInWindow, inArray(tasks.id, completedIds)) : createdInWindow
+      )
+    );
+
+  const support = await loadSupport(rows.map((r) => r.id));
+  const liveIds = new Set(rows.map((r) => r.id));
+  return {
+    tasks: rows.map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt,
+      project: { id: r.projectId, name: r.projectName, managerId: r.projectManagerId },
+      manager: r.managerId ? { id: r.managerId } : null,
+      support: support.get(r.id) ?? [],
+    })),
+    completions: events.filter((e) => liveIds.has(e.taskId)),
+  };
+}
