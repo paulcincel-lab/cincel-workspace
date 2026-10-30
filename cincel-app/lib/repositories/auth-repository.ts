@@ -16,6 +16,8 @@ export type SessionUser = {
   area: string | null;
   active: boolean;
   mustChangePassword: boolean;
+  /** Signed in with Google at least once (`core.staff.google_sub` set). */
+  googleLinked: boolean;
 };
 
 export type SessionRecord = {
@@ -92,6 +94,7 @@ export async function findSessionByToken(token: string): Promise<SessionRecord |
       email: staff.email,
       role: staff.role,
       active: staff.active,
+      googleSub: staff.googleSub,
       mustChangePassword: authCredentials.mustChangePassword,
     })
     .from(sessions)
@@ -113,6 +116,7 @@ export async function findSessionByToken(token: string): Promise<SessionRecord |
       area: await primaryAreaName(row.staffId),
       active: row.active,
       mustChangePassword: row.mustChangePassword ?? false,
+      googleLinked: row.googleSub !== null,
     },
   };
 }
