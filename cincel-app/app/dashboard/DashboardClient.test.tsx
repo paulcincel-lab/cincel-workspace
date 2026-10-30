@@ -1,12 +1,15 @@
 import { readdirSync, readFileSync } from "fs";
 import { join, resolve } from "path";
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
 
 import type { TaskListItem } from "@/lib/types/core";
 
 vi.mock("@/lib/proyectos/use-projects-data", () => ({
-  useProjectsData: (projects: unknown[]) => ({ projectsData: projects, isLoadingData: false }),
+  useProjectsData: (projects: unknown[]) => ({
+    projectsData: projects,
+    isLoadingData: false,
+  }),
 }));
 
 vi.mock("@/lib/auth/auth-service", () => ({
@@ -55,13 +58,29 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   fetchTasksAction: () => Promise.resolve(tasks),
 }));
 
+const fetchTrend = vi.fn();
+vi.mock("@/lib/actions/dashboard-actions", () => ({
+  fetchDashboardTaskTrendAction: (range: string) => fetchTrend(range),
+}));
+
 import { DashboardClient } from "./DashboardClient";
 
 describe("DashboardClient widgets", () => {
+  beforeEach(() => {
+    fetchTrend.mockReset();
+    fetchTrend.mockResolvedValue({
+      labels: ["LUN", "MAR"],
+      created: [0, 0],
+      completed: [0, 0],
+    });
+  });
+
   it("renders the panels as shadcn cards with compact tables", async () => {
     const { container } = render(<DashboardClient initialProjects={[]} />);
 
-    const row = (await screen.findByText("Render de fachada norte")).closest("tr");
+    const row = (await screen.findByText("Render de fachada norte")).closest(
+      "tr",
+    );
     expect(row).not.toBeNull();
     const cells = within(row!);
     expect(cells.getByText("Residencia Valle Alto")).toBeTruthy();
@@ -73,21 +92,67 @@ describe("DashboardClient widgets", () => {
     expect(dateCell?.className).toContain("font-mono");
     expect(dateCell?.className).toContain("text-destructive");
 
-    expect(screen.getByRole("link", { name: "Ver todas →" }).getAttribute("href")).toBe("/actividades/general");
+    expect(
+      screen.getByRole("link", { name: "Ver todas →" }).getAttribute("href"),
+    ).toBe("/actividades/general");
 
     const cards = container.querySelectorAll('[data-slot="card"]');
     expect(cards.length).toBe(4);
-    cards.forEach((card) => expect(card.querySelector('[data-slot="card-title"]')).not.toBeNull());
+    cards.forEach((card) =>
+      expect(card.querySelector('[data-slot="card-title"]')).not.toBeNull(),
+    );
     expect(container.querySelectorAll('[data-slot="table"]').length).toBe(1);
   });
 
   it("shows the status donut legend and the projects empty state", async () => {
     render(<DashboardClient initialProjects={[]} />);
 
-    const statusCard = (await screen.findByText("Tareas por estatus")).closest('[data-slot="card"]') as HTMLElement;
+    const statusCard = (await screen.findByText("Tareas por estatus")).closest(
+      '[data-slot="card"]',
+    ) as HTMLElement;
     const legend = within(statusCard).getByText("Pendiente").closest("li");
     expect(legend?.textContent).toContain("100%");
     expect(screen.getByText("Sin proyectos activos.")).toBeTruthy();
+  });
+
+  it("loads the weekly task trend and shows the empty state when the range has no data", async () => {
+    render(<DashboardClient initialProjects={[]} />);
+
+    expect(
+      await screen.findByText(
+        "Sin tareas creadas ni completadas en este periodo.",
+      ),
+    ).toBeTruthy();
+    expect(fetchTrend).toHaveBeenCalledWith("semana");
+    expect(screen.queryByText("Avance semanal")).toBeNull();
+    const trendCard = screen
+      .getByText("Avance de tareas")
+      .closest('[data-slot="card"]') as HTMLElement;
+    expect(
+      within(trendCard).getByRole("combobox", { name: "Periodo" }),
+    ).toBeTruthy();
+  });
+
+  it("draws the trend chart when the range has data", async () => {
+    fetchTrend.mockResolvedValue({
+      labels: ["LUN", "MAR"],
+      created: [2, 1],
+      completed: [1, 3],
+    });
+    const { container } = render(<DashboardClient initialProjects={[]} />);
+
+    const trendCard = (await screen.findByText("Avance de tareas")).closest(
+      '[data-slot="card"]',
+    ) as HTMLElement;
+    await waitFor(() =>
+      expect(trendCard.querySelector('[data-slot="chart"]')).not.toBeNull(),
+    );
+    expect(
+      within(trendCard).queryByText(
+        "Sin tareas creadas ni completadas en este periodo.",
+      ),
+    ).toBeNull();
+    expect(container.querySelectorAll('[data-slot="card"]').length).toBe(4);
   });
 });
 
@@ -97,10 +162,13 @@ describe("app/dashboard colors", () => {
     .filter((f) => /\.tsx?$/.test(f) && !f.includes(".test."))
     .map((f) => [f, readFileSync(join(dir, f), "utf8")] as const);
 
-  it.each(sources)("%s has no hard-coded hex colors or palette classes", (_name, src) => {
-    expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(src).not.toMatch(
-      /\b(?:bg|text|border|ring|fill|stroke)-(?:red|green|blue|amber|yellow|orange|gray|neutral|zinc|slate|stone|white|black)\b/
-    );
-  });
+  it.each(sources)(
+    "%s has no hard-coded hex colors or palette classes",
+    (_name, src) => {
+      expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+      expect(src).not.toMatch(
+        /\b(?:bg|text|border|ring|fill|stroke)-(?:red|green|blue|amber|yellow|orange|gray|neutral|zinc|slate|stone|white|black)\b/,
+      );
+    },
+  );
 });
