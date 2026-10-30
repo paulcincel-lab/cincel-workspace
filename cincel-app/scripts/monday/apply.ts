@@ -17,9 +17,9 @@
  *    after insert (null for rows without one). Rows already in
  *    `import_refs` are skipped, so a second apply of the same export
  *    creates an empty batch, marked `applied`: "Nada nuevo que importar".
- * 5. Phase B (Drive folders and uploads) runs after the commit through
- *    `ApplyDeps.phaseB`; until it exists the batch stays `applying` and a
- *    later apply resumes it.
+ * 5. Phase B (Drive folders and uploads, scripts/monday/apply-phase-b.ts)
+ *    runs after the commit; it ends the batch `applied`, or leaves it
+ *    `applying` for a later apply to resume.
  *
  * Project rollups (progress, dates, status per §0.4) come from translate.
  * Comments keep their monday `event_at`; no `cambio` history rows are
@@ -54,6 +54,7 @@ import {
   type ImportEntity,
   type ImportRefInput,
 } from "../../lib/import/refs";
+import { createPhaseB } from "./apply-phase-b";
 import { createMondayDb, type MondayDbHandle } from "./db";
 import { readJson } from "./init";
 import type { Manifest } from "./export";
@@ -586,21 +587,13 @@ export interface PhaseBContext {
 /** Phase B (Drive folders and uploads); returns the exit code. */
 export type PhaseB = (ctx: PhaseBContext) => Promise<number>;
 
-/** Until phase B exists, the batch stays `applying` and a later apply resumes it. */
-export const pendingPhaseB: PhaseB = async ({ batchId, io }) => {
-  io.stdout(
-    `Phase B (Drive) is not available yet; batch ${batchId} stays applying and the next apply resumes it.\n`,
-  );
-  return 0;
-};
-
 type Env = Record<string, string | undefined>;
 
 export interface ApplyDeps {
   openDb: () => MondayDbHandle;
   /** The plan lookups over the transaction; `createPlanDbLookups` by default. */
   lookups?: (db: ImportDb) => PlanLookups;
-  /** The Drive client for the DRIVE_NOT_CONFIGURED check; the env service account by default. */
+  /** The Drive client for the DRIVE_NOT_CONFIGURED check and phase B; the env service account by default. */
   openDrive?: () => DriveAdmin;
   env?: Env;
   phaseB?: PhaseB;
@@ -621,7 +614,12 @@ function formatCounts(c: PhaseACounts): string {
 export function createApplyCommand(
   deps: ApplyDeps = { openDb: () => createMondayDb() },
 ): CommandHandler {
-  const phaseB = deps.phaseB ?? pendingPhaseB;
+  const phaseB =
+    deps.phaseB ??
+    createPhaseB({
+      openDrive: deps.openDrive ?? openServiceAccountDrive,
+      env: deps.env,
+    });
   return async (args: string[], io: CliIo) => {
     const parsed = parseApplyArgs(args);
     if (typeof parsed === "string") {
