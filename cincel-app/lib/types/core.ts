@@ -380,6 +380,32 @@ export type TaskListItem = Task & {
   manager: StaffRef | null;
   support: StaffRef[];
   checklist: { total: number; completed: number };
+  parentTaskId: string | null;
+  /** Null when the task has no parent or the parent was deleted ("Tarea padre eliminada"). */
+  parentTitle: string | null;
+  /** Live (not deleted, not archived) child tasks. */
+  subtaskCount: number;
+  subtaskDoneCount: number;
+  /** Dependencies that aren't completado, deleted or archived. */
+  waitingOn: number;
+};
+
+/** Compact task reference for subtask and dependency lists. */
+export type TaskRef = {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  managerName: string | null;
+  commitmentDate: string | null;
+};
+
+/** Untranslated data an import kept for a row (`core.import_refs.data`). */
+export type ImportData = {
+  source: "monday";
+  importedAt: string;
+  boardName: string | null;
+  groupTitle: string | null;
+  data: Record<string, unknown>;
 };
 
 export type TaskChecklistItem = {

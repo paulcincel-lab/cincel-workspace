@@ -31,6 +31,11 @@ function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
     manager: null,
     support: [],
     checklist: { total: 0, completed: 0 },
+    parentTaskId: null,
+    parentTitle: null,
+    subtaskCount: 0,
+    subtaskDoneCount: 0,
+    waitingOn: 0,
     customStatus: null,
     ...overrides,
   };

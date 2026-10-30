@@ -310,6 +310,12 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
       customStatusCloses: taskStatuses.closes,
       checklistTotal: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id})::int`,
       checklistDone: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id} and c.completed)::int`,
+      // A deleted parent reads as no parent title ("Tarea padre eliminada").
+      parentTitle: sql<string | null>`(select p.title from core.tasks p where p.id = ${tasks.parentTaskId} and p.deleted_at is null)`,
+      subtaskCount: sql<number>`(select count(*) from core.tasks s where s.parent_task_id = ${tasks.id} and s.deleted_at is null and not s.archived)::int`,
+      subtaskDoneCount: sql<number>`(select count(*) from core.tasks s where s.parent_task_id = ${tasks.id} and s.deleted_at is null and not s.archived and s.status = 'completado')::int`,
+      // Open dependencies only: completado, deleted and archived ones don't count.
+      waitingOn: sql<number>`(select count(*) from core.task_dependencies d join core.tasks dt on dt.id = d.depends_on_task_id where d.task_id = ${tasks.id} and dt.deleted_at is null and not dt.archived and dt.status <> 'completado')::int`,
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -333,6 +339,11 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     manager: r.task.managerId ? { id: r.task.managerId, name: r.managerName! } : null,
     support: support.get(r.task.id) ?? [],
     checklist: { total: r.checklistTotal, completed: r.checklistDone },
+    parentTaskId: r.task.parentTaskId,
+    parentTitle: r.task.parentTaskId ? (r.parentTitle ?? null) : null,
+    subtaskCount: r.subtaskCount,
+    subtaskDoneCount: r.subtaskDoneCount,
+    waitingOn: r.waitingOn,
   }));
 }
 
