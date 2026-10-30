@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-import type { StaffRef, TaskChecklistItem, TaskDetail, TaskLinkInput } from "@/lib/types/core";
+import type { StaffRef, TaskChecklistItem, TaskDetail, TaskLinkInput, TaskRef } from "@/lib/types/core";
+import TaskSubtasks from "@/components/tareas/TaskSubtasks";
 import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
 import { formatDateDMY } from "@/lib/utils/date";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
@@ -46,7 +47,11 @@ type Props = {
   /** Active staff available to assign as support. Optional — support editing is hidden when omitted. */
   staffOptions?: StaffRef[];
   onChangeSupport?: (staffIds: string[]) => void;
+  /** Shows another task (a subtask or the parent) in this drawer. Optional — the Subtareas section is hidden when omitted. */
+  onOpenTask?: (taskId: string) => void;
 };
+
+type BackEntry = { id: string; title: string };
 
 export default function TaskDrawer({
   open,
@@ -62,7 +67,10 @@ export default function TaskDrawer({
   onRemoveLink,
   staffOptions = [],
   onChangeSupport,
+  onOpenTask,
 }: Props) {
+  /** Tasks the user came from inside this drawer (parent → subtask), for "← {padre}". */
+  const [backStack, setBackStack] = useState<BackEntry[]>([]);
   const [newNote, setNewNote] = useState("");
   const [newChecklistItem, setNewChecklistItem] = useState("");
   const [attachmentError, setAttachmentError] = useState("");
@@ -74,6 +82,37 @@ export default function TaskDrawer({
     if (!task) return [];
     return [...task.history].sort((a, b) => a.eventAt.localeCompare(b.eventAt));
   }, [task]);
+
+  const backTo = backStack.length > 0 ? backStack[backStack.length - 1] : null;
+  // A child whose parent was soft-deleted behaves as top-level and can take subtasks.
+  const isSubtask = Boolean(task?.parentTaskId && task.parentTitle !== null);
+
+  const handleClose = () => {
+    setBackStack([]);
+    onClose();
+  };
+
+  const openSubtask = (subtask: TaskRef) => {
+    if (!task || !onOpenTask) return;
+    setBackStack((stack) => [...stack, { id: task.id, title: task.title }]);
+    onOpenTask(subtask.id);
+  };
+
+  const goBack = () => {
+    if (!backTo || !onOpenTask) return;
+    setBackStack((stack) => stack.slice(0, -1));
+    onOpenTask(backTo.id);
+  };
+
+  const openParent = () => {
+    if (!task?.parentTaskId || !onOpenTask) return;
+    if (backTo?.id === task.parentTaskId) {
+      goBack();
+      return;
+    }
+    setBackStack([]);
+    onOpenTask(task.parentTaskId);
+  };
 
   const handleAddNote = () => {
     const trimmed = newNote.trim();
@@ -137,17 +176,38 @@ export default function TaskDrawer({
   };
 
   return (
-    <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+    <Sheet open={open} onOpenChange={(next) => { if (!next) handleClose(); }}>
       <SheetContent side="right" className="w-[560px] p-0">
         {task ? (
           <>
             <SheetHeader>
+              {backTo && onOpenTask ? (
+                <Button variant="link" size="sm" className="h-auto self-start p-0" onClick={goBack}>
+                  ← {backTo.title}
+                </Button>
+              ) : null}
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                     Detalle de tarea
                   </p>
                   <SheetTitle className="mt-2">{task.title}</SheetTitle>
+                  {task.parentTaskId ? (
+                    task.parentTitle !== null ? (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Subtarea de{" "}
+                        {onOpenTask ? (
+                          <Button variant="link" size="sm" className="h-auto p-0" onClick={openParent}>
+                            {task.parentTitle}
+                          </Button>
+                        ) : (
+                          task.parentTitle
+                        )}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-sm text-muted-foreground">Tarea padre eliminada</p>
+                    )
+                  ) : null}
                 </div>
               </div>
 
@@ -333,6 +393,10 @@ export default function TaskDrawer({
                 </div>
               </section>
 
+              {onOpenTask && !isSubtask ? (
+                <TaskSubtasks key={task.id} parentId={task.id} onOpenSubtask={openSubtask} />
+              ) : null}
+
               {onChangeSupport && staffOptions.length > 0 ? (
                 <section>
                   <h3 className="text-lg font-semibold text-foreground">Staff de apoyo</h3>
@@ -406,7 +470,7 @@ export default function TaskDrawer({
             </div>
 
             <SheetFooter>
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outline" onClick={handleClose}>
                 Cerrar
               </Button>
             </SheetFooter>
