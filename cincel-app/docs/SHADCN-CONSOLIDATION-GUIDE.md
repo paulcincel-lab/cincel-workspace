@@ -6,6 +6,8 @@ Complete mapping of Cincel custom components to shadcn/ui equivalents with migra
 
 **Reference:** https://ui.shadcn.com/docs/components
 
+**Color rules:** see the [Color section of the Component Usage Guide](./COMPONENT-USAGE-GUIDE.md#color) (monochrome chrome, `chart-1..5` for data, `destructive` only for blocked/late/errors). Color examples below that use Tailwind palette classes are historical.
+
 ---
 
 ## Table of Contents
@@ -1178,6 +1180,7 @@ After each phase, update:
 ## Additional Resources
 
 - **shadcn/ui Docs:** https://ui.shadcn.com/docs/components
+- **Color rules:** [Component Usage Guide → Color](./COMPONENT-USAGE-GUIDE.md#color)
 - **Radix UI (underlying):** https://radix-ui.com/
 - **Lucide Icons:** https://lucide.dev/
 - **TanStack React Table:** https://tanstack.com/table/

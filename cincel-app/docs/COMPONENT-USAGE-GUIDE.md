@@ -11,10 +11,11 @@ A practical guide for developers on how to use, compose, and extend UI component
 4. [Form Handling](#form-handling)
 5. [Data Display](#data-display)
 6. [Modals & Drawers](#modals--drawers)
-7. [Styling & Customization](#styling--customization)
-8. [Accessibility](#accessibility)
-9. [Performance Tips](#performance-tips)
-10. [Code Examples](#code-examples)
+7. [Color](#color)
+8. [Styling & Customization](#styling--customization)
+9. [Accessibility](#accessibility)
+10. [Performance Tips](#performance-tips)
+11. [Code Examples](#code-examples)
 
 ---
 
@@ -834,26 +835,107 @@ export default function TasksList({ tasks }: { tasks: Task[] }) {
 
 ---
 
+## Color
+
+Two rules cover every screen: the **chrome** (layout, navigation, cards, forms, buttons, text) is strictly black, white and gray, and **data** (charts, area badges, status) carries the color. Color always comes from a theme token defined in `app/globals.css`; components never pick a hue or write a hex value.
+
+### Token table
+
+| Use | Tokens | Tailwind classes | Rule |
+|-----|--------|------------------|------|
+| Chrome surfaces and text | `background`, `foreground`, `card`, `popover`, `primary`, `secondary`, `muted`, `muted-foreground`, `accent`, `border`, `input`, `ring`, `sidebar-*` | `bg-background`, `text-foreground`, `bg-card`, `bg-muted`, `text-muted-foreground`, `border-border`, ... | Monochrome only. No new brand hues. |
+| Data series | `chart-1` … `chart-5` | `fill-chart-1`, `bg-chart-2`, `var(--chart-3)` | Fixed order, never cycled. A 6th series folds into "Otros". |
+| Área (department) | assigned `chart-*` slot per área | from the área color helper (#587) | Stored per área, never picked in a component. |
+| Task status | Badge variants `outline`, `secondary`, `success`, `destructive` | `BASE_STATUS_VARIANT` / `customStatusVariant` in `lib/tasks/status-options.ts` | One mapping for the whole app (#588). |
+| Negative / error | `destructive` | `variant="destructive"`, `text-destructive` | Only blocked, late and errors. |
+| Positive change | `success`, `success-foreground` | `variant="success"`, `text-success-foreground` | Only positive change (done, up vs. last period). |
+
+### Rules
+
+- **Chrome stays monochrome.** Use the chrome tokens above and plain shadcn variants. Don't add brand hues, colored wrappers, or `className` color overrides.
+- **Data uses `chart-1..5` in fixed order.** Series 1 is always `chart-1`, series 2 always `chart-2`, and so on. Never cycle back to `chart-1` for a 6th series; group everything after the 5th into one "Otros" series (use a neutral chrome token such as `muted-foreground` for it).
+- **Área and status colors come from their helpers.** The área color is stored per área (Configuración → Áreas) and read through its helper; task status goes through `BASE_STATUS_VARIANT` / `customStatusVariant`. A component never maps an área or status to a color itself.
+- **Red means a problem.** `destructive` is reserved for blocked, late and errors. Don't use it for emphasis, for a series color, or for "delete" styling beyond the shadcn destructive button.
+- **Green means positive change.** `success` only for done / improvement. Don't use it as a generic accent.
+- **Never color alone.** Every color has a legend, a text label or an icon next to it, so the meaning survives for color-blind users and in grayscale prints.
+- **Dark mode uses the dark token values.** The `.dark` / `[data-theme="dark"]` / `prefers-color-scheme: dark` blocks in `app/globals.css` define each token's dark value; don't invert colors or filter in components. Keep the dark blocks mirrored when a token changes.
+
+### Do / Don't
+
+**Chrome**
+
+```tsx
+// Do: plain shadcn variant, theme tokens
+<Button variant="outline">Exportar</Button>
+<Card className="bg-card text-card-foreground">…</Card>
+
+// Don't: brand hue or hex on chrome
+<Button className="bg-blue-600 text-white">Exportar</Button>
+<div style={{ background: "#2563eb" }}>…</div>
+```
+
+**Chart series**
+
+```tsx
+// Do: fixed order, 6th+ series folded into "Otros"
+const SERIES_TOKENS = ["chart-1", "chart-2", "chart-3", "chart-4", "chart-5"] as const;
+const top = series.slice(0, 5);
+const otros = series.slice(5); // summed into one "Otros" series, neutral color
+
+// Don't: cycle the palette, so series 1 and 6 look the same
+const color = `var(--chart-${(index % 5) + 1})`;
+```
+
+**Área and status**
+
+```tsx
+// Do: status through the shared mapping
+<Badge variant={BASE_STATUS_VARIANT[task.status]}>{label}</Badge>
+
+// Don't: local switch with ad-hoc colors
+<Badge className={task.status === "bloqueado" ? "bg-red-500" : "bg-green-500"}>{label}</Badge>
+```
+
+**Red and green**
+
+```tsx
+// Do: destructive for a late task, with a label
+<Badge variant="destructive">Atrasada</Badge>
+
+// Don't: red to highlight a total that is not a problem
+<span className="text-destructive">Total: 42</span>
+```
+
+**Never color alone**
+
+```tsx
+// Do: dot plus label
+<span className="flex items-center gap-2">
+  <span className="size-2 rounded-full bg-chart-1" aria-hidden />
+  Presale
+</span>
+
+// Don't: a colored dot with no label, legend or tooltip
+<span className="size-2 rounded-full bg-chart-1" />
+```
+
+**Dark mode**
+
+```tsx
+// Do: the token resolves to its dark value automatically
+<rect fill="var(--chart-2)" />
+
+// Don't: invert or hard-code a dark variant
+<svg className="dark:invert">…</svg>
+<rect className="fill-orange-500 dark:fill-orange-300" />
+```
+
+---
+
 ## Styling & Customization
 
 ### Color Palette
-```css
-/* Primary */
-primary: #2563eb (bg-blue-600)
-
-/* Semantic */
-success: #16a34a (bg-green-600)
-warning: #eab308 (bg-yellow-400)
-error: #dc2626 (bg-red-600)
-info: #7c3aed (bg-purple-600)
-
-/* Neutral */
-bg-slate-50  /* Light backgrounds */
-bg-slate-100 /* Cards, sections */
-bg-slate-200 /* Borders */
-text-slate-700 /* Primary text */
-text-slate-500 /* Secondary text */
-```
+See [Color](#color). Use theme tokens only; no Tailwind palette classes (`bg-blue-600`, `text-slate-500`, ...) or hex values in components.
 
 ### Rounded Corners Convention
 ```
@@ -1227,7 +1309,7 @@ export default async function ProjectsDashboard() {
 - [ ] Use `DataTable` for list displays (not hand-rolled `<table>`)
 - [ ] Wrap modals/drawers with `DialogOverlay` for accessibility
 - [ ] Pass `triggerRef` to dialogs for focus management
-- [ ] Use semantic `color` values for badges (yellow=pending, blue=progress, etc.)
+- [ ] Follow the [Color](#color) rules: monochrome chrome, `chart-1..5` for data, status variants from `lib/tasks/status-options.ts`
 - [ ] Validate forms before submission
 - [ ] Handle loading/error states
 - [ ] Use server components where possible
