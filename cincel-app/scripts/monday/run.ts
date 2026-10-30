@@ -14,6 +14,7 @@
 
 import { exportCommand } from "./export";
 import { initCommand } from "./init";
+import { planCommand } from "./plan";
 import { rollbackCommand } from "./rollback";
 
 export const USAGE = `Usage: npm run monday -- <command> [options]
@@ -50,7 +51,7 @@ function notImplemented(name: CommandName): CommandHandler {
 export const COMMANDS: Record<CommandName, CommandHandler> = {
   export: exportCommand,
   init: initCommand,
-  plan: notImplemented("plan"),
+  plan: planCommand,
   apply: notImplemented("apply"),
   rollback: rollbackCommand,
 };
