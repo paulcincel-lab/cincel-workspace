@@ -5,7 +5,14 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(__dirname, "../../..");
 const css = readFileSync(resolve(root, "app/globals.css"), "utf8");
-const sidebarTsx = readFileSync(resolve(root, "components/layout/Sidebar.tsx"), "utf8");
+const sidebarTsx = readFileSync(
+  resolve(root, "components/layout/Sidebar.tsx"),
+  "utf8",
+);
+const shadcnSidebarTsx = readFileSync(
+  resolve(root, "components/ui/shadcn/sidebar.tsx"),
+  "utf8",
+);
 
 /** Body of the first `{ ... }` block (no nested braces) opening at or after `from`. */
 function blockBodyAt(from: number): string {
@@ -44,7 +51,9 @@ const SIDEBAR_TOKENS = [
 ];
 
 const light = blockBodyAt(css.search(/^:root\s*\{/m));
-const darkExplicit = blockBodyAt(css.search(/^\.dark,\s*\n:root\[data-theme="dark"\]/m));
+const darkExplicit = blockBodyAt(
+  css.search(/^\.dark,\s*\n:root\[data-theme="dark"\]/m),
+);
 const darkMedia = blockBodyAt(
   css.indexOf(":root", css.indexOf("@media (prefers-color-scheme: dark)")),
 );
@@ -70,21 +79,28 @@ describe("sidebar tokens", () => {
   it.each([
     ["light", light],
     ["dark", darkExplicit],
-  ])("%s: inactive, hover/active and primary text is at least 4.5:1", (_label, body) => {
-    const pairs: [string, string][] = [
-      ["sidebar-foreground", "sidebar"],
-      ["sidebar-accent-foreground", "sidebar-accent"],
-      ["sidebar-primary-foreground", "sidebar-primary"],
-    ];
-    for (const [fg, bg] of pairs) {
-      expect(contrast(token(body, fg), token(body, bg))).toBeGreaterThanOrEqual(4.5);
-    }
-  });
+  ])(
+    "%s: inactive, hover/active and primary text is at least 4.5:1",
+    (_label, body) => {
+      const pairs: [string, string][] = [
+        ["sidebar-foreground", "sidebar"],
+        ["sidebar-accent-foreground", "sidebar-accent"],
+        ["sidebar-primary-foreground", "sidebar-primary"],
+      ];
+      for (const [fg, bg] of pairs) {
+        expect(
+          contrast(token(body, fg), token(body, bg)),
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
 
   it("light mode: focus ring is visible on the sidebar and on the hover/active item", () => {
     const ring = token(light, "sidebar-ring");
     expect(contrast(ring, token(light, "sidebar"))).toBeGreaterThanOrEqual(3);
-    expect(contrast(ring, token(light, "sidebar-accent"))).toBeGreaterThanOrEqual(3);
+    expect(
+      contrast(ring, token(light, "sidebar-accent")),
+    ).toBeGreaterThanOrEqual(3);
   });
 
   it("dark mode is unchanged and both dark blocks stay in sync", () => {
@@ -101,5 +117,13 @@ describe("sidebar tokens", () => {
     expect(sidebarTsx).not.toMatch(
       /\b(?:bg|text|border|ring)-(?:white|black|gray|neutral|zinc|slate|stone)(?:-\d+)?\b/,
     );
+  });
+
+  it("active menu item is the primary pill, also on hover", () => {
+    expect(shadcnSidebarTsx).toContain("data-active:bg-sidebar-primary");
+    expect(shadcnSidebarTsx).toContain(
+      "data-active:text-sidebar-primary-foreground",
+    );
+    expect(shadcnSidebarTsx).toContain("data-active:hover:bg-sidebar-primary");
   });
 });
