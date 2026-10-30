@@ -8,9 +8,7 @@
  * back, with the nested translate fixture written out as an export folder
  * and a fake Drive.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -18,19 +16,12 @@ import postgres from "postgres";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/lib/db/schema";
-import {
-  FOLDER_MIME_TYPE,
-  type DriveAdmin,
-  type DriveFile,
-  type ListOptions,
-  type UploadInput,
-} from "@/lib/google/drive-admin";
+import { FOLDER_MIME_TYPE, type DriveAdmin } from "@/lib/google/drive-admin";
 import {
   CLIENT_FOLDER_NAME,
   INTERNAL_FOLDER_NAME,
 } from "@/lib/google/project-folders";
 import type { ImportDb, ImportEntity } from "@/lib/import/refs";
-import nestedFixture from "@/scripts/monday/__fixtures__/translate-nested-export.json";
 import {
   createApplyCommand,
   NOTHING_NEW,
@@ -50,8 +41,13 @@ import {
   readPlanExport,
 } from "@/scripts/monday/plan";
 import { ENTITY_TABLES } from "@/scripts/monday/rollback";
-import type { CliIo } from "@/scripts/monday/run";
-import type { ExportData } from "@/scripts/monday/translate";
+
+import {
+  fakeDrive,
+  io,
+  nestedMapping as sharedNestedMapping,
+  writeExportFolder,
+} from "./apply-fixtures";
 
 const ANA = "11111111-1111-4111-8111-111111111111";
 const CLIENT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -102,146 +98,8 @@ describe("phase B upload MIME type", () => {
   });
 });
 
-/** In-memory Shared Drive: folders and files by id with their parent. */
-function fakeDrive() {
-  const files = new Map<string, DriveFile>();
-  let next = 1;
-  const calls = { uploads: 0 };
-  let failUploadNo: number | null = null;
-  const list = async (options: ListOptions = {}) => {
-    const q = options.q ?? "";
-    const name = /name = '((?:[^'\\]|\\.)*)'/
-      .exec(q)?.[1]
-      ?.replace(/\\(.)/g, "$1");
-    const folderOnly = q.includes(`mimeType = '${FOLDER_MIME_TYPE}'`);
-    const filesOnly = q.includes(`mimeType != '${FOLDER_MIME_TYPE}'`);
-    return {
-      files: [...files.values()].filter(
-        (f) =>
-          (!options.parentId || f.parents?.includes(options.parentId)) &&
-          (!name || f.name === name) &&
-          (!folderOnly || f.mimeType === FOLDER_MIME_TYPE) &&
-          (!filesOnly || f.mimeType !== FOLDER_MIME_TYPE) &&
-          !f.trashed,
-      ),
-    };
-  };
-  const drive = {
-    async createFolder(name: string, parentId: string) {
-      const file: DriveFile = {
-        id: `folder-${next++}`,
-        name,
-        mimeType: FOLDER_MIME_TYPE,
-        parents: [parentId],
-      };
-      files.set(file.id, file);
-      return file;
-    },
-    list,
-    listAll: async (options: ListOptions = {}) => (await list(options)).files,
-    async uploadResumable(input: UploadInput) {
-      calls.uploads += 1;
-      const id = `file-${next++}`;
-      const file: DriveFile = {
-        id,
-        name: input.name,
-        mimeType: input.mimeType,
-        parents: [input.parentId],
-        size: String(input.size),
-        webViewLink: `https://drive.example/${id}`,
-      };
-      files.set(id, file);
-      // The upload reached Drive, then the run died before recording it.
-      if (calls.uploads === failUploadNo) throw new Error("conexión perdida");
-      return file;
-    },
-  };
-  return {
-    drive: drive as unknown as DriveAdmin,
-    files,
-    calls,
-    failUpload: (n: number | null) => {
-      failUploadNo = n;
-    },
-    childrenOf: (parentId: string) =>
-      [...files.values()].filter((f) => f.parents?.includes(parentId)),
-  };
-}
-
-function io() {
-  const out: string[] = [];
-  const err: string[] = [];
-  const cli: CliIo = { stdout: (t) => out.push(t), stderr: (t) => err.push(t) };
-  return { cli, out: () => out.join(""), err: () => err.join("") };
-}
-
-/** The mapping of translate-nested-export.json (checklist, child tasks, item_as_project, crm). */
-function nestedMapping(): MappingInput {
-  const STATUS = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
-    "2": { status: "en_proceso" },
-  } as const;
-  const SUB = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
-  } as const;
-  return {
-    version: 1,
-    boards: [
-      {
-        mondayBoardId: "901",
-        name: "Casa Nido",
-        strategy: "board_as_project",
-        client: { kind: "contact", contactId: CLIENT },
-        columns: {
-          name: "title",
-          status: "status",
-          people: "people",
-          timeline: "timeline",
-          costo: "import_data",
-          planta: "ignore",
-        },
-        subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
-        subitems: "checklist",
-        schedule: { enabled: true, planta: { columnId: "planta" } },
-      },
-      {
-        mondayBoardId: "902",
-        name: "Casa Faro",
-        strategy: "board_as_project",
-        client: { kind: "contact", contactId: CLIENT },
-        columns: { name: "title", status: "status" },
-        subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
-        subitems: "child_tasks",
-      },
-      {
-        mondayBoardId: "903",
-        name: "Obras",
-        strategy: "item_as_project",
-        client: { kind: "contact", contactId: CLIENT },
-        columns: { name: "title", presupuesto: "import_data" },
-        subitemColumns: { name: "title" },
-        statusMaps: {},
-      },
-      {
-        mondayBoardId: "904",
-        name: "Clientes",
-        strategy: "crm_contacts",
-        contactType: "cliente",
-        columns: { name: "title", rfc: "import_data" },
-        statusMaps: {},
-      },
-    ],
-    people: {
-      "11": { action: "staff", staffId: ANA },
-      "14": { action: "ignore" },
-    },
-    options: { includeUpdates: true, includeFiles: true },
-  };
-}
+/** The mapping of translate-nested-export.json with this file's staff and client. */
+const nestedMapping = (): MappingInput => sharedNestedMapping(ANA, CLIENT);
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -284,42 +142,8 @@ describe.skipIf(!url)("apply phase A (test DB)", () => {
 
   /** Writes translate-nested-export.json out as an export folder (BE §4.1). */
   function exportFolder(mapping: MappingInput = nestedMapping()): string {
-    const dir = mkdtempSync(join(tmpdir(), "monday-apply-"));
+    const dir = writeExportFolder(ACCOUNT, mapping);
     dirs.push(dir);
-    const data = structuredClone(nestedFixture) as unknown as ExportData;
-    writeFileSync(
-      join(dir, "manifest.json"),
-      JSON.stringify({
-        account: { id: ACCOUNT, slug: "acme", name: "Acme" },
-        exported_at: "2026-10-20T12:00:00.000Z",
-        api_version: "2026-07",
-        token_user: { id: "1", name: "Ana", email: "ana@acme.mx" },
-        boards: data.boards.map((b) => ({ id: b.board.id })),
-        call_count: 1,
-        errors: [],
-      }),
-    );
-    writeFileSync(join(dir, "users.json"), JSON.stringify(data.users));
-    for (const b of data.boards) {
-      const bd = join(dir, "boards", b.board.id);
-      mkdirSync(bd, { recursive: true });
-      writeFileSync(join(bd, "board.json"), JSON.stringify(b.board));
-      writeFileSync(
-        join(bd, "items.ndjson"),
-        b.items.map((i) => JSON.stringify(i)).join("\n"),
-      );
-      writeFileSync(
-        join(bd, "updates.ndjson"),
-        (b.updates ?? []).map((u) => JSON.stringify(u)).join("\n"),
-      );
-      writeFileSync(join(bd, ".done"), "");
-    }
-    for (const entry of Object.values(data.files ?? {})) {
-      mkdirSync(join(dir, entry.path, ".."), { recursive: true });
-      writeFileSync(join(dir, entry.path), "x");
-    }
-    writeFileSync(join(dir, "files", "index.json"), JSON.stringify(data.files));
-    writeFileSync(join(dir, "mapping.json"), JSON.stringify(mapping));
     return dir;
   }
 
