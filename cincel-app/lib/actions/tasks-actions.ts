@@ -14,7 +14,9 @@ import type {
   TaskLink,
   TaskLinkInput,
   TaskListItem,
+  SubtaskInput,
   TaskPatch,
+  TaskRef,
   TaskStatus,
   UserTaskInput,
 } from "@/lib/types/core";
@@ -75,6 +77,37 @@ export async function createUserTaskAction(input: UserTaskInput): Promise<TaskDe
   return row;
 }
 
+const SUBTASK_ERRORS: Record<string, string> = {
+  TASK_NOT_FOUND: "NOT_FOUND",
+  TASK_NESTED: "NESTED",
+};
+
+/**
+ * Creates a `usuario` child task with the parent's project, phase and
+ * workflow. Same permission as creating a task. Throws FORBIDDEN, NOT_FOUND
+ * or NESTED (the parent is already a subtask).
+ */
+export async function createSubtaskAction(parentId: string, input: SubtaskInput): Promise<TaskDetail> {
+  const user = await requireCapabilityUser();
+  if (!resolveActivitiesCapabilities(user).canCreateActivity) throw new Error("FORBIDDEN");
+  try {
+    const row = await tasksRepository.createSubtask(parentId, input, user.member.id);
+    revalidateTareas(row.projectId);
+    return row;
+  } catch (err) {
+    const code = err instanceof Error ? SUBTASK_ERRORS[err.message] : undefined;
+    if (code) throw new Error(code);
+    throw err;
+  }
+}
+
+/** Live child tasks of a task, for the drawer's Subtareas section. */
+export async function listSubtasksAction(parentId: string): Promise<TaskRef[]> {
+  const caps = await requireTasksCapabilities();
+  if (!caps.canViewActivities) return [];
+  return tasksRepository.listSubtasks(parentId);
+}
+
 export async function updateTaskAction(id: string, patch: TaskPatch): Promise<TaskDetail> {
   const user = await requireCapabilityUser();
   const caps = resolveActivitiesCapabilities(user);
@@ -132,8 +165,8 @@ export async function deleteTaskAction(id: string): Promise<void> {
 }
 
 /**
- * Merge duplicate tasks into `keepId`: checklist/support/history move to
- * the survivor, then the duplicates are soft-deleted. Same capability as a
+ * Merge duplicate tasks into `keepId`: checklist/support/history, child
+ * tasks and dependencies move to the survivor, then the duplicates are soft-deleted. Same capability as a
  * plain task delete — merging is destructive to the losing records.
  */
 export async function mergeTasksAction(keepId: string, duplicateIds: string[]): Promise<TaskDetail> {

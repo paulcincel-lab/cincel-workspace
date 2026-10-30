@@ -8,6 +8,7 @@ import {
   staff,
   taskAttachments,
   taskChecklistItems,
+  taskDependencies,
   taskLinks,
   taskStatuses,
   taskSupport,
@@ -29,7 +30,9 @@ import type {
   TaskLinkInput,
   TaskListItem,
   TaskPatch,
+  TaskRef,
   TaskStatus,
+  SubtaskInput,
   UserTaskInput,
 } from "@/lib/types/core";
 
@@ -396,6 +399,14 @@ async function loadLiveTask(id: string): Promise<TaskRow> {
 
 /** A user task: free-form, on a project, optionally placed in a stage. */
 export async function createUserTask(input: UserTaskInput, actorId: string): Promise<TaskDetail> {
+  return insertUserTask(input, actorId, null);
+}
+
+async function insertUserTask(
+  input: UserTaskInput,
+  actorId: string,
+  parentTaskId: string | null
+): Promise<TaskDetail> {
   if (!input.projectId) throw new Error("TASK_PROJECT_REQUIRED");
   const title = input.title.trim();
   if (!title) throw new Error("TASK_TITLE_REQUIRED");
@@ -404,6 +415,7 @@ export async function createUserTask(input: UserTaskInput, actorId: string): Pro
     .insert(tasks)
     .values({
       projectId: input.projectId,
+      parentTaskId,
       kind: "usuario",
       templateId: null,
       workflowId: input.workflowId ?? null,
@@ -431,6 +443,65 @@ export async function createUserTask(input: UserTaskInput, actorId: string): Pro
     fields: ["created"],
   });
   return (await getTask(row.id))!;
+}
+
+/**
+ * The live parent a subtask would hang from, or an error: TASK_NOT_FOUND when
+ * the parent (or its project) is missing or deleted, TASK_NESTED when the
+ * parent is itself a subtask of a live task. A child whose parent was
+ * soft-deleted behaves as top-level, so it can take subtasks.
+ */
+export async function loadSubtaskParent(parentId: string): Promise<TaskRow> {
+  const [row] = await db
+    .select({ task: tasks })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(and(eq(tasks.id, parentId), isNull(tasks.deletedAt), isNull(projects.deletedAt)))
+    .limit(1);
+  if (!row) throw new Error("TASK_NOT_FOUND");
+  const parent = row.task;
+  if (parent.parentTaskId) {
+    const [grandparent] = await db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.id, parent.parentTaskId), isNull(tasks.deletedAt)))
+      .limit(1);
+    if (grandparent) throw new Error("TASK_NESTED");
+  }
+  return parent;
+}
+
+/** A `usuario` child task with the parent's project, phase and workflow. One level only. */
+export async function createSubtask(parentId: string, input: SubtaskInput, actorId: string): Promise<TaskDetail> {
+  const parent = await loadSubtaskParent(parentId);
+  return insertUserTask(
+    { ...input, projectId: parent.projectId, phase: parent.phase, workflowId: parent.workflowId },
+    actorId,
+    parent.id
+  );
+}
+
+/** Live (not deleted, not archived) child tasks of `parentId`, in list order. */
+export async function listSubtasks(parentId: string): Promise<TaskRef[]> {
+  const rows = await db
+    .select({
+      id: tasks.id,
+      title: tasks.title,
+      status: tasks.status,
+      managerName: staff.name,
+      commitmentDate: tasks.commitmentDate,
+    })
+    .from(tasks)
+    .leftJoin(staff, eq(staff.id, tasks.managerId))
+    .where(and(eq(tasks.parentTaskId, parentId), isNull(tasks.deletedAt), eq(tasks.archived, false)))
+    .orderBy(sql`${tasks.sortOrder} is null`, asc(tasks.sortOrder), asc(tasks.commitmentDate), asc(tasks.title));
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    status: r.status,
+    managerName: r.managerName ?? null,
+    commitmentDate: r.commitmentDate ?? null,
+  }));
 }
 
 export async function updateTask(id: string, patch: TaskPatch, actorId: string): Promise<TaskDetail> {
@@ -521,6 +592,11 @@ export async function softDeleteTask(id: string, actorId: string): Promise<void>
  *   no dedupe needed.
  * - history_events: never deleted — entity_id is repointed at keepId so the
  *   bitácora is preserved in full on the surviving task.
+ * - child tasks (parent_task_id): a duplicate's children move under keepId.
+ *   If keepId is itself a subtask they become top-level (one level only);
+ *   keepId itself never becomes its own child.
+ * - task_dependencies: both sides are repointed at keepId. Pairs that would
+ *   point keepId at itself, or repeat a pair keepId already has, are dropped.
  */
 export async function mergeTasks(
   keepId: string,
@@ -530,7 +606,7 @@ export async function mergeTasks(
   const ids = [...new Set(duplicateIds)].filter((id) => id !== keepId);
   if (ids.length === 0) throw new Error("TASK_MERGE_NO_DUPLICATES");
 
-  await loadLiveTask(keepId);
+  const keep = await loadLiveTask(keepId);
   const dupRows = await db
     .select()
     .from(tasks)
@@ -573,6 +649,53 @@ export async function mergeTasks(
       .update(historyEvents)
       .set({ entityId: keepId })
       .where(and(eq(historyEvents.entity, "task"), inArray(historyEvents.entityId, ids)));
+
+    // Child tasks: move under the survivor, or top-level if the survivor is a subtask.
+    const keepIsSubtask =
+      keep.parentTaskId !== null &&
+      !ids.includes(keep.parentTaskId) &&
+      (
+        await tx
+          .select({ id: tasks.id })
+          .from(tasks)
+          .where(and(eq(tasks.id, keep.parentTaskId), isNull(tasks.deletedAt)))
+          .limit(1)
+      ).length > 0;
+    await tx
+      .update(tasks)
+      .set({ parentTaskId: keepIsSubtask ? null : keepId })
+      .where(and(inArray(tasks.parentTaskId, ids), sql`${tasks.id} <> ${keepId}`));
+    // The survivor was a child of a merged duplicate: it's top-level now.
+    if (keep.parentTaskId !== null && ids.includes(keep.parentTaskId)) {
+      await tx.update(tasks).set({ parentTaskId: null }).where(eq(tasks.id, keepId));
+    }
+
+    // task_dependencies: repoint both sides, dropping self-pairs and repeats.
+    const allIds = [keepId, ...ids];
+    const deps = await tx
+      .select({ id: taskDependencies.id, taskId: taskDependencies.taskId, dependsOnTaskId: taskDependencies.dependsOnTaskId })
+      .from(taskDependencies)
+      .where(or(inArray(taskDependencies.taskId, allIds), inArray(taskDependencies.dependsOnTaskId, allIds)));
+    const remap = (id: string) => (ids.includes(id) ? keepId : id);
+    const seen = new Set<string>();
+    // Rows already on keepId claim their pair first so they're the ones kept.
+    const ordered = [
+      ...deps.filter((d) => !ids.includes(d.taskId) && !ids.includes(d.dependsOnTaskId)),
+      ...deps.filter((d) => ids.includes(d.taskId) || ids.includes(d.dependsOnTaskId)),
+    ];
+    for (const d of ordered) {
+      const taskId = remap(d.taskId);
+      const dependsOnTaskId = remap(d.dependsOnTaskId);
+      const key = `${taskId}:${dependsOnTaskId}`;
+      if (taskId === dependsOnTaskId || seen.has(key)) {
+        await tx.delete(taskDependencies).where(eq(taskDependencies.id, d.id));
+        continue;
+      }
+      seen.add(key);
+      if (taskId !== d.taskId || dependsOnTaskId !== d.dependsOnTaskId) {
+        await tx.update(taskDependencies).set({ taskId, dependsOnTaskId }).where(eq(taskDependencies.id, d.id));
+      }
+    }
 
     // Soft-delete the duplicates, recording it like a normal delete.
     await tx.update(tasks).set({ deletedAt: new Date() }).where(inArray(tasks.id, ids));

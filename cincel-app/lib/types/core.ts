@@ -463,6 +463,9 @@ export type UserTaskInput = {
   deliveryDate?: string | null;
 };
 
+/** Input for a child task: project, phase and workflow come from the parent. */
+export type SubtaskInput = Omit<UserTaskInput, "projectId" | "phase" | "workflowId">;
+
 export type TaskPatch = Partial<
   Pick<
     Task,
