@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { googleOauthAccounts } from "@/lib/db/schema";
@@ -23,8 +23,16 @@ function toAccount(row: typeof googleOauthAccounts.$inferSelect): GoogleOauthAcc
   };
 }
 
+/**
+ * The old connect flow (picker, Calendar sync) only uses legacy rows, with
+ * `google_sub` null and plaintext tokens. Rows written by staff Google
+ * sign-in carry `google_sub` and encrypted tokens and are skipped here
+ * (review NB 5).
+ */
+const legacyRow = (staffId: string) => and(eq(googleOauthAccounts.staffId, staffId), isNull(googleOauthAccounts.googleSub));
+
 export async function getGoogleOauthAccount(staffId: string): Promise<GoogleOauthAccount | null> {
-  const [row] = await db.select().from(googleOauthAccounts).where(eq(googleOauthAccounts.staffId, staffId)).limit(1);
+  const [row] = await db.select().from(googleOauthAccounts).where(legacyRow(staffId)).limit(1);
   return row ? toAccount(row) : null;
 }
 
@@ -55,6 +63,7 @@ export async function upsertGoogleOauthAccount(
         ...(input.refreshToken ? { refreshToken: input.refreshToken } : {}),
         scope: input.scope,
         expiresAt: input.expiresAt,
+        googleSub: null,
       },
     });
 }
@@ -67,7 +76,7 @@ export async function updateGoogleOauthTokens(
   await db
     .update(googleOauthAccounts)
     .set({ accessToken: input.accessToken, expiresAt: input.expiresAt })
-    .where(eq(googleOauthAccounts.staffId, staffId));
+    .where(legacyRow(staffId));
 }
 
 export async function deleteGoogleOauthAccount(staffId: string): Promise<void> {
