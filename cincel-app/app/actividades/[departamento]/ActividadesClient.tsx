@@ -30,6 +30,7 @@ import { DEPARTMENTOS, GENERAL_SLUG, phasesFor } from "@/lib/actividades/departa
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
+import { SubtaskCountBadge, SubtaskOfLine, WaitingBadge } from "@/components/tareas/TaskRowMeta";
 import {
   isDueDateLate,
   isTaskClosed,
@@ -771,7 +772,9 @@ export function ActividadesClient({
                     <Input autoFocus value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className="text-sm" />
                   )}
                 />
+                <SubtaskOfLine task={task} />
               </div>
+              <SubtaskCountBadge task={task} />
               <Button variant="outline" size="sm" className="h-6 w-6 shrink-0 rounded-full p-0 text-xs" onClick={() => setSelectedTaskId(task.id)} title="Ver detalle">
                 ⓘ
               </Button>
@@ -864,12 +867,15 @@ export function ActividadesClient({
             viewerId,
           });
           return (
-            <TaskStatusCell
-              task={task}
-              customStatuses={customStatuses}
-              canChange={canChange}
-              onChange={(value) => void changeStatus(task, value)}
-            />
+            <div className="flex items-center gap-2">
+              <TaskStatusCell
+                task={task}
+                customStatuses={customStatuses}
+                canChange={canChange}
+                onChange={(value) => void changeStatus(task, value)}
+              />
+              <WaitingBadge waitingOn={task.waitingOn} />
+            </div>
           );
         },
       },
