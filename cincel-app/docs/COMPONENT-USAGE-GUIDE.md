@@ -845,16 +845,16 @@ Two rules cover every screen: the **chrome** (layout, navigation, cards, forms, 
 |-----|--------|------------------|------|
 | Chrome surfaces and text | `background`, `foreground`, `card`, `popover`, `primary`, `secondary`, `muted`, `muted-foreground`, `accent`, `border`, `input`, `ring`, `sidebar-*` | `bg-background`, `text-foreground`, `bg-card`, `bg-muted`, `text-muted-foreground`, `border-border`, ... | Monochrome only. No new brand hues. |
 | Data series | `chart-1` … `chart-5` | `fill-chart-1`, `bg-chart-2`, `var(--chart-3)` | Fixed order, never cycled. A 6th series folds into "Otros". |
-| Área (department) | assigned `chart-*` slot per área | from the área color helper (#587) | Stored per área, never picked in a component. |
-| Task status | Badge variants `outline`, `secondary`, `success`, `destructive` | `BASE_STATUS_VARIANT` / `customStatusVariant` in `lib/tasks/status-options.ts` | One mapping for the whole app (#588). |
-| Negative / error | `destructive` | `variant="destructive"`, `text-destructive` | Only blocked, late and errors. |
-| Positive change | `success`, `success-foreground` | `variant="success"`, `text-success-foreground` | Only positive change (done, up vs. last period). |
+| Área (department) | assigned `chart-*` slot per área | `areaColorClass` / `areaColorVar` in `lib/areas/area-color.ts`, `<AreaBadge>` | Stored per área, never picked in a component. |
+| Task status | Completado `chart-1`, En proceso `chart-2`, Pendiente `chart-3`, Bloqueado `destructive` | `BASE_STATUS_COLOR` / `statusColorToken` in `lib/tasks/status-options.ts`, `<StatusBadge>` / `<StatusDot>` | One mapping for the whole app. Custom statuses take their base status's color. |
+| Negative / error | `destructive` | `variant="destructive"`, `text-destructive`, `changeToneClass(delta)`, `isDueDateLate` | Only blocked, late and errors. |
+| Positive change | `success`, `success-foreground` | `variant="success"`, `text-success-foreground`, `changeToneClass(delta)` | Only positive change (done, up vs. last period). |
 
 ### Rules
 
 - **Chrome stays monochrome.** Use the chrome tokens above and plain shadcn variants. Don't add brand hues, colored wrappers, or `className` color overrides.
 - **Data uses `chart-1..5` in fixed order.** Series 1 is always `chart-1`, series 2 always `chart-2`, and so on. Never cycle back to `chart-1` for a 6th series; group everything after the 5th into one "Otros" series (use a neutral chrome token such as `muted-foreground` for it).
-- **Área and status colors come from their helpers.** The área color is stored per área (Configuración → Áreas) and read through its helper; task status goes through `BASE_STATUS_VARIANT` / `customStatusVariant`. A component never maps an área or status to a color itself.
+- **Área and status colors come from their helpers.** The área color is stored per área (Configuración → Áreas) and read through its helper; task status goes through `statusColorToken` (dots, badges, `statusColorVar` for chart slices). A component never maps an área or status to a color itself.
 - **Red means a problem.** `destructive` is reserved for blocked, late and errors. Don't use it for emphasis, for a series color, or for "delete" styling beyond the shadcn destructive button.
 - **Green means positive change.** `success` only for done / improvement. Don't use it as a generic accent.
 - **Never color alone.** Every color has a legend, a text label or an icon next to it, so the meaning survives for color-blind users and in grayscale prints.
@@ -890,7 +890,7 @@ const color = `var(--chart-${(index % 5) + 1})`;
 
 ```tsx
 // Do: status through the shared mapping
-<Badge variant={BASE_STATUS_VARIANT[task.status]}>{label}</Badge>
+<StatusBadge label={taskStatusLabel(task)} token={statusColorToken(task)} />
 
 // Don't: local switch with ad-hoc colors
 <Badge className={task.status === "bloqueado" ? "bg-red-500" : "bg-green-500"}>{label}</Badge>
@@ -1309,7 +1309,7 @@ export default async function ProjectsDashboard() {
 - [ ] Use `DataTable` for list displays (not hand-rolled `<table>`)
 - [ ] Wrap modals/drawers with `DialogOverlay` for accessibility
 - [ ] Pass `triggerRef` to dialogs for focus management
-- [ ] Follow the [Color](#color) rules: monochrome chrome, `chart-1..5` for data, status variants from `lib/tasks/status-options.ts`
+- [ ] Follow the [Color](#color) rules: monochrome chrome, `chart-1..5` for data, status colors from `lib/tasks/status-options.ts`
 - [ ] Validate forms before submission
 - [ ] Handle loading/error states
 - [ ] Use server components where possible

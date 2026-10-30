@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
-import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
@@ -25,7 +24,8 @@ import {
   fetchTaskStatusesAction,
   updateTaskStatusAction,
 } from "@/lib/actions/task-statuses-actions";
-import { customStatusVariant } from "@/lib/tasks/status-options";
+import { StatusBadge } from "@/components/v2/status/StatusBadge";
+import { BASE_STATUS_COLOR, customStatusBase } from "@/lib/tasks/status-options";
 import type { TaskStatusOption } from "@/lib/types/core";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -117,9 +117,7 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
         accessorKey: "name",
         header: "Estatus",
         cell: ({ row }) => (
-          <Badge variant={customStatusVariant(row.original)}>
-            {row.original.name}
-          </Badge>
+          <StatusBadge label={row.original.name} token={BASE_STATUS_COLOR[customStatusBase(row.original)]} />
         ),
       },
       {

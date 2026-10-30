@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { BASE_STATUS_COLOR, statusBorderClass, statusTintClass } from "@/lib/tasks/status-options";
+import type { TaskStatus } from "@/lib/types/core";
 import type { ScheduleStatus, ScheduleTask } from "@/lib/types/schedule";
 
 export const STATUS_LABEL: Record<ScheduleStatus, string> = {
@@ -13,11 +15,17 @@ const STATUS_ICON: Record<ScheduleStatus, string> = {
   done: "✓",
 };
 
-const STATUS_CLASS: Record<ScheduleStatus, string> = {
-  pending: "border-border bg-card text-muted-foreground",
-  progress: "border-yellow-500/50 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
-  done: "border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400",
+/** Schedule statuses read as the matching task status, so they share its color. */
+const STATUS_BASE: Record<ScheduleStatus, TaskStatus> = {
+  pending: "pendiente",
+  progress: "en_proceso",
+  done: "completado",
 };
+
+function statusClass(status: ScheduleStatus): string {
+  const token = BASE_STATUS_COLOR[STATUS_BASE[status]];
+  return cn(statusBorderClass(token), statusTintClass(token), "text-foreground");
+}
 
 /** Click cycles pending -> progress -> done -> pending. */
 const STATUS_NEXT: Record<ScheduleStatus, ScheduleStatus> = {
@@ -69,7 +77,7 @@ export function TaskCard({ task, className, readOnly = false, onCycleStatus, onT
           type="button"
           className={cn(
             "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            STATUS_CLASS[task.status]
+            statusClass(task.status)
           )}
           aria-label={`Estado: ${STATUS_LABEL[task.status]} — ${STATUS_ACTION_LABEL[task.status]}`}
           title={`${STATUS_LABEL[task.status]} — ${STATUS_ACTION_LABEL[task.status]}`}
@@ -81,7 +89,7 @@ export function TaskCard({ task, className, readOnly = false, onCycleStatus, onT
         <span
           className={cn(
             "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
-            STATUS_CLASS[task.status]
+            statusClass(task.status)
           )}
           aria-label={`Estado: ${STATUS_LABEL[task.status]}`}
           title={STATUS_LABEL[task.status]}

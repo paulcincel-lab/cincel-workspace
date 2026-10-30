@@ -11,8 +11,17 @@ import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
-import type { TaskListItem, TaskStatus } from "@/lib/types/core";
-import { statusSelectValue, taskStatusLabel } from "@/lib/tasks/status-options";
+import { StatusDot } from "@/components/v2/status/StatusBadge";
+import type { TaskListItem } from "@/lib/types/core";
+import {
+  BASE_STATUSES,
+  BASE_STATUS_COLOR,
+  BASE_STATUS_LABEL,
+  statusColorToken,
+  statusSelectValue,
+  taskStatusLabel,
+  type StatusColorToken,
+} from "@/lib/tasks/status-options";
 
 interface DashboardClientProps {
   initialProjects: ProjectItem[];
@@ -27,14 +36,6 @@ function toDate(value: string | null): Date | null {
 function effectiveDueDate(task: TaskListItem): string | null {
   return task.deliveryDate || task.commitmentDate;
 }
-
-const STATUS_ORDER: TaskStatus[] = ["pendiente", "en_proceso", "completado", "bloqueado"];
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  pendiente: "Pendiente",
-  en_proceso: "En proceso",
-  completado: "Completado",
-  bloqueado: "Bloqueado",
-};
 
 export function DashboardClient({ initialProjects }: DashboardClientProps) {
   const { projectsData, isLoadingData } = useProjectsData(initialProjects);
@@ -110,12 +111,15 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
   // Built-in statuses always listed; custom statuses are their own rows, when in use.
   const statusMix = useMemo(() => {
     const total = activeTasks.length || 1;
-    const rows = new Map<string, { status: string; label: string; count: number }>(
-      STATUS_ORDER.map((status) => [status, { status, label: STATUS_LABEL[status], count: 0 }])
+    const rows = new Map<string, { status: string; label: string; token: StatusColorToken; count: number }>(
+      BASE_STATUSES.map((status) => [
+        status,
+        { status, label: BASE_STATUS_LABEL[status], token: BASE_STATUS_COLOR[status], count: 0 },
+      ])
     );
     activeTasks.forEach((t) => {
       const key = statusSelectValue(t);
-      const row = rows.get(key) ?? { status: key, label: taskStatusLabel(t), count: 0 };
+      const row = rows.get(key) ?? { status: key, label: taskStatusLabel(t), token: statusColorToken(t), count: 0 };
       row.count += 1;
       rows.set(key, row);
     });
@@ -167,14 +171,12 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
                 {attention.map((t) => (
                   <li key={t.id} className="flex items-center justify-between text-[12.5px]">
                     <span className="flex items-center gap-2">
-                      <span className="size-1.5 rounded-full bg-destructive" />
+                      <StatusDot token={statusColorToken(t)} />
                       {t.project.name} — {t.title}
                       {t.workflow ? <AreaBadge name={t.workflow.name} colorSlot={t.areaColorSlot} /> : null}
-                      {t.customStatus ? (
-                        <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                          {taskStatusLabel(t)}
-                        </span>
-                      ) : null}
+                      <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {taskStatusLabel(t)}
+                      </span>
                     </span>
                     <Link
                       href={`/proyectos/${t.projectId}/ficha`}
@@ -200,7 +202,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
             {statusMix.map((s) => (
               <div key={s.status} className="flex items-center justify-between text-[12.5px]">
                 <span className="flex items-center gap-2">
-                  <span className="size-1.5 rounded-full bg-foreground" />
+                  <StatusDot token={s.token} />
                   {s.label}
                 </span>
                 <span className="tabular-nums text-muted-foreground">{Math.round(s.percent)}%</span>
