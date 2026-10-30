@@ -54,8 +54,18 @@ const tasks: TaskListItem[] = [
   },
 ];
 
+let currentTasks: TaskListItem[] = tasks;
+
+function isoInDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 vi.mock("@/lib/actions/tasks-actions", () => ({
-  fetchTasksAction: () => Promise.resolve(tasks),
+  fetchTasksAction: () => Promise.resolve(currentTasks),
 }));
 
 const fetchTrend = vi.fn();
@@ -67,6 +77,7 @@ import { DashboardClient } from "./DashboardClient";
 
 describe("DashboardClient widgets", () => {
   beforeEach(() => {
+    currentTasks = tasks;
     fetchTrend.mockReset();
     fetchTrend.mockResolvedValue({
       labels: ["LUN", "MAR"],
@@ -96,12 +107,65 @@ describe("DashboardClient widgets", () => {
       screen.getByRole("link", { name: "Ver todas →" }).getAttribute("href"),
     ).toBe("/actividades/general");
 
+    expect(cells.getByText("Vencida")).toBeTruthy();
+
+    // 4 KPI cards + 2 tables + trend + 2 donuts.
     const cards = container.querySelectorAll('[data-slot="card"]');
-    expect(cards.length).toBe(4);
-    cards.forEach((card) =>
-      expect(card.querySelector('[data-slot="card-title"]')).not.toBeNull(),
-    );
+    expect(cards.length).toBe(9);
+    const kpi = screen.getByText("Vencidas").closest('[data-slot="card"]');
+    expect(kpi?.textContent).toContain("1");
+    expect(kpi?.querySelector(".text-destructive")).not.toBeNull();
     expect(container.querySelectorAll('[data-slot="table"]').length).toBe(1);
+    expect(
+      screen.getByText("Sin revisiones en los próximos 7 días."),
+    ).toBeTruthy();
+  });
+
+  it("lists an overdue and blocked task once with both reasons", async () => {
+    currentTasks = [{ ...tasks[0], status: "bloqueado", manager: null }];
+    render(<DashboardClient initialProjects={[]} />);
+
+    const titles = await screen.findAllByText("Render de fachada norte");
+    expect(titles.length).toBe(1);
+    const cells = within(titles[0].closest("tr")!);
+    expect(cells.getByText("Vencida")).toBeTruthy();
+    expect(cells.getByText("Bloqueada")).toBeTruthy();
+    expect(
+      cells
+        .getAllByText("Sin responsable")
+        .some((el) => el.dataset.slot === "badge"),
+    ).toBe(true);
+  });
+
+  it("lists upcoming reviews sorted by date", async () => {
+    currentTasks = [
+      {
+        ...tasks[0],
+        id: "r2",
+        title: "Revisión tardía",
+        commitmentDate: null,
+        reviewDate: isoInDays(5),
+      },
+      {
+        ...tasks[0],
+        id: "r1",
+        title: "Revisión próxima",
+        commitmentDate: null,
+        reviewDate: isoInDays(1),
+      },
+    ];
+    render(<DashboardClient initialProjects={[]} />);
+
+    const card = (await screen.findByText("Revisiones próximas")).closest(
+      '[data-slot="card"]',
+    ) as HTMLElement;
+    await waitFor(() =>
+      expect(within(card).getAllByRole("row").length).toBe(3),
+    );
+    const rows = within(card).getAllByRole("row");
+    expect(rows[1].textContent).toContain("Revisión próxima");
+    expect(rows[2].textContent).toContain("Revisión tardía");
+    expect(within(card).queryByText("Motivo")).toBeNull();
   });
 
   it("shows the status donut legend and the projects empty state", async () => {
@@ -152,7 +216,7 @@ describe("DashboardClient widgets", () => {
         "Sin tareas creadas ni completadas en este periodo.",
       ),
     ).toBeNull();
-    expect(container.querySelectorAll('[data-slot="card"]').length).toBe(4);
+    expect(container.querySelectorAll('[data-slot="card"]').length).toBe(9);
   });
 });
 
