@@ -47,6 +47,12 @@ export type DriveFile = {
   modifiedTime?: string;
   /** Only when asked for in `fields`. */
   createdTime?: string;
+  /** Only when asked for in `fields`. */
+  webViewLink?: string;
+  /** Only when asked for in `fields`. */
+  iconLink?: string;
+  /** Only when asked for in `fields`. */
+  thumbnailLink?: string;
 };
 
 export type DriveFileList = { files: DriveFile[]; nextPageToken?: string };

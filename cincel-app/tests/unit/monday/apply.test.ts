@@ -1,6 +1,7 @@
 // @vitest-environment node
 /**
- * scripts/monday/apply.ts phase A (BE §7, §12 #3, #4, #5).
+ * scripts/monday/apply.ts phase A (BE §7, §12 #3, #4, #5) and phase B
+ * (scripts/monday/apply-phase-b.ts, BE §7, §12 #10, #11).
  *
  * Argument parsing runs everywhere. The command tests need TEST_DATABASE_URL
  * pointing at a migrated database; each runs in a transaction that is rolled
@@ -17,7 +18,17 @@ import postgres from "postgres";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/lib/db/schema";
-import type { DriveAdmin } from "@/lib/google/drive-admin";
+import {
+  FOLDER_MIME_TYPE,
+  type DriveAdmin,
+  type DriveFile,
+  type ListOptions,
+  type UploadInput,
+} from "@/lib/google/drive-admin";
+import {
+  CLIENT_FOLDER_NAME,
+  INTERNAL_FOLDER_NAME,
+} from "@/lib/google/project-folders";
 import type { ImportDb, ImportEntity } from "@/lib/import/refs";
 import nestedFixture from "@/scripts/monday/__fixtures__/translate-nested-export.json";
 import {
@@ -26,6 +37,11 @@ import {
   parseApplyArgs,
   type PhaseB,
 } from "@/scripts/monday/apply";
+import {
+  createPhaseB,
+  IMPORT_FOLDER_NAME,
+  mimeTypeFor,
+} from "@/scripts/monday/apply-phase-b";
 import type { MondayDbHandle } from "@/scripts/monday/db";
 import type { MappingInput } from "@/scripts/monday/mapping.schema";
 import {
@@ -76,6 +92,81 @@ describe("apply arguments", () => {
     expect(openDb).not.toHaveBeenCalled();
   });
 });
+
+describe("phase B upload MIME type", () => {
+  it("maps known extensions and falls back to octet-stream", () => {
+    expect(mimeTypeFor("muros.PDF")).toBe("application/pdf");
+    expect(mimeTypeFor("foto.jpg")).toBe("image/jpeg");
+    expect(mimeTypeFor("plano.xyz")).toBe("application/octet-stream");
+    expect(mimeTypeFor("sin-extension")).toBe("application/octet-stream");
+  });
+});
+
+/** In-memory Shared Drive: folders and files by id with their parent. */
+function fakeDrive() {
+  const files = new Map<string, DriveFile>();
+  let next = 1;
+  const calls = { uploads: 0 };
+  let failUploadNo: number | null = null;
+  const list = async (options: ListOptions = {}) => {
+    const q = options.q ?? "";
+    const name = /name = '((?:[^'\\]|\\.)*)'/
+      .exec(q)?.[1]
+      ?.replace(/\\(.)/g, "$1");
+    const folderOnly = q.includes(`mimeType = '${FOLDER_MIME_TYPE}'`);
+    const filesOnly = q.includes(`mimeType != '${FOLDER_MIME_TYPE}'`);
+    return {
+      files: [...files.values()].filter(
+        (f) =>
+          (!options.parentId || f.parents?.includes(options.parentId)) &&
+          (!name || f.name === name) &&
+          (!folderOnly || f.mimeType === FOLDER_MIME_TYPE) &&
+          (!filesOnly || f.mimeType !== FOLDER_MIME_TYPE) &&
+          !f.trashed,
+      ),
+    };
+  };
+  const drive = {
+    async createFolder(name: string, parentId: string) {
+      const file: DriveFile = {
+        id: `folder-${next++}`,
+        name,
+        mimeType: FOLDER_MIME_TYPE,
+        parents: [parentId],
+      };
+      files.set(file.id, file);
+      return file;
+    },
+    list,
+    listAll: async (options: ListOptions = {}) => (await list(options)).files,
+    async uploadResumable(input: UploadInput) {
+      calls.uploads += 1;
+      const id = `file-${next++}`;
+      const file: DriveFile = {
+        id,
+        name: input.name,
+        mimeType: input.mimeType,
+        parents: [input.parentId],
+        size: String(input.size),
+        webViewLink: `https://drive.example/${id}`,
+      };
+      files.set(id, file);
+      // The upload reached Drive, then the run died before recording it.
+      if (calls.uploads === failUploadNo) throw new Error("conexión perdida");
+      return file;
+    },
+  };
+  return {
+    drive: drive as unknown as DriveAdmin,
+    files,
+    calls,
+    failUpload: (n: number | null) => {
+      failUploadNo = n;
+    },
+    childrenOf: (parentId: string) =>
+      [...files.values()].filter((f) => f.parents?.includes(parentId)),
+  };
+}
 
 function io() {
   const out: string[] = [];
@@ -456,6 +547,197 @@ describe.skipIf(!url)("apply phase A (test DB)", () => {
           .from(schema.importFiles)
           .where(eq(schema.importFiles.batchId, second.id)),
       ).toEqual([]);
+    });
+  });
+
+  it("phase B: uploads into Importado de monday/<group>, links them, resumes without duplicates and ends applied", async () => {
+    await inTx(async (tx) => {
+      await seed(tx);
+      const dir = exportFolder();
+      const by = ["--export", dir, "--by", "ana.apply@example.com"];
+      expect(await command(tx)(by, io().cli)).toBe(0);
+      const [batch] = await batchesOf(tx);
+      const files = await tx
+        .select()
+        .from(schema.importFiles)
+        .where(eq(schema.importFiles.batchId, batch.id));
+      expect(files.length).toBeGreaterThan(1);
+      const projectRefs = await tx
+        .select()
+        .from(schema.importRefs)
+        .where(
+          sql`${schema.importRefs.batchId} = ${batch.id} and ${schema.importRefs.entity} = 'project'`,
+        );
+
+      // One project already has its root folder: it must be kept.
+      const fake = fakeDrive();
+      const sd = "sd1";
+      const keptProject = files[0].projectId;
+      const existing = await fake.drive.createFolder("Carpeta previa", sd);
+      await tx
+        .update(schema.projects)
+        .set({ driveFolderId: existing.id })
+        .where(eq(schema.projects.id, keptProject));
+
+      const phaseB = createPhaseB({
+        openDrive: () => fake.drive,
+        env: { GOOGLE_SHARED_DRIVE_ID: sd },
+      });
+
+      // The first run dies on the second upload, after Drive stored it.
+      fake.failUpload(2);
+      const first = io();
+      expect(await command(tx, phaseB)(by, first.cli)).toBe(1);
+      expect(first.err()).toContain("conexión perdida");
+      expect(first.err()).toContain("stays applying");
+      expect((await batchesOf(tx))[0].status).toBe("applying");
+
+      // The re-run reuses the orphan upload and finishes.
+      fake.failUpload(null);
+      const second = io();
+      expect(await command(tx, phaseB)(by, second.cli)).toBe(0);
+      expect(second.out()).toContain("skipping phase A");
+      expect(second.out()).toContain("1 reused");
+      expect(second.out()).toContain(`Batch ${batch.id} applied.`);
+      expect(fake.calls.uploads).toBe(files.length);
+
+      const [done] = await batchesOf(tx);
+      expect(done.status).toBe("applied");
+      expect(done.stats).toMatchObject({
+        created: expect.any(Object),
+        drive: { files: files.length, pending: 0, failedProjects: 0 },
+      });
+
+      const after = await tx
+        .select()
+        .from(schema.importFiles)
+        .where(eq(schema.importFiles.batchId, batch.id));
+      const uploaded = [...fake.files.values()].filter(
+        (f) => f.mimeType !== FOLDER_MIME_TYPE,
+      );
+      expect(uploaded).toHaveLength(files.length);
+      expect(new Set(after.map((f) => f.driveFileId)).size).toBe(files.length);
+      expect(after.every((f) => f.error == null)).toBe(true);
+
+      for (const f of after) {
+        const [p] = await tx
+          .select()
+          .from(schema.projects)
+          .where(eq(schema.projects.id, f.projectId));
+        const internal = fake.files.get(p.driveInternalFolderId!)!;
+        expect(internal.name).toBe(INTERNAL_FOLDER_NAME);
+        const importFolder = fake.files.get(p.driveImportFolderId!)!;
+        expect(importFolder).toMatchObject({
+          name: IMPORT_FOLDER_NAME,
+          parents: [internal.id],
+        });
+        const driveFile = fake.files.get(f.driveFileId!)!;
+        const parent = fake.files.get(driveFile.parents![0])!;
+        if (f.groupName) {
+          expect(parent).toMatchObject({
+            name: f.groupName,
+            parents: [importFolder.id],
+          });
+        } else {
+          expect(parent.id).toBe(importFolder.id);
+        }
+        // Nothing lands in 02 Cliente.
+        expect(fake.files.get(p.driveClientFolderId!)!.name).toBe(
+          CLIENT_FOLDER_NAME,
+        );
+        expect(fake.childrenOf(p.driveClientFolderId!)).toEqual([]);
+
+        // Linked on its task or project as interno, with import refs.
+        const [df] = await tx
+          .select()
+          .from(schema.driveFiles)
+          .where(eq(schema.driveFiles.googleFileId, f.driveFileId!));
+        expect(df.webViewLink).toBe(driveFile.webViewLink);
+        const linkEntity = f.taskId ? "task_link" : "project_link";
+        const refs = await tx
+          .select()
+          .from(schema.importRefs)
+          .where(
+            sql`${schema.importRefs.externalId} = ${f.assetId} and ${schema.importRefs.entity} in ('drive_file', ${linkEntity})`,
+          );
+        expect(refs.map((r) => r.entity).sort()).toEqual(
+          ["drive_file", linkEntity].sort(),
+        );
+        expect(refs.find((r) => r.entity === "drive_file")!.rowId).toBe(df.id);
+        const linkRef = refs.find((r) => r.entity === linkEntity)!;
+        if (f.taskId) {
+          const [link] = await tx
+            .select()
+            .from(schema.taskLinks)
+            .where(eq(schema.taskLinks.id, linkRef.rowId));
+          expect(link).toMatchObject({
+            taskId: f.taskId,
+            kind: "interno",
+            title: f.fileName,
+            url: driveFile.webViewLink,
+            createdById: ANA,
+          });
+          expect(linkRef.rowUpdatedAt?.getTime()).toBe(
+            link.updatedAt.getTime(),
+          );
+        } else {
+          const [link] = await tx
+            .select()
+            .from(schema.projectLinks)
+            .where(eq(schema.projectLinks.id, linkRef.rowId));
+          expect(link).toMatchObject({
+            projectId: f.projectId,
+            kind: "interno",
+            title: f.fileName,
+            driveFileId: df.id,
+          });
+        }
+      }
+
+      // The project with a root folder kept it; one new root per other project.
+      const [kept] = await tx
+        .select()
+        .from(schema.projects)
+        .where(eq(schema.projects.id, keptProject));
+      expect(kept.driveFolderId).toBe(existing.id);
+      expect(fake.childrenOf(sd)).toHaveLength(projectRefs.length);
+
+      // Project refs follow the drive_* writes, so rollback sees no edit.
+      for (const ref of projectRefs) {
+        const [p] = await tx
+          .select()
+          .from(schema.projects)
+          .where(eq(schema.projects.id, ref.rowId));
+        expect(p.driveFolderStatus).toBe("ready");
+        expect(p.driveImportFolderId).toBeTruthy();
+        const [fresh] = await tx
+          .select()
+          .from(schema.importRefs)
+          .where(
+            sql`${schema.importRefs.entity} = 'project' and ${schema.importRefs.externalId} = ${ref.externalId}`,
+          );
+        expect(fresh.rowUpdatedAt?.getTime()).toBe(p.updatedAt.getTime());
+      }
+    });
+  });
+
+  it("phase B without GOOGLE_SHARED_DRIVE_ID leaves the batch applying", async () => {
+    await inTx(async (tx) => {
+      await seed(tx);
+      const dir = exportFolder();
+      const phaseB = createPhaseB({
+        openDrive: () => fakeDrive().drive,
+        env: {},
+      });
+      const c = io();
+      expect(
+        await command(tx, phaseB)(
+          ["--export", dir, "--by", "ana.apply@example.com"],
+          c.cli,
+        ),
+      ).toBe(1);
+      expect(c.err()).toContain("GOOGLE_SHARED_DRIVE_ID is not set");
+      expect((await batchesOf(tx))[0].status).toBe("applying");
     });
   });
 });
