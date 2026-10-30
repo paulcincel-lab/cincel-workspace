@@ -122,7 +122,7 @@ test.describe("Proyectos — create and edit", () => {
     await phases.locator("label").filter({ hasText: /^Inicial$/ }).getByRole("checkbox").click();
     await phases.getByPlaceholder("Otra fase…").fill("Fase especial E2E");
     await phases.getByRole("button", { name: "Agregar fase" }).click();
-    await page.getByRole("button", { name: "Guardar" }).click();
+    await page.getByRole("button", { name: "Guardar", exact: true }).click();
 
     // Persisted after reload.
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -170,7 +170,7 @@ test.describe("Proyectos — create and edit", () => {
     await page.locator("label").filter({ hasText: /^Cliente/ }).first().getByRole("combobox").click();
     await page.getByRole("option", { name: newClient }).click();
     page.once("dialog", (dialog) => void dialog.accept());
-    await page.getByRole("button", { name: "Guardar" }).click();
+    await page.getByRole("button", { name: "Guardar", exact: true }).click();
 
     await expect(page.getByRole("link", { name: newClient })).toBeVisible({ timeout: 15_000 });
     await page.reload({ waitUntil: "domcontentloaded" });
