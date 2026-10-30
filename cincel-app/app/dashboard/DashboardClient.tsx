@@ -2,25 +2,56 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangleIcon, CalendarCheckIcon, FolderKanbanIcon, ListChecksIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  FolderKanbanIcon,
+  ListChecksIcon,
+} from "lucide-react";
 
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/shadcn/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/shadcn/table";
 
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
 import { AreaBadge } from "@/components/v2/status/AreaBadge";
-import { LoadBar } from "@/components/v2/status/LoadBar";
-import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
+import {
+  useProjectsData,
+  type ProjectItem,
+} from "@/lib/proyectos/use-projects-data";
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
+import {
+  resolveDashboardCapabilities,
+  scopeDashboardProjects,
+  scopeDashboardTasks,
+} from "@/lib/auth/permissions";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import { cn } from "@/lib/utils";
 import type { TaskListItem } from "@/lib/types/core";
-import { isDueDateLate, statusColorToken, taskStatusLabel } from "@/lib/tasks/status-options";
-import { projectsByArea, tasksByBaseStatus } from "@/lib/dashboard/donut-groups";
+import {
+  isDueDateLate,
+  statusColorToken,
+  taskStatusLabel,
+} from "@/lib/tasks/status-options";
+import {
+  projectsByArea,
+  tasksByBaseStatus,
+} from "@/lib/dashboard/donut-groups";
 import { DonutCard } from "./DonutCard";
+import { TaskTrendCard } from "./TaskTrendCard";
 
 interface DashboardClientProps {
   initialProjects: ProjectItem[];
@@ -33,9 +64,13 @@ function toDate(value: string | null): Date | null {
 }
 
 /** Small mono uppercase label used for the widget table headers. */
-const SECTION_LABEL = "font-mono text-[11px] font-normal tracking-wider uppercase";
+const SECTION_LABEL =
+  "font-mono text-[11px] font-normal tracking-wider uppercase";
 
-const SHORT_DATE = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" });
+const SHORT_DATE = new Intl.DateTimeFormat("es-MX", {
+  day: "numeric",
+  month: "short",
+});
 
 function toIsoDate(date: Date): string {
   const y = date.getFullYear();
@@ -59,7 +94,9 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
 
   useEffect(() => {
-    void fetchTasksAction({ archived: false }).then(setAllTasks).catch(() => undefined);
+    void fetchTasksAction({ archived: false })
+      .then(setAllTasks)
+      .catch(() => undefined);
   }, []);
 
   const today = useMemo(() => {
@@ -73,7 +110,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
   // tasks outside their scope just because this is the "new" page.
   const dashboardCapabilities = useMemo(
     () => resolveDashboardCapabilities(authenticatedUser),
-    [authenticatedUser]
+    [authenticatedUser],
   );
 
   const viewerId = authenticatedUser?.member.id ?? "";
@@ -86,7 +123,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         viewerId,
         dataScope: dashboardCapabilities.dataScope,
       }),
-    [allTasks, viewerId, dashboardCapabilities.dataScope, projectsData]
+    [allTasks, viewerId, dashboardCapabilities.dataScope, projectsData],
   );
 
   const scopedAllTasks = useMemo(
@@ -95,15 +132,22 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         tasks: allTasks,
         viewerId,
         dataScope: dashboardCapabilities.dataScope,
-        allowedProjectIds: new Set(scopedProjectsData.map((project) => project.id)),
+        allowedProjectIds: new Set(
+          scopedProjectsData.map((project) => project.id),
+        ),
       }),
-    [allTasks, viewerId, dashboardCapabilities.dataScope, scopedProjectsData]
+    [allTasks, viewerId, dashboardCapabilities.dataScope, scopedProjectsData],
   );
 
-  const activeTasks = useMemo(() => scopedAllTasks.filter((t) => !t.archived), [scopedAllTasks]);
+  const activeTasks = useMemo(
+    () => scopedAllTasks.filter((t) => !t.archived),
+    [scopedAllTasks],
+  );
 
   const kpis = useMemo(() => {
-    const activeProjects = scopedProjectsData.filter((p) => p.status === "activo").length;
+    const activeProjects = scopedProjectsData.filter(
+      (p) => p.status === "activo",
+    ).length;
 
     const overdue = activeTasks.filter((t) => {
       const due = toDate(effectiveDueDate(t));
@@ -124,25 +168,21 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     return { activeProjects, overdue, blocked, reviews, noOwner };
   }, [scopedProjectsData, activeTasks, today]);
 
-  const tasksByStatus = useMemo(() => tasksByBaseStatus(activeTasks), [activeTasks]);
-
-  const projectsByDepartment = useMemo(
-    () => projectsByArea(scopedProjectsData.filter((p) => p.status === "activo")),
-    [scopedProjectsData]
+  const tasksByStatus = useMemo(
+    () => tasksByBaseStatus(activeTasks),
+    [activeTasks],
   );
 
-  const weeklyProgress = useMemo(() => {
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay());
-    const dueThisWeek = activeTasks.filter((t) => {
-      const due = toDate(effectiveDueDate(t));
-      return !!due && due >= weekStart && due <= today;
-    });
-    const completed = dueThisWeek.filter((t) => t.status === "completado");
-    return { completed: completed.length, total: dueThisWeek.length };
-  }, [activeTasks, today]);
+  const projectsByDepartment = useMemo(
+    () =>
+      projectsByArea(scopedProjectsData.filter((p) => p.status === "activo")),
+    [scopedProjectsData],
+  );
 
-  const attention = [...kpis.overdue, ...kpis.blocked, ...kpis.noOwner].slice(0, 5);
+  const attention = [...kpis.overdue, ...kpis.blocked, ...kpis.noOwner].slice(
+    0,
+    5,
+  );
 
   const todayIso = toIsoDate(today);
 
@@ -156,8 +196,16 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
       <KpiRow
         tiles={[
           { label: "Proyectos activos", value: kpis.activeProjects },
-          { label: "Vencidas", value: kpis.overdue.length, tone: kpis.overdue.length > 0 ? "warn" : "default" },
-          { label: "Bloqueadas", value: kpis.blocked.length, tone: kpis.blocked.length > 0 ? "warn" : "default" },
+          {
+            label: "Vencidas",
+            value: kpis.overdue.length,
+            tone: kpis.overdue.length > 0 ? "warn" : "default",
+          },
+          {
+            label: "Bloqueadas",
+            value: kpis.blocked.length,
+            tone: kpis.blocked.length > 0 ? "warn" : "default",
+          },
           { label: "Revisiones (7 días)", value: kpis.reviews.length },
         ]}
       />
@@ -166,29 +214,41 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         <Card className="min-w-0 lg:col-span-2">
           <CardHeader className="border-b">
             <CardTitle className="flex items-center gap-2.5 font-semibold">
-              <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+              <span
+                aria-hidden
+                className="flex size-7 items-center justify-center rounded-lg bg-destructive/10 text-destructive"
+              >
                 <AlertTriangleIcon className="size-4" />
               </span>
               Necesita atención hoy
             </CardTitle>
             <CardAction>
-              <Link href="/actividades/general" className="text-sm text-muted-foreground hover:text-foreground">
+              <Link
+                href="/actividades/general"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
                 Ver todas →
               </Link>
             </CardAction>
           </CardHeader>
           <CardContent className="px-0">
             {attention.length === 0 ? (
-              <p className="px-4 text-sm text-muted-foreground">Todo al día — nada requiere atención inmediata.</p>
+              <p className="px-4 text-sm text-muted-foreground">
+                Todo al día — nada requiere atención inmediata.
+              </p>
             ) : (
               <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className={cn(SECTION_LABEL, "pl-4")}>Tarea</TableHead>
+                    <TableHead className={cn(SECTION_LABEL, "pl-4")}>
+                      Tarea
+                    </TableHead>
                     <TableHead className={SECTION_LABEL}>Área</TableHead>
                     <TableHead className={SECTION_LABEL}>Estatus</TableHead>
                     <TableHead className={SECTION_LABEL}>Responsable</TableHead>
-                    <TableHead className={cn(SECTION_LABEL, "pr-4 text-right")}>Fecha</TableHead>
+                    <TableHead className={cn(SECTION_LABEL, "pr-4 text-right")}>
+                      Fecha
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -198,29 +258,50 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
                       <TableRow key={t.id}>
                         <TableCell className="pl-4">
                           <div className="flex flex-col">
-                            <Link href={`/proyectos/${t.projectId}/ficha`} className="font-medium hover:underline">
+                            <Link
+                              href={`/proyectos/${t.projectId}/ficha`}
+                              className="font-medium hover:underline"
+                            >
                               {t.title}
                             </Link>
-                            <span className="text-xs text-muted-foreground">{t.project.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {t.project.name}
+                            </span>
                           </div>
                         </TableCell>
                         <TableCell>
                           {t.workflow ? (
-                            <AreaBadge name={t.workflow.name} colorSlot={t.areaColorSlot} />
+                            <AreaBadge
+                              name={t.workflow.name}
+                              colorSlot={t.areaColorSlot}
+                            />
                           ) : (
-                            <span className="text-muted-foreground">Sin área</span>
+                            <span className="text-muted-foreground">
+                              Sin área
+                            </span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <StatusBadge label={taskStatusLabel(t)} token={statusColorToken(t)} />
+                          <StatusBadge
+                            label={taskStatusLabel(t)}
+                            token={statusColorToken(t)}
+                          />
                         </TableCell>
                         <TableCell>
-                          {t.manager ? t.manager.name : <span className="text-muted-foreground">Sin responsable</span>}
+                          {t.manager ? (
+                            t.manager.name
+                          ) : (
+                            <span className="text-muted-foreground">
+                              Sin responsable
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell
                           className={cn(
                             "pr-4 text-right font-mono text-xs",
-                            isDueDateLate(due, todayIso, t) ? "text-destructive" : "text-muted-foreground"
+                            isDueDateLate(due, todayIso, t)
+                              ? "text-destructive"
+                              : "text-muted-foreground",
                           )}
                         >
                           {formatShortDate(due)}
@@ -237,7 +318,10 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         <DonutCard
           title="Tareas por estatus"
           icon={
-            <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-chart-1/10 text-chart-1">
+            <span
+              aria-hidden
+              className="flex size-7 items-center justify-center rounded-lg bg-chart-1/10 text-chart-1"
+            >
               <ListChecksIcon className="size-4" />
             </span>
           }
@@ -249,7 +333,10 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         <DonutCard
           title="Proyectos por departamento"
           icon={
-            <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-chart-3/10 text-chart-3">
+            <span
+              aria-hidden
+              className="flex size-7 items-center justify-center rounded-lg bg-chart-3/10 text-chart-3"
+            >
               <FolderKanbanIcon className="size-4" />
             </span>
           }
@@ -258,33 +345,13 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
           emptyText="Sin proyectos activos."
         />
 
-        <Card className="min-w-0">
-          <CardHeader className="border-b">
-            <CardTitle className="flex items-center gap-2.5 font-semibold">
-              <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-chart-2/10 text-chart-2">
-                <CalendarCheckIcon className="size-4" />
-              </span>
-              Avance semanal
-            </CardTitle>
-            <CardAction>
-              <span className="font-mono text-xs text-muted-foreground">
-                {weeklyProgress.completed} / {weeklyProgress.total}
-              </span>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <p>
-              {weeklyProgress.completed} / {weeklyProgress.total} tareas completadas esta semana
-            </p>
-            <LoadBar
-              segments={[{ percent: weeklyProgress.total ? (weeklyProgress.completed / weeklyProgress.total) * 100 : 0 }]}
-            />
-          </CardContent>
-        </Card>
+        <TaskTrendCard />
       </div>
 
       {isLoadingData ? (
-        <p className="mt-3 text-xs text-muted-foreground">Actualizando datos…</p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Actualizando datos…
+        </p>
       ) : null}
     </div>
   );
