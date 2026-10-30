@@ -219,6 +219,15 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
+      # Keter Console reads the runtime image's recipe from these labels
+      # without pulling it. The digest hashes the exact file the image copies.
+      - name: Compute Keter recipe labels
+        id: kcd
+        working-directory: .
+        run: |
+          echo "digest=sha256:$(sha256sum cincel-app/kcd.yml | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "content=$(gzip -9n < cincel-app/kcd.yml | base64 -w0)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push runtime image
         uses: docker/build-push-action@v6
         with:
@@ -227,6 +236,9 @@ jobs:
           push: true
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
+            GIT_SHA=${{ github.sha }}
+            KCD_DIGEST=${{ steps.kcd.outputs.digest }}
+            KCD_CONTENT=${{ steps.kcd.outputs.content }}
           tags: |
             ${{ steps.registry.outputs.registry }}/cincel-app:${{ steps.version.outputs.version }}
             ${{ steps.registry.outputs.registry }}/cincel-app:${{ github.sha }}

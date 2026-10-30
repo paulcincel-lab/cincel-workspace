@@ -1,0 +1,23 @@
+name: "Cincel Workspace"
+port: 3000
+health: /api/healthz
+env:
+  CINCEL_ADMIN_EMAILS: {}
+  GITHUB_PAT: { description: "── GitHub RFCs (assistant `create_rfc` tool, optional) ───────────────────── Fine-grained personal access token scoped to Issues: write on GITHUB_REPO only (no other repo/org scope). Used to file RFCs the assistant drafts as GitHub Issues labeled \"rfc\". Leave unset to disable the tool — it tells the user GitHub isn't configured instead of failing silently." }
+  GITHUB_REPO: {}
+  GOOGLE_DRIVE_ROOT_FOLDER_ID: {}
+  GOOGLE_OAUTH_CLIENT_ID: { description: "Real \"Sign in with Google\" — lets a user connect and switch between their own Google accounts (personal or work, any of them) through Google's real account chooser, instead of always using the impersonated institutional identity above. OAuth client from Google Cloud Console; the redirect URI to register there is <app origin>/api/google/oauth/callback. Leave unset to keep only the service-account picker. The same client powers the direct Google Calendar sync in Calendario (enable the Calendar API; see docs/google-drive.md)." }
+  GOOGLE_OAUTH_CLIENT_SECRET: { secret: true }
+  GOOGLE_SA_CLIENT_EMAIL: { description: "── Google Drive (Phase 4/6, optional) ─────────────────────────────────────── Service-account access to Drive for the Recursos / project doc pickers, via domain-wide delegation impersonating the logged-in Cincel user (their institutional email) — so Google's own per-file permissions apply exactly as they already do. See docs/google-drive.md. Leave unset to disable the picker (manual URL entry still works)." }
+  GOOGLE_SA_PRIVATE_KEY: { secret: true }
+  LLM_API_KEY: { secret: true }
+  LLM_BASE_URL: { description: "── AI Assistant (Phase 5, optional) ──────────────────────────────────────── OpenAI-compatible chat endpoint for /asistente. Point LLM_BASE_URL at any compatible /v1 surface (OpenAI, a local model, a Claude proxy, …). Leave unset to disable — the route returns 503 and the UI shows an error." }
+  LLM_MODEL: { default: "gpt-4o-mini" }
+needs:
+  postgres: { version: "17" }
+stack:
+  id: cincel-app
+  name: "Cincel Workspace"
+  service: app
+  jobs:
+    migrate: { command: "node scripts/migrate.mjs" }
