@@ -15,11 +15,12 @@ import {
   workflowTaskTemplates,
   workflows,
 } from "@/lib/db/schema";
-import { recordChanges } from "@/lib/repositories/history-repository";
+import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
 import { toTemplate } from "@/lib/repositories/workflows-repository";
 import type {
   ApplyWorkflowPreview,
   DriveFileInput,
+  HistoryEvent,
   Project,
   ProjectDetail,
   ProjectInput,
@@ -483,6 +484,25 @@ export async function addProjectLink(projectId: string, input: ProjectLinkInput)
 
 export async function removeProjectLink(projectId: string, linkId: string): Promise<void> {
   await db.delete(projectLinks).where(and(eq(projectLinks.id, linkId), eq(projectLinks.projectId, projectId)));
+}
+
+/** True when the project exists and isn't deleted. */
+export async function projectExists(id: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, id), isNull(projects.deletedAt)));
+  return Boolean(row);
+}
+
+/** Project bitácora: comments and changes, newest first. */
+export async function listProjectHistory(projectId: string): Promise<HistoryEvent[]> {
+  return listHistory("project", projectId);
+}
+
+/** Append a `comentario` to the project bitácora. `comment` must be non-blank. */
+export async function addProjectComment(projectId: string, comment: string, actorId: string): Promise<HistoryEvent> {
+  return recordComment({ entity: "project", entityId: projectId, actorId, comment });
 }
 
 export async function upsertDriveFile(input: DriveFileInput): Promise<string> {
