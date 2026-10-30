@@ -19,6 +19,7 @@ import { normalizePhases, projectPhaseOptions } from "@/lib/proyectos/phases";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
 import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard";
+import { hasImportData, ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
@@ -62,6 +63,7 @@ export default function ProjectFichaPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
   const googleConnectResult = useGoogleConnectResult();
+  const importData = useImportData("project", projectId);
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
@@ -555,6 +557,12 @@ export default function ProjectFichaPage() {
             </section>
 
             <ProjectBitacoraCard projectId={project.id} />
+
+            {hasImportData(importData) ? (
+              <section className="rounded-2xl border border-border bg-card px-6 py-2 shadow-sm">
+                <ImportDataPanel importData={importData} />
+              </section>
+            ) : null}
           </div>
 
           <div className="space-y-6">

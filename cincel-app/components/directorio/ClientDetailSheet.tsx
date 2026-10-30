@@ -9,6 +9,7 @@ import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { fetchContactHistoryAction } from "@/lib/actions/contacts-actions";
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
+import { ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import type { ContactDetail, HistoryEvent, ProjectStatus } from "@/lib/types/core";
 
 interface ClientDetailSheetProps {
@@ -50,6 +51,7 @@ export function ClientDetailSheet({
   canDelete,
 }: ClientDetailSheetProps) {
   const [history, setHistory] = useState<HistoryEvent[]>([]);
+  const importData = useImportData("contact", contact.id);
 
   useEffect(() => {
     let cancelled = false;
@@ -213,6 +215,8 @@ export function ClientDetailSheet({
               }
             />
           </section>
+
+          <ImportDataPanel importData={importData} />
         </div>
       </SheetContent>
     </Sheet>
