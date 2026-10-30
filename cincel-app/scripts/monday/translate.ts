@@ -10,11 +10,12 @@
  * `externalId`, the same key `core.import_refs` stores) and at rows that
  * already exist in Cincel by id; `apply` turns keys into ids as it inserts.
  *
- * This file covers contacts, projects, groups, tasks, status, priority,
- * people, dates, notes, dependencies, workflow kind and project rollups.
- * Subitems, updates, files, `import_refs.data` and cronograma rows build on it.
+ * Covers contacts, projects, groups, tasks, status, priority, people, dates,
+ * notes, dependencies, workflow kind and project rollups; subitems (checklist
+ * or child tasks), updates → comments, files → planned uploads,
+ * `import_refs.data` and cronograma rows (BE §5.2, §6.1).
  */
-import type { BoardFile, ColumnDef } from "./export";
+import type { BoardFile, ColumnDef, FileIndex, UpdateLine } from "./export";
 import type {
   BoardMapping,
   ClientRef,
@@ -27,6 +28,7 @@ import type {
   MondayColumnValue,
   MondayItem,
 } from "./queries";
+import { sanitizeMondayHtml } from "./sanitize";
 
 // ---------------------------------------------------------------------------
 // Input
@@ -41,16 +43,20 @@ export interface ExportUser {
   kind?: string;
 }
 
-/** One exported board: board.json plus items.ndjson in API order. */
+/** One exported board: board.json, items.ndjson in API order and updates.ndjson. */
 export interface ExportBoard {
   board: BoardFile;
   items: MondayItem[];
+  /** updates.ndjson; absent when the export ran with `--no-updates`. */
+  updates?: UpdateLine[];
 }
 
 /** The parts of an export folder translate reads. */
 export interface ExportData {
   users: ExportUser[];
   boards: ExportBoard[];
+  /** files/index.json; absent when the export ran with `--no-files`. */
+  files?: FileIndex;
 }
 
 /** What translate needs from the Cincel database, read by the caller. */
@@ -94,6 +100,22 @@ export interface RowSource {
   groupTitle: string | null;
 }
 
+/** Column values kept as import data, keyed by column title (`#<columnId>` on duplicates). */
+export type ImportColumns = Record<string, string>;
+
+/** `import_refs.data` of a created row (BE §5.2, §8). */
+export interface ImportRefData {
+  source: RowSource;
+  columns: ImportColumns;
+  /** Checklist-mode subitems of a task, by subitem id. */
+  subitems?: Record<string, { name: string; columns: ImportColumns }>;
+  /** Timeline `from`. */
+  start?: string;
+  milestone?: true;
+  /** Child tasks flattened from deeper levels: subitem names from the first level down. */
+  path?: string[];
+}
+
 export interface PlannedContact {
   entity: "contact";
   externalId: string;
@@ -104,6 +126,8 @@ export interface PlannedContact {
   phone: string | null;
   notes: string | null;
   source: RowSource | null;
+  /** null for clients created from a `new` client ref. */
+  data: ImportRefData | null;
 }
 
 export interface PlannedContactPerson {
@@ -135,6 +159,7 @@ export interface PlannedProject {
   startDate: string | null;
   endDate: string | null;
   source: RowSource;
+  data: ImportRefData;
 }
 
 export interface UnmatchedPerson {
@@ -175,6 +200,7 @@ export interface PlannedTask {
   /** Assignees with no staff match; kept in the import data. */
   unmatchedPeople: UnmatchedPerson[];
   source: RowSource;
+  data: ImportRefData;
 }
 
 export interface PlannedTaskSupport {
@@ -194,12 +220,96 @@ export interface PlannedTaskDependency {
   kind: "finish_to_start";
 }
 
+/** A checklist-mode subitem (`task_checklist_items`). */
+export interface PlannedChecklistItem {
+  entity: "checklist_item";
+  /** The monday subitem id. */
+  externalId: string;
+  task: RowRef;
+  /** Deeper levels are prefixed with their parents' names ("Muros › Aplanado"). */
+  title: string;
+  completed: boolean;
+  /** 1..n, depth-first within the task. */
+  sortOrder: number;
+  source: RowSource;
+}
+
+/** A monday update or reply (`history_events`, `kind = 'comentario'`). */
+export interface PlannedHistoryEvent {
+  entity: "history_event";
+  /** The monday update (or reply) id. */
+  externalId: string;
+  target: { entity: "task" | "project" | "contact"; ref: RowRef };
+  kind: "comentario";
+  /** The mapped staff member, else the importing admin. */
+  actorId: string;
+  comment: string;
+  /** monday `created_at`. */
+  eventAt: string | null;
+  source: RowSource;
+}
+
+/** A file to upload in phase B (`import_files`), then linked on its task or project. */
+export interface PlannedImportFile {
+  entity: "import_file";
+  /** The monday asset id. */
+  externalId: string;
+  assetId: string;
+  project: RowRef;
+  /** null → a project link (`item_as_project` items). */
+  task: RowRef | null;
+  link: "task_link" | "project_link";
+  /** Drive subfolder under "Importado de monday". */
+  groupName: string | null;
+  fileName: string;
+  sizeBytes: number | null;
+  sha256: string;
+  /** Relative to the export folder. */
+  localPath: string;
+  source: RowSource;
+}
+
+/** One cronograma per project of a board with `schedule.enabled` (BE §6.1). */
+export interface PlannedProjectSchedule {
+  entity: "project_schedule";
+  /** The project's external id. */
+  externalId: string;
+  project: RowRef;
+  /** `monday:<boardId>`. */
+  sourceFileName: string;
+}
+
+export type ScheduleStatus = "pending" | "progress" | "done";
+
+/** A cronograma row (`schedule_tasks`, BE §6.1). */
+export interface PlannedScheduleTask {
+  entity: "schedule_task";
+  /** The monday item id. */
+  externalId: string;
+  /** The project whose cronograma holds the row. */
+  project: RowRef;
+  task: RowRef;
+  /** `monday:<itemId>`. */
+  stableKey: string;
+  planta: string;
+  seccion: string;
+  seccionOrder: number;
+  tarea: string;
+  inicio: string;
+  fin: string;
+  status: ScheduleStatus;
+  responsable: string | null;
+  sortOrder: number;
+}
+
 export type TranslateIssueCode =
   | "CLIENT_UNRESOLVED"
   | "STATUS_UNMAPPED"
   | "TEMPLATE_INVALID"
   | "PERSON_UNMATCHED"
-  | "RELATION_MISSING";
+  | "RELATION_MISSING"
+  | "DATES_MISSING"
+  | "FILE_MISSING";
 
 export interface TranslateIssue {
   code: TranslateIssueCode;
@@ -216,6 +326,11 @@ export interface TranslateResult {
   tasks: PlannedTask[];
   taskSupport: PlannedTaskSupport[];
   taskDependencies: PlannedTaskDependency[];
+  checklistItems: PlannedChecklistItem[];
+  historyEvents: PlannedHistoryEvent[];
+  files: PlannedImportFile[];
+  projectSchedules: PlannedProjectSchedule[];
+  scheduleTasks: PlannedScheduleTask[];
   issues: TranslateIssue[];
 }
 
@@ -327,6 +442,28 @@ export function toDate(value: string | null | undefined): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Import data key per column id: the column title, with `#<columnId>`
+ * appended to every later column that repeats a title already seen in
+ * board column order (BE §5.2).
+ */
+export function columnKeys(defs: readonly ColumnDef[]): Map<string, string> {
+  const seen = new Set<string>();
+  const keys = new Map<string, string>();
+  for (const d of defs) {
+    keys.set(d.id, seen.has(d.title) ? `${d.title}#${d.id}` : d.title);
+    seen.add(d.title);
+  }
+  return keys;
+}
+
+/** Cronograma status from a task status (BE §6.1). */
+export function scheduleStatus(status: TaskStatus): ScheduleStatus {
+  if (status === "completado") return "done";
+  if (status === "en_proceso") return "progress";
+  return "pending";
+}
+
 // ---------------------------------------------------------------------------
 // Translation
 // ---------------------------------------------------------------------------
@@ -334,6 +471,28 @@ export function toDate(value: string | null | undefined): string | null {
 type ItemLike = ItemFieldsFragment & {
   subitems?: readonly (ItemLike | null)[] | null;
 };
+
+/** Where an item's updates and files land. */
+interface ItemTarget {
+  entity: "task" | "project" | "contact";
+  ref: RowRef;
+  /** `[{subitem name}]` prefix for checklist-mode subitems. */
+  prefix: string | null;
+  /** null: files have nowhere to go (contacts). */
+  files: {
+    project: RowRef;
+    task: RowRef | null;
+    groupName: string | null;
+  } | null;
+  source: RowSource;
+}
+
+/** Timeline and planta of a task, for its cronograma row. */
+interface ScheduleCandidate {
+  inicio: string | null;
+  fin: string | null;
+  planta: string;
+}
 
 interface Ctx {
   mapping: Mapping;
@@ -345,6 +504,10 @@ interface Ctx {
   out: TranslateResult;
   contactKeys: Set<string>;
   contactPersonKeys: Set<string>;
+  /** monday item or subitem id → where its updates and files go. */
+  targets: Map<string, ItemTarget>;
+  /** task external id → cronograma inputs (boards with `schedule.enabled`). */
+  schedule: Map<string, ScheduleCandidate>;
 }
 
 /** Translates an export with a validated mapping into planned rows. Pure. */
@@ -362,6 +525,11 @@ export function translate(
     tasks: [],
     taskSupport: [],
     taskDependencies: [],
+    checklistItems: [],
+    historyEvents: [],
+    files: [],
+    projectSchedules: [],
+    scheduleTasks: [],
     issues: [],
   };
   const exported = new Map(data.boards.map((b) => [b.board.id, b]));
@@ -379,6 +547,8 @@ export function translate(
     out,
     contactKeys: new Set(),
     contactPersonKeys: new Set(),
+    targets: new Map(),
+    schedule: new Map(),
   };
 
   // Contacts first: projects may point at them through a relation column.
@@ -398,6 +568,9 @@ export function translate(
   }
   translateDependencies(ctx, exported);
   for (const project of out.projects) rollUpProject(project, out.tasks);
+  translateUpdates(ctx, exported);
+  translateFiles(ctx, exported, data.files ?? {});
+  translateSchedules(ctx);
   return out;
 }
 
@@ -448,6 +621,48 @@ function textOf(value: MondayColumnValue | undefined): string | null {
   return text ? text : null;
 }
 
+/** Display text of a value: its text, else a mirror/relation display value. */
+function displayOf(value: MondayColumnValue | undefined): string | null {
+  const text = textOf(value);
+  if (text != null || !value) return text;
+  if (
+    value.__typename === "MirrorValue" ||
+    value.__typename === "BoardRelationValue"
+  ) {
+    return value.display_value?.trim() || null;
+  }
+  return null;
+}
+
+/**
+ * The item's `import_data` columns keyed per `columnKeys`; unmatched
+ * assignees are kept by name under the people column's key.
+ */
+function importColumns(
+  item: ItemLike,
+  columns: Record<string, ColumnTarget>,
+  defs: readonly ColumnDef[],
+  unmatched: readonly UnmatchedPerson[] = [],
+): ImportColumns {
+  const keys = columnKeys(defs);
+  const out: ImportColumns = {};
+  for (const id of columnsFor(columns, defs, "import_data")) {
+    const text = displayOf(valueOf(item, id));
+    if (text != null) out[keys.get(id) ?? id] = text;
+  }
+  const people = columnsFor(columns, defs, "people")[0];
+  if (people && unmatched.length > 0) {
+    out[keys.get(people) ?? people] = unmatched
+      .map((p) => p.name ?? `monday ${p.id}`)
+      .join(", ");
+  }
+  return out;
+}
+
+function taskRef(externalId: string): RowRef {
+  return { kind: "planned", entity: "task", externalId };
+}
+
 function dateOf(value: MondayColumnValue | undefined): string | null {
   if (!value) return null;
   if (value.__typename === "DateValue")
@@ -477,7 +692,18 @@ function translateContacts(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
   const phone = columnsFor(bm.columns, defs, "contact_phone")[0];
   const notes = columnsFor(bm.columns, defs, "notes")[0];
   for (const item of activeItems(eb.items)) {
-    if (bm.contactMatches[item.id]) continue; // reuse the existing contact
+    const source = sourceOf(eb.board, item.group?.id ?? null);
+    const existing = bm.contactMatches[item.id];
+    ctx.targets.set(item.id, {
+      entity: "contact",
+      ref: existing
+        ? { kind: "existing", id: existing }
+        : { kind: "planned", entity: "contact", externalId: item.id },
+      prefix: null,
+      files: null,
+      source,
+    });
+    if (existing) continue; // reuse the existing contact
     const emailValue = valueOf(item, email);
     const phoneValue = valueOf(item, phone);
     ctx.out.contacts.push({
@@ -495,7 +721,8 @@ function translateContacts(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
           ? phoneValue.phone?.trim() || null
           : null) ?? textOf(phoneValue),
       notes: textOf(valueOf(item, notes)),
-      source: sourceOf(eb.board, item.group?.id ?? null),
+      source,
+      data: { source, columns: importColumns(item, bm.columns, defs) },
     });
     if (type === "proveedor" && bm.providerSubtype) {
       ctx.out.providerProfiles.push({
@@ -551,6 +778,7 @@ function resolveClient(
         phone: null,
         notes: null,
         source: null,
+        data: null,
       });
     }
     return { kind: "planned", entity: "contact", externalId: key };
@@ -593,6 +821,7 @@ function newProject(
   code: string | null | undefined,
   client: RowRef | null,
   source: RowSource,
+  columns: ImportColumns = {},
 ): PlannedProject {
   return {
     entity: "project",
@@ -605,6 +834,7 @@ function newProject(
     startDate: null,
     endDate: null,
     source,
+    data: { source, columns },
   };
 }
 
@@ -628,7 +858,7 @@ function translateBoardAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
     const n = (orderInGroup.get(groupId ?? "") ?? 0) + 1;
     orderInGroup.set(groupId ?? "", n);
     const group = board.groups.find((g) => g.id === groupId);
-    addTask(ctx, bm, board, item, project, {
+    const task = addTask(ctx, bm, board, item, project, {
       columns: bm.columns,
       defs: board.columns,
       phase: group?.title ?? null,
@@ -637,6 +867,7 @@ function translateBoardAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
       sortOrder: n,
       groupId,
     });
+    addSubitems(ctx, bm, board, item, task, project);
   }
 }
 
@@ -665,8 +896,8 @@ function translateGroupAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
       sourceOf(board, group.id),
     );
     ctx.out.projects.push(project);
-    groupItems.forEach((item, i) =>
-      addTask(ctx, bm, board, item, project, {
+    groupItems.forEach((item, i) => {
+      const task = addTask(ctx, bm, board, item, project, {
         columns: bm.columns,
         defs: board.columns,
         phase: null,
@@ -674,8 +905,9 @@ function translateGroupAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
         seccionOrder: ranks.get(group.id) ?? null,
         sortOrder: i + 1,
         groupId: group.id,
-      }),
-    );
+      });
+      addSubitems(ctx, bm, board, item, task, project);
+    });
   }
 }
 
@@ -686,17 +918,31 @@ function translateItemAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
     const groupId = item.group?.id ?? null;
     const name = bm.projectNames[item.id] ?? item.name;
     const client = resolveClient(ctx, bm, bm.client, [item], name, item.id);
+    const source = sourceOf(board, groupId);
     const project = newProject(
       item.id,
       name,
       bm.projectCodes[item.id],
       client,
-      sourceOf(board, groupId),
+      source,
+      importColumns(item, bm.columns, board.columns),
     );
     ctx.out.projects.push(project);
+    const projectRef: RowRef = {
+      kind: "planned",
+      entity: "project",
+      externalId: project.externalId,
+    };
+    ctx.targets.set(item.id, {
+      entity: "project",
+      ref: projectRef,
+      prefix: null,
+      files: { project: projectRef, task: null, groupName: source.groupTitle },
+      source,
+    });
     const group = board.groups.find((g) => g.id === groupId);
-    activeItems(item.subitems ?? []).forEach((sub, i) =>
-      addTask(ctx, bm, board, sub, project, {
+    activeItems(item.subitems ?? []).forEach((sub, i) => {
+      const task = addTask(ctx, bm, board, sub, project, {
         columns: bm.subitemColumns,
         defs: board.subitem_columns,
         phase: null,
@@ -704,8 +950,9 @@ function translateItemAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
         seccionOrder: groupId ? (ranks.get(groupId) ?? null) : null,
         sortOrder: i + 1,
         groupId,
-      }),
-    );
+      });
+      addSubitems(ctx, bm, board, sub, task, project);
+    });
   }
 }
 
@@ -755,6 +1002,16 @@ function addTask(
   const { kind, templateId, workflowId } = taskKind(ctx, bm, item);
   const people = taskPeople(ctx, bm, item, first("people"), project.client);
 
+  const source = sourceOf(board, at.groupId);
+  const start = toDate(tl?.from);
+  const milestone = tl?.visualization_type === "milestone";
+  const data: ImportRefData = {
+    source,
+    columns: importColumns(item, columns, defs, people.unmatched),
+  };
+  if (start) data.start = start;
+  if (milestone) data.milestone = true;
+
   const task: PlannedTask = {
     entity: "task",
     externalId: item.id,
@@ -779,14 +1036,38 @@ function addTask(
     sortOrder: at.sortOrder,
     commitmentDate,
     deliveryDate,
-    start: toDate(tl?.from),
-    milestone: tl?.visualization_type === "milestone",
+    start,
+    milestone,
     createdAt: item.created_at ?? null,
     createdById: ctx.options.importedById,
     unmatchedPeople: people.unmatched,
-    source: sourceOf(board, at.groupId),
+    source,
+    data,
   };
   ctx.out.tasks.push(task);
+  const ref = taskRef(item.id);
+  ctx.targets.set(item.id, {
+    entity: "task",
+    ref,
+    prefix: null,
+    files: {
+      project: task.project,
+      task: ref,
+      groupName: source.groupTitle,
+    },
+    source,
+  });
+  if (bm.schedule.enabled) {
+    const planta =
+      "fixed" in bm.schedule.planta
+        ? bm.schedule.planta.fixed
+        : (displayOf(valueOf(item, bm.schedule.planta.columnId)) ?? "General");
+    ctx.schedule.set(item.id, {
+      inicio: start,
+      fin: toDate(tl?.to),
+      planta,
+    });
+  }
   for (const s of people.support) {
     ctx.out.taskSupport.push({
       entity: "task_support",
@@ -944,6 +1225,288 @@ function addGuestContact(
     name: user?.name?.trim() || user?.email || `monday ${userId}`,
     email: user?.email?.trim().toLowerCase() || null,
   });
+}
+
+// --- subitems --------------------------------------------------------------
+
+/**
+ * Subitems of a task's item (BE §5.2). `checklist`: checklist items in
+ * depth-first order, deeper levels prefixed with their parents' names, and
+ * their column values in the task's import data. `child_tasks`: tasks under
+ * the item's task, every level flattened to that one child level with the
+ * subitem names in `path`.
+ */
+function addSubitems(
+  ctx: Ctx,
+  bm: BoardMapping,
+  board: BoardFile,
+  item: ItemLike,
+  parent: PlannedTask,
+  project: PlannedProject,
+) {
+  if (bm.subitems === "ignore") return;
+  const roots = activeItems(item.subitems ?? []);
+  if (roots.length === 0) return;
+  const columns = bm.subitemColumns;
+  const defs = board.subitem_columns;
+  const parentRef = taskRef(parent.externalId);
+  let n = 0;
+
+  if (bm.subitems === "checklist") {
+    const statusColumn = columnsFor(columns, defs, "status")[0];
+    const files = ctx.targets.get(parent.externalId)?.files ?? null;
+    const subitems: NonNullable<ImportRefData["subitems"]> = {};
+    const walk = (
+      nodes: readonly (ItemLike | null)[],
+      prefix: string | null,
+    ) => {
+      for (const sub of activeItems(nodes)) {
+        const title = prefix ? `${prefix} › ${sub.name}` : sub.name;
+        const { status } = taskStatus(ctx, bm, sub, defs, statusColumn);
+        ctx.out.checklistItems.push({
+          entity: "checklist_item",
+          externalId: sub.id,
+          task: parentRef,
+          title,
+          completed: status === "completado",
+          sortOrder: ++n,
+          source: parent.source,
+        });
+        subitems[sub.id] = {
+          name: sub.name,
+          columns: importColumns(sub, columns, defs),
+        };
+        ctx.targets.set(sub.id, {
+          entity: "task",
+          ref: parentRef,
+          prefix: sub.name,
+          files,
+          source: parent.source,
+        });
+        walk(sub.subitems ?? [], title);
+      }
+    };
+    walk(roots, null);
+    parent.data.subitems = subitems;
+    return;
+  }
+
+  const walk = (nodes: readonly (ItemLike | null)[], path: string[]) => {
+    for (const sub of activeItems(nodes)) {
+      const child = addTask(ctx, bm, board, sub, project, {
+        columns,
+        defs,
+        phase: parent.phase,
+        seccion: parent.seccion,
+        seccionOrder: parent.seccionOrder,
+        sortOrder: ++n,
+        groupId: parent.source.groupId,
+      });
+      child.parentTask = parentRef;
+      const childPath = [...path, sub.name];
+      if (childPath.length > 1) child.data.path = childPath;
+      walk(sub.subitems ?? [], childPath);
+    }
+  };
+  walk(roots, []);
+}
+
+// --- updates ---------------------------------------------------------------
+
+interface UpdateLike {
+  id: string;
+  body: string;
+  text_body?: string | null;
+  created_at: string | null;
+  creator_id: string | null;
+}
+
+function eventTime(at: string | null): number {
+  const t = at ? Date.parse(at) : Number.NaN;
+  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+}
+
+/**
+ * Updates and replies → comments on the item's task, project or contact,
+ * oldest first (BE §5.2). The author is the mapped staff member, else the
+ * importing admin with a `monday · {name}:` prefix; checklist-mode subitems
+ * add `[{subitem name}]`.
+ */
+function translateUpdates(ctx: Ctx, exported: Map<string, ExportBoard>) {
+  if (!ctx.mapping.options.includeUpdates) return;
+  const seen = new Set<string>();
+  const events: PlannedHistoryEvent[] = [];
+  const add = (u: UpdateLike, target: ItemTarget) => {
+    if (seen.has(u.id)) return;
+    seen.add(u.id);
+    const text = sanitizeMondayHtml(u.body) || u.text_body?.trim() || "";
+    if (text === "") return;
+    const mapped = u.creator_id ? ctx.mapping.people[u.creator_id] : undefined;
+    const staffId =
+      mapped?.action === "staff" && ctx.lookups.staff[mapped.staffId]
+        ? mapped.staffId
+        : null;
+    const parts: string[] = [];
+    if (!staffId) {
+      const name =
+        (u.creator_id && ctx.users.get(u.creator_id)?.name?.trim()) ||
+        (u.creator_id ? `usuario ${u.creator_id}` : "usuario desconocido");
+      parts.push(`monday · ${name}:`);
+    }
+    if (target.prefix) parts.push(`[${target.prefix}]`);
+    parts.push(text);
+    events.push({
+      entity: "history_event",
+      externalId: u.id,
+      target: { entity: target.entity, ref: target.ref },
+      kind: "comentario",
+      actorId: staffId ?? ctx.options.importedById,
+      comment: parts.join(" "),
+      eventAt: u.created_at ?? null,
+      source: target.source,
+    });
+  };
+  for (const bm of ctx.mapping.boards) {
+    const eb = exported.get(bm.mondayBoardId);
+    if (!eb || bm.strategy === "skip") continue;
+    for (const line of eb.updates ?? []) {
+      const target = ctx.targets.get(line.item_id);
+      if (!target) continue;
+      add(line, target);
+      for (const reply of line.replies ?? []) add(reply, target);
+    }
+  }
+  events.sort(
+    (a, b) =>
+      eventTime(a.eventAt) - eventTime(b.eventAt) ||
+      (a.externalId < b.externalId ? -1 : a.externalId > b.externalId ? 1 : 0),
+  );
+  ctx.out.historyEvents.push(...events);
+}
+
+// --- files -----------------------------------------------------------------
+
+type AssetList =
+  readonly ({ id: string; name: string } | null)[] | null | undefined;
+
+/**
+ * Files on items, subitems, updates and replies → planned uploads, linked
+ * on the task (or the project for `item_as_project` items); checklist-mode
+ * subitems' files go to the parent task (BE §5.2, §7). An asset missing from
+ * files/index.json (failed download) is reported as FILE_MISSING.
+ */
+function translateFiles(
+  ctx: Ctx,
+  exported: Map<string, ExportBoard>,
+  index: FileIndex,
+) {
+  if (!ctx.mapping.options.includeFiles) return;
+  const seen = new Set<string>();
+  const add = (assets: AssetList, itemId: string, boardId: string) => {
+    const target = ctx.targets.get(itemId);
+    if (!target?.files) return;
+    for (const asset of assets ?? []) {
+      if (!asset || seen.has(asset.id)) continue;
+      seen.add(asset.id);
+      const entry = index[asset.id];
+      if (!entry) {
+        issue(
+          ctx,
+          "FILE_MISSING",
+          boardId,
+          itemId,
+          `File ${asset.id} ("${asset.name}") is not in files/index.json`,
+        );
+        continue;
+      }
+      ctx.out.files.push({
+        entity: "import_file",
+        externalId: asset.id,
+        assetId: asset.id,
+        project: target.files.project,
+        task: target.files.task,
+        link: target.files.task ? "task_link" : "project_link",
+        groupName: target.files.groupName,
+        fileName: entry.name || asset.name,
+        sizeBytes: Number.isFinite(entry.size) ? entry.size : null,
+        sha256: entry.sha256,
+        localPath: entry.path,
+        source: target.source,
+      });
+    }
+  };
+  for (const bm of ctx.mapping.boards) {
+    const eb = exported.get(bm.mondayBoardId);
+    if (!eb || bm.strategy === "skip") continue;
+    const walk = (nodes: readonly (ItemLike | null)[]) => {
+      for (const node of nodes) {
+        if (!node) continue;
+        add(node.assets, node.id, bm.mondayBoardId);
+        walk(node.subitems ?? []);
+      }
+    };
+    walk(eb.items);
+    for (const line of eb.updates ?? []) {
+      add(line.assets, line.item_id, bm.mondayBoardId);
+      for (const reply of line.replies ?? [])
+        add(reply.assets, line.item_id, bm.mondayBoardId);
+    }
+  }
+}
+
+// --- cronograma ------------------------------------------------------------
+
+/**
+ * Cronograma rows for the top-level tasks of boards with `schedule.enabled`
+ * (BE §6.1): one row per task with a full timeline, and one
+ * `project_schedules` row per project that gets rows. A task without a
+ * timeline is reported as DATES_MISSING (it stays a task).
+ */
+function translateSchedules(ctx: Ctx) {
+  const scheduled = new Set<string>();
+  for (const task of ctx.out.tasks) {
+    if (task.parentTask) continue;
+    const c = ctx.schedule.get(task.externalId);
+    if (!c) continue;
+    if (!c.inicio || !c.fin) {
+      issue(
+        ctx,
+        "DATES_MISSING",
+        task.source.boardId,
+        task.externalId,
+        `"${task.title}" has no timeline; left out of the cronograma`,
+      );
+      continue;
+    }
+    const projectId = task.project.externalId;
+    if (!scheduled.has(projectId)) {
+      scheduled.add(projectId);
+      ctx.out.projectSchedules.push({
+        entity: "project_schedule",
+        externalId: projectId,
+        project: task.project,
+        sourceFileName: `monday:${task.source.boardId}`,
+      });
+    }
+    ctx.out.scheduleTasks.push({
+      entity: "schedule_task",
+      externalId: task.externalId,
+      project: task.project,
+      task: taskRef(task.externalId),
+      stableKey: `monday:${task.externalId}`,
+      planta: c.planta,
+      seccion: task.seccion ?? "General",
+      seccionOrder: task.seccionOrder ?? 1,
+      tarea: task.title,
+      inicio: c.inicio,
+      fin: c.fin,
+      status: scheduleStatus(task.status),
+      responsable: task.managerId
+        ? (ctx.lookups.staff[task.managerId]?.name ?? null)
+        : null,
+      sortOrder: task.sortOrder,
+    });
+  }
 }
 
 // --- dependencies ----------------------------------------------------------
