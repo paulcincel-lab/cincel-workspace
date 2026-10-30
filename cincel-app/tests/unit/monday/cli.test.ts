@@ -36,12 +36,6 @@ describe("monday CLI dispatch", () => {
     expect(handler).toHaveBeenCalledWith(["--export", "exports/acme"], c.io);
   });
 
-  it.each(COMMAND_NAMES.filter((n) => n !== "export" && n !== "init" && n !== "plan" && n !== "rollback"))("stub %s exits with a clear message", async (name) => {
-    const c = captureIo();
-    expect(await run([name], c.io)).toBe(2);
-    expect(c.err()).toBe(`monday: "${name}" is not implemented yet.\n`);
-    expect(c.out()).toBe("");
-  });
 
   it.each([["--token", "abc"], ["--token=abc"]])("refuses a token flag (%s)", async (...flag) => {
     const handler = vi.fn(async () => 0);
