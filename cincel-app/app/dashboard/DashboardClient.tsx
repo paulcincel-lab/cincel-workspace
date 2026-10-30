@@ -4,10 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangleIcon,
+  BanIcon,
+  CalendarClockIcon,
+  CalendarX2Icon,
   FolderKanbanIcon,
   ListChecksIcon,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/shadcn/badge";
 import {
   Card,
   CardAction,
@@ -25,7 +29,6 @@ import {
 } from "@/components/ui/shadcn/table";
 
 import { PageHeader } from "@/components/v2/layout/PageHeader";
-import { KpiRow } from "@/components/v2/layout/KpiRow";
 import { AreaBadge } from "@/components/v2/status/AreaBadge";
 import {
   useProjectsData,
@@ -38,14 +41,9 @@ import {
   scopeDashboardProjects,
   scopeDashboardTasks,
 } from "@/lib/auth/permissions";
-import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import { cn } from "@/lib/utils";
 import type { TaskListItem } from "@/lib/types/core";
-import {
-  isDueDateLate,
-  statusColorToken,
-  taskStatusLabel,
-} from "@/lib/tasks/status-options";
+import { isDueDateLate } from "@/lib/tasks/status-options";
 import {
   projectsByArea,
   tasksByBaseStatus,
@@ -86,6 +84,109 @@ function formatShortDate(value: string | null): string {
 
 function effectiveDueDate(task: TaskListItem): string | null {
   return task.deliveryDate || task.commitmentDate;
+}
+
+type Reason = "overdue" | "blocked" | "noOwner";
+
+const REASONS: Record<
+  Reason,
+  { label: string; variant: "destructive" | "secondary" }
+> = {
+  overdue: { label: "Vencida", variant: "destructive" },
+  blocked: { label: "Bloqueada", variant: "destructive" },
+  noOwner: { label: "Sin responsable", variant: "secondary" },
+};
+
+interface TaskRow {
+  task: TaskListItem;
+  reasons: Reason[];
+}
+
+interface TaskTableProps {
+  rows: TaskRow[];
+  todayIso: string;
+  dateOf: (task: TaskListItem) => string | null;
+  showReasons?: boolean;
+}
+
+function TaskTable({ rows, todayIso, dateOf, showReasons }: TaskTableProps) {
+  return (
+    <Table className={showReasons ? "min-w-[640px]" : "min-w-[520px]"}>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className={cn(SECTION_LABEL, "pl-4")}>Tarea</TableHead>
+          <TableHead className={SECTION_LABEL}>Área</TableHead>
+          {showReasons ? (
+            <TableHead className={SECTION_LABEL}>Motivo</TableHead>
+          ) : null}
+          <TableHead className={SECTION_LABEL}>Responsable</TableHead>
+          <TableHead className={cn(SECTION_LABEL, "pr-4 text-right")}>
+            Fecha
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map(({ task: t, reasons }) => {
+          const date = dateOf(t);
+          return (
+            <TableRow key={t.id}>
+              <TableCell className="pl-4">
+                <div className="flex flex-col">
+                  <Link
+                    href={`/proyectos/${t.projectId}/ficha`}
+                    className="font-medium hover:underline"
+                  >
+                    {t.title}
+                  </Link>
+                  <span className="text-xs text-muted-foreground">
+                    {t.project.name}
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell>
+                {t.workflow ? (
+                  <AreaBadge
+                    name={t.workflow.name}
+                    colorSlot={t.areaColorSlot}
+                  />
+                ) : (
+                  <span className="text-muted-foreground">Sin área</span>
+                )}
+              </TableCell>
+              {showReasons ? (
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {reasons.map((reason) => (
+                      <Badge key={reason} variant={REASONS[reason].variant}>
+                        {REASONS[reason].label}
+                      </Badge>
+                    ))}
+                  </div>
+                </TableCell>
+              ) : null}
+              <TableCell>
+                {t.manager ? (
+                  t.manager.name
+                ) : (
+                  <span className="text-muted-foreground">Sin responsable</span>
+                )}
+              </TableCell>
+              <TableCell
+                className={cn(
+                  "pr-4 text-right font-mono text-xs",
+                  showReasons && isDueDateLate(date, todayIso, t)
+                    ? "text-destructive"
+                    : "text-muted-foreground",
+                )}
+              >
+                {formatShortDate(date)}
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
 }
 
 export function DashboardClient({ initialProjects }: DashboardClientProps) {
@@ -179,12 +280,57 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     [scopedProjectsData],
   );
 
-  const attention = [...kpis.overdue, ...kpis.blocked, ...kpis.noOwner].slice(
-    0,
-    5,
+  // One row per task, carrying every reason it needs attention.
+  const attention = useMemo(() => {
+    const byId = new Map<string, TaskRow>();
+    const add = (list: TaskListItem[], reason: Reason) =>
+      list.forEach((task) => {
+        const entry = byId.get(task.id);
+        if (entry) entry.reasons.push(reason);
+        else byId.set(task.id, { task, reasons: [reason] });
+      });
+    add(kpis.overdue, "overdue");
+    add(kpis.blocked, "blocked");
+    add(kpis.noOwner, "noOwner");
+    return [...byId.values()].slice(0, 5);
+  }, [kpis]);
+
+  const upcomingReviews = useMemo(
+    () =>
+      [...kpis.reviews]
+        .sort((a, b) => (a.reviewDate ?? "").localeCompare(b.reviewDate ?? ""))
+        .map((task) => ({ task, reasons: [] })),
+    [kpis.reviews],
   );
 
   const todayIso = toIsoDate(today);
+
+  const kpiTiles = [
+    {
+      label: "Proyectos activos",
+      value: kpis.activeProjects,
+      icon: FolderKanbanIcon,
+      alert: false,
+    },
+    {
+      label: "Vencidas",
+      value: kpis.overdue.length,
+      icon: CalendarX2Icon,
+      alert: kpis.overdue.length > 0,
+    },
+    {
+      label: "Bloqueadas",
+      value: kpis.blocked.length,
+      icon: BanIcon,
+      alert: kpis.blocked.length > 0,
+    },
+    {
+      label: "Revisiones 7 días",
+      value: kpis.reviews.length,
+      icon: CalendarClockIcon,
+      alert: false,
+    },
+  ];
 
   return (
     <div className="min-w-0">
@@ -193,25 +339,32 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         description="Vista unificada de riesgo, agenda y carga operativa."
       />
 
-      <KpiRow
-        tiles={[
-          { label: "Proyectos activos", value: kpis.activeProjects },
-          {
-            label: "Vencidas",
-            value: kpis.overdue.length,
-            tone: kpis.overdue.length > 0 ? "warn" : "default",
-          },
-          {
-            label: "Bloqueadas",
-            value: kpis.blocked.length,
-            tone: kpis.blocked.length > 0 ? "warn" : "default",
-          },
-          { label: "Revisiones (7 días)", value: kpis.reviews.length },
-        ]}
-      />
+      <div className="mb-3.5 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+        {kpiTiles.map(({ label, value, icon: Icon, alert }) => (
+          <Card key={label} className="min-w-0">
+            <CardContent className="flex flex-col gap-2">
+              <span
+                aria-hidden
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-lg",
+                  alert
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                <Icon className="size-4" />
+              </span>
+              <span className="text-sm text-muted-foreground">{label}</span>
+              <span className="text-2xl font-semibold tabular-nums">
+                {value}
+              </span>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
-        <Card className="min-w-0 lg:col-span-2">
+        <Card className="min-w-0">
           <CardHeader className="border-b">
             <CardTitle className="flex items-center gap-2.5 font-semibold">
               <span
@@ -220,7 +373,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
               >
                 <AlertTriangleIcon className="size-4" />
               </span>
-              Necesita atención hoy
+              Requiere atención
             </CardTitle>
             <CardAction>
               <Link
@@ -237,83 +390,44 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
                 Todo al día — nada requiere atención inmediata.
               </p>
             ) : (
-              <Table className="min-w-[640px]">
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className={cn(SECTION_LABEL, "pl-4")}>
-                      Tarea
-                    </TableHead>
-                    <TableHead className={SECTION_LABEL}>Área</TableHead>
-                    <TableHead className={SECTION_LABEL}>Estatus</TableHead>
-                    <TableHead className={SECTION_LABEL}>Responsable</TableHead>
-                    <TableHead className={cn(SECTION_LABEL, "pr-4 text-right")}>
-                      Fecha
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {attention.map((t) => {
-                    const due = effectiveDueDate(t);
-                    return (
-                      <TableRow key={t.id}>
-                        <TableCell className="pl-4">
-                          <div className="flex flex-col">
-                            <Link
-                              href={`/proyectos/${t.projectId}/ficha`}
-                              className="font-medium hover:underline"
-                            >
-                              {t.title}
-                            </Link>
-                            <span className="text-xs text-muted-foreground">
-                              {t.project.name}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {t.workflow ? (
-                            <AreaBadge
-                              name={t.workflow.name}
-                              colorSlot={t.areaColorSlot}
-                            />
-                          ) : (
-                            <span className="text-muted-foreground">
-                              Sin área
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge
-                            label={taskStatusLabel(t)}
-                            token={statusColorToken(t)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {t.manager ? (
-                            t.manager.name
-                          ) : (
-                            <span className="text-muted-foreground">
-                              Sin responsable
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell
-                          className={cn(
-                            "pr-4 text-right font-mono text-xs",
-                            isDueDateLate(due, todayIso, t)
-                              ? "text-destructive"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          {formatShortDate(due)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <TaskTable
+                rows={attention}
+                todayIso={todayIso}
+                dateOf={effectiveDueDate}
+                showReasons
+              />
             )}
           </CardContent>
         </Card>
+
+        <Card className="min-w-0">
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center gap-2.5 font-semibold">
+              <span
+                aria-hidden
+                className="flex size-7 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+              >
+                <CalendarClockIcon className="size-4" />
+              </span>
+              Revisiones próximas
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-0">
+            {upcomingReviews.length === 0 ? (
+              <p className="px-4 text-sm text-muted-foreground">
+                Sin revisiones en los próximos 7 días.
+              </p>
+            ) : (
+              <TaskTable
+                rows={upcomingReviews}
+                todayIso={todayIso}
+                dateOf={(t) => t.reviewDate}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <TaskTrendCard />
 
         <DonutCard
           title="Tareas por estatus"
@@ -344,8 +458,6 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
           unit="proyectos"
           emptyText="Sin proyectos activos."
         />
-
-        <TaskTrendCard />
       </div>
 
       {isLoadingData ? (
