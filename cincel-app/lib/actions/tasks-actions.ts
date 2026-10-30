@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import * as taskDependenciesRepository from "@/lib/repositories/task-dependencies-repository";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import type {
   HistoryEvent,
@@ -319,4 +320,37 @@ export async function removeTaskLinkAction(id: string): Promise<void> {
   const user = await requireCapabilityUser();
   await tasksRepository.removeTaskLink(id, user.member.id);
   revalidateTareas();
+}
+
+/**
+ * `taskId` waits on `dependsOnTaskId` ("Depende de"). Same project, no self,
+ * no duplicate, no cycle. Whoever can edit the task can edit its dependencies.
+ * Throws `FORBIDDEN`, `NOT_FOUND`, `OTHER_PROJECT`, `SELF`, `DUPLICATE`, `CYCLE`.
+ */
+export async function addTaskDependencyAction(taskId: string, dependsOnTaskId: string): Promise<void> {
+  const user = await requireCapabilityUser();
+  if (!resolveActivitiesCapabilities(user).canCreateActivity) {
+    throw new Error("FORBIDDEN: task dependency edit");
+  }
+  await taskDependenciesRepository.addTaskDependency(taskId, dependsOnTaskId);
+  revalidateTareas((await taskDependenciesRepository.getTaskProjectId(taskId)) ?? undefined);
+}
+
+/** Removes a dependency. Throws `FORBIDDEN`, `NOT_FOUND`. */
+export async function removeTaskDependencyAction(taskId: string, dependsOnTaskId: string): Promise<void> {
+  const user = await requireCapabilityUser();
+  if (!resolveActivitiesCapabilities(user).canCreateActivity) {
+    throw new Error("FORBIDDEN: task dependency edit");
+  }
+  await taskDependenciesRepository.removeTaskDependency(taskId, dependsOnTaskId);
+  revalidateTareas((await taskDependenciesRepository.getTaskProjectId(taskId)) ?? undefined);
+}
+
+/** Tasks this one waits on (`dependsOn`) and tasks that wait on it (`blocks`). */
+export async function listTaskDependenciesAction(
+  taskId: string
+): Promise<{ dependsOn: TaskRef[]; blocks: TaskRef[] }> {
+  const caps = await requireTasksCapabilities();
+  if (!caps.canViewActivities) return { dependsOn: [], blocks: [] };
+  return taskDependenciesRepository.listTaskDependencies(taskId);
 }
