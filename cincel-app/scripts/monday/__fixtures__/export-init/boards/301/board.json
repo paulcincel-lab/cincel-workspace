@@ -1,0 +1,54 @@
+{
+  "id": "301",
+  "name": "Clientes",
+  "workspace_id": null,
+  "hierarchy_type": "classic",
+  "columns": [
+    {
+      "id": "name",
+      "title": "Name",
+      "type": "name",
+      "settings": {}
+    },
+    {
+      "id": "email",
+      "title": "Correo",
+      "type": "email",
+      "settings": {}
+    },
+    {
+      "id": "phone",
+      "title": "Teléfono",
+      "type": "phone",
+      "settings": {}
+    },
+    {
+      "id": "status",
+      "title": "Estado",
+      "type": "status",
+      "settings": {
+        "labels": [
+          {
+            "id": 0,
+            "label": "Activo",
+            "index": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "text",
+      "title": "Notas",
+      "type": "text",
+      "settings": {}
+    }
+  ],
+  "groups": [
+    {
+      "id": "g",
+      "title": "Clientes",
+      "position": "1"
+    }
+  ],
+  "subitem_columns": []
+}

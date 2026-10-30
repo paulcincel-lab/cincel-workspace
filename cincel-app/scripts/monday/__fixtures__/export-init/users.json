@@ -1,0 +1,30 @@
+[
+  {
+    "id": "1",
+    "name": "Ana Admin",
+    "email": "Ana@Cincel.mx",
+    "status": "active",
+    "kind": "admin"
+  },
+  {
+    "id": "2",
+    "name": "Beto Obra",
+    "email": "beto@cincel.mx",
+    "status": "active",
+    "kind": "member"
+  },
+  {
+    "id": "3",
+    "name": "Carla Cliente",
+    "email": "carla@cliente.mx",
+    "status": "active",
+    "kind": "guest"
+  },
+  {
+    "id": "4",
+    "name": "Dani Externo",
+    "email": "dani@otro.mx",
+    "status": "inactive",
+    "kind": "member"
+  }
+]
