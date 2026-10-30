@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangleIcon, CalendarCheckIcon, ListChecksIcon } from "lucide-react";
+import { AlertTriangleIcon, CalendarCheckIcon, FolderKanbanIcon, ListChecksIcon } from "lucide-react";
 
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
@@ -15,19 +15,12 @@ import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveDashboardCapabilities, scopeDashboardProjects, scopeDashboardTasks } from "@/lib/auth/permissions";
-import { StatusBadge, StatusDot } from "@/components/v2/status/StatusBadge";
+import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import { cn } from "@/lib/utils";
 import type { TaskListItem } from "@/lib/types/core";
-import {
-  BASE_STATUSES,
-  BASE_STATUS_COLOR,
-  BASE_STATUS_LABEL,
-  isDueDateLate,
-  statusColorToken,
-  statusSelectValue,
-  taskStatusLabel,
-  type StatusColorToken,
-} from "@/lib/tasks/status-options";
+import { isDueDateLate, statusColorToken, taskStatusLabel } from "@/lib/tasks/status-options";
+import { projectsByArea, tasksByBaseStatus } from "@/lib/dashboard/donut-groups";
+import { DonutCard } from "./DonutCard";
 
 interface DashboardClientProps {
   initialProjects: ProjectItem[];
@@ -131,23 +124,12 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     return { activeProjects, overdue, blocked, reviews, noOwner };
   }, [scopedProjectsData, activeTasks, today]);
 
-  // Built-in statuses always listed; custom statuses are their own rows, when in use.
-  const statusMix = useMemo(() => {
-    const total = activeTasks.length || 1;
-    const rows = new Map<string, { status: string; label: string; token: StatusColorToken; count: number }>(
-      BASE_STATUSES.map((status) => [
-        status,
-        { status, label: BASE_STATUS_LABEL[status], token: BASE_STATUS_COLOR[status], count: 0 },
-      ])
-    );
-    activeTasks.forEach((t) => {
-      const key = statusSelectValue(t);
-      const row = rows.get(key) ?? { status: key, label: taskStatusLabel(t), token: statusColorToken(t), count: 0 };
-      row.count += 1;
-      rows.set(key, row);
-    });
-    return [...rows.values()].map((row) => ({ ...row, percent: (row.count / total) * 100 }));
-  }, [activeTasks]);
+  const tasksByStatus = useMemo(() => tasksByBaseStatus(activeTasks), [activeTasks]);
+
+  const projectsByDepartment = useMemo(
+    () => projectsByArea(scopedProjectsData.filter((p) => p.status === "activo")),
+    [scopedProjectsData]
+  );
 
   const weeklyProgress = useMemo(() => {
     const weekStart = new Date(today);
@@ -252,46 +234,29 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
           </CardContent>
         </Card>
 
-        <Card className="min-w-0">
-          <CardHeader className="border-b">
-            <CardTitle className="flex items-center gap-2.5 font-semibold">
-              <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-chart-1/10 text-chart-1">
-                <ListChecksIcon className="size-4" />
-              </span>
-              Estatus de actividades
-            </CardTitle>
-            <CardAction>
-              <span className="font-mono text-xs text-muted-foreground">{activeTasks.length} tareas</span>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="px-0">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className={cn(SECTION_LABEL, "pl-4")}>Estatus</TableHead>
-                  <TableHead className={cn(SECTION_LABEL, "text-right")}>Tareas</TableHead>
-                  <TableHead className={cn(SECTION_LABEL, "pr-4 text-right")}>%</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {statusMix.map((s) => (
-                  <TableRow key={s.status}>
-                    <TableCell className="pl-4">
-                      <span className="flex items-center gap-2">
-                        <StatusDot token={s.token} />
-                        {s.label}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">{s.count}</TableCell>
-                    <TableCell className="pr-4 text-right font-mono tabular-nums text-muted-foreground">
-                      {Math.round(s.percent)}%
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <DonutCard
+          title="Tareas por estatus"
+          icon={
+            <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-chart-1/10 text-chart-1">
+              <ListChecksIcon className="size-4" />
+            </span>
+          }
+          slices={tasksByStatus}
+          unit="tareas"
+          emptyText="Sin tareas activas."
+        />
+
+        <DonutCard
+          title="Proyectos por departamento"
+          icon={
+            <span aria-hidden className="flex size-7 items-center justify-center rounded-lg bg-chart-3/10 text-chart-3">
+              <FolderKanbanIcon className="size-4" />
+            </span>
+          }
+          slices={projectsByDepartment}
+          unit="proyectos"
+          emptyText="Sin proyectos activos."
+        />
 
         <Card className="min-w-0">
           <CardHeader className="border-b">
