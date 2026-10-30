@@ -18,6 +18,9 @@ const actions = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/actions/tasks-actions", () => actions);
+vi.mock("@/lib/actions/import-actions", () => ({
+  getImportDataAction: vi.fn().mockResolvedValue(null),
+}));
 
 import TaskDrawer from "./TaskDrawer";
 import { subtaskErrorMessage } from "./TaskSubtasks";

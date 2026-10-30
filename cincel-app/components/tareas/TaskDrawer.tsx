@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
 import { HistoryCommentInput } from "@/components/ui/HistoryCommentInput";
+import { ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 
 const STATUS_LABEL: Record<TaskDetail["status"], string> = {
   pendiente: "Pendiente",
@@ -79,6 +80,7 @@ export default function TaskDrawer({
   const [backStack, setBackStack] = useState<BackEntry[]>([]);
   const [newChecklistItem, setNewChecklistItem] = useState("");
   const [attachmentError, setAttachmentError] = useState("");
+  const importData = useImportData("task", task?.id);
 
   const nameToStaffId = useMemo(() => new Map(staffOptions.map((s) => [s.name, s.id])), [staffOptions]);
   const staffNames = useMemo(() => staffOptions.map((s) => s.name), [staffOptions]);
@@ -456,6 +458,8 @@ export default function TaskDrawer({
                   </div>
                 </section>
               ) : null}
+
+              <ImportDataPanel importData={importData} />
             </div>
 
             <SheetFooter>
