@@ -1,4 +1,4 @@
-import { JWT } from "google-auth-library";
+import { createServiceAccountJwt } from "./service-account";
 
 /**
  * Drive v3 client that acts as the service account itself (no domain-wide
@@ -142,11 +142,7 @@ export function buildListQuery(options: Pick<ListOptions, "parentId" | "q" | "in
 }
 
 function serviceAccountTokenSource(credentials: DriveAdminCredentials): () => Promise<string> {
-  const jwt = new JWT({
-    email: credentials.clientEmail.trim(),
-    key: credentials.privateKey.replace(/\\n/g, "\n"),
-    scopes: [DRIVE_SCOPE],
-  });
+  const jwt = createServiceAccountJwt(credentials, [DRIVE_SCOPE]);
   return async () => {
     const { token } = await jwt.getAccessToken();
     if (!token) throw new DriveAdminError("No se obtuvo un token de la cuenta de servicio", 401);
