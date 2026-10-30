@@ -249,7 +249,7 @@ sequenceDiagram
   R->>DB: session → staff
   alt staff.access_revoked_at set or staff.active = false
     R->>DB: delete the staff member's sessions
-    R-->>P: redirect /api/auth/signout?next=/login/denegado?motivo=revoked
+    R-->>P: redirect /api/auth/signout?next=%2Flogin%2Fdenegado%3Fmotivo%3Drevoked
   else google_sub set and access_checked_at older than ACCESS_RECHECK_HOURS
     R->>DB: claim the check (conditional update of access_checked_at)
     R->>D: users.get + hasMember for mapped groups
@@ -257,7 +257,7 @@ sequenceDiagram
       R->>DB: update role, area_members, access_checked_at
     else not allowed
       R->>DB: access_revoked_at/reason, delete all sessions, auth_events
-      R-->>P: redirect /api/auth/signout?next=/login/denegado?motivo=revoked
+      R-->>P: redirect /api/auth/signout?next=%2Flogin%2Fdenegado%3Fmotivo%3Drevoked
     else Directory error
       R->>DB: auth_events (staff_recheck_error); keep current access
     end
@@ -274,9 +274,10 @@ sequenceDiagram
 ### A.5.1 Route guard, stale cookies and sign-out
 
 Server Components can't delete cookies, so a revoked or expired session leaves its cookie behind. Rules that avoid redirect loops:
-- **Sign-out route:** `GET /api/auth/signout?next=<path>` deletes the staff session row (if any) and the cookie, then redirects to `safeReturnTo(next)` (§A.10). Every server-side "this session is no longer valid" outcome redirects through it: revoked at re-check → `/api/auth/signout?next=/login/denegado?motivo=revoked`; session row missing or expired → `/api/auth/signout?next=/login`.
+- **Sign-out route:** `GET /api/auth/signout?next=<path>` deletes the staff session row (if any) and the cookie, then redirects to `safeReturnTo(next, "/login")` (§A.10). The nested target is always URL-encoded (`next=%2Flogin%2Fdenegado%3Fmotivo%3Drevoked`).
+- **Who sends the browser to sign-out:** server helpers redirect through `/api/auth/signout` only for `revoked` / `inactive` (revoked at re-check → `/api/auth/signout?next=%2Flogin%2Fdenegado%3Fmotivo%3Drevoked`). A missing or expired session row is handled by `AppRouteGuard` on non-public paths only (see the `AppRouteGuard` bullet), so a stale staff cookie on a public path such as `/portal/*` never leads to the staff login.
 - **`middleware.ts`:** drop the `/login → /dashboard` redirect for requests with a cookie. The `/login` page (server component) calls `getSessionAccess()` and redirects to `/dashboard` itself only when the session is `active`.
-- **`AppRouteGuard`:** public routes become `/login`, `/login/denegado`, `/change-password`, and every path under `/portal`. For `/portal` paths the guard renders children without any staff check (the portal layout does its own checks, §B.4.3). When the server resolution is `guest` but a staff cookie may exist, the guard sends the browser to `/api/auth/signout?next=/login` instead of `/login`.
+- **`AppRouteGuard`:** public routes become `/login`, `/login/denegado`, `/change-password`, and every path under `/portal`. For `/portal` paths the guard renders children without any staff check (the portal layout does its own checks, §B.4.3). On non-public paths, when the server resolution is `guest` (session row missing or expired), the guard does a hard navigation, `window.location.assign("/api/auth/signout?next=%2Flogin")`, instead of `router.replace` to `/login`.
 - **`/change-password`:** only reachable for `pending_first_access` while `AUTH_PASSWORD_ENABLED=true`; otherwise it redirects to `/dashboard` (active) or `/login` (guest), never back and forth.
 - Tests cover each public path, the revoked-cookie path and the `must_change_password` path (§10).
 
@@ -401,7 +402,7 @@ Update `.env.example`, `docker-compose.prod.yml`, `docs/google-drive.md` and the
 
 - Verify the ID token, `hd` and `email_verified` on every Google sign-in; identify by `sub`.
 - OAuth `state` and PKCE `code_verifier` in a short-lived (10 min) httpOnly cookie; callback refuses mismatches.
-- **`safeReturnTo(value, fallback)`** in `lib/auth/safe-return-to.ts`, used for every `return_to` / `next` (staff and portal): the value must start with a single `/`, not `//` or `/\`, contain no control characters, and `new URL(value, APP_ORIGIN).origin` must equal `APP_ORIGIN`; otherwise `fallback` (`/dashboard`, or `/portal` for the portal). Redirect targets are always built from `APP_ORIGIN`, never from the request host.
+- **`safeReturnTo(value, fallback)`** in `lib/auth/safe-return-to.ts`, used for every `return_to` / `next` (staff and portal): the value must start with a single `/`, not `//` or `/\`, contain no control characters, and `new URL(value, APP_ORIGIN).origin` must equal `APP_ORIGIN`; otherwise `fallback` (`/dashboard`; `/login` for `/api/auth/signout`; `/portal` for the portal). Redirect targets are always built from `APP_ORIGIN`, never from the request host.
 - **Client IP** for rate limits and logs comes from `X-Real-IP`, which the reverse proxy sets; `X-Forwarded-For` is never trusted.
 - No session before the gate passes.
 - Service account key only in env secrets; read-only custom admin role.
@@ -423,12 +424,12 @@ Update `.env.example`, `docker-compose.prod.yml`, `docs/google-drive.md` and the
 9. The Archivos tab asks for Drive once, then lists folder contents with the user's own token. A user without Drive access sees "No tienes acceso a esta carpeta en Drive".
 10. An existing staff row with a password and no `google_sub` is linked on first Google sign-in by email; afterwards changing the Google account's email doesn't break the link.
 11. With `AUTH_PASSWORD_ENABLED=false`, `loginAction` refuses and the form is hidden.
+12. Role and area edits for a Google-managed staff member are refused by the server actions, not just hidden.
 13. A revoked staff member lands on `/login/denegado?motivo=revoked` with the cookie cleared; **Volver a intentar** shows `/login` without any redirect loop.
 14. A staff member with `must_change_password = true` who signs in with Google goes straight to `/dashboard`.
 15. With `AUTH_GOOGLE_ENABLED=false`, the Drive picker and Calendar sync work exactly as before the release.
 16. A password-session staff member who clicks **Conectar Google Drive** during cutover gets linked (`google_sub` set) and their Drive works.
 17. `return_to=//evil.example` and `return_to=https://evil.example` redirect to `/dashboard`.
-12. Role and area edits for a Google-managed staff member are refused by the server actions, not just hidden.
 
 ---
 
@@ -650,7 +651,7 @@ GET /api/portal/projects/[pid]/files/[fileId]/preview    → inline (PDF, JPEG, 
 2. `assertInsideClientFolder(fileId, project)`; folders → 400.
 3. Google-native (Docs, Sheets, Slides, Drawings) → `files.export` `application/pdf`. Drive limits exports to 10 MB; on that error return 422 `{ error: "export_too_large" }` ("Este documento es muy grande; pide el PDF a tu equipo.").
 4. Other files → `files.get` `alt=media`, **streamed** (`ReadableStream`, no buffering).
-5. Headers: RFC 6266 `Content-Disposition` with a sanitized filename (`filename*=UTF-8''…`), `Content-Type` from Drive, `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`, and `Content-Security-Policy: sandbox; default-src 'none'; img-src 'self'; object-src 'self'` on both routes.
+5. Headers: RFC 6266 `Content-Disposition` with a sanitized filename (`filename*=UTF-8''…`), `Content-Type` from Drive, `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`. CSP: `download` and image previews send `Content-Security-Policy: sandbox; default-src 'none'`. PDF previews send `Content-Security-Policy: default-src 'none'; object-src 'self'` (no `sandbox`: browser PDF viewers refuse sandboxed documents). Verified manually in Chrome, Safari and Firefox.
 6. Insert `portal_file_events` (`download` or `preview`).
 
 ### B.4.6 Ancestry check
@@ -755,6 +756,6 @@ Local `docker-compose.yml` gains a `mailpit` service (`axllent/mailpit`), and `.
 ## 11. Open questions
 
 1. Can the Keter route for the app accept 55 MB bodies (§B.4.7)? Decides streaming vs two-step upload.
-4. Retention of `auth_events`, `portal_file_events` and `portal_audit_events`: kept indefinitely in v1; decide a period with the client.
 2. Confirm the defaults in §0.3 with the client (group names, permission defaults, cronograma detail for clients).
 3. Should `project_links` with `kind = 'cliente'` (links staff already curate for clients) also appear in the portal? v1 says no.
+4. Retention of `auth_events`, `portal_file_events` and `portal_audit_events`: kept indefinitely in v1; decide a period with the client.
