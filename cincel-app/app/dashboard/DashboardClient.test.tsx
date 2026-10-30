@@ -51,6 +51,11 @@ const tasks: TaskListItem[] = [
     manager: { id: "u1", name: "Ana Ruiz" },
     support: [],
     checklist: { total: 0, completed: 0 },
+    parentTaskId: null,
+    parentTitle: null,
+    subtaskCount: 0,
+    subtaskDoneCount: 0,
+    waitingOn: 0,
   },
 ];
 
