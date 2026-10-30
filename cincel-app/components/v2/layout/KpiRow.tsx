@@ -13,7 +13,7 @@ export interface KpiTileProps {
  */
 export function KpiTile({ label, value, tone = "default" }: KpiTileProps) {
   return (
-    <div className="rounded-lg border border-border bg-background p-3.5">
+    <div className="rounded-lg border border-border bg-card p-3.5">
       <div className="font-mono text-[9.5px] tracking-wide text-muted-foreground uppercase">
         {label}
       </div>

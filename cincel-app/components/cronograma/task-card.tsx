@@ -14,7 +14,7 @@ const STATUS_ICON: Record<ScheduleStatus, string> = {
 };
 
 const STATUS_CLASS: Record<ScheduleStatus, string> = {
-  pending: "border-border bg-background text-muted-foreground",
+  pending: "border-border bg-card text-muted-foreground",
   progress: "border-yellow-500/50 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
   done: "border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400",
 };

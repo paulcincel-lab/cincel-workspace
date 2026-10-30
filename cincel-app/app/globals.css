@@ -58,11 +58,11 @@
      carries zero accent hue anywhere in its chrome; color only ever comes
      from project photography), each step distinct so muted/hover/secondary
      surfaces read differently from one another. */
-  --background: #ffffff;
+  --background: #f5f5f4;
   --foreground: #0a0a0a;
-  --card: #fafafa;
+  --card: #ffffff;
   --card-foreground: #0a0a0a;
-  --popover: #fafafa;
+  --popover: #ffffff;
   --popover-foreground: #0a0a0a;
   --primary: #0a0a0a;
   --primary-foreground: #ffffff;
@@ -75,8 +75,8 @@
   --destructive: #c6362b;
   --success: #e9f5ee;
   --success-foreground: #1e7a46;
-  --border: #e2e2e2;
-  --input: #e2e2e2;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
   --ring: #0a0a0a;
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
@@ -90,7 +90,7 @@
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #efefef;
   --sidebar-accent-foreground: #0a0a0a;
-  --sidebar-border: #e2e2e2;
+  --sidebar-border: #e5e5e5;
   --sidebar-ring: #0a0a0a;
 }
 

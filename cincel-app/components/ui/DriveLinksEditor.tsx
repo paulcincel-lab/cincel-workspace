@@ -96,7 +96,7 @@ export function DriveLinksEditor({ links, onAdd, onRemove }: Props) {
               value={kind}
               onChange={(e) => setKind(e.target.value as TaskLinkKind)}
               aria-label="Tipo de enlace"
-              className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
+              className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
             >
               <option value="interno">{TASK_LINK_KIND_LABEL.interno}</option>
               <option value="cliente">{TASK_LINK_KIND_LABEL.cliente}</option>
