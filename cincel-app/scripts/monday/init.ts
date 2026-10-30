@@ -95,7 +95,7 @@ export interface ExportData {
   boards: ExportBoard[];
 }
 
-async function readJson<T>(path: string): Promise<T | null> {
+export async function readJson<T>(path: string): Promise<T | null> {
   try {
     return JSON.parse(await readFile(path, "utf8")) as T;
   } catch (err) {
@@ -104,7 +104,7 @@ async function readJson<T>(path: string): Promise<T | null> {
   }
 }
 
-async function readNdjson<T>(path: string): Promise<T[]> {
+export async function readNdjson<T>(path: string): Promise<T[]> {
   let text: string;
   try {
     text = await readFile(path, "utf8");
