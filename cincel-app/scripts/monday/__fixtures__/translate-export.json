@@ -1,0 +1,815 @@
+{
+  "users": [
+    {
+      "id": "11",
+      "name": "Ana Arquitecta",
+      "email": "ana@cincel.mx",
+      "status": "ACTIVE",
+      "kind": "member"
+    },
+    {
+      "id": "12",
+      "name": "Beto Obra",
+      "email": "beto@cincel.mx",
+      "status": "ACTIVE",
+      "kind": "member"
+    },
+    {
+      "id": "13",
+      "name": "Carla Cliente",
+      "email": "Carla@Example.com",
+      "status": "ACTIVE",
+      "kind": "guest"
+    },
+    {
+      "id": "14",
+      "name": "Dario Externo",
+      "email": "dario@otro.mx",
+      "status": "ACTIVE",
+      "kind": "member"
+    }
+  ],
+  "boards": [
+    {
+      "board": {
+        "id": "301",
+        "name": "Casa Lomas",
+        "workspace_id": "7",
+        "hierarchy_type": "classic",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "status",
+            "title": "Estado",
+            "type": "status",
+            "settings": {
+              "labels": [
+                {
+                  "id": 0,
+                  "label": "Pendiente",
+                  "index": 0
+                },
+                {
+                  "id": 1,
+                  "label": "Listo",
+                  "index": 1,
+                  "is_done": true
+                },
+                {
+                  "id": 2,
+                  "label": "Detenido",
+                  "index": 2
+                },
+                {
+                  "id": 3,
+                  "label": "Revisión cliente",
+                  "index": 3
+                }
+              ]
+            }
+          },
+          {
+            "id": "prio",
+            "title": "Prioridad",
+            "type": "status",
+            "settings": {
+              "labels": [
+                {
+                  "id": 0,
+                  "label": "Alta",
+                  "index": 0
+                },
+                {
+                  "id": 1,
+                  "label": "Baja",
+                  "index": 1
+                },
+                {
+                  "id": 2,
+                  "label": "Normal",
+                  "index": 2
+                }
+              ]
+            }
+          },
+          {
+            "id": "people",
+            "title": "Responsable",
+            "type": "people",
+            "settings": {}
+          },
+          {
+            "id": "timeline",
+            "title": "Cronograma",
+            "type": "timeline",
+            "settings": {}
+          },
+          {
+            "id": "entrega",
+            "title": "Entrega",
+            "type": "date",
+            "settings": {}
+          },
+          {
+            "id": "notas",
+            "title": "Notas",
+            "type": "long_text",
+            "settings": {}
+          },
+          {
+            "id": "deps",
+            "title": "Dependencia",
+            "type": "dependency",
+            "settings": {}
+          }
+        ],
+        "groups": [
+          {
+            "id": "g_obra",
+            "title": "Obra",
+            "position": "131072.5"
+          },
+          {
+            "id": "g_diseno",
+            "title": "Diseño",
+            "position": "65536"
+          },
+          {
+            "id": "g_extra",
+            "title": "Extras",
+            "position": "65536.0"
+          },
+          {
+            "id": "g_final",
+            "title": "Entrega final",
+            "position": "200000"
+          }
+        ],
+        "subitem_columns": []
+      },
+      "items": [
+        {
+          "id": "1001",
+          "name": "Planos",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g_diseno"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "StatusValue",
+              "id": "status",
+              "type": "status",
+              "text": "Listo",
+              "label": "Listo",
+              "index": 1,
+              "is_done": true
+            },
+            {
+              "__typename": "StatusValue",
+              "id": "prio",
+              "type": "status",
+              "text": "Alta",
+              "label": "Alta",
+              "index": 0,
+              "is_done": false
+            },
+            {
+              "__typename": "PeopleValue",
+              "id": "people",
+              "type": "people",
+              "text": null,
+              "persons_and_teams": [
+                {
+                  "id": "11",
+                  "kind": "person"
+                },
+                {
+                  "id": "12",
+                  "kind": "person"
+                },
+                {
+                  "id": "13",
+                  "kind": "person"
+                },
+                {
+                  "id": "14",
+                  "kind": "person"
+                },
+                {
+                  "id": "99",
+                  "kind": "team"
+                }
+              ]
+            },
+            {
+              "__typename": "TimelineValue",
+              "id": "timeline",
+              "type": "timeline",
+              "text": "2026-01-05 - 2026-01-20",
+              "from": "2026-01-05",
+              "to": "2026-01-20",
+              "visualization_type": "timeline"
+            },
+            {
+              "__typename": "DateValue",
+              "id": "entrega",
+              "type": "date",
+              "text": "2026-01-25",
+              "date": "2026-01-25",
+              "time": null
+            },
+            {
+              "__typename": "LongTextValue",
+              "id": "notas",
+              "type": "long_text",
+              "text": "Revisar con el cliente"
+            }
+          ]
+        },
+        {
+          "id": "1002",
+          "name": "Permisos",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g_diseno"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "StatusValue",
+              "id": "status",
+              "type": "status",
+              "text": "Revisión cliente",
+              "label": "Revisión cliente",
+              "index": 3,
+              "is_done": false
+            },
+            {
+              "__typename": "StatusValue",
+              "id": "prio",
+              "type": "status",
+              "text": "Baja",
+              "label": "Baja",
+              "index": 1,
+              "is_done": false
+            },
+            {
+              "__typename": "PeopleValue",
+              "id": "people",
+              "type": "people",
+              "text": null,
+              "persons_and_teams": [
+                {
+                  "id": "12",
+                  "kind": "person"
+                },
+                {
+                  "id": "12",
+                  "kind": "person"
+                }
+              ]
+            },
+            {
+              "__typename": "TimelineValue",
+              "id": "timeline",
+              "type": "timeline",
+              "text": "2026-02-01 - 2026-02-01",
+              "from": "2026-02-01",
+              "to": "2026-02-01",
+              "visualization_type": "milestone"
+            },
+            {
+              "__typename": "DependencyValue",
+              "id": "deps",
+              "type": "dependency",
+              "text": null,
+              "linked_item_ids": ["1001", "9999"]
+            }
+          ]
+        },
+        {
+          "id": "1003",
+          "name": "Cimentación",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g_obra"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "StatusValue",
+              "id": "status",
+              "type": "status",
+              "text": "Detenido",
+              "label": "Detenido",
+              "index": 2,
+              "is_done": false
+            },
+            {
+              "__typename": "PeopleValue",
+              "id": "people",
+              "type": "people",
+              "text": null,
+              "persons_and_teams": [
+                {
+                  "id": "13",
+                  "kind": "person"
+                }
+              ]
+            },
+            {
+              "__typename": "DependencyValue",
+              "id": "deps",
+              "type": "dependency",
+              "text": null,
+              "linked_item_ids": ["1002", "1003"]
+            }
+          ]
+        },
+        {
+          "id": "1004",
+          "name": "Muros",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g_obra"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "StatusValue",
+              "id": "status",
+              "type": "status",
+              "text": null,
+              "label": null,
+              "index": null,
+              "is_done": null
+            }
+          ]
+        },
+        {
+          "id": "1005",
+          "name": "Acabados",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g_extra"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "StatusValue",
+              "id": "status",
+              "type": "status",
+              "text": "Pendiente",
+              "label": "Pendiente",
+              "index": 0,
+              "is_done": false
+            },
+            {
+              "__typename": "TimelineValue",
+              "id": "timeline",
+              "type": "timeline",
+              "text": "2026-03-01T00:00:00+00:00 - 2026-03-31T00:00:00+00:00",
+              "from": "2026-03-01T00:00:00+00:00",
+              "to": "2026-03-31T00:00:00+00:00",
+              "visualization_type": "timeline"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "board": {
+        "id": "401",
+        "name": "Clientes",
+        "workspace_id": null,
+        "hierarchy_type": "classic",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "email",
+            "title": "Correo",
+            "type": "email",
+            "settings": {}
+          },
+          {
+            "id": "phone",
+            "title": "Teléfono",
+            "type": "phone",
+            "settings": {}
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "title": "Clientes",
+            "position": "1"
+          }
+        ],
+        "subitem_columns": []
+      },
+      "items": [
+        {
+          "id": "5001",
+          "name": "Familia Ruiz",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g1"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "EmailValue",
+              "id": "email",
+              "type": "email",
+              "text": "ruiz@example.com",
+              "email": "ruiz@example.com",
+              "label": null
+            },
+            {
+              "__typename": "PhoneValue",
+              "id": "phone",
+              "type": "phone",
+              "text": "+52 55 1234 5678",
+              "phone": "+525512345678",
+              "country_short_name": "MX"
+            }
+          ]
+        },
+        {
+          "id": "5002",
+          "name": "Grupo Sol",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g1"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": []
+        }
+      ]
+    },
+    {
+      "board": {
+        "id": "501",
+        "name": "Obras 2026",
+        "workspace_id": null,
+        "hierarchy_type": "classic",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "rel",
+            "title": "Cliente",
+            "type": "board_relation",
+            "settings": {}
+          },
+          {
+            "id": "subitems",
+            "title": "Subelementos",
+            "type": "subtasks",
+            "settings": {}
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "title": "Activas",
+            "position": "1"
+          }
+        ],
+        "subitem_columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "sstatus",
+            "title": "Estado",
+            "type": "status",
+            "settings": {
+              "labels": [
+                {
+                  "id": 5,
+                  "label": "Hecho",
+                  "index": 0,
+                  "is_done": true
+                },
+                {
+                  "id": 6,
+                  "label": "En curso",
+                  "index": 1
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "items": [
+        {
+          "id": "6001",
+          "name": "Casa Ruiz",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g1"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "BoardRelationValue",
+              "id": "rel",
+              "type": "board_relation",
+              "text": null,
+              "linked_item_ids": ["5001"],
+              "display_value": ""
+            }
+          ],
+          "subitems": [
+            {
+              "id": "6101",
+              "name": "Demolición",
+              "state": "active",
+              "created_at": "2025-12-01T10:00:00Z",
+              "updated_at": "2025-12-01T10:00:00Z",
+              "creator_id": "1",
+              "group": {
+                "id": "sg"
+              },
+              "parent_item": null,
+              "assets": [],
+              "column_values": [
+                {
+                  "__typename": "StatusValue",
+                  "id": "sstatus",
+                  "type": "status",
+                  "text": "Hecho",
+                  "label": "Hecho",
+                  "index": 0,
+                  "is_done": true
+                }
+              ]
+            },
+            {
+              "id": "6102",
+              "name": "Instalaciones",
+              "state": "active",
+              "created_at": "2025-12-01T10:00:00Z",
+              "updated_at": "2025-12-01T10:00:00Z",
+              "creator_id": "1",
+              "group": {
+                "id": "sg"
+              },
+              "parent_item": null,
+              "assets": [],
+              "column_values": [
+                {
+                  "__typename": "StatusValue",
+                  "id": "sstatus",
+                  "type": "status",
+                  "text": "En curso",
+                  "label": "En curso",
+                  "index": 1,
+                  "is_done": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "6002",
+          "name": "Casa Sol",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g1"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "BoardRelationValue",
+              "id": "rel",
+              "type": "board_relation",
+              "text": null,
+              "linked_item_ids": ["5002"],
+              "display_value": ""
+            }
+          ],
+          "subitems": [
+            {
+              "id": "6201",
+              "name": "Pintura",
+              "state": "active",
+              "created_at": "2025-12-01T10:00:00Z",
+              "updated_at": "2025-12-01T10:00:00Z",
+              "creator_id": "1",
+              "group": {
+                "id": "sg"
+              },
+              "parent_item": null,
+              "assets": [],
+              "column_values": [
+                {
+                  "__typename": "StatusValue",
+                  "id": "sstatus",
+                  "type": "status",
+                  "text": "Hecho",
+                  "label": "Hecho",
+                  "index": 0,
+                  "is_done": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "6003",
+          "name": "Casa sin cliente",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g1"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "BoardRelationValue",
+              "id": "rel",
+              "type": "board_relation",
+              "text": null,
+              "linked_item_ids": ["8888"],
+              "display_value": ""
+            }
+          ],
+          "subitems": []
+        }
+      ]
+    },
+    {
+      "board": {
+        "id": "601",
+        "name": "Proveedores",
+        "workspace_id": null,
+        "hierarchy_type": "classic",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "title": "Todos",
+            "position": "1"
+          }
+        ],
+        "subitem_columns": []
+      },
+      "items": [
+        {
+          "id": "7001",
+          "name": "Concretos del Valle",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "g1"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": []
+        }
+      ]
+    },
+    {
+      "board": {
+        "id": "701",
+        "name": "Remodelaciones",
+        "workspace_id": null,
+        "hierarchy_type": "classic",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          }
+        ],
+        "groups": [
+          {
+            "id": "gb",
+            "title": "Depto Roma",
+            "position": "2"
+          },
+          {
+            "id": "ga",
+            "title": "Depto Condesa",
+            "position": "1"
+          }
+        ],
+        "subitem_columns": []
+      },
+      "items": [
+        {
+          "id": "8001",
+          "name": "Cocina",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "ga"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": []
+        },
+        {
+          "id": "8002",
+          "name": "Baño",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "gb"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": []
+        },
+        {
+          "id": "8003",
+          "name": "Recámara",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "1",
+          "group": {
+            "id": "ga"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": []
+        }
+      ]
+    }
+  ]
+}
