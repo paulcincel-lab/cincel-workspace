@@ -2,6 +2,10 @@ name: "Cincel Workspace"
 port: 3000
 health: /api/healthz
 env:
+  ACCESS_RECHECK_HOURS: { default: "4", description: "Hours between Workspace access re-checks of a signed-in staff member." }
+  APP_ORIGIN: { description: "Public origin of the app (e.g. https://app.example.com). Builds the staff Google sign-in redirect URI <APP_ORIGIN>/api/auth/google/callback; never taken from the request." }
+  AUTH_GOOGLE_ENABLED: { default: "false", description: "Staff login flag (true/false): shows \"Entrar con Google\" and enables /api/auth/google/*. Read server-side." }
+  AUTH_PASSWORD_ENABLED: { default: "true", description: "Staff login flag (true/false): shows the email/password form and enables login, first access and change password. Read server-side." }
   CINCEL_ADMIN_EMAILS: {}
   GITHUB_PAT: { description: "── GitHub RFCs (assistant `create_rfc` tool, optional) ───────────────────── Fine-grained personal access token scoped to Issues: write on GITHUB_REPO only (no other repo/org scope). Used to file RFCs the assistant drafts as GitHub Issues labeled \"rfc\". Leave unset to disable the tool — it tells the user GitHub isn't configured instead of failing silently." }
   GITHUB_REPO: {}
@@ -10,9 +14,13 @@ env:
   GOOGLE_OAUTH_CLIENT_SECRET: { secret: true }
   GOOGLE_SA_CLIENT_EMAIL: { description: "── Google Drive (Phase 4/6, optional) ─────────────────────────────────────── Service-account access to Drive for the Recursos / project doc pickers, via domain-wide delegation impersonating the logged-in Cincel user (their institutional email) — so Google's own per-file permissions apply exactly as they already do. See docs/google-drive.md. Leave unset to disable the picker (manual URL entry still works)." }
   GOOGLE_SA_PRIVATE_KEY: { secret: true }
+  GOOGLE_SHARED_DRIVE_ID: { description: "Company Shared Drive where project folders live. The service account must be a Content manager on it. See docs/google-drive.md." }
+  GOOGLE_WORKSPACE_CUSTOMER_ID: { description: "Optional Workspace customer id, for Directory groups.get." }
+  GOOGLE_WORKSPACE_DOMAIN: { description: "Workspace domain allowed to sign in (checked against the ID token's hd)." }
   LLM_API_KEY: { secret: true }
   LLM_BASE_URL: { description: "── AI Assistant (Phase 5, optional) ──────────────────────────────────────── OpenAI-compatible chat endpoint for /asistente. Point LLM_BASE_URL at any compatible /v1 surface (OpenAI, a local model, a Claude proxy, …). Leave unset to disable — the route returns 503 and the UI shows an error." }
   LLM_MODEL: { default: "gpt-4o-mini" }
+  TOKEN_ENCRYPTION_KEY: { secret: true, generate: hex32, description: "AES-256 key for OAuth tokens at rest (32 bytes as 64 hex chars)." }
 needs:
   postgres: { version: "17" }
 stack:

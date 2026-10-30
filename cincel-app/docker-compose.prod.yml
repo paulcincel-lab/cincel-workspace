@@ -20,6 +20,16 @@
 #   REGISTRY_URL, IMAGE_TAG, POSTGRES_PASSWORD, SEED_ADMIN_PASSWORD (seed only,
 #   not required to `up`), DATABASE-adjacent POSTGRES_DB/POSTGRES_USER default
 #   to `cincel` like the local compose file.
+#
+# Staff Google sign-in (optional; set in .env.production, see .env.example and
+# docs/google-drive.md):
+#   AUTH_GOOGLE_ENABLED (default false), AUTH_PASSWORD_ENABLED (default true),
+#   APP_ORIGIN, GOOGLE_WORKSPACE_DOMAIN, GOOGLE_WORKSPACE_CUSTOMER_ID,
+#   GOOGLE_SHARED_DRIVE_ID, ACCESS_RECHECK_HOURS (default 4), and the secret
+#   TOKEN_ENCRYPTION_KEY (64 hex chars, `openssl rand -hex 32`). Sign-in reuses
+#   GOOGLE_OAUTH_CLIENT_ID/_SECRET and GOOGLE_SA_CLIENT_EMAIL/_PRIVATE_KEY.
+#   They are not listed under `environment:` below on purpose: an entry there
+#   would override the value from .env.production.
 
 services:
   db:
@@ -48,7 +58,7 @@ services:
     image: ${REGISTRY_URL:?REGISTRY_URL must be set, e.g. your registry host}/cincel-app-migrate:${IMAGE_TAG:?IMAGE_TAG must be set, e.g. a commit SHA or latest}
     command: ["npm", "run", "db:migrate"]
     env_file:
-      # Optional — most secrets (GOOGLE_SA_*, LLM_*, GITHUB_PAT) can also come
+      # Optional — most secrets (GOOGLE_SA_*, TOKEN_ENCRYPTION_KEY, LLM_*, GITHUB_PAT) can also come
       # from the platform's own secret injection instead of a file on disk.
       - path: .env.production
         required: false

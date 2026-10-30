@@ -208,3 +208,59 @@ Turning sync off leaves the calendar in Google.
 Enable the **Google Calendar API** in the same project as the OAuth client,
 and add the `calendar.app.created` scope to the OAuth consent screen. No new
 environment variables.
+
+## Staff Google sign-in (Staff SSO)
+
+Staff can sign in with **Entrar con Google**; Workspace groups decide who gets
+in and with which role and areas. It ships behind two flags, both read
+server-side (never `NEXT_PUBLIC_*`; `lib/auth/auth-flags.ts`):
+
+| Flag | Default | Effect |
+|---|---|---|
+| `AUTH_GOOGLE_ENABLED` | `false` | Shows **Entrar con Google** and enables `/api/auth/google/*` |
+| `AUTH_PASSWORD_ENABLED` | `true` | Shows the email/password form and enables login, first access and change password |
+
+Only `true` / `false` change a flag; an unset or unrecognised value keeps the
+default. With the defaults, password login, the Drive picker and Calendar
+sync behave exactly as before.
+
+### Environment
+
+```
+AUTH_GOOGLE_ENABLED=true
+AUTH_PASSWORD_ENABLED=true
+APP_ORIGIN=https://<app host>                    # builds OAuth redirect URIs; not taken from the request
+GOOGLE_OAUTH_CLIENT_ID=<oauth client id>         # staff OAuth client (Internal), existing var
+GOOGLE_OAUTH_CLIENT_SECRET=<oauth client secret>
+GOOGLE_WORKSPACE_DOMAIN=<workspace domain>       # checked against the ID token's hd
+GOOGLE_WORKSPACE_CUSTOMER_ID=<customer id>       # optional, for groups.get
+GOOGLE_SA_CLIENT_EMAIL=<service-account-email>   # existing var
+GOOGLE_SA_PRIVATE_KEY=<private key>              # existing var; never committed
+GOOGLE_SHARED_DRIVE_ID=<shared drive id>         # see "Shared Drive for project folders"
+TOKEN_ENCRYPTION_KEY=<64 hex chars>              # AES-256 key, e.g. `openssl rand -hex 32`
+ACCESS_RECHECK_HOURS=4
+```
+
+- `TOKEN_ENCRYPTION_KEY` encrypts OAuth tokens at rest (32 bytes as hex; the
+  Keter recipe `kcd.yml` generates it with `generate: hex32`). Ciphertext is
+  prefixed `v1:` so a later key rotation can add `v2`; rotation itself is out
+  of scope.
+- Secrets: `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_SA_PRIVATE_KEY`,
+  `TOKEN_ENCRYPTION_KEY`. Keep them in the platform's secret store or
+  `.env.production`, never in the repo.
+- Register the redirect URI `<APP_ORIGIN>/api/auth/google/callback` on the
+  OAuth client for every environment (prod and staging).
+
+### Cutover (passwords → Google)
+
+1. Deploy with both flags on. Staff sign in with Google once.
+2. Configuración → Grupos de Google shows how many active staff already
+   signed in with Google. While both are on, password users keep working;
+   Drive and Calendar switch to each staff member's own token.
+3. Turn `AUTH_PASSWORD_ENABLED=false`: password routes return 404.
+4. Break-glass: `AUTH_PASSWORD_ENABLED=true` again re-enables password login.
+5. Cleanup (its own release, after step 3 has run in production): the
+   delegation client and the old connect flow are removed.
+
+The full cutover and the Workspace admin checklist are in
+`docs/specs/backend.md` §A.8–§A.9.
