@@ -38,6 +38,7 @@ import {
 } from "@/lib/actions/tasks-actions";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
+import { SubtaskCountBadge, SubtaskOfLine, WaitingBadge } from "@/components/tareas/TaskRowMeta";
 import { isDueDateLate, isTaskClosed, parseStatusValue, statusSelectItems, statusSelectValue, taskStatusLabel } from "@/lib/tasks/status-options";
 import { cn } from "@/lib/utils";
 import type { TaskChecklistItem, TaskDetail, TaskListItem, TaskLinkInput, TaskStatusOption } from "@/lib/types/core";
@@ -311,7 +312,15 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
       {
         id: "title",
         header: "Tarea",
-        cell: ({ row }: CellContext<TaskListItem, unknown>) => <span className="font-medium">{row.original.title}</span>,
+        cell: ({ row }: CellContext<TaskListItem, unknown>) => (
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <span className="font-medium">{row.original.title}</span>
+              <SubtaskOfLine task={row.original} />
+            </div>
+            <SubtaskCountBadge task={row.original} />
+          </div>
+        ),
       },
       {
         id: "workflow",
@@ -378,12 +387,15 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
             viewerId,
           });
           return (
-            <TaskStatusCell
-              task={task}
-              customStatuses={customStatuses}
-              canChange={canChange}
-              onChange={(value) => void changeStatus(task, value)}
-            />
+            <div className="flex items-center gap-2">
+              <TaskStatusCell
+                task={task}
+                customStatuses={customStatuses}
+                canChange={canChange}
+                onChange={(value) => void changeStatus(task, value)}
+              />
+              <WaitingBadge waitingOn={task.waitingOn} />
+            </div>
           );
         },
       },
