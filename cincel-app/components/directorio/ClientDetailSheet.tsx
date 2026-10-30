@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/shadcn/button";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { fetchContactHistoryAction } from "@/lib/actions/contacts-actions";
-import { formatDateDMY } from "@/lib/utils/date";
+import { HistoryEventList } from "@/components/ui/HistoryEventList";
 import type { ContactDetail, HistoryEvent, ProjectStatus } from "@/lib/types/core";
 
 interface ClientDetailSheetProps {
@@ -203,27 +203,15 @@ export function ClientDetailSheet({
 
           <section>
             <h3 className="mb-3 text-sm font-semibold">Bitácora de cambios</h3>
-            {sortedHistory.length > 0 ? (
-              <div className="space-y-2">
-                {sortedHistory.map((item) => (
-                  <div key={item.id} className="rounded-xl border border-border bg-muted p-3 text-sm text-muted-foreground">
-                    <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                      <span>{formatDateDMY(item.eventAt.slice(0, 10))}</span>
-                      <span>{item.actor?.name ?? "Sistema"}</span>
-                    </div>
-                    <p className="mt-2">
-                      {item.kind === "comentario"
-                        ? item.comment
-                        : `Cambió ${item.field ?? "un campo"}: ${item.beforeValue ?? "—"} → ${item.afterValue ?? "—"}`}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No hay cambios registrados para este cliente.
-              </p>
-            )}
+            <HistoryEventList
+              events={sortedHistory}
+              bordered
+              empty={
+                <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  No hay cambios registrados para este cliente.
+                </p>
+              }
+            />
           </section>
         </div>
       </SheetContent>
