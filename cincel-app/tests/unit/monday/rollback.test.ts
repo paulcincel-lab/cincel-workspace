@@ -20,6 +20,7 @@ import {
   type ImportEntity,
   type ImportRefInput,
 } from "@/lib/import/refs";
+import { DriveAdminError, type DriveAdmin } from "@/lib/google/drive-admin";
 import type { MondayDbHandle } from "@/scripts/monday/db";
 import {
   createRollbackCommand,
@@ -670,14 +671,239 @@ describe.skipIf(!url)("rollback blocker detection (test DB)", () => {
       });
     });
 
-    it("reports no blockers on a clean batch", async () => {
+    /** A Drive fake: records trash calls; `fail` ids throw, `createdTime` per id. */
+    function fakeDrive(
+      opts: {
+        fail?: Set<string>;
+        createdTime?: Record<string, string>;
+      } = {},
+    ) {
+      const trashed: string[] = [];
+      const drive = {
+        async get(id: string) {
+          return {
+            id,
+            name: id,
+            mimeType: "application/vnd.google-apps.folder",
+            createdTime: opts.createdTime?.[id] ?? new Date().toISOString(),
+          };
+        },
+        async trash(id: string) {
+          if (opts.fail?.has(id)) throw new Error(`quota exceeded for ${id}`);
+          trashed.push(id);
+          return { id, name: id, mimeType: "x", trashed: true };
+        },
+      } as unknown as DriveAdmin;
+      return { drive, trashed };
+    }
+
+    /** Phase B ran: project folders and one uploaded file. */
+    async function afterPhaseB(tx: ImportDb, f: Fixture) {
+      await tx.execute(
+        sql`update core.projects set drive_folder_id = 'fld-project', drive_internal_folder_id = 'fld-int',
+          drive_client_folder_id = 'fld-cli', drive_inbound_folder_id = 'fld-in',
+          drive_import_folder_id = 'fld-import', drive_folder_status = 'ready'
+          where id = ${f.project.id}`,
+      );
+      await tx.execute(
+        sql`update core.import_files set drive_file_id = 'file-upload' where batch_id = ${f.batch.id}`,
+      );
+    }
+
+    async function batchRowsLeft(tx: ImportDb, f: Fixture) {
+      const [row] = (await tx.execute(sql`select
+        (select count(*) from core.import_refs where batch_id = ${f.batch.id})::int as refs,
+        (select count(*) from core.import_files where batch_id = ${f.batch.id})::int as files,
+        (select count(*) from core.tasks where project_id = ${f.project.id})::int as tasks,
+        (select count(*) from core.projects where id = ${f.project.id})::int as projects,
+        (select count(*) from core.contacts where id in (${f.client.id}, ${f.provider.id}))::int as contacts,
+        (select count(*) from core.contact_people where contact_id = ${f.provider.id})::int as people,
+        (select count(*) from core.provider_profiles where contact_id = ${f.provider.id})::int as profiles,
+        (select count(*) from core.task_support where staff_id = ${f.helper.id})::int as support,
+        (select count(*) from core.history_events where entity_id = ${f.task.id})::int as history,
+        (select count(*) from core.project_schedules where id = ${f.scheduleRow.id})::int as schedules,
+        (select count(*) from core.drive_files where id = ${f.driveFile.id})::int as drive_files,
+        (select count(*) from core.staff where id in (${f.admin.id}, ${f.helper.id}))::int as staff`)) as unknown as Record<
+        string,
+        number
+      >[];
+      return row;
+    }
+
+    async function batchState(tx: ImportDb, f: Fixture) {
+      const [row] = (await tx.execute(
+        sql`select status::text as status, rolled_back_at, stats from core.import_batches where id = ${f.batch.id}`,
+      )) as unknown as {
+        status: string;
+        rolled_back_at: Date | null;
+        stats: Record<string, unknown>;
+      }[];
+      return row;
+    }
+
+    it("after phase B removes every batch row in one transaction, then trashes Drive", async () => {
       await inBatch(async (tx, f) => {
+        await afterPhaseB(tx, f);
+        const { drive, trashed } = fakeDrive();
         const c = capture();
         const code = await createRollbackCommand({
           openDb: () => handleFor(tx),
+          openDrive: () => drive,
         })(["--batch", f.batch.id], c.io);
-        expect(c.out()).toBe(`Batch ${f.batch.id}: no blockers.\n`);
-        expect(code).toBe(2);
+        expect(c.err()).toBe("");
+        expect(code).toBe(0);
+        expect(c.out()).toContain(`Batch ${f.batch.id} rolled back`);
+        expect(c.out()).toContain("Drive: 4 trashed, 0 kept");
+
+        expect(await batchRowsLeft(tx, f)).toEqual({
+          refs: 0,
+          files: 0,
+          tasks: 0,
+          projects: 0,
+          contacts: 0,
+          people: 0,
+          profiles: 0,
+          support: 0,
+          history: 0,
+          schedules: 0,
+          drive_files: 0,
+          staff: 2,
+        });
+        // Files first, then the import folder, then the project folder.
+        expect(trashed).toEqual([
+          ...[f.driveFile.googleFileId, "file-upload"].sort(),
+          "fld-import",
+          "fld-project",
+        ]);
+        const state = await batchState(tx, f);
+        expect(state.status).toBe("rolled_back");
+        expect(state.rolled_back_at).not.toBeNull();
+        expect(state.stats.driveTrash).toEqual({
+          files: [f.driveFile.googleFileId, "file-upload"].sort(),
+          importFolders: ["fld-import"],
+          projectFolders: ["fld-project"],
+        });
+        expect([...(state.stats.driveTrashed as string[])].sort()).toEqual(
+          [...trashed].sort(),
+        );
+      });
+    });
+
+    it("keeps a project folder that existed before the batch", async () => {
+      await inBatch(async (tx, f) => {
+        await afterPhaseB(tx, f);
+        const { drive, trashed } = fakeDrive({
+          createdTime: { "fld-project": "2020-01-01T00:00:00Z" },
+        });
+        const c = capture();
+        expect(
+          await createRollbackCommand({
+            openDb: () => handleFor(tx),
+            openDrive: () => drive,
+          })(["--batch", f.batch.id], c.io),
+        ).toBe(0);
+        expect(trashed).toContain("fld-import");
+        expect(trashed).not.toContain("fld-project");
+        expect(c.out()).toContain("1 kept");
+        expect((await batchState(tx, f)).stats.driveKept).toEqual([
+          "fld-project",
+        ]);
+      });
+    });
+
+    it("lists Drive failures and --drive-only retries only those", async () => {
+      await inBatch(async (tx, f) => {
+        await afterPhaseB(tx, f);
+        const first = fakeDrive({
+          fail: new Set(["file-upload", "fld-project"]),
+        });
+        const run = (drive: DriveAdmin) =>
+          createRollbackCommand({
+            openDb: () => handleFor(tx),
+            openDrive: () => drive,
+          });
+        const c = capture();
+        expect(await run(first.drive)(["--batch", f.batch.id], c.io)).toBe(1);
+        expect(c.err()).toContain("2 Drive items not trashed");
+        expect(c.err()).toMatch(/file-upload\s+file\s+quota exceeded/);
+        expect(c.err()).toMatch(
+          /fld-project\s+project folder\s+quota exceeded/,
+        );
+        expect(c.err()).toContain("--drive-only");
+        expect((await batchState(tx, f)).status).toBe("rolled_back");
+        expect(await batchRowsLeft(tx, f)).toMatchObject({ refs: 0, tasks: 0 });
+
+        const retry = fakeDrive();
+        const d = capture();
+        expect(
+          await run(retry.drive)(["--batch", f.batch.id, "--drive-only"], d.io),
+        ).toBe(0);
+        expect(retry.trashed).toEqual(["file-upload", "fld-project"]);
+        expect(d.out()).toContain("Drive: 2 trashed, 0 kept");
+        expect(d.out()).toContain("2 already done, 0 failed");
+        const state = await batchState(tx, f);
+        expect([...(state.stats.driveTrashed as string[])].sort()).toEqual(
+          [
+            f.driveFile.googleFileId,
+            "file-upload",
+            "fld-import",
+            "fld-project",
+          ].sort(),
+        );
+      });
+    });
+
+    it("treats a Drive item already gone as trashed", async () => {
+      await inBatch(async (tx, f) => {
+        await afterPhaseB(tx, f);
+        const drive = {
+          async get(id: string) {
+            return { id, name: id, mimeType: "x" };
+          },
+          async trash() {
+            throw new DriveAdminError("File not found", 404, "notFound");
+          },
+        } as unknown as DriveAdmin;
+        const c = capture();
+        expect(
+          await createRollbackCommand({
+            openDb: () => handleFor(tx),
+            openDrive: () => drive,
+          })(["--batch", f.batch.id], c.io),
+        ).toBe(0);
+        expect(c.out()).toContain("Drive: 4 trashed");
+      });
+    });
+
+    it("lists every Drive item as failed when Drive can't be opened", async () => {
+      await inBatch(async (tx, f) => {
+        await afterPhaseB(tx, f);
+        const c = capture();
+        expect(
+          await createRollbackCommand({
+            openDb: () => handleFor(tx),
+            openDrive: () => {
+              throw new Error("Drive is not configured");
+            },
+          })(["--batch", f.batch.id], c.io),
+        ).toBe(1);
+        expect(c.err()).toContain("4 Drive items not trashed");
+        expect((await batchState(tx, f)).status).toBe("rolled_back");
+      });
+    });
+
+    it("refuses --drive-only on a batch that isn't rolled back", async () => {
+      await inBatch(async (tx, f) => {
+        const before = await counts(tx);
+        const c = capture();
+        expect(
+          await createRollbackCommand({
+            openDb: () => handleFor(tx),
+            openDrive: () => fakeDrive().drive,
+          })(["--batch", f.batch.id, "--drive-only"], c.io),
+        ).toBe(1);
+        expect(c.err()).toMatch(/is not rolled back/);
+        expect(await counts(tx)).toEqual(before);
       });
     });
 

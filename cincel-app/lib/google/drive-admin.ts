@@ -45,6 +45,8 @@ export type DriveFile = {
   /** Drive returns it as a decimal string; absent for folders and native docs. */
   size?: string;
   modifiedTime?: string;
+  /** Only when asked for in `fields`. */
+  createdTime?: string;
 };
 
 export type DriveFileList = { files: DriveFile[]; nextPageToken?: string };
