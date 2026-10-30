@@ -10,6 +10,7 @@ import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { CapacityRing } from "@/components/v2/status/CapacityRing";
 import { LoadBar } from "@/components/v2/status/LoadBar";
+import { AreaBadge } from "@/components/v2/status/AreaBadge";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
@@ -735,9 +736,12 @@ export function ActividadesClient({
               id: "area",
               header: "Área",
               accessorFn: (t: TaskListItem) => areaLabel(t),
-              cell: ({ row }: CellContext<TaskListItem, unknown>) => (
-                <span className="text-sm">{areaLabel(row.original)}</span>
-              ),
+              cell: ({ row }: CellContext<TaskListItem, unknown>) =>
+                row.original.workflow ? (
+                  <AreaBadge name={areaLabel(row.original)} colorSlot={row.original.areaColorSlot} />
+                ) : (
+                  <span className="text-sm text-muted-foreground">{areaLabel(row.original)}</span>
+                ),
             },
           ]
         : []),

@@ -27,6 +27,7 @@ function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
     updatedAt: "2026-05-20T00:00:00.000Z",
     project: { id: "p1", name: "Proyecto", clientName: "Cliente" },
     workflow: null,
+    areaColorSlot: null,
     manager: null,
     support: [],
     checklist: { total: 0, completed: 0 },

@@ -127,6 +127,13 @@
       "when": 1793306988261,
       "tag": "0017_monday_migration_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793318552696,
+      "tag": "0018_area_color_slot",
+      "breakpoints": true
     }
   ]
 }

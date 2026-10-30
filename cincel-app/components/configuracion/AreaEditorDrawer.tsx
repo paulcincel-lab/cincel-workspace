@@ -8,17 +8,37 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/com
 import { Switch } from "@/components/ui/shadcn/switch";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
+import { AREA_COLOR_SLOTS, areaColorClass, areaColorLabel } from "@/lib/areas/area-color";
 import type { AreasCapabilities } from "@/lib/auth/permissions";
+import { cn } from "@/lib/utils";
 import type { AreaDetail } from "@/lib/types/core";
 
 const NO_LEAD_VALUE = "__none__";
+const AUTO_COLOR_VALUE = "__auto__";
+const NEUTRAL_COLOR_VALUE = "__neutral__";
 
 export type AreaDraft = {
   name: string;
   description: string;
   leadId: string | null;
   active: boolean;
+  /** undefined = automatic (new áreas only); null = neutral. */
+  colorSlot?: number | null;
 };
+
+function colorValue(slot: number | null | undefined): string {
+  if (slot === undefined) return AUTO_COLOR_VALUE;
+  return slot === null ? NEUTRAL_COLOR_VALUE : String(slot);
+}
+
+function ColorOption({ slot, label }: { slot: number | null; label: string }) {
+  return (
+    <span className="flex items-center gap-2">
+      <span aria-hidden className={cn("size-2.5 shrink-0 rounded-full", areaColorClass(slot))} />
+      {label}
+    </span>
+  );
+}
 
 interface AreaEditorDrawerProps {
   show: boolean;
@@ -127,6 +147,49 @@ export function AreaEditorDrawer({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">Color</label>
+                <Select
+                  items={{
+                    ...(isCreating ? { [AUTO_COLOR_VALUE]: "Automático" } : {}),
+                    ...Object.fromEntries(AREA_COLOR_SLOTS.map((slot) => [String(slot), areaColorLabel(slot)])),
+                    [NEUTRAL_COLOR_VALUE]: areaColorLabel(null),
+                  }}
+                  value={colorValue(draft.colorSlot)}
+                  disabled={!canManage}
+                  onValueChange={(value) =>
+                    onChangeDraft((current) => ({
+                      ...current,
+                      colorSlot:
+                        value === AUTO_COLOR_VALUE
+                          ? undefined
+                          : value === NEUTRAL_COLOR_VALUE
+                            ? null
+                            : Number(value),
+                    }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isCreating ? <SelectItem value={AUTO_COLOR_VALUE}>Automático</SelectItem> : null}
+                    {AREA_COLOR_SLOTS.map((slot) => (
+                      <SelectItem key={slot} value={String(slot)}>
+                        <ColorOption slot={slot} label={areaColorLabel(slot)} />
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={NEUTRAL_COLOR_VALUE}>
+                      <ColorOption slot={null} label={areaColorLabel(null)} />
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Color del área en etiquetas y gráficas.
+                  {isCreating ? " Automático usa el color del departamento o el siguiente libre." : ""}
+                </p>
               </div>
 
               <label className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted p-4">

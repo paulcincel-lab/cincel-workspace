@@ -19,6 +19,7 @@ import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import { defaultAreaColorSlot } from "../lib/areas/area-color";
 import { teamMembers as roster } from "../lib/data/team";
 import * as schema from "../lib/db/schema";
 
@@ -71,6 +72,9 @@ async function seedAreas() {
   for (const m of roster) if (m.area.trim()) names.add(m.area.trim());
 
   const ids = new Map<string, string>();
+  const taken: Array<number | null> = (
+    await db.select({ slot: schema.areas.colorSlot }).from(schema.areas).where(sql`${schema.areas.deletedAt} is null`)
+  ).map((r) => r.slot);
   let i = 0;
   for (const name of names) {
     const existing = await db.query.areas.findFirst({
@@ -81,9 +85,10 @@ async function seedAreas() {
       (
         await db
           .insert(schema.areas)
-          .values({ name, sortOrder: i })
+          .values({ name, sortOrder: i, colorSlot: defaultAreaColorSlot(name, taken) })
           .returning()
       )[0];
+    if (!existing) taken.push(row.colorSlot);
     ids.set(name.toLowerCase(), row.id);
     i += 1;
   }

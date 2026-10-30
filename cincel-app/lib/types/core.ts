@@ -93,6 +93,8 @@ export type Area = {
   leadId: string | null;
   active: boolean;
   sortOrder: number;
+  /** Chart token slot 1–5 (see lib/areas/area-color.ts); null = neutral. */
+  colorSlot: number | null;
 };
 
 export type AreaDetail = Area & {
@@ -107,6 +109,8 @@ export type AreaInput = {
   leadId?: string | null;
   active?: boolean;
   sortOrder?: number;
+  /** Omitted on create = the área's default slot; null = neutral. */
+  colorSlot?: number | null;
 };
 
 // ── People outside (CRM) ────────────────────────────────────────────────────
@@ -369,6 +373,8 @@ export type TaskListItem = Task & {
   customStatus: { id: string; name: string; closes: boolean } | null;
   project: { id: string; name: string; clientName: string };
   workflow: WorkflowRef | null;
+  /** Color slot of the área that owns the task's workflow; null = neutral. */
+  areaColorSlot: number | null;
   manager: StaffRef | null;
   support: StaffRef[];
   checklist: { total: number; completed: number };
