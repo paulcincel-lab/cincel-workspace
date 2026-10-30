@@ -303,6 +303,8 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
       workflowId: workflows.id,
       workflowKey: workflows.key,
       workflowName: workflows.name,
+      // Color of the área that owns the workflow (first by sort order).
+      areaColorSlot: sql<number | null>`(select a.color_slot from core.area_workflows aw join core.areas a on a.id = aw.area_id where aw.workflow_id = ${tasks.workflowId} and a.deleted_at is null order by a.sort_order, a.name limit 1)`,
       managerName: staff.name,
       customStatusName: taskStatuses.name,
       customStatusCloses: taskStatuses.closes,
@@ -327,6 +329,7 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
         : null,
     project: { id: r.task.projectId, name: r.projectName, clientName: r.clientName },
     workflow: r.workflowId ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName! } : null,
+    areaColorSlot: r.areaColorSlot ?? null,
     manager: r.task.managerId ? { id: r.task.managerId, name: r.managerName! } : null,
     support: support.get(r.task.id) ?? [],
     checklist: { total: r.checklistTotal, completed: r.checklistDone },

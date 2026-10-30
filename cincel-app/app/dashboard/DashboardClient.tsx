@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
+import { AreaBadge } from "@/components/v2/status/AreaBadge";
 import { LoadBar } from "@/components/v2/status/LoadBar";
 import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
@@ -168,6 +169,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
                     <span className="flex items-center gap-2">
                       <span className="size-1.5 rounded-full bg-destructive" />
                       {t.project.name} — {t.title}
+                      {t.workflow ? <AreaBadge name={t.workflow.name} colorSlot={t.areaColorSlot} /> : null}
                       {t.customStatus ? (
                         <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
                           {taskStatusLabel(t)}

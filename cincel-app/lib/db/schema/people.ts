@@ -81,10 +81,13 @@ export const areas = core.table(
     leadId: uuid("lead_id").references(() => staff.id, { onDelete: "set null" }),
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
+    /** Chart token slot 1–5 for the área's color; null = neutral gray. */
+    colorSlot: integer("color_slot"),
     ...stamps,
     ...soft,
   },
   (t) => [
+    check("areas_color_slot_check", sql`${t.colorSlot} between 1 and 5`),
     uniqueIndex("areas_name_lower_uq")
       .on(sql`lower(${t.name})`)
       .where(sql`${t.deletedAt} is null`),

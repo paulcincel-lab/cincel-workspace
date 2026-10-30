@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, isNull, notInArray } from "drizzle-orm";
 
+import { defaultAreaColorSlot, isAreaColorSlot } from "@/lib/areas/area-color";
 import { db } from "@/lib/db/client";
 import { areaMembers, areaWorkflows, areas, staff, workflows } from "@/lib/db/schema";
 import { recordChanges } from "@/lib/repositories/history-repository";
@@ -20,6 +21,7 @@ function toArea(row: AreaRow): Area {
     leadId: row.leadId,
     active: row.active,
     sortOrder: row.sortOrder,
+    colorSlot: row.colorSlot,
   };
 }
 
@@ -66,18 +68,34 @@ export async function getArea(id: string): Promise<AreaDetail | null> {
   return all.find((a) => a.id === id) ?? null;
 }
 
-function toValues(input: AreaInput) {
+function checkColorSlot(slot: number | null): number | null {
+  if (slot !== null && !isAreaColorSlot(slot)) throw new Error("AREA_COLOR_SLOT_INVALID");
+  return slot;
+}
+
+function toValues(input: AreaInput & { colorSlot: number | null }) {
   return {
     name: input.name.trim(),
     description: clean(input.description),
     leadId: input.leadId ?? null,
     active: input.active ?? true,
     sortOrder: input.sortOrder ?? 0,
+    colorSlot: checkColorSlot(input.colorSlot),
   };
 }
 
+/** Slots already used by live áreas, for picking a new área's default. */
+async function takenColorSlots(): Promise<Array<number | null>> {
+  const rows = await db.select({ slot: areas.colorSlot }).from(areas).where(isNull(areas.deletedAt));
+  return rows.map((r) => r.slot);
+}
+
 export async function createArea(input: AreaInput, actorId: string): Promise<Area> {
-  const [row] = await db.insert(areas).values(toValues(input)).returning();
+  const colorSlot =
+    input.colorSlot === undefined
+      ? defaultAreaColorSlot(input.name, await takenColorSlots())
+      : input.colorSlot;
+  const [row] = await db.insert(areas).values(toValues({ ...input, colorSlot })).returning();
   await recordChanges({
     entity: "area",
     entityId: row.id,
@@ -107,6 +125,7 @@ export async function updateArea(
     leadId: patch.leadId === undefined ? before.leadId : patch.leadId,
     active: patch.active ?? before.active,
     sortOrder: patch.sortOrder ?? before.sortOrder,
+    colorSlot: patch.colorSlot === undefined ? before.colorSlot : patch.colorSlot,
   });
   const [after] = await db.update(areas).set(merged).where(eq(areas.id, id)).returning();
   await recordChanges({
@@ -115,7 +134,7 @@ export async function updateArea(
     actorId,
     before,
     after,
-    fields: ["name", "description", "leadId", "active", "sortOrder"],
+    fields: ["name", "description", "leadId", "active", "sortOrder", "colorSlot"],
   });
   return toArea(after);
 }

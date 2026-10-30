@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
+import { AreaBadge } from "@/components/v2/status/AreaBadge";
 import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
 import {
   AreaEditorDrawer,
@@ -39,6 +40,7 @@ function draftFromArea(area: AreaDetail): AreaDraft {
     description: area.description ?? "",
     leadId: area.leadId,
     active: area.active,
+    colorSlot: area.colorSlot,
   };
 }
 
@@ -143,6 +145,7 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
         description: draft.description.trim() || null,
         leadId: draft.leadId,
         active: draft.active,
+        ...(draft.colorSlot === undefined ? {} : { colorSlot: draft.colorSlot }),
       };
 
       if (editingArea === null) {
@@ -237,7 +240,7 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
         header: "Área",
         cell: ({ row }) => (
           <div>
-            <p className="font-semibold text-foreground">{row.original.name}</p>
+            <AreaBadge name={row.original.name} colorSlot={row.original.colorSlot} />
             {row.original.description ? (
               <p className="text-xs text-muted-foreground">
                 {row.original.description}

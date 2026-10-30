@@ -13,6 +13,7 @@ import { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
 import { createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { Badge } from "@/components/ui/shadcn/badge";
+import { AreaBadge } from "@/components/v2/status/AreaBadge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
@@ -314,9 +315,12 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
       {
         id: "workflow",
         header: "Departamento",
-        cell: ({ row }: CellContext<TaskListItem, unknown>) => (
-          <span className="text-sm text-muted-foreground">{row.original.workflow?.name || "Sin departamento"}</span>
-        ),
+        cell: ({ row }: CellContext<TaskListItem, unknown>) =>
+          row.original.workflow ? (
+            <AreaBadge name={row.original.workflow.name} colorSlot={row.original.areaColorSlot} />
+          ) : (
+            <span className="text-sm text-muted-foreground">Sin departamento</span>
+          ),
       },
       {
         id: "role",
