@@ -1,0 +1,978 @@
+{
+  "users": [
+    {
+      "id": "11",
+      "name": "Ana Arquitecta",
+      "email": "ana@cincel.mx",
+      "status": "ACTIVE",
+      "kind": "member"
+    },
+    {
+      "id": "14",
+      "name": "Dario Externo",
+      "email": "dario@otro.mx",
+      "status": "ACTIVE",
+      "kind": "member"
+    }
+  ],
+  "boards": [
+    {
+      "board": {
+        "id": "901",
+        "name": "Casa Nido",
+        "workspace_id": "7",
+        "hierarchy_type": "classic",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "status",
+            "title": "Estado",
+            "type": "status",
+            "settings": {
+              "labels": [
+                {
+                  "id": 0,
+                  "label": "Pendiente",
+                  "index": 0
+                },
+                {
+                  "id": 1,
+                  "label": "Listo",
+                  "index": 1,
+                  "is_done": true
+                },
+                {
+                  "id": 2,
+                  "label": "En curso",
+                  "index": 2
+                }
+              ]
+            }
+          },
+          {
+            "id": "people",
+            "title": "Responsable",
+            "type": "people",
+            "settings": {}
+          },
+          {
+            "id": "timeline",
+            "title": "Cronograma",
+            "type": "timeline",
+            "settings": {}
+          },
+          {
+            "id": "costo",
+            "title": "Costo",
+            "type": "numbers",
+            "settings": {}
+          },
+          {
+            "id": "costo2",
+            "title": "Costo",
+            "type": "numbers",
+            "settings": {}
+          },
+          {
+            "id": "prov",
+            "title": "Proveedor",
+            "type": "mirror",
+            "settings": {}
+          },
+          {
+            "id": "planta",
+            "title": "Planta",
+            "type": "text",
+            "settings": {}
+          }
+        ],
+        "groups": [
+          {
+            "id": "g_obra",
+            "title": "Obra",
+            "position": "200"
+          },
+          {
+            "id": "g_diseno",
+            "title": "Diseño",
+            "position": "100"
+          }
+        ],
+        "subitem_columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "sstatus",
+            "title": "Estado",
+            "type": "status",
+            "settings": {
+              "labels": [
+                {
+                  "id": 0,
+                  "label": "Pendiente",
+                  "index": 0
+                },
+                {
+                  "id": 1,
+                  "label": "Listo",
+                  "index": 1,
+                  "is_done": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "metros",
+            "title": "Metros",
+            "type": "numbers",
+            "settings": {}
+          },
+          {
+            "id": "metros2",
+            "title": "Metros",
+            "type": "numbers",
+            "settings": {}
+          }
+        ]
+      },
+      "items": [
+        {
+          "id": "2001",
+          "name": "Muros",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "11",
+          "group": {
+            "id": "g_obra"
+          },
+          "parent_item": null,
+          "assets": [
+            {
+              "id": "a1",
+              "name": "muros.pdf",
+              "file_extension": "pdf",
+              "file_size": 1000
+            }
+          ],
+          "column_values": [
+            {
+              "__typename": "StatusValue",
+              "id": "status",
+              "type": "status",
+              "text": "Listo",
+              "label": "Listo",
+              "index": 1,
+              "is_done": true
+            },
+            {
+              "__typename": "PeopleValue",
+              "id": "people",
+              "type": "people",
+              "text": null,
+              "persons_and_teams": [
+                {
+                  "id": "11",
+                  "kind": "person"
+                },
+                {
+                  "id": "14",
+                  "kind": "person"
+                }
+              ]
+            },
+            {
+              "__typename": "TimelineValue",
+              "id": "timeline",
+              "type": "timeline",
+              "text": "2026-02-01 - 2026-02-10",
+              "from": "2026-02-01",
+              "to": "2026-02-10",
+              "visualization_type": "timeline"
+            },
+            {
+              "__typename": "NumbersValue",
+              "id": "costo",
+              "type": "numbers",
+              "text": "100",
+              "number": 100.0
+            },
+            {
+              "__typename": "NumbersValue",
+              "id": "costo2",
+              "type": "numbers",
+              "text": "200",
+              "number": 200.0
+            },
+            {
+              "__typename": "MirrorValue",
+              "id": "prov",
+              "type": "mirror",
+              "text": null,
+              "display_value": "Concretos del Valle"
+            },
+            {
+              "__typename": "TextValue",
+              "id": "planta",
+              "type": "text",
+              "text": "Planta baja"
+            }
+          ],
+          "subitems": [
+            {
+              "id": "2101",
+              "name": "Aplanado",
+              "state": "active",
+              "created_at": "2025-12-01T10:00:00Z",
+              "updated_at": "2025-12-01T10:00:00Z",
+              "creator_id": "11",
+              "group": {
+                "id": "g_obra"
+              },
+              "parent_item": {
+                "id": "2001"
+              },
+              "assets": [],
+              "column_values": [
+                {
+                  "__typename": "StatusValue",
+                  "id": "sstatus",
+                  "type": "status",
+                  "text": "Listo",
+                  "label": "Listo",
+                  "index": 1,
+                  "is_done": true
+                },
+                {
+                  "__typename": "NumbersValue",
+                  "id": "metros",
+                  "type": "numbers",
+                  "text": "20",
+                  "number": 20.0
+                },
+                {
+                  "__typename": "NumbersValue",
+                  "id": "metros2",
+                  "type": "numbers",
+                  "text": "5",
+                  "number": 5.0
+                }
+              ],
+              "subitems": [
+                {
+                  "id": "2111",
+                  "name": "Fino",
+                  "state": "active",
+                  "created_at": "2025-12-01T10:00:00Z",
+                  "updated_at": "2025-12-01T10:00:00Z",
+                  "creator_id": "11",
+                  "group": {
+                    "id": "g_obra"
+                  },
+                  "parent_item": {
+                    "id": "2101"
+                  },
+                  "assets": [],
+                  "column_values": [
+                    {
+                      "__typename": "StatusValue",
+                      "id": "sstatus",
+                      "type": "status",
+                      "text": "Pendiente",
+                      "label": "Pendiente",
+                      "index": 0,
+                      "is_done": false
+                    }
+                  ],
+                  "subitems": []
+                }
+              ]
+            },
+            {
+              "id": "2102",
+              "name": "Pintura",
+              "state": "active",
+              "created_at": "2025-12-01T10:00:00Z",
+              "updated_at": "2025-12-01T10:00:00Z",
+              "creator_id": "11",
+              "group": {
+                "id": "g_obra"
+              },
+              "parent_item": {
+                "id": "2001"
+              },
+              "assets": [],
+              "column_values": [
+                {
+                  "__typename": "StatusValue",
+                  "id": "sstatus",
+                  "type": "status",
+                  "text": null,
+                  "label": null,
+                  "index": null,
+                  "is_done": false
+                }
+              ],
+              "subitems": []
+            },
+            {
+              "id": "2103",
+              "name": "Borrado",
+              "state": "deleted",
+              "created_at": "2025-12-01T10:00:00Z",
+              "updated_at": "2025-12-01T10:00:00Z",
+              "creator_id": "11",
+              "group": {
+                "id": "g_obra"
+              },
+              "parent_item": {
+                "id": "2001"
+              },
+              "assets": [],
+              "column_values": [],
+              "subitems": []
+            }
+          ]
+        },
+        {
+          "id": "2002",
+          "name": "Planos",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "11",
+          "group": {
+            "id": "g_diseno"
+          },
+          "parent_item": null,
+          "assets": [
+            {
+              "id": "a9",
+              "name": "perdido.dwg",
+              "file_extension": "dwg",
+              "file_size": 1000
+            }
+          ],
+          "column_values": [
+            {
+              "__typename": "StatusValue",
+              "id": "status",
+              "type": "status",
+              "text": "En curso",
+              "label": "En curso",
+              "index": 2,
+              "is_done": false
+            },
+            {
+              "__typename": "PeopleValue",
+              "id": "people",
+              "type": "people",
+              "text": null,
+              "persons_and_teams": [
+                {
+                  "id": "11",
+                  "kind": "person"
+                }
+              ]
+            },
+            {
+              "__typename": "TimelineValue",
+              "id": "timeline",
+              "type": "timeline",
+              "text": "2026-01-15 - 2026-01-15",
+              "from": "2026-01-15",
+              "to": "2026-01-15",
+              "visualization_type": "milestone"
+            },
+            {
+              "__typename": "TextValue",
+              "id": "planta",
+              "type": "text",
+              "text": null
+            }
+          ],
+          "subitems": []
+        },
+        {
+          "id": "2003",
+          "name": "Limpieza",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "11",
+          "group": {
+            "id": "g_obra"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "StatusValue",
+              "id": "status",
+              "type": "status",
+              "text": "Pendiente",
+              "label": "Pendiente",
+              "index": 0,
+              "is_done": false
+            },
+            {
+              "__typename": "TimelineValue",
+              "id": "timeline",
+              "type": "timeline",
+              "text": null,
+              "from": null,
+              "to": null,
+              "visualization_type": "timeline"
+            }
+          ],
+          "subitems": []
+        }
+      ],
+      "updates": [
+        {
+          "item_id": "2001",
+          "id": "u1",
+          "body": "<p>Listo <b>muros</b></p>",
+          "text_body": null,
+          "created_at": "2026-01-10T10:00:00Z",
+          "creator_id": "11",
+          "replies": [
+            {
+              "id": "r1",
+              "body": "Ok, <a href=\"https://x.mx/f\">foto</a>",
+              "created_at": "2026-01-09T08:00:00Z",
+              "creator_id": "14",
+              "assets": [
+                {
+                  "id": "a3",
+                  "name": "foto.jpg",
+                  "file_extension": "jpg",
+                  "file_size": 1000
+                }
+              ]
+            }
+          ],
+          "assets": []
+        },
+        {
+          "item_id": "2101",
+          "id": "u2",
+          "body": "<p>Revisar esquinas</p>",
+          "text_body": null,
+          "created_at": "2026-01-05T09:00:00Z",
+          "creator_id": "99",
+          "replies": [],
+          "assets": [
+            {
+              "id": "a2",
+              "name": "esquinas.png",
+              "file_extension": "png",
+              "file_size": 1000
+            }
+          ]
+        },
+        {
+          "item_id": "2002",
+          "id": "u3",
+          "body": "",
+          "text_body": "",
+          "created_at": "2026-01-07T09:00:00Z",
+          "creator_id": "11",
+          "replies": [],
+          "assets": []
+        },
+        {
+          "item_id": "2103",
+          "id": "u4",
+          "body": "<p>Fantasma</p>",
+          "text_body": null,
+          "created_at": "2026-01-08T09:00:00Z",
+          "creator_id": "11",
+          "replies": [],
+          "assets": []
+        },
+        {
+          "item_id": "2111",
+          "id": "u8",
+          "body": "Fino listo",
+          "text_body": null,
+          "created_at": "2026-01-06T09:00:00Z",
+          "creator_id": "11",
+          "replies": [],
+          "assets": [
+            {
+              "id": "a7",
+              "name": "fino.jpg",
+              "file_extension": "jpg",
+              "file_size": 1000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "board": {
+        "id": "902",
+        "name": "Casa Faro",
+        "workspace_id": "7",
+        "hierarchy_type": "multi_level",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "status",
+            "title": "Estado",
+            "type": "status",
+            "settings": {
+              "labels": [
+                {
+                  "id": 0,
+                  "label": "Pendiente",
+                  "index": 0
+                },
+                {
+                  "id": 1,
+                  "label": "Listo",
+                  "index": 1,
+                  "is_done": true
+                },
+                {
+                  "id": 2,
+                  "label": "En curso",
+                  "index": 2
+                }
+              ]
+            }
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "title": "Instalaciones",
+            "position": "100"
+          }
+        ],
+        "subitem_columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "sstatus",
+            "title": "Estado",
+            "type": "status",
+            "settings": {
+              "labels": [
+                {
+                  "id": 0,
+                  "label": "Pendiente",
+                  "index": 0
+                },
+                {
+                  "id": 1,
+                  "label": "Listo",
+                  "index": 1,
+                  "is_done": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "metros",
+            "title": "Metros",
+            "type": "numbers",
+            "settings": {}
+          }
+        ]
+      },
+      "items": [
+        {
+          "id": "3001",
+          "name": "Instalaciones",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "11",
+          "group": {
+            "id": "g1"
+          },
+          "parent_item": null,
+          "assets": [],
+          "column_values": [
+            {
+              "__typename": "StatusValue",
+              "id": "status",
+              "type": "status",
+              "text": "Pendiente",
+              "label": "Pendiente",
+              "index": 0,
+              "is_done": false
+            }
+          ],
+          "subitems": [
+            {
+              "id": "3101",
+              "name": "Eléctrica",
+              "state": "active",
+              "created_at": "2025-12-01T10:00:00Z",
+              "updated_at": "2025-12-01T10:00:00Z",
+              "creator_id": "11",
+              "group": {
+                "id": "g1"
+              },
+              "parent_item": {
+                "id": "3001"
+              },
+              "assets": [],
+              "column_values": [
+                {
+                  "__typename": "StatusValue",
+                  "id": "sstatus",
+                  "type": "status",
+                  "text": "Listo",
+                  "label": "Listo",
+                  "index": 1,
+                  "is_done": true
+                },
+                {
+                  "__typename": "NumbersValue",
+                  "id": "metros",
+                  "type": "numbers",
+                  "text": "12",
+                  "number": 12.0
+                }
+              ],
+              "subitems": [
+                {
+                  "id": "3111",
+                  "name": "Tablero",
+                  "state": "active",
+                  "created_at": "2025-12-01T10:00:00Z",
+                  "updated_at": "2025-12-01T10:00:00Z",
+                  "creator_id": "11",
+                  "group": {
+                    "id": "g1"
+                  },
+                  "parent_item": {
+                    "id": "3101"
+                  },
+                  "assets": [
+                    {
+                      "id": "a4",
+                      "name": "tablero.pdf",
+                      "file_extension": "pdf",
+                      "file_size": 1000
+                    }
+                  ],
+                  "column_values": [
+                    {
+                      "__typename": "StatusValue",
+                      "id": "sstatus",
+                      "type": "status",
+                      "text": "Pendiente",
+                      "label": "Pendiente",
+                      "index": 0,
+                      "is_done": false
+                    }
+                  ],
+                  "subitems": [
+                    {
+                      "id": "3121",
+                      "name": "Breakers",
+                      "state": "active",
+                      "created_at": "2025-12-01T10:00:00Z",
+                      "updated_at": "2025-12-01T10:00:00Z",
+                      "creator_id": "11",
+                      "group": {
+                        "id": "g1"
+                      },
+                      "parent_item": {
+                        "id": "3111"
+                      },
+                      "assets": [],
+                      "column_values": [],
+                      "subitems": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "3102",
+              "name": "Hidráulica",
+              "state": "active",
+              "created_at": "2025-12-01T10:00:00Z",
+              "updated_at": "2025-12-01T10:00:00Z",
+              "creator_id": "11",
+              "group": {
+                "id": "g1"
+              },
+              "parent_item": {
+                "id": "3001"
+              },
+              "assets": [],
+              "column_values": [],
+              "subitems": []
+            }
+          ]
+        }
+      ],
+      "updates": [
+        {
+          "item_id": "3111",
+          "id": "u5",
+          "body": "<p>Tablero instalado</p>",
+          "text_body": null,
+          "created_at": "2026-01-03T09:00:00Z",
+          "creator_id": "11",
+          "replies": [],
+          "assets": []
+        }
+      ]
+    },
+    {
+      "board": {
+        "id": "903",
+        "name": "Obras",
+        "workspace_id": "7",
+        "hierarchy_type": "classic",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "presupuesto",
+            "title": "Presupuesto",
+            "type": "numbers",
+            "settings": {}
+          }
+        ],
+        "groups": [
+          {
+            "id": "g2",
+            "title": "2026",
+            "position": "1"
+          }
+        ],
+        "subitem_columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          }
+        ]
+      },
+      "items": [
+        {
+          "id": "4001",
+          "name": "Casa Mar",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "11",
+          "group": {
+            "id": "g2"
+          },
+          "parent_item": null,
+          "assets": [
+            {
+              "id": "a5",
+              "name": "contrato.pdf",
+              "file_extension": "pdf",
+              "file_size": 1000
+            }
+          ],
+          "column_values": [
+            {
+              "__typename": "NumbersValue",
+              "id": "presupuesto",
+              "type": "numbers",
+              "text": "5000",
+              "number": 5000.0
+            }
+          ],
+          "subitems": [
+            {
+              "id": "4101",
+              "name": "Demolición",
+              "state": "active",
+              "created_at": "2025-12-01T10:00:00Z",
+              "updated_at": "2025-12-01T10:00:00Z",
+              "creator_id": "11",
+              "group": {
+                "id": "g2"
+              },
+              "parent_item": {
+                "id": "4001"
+              },
+              "assets": [],
+              "column_values": [],
+              "subitems": []
+            }
+          ]
+        }
+      ],
+      "updates": [
+        {
+          "item_id": "4001",
+          "id": "u6",
+          "body": "<p>Arranque</p>",
+          "text_body": null,
+          "created_at": "2026-01-02T09:00:00Z",
+          "creator_id": "11",
+          "replies": [],
+          "assets": []
+        }
+      ]
+    },
+    {
+      "board": {
+        "id": "904",
+        "name": "Clientes",
+        "workspace_id": "7",
+        "hierarchy_type": "classic",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {}
+          },
+          {
+            "id": "rfc",
+            "title": "RFC",
+            "type": "text",
+            "settings": {}
+          }
+        ],
+        "groups": [
+          {
+            "id": "g3",
+            "title": "Activos",
+            "position": "1"
+          }
+        ],
+        "subitem_columns": []
+      },
+      "items": [
+        {
+          "id": "5001",
+          "name": "Familia Mar",
+          "state": "active",
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T10:00:00Z",
+          "creator_id": "11",
+          "group": {
+            "id": "g3"
+          },
+          "parent_item": null,
+          "assets": [
+            {
+              "id": "a6",
+              "name": "ine.pdf",
+              "file_extension": "pdf",
+              "file_size": 1000
+            }
+          ],
+          "column_values": [
+            {
+              "__typename": "TextValue",
+              "id": "rfc",
+              "type": "text",
+              "text": "MAR010101AAA"
+            }
+          ]
+        }
+      ],
+      "updates": [
+        {
+          "item_id": "5001",
+          "id": "u7",
+          "body": "Primer contacto",
+          "text_body": null,
+          "created_at": "2026-01-01T09:00:00Z",
+          "creator_id": "14",
+          "replies": [],
+          "assets": []
+        }
+      ]
+    }
+  ],
+  "files": {
+    "a1": {
+      "name": "muros.pdf",
+      "size": 1000,
+      "sha256": "sha-a1",
+      "path": "files/a1/muros.pdf",
+      "board_id": "901",
+      "item_id": "2001"
+    },
+    "a2": {
+      "name": "esquinas.png",
+      "size": 1000,
+      "sha256": "sha-a2",
+      "path": "files/a2/esquinas.png",
+      "board_id": "901",
+      "update_id": "u2"
+    },
+    "a3": {
+      "name": "foto.jpg",
+      "size": 1000,
+      "sha256": "sha-a3",
+      "path": "files/a3/foto.jpg",
+      "board_id": "901",
+      "update_id": "r1"
+    },
+    "a4": {
+      "name": "tablero.pdf",
+      "size": 1000,
+      "sha256": "sha-a4",
+      "path": "files/a4/tablero.pdf",
+      "board_id": "902",
+      "item_id": "3111"
+    },
+    "a5": {
+      "name": "contrato.pdf",
+      "size": 1000,
+      "sha256": "sha-a5",
+      "path": "files/a5/contrato.pdf",
+      "board_id": "903",
+      "item_id": "4001"
+    },
+    "a6": {
+      "name": "ine.pdf",
+      "size": 1000,
+      "sha256": "sha-a6",
+      "path": "files/a6/ine.pdf",
+      "board_id": "904",
+      "item_id": "5001"
+    },
+    "a7": {
+      "name": "fino.jpg",
+      "size": 1000,
+      "sha256": "sha-a7",
+      "path": "files/a7/fino.jpg",
+      "board_id": "901",
+      "update_id": "u8"
+    }
+  }
+}
