@@ -6,24 +6,16 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 
-const ACCENT = "var(--chart-1)";
-const GRID = "var(--border)";
-const AXIS = "var(--muted-foreground)";
-const TOOLTIP_CONTENT_STYLE = {
-  backgroundColor: "var(--popover)",
-  borderColor: "var(--border)",
-  borderRadius: 8,
-  color: "var(--popover-foreground)",
-  fontSize: 12,
-};
-const TOOLTIP_LABEL_STYLE = { color: "var(--popover-foreground)" };
-const TOOLTIP_CURSOR = { fill: "var(--muted)" };
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/shadcn/chart";
 
 type ChartDataPoint = { label: string; value: number };
 
@@ -33,62 +25,97 @@ type Props = {
   data: ChartDataPoint[];
 };
 
+// Point marker: 8px dot with a ring in the card surface color.
+const POINT = {
+  r: 4,
+  fill: "var(--color-value)",
+  stroke: "var(--card)",
+  strokeWidth: 2,
+};
+
 export function AssistantChartMessage({ chartType, title, data }: Props) {
   const height =
-    chartType === "bar"
-      ? Math.min(280, Math.max(data.length * 44, 120))
-      : 260;
+    chartType === "bar" ? Math.min(280, Math.max(data.length * 44, 120)) : 260;
+
+  const config = {
+    value: { label: title, color: "var(--chart-1)" },
+  } satisfies ChartConfig;
 
   return (
     <div className="w-full max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="border-b border-border px-4 py-3">
         <p className="text-sm font-semibold text-foreground">{title}</p>
       </div>
-      <div className="w-full p-3" style={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="w-full p-3">
+        <ChartContainer
+          config={config}
+          className="aspect-auto w-full"
+          style={{ height }}
+        >
           {chartType === "bar" ? (
             <BarChart
+              accessibilityLayer
               data={data}
               layout="vertical"
               margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
             >
-              <CartesianGrid stroke={GRID} horizontal={false} />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} stroke={AXIS} />
+              <CartesianGrid horizontal={false} />
+              <XAxis
+                type="number"
+                allowDecimals={false}
+                tickLine={false}
+                axisLine={false}
+              />
               <YAxis
                 type="category"
                 dataKey="label"
                 width={110}
-                tick={{ fontSize: 12 }}
-                stroke={AXIS}
+                tickLine={false}
+                axisLine={false}
               />
-              <Tooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                labelStyle={TOOLTIP_LABEL_STYLE}
-                cursor={TOOLTIP_CURSOR}
+              <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+              <Bar
+                dataKey="value"
+                fill="var(--color-value)"
+                radius={[0, 4, 4, 0]}
+                maxBarSize={20}
               />
-              <Bar dataKey="value" fill={ACCENT} radius={[0, 4, 4, 0]} maxBarSize={20} />
             </BarChart>
           ) : (
-            <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke={AXIS} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke={AXIS} />
-              <Tooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                labelStyle={TOOLTIP_LABEL_STYLE}
-                cursor={{ stroke: "var(--border)" }}
+            <AreaChart
+              accessibilityLayer
+              data={data}
+              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+              />
+              <YAxis
+                allowDecimals={false}
+                tickLine={false}
+                axisLine={false}
+                width={32}
+              />
+              <ChartTooltip
+                content={<ChartTooltipContent indicator="line" />}
               />
               <Area
                 type="monotone"
                 dataKey="value"
-                stroke={ACCENT}
+                stroke="var(--color-value)"
                 strokeWidth={2}
-                fill={ACCENT}
+                fill="var(--color-value)"
                 fillOpacity={0.1}
+                dot={POINT}
+                activeDot={POINT}
               />
             </AreaChart>
           )}
-        </ResponsiveContainer>
+        </ChartContainer>
       </div>
     </div>
   );
