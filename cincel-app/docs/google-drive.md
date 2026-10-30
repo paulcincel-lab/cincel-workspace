@@ -262,5 +262,5 @@ ACCESS_RECHECK_HOURS=4
 5. Cleanup (its own release, after step 3 has run in production): the
    delegation client and the old connect flow are removed.
 
-The full cutover and the Workspace admin checklist are in
-`docs/specs/backend.md` §A.8–§A.9.
+The full cutover is in `docs/specs/backend.md` §A.8–§A.9; the client's
+Workspace setup is in `docs/google-workspace-admin-checklist.md`.
