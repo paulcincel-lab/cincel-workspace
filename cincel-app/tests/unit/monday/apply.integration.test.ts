@@ -149,12 +149,19 @@ describe.skipIf(!url)(
         rmSync(d, { recursive: true, force: true });
     });
 
+    /**
+     * Runs `fn` in a transaction that is rolled back. Repeatable read keeps
+     * rows other test files commit meanwhile out of the table counts.
+     */
     async function inTx(fn: (tx: ImportDb) => Promise<void>) {
       await db
-        .transaction(async (tx) => {
-          await fn(tx);
-          throw new Rollback();
-        })
+        .transaction(
+          async (tx) => {
+            await fn(tx);
+            throw new Rollback();
+          },
+          { isolationLevel: "repeatable read" },
+        )
         .catch((err) => {
           if (!(err instanceof Rollback)) throw err;
         });
