@@ -7,10 +7,14 @@ import {
   integer,
   primaryKey,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { core, soft, stamps, staffKind } from "./_schema";
+
+/** Whether a Workspace group mapping grants a role or an área (BE §A.3). */
+export const groupMappingKind = core.enum("group_mapping_kind", ["role", "area"]);
 
 /** Internal person: employee, freelance or servicio social (Part C.1). */
 export const staff = core.table(
@@ -28,6 +32,13 @@ export const staff = core.table(
     active: boolean("active").notNull().default(true),
     // Manual order in Equipo (#452); null = not placed yet, listed after the placed ones by name.
     sortOrder: integer("sort_order"),
+    // Google staff sign-in (BE §A.3): stable Google account id, matched before email.
+    googleSub: text("google_sub"),
+    accessCheckedAt: timestamp("access_checked_at", { withTimezone: true }),
+    accessRevokedAt: timestamp("access_revoked_at", { withTimezone: true }),
+    // One of WORKSPACE_DENIAL_REASONS in lib/types/workspace-access.ts (BE §A.4).
+    accessRevokedReason: text("access_revoked_reason"),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     ...stamps,
     ...soft,
   },
@@ -39,6 +50,9 @@ export const staff = core.table(
     uniqueIndex("staff_email_lower_uq")
       .on(sql`lower(${t.email})`)
       .where(sql`${t.deletedAt} is null and ${t.email} is not null`),
+    uniqueIndex("staff_google_sub_uq")
+      .on(t.googleSub)
+      .where(sql`${t.googleSub} is not null and ${t.deletedAt} is null`),
     index("idx_staff_name_trgm").using("gin", sql`${t.name} gin_trgm_ops`),
     index("idx_staff_active").on(t.active),
   ]
@@ -105,11 +119,35 @@ export const areaMembers = core.table(
       .notNull()
       .references(() => staff.id, { onDelete: "cascade" }),
     role: text("role"),
+    // "manual" | "workspace": workspace rows come from Google group mappings (BE §A.4).
+    source: text("source").notNull().default("manual"),
     ...stamps,
   },
   (t) => [
     primaryKey({ columns: [t.areaId, t.staffId] }),
     index("idx_area_members_staff_id").on(t.staffId),
+  ]
+);
+
+/** Admin-configured: which Workspace group means which role or area (BE §A.3). */
+export const workspaceGroupMappings = core.table(
+  "workspace_group_mappings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupEmail: text("group_email").notNull(), // shown in UI
+    groupId: text("group_id").notNull(), // from groups.get; survives renames
+    kind: groupMappingKind("kind").notNull(),
+    role: text("role"), // kind = role: one of OFFICIAL_CINCEL_ROLES
+    areaId: uuid("area_id").references(() => areas.id, { onDelete: "cascade" }), // kind = area
+    rank: integer("rank").notNull().default(0), // kind = role: higher wins
+    ...stamps,
+  },
+  (t) => [
+    uniqueIndex("workspace_group_mappings_group_uq").on(t.groupId, t.kind),
+    check(
+      "workspace_group_mappings_kind_check",
+      sql`(${t.kind} = 'role' and ${t.role} is not null and ${t.areaId} is null) or (${t.kind} = 'area' and ${t.areaId} is not null and ${t.role} is null)`
+    ),
   ]
 );
 
@@ -130,4 +168,8 @@ export const areasRelations = relations(areas, ({ one, many }) => ({
 export const areaMembersRelations = relations(areaMembers, ({ one }) => ({
   area: one(areas, { fields: [areaMembers.areaId], references: [areas.id] }),
   staff: one(staff, { fields: [areaMembers.staffId], references: [staff.id] }),
+}));
+
+export const workspaceGroupMappingsRelations = relations(workspaceGroupMappings, ({ one }) => ({
+  area: one(areas, { fields: [workspaceGroupMappings.areaId], references: [areas.id] }),
 }));
