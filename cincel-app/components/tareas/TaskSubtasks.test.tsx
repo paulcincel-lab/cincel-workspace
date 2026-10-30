@@ -14,6 +14,7 @@ import type { TaskDetail, TaskRef } from "@/lib/types/core";
 const actions = vi.hoisted(() => ({
   createSubtaskAction: vi.fn(),
   listSubtasksAction: vi.fn(),
+  listTaskDependenciesAction: vi.fn(async () => ({ dependsOn: [], blocks: [] })),
 }));
 
 vi.mock("@/lib/actions/tasks-actions", () => actions);
