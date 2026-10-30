@@ -9,9 +9,10 @@ import { formatDateDMY } from "@/lib/utils/date";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
-import { Textarea } from "@/components/ui/shadcn/textarea";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
+import { HistoryEventList } from "@/components/ui/HistoryEventList";
+import { HistoryCommentInput } from "@/components/ui/HistoryCommentInput";
 
 const STATUS_LABEL: Record<TaskDetail["status"], string> = {
   pendiente: "Pendiente",
@@ -71,7 +72,6 @@ export default function TaskDrawer({
 }: Props) {
   /** Tasks the user came from inside this drawer (parent → subtask), for "← {padre}". */
   const [backStack, setBackStack] = useState<BackEntry[]>([]);
-  const [newNote, setNewNote] = useState("");
   const [newChecklistItem, setNewChecklistItem] = useState("");
   const [attachmentError, setAttachmentError] = useState("");
 
@@ -112,13 +112,6 @@ export default function TaskDrawer({
     }
     setBackStack([]);
     onOpenTask(task.parentTaskId);
-  };
-
-  const handleAddNote = () => {
-    const trimmed = newNote.trim();
-    if (!trimmed) return;
-    onAddComment(trimmed);
-    setNewNote("");
   };
 
   const handleAddChecklistItem = () => {
@@ -250,43 +243,16 @@ export default function TaskDrawer({
               <section>
                 <h3 className="text-lg font-semibold text-foreground">Historial</h3>
                 <div className="mt-3 space-y-3 rounded-2xl border border-border p-4">
-                  {sortedHistory.length > 0 ? (
-                    <div className="space-y-2">
-                      {sortedHistory.map((item) => (
-                        <div key={item.id} className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">
-                          <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                            <span>{formatDateDMY(item.eventAt.slice(0, 10))}</span>
-                            <span>{item.actor?.name ?? "Sistema"}</span>
-                          </div>
-                          <p className="mt-2">
-                            {item.kind === "comentario"
-                              ? item.comment
-                              : `Cambió ${item.field ?? "un campo"}: ${item.beforeValue ?? "—"} → ${item.afterValue ?? "—"}`}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No hay notas de seguimiento registradas.</p>
-                  )}
+                  <HistoryEventList
+                    events={sortedHistory}
+                    empty={<p className="text-sm text-muted-foreground">No hay notas de seguimiento registradas.</p>}
+                  />
 
-                  <div className="space-y-2 rounded-xl border border-dashed border-border p-3">
-                    <Textarea
-                      value={newNote}
-                      onChange={(event) => setNewNote(event.target.value)}
-                      rows={3}
-                      placeholder="Agregar nueva nota de seguimiento..."
-                      className="text-sm"
-                    />
-                    <div className="flex justify-end">
-                      <Button
-                        onClick={handleAddNote}
-                        className="h-auto rounded-lg px-3 py-2 text-xs font-semibold"
-                      >
-                        Guardar nota
-                      </Button>
-                    </div>
-                  </div>
+                  <HistoryCommentInput
+                    onSubmit={onAddComment}
+                    placeholder="Agregar nueva nota de seguimiento..."
+                    submitLabel="Guardar nota"
+                  />
                 </div>
               </section>
 

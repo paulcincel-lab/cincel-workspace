@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { normalizePhases, projectPhaseOptions } from "@/lib/proyectos/phases";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
+import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
@@ -552,6 +553,8 @@ export default function ProjectFichaPage() {
                 />
               </div>
             </section>
+
+            <ProjectBitacoraCard projectId={project.id} />
           </div>
 
           <div className="space-y-6">
