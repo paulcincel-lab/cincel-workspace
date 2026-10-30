@@ -12,9 +12,18 @@ import {
   YAxis,
 } from "recharts";
 
-const ACCENT = "var(--foreground)";
+const ACCENT = "var(--chart-1)";
 const GRID = "var(--border)";
 const AXIS = "var(--muted-foreground)";
+const TOOLTIP_CONTENT_STYLE = {
+  backgroundColor: "var(--popover)",
+  borderColor: "var(--border)",
+  borderRadius: 8,
+  color: "var(--popover-foreground)",
+  fontSize: 12,
+};
+const TOOLTIP_LABEL_STYLE = { color: "var(--popover-foreground)" };
+const TOOLTIP_CURSOR = { fill: "var(--muted)" };
 
 type ChartDataPoint = { label: string; value: number };
 
@@ -52,7 +61,11 @@ export function AssistantChartMessage({ chartType, title, data }: Props) {
                 tick={{ fontSize: 12 }}
                 stroke={AXIS}
               />
-              <Tooltip />
+              <Tooltip
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                cursor={TOOLTIP_CURSOR}
+              />
               <Bar dataKey="value" fill={ACCENT} radius={[0, 4, 4, 0]} maxBarSize={20} />
             </BarChart>
           ) : (
@@ -60,7 +73,11 @@ export function AssistantChartMessage({ chartType, title, data }: Props) {
               <CartesianGrid stroke={GRID} vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke={AXIS} />
               <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke={AXIS} />
-              <Tooltip />
+              <Tooltip
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                cursor={{ stroke: "var(--border)" }}
+              />
               <Area
                 type="monotone"
                 dataKey="value"
