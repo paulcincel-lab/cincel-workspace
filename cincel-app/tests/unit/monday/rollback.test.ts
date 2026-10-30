@@ -395,10 +395,18 @@ describe.skipIf(!url)("rollback blocker detection (test DB)", () => {
           afterValue: "55",
         })
         .returning();
-      expect(pick(await findRollbackBlockers(tx, f.batch.id))).toEqual([
-        { kind: "history", table: "history_events", id: comment.id },
-        { kind: "history", table: "history_events", id: change.id },
-      ]);
+      // Both events share event_at (one transaction), so they come back in
+      // id order, which is random for uuids.
+      const byId = (a: { id: string }, b: { id: string }) =>
+        a.id.localeCompare(b.id);
+      expect(
+        pick(await findRollbackBlockers(tx, f.batch.id)).sort(byId),
+      ).toEqual(
+        [
+          { kind: "history", table: "history_events", id: comment.id },
+          { kind: "history", table: "history_events", id: change.id },
+        ].sort(byId),
+      );
     });
   });
 
