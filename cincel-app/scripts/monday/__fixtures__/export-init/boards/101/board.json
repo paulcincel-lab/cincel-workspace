@@ -1,0 +1,239 @@
+{
+  "id": "101",
+  "name": "Casa Pérez",
+  "workspace_id": "7",
+  "hierarchy_type": "classic",
+  "columns": [
+    {
+      "id": "name",
+      "title": "Name",
+      "type": "name",
+      "settings": {}
+    },
+    {
+      "id": "status",
+      "title": "Estado",
+      "type": "status",
+      "settings": {
+        "labels": [
+          {
+            "id": 0,
+            "label": "En proceso",
+            "index": 0,
+            "is_done": false
+          },
+          {
+            "id": 1,
+            "label": "Listo",
+            "index": 1,
+            "is_done": true
+          },
+          {
+            "id": 2,
+            "label": "Detenido",
+            "index": 2,
+            "is_done": false
+          },
+          {
+            "id": 3,
+            "label": "Revisión cliente",
+            "index": 3,
+            "is_done": false
+          },
+          {
+            "id": 7,
+            "label": "Por iniciar",
+            "index": 4,
+            "is_done": false
+          },
+          {
+            "id": 9,
+            "label": "Entregado",
+            "index": 5,
+            "is_done": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "priority",
+      "title": "Prioridad",
+      "type": "status",
+      "settings": {
+        "labels": [
+          {
+            "id": 0,
+            "label": "Alta",
+            "index": 0
+          },
+          {
+            "id": 1,
+            "label": "Baja",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "person",
+      "title": "Responsable",
+      "type": "people",
+      "settings": {}
+    },
+    {
+      "id": "timeline",
+      "title": "Cronograma",
+      "type": "timeline",
+      "settings": {}
+    },
+    {
+      "id": "date4",
+      "title": "Entrega",
+      "type": "date",
+      "settings": {}
+    },
+    {
+      "id": "date5",
+      "title": "Visita",
+      "type": "date",
+      "settings": {}
+    },
+    {
+      "id": "notes",
+      "title": "Notas",
+      "type": "long_text",
+      "settings": {}
+    },
+    {
+      "id": "text0",
+      "title": "Ubicación",
+      "type": "text",
+      "settings": {}
+    },
+    {
+      "id": "dep",
+      "title": "Depende de",
+      "type": "dependency",
+      "settings": {}
+    },
+    {
+      "id": "files",
+      "title": "Archivos",
+      "type": "file",
+      "settings": {}
+    },
+    {
+      "id": "cliente",
+      "title": "Cliente",
+      "type": "board_relation",
+      "settings": {
+        "boardIds": [301]
+      }
+    },
+    {
+      "id": "numbers",
+      "title": "Costo",
+      "type": "numbers",
+      "settings": {}
+    },
+    {
+      "id": "status_1",
+      "title": "Estado obra",
+      "type": "status",
+      "settings": {
+        "labels": [
+          {
+            "id": 0,
+            "label": "En proceso",
+            "index": 0,
+            "is_done": false
+          },
+          {
+            "id": 1,
+            "label": "Listo",
+            "index": 1,
+            "is_done": true
+          },
+          {
+            "id": 2,
+            "label": "Detenido",
+            "index": 2,
+            "is_done": false
+          },
+          {
+            "id": 3,
+            "label": "Revisión cliente",
+            "index": 3,
+            "is_done": false
+          },
+          {
+            "id": 7,
+            "label": "Por iniciar",
+            "index": 4,
+            "is_done": false
+          },
+          {
+            "id": 9,
+            "label": "Entregado",
+            "index": 5,
+            "is_done": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "subitems",
+      "title": "Subelementos",
+      "type": "subtasks",
+      "settings": {
+        "boardIds": [901]
+      }
+    }
+  ],
+  "groups": [
+    {
+      "id": "topics",
+      "title": "Diseño",
+      "position": "65536"
+    },
+    {
+      "id": "g_obra",
+      "title": "Obra",
+      "position": "131072"
+    }
+  ],
+  "subitem_columns": [
+    {
+      "id": "name",
+      "title": "Name",
+      "type": "name",
+      "settings": {}
+    },
+    {
+      "id": "status",
+      "title": "Estado",
+      "type": "status",
+      "settings": {
+        "labels": [
+          {
+            "id": 1,
+            "label": "Listo",
+            "index": 1,
+            "is_done": true
+          },
+          {
+            "id": 4,
+            "label": "En curso",
+            "index": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "person",
+      "title": "Responsable",
+      "type": "people",
+      "settings": {}
+    }
+  ]
+}

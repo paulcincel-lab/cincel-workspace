@@ -3,7 +3,7 @@
  *
  * Commands (docs/specs/monday-migration/backend.md §2.1):
  *   export   --out exports/<client> [--boards 123,456] [--no-files] [--no-updates]
- *   init     --export exports/<client>
+ *   init     --export exports/<client> [--force]
  *   plan     --export exports/<client>
  *   apply    --export exports/<client> --by <staff email>
  *   rollback --batch <import_batch_id> [--drive-only]
@@ -13,13 +13,14 @@
  */
 
 import { exportCommand } from "./export";
+import { initCommand } from "./init";
 import { rollbackCommand } from "./rollback";
 
 export const USAGE = `Usage: npm run monday -- <command> [options]
 
 Commands:
   export    --out exports/<client> [--boards 123,456] [--no-files] [--no-updates]
-  init      --export exports/<client>
+  init      --export exports/<client> [--force]
   plan      --export exports/<client>
   apply     --export exports/<client> --by <staff email>
   rollback  --batch <import_batch_id> [--drive-only]
@@ -48,7 +49,7 @@ function notImplemented(name: CommandName): CommandHandler {
 
 export const COMMANDS: Record<CommandName, CommandHandler> = {
   export: exportCommand,
-  init: notImplemented("init"),
+  init: initCommand,
   plan: notImplemented("plan"),
   apply: notImplemented("apply"),
   rollback: rollbackCommand,

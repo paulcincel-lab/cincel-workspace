@@ -1,0 +1,34 @@
+{
+  "id": "202",
+  "name": "Desarrollos",
+  "workspace_id": "8",
+  "hierarchy_type": "multi_level",
+  "columns": [
+    {
+      "id": "name",
+      "title": "Name",
+      "type": "name",
+      "settings": {}
+    },
+    {
+      "id": "estado",
+      "title": "Estado",
+      "type": "color",
+      "settings": "{\"labels\": {\"0\": \"Pendiente\", \"1\": \"Hecho\", \"2\": \"Stuck\"}, \"done_colors\": [1]}"
+    },
+    {
+      "id": "people",
+      "title": "Equipo",
+      "type": "people",
+      "settings": {}
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "title": "Activos",
+      "position": "1"
+    }
+  ],
+  "subitem_columns": []
+}
