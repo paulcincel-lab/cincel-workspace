@@ -63,6 +63,8 @@ export const googleOauthAccounts = core.table("google_oauth_accounts", {
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token"),
   scope: text("scope").notNull(),
+  // Google account id; must equal core.staff.google_sub. Null = legacy row from the old connect flow (BE §A.3).
+  googleSub: text("google_sub"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   ...stamps,
 });
@@ -114,3 +116,25 @@ export const googleCalendarEvents = core.table(
   },
   (t) => [primaryKey({ columns: [t.staffId, t.eventKey] })]
 );
+
+/** Sign-in audit (BE §A.3): Google allow/deny, periodic re-checks and password logins. */
+export const authEvents = core.table(
+  "auth_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // "staff_login_allowed" | "staff_login_denied" | "staff_recheck_kept" | "staff_recheck_revoked" |
+    // "staff_recheck_error" | "password_login"
+    kind: text("kind").notNull(),
+    staffId: uuid("staff_id").references(() => staff.id, { onDelete: "set null" }),
+    email: text("email"),
+    reason: text("reason"),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_auth_events_at").on(t.at), index("idx_auth_events_staff_id").on(t.staffId)]
+);
+
+export const authEventsRelations = relations(authEvents, ({ one }) => ({
+  staff: one(staff, { fields: [authEvents.staffId], references: [staff.id] }),
+}));
