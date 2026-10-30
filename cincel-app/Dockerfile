@@ -25,6 +25,20 @@ WORKDIR /app
 COPY --from=build --chown=nextuser:nextuser /app/public ./public
 COPY --from=build --chown=nextuser:nextuser /app/.next/standalone ./
 COPY --from=build --chown=nextuser:nextuser /app/.next/static ./.next/static
+# Migrations without drizzle-kit: `node scripts/migrate.mjs` (the recipe's
+# migrate job). The standalone trace doesn't include drizzle-orm's migrator,
+# so both packages are copied whole.
+COPY --from=build --chown=nextuser:nextuser /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
+COPY --from=build --chown=nextuser:nextuser /app/node_modules/postgres ./node_modules/postgres
+COPY --from=build --chown=nextuser:nextuser /app/lib/db/migrations ./lib/db/migrations
+COPY --from=build --chown=nextuser:nextuser /app/scripts/migrate.mjs ./scripts/migrate.mjs
+COPY kcd.yml /kcd.yml
+ARG KCD_DIGEST KCD_CONTENT GIT_SHA
+LABEL dev.keter.kcd.schema="1" \
+      dev.keter.kcd.digest="${KCD_DIGEST}" \
+      dev.keter.kcd.content="${KCD_CONTENT}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.source="https://github.com/paulcincel-lab/cincel-workspace"
 
 # set non root user
 USER nextuser
