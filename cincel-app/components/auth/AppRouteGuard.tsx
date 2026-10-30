@@ -3,15 +3,16 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
+import {
+  CHANGE_PASSWORD_ROUTE as PUBLIC_FIRST_ACCESS_ROUTE,
+  isPortalPath,
+  isPublicPath,
+  LOGIN_ROUTE as PUBLIC_LOGIN_ROUTE,
+  SIGN_OUT_TO_LOGIN_URL,
+} from "@/lib/auth/public-routes";
 import { useSessionAccess } from "@/lib/auth/session-context";
 
-const PUBLIC_LOGIN_ROUTE = "/login";
-const PUBLIC_FIRST_ACCESS_ROUTE = "/change-password";
 const CONFIG_ROUTE_PREFIX = "/configuracion";
-
-function isPublicRoute(pathname: string): boolean {
-  return pathname === PUBLIC_LOGIN_ROUTE || pathname === PUBLIC_FIRST_ACCESS_ROUTE;
-}
 
 export default function AppRouteGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -30,10 +31,16 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
   const resolution = isMounted
     ? serverResolution
     : { status: "guest" as const, user: null };
-  const isPublic = isPublicRoute(route);
+  const isPortal = isPortalPath(route);
+  const isPublic = isPublicPath(route);
   const isConfigurationRoute = route === CONFIG_ROUTE_PREFIX || route.startsWith(`${CONFIG_ROUTE_PREFIX}/`);
 
   const canRender = useMemo(() => {
+    // The portal layout does its own (portal-cookie) checks; no staff checks here.
+    if (isPortal) {
+      return true;
+    }
+
     if (!isMounted) {
       return isPublic;
     }
@@ -55,10 +62,19 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
     }
 
     return true;
-  }, [isConfigurationRoute, isMounted, isPublic, resolution.status, resolution.user?.access, route]);
+  }, [isConfigurationRoute, isMounted, isPortal, isPublic, resolution.status, resolution.user?.access, route]);
 
   useEffect(() => {
     if (!isMounted || canRender) {
+      return;
+    }
+
+    // A guest on a protected path only gets past the middleware with a staff
+    // cookie, which is therefore stale (session row missing or expired). A
+    // hard navigation through the sign-out route clears it before landing on
+    // /login, so the browser can't bounce between the page and /login.
+    if (resolution.status === "guest" && !isPublic) {
+      window.location.assign(SIGN_OUT_TO_LOGIN_URL);
       return;
     }
 
@@ -95,7 +111,7 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
     }
 
     router.replace(PUBLIC_LOGIN_ROUTE);
-  }, [canRender, isConfigurationRoute, isMounted, resolution.status, resolution.user?.access, router]);
+  }, [canRender, isConfigurationRoute, isMounted, isPublic, resolution.status, resolution.user?.access, router]);
 
   if (!canRender) {
     if (!isMounted && isPublic) {
