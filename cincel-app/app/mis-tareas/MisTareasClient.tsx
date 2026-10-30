@@ -143,6 +143,17 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
     }
   }
 
+  async function reloadAfterDependencyChange() {
+    if (!selectedTaskId) return;
+    try {
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      await refresh();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   async function addComment(comment: string) {
     if (!selectedTaskId) return;
     try {
@@ -529,6 +540,7 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         task={activeTaskDetail}
         onClose={() => setSelectedTaskId(null)}
         onOpenTask={setSelectedTaskId}
+        onDependenciesChange={() => void reloadAfterDependencyChange()}
         onAddComment={(comment) => void addComment(comment)}
         onAddAttachment={(file, checklistItemId) => void addAttachment(file, checklistItemId)}
         onAddLink={(input) => void addLink(input)}

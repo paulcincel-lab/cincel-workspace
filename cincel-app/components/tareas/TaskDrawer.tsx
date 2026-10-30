@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 
 import type { StaffRef, TaskChecklistItem, TaskDetail, TaskLinkInput, TaskRef } from "@/lib/types/core";
+import TaskDependencies from "@/components/tareas/TaskDependencies";
 import TaskSubtasks from "@/components/tareas/TaskSubtasks";
+import { WaitingBadge } from "@/components/tareas/TaskRowMeta";
 import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
 import { formatDateDMY } from "@/lib/utils/date";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
@@ -50,6 +52,8 @@ type Props = {
   onChangeSupport?: (staffIds: string[]) => void;
   /** Shows another task (a subtask or the parent) in this drawer. Optional — the Subtareas section is hidden when omitted. */
   onOpenTask?: (taskId: string) => void;
+  /** Called after a dependency is added or removed, so the caller can refetch the task ("En espera"). */
+  onDependenciesChange?: () => void;
 };
 
 type BackEntry = { id: string; title: string };
@@ -69,6 +73,7 @@ export default function TaskDrawer({
   staffOptions = [],
   onChangeSupport,
   onOpenTask,
+  onDependenciesChange,
 }: Props) {
   /** Tasks the user came from inside this drawer (parent → subtask), for "← {padre}". */
   const [backStack, setBackStack] = useState<BackEntry[]>([]);
@@ -96,6 +101,13 @@ export default function TaskDrawer({
     if (!task || !onOpenTask) return;
     setBackStack((stack) => [...stack, { id: task.id, title: task.title }]);
     onOpenTask(subtask.id);
+  };
+
+  /** Opens a linked task (dependency) fresh, without a back link. */
+  const openLinkedTask = (linked: TaskRef) => {
+    if (!onOpenTask) return;
+    setBackStack([]);
+    onOpenTask(linked.id);
   };
 
   const goBack = () => {
@@ -208,6 +220,7 @@ export default function TaskDrawer({
                 <span className="rounded-full bg-muted px-3 py-1">{task.project.name}</span>
                 {task.phase ? <span className="rounded-full bg-muted px-3 py-1">{task.phase}</span> : null}
                 <span className="rounded-full bg-muted px-3 py-1">{task.customStatus?.name ?? STATUS_LABEL[task.status]}</span>
+                <WaitingBadge waitingOn={task.waitingOn} />
               </div>
             </SheetHeader>
 
@@ -361,6 +374,16 @@ export default function TaskDrawer({
 
               {onOpenTask && !isSubtask ? (
                 <TaskSubtasks key={task.id} parentId={task.id} onOpenSubtask={openSubtask} />
+              ) : null}
+
+              {onOpenTask ? (
+                <TaskDependencies
+                  key={`deps-${task.id}`}
+                  taskId={task.id}
+                  projectId={task.projectId}
+                  onOpenTask={openLinkedTask}
+                  onChange={onDependenciesChange}
+                />
               ) : null}
 
               {onChangeSupport && staffOptions.length > 0 ? (
