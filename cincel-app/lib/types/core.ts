@@ -38,6 +38,13 @@ export type Staff = {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Role and áreas come from Google Workspace (`google_sub` set); Equipo shows them read-only. */
+  googleManaged: boolean;
+  /** Last Google sign-in (ISO). */
+  lastLoginAt: string | null;
+  /** Set when the access re-check revoked access (ISO); cleared by the next allowed sign-in. */
+  accessRevokedAt: string | null;
+  accessRevokedReason: string | null;
 };
 
 /** A collaborator's emergency contact, for quick access in Equipo (#451). */

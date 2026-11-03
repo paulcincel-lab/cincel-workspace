@@ -21,6 +21,12 @@ export function isWorkspaceDenialReason(value: unknown): value is WorkspaceDenia
   return typeof value === "string" && (WORKSPACE_DENIAL_REASONS as readonly string[]).includes(value);
 }
 
+/**
+ * Refusal of a role or área change for staff whose role and áreas come from
+ * Google Workspace (BE §A.7, §A.11 #12).
+ */
+export const GOOGLE_MANAGED_ERROR = "Se administra en Google Workspace";
+
 /** Which Workspace group means which role or area (BE §A.7, FE §5). */
 export type GroupMappingKind = "role" | "area";
 

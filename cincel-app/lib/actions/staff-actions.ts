@@ -10,6 +10,31 @@ import {
 } from "@/lib/auth/permissions";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
+import { GOOGLE_MANAGED_ERROR } from "@/lib/types/workspace-access";
+
+const normalizeRole = (role: string | null | undefined) => role?.trim() || null;
+
+/**
+ * Role and áreas of Google-managed staff come from Workspace (BE §A.7): a
+ * change is refused even when the action is called directly. Sending the
+ * current value back (a full form save) is not a change.
+ */
+async function assertRoleEditable(staffId: string, patch: Partial<StaffInput>): Promise<void> {
+  if (patch.role === undefined) return;
+  const lock = await staffRepository.getStaffRoleLock(staffId);
+  if (lock?.googleManaged && normalizeRole(patch.role) !== normalizeRole(lock.role)) {
+    throw new Error(GOOGLE_MANAGED_ERROR);
+  }
+}
+
+async function assertAreasEditable(staffId: string, areaIds: string[]): Promise<void> {
+  if (!(await staffRepository.googleManagedStaffIds([staffId])).has(staffId)) return;
+  const current = new Set(await staffRepository.listStaffAreaIds(staffId));
+  const wanted = new Set(areaIds);
+  if (current.size !== wanted.size || [...wanted].some((id) => !current.has(id))) {
+    throw new Error(GOOGLE_MANAGED_ERROR);
+  }
+}
 
 /**
  * Everyone's emergency contact, for quick access in Equipo (#451). `null`
@@ -59,6 +84,7 @@ export async function updateStaffAction(id: string, patch: Partial<StaffInput>):
   if (!resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff edit");
   }
+  await assertRoleEditable(id, patch);
   const row = await staffRepository.updateStaff(id, patch, user.member.id);
   revalidatePath("/equipo");
   return row;
@@ -101,6 +127,7 @@ export async function setStaffAreasAction(staffId: string, areaIds: string[]): P
   if (!resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff areas edit");
   }
+  await assertAreasEditable(staffId, areaIds);
   await staffRepository.setStaffAreas(staffId, areaIds);
   revalidatePath("/equipo");
 }

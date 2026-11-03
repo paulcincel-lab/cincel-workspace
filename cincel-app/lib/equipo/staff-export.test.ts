@@ -46,6 +46,10 @@ const sampleStaff: Staff[] = [
     active: true,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
+    googleManaged: false,
+    lastLoginAt: null,
+    accessRevokedAt: null,
+    accessRevokedReason: null,
   },
 ];
 
