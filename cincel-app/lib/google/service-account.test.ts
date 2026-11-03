@@ -29,6 +29,8 @@ describe("service account", () => {
     expect(jwt.subject).toBeUndefined();
     expect(jwt.key).toContain("\nfake\n");
     expect(jwt.scopes).toEqual(DIRECTORY_SCOPES);
+    // groups.get needs group.readonly; group.member.readonly alone is refused.
+    expect(DIRECTORY_SCOPES).toContain("https://www.googleapis.com/auth/admin.directory.group.readonly");
   });
 
   it("returns null when not configured and caches one source per scope set", () => {

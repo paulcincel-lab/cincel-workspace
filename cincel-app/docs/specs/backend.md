@@ -89,7 +89,7 @@ Two features, built in order:
 | Credential | Used for | Scopes |
 |---|---|---|
 | **Staff OAuth client** "Cincel Staff" (Internal), one per environment | Sign-in; the staff member's own Drive and Calendar calls | Sign-in: `openid email profile`. Drive feature: + `https://www.googleapis.com/auth/drive.readonly`. Calendar sync: + `https://www.googleapis.com/auth/calendar.app.created`. Both added incrementally. |
-| **Service account** `cincel-directory` (server only, no `subject`) | Group membership and user status (Directory API); project folders; client file list/stream/upload | `https://www.googleapis.com/auth/admin.directory.group.member.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/drive` |
+| **Service account** `cincel-directory` (server only, no `subject`) | Group membership and user status (Directory API); project folders; client file list/stream/upload | `https://www.googleapis.com/auth/admin.directory.group.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/drive` |
 
 The service account calls the Directory API **as itself**, through a custom admin role ("Cincel directory reader": read Users and Groups) assigned to it in the Admin console. It calls Drive as itself, as a member of the Shared Drive. **No domain-wide delegation anywhere.**
 
