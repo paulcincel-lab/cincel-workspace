@@ -16,9 +16,11 @@ import { FAKE_ACCESS_TOKEN, isGoogleFake } from "./fake";
  * builds its JWT here.
  */
 
-export const DIRECTORY_GROUP_MEMBER_SCOPE = "https://www.googleapis.com/auth/admin.directory.group.member.readonly";
+// groups.get (checking a group when it is mapped) needs group.readonly; it also
+// covers members.hasMember. group.member.readonly alone gets a 403 on groups.get.
+export const DIRECTORY_GROUP_SCOPE = "https://www.googleapis.com/auth/admin.directory.group.readonly";
 export const DIRECTORY_USER_SCOPE = "https://www.googleapis.com/auth/admin.directory.user.readonly";
-export const DIRECTORY_SCOPES = [DIRECTORY_GROUP_MEMBER_SCOPE, DIRECTORY_USER_SCOPE];
+export const DIRECTORY_SCOPES = [DIRECTORY_GROUP_SCOPE, DIRECTORY_USER_SCOPE];
 
 export type ServiceAccountCredentials = {
   clientEmail: string;

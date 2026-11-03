@@ -76,7 +76,7 @@ Google
 | Credential | Used for | Scopes |
 |---|---|---|
 | **User OAuth token** (per staff member) | Sign-in; listing Drive files the user can see | Login: `openid email profile`. Drive feature: + `drive.readonly` (incremental) |
-| **Service account** (one, server only) | Group membership and user status checks; creating project folders | `admin.directory.group.member.readonly`, `admin.directory.user.readonly`, `drive` |
+| **Service account** (one, server only) | Group membership and user status checks; creating project folders | `admin.directory.group.readonly`, `admin.directory.user.readonly`, `drive` |
 
 The service account calls the Directory API **as itself**, using a custom admin role assigned to it in the Admin console. **No domain-wide delegation.**
 
@@ -339,7 +339,7 @@ account: { encryptOAuthTokens: true },
 session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
 ```
 
-Directory client: `google-auth-library` `JWT` / `GoogleAuth` with the service account key and scopes `admin.directory.group.member.readonly`, `admin.directory.user.readonly`. **No `subject`** (no impersonation).
+Directory client: `google-auth-library` `JWT` / `GoogleAuth` with the service account key and scopes `admin.directory.group.readonly`, `admin.directory.user.readonly`. **No `subject`** (no impersonation).
 
 ---
 

@@ -79,12 +79,18 @@ async function resolveValues(input: GroupMappingInput, exceptId?: string): Promi
   if (!shape) return fail("invalid");
 
   const directory = getDirectory();
-  if (!directory) return fail("directory_error");
+  if (!directory) {
+    console.error("[group-mappings] Directory error (service account not configured)");
+    return fail("directory_error");
+  }
   let group;
   try {
     group = await directory.getGroup(shape.groupEmail);
   } catch (error) {
-    if (error instanceof DirectoryError) return fail("directory_error");
+    if (error instanceof DirectoryError) {
+      console.error(`[group-mappings] Directory error (${error.kind}${error.status ? ` ${error.status}` : ""})`);
+      return fail("directory_error");
+    }
     throw error;
   }
   if (!group) return fail("group_not_found");
