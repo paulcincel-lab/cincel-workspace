@@ -20,10 +20,18 @@ export type SessionUser = {
   googleLinked: boolean;
 };
 
+/** Staff row fields the session helpers need for the access re-check (BE §A.5). Server only. */
+export type SessionStaffAccess = {
+  googleSub: string | null;
+  accessCheckedAt: Date | null;
+  accessRevokedAt: Date | null;
+};
+
 export type SessionRecord = {
   id: string;
   user: SessionUser;
   expiresAt: Date;
+  staffAccess: SessionStaffAccess;
 };
 
 export type LoginFailure = "invalid_credentials" | "inactive_member" | "auth_disabled" | "password_not_set";
@@ -95,6 +103,8 @@ export async function findSessionByToken(token: string): Promise<SessionRecord |
       role: staff.role,
       active: staff.active,
       googleSub: staff.googleSub,
+      accessCheckedAt: staff.accessCheckedAt,
+      accessRevokedAt: staff.accessRevokedAt,
       mustChangePassword: authCredentials.mustChangePassword,
     })
     .from(sessions)
@@ -118,11 +128,21 @@ export async function findSessionByToken(token: string): Promise<SessionRecord |
       mustChangePassword: row.mustChangePassword ?? false,
       googleLinked: row.googleSub !== null,
     },
+    staffAccess: {
+      googleSub: row.googleSub,
+      accessCheckedAt: row.accessCheckedAt,
+      accessRevokedAt: row.accessRevokedAt,
+    },
   };
 }
 
 export async function deleteSessionByToken(token: string): Promise<void> {
   await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+}
+
+/** Deletes every session of a staff member (revoked or deactivated access). */
+export async function deleteStaffSessions(staffId: string): Promise<void> {
+  await db.delete(sessions).where(eq(sessions.staffId, staffId));
 }
 
 /** Sessions are hard-deleted; expired rows are swept opportunistically. */

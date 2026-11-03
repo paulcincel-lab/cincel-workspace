@@ -1,9 +1,11 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
+import { accessRecheckHours, isAccessCheckDue, recheckStaffAccess } from "@/lib/auth/access-recheck";
 import * as authRepository from "@/lib/repositories/auth-repository";
-import type { SessionUser as RepoSessionUser } from "@/lib/repositories/auth-repository";
+import type { SessionStaffAccess, SessionUser as RepoSessionUser } from "@/lib/repositories/auth-repository";
 import {
   DEFAULT_SYSTEM_ACCESS_ROLE,
   hasDefaultSystemAdministratorAccess,
@@ -25,7 +27,16 @@ export type Session = {
   id: string;
   user: SessionUser;
   expiresAt: Date;
+  /** Re-check state of the staff row (BE §A.5); server only, never sent to the browser. */
+  staffAccess: SessionStaffAccess;
 };
+
+/**
+ * Where the session helpers send a staff member whose access is gone (BE
+ * §A.5.1). The sign-out route clears the cookie, then shows the denial page.
+ */
+export const SIGNOUT_REVOKED_PATH = "/api/auth/signout?next=%2Flogin%2Fdenegado%3Fmotivo%3Drevoked";
+export const SIGNOUT_INACTIVE_PATH = "/api/auth/signout?next=%2Flogin%2Fdenegado%3Fmotivo%3Dinactive";
 
 export type SessionAccessStatus =
   | "guest"
@@ -60,9 +71,8 @@ function resolveAccessRole(
  * guard. Safe to call in Server Components / layout.
  */
 export async function getSessionAccess(): Promise<SessionAccess> {
-  const session = await getSession();
+  const session = await getCheckedSession();
   if (!session) return { status: "guest", user: null };
-  if (!session.user.active) return { status: "inactive_member", user: null };
 
   const access = resolveAccessRole(session.user.role, session.user.email);
   if (!access) return { status: "no_system_access", user: null };
@@ -110,15 +120,54 @@ export async function getSession(): Promise<Session | null> {
   const record = await authRepository.findSessionByToken(token);
   if (!record) return null;
 
-  return { id: record.id, expiresAt: record.expiresAt, user: record.user };
+  return { id: record.id, expiresAt: record.expiresAt, user: record.user, staffAccess: record.staffAccess };
+}
+
+/**
+ * The current session after the access checks (BE §A.5):
+ * - `access_revoked_at` set or `active = false`: the staff member's sessions
+ *   are deleted and the request redirects through `/api/auth/signout` to
+ *   `/login/denegado` (`motivo=revoked` / `inactive`)
+ * - Google-linked and the re-check is due: the request that claims it asks
+ *   the Directory; a revoke redirects the same way, a Directory error keeps
+ *   access (the re-check backs off on its own)
+ *
+ * `redirect()` throws; route handlers that turn a thrown helper into a 401
+ * keep doing so.
+ */
+async function getCheckedSession(): Promise<Session | null> {
+  const session = await getSession();
+  if (!session) return null;
+
+  if (session.staffAccess.accessRevokedAt || !session.user.active) {
+    await authRepository.deleteStaffSessions(session.user.id);
+    redirect(session.staffAccess.accessRevokedAt ? SIGNOUT_REVOKED_PATH : SIGNOUT_INACTIVE_PATH);
+  }
+
+  const { googleSub, accessCheckedAt } = session.staffAccess;
+  if (!googleSub || !isAccessCheckDue(accessCheckedAt, accessRecheckHours())) return session;
+
+  let outcome;
+  try {
+    outcome = await recheckStaffAccess(session.user.id);
+  } catch (error) {
+    // An unexpected failure must not take every page down; the next request retries.
+    console.error("[access-recheck] unexpected error", error);
+    return session;
+  }
+  if (outcome.status === "revoked") redirect(SIGNOUT_REVOKED_PATH);
+  // Role and áreas may have changed.
+  if (outcome.status === "kept") return getSession();
+  return session;
 }
 
 /**
  * Require an active session or throw. Use at the top of Server Actions.
+ * Revoked or deactivated staff are redirected to sign-out (see `getCheckedSession`).
  */
 export async function requireSession(): Promise<Session> {
-  const session = await getSession();
-  if (!session || !session.user.active) {
+  const session = await getCheckedSession();
+  if (!session) {
     throw new Error("UNAUTHENTICATED");
   }
   return session;
