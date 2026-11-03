@@ -212,6 +212,7 @@ Ver [`.env.example`](./.env.example). Las relevantes:
 |---|---|---|
 | `DATABASE_URL` | Conexión Postgres — `lib/db/client.ts`, drizzle-kit, `scripts/seed.ts` | `postgres://cincel:cincel@localhost:5432/cincel` |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Credencial admin que crea `npm run db:seed` | `paul@cincel.mx` / `CincelAdmin2026!` |
+| `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | Administrador con contraseña que el job de migración crea o actualiza en cada despliegue (sin seed) | vacío |
 | `CINCEL_ADMIN_EMAILS` | Emails con escalación automática a Administrador (solo servidor) | vacío |
 
 ### Scripts disponibles
