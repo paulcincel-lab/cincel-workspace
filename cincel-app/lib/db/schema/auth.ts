@@ -122,8 +122,8 @@ export const authEvents = core.table(
   "auth_events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    // "staff_login_allowed" | "staff_login_denied" | "staff_recheck_kept" | "staff_recheck_revoked" |
-    // "staff_recheck_error" | "password_login"
+    // "staff_login_allowed" | "staff_login_denied" | "staff_login_error" | "group_mapping_error" |
+    // "staff_recheck_kept" | "staff_recheck_revoked" | "staff_recheck_error" | "password_login"
     kind: text("kind").notNull(),
     staffId: uuid("staff_id").references(() => staff.id, { onDelete: "set null" }),
     email: text("email"),

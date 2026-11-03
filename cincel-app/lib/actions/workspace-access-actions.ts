@@ -2,24 +2,31 @@
 
 import { revalidatePath } from "next/cache";
 
+import { recheckStaffAccess } from "@/lib/auth/access-recheck";
+import { recordDirectoryError } from "@/lib/auth/directory-error-log";
+import { loadGoogleHealth } from "@/lib/auth/google-health";
 import { getSessionAccess } from "@/lib/auth/session";
 import { OFFICIAL_CINCEL_ROLES, SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { DirectoryError, getDirectory } from "@/lib/google/directory";
 import * as mappingsRepository from "@/lib/repositories/workspace-group-mappings-repository";
 import type { GroupMappingValues } from "@/lib/repositories/workspace-group-mappings-repository";
 import type {
+  GoogleHealth,
   GroupMapping,
   GroupMappingError,
   GroupMappingInput,
   GroupMappingResult,
+  RecheckStaffAccessResult,
 } from "@/lib/types/workspace-access";
 
 /**
- * Configuración → Google → Grupos de Google (BE §A.7). Every action requires
- * role Administrador, the same rule `AppRouteGuard` applies to `/configuracion/*`.
+ * Configuración → Google (BE §A.7): Estado, Grupos de Google and the access
+ * re-check from Equipo. Every action requires role Administrador, the same
+ * rule `AppRouteGuard` applies to `/configuracion/*`.
  */
 
 const GOOGLE_SETTINGS_PATH = "/configuracion/google";
+const TEAM_PATH = "/equipo";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UNIQUE_VIOLATION = "23505";
@@ -81,6 +88,7 @@ async function resolveValues(input: GroupMappingInput, exceptId?: string): Promi
   const directory = getDirectory();
   if (!directory) {
     console.error("[group-mappings] Directory error (service account not configured)");
+    await recordDirectoryError("group_mapping", { kind: "network", status: null });
     return fail("directory_error");
   }
   let group;
@@ -89,6 +97,7 @@ async function resolveValues(input: GroupMappingInput, exceptId?: string): Promi
   } catch (error) {
     if (error instanceof DirectoryError) {
       console.error(`[group-mappings] Directory error (${error.kind}${error.status ? ` ${error.status}` : ""})`);
+      await recordDirectoryError("group_mapping", error);
       return fail("directory_error");
     }
     throw error;
@@ -147,4 +156,33 @@ export async function deleteGroupMappingAction(
   await mappingsRepository.deleteGroupMapping(id);
   revalidatePath(GOOGLE_SETTINGS_PATH);
   return { ok: true };
+}
+
+/**
+ * Revisar acceso ahora (BE §A.7): runs the §A.5 re-check for one staff member
+ * now, ignoring the interval. A revoke deletes their sessions at once.
+ */
+export async function recheckStaffAccessAction(staffId: string): Promise<RecheckStaffAccessResult> {
+  if (!(await isAdministrator())) return { ok: false, error: "forbidden" };
+  if (!isUuid(staffId)) return { ok: false, error: "not_google_linked" };
+
+  const outcome = await recheckStaffAccess(staffId, { force: true });
+  switch (outcome.status) {
+    case "kept":
+      revalidatePath(TEAM_PATH);
+      return { ok: true, allowed: true };
+    case "revoked":
+      revalidatePath(TEAM_PATH);
+      return { ok: true, allowed: false, reason: outcome.reason };
+    case "error":
+      return { ok: false, error: "directory_error" };
+    default:
+      return { ok: false, error: "not_google_linked" };
+  }
+}
+
+/** Configuración → Google → Estado (BE §A.7, FE §5). */
+export async function getGoogleHealthAction(): Promise<GoogleHealth> {
+  if (!(await isAdministrator())) throw new Error("FORBIDDEN: google health");
+  return loadGoogleHealth();
 }

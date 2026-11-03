@@ -31,12 +31,23 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/workspace-group-mappings-repository", () => repo);
 
+const recheckStaffAccess = vi.hoisted(() => vi.fn());
+const recordDirectoryError = vi.hoisted(() => vi.fn());
+const loadGoogleHealth = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth/access-recheck", () => ({ recheckStaffAccess }));
+vi.mock("@/lib/auth/directory-error-log", () => ({ recordDirectoryError }));
+vi.mock("@/lib/auth/google-health", () => ({ loadGoogleHealth }));
+
 import {
   createGroupMappingAction,
   deleteGroupMappingAction,
+  getGoogleHealthAction,
   listGroupMappingsAction,
+  recheckStaffAccessAction,
   updateGroupMappingAction,
 } from "./workspace-access-actions";
+
+const STAFF_ID = "33333333-3333-4333-8333-333333333333";
 
 const mapping: GroupMapping = {
   id: MAPPING_ID,
@@ -169,12 +180,16 @@ describe("workspace-access-actions (group mappings)", () => {
       expect(repo.updateGroupMapping).not.toHaveBeenCalled();
     });
 
-    it("returns directory_error when the Directory fails", async () => {
-      setFakeDirectoryState({ failWith: "timeout" });
+    it("returns directory_error when the Directory fails and records it for Estado", async () => {
+      setFakeDirectoryState({ failWith: "http" });
       await expect(createGroupMappingAction(roleInput)).resolves.toEqual({
         ok: false,
         error: "directory_error",
       });
+      expect(recordDirectoryError).toHaveBeenCalledWith(
+        "group_mapping",
+        expect.objectContaining({ kind: "http", status: 503 }),
+      );
     });
 
     it("returns duplicate when the group already has a mapping of that kind", async () => {
@@ -263,6 +278,13 @@ describe("workspace-access-actions (group mappings)", () => {
       expect(repo.updateGroupMapping).not.toHaveBeenCalled();
       expect(repo.deleteGroupMapping).not.toHaveBeenCalled();
     });
+
+    it("is refused the re-check and the health payload", async () => {
+      await expect(recheckStaffAccessAction(STAFF_ID)).resolves.toEqual({ ok: false, error: "forbidden" });
+      await expect(getGoogleHealthAction()).rejects.toThrow("FORBIDDEN");
+      expect(recheckStaffAccess).not.toHaveBeenCalled();
+      expect(loadGoogleHealth).not.toHaveBeenCalled();
+    });
   });
 
   it("is forbidden without a session", async () => {
@@ -275,5 +297,35 @@ describe("workspace-access-actions (group mappings)", () => {
       ok: false,
       error: "forbidden",
     });
+  });
+
+  describe("recheckStaffAccessAction", () => {
+    it("re-checks ignoring the interval and reports a kept access", async () => {
+      recheckStaffAccess.mockResolvedValue({ status: "kept" });
+      await expect(recheckStaffAccessAction(STAFF_ID)).resolves.toEqual({ ok: true, allowed: true });
+      expect(recheckStaffAccess).toHaveBeenCalledWith(STAFF_ID, { force: true });
+    });
+
+    it("reports a revoke with its reason", async () => {
+      recheckStaffAccess.mockResolvedValue({ status: "revoked", reason: "workspace_suspended" });
+      await expect(recheckStaffAccessAction(STAFF_ID)).resolves.toEqual({
+        ok: true,
+        allowed: false,
+        reason: "workspace_suspended",
+      });
+    });
+
+    it("maps a Directory error and staff without google_sub", async () => {
+      recheckStaffAccess.mockResolvedValueOnce({ status: "error", error: new Error("down") });
+      await expect(recheckStaffAccessAction(STAFF_ID)).resolves.toEqual({ ok: false, error: "directory_error" });
+      recheckStaffAccess.mockResolvedValueOnce({ status: "not_google_linked" });
+      await expect(recheckStaffAccessAction(STAFF_ID)).resolves.toEqual({ ok: false, error: "not_google_linked" });
+      await expect(recheckStaffAccessAction("nope")).resolves.toEqual({ ok: false, error: "not_google_linked" });
+    });
+  });
+
+  it("returns the health payload to an Administrador", async () => {
+    loadGoogleHealth.mockResolvedValue({ activeStaff: 3 });
+    await expect(getGoogleHealthAction()).resolves.toEqual({ activeStaff: 3 });
   });
 });

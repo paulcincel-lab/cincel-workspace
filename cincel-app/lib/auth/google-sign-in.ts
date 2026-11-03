@@ -4,6 +4,7 @@ import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { authCredentials, authEvents, googleOauthAccounts, staff } from "@/lib/db/schema";
+import { recordDirectoryError } from "@/lib/auth/directory-error-log";
 import { applyAccess, evaluateAccess, type EvaluateAccessOptions } from "@/lib/auth/workspace-access";
 import { DirectoryError } from "@/lib/google/directory";
 import type { StaffIdentity, StaffTokens } from "@/lib/google/staff-oauth";
@@ -215,6 +216,7 @@ export async function signInWithGoogle(
   } catch (error) {
     if (error instanceof DirectoryError) {
       console.error(`[google-sign-in] Directory error (${error.kind}${error.status ? ` ${error.status}` : ""})`);
+      await recordDirectoryError("sign_in", error, { email: identity.email });
       return { status: "retry" };
     }
     throw error;
