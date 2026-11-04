@@ -72,14 +72,17 @@ GOOGLE_DRIVE_ROOT_FOLDER_ID=<a folder id the picker starts in>
 
 `GOOGLE_DRIVE_ROOT_FOLDER_ID` is just the picker's starting point — it does
 not grant access. Each user still only sees what they can already see under
-it.
+it. When it is unset (or blank) the picker starts at the root of the Shared
+Drive in `GOOGLE_SHARED_DRIVE_ID` (step 5); with neither set, browsing needs an
+explicit folder.
 
 ### 5. Shared Drive for project folders
 
 Project folders (`<project>` with `01 Interno` / `02 Cliente` /
 `03 Del cliente`) live in a company **Shared Drive**, written by the service
 account itself (not by impersonation). Used by the monday migration CLI
-(`npm run monday`); Staff SSO reuses it.
+(`npm run monday`) and by the app's project folders (created with a new
+project, or re-created from the project page); Staff SSO reuses it.
 
 1. In Google Drive, create a Shared Drive (e.g. *Cincel — Proyectos*).
 2. Manage members → add the service account's email
