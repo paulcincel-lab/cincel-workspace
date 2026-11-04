@@ -139,6 +139,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     accessPreviewState,
     isEditingSelfProtectedAdmin,
     editingGoogleManaged,
+    editingGoogleAccess,
     teamCapabilities,
     openAddEditor,
     openEditEditor,
@@ -454,6 +455,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         availabilityOptions={AVAILABILITY_OPTIONS}
         areaOptions={areaOptions}
         googleManaged={editingGoogleManaged}
+        googleAccess={editingGoogleAccess}
         canRecheckAccess={isAdministrator}
         onAccessChecked={refresh}
       />

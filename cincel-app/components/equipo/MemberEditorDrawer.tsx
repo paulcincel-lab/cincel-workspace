@@ -14,6 +14,7 @@ import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, normalizeSystemAccessRole } from "@/lib/data/roles";
 import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { TeamAvailability } from "@/lib/data/team";
+import { revokedReasonLabel, type GoogleAccessState } from "@/lib/equipo/google-access";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
 import type { Area } from "@/lib/types/core";
 
@@ -48,6 +49,8 @@ interface MemberEditorDrawerProps {
   /** Administrador viewing a Google-managed member: shows **Revisar acceso ahora**. */
   canRecheckAccess?: boolean;
   onAccessChecked?: () => void | Promise<void>;
+  /** Google-linked member (#657): shows "Entra con Google" instead of the password controls. */
+  googleAccess?: GoogleAccessState | null;
 }
 
 /** Slide-in modal form for adding or editing a team member. */
@@ -67,6 +70,7 @@ export function MemberEditorDrawer({
   googleManaged = false,
   canRecheckAccess = false,
   onAccessChecked,
+  googleAccess = null,
 }: MemberEditorDrawerProps) {
   const canSave = editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator;
 
@@ -250,25 +254,30 @@ export function MemberEditorDrawer({
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Acceso al sistema</h3>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Administra aquí el acceso, la contraseña temporal y el historial de uso del colaborador.
+                  {googleAccess
+                    ? "El colaborador inicia sesión con su cuenta de Google Workspace."
+                    : "Administra aquí el acceso, la contraseña temporal y el historial de uso del colaborador."}
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Badge
-                  variant={accessPreviewState.status === "Acceso activo"
-                    ? "success"
-                    : accessPreviewState.status === "Sin contraseña temporal"
-                      ? "destructive"
-                      : accessPreviewState.status === "Pendiente de primer acceso"
-                        ? "secondary"
-                        : "outline"}
-                >
-                  {accessPreviewState.status}
-                </Badge>
-                <Badge variant={accessPreviewState.hasSystemAccess ? "success" : "outline"}>
-                  {accessPreviewState.hasSystemAccess ? "Tiene acceso al sistema" : "Sin acceso al sistema"}
-                </Badge>
+              <div className="flex flex-wrap gap-2" data-testid="member-access-badge">
+                {googleAccess ? (
+                  <Badge variant={googleAccess.accessRevokedAt ? "destructive" : "secondary"}>
+                    {googleAccess.accessRevokedAt ? "Sin acceso" : "Entra con Google"}
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant={accessPreviewState.status === "Acceso activo"
+                      ? "success"
+                      : accessPreviewState.status === "Sin contraseña temporal"
+                        ? "destructive"
+                        : accessPreviewState.status === "Pendiente de primer acceso"
+                          ? "secondary"
+                          : "outline"}
+                  >
+                    {accessPreviewState.status}
+                  </Badge>
+                )}
               </div>
             </div>
 
@@ -278,79 +287,98 @@ export function MemberEditorDrawer({
               </div>
             ) : null}
 
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="md:col-span-2 rounded-2xl border border-border bg-muted p-4">
-                <label className="flex items-center justify-between gap-4">
-                  <div>
-                    <span className="block text-sm font-medium text-foreground">Tiene acceso al sistema</span>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      Si lo activas, el colaborador podrá iniciar sesión y ver el ERP según su acceso.
-                    </p>
-                  </div>
-
-                  <Checkbox
-                    checked={draft.systemAccessEnabled}
-                    onCheckedChange={(checked) =>
-                      onChangeDraft((current) => ({
-                        ...current,
-                        systemAccessEnabled: checked === true,
-                        temporaryPassword: checked === true ? current.temporaryPassword : "",
-                        temporaryPasswordConfirmation: checked === true ? current.temporaryPasswordConfirmation : "",
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-
-              {draft.systemAccessEnabled ? (
-                <>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-foreground">Contraseña temporal</label>
-                    <Input
-                      type="password"
-                      value={draft.temporaryPassword}
-                      onChange={(event) =>
-                        onChangeDraft((current) => ({ ...current, temporaryPassword: event.target.value }))
-                      }
-                      placeholder={editingId === null ? "Asignar contraseña temporal" : "Solo si vas a restablecer"}
-                    />
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {editingId === null
-                        ? "Obligatoria al crear una cuenta con acceso al sistema."
-                        : "Rellena este campo solo si vas a restablecer la contraseña."}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-foreground">Confirmar contraseña temporal</label>
-                    <Input
-                      type="password"
-                      value={draft.temporaryPasswordConfirmation}
-                      onChange={(event) =>
-                        onChangeDraft((current) => ({ ...current, temporaryPasswordConfirmation: event.target.value }))
-                      }
-                      placeholder="Repetir contraseña temporal"
-                    />
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Debe coincidir con la contraseña temporal.</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Último acceso</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{formatDateTime(accessPreviewState.lastLoginAt)}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Último cambio de contraseña</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{formatDateTime(accessPreviewState.passwordUpdatedAt)}</p>
-                  </div>
-                </>
-              ) : (
-                <div className="md:col-span-2 rounded-2xl border border-border bg-card p-4 text-sm leading-relaxed text-muted-foreground">
-                  Este colaborador no tendrá acceso al sistema ni podrá iniciar sesión. Podrá seguir asignado a proyectos,
-                  tareas y recursos.
+            {googleAccess ? (
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Último acceso</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{formatDateTime(googleAccess.lastLoginAt)}</p>
                 </div>
-              )}
-            </div>
+
+                {googleAccess.accessRevokedAt ? (
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Acceso retirado</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {`${formatDateTime(googleAccess.accessRevokedAt)}: `}
+                      {revokedReasonLabel(googleAccess.accessRevokedReason)}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2 rounded-2xl border border-border bg-muted p-4">
+                  <label className="flex items-center justify-between gap-4">
+                    <div>
+                      <span className="block text-sm font-medium text-foreground">Tiene acceso al sistema</span>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        Si lo activas, el colaborador podrá iniciar sesión y ver el ERP según su acceso.
+                      </p>
+                    </div>
+
+                    <Checkbox
+                      checked={draft.systemAccessEnabled}
+                      onCheckedChange={(checked) =>
+                        onChangeDraft((current) => ({
+                          ...current,
+                          systemAccessEnabled: checked === true,
+                          temporaryPassword: checked === true ? current.temporaryPassword : "",
+                          temporaryPasswordConfirmation: checked === true ? current.temporaryPasswordConfirmation : "",
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+
+                {draft.systemAccessEnabled ? (
+                  <>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-foreground">Contraseña temporal</label>
+                      <Input
+                        type="password"
+                        value={draft.temporaryPassword}
+                        onChange={(event) =>
+                          onChangeDraft((current) => ({ ...current, temporaryPassword: event.target.value }))
+                        }
+                        placeholder={editingId === null ? "Asignar contraseña temporal" : "Solo si vas a restablecer"}
+                      />
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {editingId === null
+                          ? "Obligatoria al crear una cuenta con acceso al sistema."
+                          : "Rellena este campo solo si vas a restablecer la contraseña."}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-foreground">Confirmar contraseña temporal</label>
+                      <Input
+                        type="password"
+                        value={draft.temporaryPasswordConfirmation}
+                        onChange={(event) =>
+                          onChangeDraft((current) => ({ ...current, temporaryPasswordConfirmation: event.target.value }))
+                        }
+                        placeholder="Repetir contraseña temporal"
+                      />
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Debe coincidir con la contraseña temporal.</p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Último acceso</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{formatDateTime(accessPreviewState.lastLoginAt)}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Último cambio de contraseña</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{formatDateTime(accessPreviewState.passwordUpdatedAt)}</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="md:col-span-2 rounded-2xl border border-border bg-card p-4 text-sm leading-relaxed text-muted-foreground">
+                    Este colaborador no tendrá acceso al sistema ni podrá iniciar sesión. Podrá seguir asignado a proyectos,
+                    tareas y recursos.
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="rounded-xl border border-border bg-card p-4">

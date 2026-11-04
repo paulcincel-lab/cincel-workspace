@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import type { TeamCapabilities } from "@/lib/auth/permissions";
+import type { GoogleAccessState } from "@/lib/equipo/google-access";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
 import type { Area } from "@/lib/types/core";
 
@@ -61,7 +62,14 @@ const draft: MemberDraft = {
   availability: "Disponible",
 } as MemberDraft;
 
-function renderDrawer(props: { googleManaged?: boolean; canRecheckAccess?: boolean } = {}) {
+function renderDrawer(
+  props: {
+    googleManaged?: boolean;
+    canRecheckAccess?: boolean;
+    googleAccess?: GoogleAccessState | null;
+    accessPreviewState?: AccessPreviewState;
+  } = {},
+) {
   return render(
     <MemberEditorDrawer
       show
@@ -142,5 +150,72 @@ describe("MemberEditorDrawer — Google-managed staff", () => {
     actions.recheckStaffAccessAction.mockResolvedValueOnce({ ok: false, error: "directory_error" });
     fireEvent.click(screen.getByText("Revisar acceso ahora"));
     await waitFor(() => expect(screen.getByText("No pudimos consultar Google; intenta más tarde")).toBeTruthy());
+  });
+});
+
+describe("MemberEditorDrawer — Acceso al sistema panel (#657)", () => {
+  afterEach(cleanup);
+
+  const googleActive: GoogleAccessState = {
+    lastLoginAt: "2026-11-03T16:30:00.000Z",
+    accessRevokedAt: null,
+    accessRevokedReason: null,
+  };
+  // Password credential of a Google user is usually missing or disabled.
+  const noPassword: AccessPreviewState = {
+    ...accessState,
+    hasSystemAccess: false,
+    status: "Sin acceso al sistema",
+    authEnabled: false,
+  };
+
+  it("shows Entra con Google for an active Google-linked member and hides the password controls", () => {
+    renderDrawer({
+      googleManaged: true,
+      canRecheckAccess: true,
+      googleAccess: googleActive,
+      accessPreviewState: noPassword,
+    });
+    expect(screen.getByTestId("member-access-badge").textContent).toBe("Entra con Google");
+    expect(screen.queryByText(/Sin acceso/)).toBeNull();
+    expect(screen.queryByText("Tiene acceso al sistema")).toBeNull();
+    expect(screen.queryByText(/no tendrá acceso al sistema/)).toBeNull();
+    expect(screen.queryByText("Contraseña temporal")).toBeNull();
+    expect(screen.queryByText("Último cambio de contraseña")).toBeNull();
+    expect(screen.getByText("Último acceso")).toBeTruthy();
+    expect(screen.queryByText("Sin registro")).toBeNull();
+    expect(screen.getByText("Revisar acceso ahora")).toBeTruthy();
+  });
+
+  it("shows Sin acceso with the revoke reason for a revoked member", () => {
+    renderDrawer({
+      googleManaged: true,
+      canRecheckAccess: true,
+      googleAccess: {
+        lastLoginAt: "2026-10-01T10:00:00.000Z",
+        accessRevokedAt: "2026-11-01T10:00:00.000Z",
+        accessRevokedReason: "workspace_suspended",
+      },
+      accessPreviewState: noPassword,
+    });
+    expect(screen.getByTestId("member-access-badge").textContent).toBe("Sin acceso");
+    expect(screen.getByText(/la cuenta está suspendida en Google Workspace/)).toBeTruthy();
+    expect(screen.queryByText("Entra con Google")).toBeNull();
+    expect(screen.queryByText("Contraseña temporal")).toBeNull();
+  });
+
+  it("keeps the password controls for password-only members, with one badge", () => {
+    renderDrawer({ accessPreviewState: { ...accessState, hasPasswordHash: true } });
+    expect(screen.getByTestId("member-access-badge").children).toHaveLength(1);
+    expect(screen.getByTestId("member-access-badge").textContent).toBe("Acceso activo");
+    expect(screen.getByText("Tiene acceso al sistema")).toBeTruthy();
+    expect(screen.getByText("Contraseña temporal")).toBeTruthy();
+    expect(screen.getByText("Último cambio de contraseña")).toBeTruthy();
+    expect(screen.queryByText("Entra con Google")).toBeNull();
+  });
+
+  it("renders a single Sin acceso al sistema badge for a password-only member without access", () => {
+    renderDrawer({ accessPreviewState: noPassword });
+    expect(screen.getAllByText("Sin acceso al sistema")).toHaveLength(1);
   });
 });

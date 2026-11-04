@@ -20,6 +20,13 @@ export function revokedReasonLabel(reason: string | null | undefined): string {
   return REVOKED_REASON_LABELS[reason] ?? reason;
 }
 
+/** Access state of a Google-linked member, from the staff DTO (#657). */
+export interface GoogleAccessState {
+  lastLoginAt: string | null;
+  accessRevokedAt: string | null;
+  accessRevokedReason: string | null;
+}
+
 export type RecheckMessage = { tone: "ok" | "revoked" | "error"; text: string };
 
 /** Inline result of **Revisar acceso ahora** (FE §2.6). */
