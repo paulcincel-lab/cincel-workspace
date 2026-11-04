@@ -73,9 +73,11 @@ describe("rollback blocker coverage", () => {
         fks.push(`${config.name}.${ref.columns[i].name} → ${entity}`);
       }
     }
-    const checks = POINTER_CHECKS.map(
-      (c) => `${c.table}.${c.column} → ${c.target}`,
-    );
+    // project_portal_access is reported by its own check (d), kind "portal".
+    const checks = [
+      ...POINTER_CHECKS.map((c) => `${c.table}.${c.column} → ${c.target}`),
+      "project_portal_access.project_id → project",
+    ];
     expect([...new Set(checks)].sort()).toEqual([...new Set(fks)].sort());
     expect(checks.length).toBe(new Set(checks).size);
   });
@@ -609,16 +611,24 @@ describe.skipIf(!url)("rollback blocker detection (test DB)", () => {
     });
   });
 
-  it("names project_portal_access rows once the table exists", async () => {
+  it("names a portal user on a batch contact and its project_portal_access row", async () => {
     await inBatch(async (tx, f) => {
-      await tx.execute(
-        sql`create table core.project_portal_access (id uuid primary key default gen_random_uuid(), project_id uuid not null references core.projects(id))`,
-      );
-      const [row] = (await tx.execute(
-        sql`insert into core.project_portal_access (project_id) values (${f.project.id}) returning id::text as id`,
-      )) as unknown as { id: string }[];
+      const [user] = await tx
+        .insert(schema.portalUsers)
+        .values({
+          email: `cliente-${f.batch.id}@example.test`,
+          name: "Cliente",
+          contactId: f.client.id,
+          invitedByStaffId: f.admin.id,
+        })
+        .returning();
+      const [access] = await tx
+        .insert(schema.projectPortalAccess)
+        .values({ projectId: f.project.id, portalUserId: user.id, grantedByStaffId: f.admin.id })
+        .returning();
       expect(pick(await findRollbackBlockers(tx, f.batch.id))).toEqual([
-        { kind: "portal", table: "project_portal_access", id: row.id },
+        { kind: "reference", table: "portal_users", id: user.id },
+        { kind: "portal", table: "project_portal_access", id: access.id },
       ]);
     });
   });
