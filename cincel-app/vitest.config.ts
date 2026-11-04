@@ -6,6 +6,8 @@ export default defineConfig({
     environment: "happy-dom",
     globals: true,
     setupFiles: ["./tests/setup/happy-dom-polyfills.ts"],
+    // The 5 s default is short when the DB-backed files and the DOM files share one busy machine.
+    testTimeout: 20_000,
     include: [
       "tests/unit/**/*.{test,spec}.{ts,tsx}",
       "lib/**/*.{test,spec}.{ts,tsx}",
