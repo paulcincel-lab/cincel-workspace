@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import PortalProjectSummary from "@/components/portal/PortalProjectSummary";
-import PortalProjectTabs, { parsePortalProjectTab } from "@/components/portal/PortalProjectTabs";
+import PortalProjectTabs from "@/components/portal/PortalProjectTabs";
 import PortalSchedule from "@/components/portal/PortalSchedule";
 import { isPortalNotFound } from "@/lib/portal/drive-guard";
+import { parsePortalProjectTab } from "@/lib/portal/project-tabs";
 import { getPortalProject, getPortalSchedule } from "@/lib/portal/queries";
 import { requirePortalUser, requireProjectAccess } from "@/lib/portal/session";
 

@@ -1,0 +1,22 @@
+/**
+ * Portal project tabs (FE §3.3), kept out of the `"use client"` tabs component so the server page can
+ * parse `?tab=` itself: a function exported from a client module can't be called on the server.
+ */
+
+export type PortalProjectTab = "resumen" | "cronograma";
+
+export const PORTAL_PROJECT_TABS: { tab: PortalProjectTab; label: string }[] = [
+  { tab: "resumen", label: "Resumen" },
+  { tab: "cronograma", label: "Cronograma" },
+];
+
+/** `?tab=` value → tab; anything unknown (or missing) is Resumen. */
+export function parsePortalProjectTab(value: string | string[] | undefined): PortalProjectTab {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return PORTAL_PROJECT_TABS.some((t) => t.tab === raw) ? (raw as PortalProjectTab) : "resumen";
+}
+
+export function portalProjectTabHref(projectId: string, tab: PortalProjectTab): string {
+  const base = `/portal/proyectos/${encodeURIComponent(projectId)}`;
+  return tab === "resumen" ? base : `${base}?tab=${tab}`;
+}
