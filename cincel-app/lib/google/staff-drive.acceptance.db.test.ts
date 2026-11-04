@@ -57,7 +57,6 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
   type ProjectDriveDeps = import("@/lib/google/project-folders-app").ProjectDriveDeps;
   const { getPickerDriveStatus, pickerDriveMode, resolvePickerDriveCaller } = await import("@/lib/google/picker-drive");
   const { calendarTokenMode } = await import("@/lib/google/calendar-sync-service");
-  const repo = await import("@/lib/repositories/google-oauth-repository");
   const { grantGoogleScope } = await import("@/lib/auth/google-consent");
 
   const saved: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -417,13 +416,26 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
     });
   });
 
-  describe("§A.11 #15: AUTH_GOOGLE_ENABLED=false keeps Calendar on the old path; the picker is staff_token only", () => {
+  describe("§A.11 #15: Calendar and the picker use staff tokens only; Google sign-in off turns the picker off", () => {
     beforeEach(() => {
-      process.env.AUTH_GOOGLE_ENABLED = "false";
+      process.env.AUTH_GOOGLE_ENABLED = "true";
     });
 
-    it("Calendar sync stays in delegation mode", () => {
-      expect(calendarTokenMode()).toBe("delegation");
+    it("Calendar sync is staff_token whatever the flag says", () => {
+      expect(calendarTokenMode()).toBe("staff_token");
+      process.env.AUTH_GOOGLE_ENABLED = "false";
+      expect(calendarTokenMode()).toBe("staff_token");
+    });
+
+    it("with AUTH_GOOGLE_ENABLED=false the picker reports not configured and answers 503", async () => {
+      process.env.AUTH_GOOGLE_ENABLED = "false";
+      const staff = await staffWithDriveGrant();
+      const resolved = await resolvePickerDriveCaller(staff.staffId, staff.email);
+      expect(resolved.ok).toBe(false);
+      if (!resolved.ok) expect(resolved.response.status).toBe(503);
+      await expect(
+        getPickerDriveStatus({ staffId: staff.staffId, email: staff.email, googleLinked: true }),
+      ).resolves.toMatchObject({ configured: false, mode: "staff_token", hasDriveGrant: false });
     });
 
     it("the picker is staff_token only: the old connect account and impersonation are gone", async () => {
@@ -453,7 +465,7 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
       if (!resolved.ok) expect(resolved.response.status).toBe(403);
     });
 
-    it("a staff member with a Drive grant still browses with their own token", async () => {
+    it("a staff member with a Drive grant browses with their own token", async () => {
       const staff = await staffWithDriveGrant();
       await expect(resolvePickerDriveCaller(staff.staffId, staff.email)).resolves.toEqual({
         ok: true,
@@ -535,16 +547,7 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
       expect((await tokenRow(legacy.staffId))?.accessToken).toBe("legacy-plain-access");
     });
 
-    it("the old connect path ignores a google_sub row: no encrypted token reaches it", async () => {
-      process.env.AUTH_GOOGLE_ENABLED = "false";
-      const staff = await staffWithDriveGrant();
-      await expect(repo.getGoogleOauthAccount(staff.staffId)).resolves.toBeNull();
-      await expect(
-        getPickerDriveStatus({ staffId: staff.staffId, email: staff.email, googleLinked: true }),
-      ).resolves.toMatchObject({ mode: "staff_token", connectedEmail: null, hasDriveGrant: true });
-    });
-
-    it("flipping the flag on, off and on again keeps both rows working in their own mode", async () => {
+    it("flipping the flag on, off and on again leaves both rows as they are", async () => {
       const staff = await staffWithDriveGrant();
       const legacy = await staffWithLegacyRow();
       const encryptedBefore = (await tokenRow(staff.staffId))?.accessToken;
@@ -553,16 +556,13 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
       expect((await resolvePickerDriveCaller(staff.staffId, staff.email)).ok).toBe(true);
       expect((await resolvePickerDriveCaller(legacy.staffId, legacy.email)).ok).toBe(false);
 
+      // Google sign-in off: the picker is off for everyone (503), and no row is rewritten.
       process.env.AUTH_GOOGLE_ENABLED = "false";
-      await expect(resolvePickerDriveCaller(staff.staffId, staff.email)).resolves.toEqual({
-        ok: true,
-        caller: { staffId: staff.staffId, email: staff.email, accessToken: staff.accessToken },
-      });
-      expect((await resolvePickerDriveCaller(legacy.staffId, legacy.email)).ok).toBe(false);
-      expect((await repo.getGoogleOauthAccount(legacy.staffId))?.accessToken).toBe("legacy-plain-access");
-      // The old connect flow's token refresh only writes legacy rows.
-      await repo.updateGoogleOauthTokens(staff.staffId, { accessToken: "plain", expiresAt: new Date() });
+      const off = await resolvePickerDriveCaller(staff.staffId, staff.email);
+      expect(off.ok).toBe(false);
+      if (!off.ok) expect(off.response.status).toBe(503);
       expect((await tokenRow(staff.staffId))?.accessToken).toBe(encryptedBefore);
+      expect((await tokenRow(legacy.staffId))?.accessToken).toBe("legacy-plain-access");
 
       process.env.AUTH_GOOGLE_ENABLED = "true";
       await expect(resolvePickerDriveCaller(staff.staffId, staff.email)).resolves.toEqual({

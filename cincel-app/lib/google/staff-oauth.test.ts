@@ -3,11 +3,6 @@ import { createHash } from "node:crypto";
 import { OAuth2Client } from "google-auth-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/repositories/google-oauth-repository", () => ({
-  getGoogleOauthAccount: vi.fn(),
-  updateGoogleOauthTokens: vi.fn(),
-}));
-
 import {
   DRIVE_READONLY_SCOPE,
   STAFF_OAUTH_COOKIE,

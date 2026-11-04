@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
-import { CALENDAR_SCOPE, hasScope, isOauthConfigured } from "@/lib/google/oauth";
+import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
 import {
   calendarTokenMode,
   syncGoogleCalendar,
@@ -14,7 +14,7 @@ import {
 import { hasGrantedScope, staffOauthConfig } from "@/lib/google/staff-oauth";
 import * as feedRepository from "@/lib/repositories/calendar-feed-repository";
 import * as syncRepository from "@/lib/repositories/google-calendar-sync-repository";
-import { getGoogleOauthAccount, getStaffTokenAccount } from "@/lib/repositories/google-oauth-repository";
+import { getStaffTokenAccount } from "@/lib/repositories/google-oauth-repository";
 
 async function requireCalendarUser() {
   const user = await requireCapabilityUser();
@@ -47,12 +47,9 @@ export async function disableCalendarFeedAction(): Promise<void> {
 // ── Direct Google Calendar sync (#434) ─────────────────────────────────────
 
 export type GoogleCalendarSyncStatus = {
-  /** OAuth isn't configured on this server — the section is hidden. */
+  /** Google sign-in is off or its OAuth client isn't configured — the section is hidden. */
   oauthAvailable: boolean;
-  /**
-   * `staff_token`: connect through `/api/auth/google/start?scope=calendar`
-   * (sign-in consent). `delegation`: a legacy connected-account row, if any.
-   */
+  /** Always `staff_token`: connect through `/api/auth/google/start?scope=calendar` (sign-in consent). */
   mode: CalendarTokenMode;
   connectedEmail: string | null;
   hasCalendarScope: boolean;
@@ -74,18 +71,17 @@ async function requestOrigin(): Promise<string> {
 
 export async function fetchGoogleCalendarSyncStatusAction(): Promise<GoogleCalendarSyncStatus> {
   const user = await requireCalendarUser();
-  const mode = calendarTokenMode();
-  const staffToken = mode === "staff_token";
-  const oauthAvailable = staffToken ? staffOauthConfig() !== null : isOauthConfigured();
+  // Calendar access is granted through Google sign-in consent, so it needs sign-in on.
+  const oauthAvailable = isGoogleAuthEnabled() && staffOauthConfig() !== null;
   const [account, sync] = await Promise.all([
-    !oauthAvailable ? null : staffToken ? getStaffTokenAccount(user.member.id) : getGoogleOauthAccount(user.member.id),
+    oauthAvailable ? getStaffTokenAccount(user.member.id) : null,
     syncRepository.getCalendarSync(user.member.id),
   ]);
   return {
     oauthAvailable,
-    mode,
+    mode: calendarTokenMode(),
     connectedEmail: account?.email ?? null,
-    hasCalendarScope: staffToken ? hasGrantedScope(account?.scope, "calendar") : hasScope(account?.scope, CALENDAR_SCOPE),
+    hasCalendarScope: hasGrantedScope(account?.scope, "calendar"),
     enabled: Boolean(sync?.enabled),
     lastSyncedAt: sync?.lastSyncedAt?.toISOString() ?? null,
     lastError: sync?.lastError ?? null,

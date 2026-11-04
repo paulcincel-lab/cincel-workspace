@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
-  getGoogleOauthAccount: vi.fn(),
-  getOauthAccessToken: vi.fn(),
   listMyTasks: vi.fn(),
   buildCalendarEvents: vi.fn(),
   getCalendarSync: vi.fn(),
@@ -15,20 +13,12 @@ const m = vi.hoisted(() => ({
   insertEvent: vi.fn(),
   patchEvent: vi.fn(),
   deleteEvent: vi.fn(),
-  isGoogleAuthEnabled: vi.fn(),
   getStaffAccessToken: vi.fn(),
 }));
 
-vi.mock("@/lib/auth/auth-flags", () => ({ isGoogleAuthEnabled: m.isGoogleAuthEnabled }));
 vi.mock("@/lib/google/staff-token", () => ({ getStaffAccessToken: m.getStaffAccessToken }));
-
-vi.mock("@/lib/repositories/google-oauth-repository", () => ({ getGoogleOauthAccount: m.getGoogleOauthAccount }));
 vi.mock("@/lib/repositories/tasks-repository", () => ({ listMyTasks: m.listMyTasks }));
 vi.mock("@/lib/calendar/calendar-service", () => ({ buildCalendarEvents: m.buildCalendarEvents }));
-vi.mock("@/lib/google/oauth", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/google/oauth")>()),
-  getOauthAccessToken: m.getOauthAccessToken,
-}));
 vi.mock("@/lib/repositories/google-calendar-sync-repository", () => ({
   getCalendarSync: m.getCalendarSync,
   upsertCalendarSync: m.upsertCalendarSync,
@@ -46,7 +36,6 @@ vi.mock("@/lib/google/calendar-api", async (importOriginal) => ({
 }));
 
 import { GoogleCalendarError } from "@/lib/google/calendar-api";
-import { CALENDAR_SCOPE } from "@/lib/google/oauth";
 import {
   CalendarNotConnectedError,
   calendarTokenMode,
@@ -61,9 +50,7 @@ const ev = (id: string, title = "T") =>
 
 beforeEach(() => {
   Object.values(m).forEach((fn) => fn.mockReset());
-  m.isGoogleAuthEnabled.mockReturnValue(false);
-  m.getGoogleOauthAccount.mockResolvedValue({ email: "a@b.c", scope: `openid ${CALENDAR_SCOPE}` });
-  m.getOauthAccessToken.mockResolvedValue({ token: "tok", email: "a@b.c" });
+  m.getStaffAccessToken.mockResolvedValue({ status: "ok", accessToken: "tok" });
   m.listMyTasks.mockResolvedValue([]);
   m.getCalendarSync.mockResolvedValue({ calendarId: "cal", enabled: true, lastSyncedAt: null, lastError: null });
   m.getCalendar.mockResolvedValue(undefined);
@@ -72,12 +59,6 @@ beforeEach(() => {
 });
 
 describe("syncGoogleCalendar", () => {
-  it("refuses when the connected account didn't grant Calendar access", async () => {
-    m.getGoogleOauthAccount.mockResolvedValue({ email: "a@b.c", scope: "openid email" });
-    await expect(syncGoogleCalendar("s1", BASE)).rejects.toThrow(new CalendarNotConnectedError().message);
-    expect(m.upsertCalendarSync).toHaveBeenCalledWith("s1", { lastError: expect.stringContaining("Conecta") });
-  });
-
   it("creates, patches and deletes only what changed, then records the sync", async () => {
     m.buildCalendarEvents.mockReturnValue([ev("a"), ev("b", "Cambiada"), ev("c", "Nueva")]);
     const [a] = toDesiredEvents([ev("a")], BASE);
@@ -93,8 +74,7 @@ describe("syncGoogleCalendar", () => {
     expect(m.deleteEvent).toHaveBeenCalledWith("tok", "cal", "g-z");
     expect(m.deleteSyncedEvents).toHaveBeenCalledWith("s1", ["z"]);
     expect(m.upsertCalendarSync).toHaveBeenLastCalledWith("s1", { lastSyncedAt: expect.any(Date), lastError: null });
-    // Flag off: the legacy connect flow's token, as before.
-    expect(m.getStaffAccessToken).not.toHaveBeenCalled();
+    expect(m.getStaffAccessToken).toHaveBeenCalledWith("s1", "calendar");
   });
 
   it("recreates the calendar when the user deleted it in Google, forgetting old events", async () => {
@@ -132,25 +112,20 @@ describe("syncGoogleCalendar", () => {
   });
 });
 
-describe("syncGoogleCalendar in staff_token mode (AUTH_GOOGLE_ENABLED on)", () => {
+describe("syncGoogleCalendar with the staff token", () => {
   beforeEach(() => {
-    m.isGoogleAuthEnabled.mockReturnValue(true);
     m.getStaffAccessToken.mockResolvedValue({ status: "ok", accessToken: "staff-tok" });
   });
 
-  it("reports the mode from the flag", () => {
+  it("always uses the staff token mode", () => {
     expect(calendarTokenMode()).toBe("staff_token");
-    m.isGoogleAuthEnabled.mockReturnValue(false);
-    expect(calendarTokenMode()).toBe("delegation");
   });
 
-  it("syncs with the staff member's own token and never reads the legacy row", async () => {
+  it("syncs with the staff member's own token", async () => {
     m.buildCalendarEvents.mockReturnValue([ev("a")]);
 
     await expect(syncGoogleCalendar("s1", BASE)).resolves.toEqual({ created: 1, updated: 0, deleted: 0 });
     expect(m.getStaffAccessToken).toHaveBeenCalledWith("s1", "calendar");
-    expect(m.getGoogleOauthAccount).not.toHaveBeenCalled();
-    expect(m.getOauthAccessToken).not.toHaveBeenCalled();
     expect(m.insertEvent).toHaveBeenCalledWith("staff-tok", "cal", expect.anything());
   });
 
