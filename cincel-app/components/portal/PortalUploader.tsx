@@ -184,6 +184,7 @@ export default function PortalUploader({ projectId, createXhr, onUnauthorized = 
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadUploads(controller.signal);
     return () => controller.abort();
   }, [loadUploads]);
