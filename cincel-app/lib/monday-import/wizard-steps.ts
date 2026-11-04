@@ -18,6 +18,7 @@ import type {
   MondayExportSource,
   MondayImportChoices,
   MondayImportJob,
+  MondayImportOptionsInfo,
   MondayImportRunState,
   MondayImportStep,
   MondayPreview,
@@ -328,6 +329,20 @@ export function setOptions(
       includeFiles: disabled.files ? false : options.includeFiles,
     },
   };
+}
+
+/**
+ * The draft with the options Opciones can't offer (a reason in `info`) turned off; the same object when nothing
+ * changes. Applied when Opciones loads, so a draft that defaults to files on never reaches Vista previa asking for them.
+ */
+export function clampOptions(mapping: MappingInput, info: MondayImportOptionsInfo): MappingInput {
+  const disabled = { updates: Boolean(info.updatesDisabledReason), files: Boolean(info.filesDisabledReason) };
+  const current = {
+    includeUpdates: mapping.options.includeUpdates !== false,
+    includeFiles: mapping.options.includeFiles !== false,
+  };
+  if ((!disabled.updates || !current.includeUpdates) && (!disabled.files || !current.includeFiles)) return mapping;
+  return setOptions(mapping, current, disabled);
 }
 
 // --- Validation and Next ---------------------------------------------------------------------------------------

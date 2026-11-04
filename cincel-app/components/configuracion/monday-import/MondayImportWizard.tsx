@@ -35,6 +35,7 @@ import { completeOnboardingAction } from "@/lib/actions/onboarding-actions";
 import {
   MONDAY_IMPORT_STEPS,
   canAdvance,
+  clampOptions,
   initialStep,
   isJobRunning,
   nextStep,
@@ -209,7 +210,13 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOptionsError("");
     getMondayImportOptionsAction(runId)
-      .then((result) => (result.ok ? setOptionsInfo(result.options) : setOptionsError(result.error)))
+      .then((result) => {
+        if (!result.ok) return setOptionsError(result.error);
+        setOptionsInfo(result.options);
+        // A draft that still asks for what can't be imported (files without Drive) is turned off here, so it is
+        // saved that way on Siguiente instead of blocking Vista previa.
+        setMapping((current) => (current ? clampOptions(current, result.options) : current));
+      })
       .catch(() => setOptionsError(UNEXPECTED));
   }, [step, runId]);
 

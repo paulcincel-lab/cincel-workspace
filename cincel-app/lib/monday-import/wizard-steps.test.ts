@@ -9,6 +9,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   canAdvance,
+  clampOptions,
   decodeClient,
   decodePerson,
   decodeStatusTarget,
@@ -300,6 +301,16 @@ describe("draft edits over the fixture", () => {
     const next = setOptions(mapping, { includeUpdates: true, includeFiles: true }, { updates: false, files: true });
     expect(next.options).toEqual({ includeUpdates: true, includeFiles: false });
     expect(validateMapping(next)).toEqual([]);
+  });
+
+  it("turns off files in the draft when Drive is not configured", () => {
+    const withFiles = setOptions(mapping, { includeUpdates: true, includeFiles: true }, { updates: false, files: false });
+    const noDrive = { filesDisabledReason: "Drive no está configurado.", updatesDisabledReason: null };
+    expect(clampOptions(withFiles, noDrive).options).toEqual({ includeUpdates: true, includeFiles: false });
+    const allowed = { filesDisabledReason: null, updatesDisabledReason: null };
+    expect(clampOptions(withFiles, allowed)).toBe(withFiles);
+    const off = setOptions(withFiles, { includeUpdates: true, includeFiles: false }, { updates: false, files: false });
+    expect(clampOptions(off, noDrive)).toBe(off);
   });
 });
 
