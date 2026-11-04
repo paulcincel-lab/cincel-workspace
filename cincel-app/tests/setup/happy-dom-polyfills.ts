@@ -20,4 +20,23 @@ if (typeof document !== "undefined") {
   const { configure } = await import("@testing-library/react");
   configure({ asyncUtilTimeout: 5000 });
 }
+/**
+ * Node 25 ships its own global `localStorage`, which shadows happy-dom's and has no methods unless Node is started
+ * with `--localstorage-file`. Put an in-memory Storage back so DOM tests behave the same on every Node version.
+ */
+if (typeof window !== "undefined" && typeof window.localStorage?.clear !== "function") {
+  const store = new Map<string, string>();
+  const memoryStorage: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key) => store.get(key) ?? null,
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key) => void store.delete(key),
+    setItem: (key, value) => void store.set(key, String(value)),
+  };
+  Object.defineProperty(window, "localStorage", { configurable: true, value: memoryStorage });
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: memoryStorage });
+}
 export {};
