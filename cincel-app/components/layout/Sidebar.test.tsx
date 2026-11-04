@@ -43,7 +43,7 @@ describe("Sidebar — mobile navigation", () => {
     expect(screen.queryByRole("link", { name: /Dashboard/i })).toBeNull();
 
     // A trigger must still be reachable to open it.
-    const triggers = screen.getAllByRole("button", { name: /toggle sidebar/i });
+    const triggers = screen.getAllByRole("button", { name: "Alternar barra lateral" });
     expect(triggers.length).toBeGreaterThan(0);
 
     fireEvent.click(triggers[0]);
