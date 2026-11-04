@@ -2,71 +2,52 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
-import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
-import { isDriveConfigured } from "@/lib/google/client";
 import type { DriveCaller } from "@/lib/google/drive-repository";
-import { isOauthConfigured } from "@/lib/google/oauth";
 import { staffOauthConfig } from "@/lib/google/staff-oauth";
 import { getStaffAccessToken } from "@/lib/google/staff-token";
-import { getGoogleOauthAccount } from "@/lib/repositories/google-oauth-repository";
 
 /**
- * Drive client choice for the Recursos picker routes (`app/api/google/drive/*`,
- * backend spec §A.6.3):
- *   - AUTH_GOOGLE_ENABLED=false → "delegation": the old connect flow first, then
- *     service-account impersonation of the institutional email. Unchanged.
- *   - AUTH_GOOGLE_ENABLED=true  → "staff_token": the staff member's own Google
- *     token with `drive.readonly`. Without it the routes answer 403
- *     `{ error: "needs_consent" }`.
+ * Drive client for the Recursos picker routes (`app/api/google/drive/*`,
+ * backend spec §A.6.3): always the staff member's own Google token with
+ * `drive.readonly`. Without it the routes answer 403 `{ error: "needs_consent" }`.
+ * The domain-wide delegation client was removed in the cleanup release (§A.8 step 5).
  */
 
-export type PickerDriveMode = "delegation" | "staff_token";
+export type PickerDriveMode = "staff_token";
 
 export function pickerDriveMode(): PickerDriveMode {
-  return isGoogleAuthEnabled() ? "staff_token" : "delegation";
+  return "staff_token";
 }
 
-/** Whether the picker can work at all in the current mode. */
-export function isPickerDriveConfigured(mode: PickerDriveMode = pickerDriveMode()): boolean {
-  if (mode === "staff_token") return staffOauthConfig() !== null;
-  return isDriveConfigured() || isOauthConfigured();
+/** Whether the picker can work at all: the staff OAuth client is configured. */
+export function isPickerDriveConfigured(): boolean {
+  return staffOauthConfig() !== null;
+}
+
+// A Shared Drive's id is also the id of its root folder, so it works as the start folder.
+export function getDriveRootFolderId(): string | null {
+  return process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID?.trim() || process.env.GOOGLE_SHARED_DRIVE_ID?.trim() || null;
 }
 
 export type PickerDriveCallerResult = { ok: true; caller: DriveCaller } | { ok: false; response: NextResponse };
 
 /**
  * The DriveCaller for a signed-in staff member, or the error response the
- * route returns as is (503 not configured, 403 no usable identity / grant).
+ * route returns as is (503 not configured, 403 `needs_consent` without a grant).
  */
 export async function resolvePickerDriveCaller(staffId: string, email: string): Promise<PickerDriveCallerResult> {
-  const mode = pickerDriveMode();
-
-  if (!isPickerDriveConfigured(mode)) {
+  if (!isPickerDriveConfigured()) {
     return {
       ok: false,
       response: NextResponse.json({ error: "Google Drive is not configured on this server." }, { status: 503 }),
     };
   }
 
-  if (mode === "staff_token") {
-    const token = await getStaffAccessToken(staffId, "drive");
-    if (token.status !== "ok") {
-      return { ok: false, response: NextResponse.json({ error: "needs_consent" }, { status: 403 }) };
-    }
-    return { ok: true, caller: { staffId, email, accessToken: token.accessToken } };
+  const token = await getStaffAccessToken(staffId, "drive");
+  if (token.status !== "ok") {
+    return { ok: false, response: NextResponse.json({ error: "needs_consent" }, { status: 403 }) };
   }
-
-  const oauthAccount = await getGoogleOauthAccount(staffId);
-  if (!oauthAccount && !email) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: "Conecta tu cuenta de Google o configura un correo institucional." },
-        { status: 403 }
-      ),
-    };
-  }
-  return { ok: true, caller: { staffId, email } };
+  return { ok: true, caller: { staffId, email, accessToken: token.accessToken } };
 }
 
 export type PickerDriveStatus = {
@@ -74,48 +55,36 @@ export type PickerDriveStatus = {
   mode: PickerDriveMode;
   hasDriveGrant: boolean;
   googleLinked: boolean;
-  /** Old connect flow (delegation mode only; false in staff_token mode). */
-  oauthAvailable: boolean;
-  /** Account connected through the old flow (delegation mode only). */
-  connectedEmail: string | null;
+  /** Old connect flow; always false now that it is gone. Kept until the picker stops reading it. */
+  oauthAvailable: false;
+  /** Account connected through the old flow; always null. Kept until the picker stops reading it. */
+  connectedEmail: null;
 };
 
 /**
- * Body of `GET /api/google/drive/status`. `hasDriveGrant` is the staff
- * member's own `drive.readonly` grant in staff_token mode, and a connected
- * legacy account or an institutional email in delegation mode. The old
- * `oauthAvailable` / `connectedEmail` fields stay so the picker works as
- * before while the flag is off.
+ * Body of `GET /api/google/drive/status`. `mode` is always `"staff_token"` and
+ * `hasDriveGrant` is the staff member's own `drive.readonly` grant.
  */
 export async function getPickerDriveStatus(user: {
   staffId: string;
   email: string;
   googleLinked: boolean;
 }): Promise<PickerDriveStatus> {
-  const mode = pickerDriveMode();
-  const configured = isPickerDriveConfigured(mode);
-
-  if (mode === "staff_token") {
-    let hasDriveGrant = false;
-    if (configured) {
-      try {
-        hasDriveGrant = (await getStaffAccessToken(user.staffId, "drive")).status === "ok";
-      } catch {
-        hasDriveGrant = false;
-      }
+  const configured = isPickerDriveConfigured();
+  let hasDriveGrant = false;
+  if (configured) {
+    try {
+      hasDriveGrant = (await getStaffAccessToken(user.staffId, "drive")).status === "ok";
+    } catch {
+      hasDriveGrant = false;
     }
-    return { configured, mode, hasDriveGrant, googleLinked: user.googleLinked, oauthAvailable: false, connectedEmail: null };
   }
-
-  const oauthAvailable = isOauthConfigured();
-  const account = oauthAvailable ? await getGoogleOauthAccount(user.staffId) : null;
-  const hasDriveGrant = account !== null || (isDriveConfigured() && user.email !== "");
   return {
     configured,
-    mode,
+    mode: "staff_token",
     hasDriveGrant,
     googleLinked: user.googleLinked,
-    oauthAvailable,
-    connectedEmail: account?.email ?? null,
+    oauthAvailable: false,
+    connectedEmail: null,
   };
 }

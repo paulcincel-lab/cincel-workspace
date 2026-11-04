@@ -5,21 +5,18 @@ import {
   resolveProjectsCapabilities,
   resolveResourcesCapabilities,
 } from "@/lib/auth/permissions";
-import { getDriveRootFolderId } from "@/lib/google/client";
-import { resolvePickerDriveCaller } from "@/lib/google/picker-drive";
+import { getDriveRootFolderId, resolvePickerDriveCaller } from "@/lib/google/picker-drive";
 import { listFolder, searchFiles } from "@/lib/google/drive-repository";
 
 /**
  * GET /api/google/drive/list?folderId=&q=&pageToken=
  *
- * The Drive client depends on AUTH_GOOGLE_ENABLED (lib/google/picker-drive.ts):
- * off, the caller's old connected Google account when they have one, else the
- * service-account impersonation of their institutional email; on, the staff
- * member's own Google token. Auth gating:
+ * Drive is read with the staff member's own Google token (lib/google/picker-drive.ts).
+ * Auth gating:
  *   - no session                -> 401
  *   - no Drive capability       -> 403
  *   - nothing configured at all -> 503
- *   - no usable identity        -> 403 (staff_token mode: { error: "needs_consent" })
+ *   - no Drive grant            -> 403 { error: "needs_consent" }
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   let caller;

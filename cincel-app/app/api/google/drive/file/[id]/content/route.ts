@@ -12,8 +12,8 @@ import { getFileContent } from "@/lib/google/drive-repository";
 const INLINE_SAFE = /^(application\/pdf|image\/(png|jpe?g|gif|webp|bmp)|text\/plain)(;|$)/;
 
 /**
- * GET /api/google/drive/file/[id]/content — the file's bytes, fetched as the
- * caller's connected Google account so in-app previews don't depend on which
+ * GET /api/google/drive/file/[id]/content — the file's bytes, fetched with the
+ * caller's own Google token so in-app previews don't depend on which
  * Google account the browser is signed into. Same gating as the metadata
  * route (401 / 403 / 503), plus 415/413 for folders and oversized files.
  */

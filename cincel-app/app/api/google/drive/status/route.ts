@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { requireSessionAccess } from "@/lib/auth/session";
-import { getPickerDriveStatus, pickerDriveMode } from "@/lib/google/picker-drive";
+import { getPickerDriveStatus } from "@/lib/google/picker-drive";
 
 /**
- * GET /api/google/drive/status — for the picker's connect/switch-account UI
- * and for hiding the picker button entirely when nothing is configured.
- * Returns `{ configured, mode, hasDriveGrant, googleLinked }` (backend spec
- * §A.6.3) plus the old `oauthAvailable` / `connectedEmail` fields. The picker
- * shows **Conectar Google Drive** when `mode = "staff_token"` and
- * `hasDriveGrant` is false.
+ * GET /api/google/drive/status — for the picker's Conectar Google Drive button
+ * and for hiding the picker entirely when nothing is configured. Returns
+ * `{ configured, mode, hasDriveGrant, googleLinked }` (backend spec §A.6.3);
+ * `mode` is always `"staff_token"`. The old `oauthAvailable` / `connectedEmail`
+ * fields stay as `false` / `null` until the picker stops reading them.
  */
 export async function GET(): Promise<NextResponse> {
   let user;
@@ -19,7 +18,7 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json(
       {
         configured: false,
-        mode: pickerDriveMode(),
+        mode: "staff_token",
         hasDriveGrant: false,
         googleLinked: false,
         oauthAvailable: false,
