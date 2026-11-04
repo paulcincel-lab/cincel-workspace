@@ -101,3 +101,22 @@ export type GoogleHealth = {
 export type RecheckStaffAccessResult =
   | { ok: true; allowed: boolean; reason?: string }
   | { ok: false; error: "directory_error" | "not_google_linked" | "forbidden" };
+
+/** One entry of a project's Drive folder in the staff Archivos tab (BE §A.6.3, FE §5). */
+export type StaffFileItem = {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number | null;
+  modifiedAt: string;
+  iconLink: string | null;
+  webViewLink: string | null;
+  kind: "file" | "folder";
+};
+
+/** `GET /api/proyectos/[id]/archivos?folder=` (BE §A.6.3). */
+export type StaffFilesResult =
+  | { status: "pending" | "failed"; error?: string }
+  | { status: "needs_consent" }
+  | { status: "no_drive_access" }
+  | { status: "ok"; folderId: string; breadcrumbs: { id: string; name: string }[]; items: StaffFileItem[] };
