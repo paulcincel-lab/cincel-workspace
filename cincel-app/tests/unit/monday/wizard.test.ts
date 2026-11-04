@@ -274,6 +274,13 @@ describe("monday wizard connect and export", () => {
     ]);
     expect(merged.people).toEqual(base.people);
   });
+
+  it("turns off what a re-export skipped, whatever the old draft said", () => {
+    const base = nestedMapping(ANA, CLIENT);
+    const edited: MappingInput = { ...base, options: { includeUpdates: true, includeFiles: true } };
+    const drafted: MappingInput = { ...base, options: { includeUpdates: true, includeFiles: false } };
+    expect(mergeDraft(edited, drafted, ["901"]).options).toEqual({ includeUpdates: true, includeFiles: false });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -310,22 +317,26 @@ describe("monday wizard draft and preview", () => {
     expect(casaNido.samples.map((s) => s.mondayName)).toEqual(["Muros", "Planos", "Limpieza"]);
     expect(casaNido.samples[0]).toMatchObject({ entity: "tarea", cincel: { project: "Casa Nido" } });
     expect(preview.boards[2].samples[0]).toMatchObject({ entity: "proyecto", mondayName: "Casa Mar" });
+    // a project sample counts its tasks as tareas, not subtareas
+    expect(preview.boards[2].samples[0].cincel.childTasks).toBe(0);
     expect(preview.boards[3].samples[0]).toMatchObject({ entity: "contacto", mondayName: "Familia Mar" });
     const sum = (key: keyof typeof preview.totals) => preview.boards.reduce((n, b) => n + b.counts[key], 0);
     expect(preview.totals.tareas).toBe(sum("tareas"));
     expect(preview.totals.proyectos).toBe(sum("proyectos"));
   });
 
-  it("blocks the preview when files are on and Drive isn't configured", async () => {
+  it("turns files off in the draft when Drive isn't configured, so the preview doesn't block on it", async () => {
     const run = await nestedRun(nestedMapping(ANA, CLIENT));
+    const env = { MONDAY_IMPORT_DIR: root };
     const preview = await previewImport(run.runId, ADMIN, {
       db: {} as ImportDb,
-      env: { MONDAY_IMPORT_DIR: root },
+      env,
       openDrive: okDrive,
       planLookups: () => planLookups,
     });
-    expect(preview.canApply).toBe(false);
-    expect(preview.issues.map((i) => i.code)).toContain("DRIVE_NOT_CONFIGURED");
+    expect(preview.issues.map((i) => i.code)).not.toContain("DRIVE_NOT_CONFIGURED");
+    const stored = JSON.parse(readFileSync(join(runDir(run.runId, env), "mapping.json"), "utf8")) as MappingInput;
+    expect(stored.options).toMatchObject({ includeFiles: false });
   });
 });
 

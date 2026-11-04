@@ -312,7 +312,12 @@ export function mergeDraft(existing: MappingInput | null, drafted: MappingInput,
       .filter((b) => picked.has(b.mondayBoardId))
       .map((b) => kept.get(b.mondayBoardId) ?? b),
     people: { ...drafted.people, ...existing.people },
-    options: existing.options ?? drafted.options,
+    options: {
+      ...(existing.options ?? drafted.options),
+      // what the current export skipped can't be imported, whatever the old draft said
+      ...(drafted.options.includeFiles === false ? { includeFiles: false } : {}),
+      ...(drafted.options.includeUpdates === false ? { includeUpdates: false } : {}),
+    },
   };
 }
 
@@ -553,7 +558,10 @@ const DRIVE_DISABLED = "Drive no está configurado; los archivos no se pueden im
 
 /** Paso 5: why "Incluir archivos" / "Incluir bitácora" are disabled, if they are. */
 export async function getOptionsInfo(runId: string, deps: WizardDeps): Promise<MondayImportOptionsInfo> {
-  const run = await requireRun(runId, deps);
+  return optionsInfoFor(await requireRun(runId, deps), deps);
+}
+
+async function optionsInfoFor(run: StoredRun, deps: WizardDeps): Promise<MondayImportOptionsInfo> {
   let filesDisabledReason: string | null = null;
   if (!run.exportOptions.files) filesDisabledReason = "Los archivos no se exportaron de monday.";
   else {
@@ -566,13 +574,30 @@ export async function getOptionsInfo(runId: string, deps: WizardDeps): Promise<M
   };
 }
 
+/**
+ * Opciones shows a disabled switch as off; this stores that in the draft so
+ * the plan doesn't block on an option the admin can't turn off.
+ */
+async function enforceDisabledOptions(run: StoredRun, mapping: MappingInput, deps: WizardDeps): Promise<MappingInput> {
+  const info = await optionsInfoFor(run, deps);
+  const options = { ...mapping.options };
+  if (info.filesDisabledReason && options.includeFiles !== false) options.includeFiles = false;
+  if (info.updatesDisabledReason && options.includeUpdates !== false) options.includeUpdates = false;
+  if (options.includeFiles === mapping.options.includeFiles && options.includeUpdates === mapping.options.includeUpdates)
+    return mapping;
+  const next = { ...mapping, options };
+  await writeDraftMapping(run.runId, next, envOf(deps));
+  return next;
+}
+
 /** Paso 6: the plan dry run as counts, issues and sample items. */
 export async function previewImport(runId: string, importedById: string, deps: WizardDeps): Promise<MondayPreview> {
   const run = await requireRun(runId, deps);
   const env = envOf(deps);
   const dir = runDir(run.runId, env);
-  const mapping = await readDraftMapping(run.runId, env);
-  if (!mapping) throw new WizardError("Todavía no hay equivalencias: primero exporta los tableros.");
+  const stored = await readDraftMapping(run.runId, env);
+  if (!stored) throw new WizardError("Todavía no hay equivalencias: primero exporta los tableros.");
+  const mapping = await enforceDisabledOptions(run, stored, deps);
   const { data } = await readPlanExport(dir);
   const lookups = (deps.planLookups ?? createPlanDbLookups)(deps.db);
   const plan = await buildPlan(data, mapping, lookups, {
@@ -603,7 +628,9 @@ export async function startApply(
   const dir = runDir(run.runId, env);
   const batch = await runBatch(deps.db, dir);
   if (batch?.status === "applied") throw new WizardError("Esta importación ya se aplicó.");
-  if (!(await readDraftMapping(run.runId, env))) throw new WizardError("Todavía no hay equivalencias.");
+  const stored = await readDraftMapping(run.runId, env);
+  if (!stored) throw new WizardError("Todavía no hay equivalencias.");
+  await enforceDisabledOptions(run, stored, deps);
   if (!by.email) throw new WizardError("Tu cuenta no tiene correo; no se puede registrar quién importó.");
   const command = createApplyCommand({
     openDb: () => handleOf(deps.db),
