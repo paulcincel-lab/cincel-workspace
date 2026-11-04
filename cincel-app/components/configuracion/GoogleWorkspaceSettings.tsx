@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { GoogleGroupMappings } from "@/components/configuracion/GoogleGroupMappings";
 import { GoogleHealthStatus } from "@/components/configuracion/GoogleHealthStatus";
+import { ProjectFoldersBackfill } from "@/components/configuracion/ProjectFoldersBackfill";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import {
   Breadcrumb,
@@ -43,6 +44,8 @@ export function GoogleWorkspaceSettings({ mappings, areas, health }: GoogleWorks
       <GoogleHealthStatus health={health} />
 
       <GoogleGroupMappings mappings={mappings} areas={areas} />
+
+      <ProjectFoldersBackfill />
     </div>
   );
 }

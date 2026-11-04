@@ -5,22 +5,21 @@ import {
   resolveProjectsCapabilities,
   resolveResourcesCapabilities,
 } from "@/lib/auth/permissions";
-import { isDriveConfigured, getDriveRootFolderId } from "@/lib/google/client";
-import { isOauthConfigured } from "@/lib/google/oauth";
-import { getGoogleOauthAccount } from "@/lib/repositories/google-oauth-repository";
-import { listFolder, searchFiles, type DriveCaller } from "@/lib/google/drive-repository";
+import { getDriveRootFolderId } from "@/lib/google/client";
+import { resolvePickerDriveCaller } from "@/lib/google/picker-drive";
+import { listFolder, searchFiles } from "@/lib/google/drive-repository";
 
 /**
  * GET /api/google/drive/list?folderId=&q=&pageToken=
  *
- * Browses Drive as the caller's own connected Google account when they have
- * one (lib/google/oauth.ts); otherwise falls back to the service-account
- * impersonation of their institutional email (lib/google/client.ts). Auth
- * gating mirrors app/api/team/sensitive/[id]/route.ts:
+ * The Drive client depends on AUTH_GOOGLE_ENABLED (lib/google/picker-drive.ts):
+ * off, the caller's old connected Google account when they have one, else the
+ * service-account impersonation of their institutional email; on, the staff
+ * member's own Google token. Auth gating:
  *   - no session                -> 401
  *   - no Drive capability       -> 403
  *   - nothing configured at all -> 503
- *   - no usable identity        -> 403
+ *   - no usable identity        -> 403 (staff_token mode: { error: "needs_consent" })
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   let caller;
@@ -37,21 +36,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (!isDriveConfigured() && !isOauthConfigured()) {
-    return NextResponse.json(
-      { error: "Google Drive is not configured on this server." },
-      { status: 503 }
-    );
-  }
-
-  const oauthAccount = await getGoogleOauthAccount(caller.member.id);
-  if (!oauthAccount && !caller.email) {
-    return NextResponse.json(
-      { error: "Conecta tu cuenta de Google o configura un correo institucional." },
-      { status: 403 }
-    );
-  }
-  const driveCaller: DriveCaller = { staffId: caller.member.id, email: caller.email ?? "" };
+  const resolved = await resolvePickerDriveCaller(caller.member.id, caller.email ?? "");
+  if (!resolved.ok) return resolved.response;
+  const driveCaller = resolved.caller;
 
   const params = request.nextUrl.searchParams;
   const folderId = params.get("folderId") || getDriveRootFolderId();

@@ -19,6 +19,7 @@ import { normalizePhases, projectPhaseOptions } from "@/lib/proyectos/phases";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
 import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard";
+import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
 import { hasImportData, ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 
@@ -292,6 +293,7 @@ export default function ProjectFichaPage() {
       <Sidebar />
       <section className="flex-1 overflow-y-auto p-10">
         <Header />
+        <ProjectSectionNav projectId={project.id} />
 
         {googleConnectResult ? (
           <p className={`mb-3 text-sm ${googleConnectResult.success ? "text-muted-foreground" : "text-destructive"}`}>

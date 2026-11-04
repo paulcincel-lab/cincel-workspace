@@ -7,7 +7,7 @@ Every project gets its Shared Drive folder (`01 Interno` / `02 Cliente` / `03 De
 
 ### Backend
 - [x] `lib/google/drive-admin.ts` and `ensureProjectFolders`: built by monday Migration Phase 1 (docs/specs/monday-migration/backend.md §10); not in this phase
-- [ ] Call `ensureProjectFolders` via `after()` from `createProject`; failure → `failed` + `drive_folder_error`; folder name rules; rename on name/code change (BE §A.6.1)
+- [x] Call `ensureProjectFolders` via `after()` from `createProject`; failure → `failed` + `drive_folder_error`; folder name rules; rename on name/code change (BE §A.6.1)
 - [ ] `retryProjectFolderAction(projectId)` (`canEditProjectGeneral`) and `ensureMissingProjectFoldersAction()` (Administrador) (BE §A.6.1, §A.7)
 - [ ] Incremental consent: `/api/auth/google/start?scope=drive|calendar&return_to=` with `include_granted_scopes`, `access_type=offline`, `prompt=consent`, `login_hint`; callback for a signed-in staff member updates tokens/scope, `sub` must match; password-session staff run the full gate and get linked (BE §A.6.2)
 - [ ] Consent-callback gate denial for a password session: keep the session, store no tokens, redirect to `return_to?google_connected=error&motivo=…` (review NB 6)

@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => "/proyectos/p1/cronograma",
 }));
 
 vi.mock("@/components/layout/Header", () => ({ default: () => <div data-testid="header" /> }));

@@ -313,7 +313,8 @@ sequenceDiagram
 - Calendar sync does the same with `scope=calendar` (`calendar.app.created`).
 - The callback for an already signed-in staff member updates tokens and scope. If the staff member has a `google_sub`, the token's `sub` must equal it (else refuse with `sub_mismatch`). If they have none yet (still on a password session during cutover), the callback runs the full §A.4 resolution and gate for that token: on success it links `google_sub` to **the signed-in staff row** (only if the email matches it; otherwise `sub_mismatch`), applies role and areas, and stores the tokens. So password users can grant Drive during cutover, and doing so is their Google link.
 - `return_to` is validated with `safeReturnTo()` (§A.10).
-- `drive.readonly` is a restricted scope, but the client is Internal, so Google doesn't review it. The admin checklist confirms the console shows no verification requirement.
+- **Scope decision (2026-11-03): keep `drive.readonly`.** The OAuth app is External, in the client's own Cloud project, so `drive.readonly` (restricted) and `calendar.app.created` (sensitive) need Google verification before the app is published, and the restricted scope also needs the yearly security assessment. Until then only the listed test users can grant them.
+- The callback checks the granted scope: if the person unchecks the box on Google's consent screen, it returns with `google_connected=error&motivo=scope_missing`.
 - Refresh tokens are encrypted at rest and never sent to the browser.
 - `invalid_grant` on refresh: clear the tokens and scope, and show **Conectar Google Drive** again.
 

@@ -5,10 +5,8 @@ import {
   resolveProjectsCapabilities,
   resolveResourcesCapabilities,
 } from "@/lib/auth/permissions";
-import { isDriveConfigured } from "@/lib/google/client";
-import { isOauthConfigured } from "@/lib/google/oauth";
-import { getGoogleOauthAccount } from "@/lib/repositories/google-oauth-repository";
-import { getFileMeta, type DriveCaller } from "@/lib/google/drive-repository";
+import { resolvePickerDriveCaller } from "@/lib/google/picker-drive";
+import { getFileMeta } from "@/lib/google/drive-repository";
 
 /**
  * GET /api/google/drive/file/[id] — metadata for a single Drive file/folder.
@@ -34,21 +32,9 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (!isDriveConfigured() && !isOauthConfigured()) {
-    return NextResponse.json(
-      { error: "Google Drive is not configured on this server." },
-      { status: 503 }
-    );
-  }
-
-  const oauthAccount = await getGoogleOauthAccount(caller.member.id);
-  if (!oauthAccount && !caller.email) {
-    return NextResponse.json(
-      { error: "Conecta tu cuenta de Google o configura un correo institucional." },
-      { status: 403 }
-    );
-  }
-  const driveCaller: DriveCaller = { staffId: caller.member.id, email: caller.email ?? "" };
+  const resolved = await resolvePickerDriveCaller(caller.member.id, caller.email ?? "");
+  if (!resolved.ok) return resolved.response;
+  const driveCaller = resolved.caller;
 
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });

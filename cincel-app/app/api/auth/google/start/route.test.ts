@@ -1,11 +1,13 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { cookieSetMock } = vi.hoisted(() => ({ cookieSetMock: vi.fn() }));
+const { cookieSetMock, getSessionMock } = vi.hoisted(() => ({ cookieSetMock: vi.fn(), getSessionMock: vi.fn() }));
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ set: cookieSetMock }),
 }));
+
+vi.mock("@/lib/auth/session", () => ({ getSession: getSessionMock }));
 
 import { NextRequest } from "next/server";
 
@@ -80,5 +82,51 @@ describe("GET /api/auth/google/start", () => {
     const res = await GET(req());
     expect(res.headers.get("location")).toBe(`${ORIGIN}/login?error=retry`);
     expect(cookieSetMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/auth/google/start?scope= (incremental grant)", () => {
+  const storedState = () => JSON.parse(Buffer.from(cookieSetMock.mock.calls[0][1], "base64url").toString("utf8"));
+
+  beforeEach(() => {
+    getSessionMock.mockResolvedValue({ id: "session-1", user: { id: "staff-1", email: "ana@cincel.example" } });
+  });
+
+  it.each([
+    ["drive", "https://www.googleapis.com/auth/drive.readonly"],
+    ["calendar", "https://www.googleapis.com/auth/calendar.app.created"],
+  ])("asks for %s with consent, offline access, granted scopes and the staff email", async (scope, googleScope) => {
+    const res = await GET(req(`/api/auth/google/start?scope=${scope}&return_to=%2Fproyectos%2Fp1%2Farchivos`));
+    expect(res.status).toBe(307);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.searchParams.get("scope")?.split(" ")).toContain(googleScope);
+    expect(location.searchParams.get("prompt")).toBe("consent");
+    expect(location.searchParams.get("access_type")).toBe("offline");
+    expect(location.searchParams.get("include_granted_scopes")).toBe("true");
+    expect(location.searchParams.get("login_hint")).toBe("ana@cincel.example");
+    expect(storedState()).toMatchObject({ scope, returnTo: "/proyectos/p1/archivos" });
+  });
+
+  it("drops an off-site return_to", async () => {
+    await GET(req("/api/auth/google/start?scope=drive&return_to=https%3A%2F%2Fevil.example"));
+    expect(storedState().returnTo).toBe("/dashboard");
+  });
+
+  it("sends a browser without a session to /login and sets no cookie", async () => {
+    getSessionMock.mockResolvedValue(null);
+    const res = await GET(req("/api/auth/google/start?scope=drive"));
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/login`);
+    expect(cookieSetMock).not.toHaveBeenCalled();
+  });
+
+  it("answers 400 for an unknown scope", async () => {
+    const res = await GET(req("/api/auth/google/start?scope=gmail"));
+    expect(res.status).toBe(400);
+    expect(cookieSetMock).not.toHaveBeenCalled();
+  });
+
+  it("plain sign-in never reads the session", async () => {
+    await GET(req());
+    expect(getSessionMock).not.toHaveBeenCalled();
   });
 });

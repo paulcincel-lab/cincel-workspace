@@ -8,6 +8,8 @@ import { loadGoogleHealth } from "@/lib/auth/google-health";
 import { getSessionAccess } from "@/lib/auth/session";
 import { OFFICIAL_CINCEL_ROLES, SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { DirectoryError, getDirectory } from "@/lib/google/directory";
+import { ensureMissingProjectFolders } from "@/lib/google/project-folders-app";
+import type { EnsureMissingProjectFoldersCounts } from "@/lib/google/project-folders-app";
 import * as mappingsRepository from "@/lib/repositories/workspace-group-mappings-repository";
 import type { GroupMappingValues } from "@/lib/repositories/workspace-group-mappings-repository";
 import type {
@@ -185,4 +187,16 @@ export async function recheckStaffAccessAction(staffId: string): Promise<Recheck
 export async function getGoogleHealthAction(): Promise<GoogleHealth> {
   if (!(await isAdministrator())) throw new Error("FORBIDDEN: google health");
   return loadGoogleHealth();
+}
+
+/**
+ * Crear carpetas faltantes (BE §A.6.1, §A.7): creates the Drive folders of
+ * every project still `pending` or `failed`, one at a time, and reports counts.
+ */
+export async function ensureMissingProjectFoldersAction(): Promise<EnsureMissingProjectFoldersCounts> {
+  if (!(await isAdministrator())) throw new Error("FORBIDDEN: ensure project folders");
+  const counts = await ensureMissingProjectFolders();
+  revalidatePath(GOOGLE_SETTINGS_PATH);
+  revalidatePath("/proyectos");
+  return counts;
 }

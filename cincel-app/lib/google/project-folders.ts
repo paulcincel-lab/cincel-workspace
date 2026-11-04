@@ -175,3 +175,58 @@ export async function ensureProjectFolders(
     return { status: "failed", error: message };
   }
 }
+
+export type RenameProjectFolderResult =
+  | { status: "renamed"; name: string }
+  | { status: "unchanged" }
+  | { status: "no_folder" }
+  | { status: "failed"; error: string };
+
+/**
+ * Renames the project's Drive folder to `projectFolderName(project)` after a
+ * name or code change. Best effort: a Drive failure is written to
+ * `drive_folder_error` and returned, `drive_folder_status` is left as it is.
+ * A project without a folder yet is skipped (ensureProjectFolders names it
+ * when it creates it). A successful rename clears an earlier rename error on a
+ * `ready` project.
+ *
+ * Throws ProjectNotFoundError when the project doesn't exist.
+ */
+export async function renameProjectFolder(
+  db: ProjectFoldersDb,
+  drive: DriveAdmin,
+  projectId: string,
+): Promise<RenameProjectFolderResult> {
+  const [project] = await db
+    .select({
+      id: projects.id,
+      code: projects.code,
+      name: projects.name,
+      driveFolderId: projects.driveFolderId,
+      driveFolderStatus: projects.driveFolderStatus,
+      driveFolderError: projects.driveFolderError,
+    })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  if (!project) throw new ProjectNotFoundError(projectId);
+  if (!project.driveFolderId) return { status: "no_folder" };
+
+  const name = projectFolderName(project);
+  try {
+    const current = await drive.get(project.driveFolderId, "id,name");
+    let result: RenameProjectFolderResult = { status: "unchanged" };
+    if (current.name !== name) {
+      await drive.rename(project.driveFolderId, name);
+      result = { status: "renamed", name };
+    }
+    if (project.driveFolderStatus === "ready" && project.driveFolderError) {
+      await db.update(projects).set({ driveFolderError: null }).where(eq(projects.id, projectId));
+    }
+    return result;
+  } catch (error) {
+    const message = errorMessage(error);
+    await db.update(projects).set({ driveFolderError: message }).where(eq(projects.id, projectId));
+    return { status: "failed", error: message };
+  }
+}
