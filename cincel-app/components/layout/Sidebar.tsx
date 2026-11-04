@@ -313,6 +313,8 @@ export default function Sidebar() {
                         <SidebarMenuButton
                           isActive={hasActive}
                           tooltip={item.label}
+                          aria-label={item.label}
+                          aria-expanded={isExpanded}
                           onClick={() => setExpandedMenu(isExpanded ? null : item.label)}
                         >
                           <item.icon />

@@ -264,6 +264,7 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon-sm"
+      aria-label="Alternar barra lateral"
       className={cn(className)}
       onClick={(event) => {
         onClick?.(event)
