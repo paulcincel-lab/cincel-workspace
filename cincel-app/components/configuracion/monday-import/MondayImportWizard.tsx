@@ -125,7 +125,8 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
   const [optionsError, setOptionsError] = useState("");
   const [preview, setPreview] = useState<MondayPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
-  const [projects, setProjects] = useState<MondayImportedProject[]>([]);
+  // null until the applied run's projects load, so Importar shows a loading state instead of "no projects".
+  const [projects, setProjects] = useState<MondayImportedProject[] | null>(null);
   const [rollbackCheck, setRollbackCheck] = useState<MondayRollbackCheck | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
   const [error, setError] = useState(loadError ?? "");
@@ -148,7 +149,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
       getMondayImportedProjectsAction(id),
       checkMondayRollbackAction(id),
     ]);
-    if (projectsResult.ok) setProjects(projectsResult.projects);
+    setProjects(projectsResult.ok ? projectsResult.projects : []);
     setRollbackCheck(checkResult.ok ? checkResult.check : null);
   }, []);
 

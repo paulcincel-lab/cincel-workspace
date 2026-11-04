@@ -30,6 +30,7 @@ import {
   setRecordEntry,
   setStatusTarget,
   strategyDescription,
+  subitemsSection,
   templateCandidateItems,
   updateBoard,
   workflowsForBoard,
@@ -180,6 +181,7 @@ function BoardEquivalences({
   onStatusCreated: (status: { id: string; name: string; closes: boolean }) => void;
 }) {
   const isCrm = board.strategy === "crm_contacts";
+  const subitemsCopy = subitemsSection(board.strategy, board.subitems);
   const statusChoices: Choice[] = [
     ...Object.entries(BASE_STATUS_LABELS).map(([value, label]) => ({ value: `status:${value}`, label })),
     ...choices.statuses.map((status) => ({ value: `custom:${status.id}`, label: `${status.name} (personalizado)` })),
@@ -446,16 +448,16 @@ function BoardEquivalences({
             ) : null}
           </Section>
 
-          <Section id={`subitems-${board.mondayBoardId}`} title="Subelementos" description="Qué serán los subelementos de monday.">
+          <Section id={`subitems-${board.mondayBoardId}`} title="Subelementos" description={subitemsCopy.description}>
             <ChoiceSelect
-              label="Subelementos"
+              label={subitemsCopy.selectLabel}
               value={board.subitems ?? "checklist"}
               choices={Object.entries(SUBITEM_LABELS).map(([value, label]) => ({ value, label }))}
               onChange={(value) =>
                 onBoardChange((current) => ({ ...current, subitems: value as NonNullable<BoardDraft["subitems"]> }))
               }
             />
-            {source.subitemColumns.length > 0 && (board.subitems ?? "checklist") !== "ignore" ? (
+            {source.subitemColumns.length > 0 && subitemsCopy.showColumns ? (
               <EquivalenceTable monday="Columna de subelementos" cincel="Campo de Cincel">
                 {columnRows(source.subitemColumns, true)}
               </EquivalenceTable>

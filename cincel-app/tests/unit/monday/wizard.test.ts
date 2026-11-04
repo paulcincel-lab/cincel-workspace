@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/lib/db/schema";
 import type { DriveAdmin } from "@/lib/google/drive-admin";
@@ -245,7 +245,7 @@ describe("monday wizard connect and export", () => {
 
     const stored = (await readRun(run.runId, env))!;
     expect(stored.jobs.export?.status).toBe("succeeded");
-    expect(stored.jobs.export?.progress).toMatchObject({ done: 1, total: 1 });
+    expect(stored.jobs.export?.progress).toMatchObject({ done: 1, total: 1, label: "Exportación terminada" });
     expect(stored.account).toEqual({ id: "555", slug: "acme", name: "Acme" });
     expect(stored.boardIds).toEqual(["101"]);
 
@@ -383,10 +383,12 @@ describe.skipIf(!url)("monday wizard apply and rollback (test DB)", { timeout: 6
       const preview = await previewImport(run.runId, ANA, deps);
       expect(preview.canApply).toBe(true);
 
-      await startApply(run.runId, { email: "ana.wizard@example.com" }, deps);
+      const onApplied = vi.fn(async () => {});
+      await startApply(run.runId, { email: "ana.wizard@example.com" }, deps, onApplied);
       await waitForJob(run.runId, "apply");
       const state = await getRunState(run.runId, deps);
       expect(state.jobs.apply?.status).toBe("succeeded");
+      expect(onApplied).toHaveBeenCalledTimes(1);
       expect(state.batchStatus).toBe("applied");
       expect(drive.log).toEqual([]);
 
@@ -400,6 +402,7 @@ describe.skipIf(!url)("monday wizard apply and rollback (test DB)", { timeout: 6
       expect(check).toMatchObject({ canRollback: true, blockers: [] });
       await startRollback(run.runId, deps);
       await waitForJob(run.runId, "rollback");
+      expect((await getRunState(run.runId, deps)).jobs.rollback?.progress.label).toBe("Importación deshecha");
       const [batch] = await tx
         .select({ status: schema.importBatches.status })
         .from(schema.importBatches)

@@ -11,7 +11,11 @@ const session = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth/session", () => ({ getSessionAccess: vi.fn(async () => session.value) }));
 vi.mock("@/lib/db/client", () => ({ db: {} }));
-vi.mock("@/lib/repositories/onboarding-repository", () => ({ hasAppliedImport: vi.fn(async () => false) }));
+const onboarding = vi.hoisted(() => ({
+  hasAppliedImport: vi.fn(async () => false),
+  markOnboardingCompleted: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/repositories/onboarding-repository", () => onboarding);
 
 const service = vi.hoisted(() => {
   class WizardError extends Error {}
@@ -84,6 +88,20 @@ describe("monday import actions", () => {
 
     service.startApply.mockResolvedValueOnce({ status: "running" });
     expect(await startMondayApplyAction(RUN)).toEqual({ ok: true, job: { status: "running" } });
-    expect(service.startApply).toHaveBeenCalledWith(RUN, { email: "admin@cincel.mx" }, expect.anything());
+    expect(service.startApply).toHaveBeenCalledWith(
+      RUN,
+      { email: "admin@cincel.mx" },
+      expect.anything(),
+      expect.any(Function),
+    );
+  });
+
+  it("marks the admin's first-login wizard as finished once the import is applied", async () => {
+    service.startApply.mockResolvedValueOnce({ status: "running" });
+    await startMondayApplyAction(RUN);
+    expect(onboarding.markOnboardingCompleted).not.toHaveBeenCalled();
+    const onApplied = service.startApply.mock.calls[0][3] as () => Promise<void>;
+    await onApplied();
+    expect(onboarding.markOnboardingCompleted).toHaveBeenCalledWith("admin");
   });
 });

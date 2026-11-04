@@ -418,6 +418,7 @@ export async function startExport(
         }, env);
         await draftRunMapping(latest, deps);
         io.stdout("Equivalencias preparadas a partir de la exportación.");
+        progress(boardIds.length, boardIds.length, "Exportación terminada");
         return null;
       },
       env,
@@ -643,11 +644,13 @@ export async function previewImport(runId: string, importedById: string, deps: W
  * Paso 7: runs `apply` in the background as `by` (an active staff email). A
  * run whose batch is still `applying` resumes phase B. The plan runs again
  * inside apply, so a blocking issue fails the job without writing anything.
+ * `onApplied` runs once the import succeeds (the action marks the admin's first-login wizard as finished).
  */
 export async function startApply(
   runId: string,
   by: { email: string },
   deps: WizardDeps,
+  onApplied?: () => Promise<void>,
 ): Promise<MondayImportJob> {
   const run = await requireRun(runId, deps);
   const env = envOf(deps);
@@ -681,6 +684,13 @@ export async function startApply(
             ? "Los datos se importaron pero faltan archivos por subir a Drive. Revisa el registro y vuelve a intentarlo."
             : "La importación no se aplicó. Revisa el registro.";
         progress(1, 1, "Importación terminada");
+        if (onApplied) {
+          try {
+            await onApplied();
+          } catch {
+            io.stderr("No se pudo marcar el asistente como terminado; usa «Ir al tablero».");
+          }
+        }
         return null;
       },
       env,
@@ -726,9 +736,12 @@ export async function startRollback(runId: string, deps: WizardDeps): Promise<Mo
       runId,
       "rollback",
       "Deshaciendo importación",
-      async ({ io }) => {
+      async ({ io, progress }) => {
         const code = await command(["--batch", check.batchId], io);
-        if (code === 0) return null;
+        if (code === 0) {
+          progress(1, 1, "Importación deshecha");
+          return null;
+        }
         const after = await runBatch(deps.db, runDir(runId, envOf(deps)));
         return after?.status === "rolled_back"
           ? "Se borró lo importado en Cincel, pero algunos archivos de Drive no se movieron a la papelera. Revisa el registro."

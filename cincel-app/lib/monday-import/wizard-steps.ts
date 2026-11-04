@@ -447,3 +447,30 @@ export const PREVIEW_COUNT_LABELS: [keyof MondayPreview["totals"], string][] = [
   ["filasCronograma", "Filas de cronograma"],
   ["yaImportados", "Ya importados (se omiten)"],
 ];
+
+/** "1 tarea", "3 tareas": the count with the singular for exactly 1. */
+export function countLabel(n: number, singular: string, plural: string): string {
+  return `${n.toLocaleString("es-MX")} ${n === 1 ? singular : plural}`;
+}
+
+/**
+ * Copy of the Subelementos section. With `item_as_project` the subitems already are the project's tasks, so the
+ * choice only covers their own subitems and the subitem columns always map to the tasks.
+ */
+export function subitemsSection(
+  strategy: BoardStrategy,
+  subitems: BoardDraft["subitems"],
+): { description: string; selectLabel: string; showColumns: boolean } {
+  if (strategy === "item_as_project")
+    return {
+      description:
+        "Los subelementos de monday serán las tareas del proyecto. Elige qué serán sus propios subelementos.",
+      selectLabel: "Subelementos de las tareas",
+      showColumns: true,
+    };
+  return {
+    description: "Qué serán los subelementos de monday.",
+    selectLabel: "Subelementos",
+    showColumns: (subitems ?? "checklist") !== "ignore",
+  };
+}

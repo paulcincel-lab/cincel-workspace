@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/aler
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
-import { PREVIEW_COUNT_LABELS, STRATEGY_OPTIONS } from "@/lib/monday-import/wizard-steps";
+import { countLabel, PREVIEW_COUNT_LABELS, STRATEGY_OPTIONS } from "@/lib/monday-import/wizard-steps";
 import type { MondayPreview, MondayPreviewCounts, MondayPreviewSample } from "@/lib/types/monday-import";
 
 const ENTITY_LABELS: Record<MondayPreviewSample["entity"], string> = {
@@ -39,10 +39,10 @@ function sampleDetails(sample: MondayPreviewSample): string {
     c.kind === "workflow" ? "Tarea de workflow" : null,
     c.template ? "De plantilla" : null,
     c.checklistItems ? `${c.checklistItems} de checklist` : null,
-    c.tasks ? `${c.tasks} tareas` : null,
-    c.childTasks ? `${c.childTasks} subtareas` : null,
-    c.comments ? `${c.comments} comentarios` : null,
-    c.files ? `${c.files} archivos` : null,
+    c.tasks ? countLabel(c.tasks, "tarea", "tareas") : null,
+    c.childTasks ? countLabel(c.childTasks, "subtarea", "subtareas") : null,
+    c.comments ? countLabel(c.comments, "comentario", "comentarios") : null,
+    c.files ? countLabel(c.files, "archivo", "archivos") : null,
     c.contactType ? `Tipo: ${c.contactType}` : null,
   ];
   return parts.filter(Boolean).join(" · ");
@@ -116,7 +116,8 @@ export function PreviewStep({
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                {board.counts.proyectos} proyectos, {board.counts.tareas} tareas, {board.counts.contactos} contactos.
+                {countLabel(board.counts.proyectos, "proyecto", "proyectos")}, {countLabel(board.counts.tareas, "tarea", "tareas")},{" "}
+                {countLabel(board.counts.contactos, "contacto", "contactos")}.
               </p>
               {board.samples.length > 0 ? (
                 <Table>
