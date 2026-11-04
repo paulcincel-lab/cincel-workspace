@@ -47,6 +47,26 @@ function invalidLink(json: boolean): NextResponse {
 }
 
 /**
+ * Login CSRF guard: a cross-site page must not be able to post an attacker's token here and plant
+ * that portal session in the victim's browser. `Sec-Fetch-Site` other than same-origin/none, or an
+ * `Origin` that isn't APP_ORIGIN (the Host header when APP_ORIGIN isn't set), is rejected.
+ */
+function isCrossSite(request: NextRequest): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") return true;
+
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  const expected = getAppOrigin();
+  if (expected) return origin !== expected;
+  try {
+    return new URL(origin).host !== request.headers.get("host");
+  } catch {
+    return true;
+  }
+}
+
+/**
  * POST /api/portal/auth/verify `{ token }` (#506, replaces BE §B.4.2's code
  * check). 10 per 15 minutes per IP → 429. The token's hash is marked used in
  * one conditional update, so a link signs in once; a used, expired or
@@ -54,6 +74,7 @@ function invalidLink(json: boolean): NextResponse {
  * session + cookie, `invited → active`, then the safe `return_to` (inside
  * `/portal`) or `/portal`. Form posts get a 303; JSON callers get
  * `{ redirect }`. Only this POST consumes a link; `/portal/acceder` never does.
+ * A cross-site post gets the invalid-link answer without spending the link.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const { token: rawToken, json } = await readBody(request);
@@ -70,6 +91,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     return NextResponse.json({ error: "rate_limited", message: PORTAL_RATE_LIMITED_MESSAGE }, { status: 429, headers });
   }
+
+  if (isCrossSite(request)) return invalidLink(json);
 
   const token = parsePortalLinkToken(rawToken);
   if (!token) return invalidLink(json);

@@ -46,13 +46,18 @@ const { portalVerifyIpRateLimiter, PORTAL_LINK_INVALID_MESSAGE } = await import(
 const TOKEN = "a".repeat(64);
 const ORIGIN = "https://app.example.test";
 
-function form(token: string | null, ip = "10.0.0.1") {
+function form(token: string | null, ip = "10.0.0.1", extraHeaders: Record<string, string> = {}) {
   const body = new URLSearchParams();
   if (token !== null) body.set("token", token);
   return POST(
     new NextRequest("http://internal.host:3000/api/portal/auth/verify", {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded", "x-real-ip": ip, "user-agent": "UA" },
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "x-real-ip": ip,
+        "user-agent": "UA",
+        ...extraHeaders,
+      },
       body,
     })
   );
@@ -168,6 +173,25 @@ describe("POST /api/portal/auth/verify", () => {
       message: PORTAL_LINK_INVALID_MESSAGE,
       redirect: "/portal/login?error=link",
     });
+  });
+
+  it.each([
+    { origin: "https://evil.example", "sec-fetch-site": "cross-site" },
+    { origin: "https://evil.example" },
+    { "sec-fetch-site": "same-site" },
+  ])("rejects a cross-site form post without spending the link (%o)", async (headers) => {
+    link();
+    const res = await form(TOKEN, "10.0.0.3", headers);
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/portal/login?error=link`);
+    expect(mocks.createPortalSession).not.toHaveBeenCalled();
+    expect(mocks.links.get(TOKEN)?.usedAt).toBeNull();
+  });
+
+  it("accepts a same-origin form post", async () => {
+    link();
+    const res = await form(TOKEN, "10.0.0.4", { origin: ORIGIN, "sec-fetch-site": "same-origin" });
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/portal`);
+    expect(mocks.createPortalSession).toHaveBeenCalledTimes(1);
   });
 
   it("returns 429 on the eleventh verify from one IP in 15 minutes", async () => {
