@@ -49,6 +49,8 @@ export type GeneralSettings = {
 type StoredGeneralSettings = {
   version: 1;
   data: GeneralSettings;
+  // ISO time of the last save; older payloads don't carry it.
+  savedAt?: string;
 };
 
 export const GENERAL_SETTINGS_DEFAULTS: GeneralSettings = {
@@ -173,15 +175,31 @@ export function sanitizeGeneralSettings(candidate: unknown): GeneralSettings {
   };
 }
 
-export function loadGeneralSettings(): { settings: GeneralSettings; hasCustom: boolean } {
+function sanitizeSavedAt(candidate: unknown): string | null {
+  if (!candidate || typeof candidate !== "object") {
+    return null;
+  }
+
+  const savedAt = (candidate as StoredGeneralSettings).savedAt;
+
+  if (typeof savedAt !== "string" || Number.isNaN(Date.parse(savedAt))) {
+    return null;
+  }
+
+  return savedAt;
+}
+
+export type LoadedGeneralSettings = { settings: GeneralSettings; hasCustom: boolean; savedAt: string | null };
+
+export function loadGeneralSettings(): LoadedGeneralSettings {
   if (typeof window === "undefined") {
-    return { settings: deepCloneDefaults(), hasCustom: false };
+    return { settings: deepCloneDefaults(), hasCustom: false, savedAt: null };
   }
 
   const stored = readStorage(GENERAL_SETTINGS_STORAGE_KEY);
 
   if (!stored) {
-    return { settings: deepCloneDefaults(), hasCustom: false };
+    return { settings: deepCloneDefaults(), hasCustom: false, savedAt: null };
   }
 
   try {
@@ -189,24 +207,39 @@ export function loadGeneralSettings(): { settings: GeneralSettings; hasCustom: b
     return {
       settings: sanitizeGeneralSettings(parsed),
       hasCustom: true,
+      savedAt: sanitizeSavedAt(parsed),
     };
   } catch {
-    return { settings: deepCloneDefaults(), hasCustom: false };
+    return { settings: deepCloneDefaults(), hasCustom: false, savedAt: null };
   }
 }
 
-export function saveGeneralSettings(settings: GeneralSettings): void {
+/** Saves the settings and returns the ISO time stamped on them (null when there's no browser). */
+export function saveGeneralSettings(settings: GeneralSettings, now: Date = new Date()): string | null {
   if (typeof window === "undefined") {
-    return;
+    return null;
   }
 
+  const savedAt = now.toISOString();
   const payload: StoredGeneralSettings = {
     version: 1,
     data: settings,
+    savedAt,
   };
 
   writeStorage(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
   window.dispatchEvent(new Event(GENERAL_SETTINGS_CHANGED_EVENT));
+  return savedAt;
+}
+
+/** "Guardado 4 nov 2026, 10:30" style label for the last save. */
+export function formatGeneralSettingsSavedAt(savedAt: string): string {
+  const date = new Intl.DateTimeFormat("es-MX", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: GENERAL_SETTINGS_DEFAULTS.regional.timeZone,
+  }).format(new Date(savedAt));
+  return `Guardado ${date}`;
 }
 
 export function restoreDefaultGeneralSettings(): void {

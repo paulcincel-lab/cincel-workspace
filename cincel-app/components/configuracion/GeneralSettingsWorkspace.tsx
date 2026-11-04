@@ -19,8 +19,8 @@ import { PrimaryColorPicker } from "@/components/configuracion/PrimaryColorPicke
 import type { AppearanceState } from "@/lib/actions/app-settings-actions";
 import {
   buildDefaultGeneralSettings,
+  formatGeneralSettingsSavedAt,
   type GeneralSettings,
-  GENERAL_SETTINGS_STORAGE_KEY,
   loadGeneralSettings,
   restoreDefaultGeneralSettings,
   saveGeneralSettings,
@@ -66,6 +66,8 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
   const [savedSettings, setSavedSettings] = useState<GeneralSettings>(
     initialState.settings,
   );
+  // Filled in by the mount refresh below, so the server and first client render agree.
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = () => {
@@ -73,6 +75,7 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
       setSettings(loaded.settings);
       setSavedSettings(loaded.settings);
       setHasCustomConfig(loaded.hasCustom);
+      setSavedAt(loaded.savedAt);
     };
 
     refresh();
@@ -174,7 +177,7 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
   };
 
   const saveChanges = () => {
-    saveGeneralSettings(settings);
+    setSavedAt(saveGeneralSettings(settings));
     setSavedSettings(settings);
     setHasCustomConfig(true);
   };
@@ -184,6 +187,7 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
     setSettings(defaultSettings);
     setSavedSettings(defaultSettings);
     setHasCustomConfig(false);
+    setSavedAt(null);
   };
 
   return (
@@ -210,15 +214,9 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
                 <p className="mt-1 text-sm text-muted-foreground">
                   Ajusta la información principal de la empresa y del sistema.
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Fuente actual:{" "}
-                  {hasCustomConfig
-                    ? "Configuración personalizada"
-                    : "Valores por defecto"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Clave de persistencia: {GENERAL_SETTINGS_STORAGE_KEY}
-                </p>
+                {savedAt ? (
+                  <p className="mt-1 text-xs text-muted-foreground">{formatGeneralSettingsSavedAt(savedAt)}</p>
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 <Button
