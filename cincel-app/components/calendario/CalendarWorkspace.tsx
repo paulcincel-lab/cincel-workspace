@@ -6,6 +6,7 @@ import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import CalendarFeedDialog from "@/components/calendario/CalendarFeedDialog";
 import UnifiedCalendar from "@/components/calendario/UnifiedCalendar";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
@@ -113,9 +114,10 @@ export default function CalendarWorkspace() {
           </section>
 
           {connectResult && !connectResult.success ? (
-            <section className="rounded-2xl border border-border bg-muted px-4 py-3 text-sm text-foreground">
-              {connectResult.message}
-            </section>
+            <Alert>
+              <AlertTitle>No se conectó Google Calendar</AlertTitle>
+              <AlertDescription>{connectResult.message}</AlertDescription>
+            </Alert>
           ) : null}
 
           {fetchError ? (

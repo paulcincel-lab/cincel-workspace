@@ -30,6 +30,16 @@ function formatSyncedAt(iso: string): string {
 }
 
 /**
+ * Where "Conectar Google Calendar" sends the browser. `staff_token`: the
+ * incremental sign-in consent (FE §2.7), always back to `/calendario`.
+ * `delegation`: the old per-user OAuth flow, back to the current page.
+ */
+export function calendarConnectUrl(mode: GoogleCalendarSyncStatus["mode"], currentPath: string): string {
+  if (mode === "staff_token") return "/api/auth/google/start?scope=calendar&return_to=/calendario";
+  return `/api/google/oauth/start?scope=calendar&return_to=${encodeURIComponent(currentPath)}`;
+}
+
+/**
  * Direct sync (#434): with the user's own Google account connected (Calendar
  * scope), tasks are pushed into a "Cincel" calendar the app creates there —
  * updates land within minutes instead of Google's hours-long ICS polling.
@@ -66,8 +76,8 @@ function GoogleCalendarSyncSection({ open }: { open: boolean }) {
   }
 
   function connect() {
-    const returnTo = `${window.location.pathname}${window.location.search}`;
-    window.location.href = `/api/google/oauth/start?scope=calendar&return_to=${encodeURIComponent(returnTo)}`;
+    if (!status) return;
+    window.location.href = calendarConnectUrl(status.mode, `${window.location.pathname}${window.location.search}`);
   }
 
   if (!status?.oauthAvailable) return null;
