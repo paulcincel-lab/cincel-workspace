@@ -5,6 +5,8 @@ import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import { PortalAccessPanel } from "@/components/proyectos/PortalAccessPanel";
 import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
+import { buttonVariants } from "@/components/ui/shadcn/button";
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { listInvitablePortalContactsAction } from "@/lib/actions/portal-contacts-actions";
 import { listProjectPortalAccessAction } from "@/lib/actions/portal-actions";
 import { fetchProjectAction } from "@/lib/actions/projects-actions";
@@ -35,13 +37,19 @@ function Shell({ children }: { children: ReactNode }) {
 
 function StateCard({ title, message }: { title: string; message: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{message}</p>
-      <Link href="/proyectos" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/80">
-        Volver a proyectos
-      </Link>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h1>{title}</h1>
+        </CardTitle>
+        <CardDescription>{message}</CardDescription>
+      </CardHeader>
+      <CardFooter>
+        <Link href="/proyectos" className={buttonVariants()}>
+          Volver a proyectos
+        </Link>
+      </CardFooter>
+    </Card>
   );
 }
 
