@@ -102,6 +102,16 @@ export interface ExportDeps {
   download?: (url: string) => Promise<Uint8Array>;
   /** Waits between download retries. */
   sleep?: (ms: number) => Promise<void>;
+  /** Called once the run knows its boards and after each board finishes (the import wizard's progress). */
+  onProgress?: (progress: ExportProgress) => void;
+}
+
+/** Boards of this run: finished (including the ones a previous run finished) out of selected. */
+export interface ExportProgress {
+  boardsDone: number;
+  boardsTotal: number;
+  /** The board that just finished. */
+  boardId?: string;
 }
 
 /** One entry of files/index.json. */
@@ -324,7 +334,7 @@ function chunk<T>(list: T[], size: number): T[][] {
   return out;
 }
 
-async function fetchAllBoards(client: MondayClient): Promise<MondayBoard[]> {
+export async function fetchAllBoards(client: MondayClient): Promise<MondayBoard[]> {
   const boards: MondayBoard[] = [];
   for (let page = 1; ; page++) {
     const data = await client.request(BoardsDocument, { page });
@@ -347,9 +357,9 @@ async function fetchAllUsers(client: MondayClient): Promise<MondayUser[]> {
   return users;
 }
 
-type Workspace = NonNullable<NonNullable<WorkspacesQuery["workspaces"]>[number]>;
+export type Workspace = NonNullable<NonNullable<WorkspacesQuery["workspaces"]>[number]>;
 
-async function fetchAllWorkspaces(client: MondayClient): Promise<Workspace[]> {
+export async function fetchAllWorkspaces(client: MondayClient): Promise<Workspace[]> {
   const workspaces: Workspace[] = [];
   for (let page = 1; ; page++) {
     const data = await client.request(WorkspacesDocument, { page });
@@ -524,6 +534,8 @@ export async function runExport(options: ExportOptions, deps: ExportDeps): Promi
   }
 
   await mkdir(join(out, "boards"), { recursive: true });
+  let boardsDone = selected.length - pending.length;
+  deps.onProgress?.({ boardsDone, boardsTotal: selected.length });
 
   const exportedAt = now().toISOString();
   const errors: ManifestError[] = [...(previous?.errors ?? [])].filter(
@@ -712,6 +724,7 @@ export async function runExport(options: ExportOptions, deps: ExportDeps): Promi
       });
       boardEntries.set(board.id, { ...boardEntries.get(board.id)!, done: true });
       await saveManifest();
+      deps.onProgress?.({ boardsDone: ++boardsDone, boardsTotal: selected.length, boardId: board.id });
       io.stdout(
         `board ${board.id} ${board.name}: ${count} items` +
           (options.updates ? `, ${updateCount} updates` : "") +
