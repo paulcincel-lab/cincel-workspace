@@ -1,5 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 
+import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
 import { db } from "@/lib/db/client";
 import { googleOauthAccounts } from "@/lib/db/schema";
 
@@ -27,7 +28,9 @@ function toAccount(row: typeof googleOauthAccounts.$inferSelect): GoogleOauthAcc
  * The old connect flow (picker, Calendar sync) only uses legacy rows, with
  * `google_sub` null and plaintext tokens. Rows written by staff Google
  * sign-in carry `google_sub` and encrypted tokens and are skipped here
- * (review NB 5).
+ * (review NB 5), so turning AUTH_GOOGLE_ENABLED back off never hands an
+ * encrypted token to the delegation path. The staff_token side reads only
+ * rows with `google_sub` set (lib/google/staff-token.ts).
  */
 const legacyRow = (staffId: string) => and(eq(googleOauthAccounts.staffId, staffId), isNull(googleOauthAccounts.googleSub));
 
@@ -40,6 +43,11 @@ export async function getGoogleOauthAccount(staffId: string): Promise<GoogleOaut
  * Connects (or replaces) the Google account for a staff member. `refreshToken`
  * is only sent by Google on the first consent for a given account, so a
  * reconnect that omits it keeps whatever was already stored.
+ *
+ * While AUTH_GOOGLE_ENABLED is on, a staff-token row (`google_sub` set) is
+ * left untouched, so the old connect flow can't break the staff member's own
+ * Drive grant. With the flag off it may replace that row, which then becomes
+ * a legacy row the delegation path can read.
  */
 export async function upsertGoogleOauthAccount(
   staffId: string,
@@ -65,6 +73,7 @@ export async function upsertGoogleOauthAccount(
         expiresAt: input.expiresAt,
         googleSub: null,
       },
+      ...(isGoogleAuthEnabled() ? { setWhere: isNull(googleOauthAccounts.googleSub) } : {}),
     });
 }
 
@@ -79,6 +88,7 @@ export async function updateGoogleOauthTokens(
     .where(legacyRow(staffId));
 }
 
+/** Disconnect of the old connect flow: removes only the legacy row, never a staff-token row. */
 export async function deleteGoogleOauthAccount(staffId: string): Promise<void> {
-  await db.delete(googleOauthAccounts).where(eq(googleOauthAccounts.staffId, staffId));
+  await db.delete(googleOauthAccounts).where(legacyRow(staffId));
 }
