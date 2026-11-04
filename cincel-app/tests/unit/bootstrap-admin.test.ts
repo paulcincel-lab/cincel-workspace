@@ -35,7 +35,13 @@ describe("bootstrapAdminFromEnv", () => {
         BOOTSTRAP_ADMIN_EMAIL: " Admin@Example.dev ",
         BOOTSTRAP_ADMIN_PASSWORD: " pw 1 ",
       }),
-    ).toEqual({ email: "admin@example.dev", password: " pw 1 " });
+    ).toEqual({ email: "admin@example.dev", password: " pw 1 ", name: "Administrador" });
+  });
+
+  it("reads BOOTSTRAP_ADMIN_NAME, defaulting to Administrador when blank", () => {
+    const base = { BOOTSTRAP_ADMIN_EMAIL: "a@b.dev", BOOTSTRAP_ADMIN_PASSWORD: "x" };
+    expect(bootstrapAdminFromEnv({ ...base, BOOTSTRAP_ADMIN_NAME: " Paula Ruiz " })?.name).toBe("Paula Ruiz");
+    expect(bootstrapAdminFromEnv({ ...base, BOOTSTRAP_ADMIN_NAME: "  " })?.name).toBe("Administrador");
   });
 
   it("refuses only one of the two, or a malformed email", () => {
@@ -76,6 +82,45 @@ describe("ensureBootstrapAdmin with passwords disabled", () => {
   });
 });
 
+describe("ensureBootstrapAdmin display name", () => {
+  type Call = { text: string; values: unknown[] };
+
+  // Fake tagged-template client: answers the staff lookup with `existing` and records every query.
+  function fakeSql(existing: Record<string, unknown> | undefined) {
+    const calls: Call[] = [];
+    const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = strings.join("?").replace(/\s+/g, " ").trim();
+      calls.push({ text, values });
+      if (text.startsWith("select id, name, email, role, active from core.staff")) return existing ? [existing] : [];
+      if (text.startsWith("insert into core.staff")) {
+        return [{ id: "new-id", name: values[0], email: values[1], role: values[2], active: true }];
+      }
+      return [];
+    };
+    return { sql, calls };
+  }
+  const admin = { email: "admin@example.dev", password: "pw", name: "Administrador" };
+
+  it("creates a new admin with the display name, not the email", async () => {
+    const { sql, calls } = fakeSql(undefined);
+    expect(await ensureBootstrapAdmin(sql, admin)).toContain("staff created");
+    const insert = calls.find((c) => c.text.startsWith("insert into core.staff"));
+    expect(insert?.values.slice(0, 2)).toEqual(["Administrador", "admin@example.dev"]);
+  });
+
+  it("renames an existing row only while its name is still the email", async () => {
+    const member = { id: "s1", email: "Admin@Example.dev", role: "Administrador", active: true };
+    const renamed = fakeSql({ ...member, name: "Admin@Example.dev" });
+    expect(await ensureBootstrapAdmin(renamed.sql, { ...admin, name: "Paula Ruiz" })).toContain("name set");
+    const update = renamed.calls.find((c) => c.text.startsWith("update core.staff set name"));
+    expect(update?.values).toEqual(["Paula Ruiz", "s1"]);
+
+    const kept = fakeSql({ ...member, name: "Paula Ruiz" });
+    expect(await ensureBootstrapAdmin(kept.sql, admin)).not.toContain("name set");
+    expect(kept.calls.some((c) => c.text.startsWith("update core.staff set name"))).toBe(false);
+  });
+});
+
 describe.skipIf(!url)("ensureBootstrapAdmin (test DB)", () => {
   const sql = postgres(url ?? "", { max: 1, onnotice: () => {} });
   afterAll(() => sql.end());
@@ -95,7 +140,7 @@ describe.skipIf(!url)("ensureBootstrapAdmin (test DB)", () => {
 
   async function read(tx: postgres.TransactionSql) {
     const [row] = await tx`
-      select s.id, s.role, s.active, c.password_hash, c.salt, c.enabled, c.must_change_password
+      select s.id, s.name, s.role, s.active, c.password_hash, c.salt, c.enabled, c.must_change_password
       from core.staff s left join core.auth_credentials c on c.staff_id = s.id
       where lower(s.email) = ${email} and s.deleted_at is null`;
     return row;
@@ -107,6 +152,7 @@ describe.skipIf(!url)("ensureBootstrapAdmin (test DB)", () => {
         await ensureBootstrapAdmin(tx, { email, password: "first-pass" }),
       ).toEqual(["staff created", "password set"]);
       const row = await read(tx);
+      expect(row.name).toBe("Administrador");
       expect(row.role).toBe("Administrador");
       expect(row.active).toBe(true);
       expect(row.enabled).toBe(true);
@@ -144,6 +190,22 @@ describe.skipIf(!url)("ensureBootstrapAdmin (test DB)", () => {
       ).toEqual(["password updated"]);
       row = await read(tx);
       expect(row.enabled).toBe(true);
+    });
+  });
+
+  it("renames a row still named after its email once, then leaves it alone", async () => {
+    await inTx(async (tx) => {
+      await tx`insert into core.staff (name, email, role, active) values (${email}, ${email}, 'Administrador', true)`;
+      expect(
+        await ensureBootstrapAdmin(tx, { email, password: "first-pass", name: "Equipo Cincel" }),
+      ).toEqual(["name set", "password set"]);
+      expect((await read(tx)).name).toBe("Equipo Cincel");
+
+      await tx`update core.staff set name = 'Paula Ruiz' where lower(email) = ${email}`;
+      expect(
+        await ensureBootstrapAdmin(tx, { email, password: "first-pass", name: "Equipo Cincel" }),
+      ).toEqual([]);
+      expect((await read(tx)).name).toBe("Paula Ruiz");
     });
   });
 

@@ -20,6 +20,9 @@
  * 3. With nothing pending, `import_batches.status = applied` and
  *    `stats.drive`; otherwise the batch stays `applying` and the next
  *    `apply` resumes it.
+ * 4. When Drive isn't configured and the batch has no `import_files` (files
+ *    excluded), phase B is skipped: the batch ends `applied` with
+ *    `stats.drive.skipped` and the folders stay pending for the backfill.
  *
  * Nothing is ever written to `02 Cliente`; staff move client files there.
  */
@@ -488,6 +491,31 @@ function report(ctx: PhaseBContext, r: PhaseBResult): number {
   return 0;
 }
 
+/**
+ * Ends an `applying` batch that has no `import_files` rows as `applied`
+ * without touching Drive, recording why in `stats.drive.skipped`. Returns
+ * false (and changes nothing) when the batch has files waiting for Drive.
+ */
+export async function skipPhaseBWithoutFiles(
+  db: ImportDb,
+  batchId: string,
+  reason: string,
+): Promise<boolean> {
+  const [files] = (await db.execute(
+    sql`select count(*)::int as n from core.import_files where batch_id = ${batchId}`,
+  )) as unknown as { n: number }[];
+  if ((files?.n ?? 0) > 0) return false;
+  const driveStats = { skipped: reason, projects: 0, files: 0, pending: 0, failedProjects: 0 };
+  await db
+    .update(importBatches)
+    .set({
+      stats: sql`${importBatches.stats} || jsonb_build_object('drive', ${JSON.stringify(driveStats)}::jsonb)`,
+      status: "applied" as const,
+    })
+    .where(and(eq(importBatches.id, batchId), eq(importBatches.status, "applying")));
+  return true;
+}
+
 /** Builds phase B over a Drive client and `GOOGLE_SHARED_DRIVE_ID`. */
 export function createPhaseB(deps: PhaseBDeps): PhaseB {
   return async (ctx) => {
@@ -500,8 +528,18 @@ export function createPhaseB(deps: PhaseBDeps): PhaseB {
       if (!sharedDriveId) throw new Error("GOOGLE_SHARED_DRIVE_ID is not set");
       drive = deps.openDrive();
     } catch (err) {
+      const reason = errorMessage(err);
+      // Without files to upload (files excluded, or none in the export) Drive
+      // is optional: the batch ends applied and the project folders stay
+      // pending for the folder backfill in Configuración → Google.
+      if (await skipPhaseBWithoutFiles(ctx.db, batchId, reason)) {
+        io.stdout(
+          `Phase B skipped (${reason}): no files to upload. Project folders stay pending; create them later from Configuración → Google.\nBatch ${batchId} applied.\n`,
+        );
+        return 0;
+      }
       io.stderr(
-        `monday apply: phase B can't start: ${errorMessage(err)}. Batch ${batchId} stays applying; fix it and run the same apply again.\n`,
+        `monday apply: phase B can't start: ${reason}. Batch ${batchId} stays applying; fix it and run the same apply again.\n`,
       );
       return 1;
     }

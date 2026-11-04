@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
+import { FormField } from "@/components/ui/shadcn/form-field";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { fetchContactsAction } from "@/lib/actions/contacts-actions";
@@ -96,13 +97,13 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
 
         <div className="space-y-4 px-6 py-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Label className="text-sm font-normal text-muted-foreground sm:col-span-2">
-              Nombre del proyecto
+            <FormField className="sm:col-span-2">
+              <Label className="block text-sm font-normal text-muted-foreground">Nombre del proyecto</Label>
               <Input value={name} onChange={(event) => setName(event.target.value)} className="mt-1" />
-            </Label>
+            </FormField>
 
-            <Label className="text-sm font-normal text-muted-foreground">
-              Cliente
+            <FormField>
+              <Label className="block text-sm font-normal text-muted-foreground">Cliente</Label>
               <Select
                 items={{
                   [NO_VALUE]: clients.length === 0 ? "No hay clientes" : "Selecciona un cliente",
@@ -130,10 +131,10 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
                   ))}
                 </SelectContent>
               </Select>
-            </Label>
+            </FormField>
 
-            <Label className="text-sm font-normal text-muted-foreground">
-              Etapa inicial
+            <FormField>
+              <Label className="block text-sm font-normal text-muted-foreground">Etapa inicial</Label>
               <Select
                 items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
                 value={workflowId}
@@ -148,10 +149,10 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
                   ))}
                 </SelectContent>
               </Select>
-            </Label>
+            </FormField>
 
-            <Label className="text-sm font-normal text-muted-foreground">
-              Tipo de proyecto
+            <FormField>
+              <Label className="block text-sm font-normal text-muted-foreground">Tipo de proyecto</Label>
               <Select
                 items={Object.fromEntries(PROJECT_TYPE_OPTIONS.map((t) => [t, t]))}
                 value={type}
@@ -166,10 +167,10 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
                   ))}
                 </SelectContent>
               </Select>
-            </Label>
+            </FormField>
 
-            <Label className="text-sm font-normal text-muted-foreground">
-              Encargado
+            <FormField>
+              <Label className="block text-sm font-normal text-muted-foreground">Encargado</Label>
               <Select
                 items={{ [NO_VALUE]: "Sin encargado", ...Object.fromEntries(staff.map((s) => [s.id, s.name])) }}
                 value={managerId || NO_VALUE}
@@ -185,17 +186,17 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
                   ))}
                 </SelectContent>
               </Select>
-            </Label>
+            </FormField>
 
-            <Label className="text-sm font-normal text-muted-foreground sm:col-span-2">
-              Fecha de inicio
+            <FormField className="sm:col-span-2">
+              <Label className="block text-sm font-normal text-muted-foreground">Fecha de inicio</Label>
               <Input
                 type="date"
                 value={startDate}
                 onChange={(event) => setStartDate(event.target.value)}
                 className="mt-1"
               />
-            </Label>
+            </FormField>
           </div>
 
           {error ? (

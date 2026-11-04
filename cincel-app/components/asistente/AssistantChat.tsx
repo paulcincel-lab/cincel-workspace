@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { Button } from "@/components/ui/shadcn/button";
+import { Separator } from "@/components/ui/shadcn/separator";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { AssistantChartMessage } from "@/components/asistente/AssistantChartMessage";
 import { AssistantCardMessage } from "@/components/asistente/AssistantCardMessage";
@@ -92,6 +93,9 @@ export function AssistantChat() {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [initialMessages] = useState<UIMessage[]>(loadThread);
+  // How many messages came from the saved thread; they're shown under a "Conversación anterior" divider and the
+  // view opens at their top instead of jumping to the end. Reset to 0 when a new conversation starts.
+  const [restoredCount, setRestoredCount] = useState(initialMessages.length);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -109,8 +113,10 @@ export function AssistantChat() {
   const isBusy = status === "submitted" || status === "streaming";
 
   useEffect(() => {
+    // A restored thread opens at its top; only follow the end once the user adds to it.
+    if (messages.length <= restoredCount && status === "ready") return;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, status]);
+  }, [messages, status, restoredCount]);
 
   // Persist the conversation as it changes so it survives a reload.
   useEffect(() => {
@@ -135,6 +141,7 @@ export function AssistantChat() {
 
   const clearConversation = () => {
     setMessages([]);
+    setRestoredCount(0);
     setError(null);
     saveThread([]);
   };
@@ -191,9 +198,24 @@ export function AssistantChat() {
           </div>
         ) : null}
 
-        {messages.map((message) => (
+        {restoredCount > 0 && messages.length > 0 ? (
+          <div className="flex items-center gap-3">
+            <Separator className="flex-1" />
+            <span className="shrink-0 text-xs text-muted-foreground">Conversación anterior</span>
+            <Separator className="flex-1" />
+          </div>
+        ) : null}
+
+        {messages.map((message, messageIndex) => (
+          <Fragment key={message.id}>
+          {restoredCount > 0 && messageIndex === restoredCount ? (
+            <div className="flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="shrink-0 text-xs text-muted-foreground">Nuevos mensajes</span>
+              <Separator className="flex-1" />
+            </div>
+          ) : null}
           <div
-            key={message.id}
             className={
               message.role === "user"
                 ? "flex justify-end"
@@ -359,6 +381,7 @@ export function AssistantChat() {
               return null;
             })}
           </div>
+          </Fragment>
         ))}
 
         {status === "submitted" ? (

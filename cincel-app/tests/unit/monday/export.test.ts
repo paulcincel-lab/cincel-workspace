@@ -434,6 +434,23 @@ describe("monday export: updates and files", () => {
     expect(c.out()).toContain("1 failed");
   });
 
+  it("finishes the board when monday returns no public_url for any of its assets", async () => {
+    const { client } = fakeAccount((_body, op) => (op === "Assets" ? { data: { assets: [] } } : undefined));
+    const download = vi.fn(async (u: string) => bytesFor(u));
+    const c = captureIo();
+
+    expect(await runExport(options({ boards: ["101"] }), { client, io: c.io, confirm: yes, download })).toBe(0);
+
+    expect(download).not.toHaveBeenCalled();
+    expect(read<Manifest>("manifest.json").errors.map((e) => e.message).sort()).toEqual([
+      "asset 77: monday returned no public_url",
+      "asset 88: monday returned no public_url",
+      "asset 89: monday returned no public_url",
+    ]);
+    expect(read<FileIndex>("files", "index.json")).toEqual({});
+    expect(existsSync(join(out, "boards", "101", DONE_FILE))).toBe(true);
+  });
+
   it("--no-updates and --no-files skip those stages", async () => {
     const { client, calls } = fakeAccount();
     const download = vi.fn(async (u: string) => bytesFor(u));

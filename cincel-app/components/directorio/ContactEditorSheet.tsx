@@ -3,6 +3,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
 import { Button } from "@/components/ui/shadcn/button";
+import { FormField } from "@/components/ui/shadcn/form-field";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
@@ -191,7 +192,7 @@ export function ContactEditorSheet({
           ) : null}
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <FormField>
               <Label className="mb-2 block">Tipo de contacto</Label>
               <Select
                 items={Object.fromEntries(CONTACT_TYPES.map((t) => [t, CONTACT_TYPE_LABEL[t]]))}
@@ -206,8 +207,8 @@ export function ContactEditorSheet({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div>
+            </FormField>
+            <FormField>
               <Label className="mb-2 block">Empresa o particular</Label>
               <Select
                 items={{ particular: "Particular", empresa: "Empresa" }}
@@ -220,71 +221,71 @@ export function ContactEditorSheet({
                   <SelectItem value="empresa">Empresa</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </FormField>
           </div>
 
-          <div>
+          <FormField>
             <Label className="mb-2 block">Nombre</Label>
             <Input
               value={draft.name}
               onChange={(e) => set(onChangeDraft, "name", e.target.value)}
               placeholder={draft.type === "cliente" ? "Familia Gómez" : "Nombre o razón social"}
             />
-          </div>
+          </FormField>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <FormField>
               <Label className="mb-2 block">Teléfono</Label>
               <Input value={draft.phone} onChange={(e) => set(onChangeDraft, "phone", e.target.value)} />
-            </div>
-            <div>
+            </FormField>
+            <FormField>
               <Label className="mb-2 block">Email</Label>
               <Input type="email" value={draft.email} onChange={(e) => set(onChangeDraft, "email", e.target.value)} />
-            </div>
+            </FormField>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <FormField>
               <Label className="mb-2 block">Página web</Label>
               <Input value={draft.website} onChange={(e) => set(onChangeDraft, "website", e.target.value)} placeholder="https://..." />
-            </div>
-            <div>
+            </FormField>
+            <FormField>
               <Label className="mb-2 block">Ubicación</Label>
               <Input value={draft.location} onChange={(e) => set(onChangeDraft, "location", e.target.value)} />
-            </div>
+            </FormField>
           </div>
 
-          <div>
+          <FormField>
             <Label className="mb-2 block">Canal de adquisición</Label>
             <Input value={draft.acquisitionChannel} onChange={(e) => set(onChangeDraft, "acquisitionChannel", e.target.value)} />
-          </div>
+          </FormField>
 
-          <div>
+          <FormField>
             <Label className="mb-2 block">Notas</Label>
             <Textarea value={draft.notes} onChange={(e) => set(onChangeDraft, "notes", e.target.value)} rows={2} />
-          </div>
+          </FormField>
 
-          <div>
+          <FormField>
             <Label className="mb-2 block">Categorías</Label>
             <Input
               value={draft.categoriaTagsText}
               onChange={(e) => set(onChangeDraft, "categoriaTagsText", e.target.value)}
               placeholder="Categoría 1, Categoría 2"
             />
-          </div>
-          <div>
+          </FormField>
+          <FormField>
             <Label className="mb-2 block">Habilidades</Label>
             <Input
               value={draft.habilidadTagsText}
               onChange={(e) => set(onChangeDraft, "habilidadTagsText", e.target.value)}
               placeholder="Habilidad 1, Habilidad 2"
             />
-          </div>
+          </FormField>
 
           {draft.type === "proveedor" ? (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <FormField>
                   <Label className="mb-2 block">Subtipo</Label>
                   <Select
                     items={Object.fromEntries(PROVIDER_SUBTYPES.map((s) => [s, PROVIDER_SUBTYPE_LABEL[s]]))}
@@ -296,8 +297,8 @@ export function ContactEditorSheet({
                       {PROVIDER_SUBTYPES.map((s) => <SelectItem key={s} value={s}>{PROVIDER_SUBTYPE_LABEL[s]}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                </div>
-                <div>
+                </FormField>
+                <FormField>
                   <Label className="mb-2 block">Estado</Label>
                   <Select
                     items={Object.fromEntries(PROVIDER_STATUSES.map((s) => [s, PROVIDER_STATUS_LABEL[s]]))}
@@ -309,10 +310,10 @@ export function ContactEditorSheet({
                       {PROVIDER_STATUSES.map((s) => <SelectItem key={s} value={s}>{PROVIDER_STATUS_LABEL[s]}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                </div>
+                </FormField>
               </div>
               {draft.providerSubtype === "colaborador" ? (
-                <div>
+                <FormField>
                   <Label className="mb-2 block">Staff vinculado</Label>
                   {/* Links this colaborador contact to a core.staff row so the same
                       person can also be assigned tasks as staff. Optional — leave
@@ -335,46 +336,46 @@ export function ContactEditorSheet({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </FormField>
               ) : null}
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <FormField>
                   <Label className="mb-2 block">Ramo principal</Label>
                   <Input value={draft.mainSpecialty} onChange={(e) => set(onChangeDraft, "mainSpecialty", e.target.value)} />
-                </div>
-                <div>
+                </FormField>
+                <FormField>
                   <Label className="mb-2 block">Departamento</Label>
                   <Input value={draft.department} onChange={(e) => set(onChangeDraft, "department", e.target.value)} />
-                </div>
+                </FormField>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <FormField>
                   <Label className="mb-2 block">Seniority</Label>
                   <Input value={draft.seniority} onChange={(e) => set(onChangeDraft, "seniority", e.target.value)} />
-                </div>
-                <div>
+                </FormField>
+                <FormField>
                   <Label className="mb-2 block">Precio/Nivel</Label>
                   <Input value={draft.priceLevel} onChange={(e) => set(onChangeDraft, "priceLevel", e.target.value)} />
-                </div>
+                </FormField>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <FormField>
                   <Label className="mb-2 block">Disponibilidad</Label>
                   <Input value={draft.availability} onChange={(e) => set(onChangeDraft, "availability", e.target.value)} />
-                </div>
-                <div>
+                </FormField>
+                <FormField>
                   <Label className="mb-2 block">Fecha de inicio</Label>
                   <Input type="date" value={draft.startDate} onChange={(e) => set(onChangeDraft, "startDate", e.target.value)} />
-                </div>
+                </FormField>
               </div>
               <div>
                 <Label className="mb-2 block">Calificación</Label>
                 <StarRating rating={draft.rating} onRate={(r) => set(onChangeDraft, "rating", r)} />
               </div>
-              <div>
+              <FormField>
                 <Label className="mb-2 block">Comentarios</Label>
                 <Textarea value={draft.comments} onChange={(e) => set(onChangeDraft, "comments", e.target.value)} rows={2} />
-              </div>
+              </FormField>
             </>
           ) : null}
 
@@ -398,6 +399,7 @@ export function ContactEditorSheet({
                     <Input
                       value={person.name}
                       placeholder="Nombre"
+                      aria-label="Nombre de la persona de contacto"
                       onChange={(e) => {
                         const next = [...draft.people];
                         next[index] = { ...next[index], name: e.target.value };
@@ -407,6 +409,7 @@ export function ContactEditorSheet({
                     <Input
                       value={person.role ?? ""}
                       placeholder="Rol"
+                      aria-label="Rol de la persona de contacto"
                       onChange={(e) => {
                         const next = [...draft.people];
                         next[index] = { ...next[index], role: e.target.value };
@@ -416,6 +419,7 @@ export function ContactEditorSheet({
                     <Input
                       value={person.phone ?? ""}
                       placeholder="Teléfono"
+                      aria-label="Teléfono de la persona de contacto"
                       onChange={(e) => {
                         const next = [...draft.people];
                         next[index] = { ...next[index], phone: e.target.value };
@@ -425,6 +429,7 @@ export function ContactEditorSheet({
                     <Input
                       value={person.email ?? ""}
                       placeholder="Correo electrónico"
+                      aria-label="Correo electrónico de la persona de contacto"
                       onChange={(e) => {
                         const next = [...draft.people];
                         next[index] = { ...next[index], email: e.target.value };

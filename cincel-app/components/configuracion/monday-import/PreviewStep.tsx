@@ -1,0 +1,155 @@
+"use client";
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
+import { Badge } from "@/components/ui/shadcn/badge";
+import { Button } from "@/components/ui/shadcn/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
+import { PREVIEW_COUNT_LABELS, STRATEGY_OPTIONS } from "@/lib/monday-import/wizard-steps";
+import type { MondayPreview, MondayPreviewCounts, MondayPreviewSample } from "@/lib/types/monday-import";
+
+const ENTITY_LABELS: Record<MondayPreviewSample["entity"], string> = {
+  proyecto: "Proyecto",
+  tarea: "Tarea",
+  contacto: "Contacto",
+};
+
+function Counts({ counts }: { counts: MondayPreviewCounts }) {
+  return (
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      {PREVIEW_COUNT_LABELS.map(([key, label]) => (
+        <div key={key} className="rounded-xl border border-border p-3">
+          <dt className="text-xs text-muted-foreground">{label}</dt>
+          <dd className="text-lg font-medium text-foreground">{counts[key].toLocaleString("es-MX")}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function sampleDetails(sample: MondayPreviewSample): string {
+  const c = sample.cincel;
+  const parts = [
+    c.project ? `Proyecto: ${c.project}` : null,
+    c.phase ? `Fase: ${c.phase}` : null,
+    c.customStatus ?? c.status ? `Estatus: ${c.customStatus ?? c.status}` : null,
+    c.priority ? `Prioridad: ${c.priority}` : null,
+    c.manager ? `Responsable: ${c.manager}` : null,
+    c.commitmentDate ? `Compromiso: ${c.commitmentDate}` : null,
+    c.deliveryDate ? `Entrega: ${c.deliveryDate}` : null,
+    c.kind === "workflow" ? "Tarea de workflow" : null,
+    c.template ? "De plantilla" : null,
+    c.checklistItems ? `${c.checklistItems} de checklist` : null,
+    c.tasks ? `${c.tasks} tareas` : null,
+    c.childTasks ? `${c.childTasks} subtareas` : null,
+    c.comments ? `${c.comments} comentarios` : null,
+    c.files ? `${c.files} archivos` : null,
+    c.contactType ? `Tipo: ${c.contactType}` : null,
+  ];
+  return parts.filter(Boolean).join(" · ");
+}
+
+/** Paso 6: the plan dry run. Next (Importar) stays disabled while a blocking issue is left. */
+export function PreviewStep({
+  preview,
+  error,
+  isPending,
+  onRefresh,
+}: {
+  preview: MondayPreview | null;
+  error: string;
+  isPending: boolean;
+  onRefresh: () => void;
+}) {
+  const blocking = preview?.issues.filter((issue) => issue.blocking) ?? [];
+  const warnings = preview?.issues.filter((issue) => !issue.blocking) ?? [];
+
+  return (
+    <div className="space-y-6">
+      <Button variant="outline" disabled={isPending} onClick={onRefresh}>
+        {isPending ? "Calculando…" : "Volver a calcular"}
+      </Button>
+
+      {error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {preview ? (
+        <>
+          <Counts counts={preview.totals} />
+
+          {blocking.length > 0 ? (
+            <Alert variant="destructive">
+              <AlertTitle>Corrige esto antes de importar</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc space-y-1 pl-4">
+                  {blocking.map((issue, index) => (
+                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {warnings.length > 0 ? (
+            <Alert>
+              <AlertTitle>Avisos</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc space-y-1 pl-4">
+                  {warnings.map((issue, index) => (
+                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {preview.boards.map((board) => (
+            <section key={board.boardId} className="space-y-3" aria-labelledby={`preview-${board.boardId}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 id={`preview-${board.boardId}`} className="text-sm font-medium text-foreground">
+                  {board.name}
+                </h3>
+                <Badge variant="outline">
+                  {STRATEGY_OPTIONS.find((option) => option.value === board.strategy)?.label ?? board.strategy}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {board.counts.proyectos} proyectos, {board.counts.tareas} tareas, {board.counts.contactos} contactos.
+              </p>
+              {board.samples.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Elemento de monday</TableHead>
+                      <TableHead>En Cincel</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {board.samples.map((sample) => (
+                      <TableRow key={sample.mondayItemId}>
+                        <TableCell className="align-top">
+                          <span className="text-foreground">{sample.mondayName}</span>
+                          {sample.groupTitle ? (
+                            <span className="block text-xs text-muted-foreground">{sample.groupTitle}</span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="whitespace-normal">
+                          <span className="text-foreground">
+                            {ENTITY_LABELS[sample.entity]}: {sample.cincel.title}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">{sampleDetails(sample)}</span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : null}
+            </section>
+          ))}
+        </>
+      ) : null}
+    </div>
+  );
+}

@@ -155,6 +155,13 @@
       "when": 1793752338892,
       "tag": "0021_purge_legacy_google_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793814948570,
+      "tag": "0022_staff_onboarding",
+      "breakpoints": true
     }
   ]
 }

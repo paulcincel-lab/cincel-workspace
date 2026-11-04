@@ -7,7 +7,9 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/shadcn/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/shadcn/sheet";
+import { FormField } from "@/components/ui/shadcn/form-field";
 import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
@@ -767,6 +769,7 @@ export default function ResourcesWorkspace({
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Buscar carpeta o recurso"
+                  aria-label="Buscar carpeta o recurso"
                   className="w-full sm:w-72"
                 />
 
@@ -776,7 +779,7 @@ export default function ResourcesWorkspace({
                     value={effectiveSelectedStaffId ?? ""}
                     onValueChange={(value) => setSelectedStaffId(value as string)}
                   >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Persona"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {activeStaff.map((member) => (
                         <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
@@ -1110,18 +1113,18 @@ export default function ResourcesWorkspace({
 
           {creating ? (
             <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Título</label>
+              <FormField>
+                <Label className="mb-1 block text-xs text-muted-foreground">Título</Label>
                 <Input
                   type="text"
                   value={creating.title}
                   onChange={(event) => setCreating((current) => current ? { ...current, title: event.target.value } : current)}
                 />
-              </div>
+              </FormField>
 
-              <div>
+              <FormField>
                 <div className="mb-1 flex items-center justify-between">
-                  <label className="block text-xs font-medium text-muted-foreground">URL</label>
+                  <Label className="block text-xs text-muted-foreground">URL</Label>
                   {driveEnabled ? (
                     <Button
                       variant="link"
@@ -1147,7 +1150,7 @@ export default function ResourcesWorkspace({
                     Vinculado a Drive: {creating.drive.fileName}
                   </p>
                 ) : null}
-              </div>
+              </FormField>
 
               {createError ? <p className="text-sm text-destructive">{createError}</p> : null}
             </div>

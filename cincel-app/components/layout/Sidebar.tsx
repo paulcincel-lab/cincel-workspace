@@ -232,6 +232,7 @@ export default function Sidebar() {
               { label: "Estatus", href: "/configuracion/estatus", icon: SettingsIcon },
               { label: "Workflows", href: "/configuracion/workflows", icon: SettingsIcon },
               { label: "Google", href: "/configuracion/google", icon: SettingsIcon },
+              { label: "Importar de monday", href: "/configuracion/importar-monday", icon: SettingsIcon },
             ],
           } satisfies MenuGroupItem,
         ]
@@ -313,6 +314,8 @@ export default function Sidebar() {
                         <SidebarMenuButton
                           isActive={hasActive}
                           tooltip={item.label}
+                          aria-label={item.label}
+                          aria-expanded={isExpanded}
                           onClick={() => setExpandedMenu(isExpanded ? null : item.label)}
                         >
                           <item.icon />

@@ -13,6 +13,7 @@ import { statusColorToken, taskStatusLabel } from "@/lib/tasks/status-options";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
+import { FormField } from "@/components/ui/shadcn/form-field";
 import { Label } from "@/components/ui/shadcn/label";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { normalizePhases, projectPhaseOptions } from "@/lib/proyectos/phases";
@@ -339,8 +340,8 @@ export default function ProjectFichaPage() {
               <h2 className="text-lg font-semibold text-foreground">Datos generales</h2>
               {isEditing ? (
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <Label className="text-sm font-normal text-muted-foreground sm:col-span-2">
-                    Cliente
+                  <FormField className="sm:col-span-2">
+                    <Label className="block text-sm font-normal text-muted-foreground">Cliente</Label>
                     <Select
                       items={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
                       value={draft.clientId ?? project.client.id}
@@ -355,15 +356,15 @@ export default function ProjectFichaPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </Label>
-                  <Label className="text-sm font-normal text-muted-foreground">
-                    Tipo de proyecto
+                  </FormField>
+                  <FormField>
+                    <Label className="block text-sm font-normal text-muted-foreground">Tipo de proyecto</Label>
                     <Input
                       value={draft.projectType ?? ""}
                       onChange={(e) => setDraft((d) => ({ ...d, projectType: e.target.value }))}
                       className="mt-1"
                     />
-                  </Label>
+                  </FormField>
                   <fieldset className="text-sm text-muted-foreground sm:col-span-2">
                     <legend>Fases (puedes elegir varias)</legend>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
@@ -388,6 +389,7 @@ export default function ProjectFichaPage() {
                           }
                         }}
                         placeholder="Otra fase…"
+                        aria-label="Otra fase"
                         className="h-8 max-w-xs"
                       />
                       <Button type="button" variant="outline" size="sm" className="h-8" onClick={addCustomPhase}>
@@ -395,33 +397,33 @@ export default function ProjectFichaPage() {
                       </Button>
                     </div>
                   </fieldset>
-                  <Label className="text-sm font-normal text-muted-foreground">
-                    Calle
+                  <FormField>
+                    <Label className="block text-sm font-normal text-muted-foreground">Calle</Label>
                     <Input
                       value={draft.addressStreet ?? ""}
                       onChange={(e) => setDraft((d) => ({ ...d, addressStreet: e.target.value }))}
                       className="mt-1"
                     />
-                  </Label>
-                  <Label className="text-sm font-normal text-muted-foreground">
-                    Ciudad
+                  </FormField>
+                  <FormField>
+                    <Label className="block text-sm font-normal text-muted-foreground">Ciudad</Label>
                     <Input
                       value={draft.addressCity ?? ""}
                       onChange={(e) => setDraft((d) => ({ ...d, addressCity: e.target.value }))}
                       className="mt-1"
                     />
-                  </Label>
-                  <Label className="text-sm font-normal text-muted-foreground">
-                    Fecha de inicio
+                  </FormField>
+                  <FormField>
+                    <Label className="block text-sm font-normal text-muted-foreground">Fecha de inicio</Label>
                     <Input
                       type="date"
                       value={draft.startDate ?? ""}
                       onChange={(e) => setDraft((d) => ({ ...d, startDate: e.target.value }))}
                       className="mt-1"
                     />
-                  </Label>
-                  <Label className="text-sm font-normal text-muted-foreground">
-                    Encargado
+                  </FormField>
+                  <FormField>
+                    <Label className="block text-sm font-normal text-muted-foreground">Encargado</Label>
                     <Select
                       items={{ [NO_VALUE]: "Sin encargado", ...Object.fromEntries(staff.map((s) => [s.id, s.name])) }}
                       value={draft.managerId ?? NO_VALUE}
@@ -437,7 +439,7 @@ export default function ProjectFichaPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </Label>
+                  </FormField>
                 </div>
               ) : (
                 <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">

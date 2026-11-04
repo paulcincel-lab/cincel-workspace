@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import Header from "@/components/layout/Header";
@@ -16,13 +16,21 @@ import {
   SelectValue,
 } from "@/components/ui/shadcn/select";
 import { Switch } from "@/components/ui/shadcn/switch";
-import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { PERMISSIONS_CUSTOM_STORAGE_KEY } from "@/lib/auth/permissions";
 import {
   PERMISSIONS_MODULES_REGISTRY,
   type PermissionValue,
   type PermissionsModuleDefinition,
 } from "@/lib/auth/permissionsRegistry";
+import {
+  getEnabledModuleNames,
+  parseStoredPermissionsState,
+  permissionsStatesEqual,
+  splitModuleBadges,
+  type ModulePermissionsState,
+  type PermissionsState,
+  type StoredPermissionsState,
+} from "@/lib/auth/permissionsState";
 import {
   DEFAULT_SYSTEM_ACCESS_ROLE,
   hasDefaultSystemAdministratorAccess,
@@ -32,7 +40,6 @@ import {
   SYSTEM_ADMIN_ROLE,
   type SystemAccessRole,
 } from "@/lib/data/roles";
-import { teamMembersPublic } from "@/lib/data/team-public";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import {
   readStorage,
@@ -49,13 +56,11 @@ type AccessSummary = {
   protectedRole: boolean;
 };
 
-type ModulePermissionsState = Record<string, PermissionValue>;
-type RolePermissionsState = Record<string, ModulePermissionsState>;
-type PermissionsState = Record<SystemAccessRole, RolePermissionsState>;
-
-type StoredPermissionsState = {
-  version: 1;
-  roles: PermissionsState;
+type PermissionChange = {
+  role: SystemAccessRole;
+  moduleId: string;
+  actionId: string;
+  nextValue: PermissionValue;
 };
 
 const ACCESS_DESCRIPTIONS: Record<SystemAccessRole, string> = {
@@ -73,6 +78,20 @@ const ACCESS_DESCRIPTIONS: Record<SystemAccessRole, string> = {
   Otros: "Acceso restringido para casos especiales de colaboración.",
 };
 
+/** Select `items` maps, built once per action instead of on every render of the editor. */
+const SELECT_ITEMS_BY_ACTION = new Map<string, Record<string, string>>(
+  PERMISSIONS_MODULES_REGISTRY.flatMap((moduleDefinition) =>
+    moduleDefinition.actions
+      .filter((action) => action.type === "select")
+      .map((action) => [
+        `${moduleDefinition.id}-${action.id}`,
+        Object.fromEntries((action.options ?? []).map((o) => [o.value, o.label])),
+      ] as const),
+  ),
+);
+
+const EMPTY_MODULE_STATE: ModulePermissionsState = {};
+
 /** Access role mirrors the server resolution in `lib/auth/session.ts`: it comes
  * straight from `staff.role`, not a separate client-side override. */
 function resolveMemberAccess(member: Staff): SystemAccessRole {
@@ -86,93 +105,6 @@ function resolveMemberAccess(member: Staff): SystemAccessRole {
   return normalizeSystemAccessRole(member.role) ?? DEFAULT_SYSTEM_ACCESS_ROLE;
 }
 
-function toMockUser(access: SystemAccessRole): AuthenticatedUser {
-  return {
-    member: teamMembersPublic[0],
-    email: "configuracion@cincel.mx",
-    access,
-  };
-}
-
-function buildDefaultPermissionsState(): PermissionsState {
-  const next = {} as PermissionsState;
-
-  for (const role of SYSTEM_ACCESS_ROLES) {
-    const roleState: RolePermissionsState = {};
-    const user = toMockUser(role);
-
-    for (const moduleDefinition of PERMISSIONS_MODULES_REGISTRY) {
-      const capabilities = moduleDefinition.resolver(user);
-      const moduleState: ModulePermissionsState = {};
-
-      for (const action of moduleDefinition.actions) {
-        moduleState[action.id] = action.getValue(capabilities);
-      }
-
-      roleState[moduleDefinition.id] = moduleState;
-    }
-
-    next[role] = roleState;
-  }
-
-  return next;
-}
-
-function sanitizePermissionsState(
-  defaultState: PermissionsState,
-  storedState: unknown,
-): PermissionsState {
-  if (!storedState || typeof storedState !== "object") {
-    return defaultState;
-  }
-
-  const candidate = storedState as StoredPermissionsState;
-  if (
-    candidate.version !== 1 ||
-    !candidate.roles ||
-    typeof candidate.roles !== "object"
-  ) {
-    return defaultState;
-  }
-
-  const merged = {} as PermissionsState;
-
-  for (const role of SYSTEM_ACCESS_ROLES) {
-    const roleDefaults = defaultState[role];
-    const roleCandidate = candidate.roles[role] ?? {};
-    const roleNext: RolePermissionsState = {};
-
-    for (const moduleDefinition of PERMISSIONS_MODULES_REGISTRY) {
-      const moduleDefaults = roleDefaults[moduleDefinition.id] ?? {};
-      const moduleCandidate = roleCandidate[moduleDefinition.id] ?? {};
-      const moduleNext: ModulePermissionsState = {};
-
-      for (const action of moduleDefinition.actions) {
-        const defaultValue = moduleDefaults[action.id];
-        const rawValue = moduleCandidate[action.id];
-
-        if (action.type === "boolean") {
-          moduleNext[action.id] =
-            typeof rawValue === "boolean" ? rawValue : defaultValue;
-          continue;
-        }
-
-        const validOption = action.options?.some(
-          (option) => option.value === rawValue,
-        );
-        moduleNext[action.id] =
-          validOption && typeof rawValue === "string" ? rawValue : defaultValue;
-      }
-
-      roleNext[moduleDefinition.id] = moduleNext;
-    }
-
-    merged[role] = roleNext;
-  }
-
-  return merged;
-}
-
 function loadPermissionsState(defaultState: PermissionsState): {
   state: PermissionsState;
   hasCustom: boolean;
@@ -181,20 +113,7 @@ function loadPermissionsState(defaultState: PermissionsState): {
     return { state: defaultState, hasCustom: false };
   }
 
-  const stored = readStorage(PERMISSIONS_CUSTOM_STORAGE_KEY);
-  if (!stored) {
-    return { state: defaultState, hasCustom: false };
-  }
-
-  try {
-    const parsed = JSON.parse(stored);
-    return {
-      state: sanitizePermissionsState(defaultState, parsed),
-      hasCustom: true,
-    };
-  } catch {
-    return { state: defaultState, hasCustom: false };
-  }
+  return parseStoredPermissionsState(readStorage(PERMISSIONS_CUSTOM_STORAGE_KEY), defaultState);
 }
 
 function savePermissionsState(state: PermissionsState): void {
@@ -215,6 +134,25 @@ function getModuleDetails(
   }
 
   return `${moduleDefinition.detailsLabel}: ${moduleDefinition.detailsValueLabel(moduleState)}`;
+}
+
+function ModuleBadges({ role, modules }: { role: SystemAccessRole; modules: string[] }) {
+  const { visible, hiddenCount } = splitModuleBadges(modules);
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visible.map((module) => (
+        <Badge key={`${role}-${module}`} variant="outline">
+          {module}
+        </Badge>
+      ))}
+      {hiddenCount > 0 ? (
+        <Badge variant="secondary" title={modules.slice(visible.length).join(", ")}>
+          +{hiddenCount}
+        </Badge>
+      ) : null}
+    </div>
+  );
 }
 
 function buildAccessColumns(
@@ -252,18 +190,7 @@ function buildAccessColumns(
       id: "modules",
       header: "Modulos",
       enableSorting: false,
-      cell: ({ row }) => (
-        <div className="flex flex-wrap gap-1.5">
-          {row.original.enabledModules.map((module) => (
-            <span
-              key={`${row.original.role}-${module}`}
-              className="rounded-full border border-border bg-muted px-2 py-1 text-xs text-muted-foreground"
-            >
-              {module}
-            </span>
-          ))}
-        </div>
-      ),
+      cell: ({ row }) => <ModuleBadges role={row.original.role} modules={row.original.enabledModules} />,
     },
     {
       id: "status",
@@ -301,46 +228,153 @@ function buildAccessColumns(
   ];
 }
 
+interface ModulePermissionsCardProps {
+  moduleDefinition: PermissionsModuleDefinition;
+  moduleState: ModulePermissionsState;
+  role: SystemAccessRole;
+  canEdit: boolean;
+  onChange: (change: PermissionChange) => void;
+}
+
+/** One module of the editor. Memoized so a toggle re-renders only the module it touches, not every Select/Switch. */
+const ModulePermissionsCard = memo(function ModulePermissionsCard({
+  moduleDefinition,
+  moduleState,
+  role,
+  canEdit,
+  onChange,
+}: ModulePermissionsCardProps) {
+  const moduleDetails = getModuleDetails(moduleDefinition, moduleState);
+
+  return (
+    <article className="rounded-xl border border-border bg-muted p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold tracking-tight text-foreground">
+            {moduleDefinition.name}
+          </h3>
+          {moduleDetails ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {moduleDetails}
+            </p>
+          ) : null}
+        </div>
+        <span className="rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+          {moduleDefinition.actions.length} acciones
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        {moduleDefinition.actions.map((action) => {
+          const value = moduleState[action.id];
+          const controlId = `${moduleDefinition.id}-${action.id}`;
+
+          if (action.type === "select") {
+            return (
+              <div
+                key={controlId}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
+              >
+                <label className="text-sm text-foreground" htmlFor={controlId}>
+                  {action.label}
+                </label>
+                <Select
+                  items={SELECT_ITEMS_BY_ACTION.get(controlId) ?? {}}
+                  value={String(value)}
+                  disabled={!canEdit}
+                  onValueChange={(nextValue) =>
+                    onChange({
+                      role,
+                      moduleId: moduleDefinition.id,
+                      actionId: action.id,
+                      nextValue: nextValue as string,
+                    })
+                  }
+                >
+                  <SelectTrigger id={controlId} className="h-auto px-2 py-1 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(action.options ?? []).map((option) => (
+                      <SelectItem key={`${action.id}-${option.value}`} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          }
+
+          return (
+            <label
+              key={controlId}
+              className={`flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 ${canEdit ? "cursor-pointer hover:bg-muted" : "cursor-not-allowed"}`}
+            >
+              <p className={`text-sm ${canEdit ? "text-foreground" : "text-muted-foreground"}`}>
+                {action.label}
+              </p>
+              <Switch
+                checked={Boolean(value)}
+                disabled={!canEdit}
+                onCheckedChange={(checked) =>
+                  onChange({
+                    role,
+                    moduleId: moduleDefinition.id,
+                    actionId: action.id,
+                    nextValue: checked,
+                  })
+                }
+              />
+            </label>
+          );
+        })}
+      </div>
+    </article>
+  );
+});
+
 interface PermissionsWorkspaceProps {
   initialStaff: Staff[];
+  /** Default permission matrix, computed on the server so hydration doesn't run every resolver for every role. */
+  defaultPermissions: PermissionsState;
 }
 
 export default function PermissionsWorkspace({
   initialStaff,
+  defaultPermissions,
 }: PermissionsWorkspaceProps) {
-  const defaultPermissionsState = useMemo(
-    () => buildDefaultPermissionsState(),
-    [],
-  );
-  const loadedPermissions = useMemo(
-    () => loadPermissionsState(defaultPermissionsState),
-    [defaultPermissionsState],
-  );
-
   const [members, setMembers] = useState<Staff[]>(initialStaff);
   const [selectedAccess, setSelectedAccess] =
     useState<SystemAccessRole>("Dirección");
-  const [permissionsState, setPermissionsState] = useState<PermissionsState>(
-    loadedPermissions.state,
-  );
-  const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(
-    loadedPermissions.hasCustom,
-  );
+  // Start from the server defaults so the first client render matches the server HTML; stored overrides are applied
+  // after mount, which avoids a hydration mismatch forcing a full client re-render.
+  const [permissionsState, setPermissionsState] = useState<PermissionsState>(defaultPermissions);
+  const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(false);
 
   useEffect(() => {
+    const applyStored = () => {
+      const loaded = loadPermissionsState(defaultPermissions);
+      startTransition(() => {
+        setPermissionsState(loaded.state);
+        setHasCustomConfig(loaded.hasCustom);
+      });
+    };
+
     const refresh = () => {
-      const loaded = loadPermissionsState(defaultPermissionsState);
-      setPermissionsState(loaded.state);
-      setHasCustomConfig(loaded.hasCustom);
+      applyStored();
 
       void fetchStaffAction({ includeInactive: true })
         .then((rows) => {
-          if (rows.length > 0) setMembers(rows);
+          if (rows.length > 0) startTransition(() => setMembers(rows));
         })
         .catch(() => undefined);
     };
 
-    refresh();
+    // The server already sent the staff list; only fetch it on mount when it couldn't.
+    if (initialStaff.length > 0) applyStored();
+    else refresh();
+
     window.addEventListener("focus", refresh);
     window.addEventListener("storage", refresh);
 
@@ -348,7 +382,8 @@ export default function PermissionsWorkspace({
       window.removeEventListener("focus", refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, [defaultPermissionsState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialStaff only decides the first fetch
+  }, [defaultPermissions]);
 
   const usersByAccess = useMemo(() => {
     const initial = Object.fromEntries(
@@ -364,21 +399,13 @@ export default function PermissionsWorkspace({
   }, [members]);
 
   const accessSummary = useMemo<AccessSummary[]>(() => {
-    return SYSTEM_ACCESS_ROLES.map((role) => {
-      const roleState = permissionsState[role] ?? {};
-      const enabledModules = PERMISSIONS_MODULES_REGISTRY.filter(
-        (moduleDefinition) =>
-          moduleDefinition.isEnabled(roleState[moduleDefinition.id] ?? {}),
-      ).map((moduleDefinition) => moduleDefinition.name);
-
-      return {
-        role,
-        description: ACCESS_DESCRIPTIONS[role],
-        usersCount: usersByAccess[role] ?? 0,
-        enabledModules,
-        protectedRole: role === SYSTEM_ADMIN_ROLE,
-      };
-    });
+    return SYSTEM_ACCESS_ROLES.map((role) => ({
+      role,
+      description: ACCESS_DESCRIPTIONS[role],
+      usersCount: usersByAccess[role] ?? 0,
+      enabledModules: getEnabledModuleNames(permissionsState[role] ?? {}),
+      protectedRole: role === SYSTEM_ADMIN_ROLE,
+    }));
   }, [permissionsState, usersByAccess]);
 
   const accessColumns = useMemo(
@@ -391,26 +418,14 @@ export default function PermissionsWorkspace({
     accessSummary[0];
   const selectedRoleState = permissionsState[selectedAccess] ?? {};
 
-  const isDirty = useMemo(() => {
-    return (
-      JSON.stringify(permissionsState) !==
-      JSON.stringify(defaultPermissionsState)
-    );
-  }, [defaultPermissionsState, permissionsState]);
+  const isDirty = useMemo(
+    () => !permissionsStatesEqual(permissionsState, defaultPermissions),
+    [defaultPermissions, permissionsState],
+  );
 
   const canEditSelectedRole = selectedAccess !== SYSTEM_ADMIN_ROLE;
 
-  const updatePermissionValue = ({
-    role,
-    moduleId,
-    actionId,
-    nextValue,
-  }: {
-    role: SystemAccessRole;
-    moduleId: string;
-    actionId: string;
-    nextValue: PermissionValue;
-  }) => {
+  const updatePermissionValue = useCallback(({ role, moduleId, actionId, nextValue }: PermissionChange) => {
     if (role === SYSTEM_ADMIN_ROLE) {
       return;
     }
@@ -425,7 +440,7 @@ export default function PermissionsWorkspace({
         },
       },
     }));
-  };
+  }, []);
 
   const saveChanges = () => {
     savePermissionsState(permissionsState);
@@ -434,7 +449,7 @@ export default function PermissionsWorkspace({
 
   const restoreDefaults = () => {
     removeStorage(PERMISSIONS_CUSTOM_STORAGE_KEY);
-    setPermissionsState(defaultPermissionsState);
+    setPermissionsState(defaultPermissions);
     setHasCustomConfig(false);
   };
 
@@ -503,119 +518,16 @@ export default function PermissionsWorkspace({
             </div>
 
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              {PERMISSIONS_MODULES_REGISTRY.map((moduleDefinition) => {
-                const moduleState =
-                  selectedRoleState[moduleDefinition.id] ?? {};
-                const moduleDetails = getModuleDetails(
-                  moduleDefinition,
-                  moduleState,
-                );
-
-                return (
-                  <article
-                    key={moduleDefinition.id}
-                    className="rounded-xl border border-border bg-muted p-4"
-                  >
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-semibold tracking-tight text-foreground">
-                          {moduleDefinition.name}
-                        </h3>
-                        {moduleDetails ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {moduleDetails}
-                          </p>
-                        ) : null}
-                      </div>
-                      <span className="rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
-                        {moduleDefinition.actions.length} acciones
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      {moduleDefinition.actions.map((action) => {
-                        const value = moduleState[action.id];
-
-                        if (action.type === "select") {
-                          return (
-                            <div
-                              key={`${moduleDefinition.id}-${action.id}`}
-                              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
-                            >
-                              <label
-                                className="text-sm text-foreground"
-                                htmlFor={`${moduleDefinition.id}-${action.id}`}
-                              >
-                                {action.label}
-                              </label>
-                              <Select
-                                items={Object.fromEntries(
-                                  (action.options ?? []).map((o) => [
-                                    o.value,
-                                    o.label,
-                                  ]),
-                                )}
-                                value={String(value)}
-                                disabled={!canEditSelectedRole}
-                                onValueChange={(nextValue) =>
-                                  updatePermissionValue({
-                                    role: selectedAccess,
-                                    moduleId: moduleDefinition.id,
-                                    actionId: action.id,
-                                    nextValue: nextValue as string,
-                                  })
-                                }
-                              >
-                                <SelectTrigger
-                                  id={`${moduleDefinition.id}-${action.id}`}
-                                  className="h-auto px-2 py-1 text-xs"
-                                >
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {(action.options ?? []).map((option) => (
-                                    <SelectItem
-                                      key={`${action.id}-${option.value}`}
-                                      value={option.value}
-                                    >
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <label
-                            key={`${moduleDefinition.id}-${action.id}`}
-                            className={`flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 ${canEditSelectedRole ? "cursor-pointer hover:bg-muted" : "cursor-not-allowed"}`}
-                          >
-                            <p
-                              className={`text-sm ${canEditSelectedRole ? "text-foreground" : "text-muted-foreground"}`}
-                            >
-                              {action.label}
-                            </p>
-                            <Switch
-                              checked={Boolean(value)}
-                              disabled={!canEditSelectedRole}
-                              onCheckedChange={(checked) =>
-                                updatePermissionValue({
-                                  role: selectedAccess,
-                                  moduleId: moduleDefinition.id,
-                                  actionId: action.id,
-                                  nextValue: checked,
-                                })
-                              }
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </article>
-                );
-              })}
+              {PERMISSIONS_MODULES_REGISTRY.map((moduleDefinition) => (
+                <ModulePermissionsCard
+                  key={moduleDefinition.id}
+                  moduleDefinition={moduleDefinition}
+                  moduleState={selectedRoleState[moduleDefinition.id] ?? EMPTY_MODULE_STATE}
+                  role={selectedAccess}
+                  canEdit={canEditSelectedRole}
+                  onChange={updatePermissionValue}
+                />
+              ))}
             </div>
           </section>
         </div>

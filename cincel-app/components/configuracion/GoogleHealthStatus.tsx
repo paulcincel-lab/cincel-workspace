@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TriangleAlert } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -22,12 +23,22 @@ export function googleSignInProgress(health: Pick<GoogleHealth, "googleLinkedSta
   return `${health.googleLinkedStaff} de ${health.activeStaff} colaboradores activos ya entraron con Google`;
 }
 
+/** Monochrome warning badge: plain outline variant with a warning icon, no color. */
+function WarningBadge({ children }: { children: ReactNode }) {
+  return (
+    <Badge variant="outline">
+      <TriangleAlert data-icon="inline-start" aria-hidden="true" />
+      {children}
+    </Badge>
+  );
+}
+
 function Configured({ value }: { value: boolean }) {
-  return value ? <Badge variant="secondary">Configurado</Badge> : <Badge variant="destructive">No configurado</Badge>;
+  return value ? <Badge variant="secondary">Configurado</Badge> : <WarningBadge>No configurado</WarningBadge>;
 }
 
 function TextValue({ value }: { value: string | null }) {
-  if (!value) return <Badge variant="destructive">No configurado</Badge>;
+  if (!value) return <WarningBadge>No configurado</WarningBadge>;
   return <span className="break-all font-mono text-sm">{value}</span>;
 }
 
@@ -97,7 +108,7 @@ export function GoogleHealthStatus({ health }: GoogleHealthStatusProps) {
             <Row label="Último error del Directorio">
               {health.lastDirectoryError ? (
                 <span>
-                  <Badge variant="destructive">Error</Badge> {health.lastDirectoryError.message}
+                  <WarningBadge>Error</WarningBadge> {health.lastDirectoryError.message}
                   {health.lastDirectoryError.status ? ` (HTTP ${health.lastDirectoryError.status})` : ""}
                   {" · "}
                   {DIRECTORY_SOURCE_LABELS[health.lastDirectoryError.source] ?? health.lastDirectoryError.source}
@@ -111,7 +122,7 @@ export function GoogleHealthStatus({ health }: GoogleHealthStatusProps) {
             <Row label="Último error de Drive">
               {health.lastDriveError ? (
                 <span>
-                  <Badge variant="destructive">Error</Badge> {health.lastDriveError.message} · {formatAt(health.lastDriveError.at)}
+                  <WarningBadge>Error</WarningBadge> {health.lastDriveError.message} · {formatAt(health.lastDriveError.at)}
                 </span>
               ) : (
                 <span className="text-muted-foreground">Sin errores</span>

@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
+import { FormField } from "@/components/ui/shadcn/form-field";
 import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, normalizeSystemAccessRole } from "@/lib/data/roles";
@@ -99,23 +101,23 @@ export function MemberEditorDrawer({
             <h3 className="text-sm font-semibold text-foreground">Información laboral</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Nombre</label>
+              <FormField>
+                <Label className="mb-2 block">Nombre</Label>
                 <Input
                   type="text"
                   value={draft.name}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, name: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Apellidos</label>
+              <FormField>
+                <Label className="mb-2 block">Apellidos</Label>
                 <Input
                   type="text"
                   value={draft.lastName}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, lastName: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
               <div>
                 <div className="mb-2 flex items-center gap-2">
@@ -197,8 +199,8 @@ export function MemberEditorDrawer({
                 <p className="mt-1 text-xs text-muted-foreground">Nivel de acceso dentro de Cincel.</p>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Capacidad</label>
+              <FormField>
+                <Label className="mb-2 block">Capacidad</Label>
                 <Input
                   type="number"
                   min={1}
@@ -208,10 +210,10 @@ export function MemberEditorDrawer({
                     onChangeDraft((current) => ({ ...current, capacity: Number.isNaN(parsed) ? 1 : parsed }));
                   }}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Disponibilidad</label>
+              <FormField>
+                <Label className="mb-2 block">Disponibilidad</Label>
                 <Select
                   items={{
                     ...Object.fromEntries(availabilityOptions.map((o) => [o, o])),
@@ -245,7 +247,7 @@ export function MemberEditorDrawer({
                     <SelectItem value={OTHER_AVAILABILITY_VALUE}>Otros...</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </FormField>
             </div>
           </section>
 
@@ -316,6 +318,7 @@ export function MemberEditorDrawer({
                     </div>
 
                     <Checkbox
+                      aria-label="Tiene acceso al sistema"
                       checked={draft.systemAccessEnabled}
                       onCheckedChange={(checked) =>
                         onChangeDraft((current) => ({
@@ -331,8 +334,8 @@ export function MemberEditorDrawer({
 
                 {draft.systemAccessEnabled ? (
                   <>
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-foreground">Contraseña temporal</label>
+                    <FormField>
+                      <Label className="mb-2 block">Contraseña temporal</Label>
                       <Input
                         type="password"
                         value={draft.temporaryPassword}
@@ -346,10 +349,10 @@ export function MemberEditorDrawer({
                           ? "Obligatoria al crear una cuenta con acceso al sistema."
                           : "Rellena este campo solo si vas a restablecer la contraseña."}
                       </p>
-                    </div>
+                    </FormField>
 
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-foreground">Confirmar contraseña temporal</label>
+                    <FormField>
+                      <Label className="mb-2 block">Confirmar contraseña temporal</Label>
                       <Input
                         type="password"
                         value={draft.temporaryPasswordConfirmation}
@@ -359,7 +362,7 @@ export function MemberEditorDrawer({
                         placeholder="Repetir contraseña temporal"
                       />
                       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Debe coincidir con la contraseña temporal.</p>
-                    </div>
+                    </FormField>
 
                     <div>
                       <p className="text-sm font-medium text-foreground">Último acceso</p>
@@ -385,50 +388,50 @@ export function MemberEditorDrawer({
             <h3 className="text-sm font-semibold text-foreground">Información personal</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Fecha nacimiento</label>
+              <FormField>
+                <Label className="mb-2 block">Fecha nacimiento</Label>
                 <Input
                   type="date"
                   value={draft.birthDate}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, birthDate: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Nacionalidad</label>
+              <FormField>
+                <Label className="mb-2 block">Nacionalidad</Label>
                 <Input
                   type="text"
                   value={draft.nationality}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, nationality: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Estado civil</label>
+              <FormField>
+                <Label className="mb-2 block">Estado civil</Label>
                 <Input
                   type="text"
                   value={draft.maritalStatus}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, maritalStatus: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">CURP</label>
+              <FormField>
+                <Label className="mb-2 block">CURP</Label>
                 <Input
                   type="text"
                   value={draft.curp}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, curp: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">RFC</label>
+              <FormField>
+                <Label className="mb-2 block">RFC</Label>
                 <Input
                   type="text"
                   value={draft.rfc}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, rfc: event.target.value }))}
                 />
-              </div>
+              </FormField>
             </div>
           </section>
 
@@ -436,17 +439,17 @@ export function MemberEditorDrawer({
             <h3 className="text-sm font-semibold text-foreground">Contacto</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Celular</label>
+              <FormField>
+                <Label className="mb-2 block">Celular</Label>
                 <Input
                   type="text"
                   value={draft.phone}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, phone: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Correo institucional</label>
+              <FormField>
+                <Label className="mb-2 block">Correo institucional</Label>
                 <Input
                   type="email"
                   value={draft.institutionalEmail}
@@ -454,34 +457,34 @@ export function MemberEditorDrawer({
                   disabled={isEditingSelfProtectedAdmin}
                   title={isEditingSelfProtectedAdmin ? "Tu correo administrador principal esta protegido" : ""}
                 />
-              </div>
+              </FormField>
 
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-foreground">Dirección</label>
+              <FormField className="md:col-span-2">
+                <Label className="mb-2 block">Dirección</Label>
                 <Input
                   type="text"
                   value={draft.address}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, address: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Teléfono de casa</label>
+              <FormField>
+                <Label className="mb-2 block">Teléfono de casa</Label>
                 <Input
                   type="text"
                   value={draft.homePhone}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, homePhone: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Correo electrónico personal</label>
+              <FormField>
+                <Label className="mb-2 block">Correo electrónico personal</Label>
                 <Input
                   type="email"
                   value={draft.personalEmail}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, personalEmail: event.target.value }))}
                 />
-              </div>
+              </FormField>
             </div>
           </section>
 
@@ -489,41 +492,41 @@ export function MemberEditorDrawer({
             <h3 className="text-sm font-semibold text-foreground">Contacto de emergencia</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Nombre</label>
+              <FormField>
+                <Label className="mb-2 block">Nombre</Label>
                 <Input
                   type="text"
                   value={draft.emergencyContactName}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, emergencyContactName: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Relación</label>
+              <FormField>
+                <Label className="mb-2 block">Relación</Label>
                 <Input
                   type="text"
                   value={draft.emergencyContactRelation}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, emergencyContactRelation: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Teléfono</label>
+              <FormField>
+                <Label className="mb-2 block">Teléfono</Label>
                 <Input
                   type="text"
                   value={draft.emergencyContactPhone}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, emergencyContactPhone: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Dirección</label>
+              <FormField>
+                <Label className="mb-2 block">Dirección</Label>
                 <Input
                   type="text"
                   value={draft.emergencyContactAddress}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, emergencyContactAddress: event.target.value }))}
                 />
-              </div>
+              </FormField>
             </div>
           </section>
         </div>

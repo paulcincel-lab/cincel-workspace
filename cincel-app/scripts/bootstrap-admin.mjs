@@ -1,8 +1,11 @@
 // Makes sure one Administrador can sign in with a password, without a seed.
 // Reads BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD; does nothing when
-// both are empty. Run by scripts/migrate.mjs after the migrations, so it runs
+// both are empty. BOOTSTRAP_ADMIN_NAME (default "Administrador") is the display name. Run by scripts/migrate.mjs after the migrations, so it runs
 // on every deploy and is safe to repeat:
 //   - no staff row with that email: one is created with role Administrador
+//     and BOOTSTRAP_ADMIN_NAME as its name
+//   - a staff row still named after its email is renamed to BOOTSTRAP_ADMIN_NAME
+//     once; a name set in the app is never overwritten
 //   - a staff row exists: its role is set to Administrador and it is reactivated
 //   - the password credential is written only when it is missing, disabled or
 //     doesn't match the env password, so the env value is the source of truth
@@ -16,6 +19,7 @@ import { promisify } from "node:util";
 const scrypt = promisify(scryptCb);
 const KEYLEN = 64;
 const ADMIN_ROLE = "Administrador";
+const DEFAULT_ADMIN_NAME = "Administrador";
 
 async function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
@@ -46,7 +50,8 @@ export function bootstrapAdminFromEnv(env = process.env) {
   }
   if (!/^[^\s@]+@[^\s@]+$/.test(email))
     throw new Error("BOOTSTRAP_ADMIN_EMAIL is not an email address");
-  return { email, password };
+  const name = env.BOOTSTRAP_ADMIN_NAME?.trim() || DEFAULT_ADMIN_NAME;
+  return { email, password, name };
 }
 
 /**
@@ -69,18 +74,24 @@ export const SKIPPED_PASSWORDS_DISABLED = "skipped, passwords disabled";
 export async function ensureBootstrapAdmin(sql, admin, { passwordEnabled = true } = {}) {
   if (!passwordEnabled) return [SKIPPED_PASSWORDS_DISABLED];
   const changes = [];
+  const name = admin.name?.trim() || DEFAULT_ADMIN_NAME;
   let [member] = await sql`
-    select id, role, active from core.staff
+    select id, name, email, role, active from core.staff
     where lower(email) = ${admin.email} and deleted_at is null
     limit 1`;
 
   if (!member) {
     [member] = await sql`
       insert into core.staff (name, email, role, active)
-      values (${admin.email}, ${admin.email}, ${ADMIN_ROLE}, true)
-      returning id, role, active`;
+      values (${name}, ${admin.email}, ${ADMIN_ROLE}, true)
+      returning id, name, email, role, active`;
     changes.push("staff created");
-  } else if (member.role !== ADMIN_ROLE || !member.active) {
+  } else if ((member.name ?? "").trim().toLowerCase() === admin.email) {
+    // Only a name that is still the email is replaced, so this happens once.
+    await sql`update core.staff set name = ${name}, updated_at = now() where id = ${member.id}`;
+    changes.push("name set");
+  }
+  if (member.role !== ADMIN_ROLE || !member.active) {
     await sql`update core.staff set role = ${ADMIN_ROLE}, active = true, updated_at = now() where id = ${member.id}`;
     changes.push("staff set to Administrador");
   }
