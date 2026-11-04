@@ -27,6 +27,21 @@ export function isWorkspaceDenialReason(value: unknown): value is WorkspaceDenia
  */
 export const GOOGLE_MANAGED_ERROR = "Se administra en Google Workspace";
 
+/**
+ * What the staff and áreas actions return for that refusal. A returned value,
+ * not a thrown error: production builds hide thrown Server Action messages.
+ */
+export type GoogleManagedRefusal = { ok: false; error: typeof GOOGLE_MANAGED_ERROR };
+
+export const GOOGLE_MANAGED_REFUSAL: GoogleManagedRefusal = { ok: false, error: GOOGLE_MANAGED_ERROR };
+
+export function isGoogleManagedRefusal(value: unknown): value is GoogleManagedRefusal {
+  return (
+    typeof value === "object" && value !== null && "ok" in value && value.ok === false &&
+    "error" in value && value.error === GOOGLE_MANAGED_ERROR
+  );
+}
+
 /** Which Workspace group means which role or area (BE §A.7, FE §5). */
 export type GroupMappingKind = "role" | "area";
 

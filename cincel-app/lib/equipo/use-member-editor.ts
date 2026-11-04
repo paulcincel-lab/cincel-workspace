@@ -20,6 +20,7 @@ import {
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
 import type { Staff } from "@/lib/types/core";
+import { isGoogleManagedRefusal } from "@/lib/types/workspace-access";
 
 /**
  * Collaborator create/edit — draft state, validation, and credential
@@ -282,7 +283,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         ).id;
 
       if (editingId !== null) {
-        await updateStaffAction(editingId, {
+        const updated = await updateStaffAction(editingId, {
           name: staffInput.name,
           lastName: staffInput.lastName,
           ...(editingGoogleManaged ? {} : { role: staffInput.role }),
@@ -291,6 +292,10 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
           capacity: staffInput.capacity,
           availability: staffInput.availability,
         });
+        if (isGoogleManagedRefusal(updated)) {
+          setFormError(updated.error);
+          return;
+        }
       }
 
       await upsertStaffProfileAction(staffId, {
@@ -308,7 +313,13 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         emergencyContactAddress: draft.emergencyContactAddress.trim() || null,
       });
 
-      if (!editingGoogleManaged) await setStaffAreasAction(staffId, draft.areaIds);
+      if (!editingGoogleManaged) {
+        const areasResult = await setStaffAreasAction(staffId, draft.areaIds);
+        if (isGoogleManagedRefusal(areasResult)) {
+          setFormError(areasResult.error);
+          return;
+        }
+      }
 
       if (teamCapabilities.canChangeCollaboratorAccess) {
         await setStaffCredentialAction(staffId, {

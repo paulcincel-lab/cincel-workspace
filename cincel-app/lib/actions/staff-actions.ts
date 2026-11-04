@@ -10,30 +10,27 @@ import {
 } from "@/lib/auth/permissions";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
-import { GOOGLE_MANAGED_ERROR } from "@/lib/types/workspace-access";
+import { GOOGLE_MANAGED_REFUSAL, type GoogleManagedRefusal } from "@/lib/types/workspace-access";
 
 const normalizeRole = (role: string | null | undefined) => role?.trim() || null;
 
 /**
  * Role and áreas of Google-managed staff come from Workspace (BE §A.7): a
  * change is refused even when the action is called directly. Sending the
- * current value back (a full form save) is not a change.
+ * current value back (a full form save) is not a change. The refusal is
+ * returned, not thrown, so the client can show its message.
  */
-async function assertRoleEditable(staffId: string, patch: Partial<StaffInput>): Promise<void> {
-  if (patch.role === undefined) return;
+async function isRoleLocked(staffId: string, patch: Partial<StaffInput>): Promise<boolean> {
+  if (patch.role === undefined) return false;
   const lock = await staffRepository.getStaffRoleLock(staffId);
-  if (lock?.googleManaged && normalizeRole(patch.role) !== normalizeRole(lock.role)) {
-    throw new Error(GOOGLE_MANAGED_ERROR);
-  }
+  return Boolean(lock?.googleManaged && normalizeRole(patch.role) !== normalizeRole(lock.role));
 }
 
-async function assertAreasEditable(staffId: string, areaIds: string[]): Promise<void> {
-  if (!(await staffRepository.googleManagedStaffIds([staffId])).has(staffId)) return;
+async function areAreasLocked(staffId: string, areaIds: string[]): Promise<boolean> {
+  if (!(await staffRepository.googleManagedStaffIds([staffId])).has(staffId)) return false;
   const current = new Set(await staffRepository.listStaffAreaIds(staffId));
   const wanted = new Set(areaIds);
-  if (current.size !== wanted.size || [...wanted].some((id) => !current.has(id))) {
-    throw new Error(GOOGLE_MANAGED_ERROR);
-  }
+  return current.size !== wanted.size || [...wanted].some((id) => !current.has(id));
 }
 
 /**
@@ -79,12 +76,15 @@ export async function createStaffAction(input: StaffInput): Promise<Staff> {
   return row;
 }
 
-export async function updateStaffAction(id: string, patch: Partial<StaffInput>): Promise<Staff> {
+export async function updateStaffAction(
+  id: string,
+  patch: Partial<StaffInput>
+): Promise<Staff | GoogleManagedRefusal> {
   const user = await requireCapabilityUser();
   if (!resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff edit");
   }
-  await assertRoleEditable(id, patch);
+  if (await isRoleLocked(id, patch)) return GOOGLE_MANAGED_REFUSAL;
   const row = await staffRepository.updateStaff(id, patch, user.member.id);
   revalidatePath("/equipo");
   return row;
@@ -122,12 +122,12 @@ export async function upsertStaffProfileAction(
   return row;
 }
 
-export async function setStaffAreasAction(staffId: string, areaIds: string[]): Promise<void> {
+export async function setStaffAreasAction(staffId: string, areaIds: string[]): Promise<GoogleManagedRefusal | void> {
   const user = await requireCapabilityUser();
   if (!resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff areas edit");
   }
-  await assertAreasEditable(staffId, areaIds);
+  if (await areAreasLocked(staffId, areaIds)) return GOOGLE_MANAGED_REFUSAL;
   await staffRepository.setStaffAreas(staffId, areaIds);
   revalidatePath("/equipo");
 }

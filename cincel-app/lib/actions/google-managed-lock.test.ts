@@ -26,7 +26,7 @@ vi.mock("@/lib/repositories/staff-repository", () => staffRepo);
 const areasRepo = vi.hoisted(() => ({ listAreaMemberIds: vi.fn(), setAreaMembers: vi.fn() }));
 vi.mock("@/lib/repositories/areas-repository", () => areasRepo);
 
-import { GOOGLE_MANAGED_ERROR } from "@/lib/types/workspace-access";
+import { GOOGLE_MANAGED_ERROR, GOOGLE_MANAGED_REFUSAL } from "@/lib/types/workspace-access";
 
 import { setAreaMembersAction } from "./areas-actions";
 import { setStaffAreasAction, updateStaffAction } from "./staff-actions";
@@ -48,7 +48,7 @@ beforeEach(() => {
 
 describe("updateStaffAction", () => {
   it("refuses a role change for Google-managed staff", async () => {
-    await expect(updateStaffAction(GOOGLE, { role: "Dirección" })).rejects.toThrow(GOOGLE_MANAGED_ERROR);
+    await expect(updateStaffAction(GOOGLE, { role: "Dirección" })).resolves.toEqual({ ok: false, error: GOOGLE_MANAGED_ERROR });
     expect(staffRepo.updateStaff).not.toHaveBeenCalled();
   });
 
@@ -66,8 +66,8 @@ describe("updateStaffAction", () => {
 
 describe("setStaffAreasAction", () => {
   it("refuses an área change for Google-managed staff", async () => {
-    await expect(setStaffAreasAction(GOOGLE, ["area-1", "area-2"])).rejects.toThrow(GOOGLE_MANAGED_ERROR);
-    await expect(setStaffAreasAction(GOOGLE, [])).rejects.toThrow(GOOGLE_MANAGED_ERROR);
+    await expect(setStaffAreasAction(GOOGLE, ["area-1", "area-2"])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
+    await expect(setStaffAreasAction(GOOGLE, [])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
     expect(staffRepo.setStaffAreas).not.toHaveBeenCalled();
   });
 
@@ -80,7 +80,7 @@ describe("setStaffAreasAction", () => {
 
 describe("setAreaMembersAction", () => {
   it("refuses removing a Google-managed member", async () => {
-    await expect(setAreaMembersAction("area-1", [{ staffId: PASSWORD }])).rejects.toThrow(GOOGLE_MANAGED_ERROR);
+    await expect(setAreaMembersAction("area-1", [{ staffId: PASSWORD }])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
     expect(areasRepo.setAreaMembers).not.toHaveBeenCalled();
   });
 
@@ -88,7 +88,7 @@ describe("setAreaMembersAction", () => {
     areasRepo.listAreaMemberIds.mockResolvedValue([PASSWORD]);
     await expect(
       setAreaMembersAction("area-1", [{ staffId: PASSWORD }, { staffId: GOOGLE }]),
-    ).rejects.toThrow(GOOGLE_MANAGED_ERROR);
+    ).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
   });
 
   it("allows changes that only touch non-Google staff", async () => {
