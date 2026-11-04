@@ -6,10 +6,12 @@ import Sidebar from "@/components/layout/Sidebar";
 import { ProjectFilesBrowser } from "@/components/proyectos/ProjectFilesBrowser";
 import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
+import { buttonVariants } from "@/components/ui/shadcn/button";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { getStaffFilesProject, listStaffProjectFiles } from "@/lib/google/staff-files-app";
 import { isStaffFolderNotFound } from "@/lib/google/staff-files";
+import { cn } from "@/lib/utils";
 import type { StaffFilesResult } from "@/lib/types/workspace-access";
 
 type CapabilityUser = Awaited<ReturnType<typeof requireCapabilityUser>>;
@@ -41,7 +43,7 @@ function StateCard({ title, message }: { title: string; message: string }) {
     <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
       <h1 className="text-2xl font-bold text-foreground">{title}</h1>
       <p className="mt-2 text-sm text-muted-foreground">{message}</p>
-      <Link href="/proyectos" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/80">
+      <Link href="/proyectos" className={cn(buttonVariants(), "mt-4")}>
         Volver a proyectos
       </Link>
     </div>
