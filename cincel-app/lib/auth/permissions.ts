@@ -109,6 +109,18 @@ export type WorkflowsCapabilities = {
   canManageWorkflows: boolean;
 };
 
+/**
+ * Client portal access (BE §B.5). Stored under module id "portal", so the keys
+ * read as `portal.manageAccess` / `portal.disableUsers`. Defaults per BE §0.3,
+ * still pending client confirmation.
+ */
+export type PortalCapabilities = {
+  /** Invite, resend, revoke, see the Clientes tab and its activity. */
+  manageAccess: boolean;
+  /** Disable or re-enable a portal user. */
+  disableUsers: boolean;
+};
+
 type ResourceEditScope = "all" | "owned_or_personal" | "none";
 
 export type ResourcesCapabilities = {
@@ -759,6 +771,20 @@ const WORKFLOWS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, WorkflowsCapabili
   ])
 ) as Record<SystemAccessRole, WorkflowsCapabilities>;
 
+const PORTAL_MANAGE_ACCESS_ROLES: readonly SystemAccessRole[] = [
+  "Administrador",
+  "Dirección",
+  "Jefe de Taller",
+  "Jefe de Construcción",
+];
+
+const PORTAL_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, PortalCapabilities> = Object.fromEntries(
+  SYSTEM_ACCESS_ROLES.map((role) => [
+    role,
+    { manageAccess: PORTAL_MANAGE_ACCESS_ROLES.includes(role), disableUsers: role === "Administrador" },
+  ])
+) as Record<SystemAccessRole, PortalCapabilities>;
+
 type StoredModulePermissionsState = Record<string, unknown>;
 
 type StoredRolePermissionsState = Record<string, StoredModulePermissionsState>;
@@ -1159,6 +1185,23 @@ export function resolveWorkflowsCapabilities(user: AuthenticatedUser | null): Wo
   return {
     canViewWorkflows: readBooleanOverride(moduleOverrides, "canViewWorkflows", defaults.canViewWorkflows),
     canManageWorkflows: readBooleanOverride(moduleOverrides, "canManageWorkflows", defaults.canManageWorkflows),
+  };
+}
+
+export function resolvePortalCapabilitiesFromDefaults(user: AuthenticatedUser | null): PortalCapabilities {
+  return PORTAL_CAPABILITIES_BY_ROLE[resolveAccess(user)];
+}
+
+export function resolvePortalCapabilities(user: AuthenticatedUser | null): PortalCapabilities {
+  const access = resolveAccess(user);
+  const defaults = resolvePortalCapabilitiesFromDefaults(user);
+  const moduleOverrides = readRoleModuleOverrides(access, "portal");
+
+  if (!moduleOverrides) return defaults;
+
+  return {
+    manageAccess: readBooleanOverride(moduleOverrides, "manageAccess", defaults.manageAccess),
+    disableUsers: readBooleanOverride(moduleOverrides, "disableUsers", defaults.disableUsers),
   };
 }
 

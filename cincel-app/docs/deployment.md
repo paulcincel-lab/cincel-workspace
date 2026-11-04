@@ -18,11 +18,59 @@
 | `GOOGLE_SA_CLIENT_EMAIL` / `GOOGLE_SA_PRIVATE_KEY` / `GOOGLE_SA_SUBJECT` / `GOOGLE_DRIVE_ROOT_FOLDER_ID` | Optional | `lib/google/*` | Service-account access for the Drive pickers. Leave unset to disable (manual URL entry still works, API routes return 503). `GOOGLE_DRIVE_ROOT_FOLDER_ID` is the picker's start folder; when unset it defaults to the root of `GOOGLE_SHARED_DRIVE_ID`. |
 | `GOOGLE_SHARED_DRIVE_ID` | Optional | `npm run monday` (monday migration CLI), project folders (`lib/google/project-folders.ts`) | Company Shared Drive where project folders are created, both by the monday migration and when a project is created or its folders are re-created in the app. The service account must be a **Content manager** on it. Also the default start folder for the Drive picker when `GOOGLE_DRIVE_ROOT_FOLDER_ID` is unset. See `docs/google-drive.md`. |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Optional | `lib/assistant/provider.ts` | OpenAI-compatible `/v1` endpoint for `/asistente`. Unset = assistant disabled (route returns 503, UI shows a notice). |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `MAIL_FROM` | Optional | `lib/email/index.ts` | Client portal mail (invitations, sign-in links, "archivo recibido"). Production: Gmail SMTP from one Workspace account (`smtp.gmail.com`, `465`, the account, its app password, see [Email](#email-client-portal)). `SMTP_PASSWORD` is a secret. Unset `SMTP_HOST` = messages are only logged. Local compose sends to Mailpit. |
 | `APP_PORT` | Compose only | `docker-compose.yml` | Host port mapped to the container's 3000. Default 3000. |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Compose only | `docker-compose.yml` `db` service | Default `cincel` / `cincel` / `cincel`. |
+| `MAILPIT_UI_PORT` / `MAILPIT_SMTP_PORT` | Compose only | `docker-compose.yml` `mailpit` service | Host ports for the local Mailpit UI and SMTP. Default `8025` / `1025`. |
 
 Copy `.env.example` to `.env` and fill it in. `.env` is git-ignored and is read by
 both the `app` and `migrate` compose services (`env_file`).
+
+## Email (client portal)
+
+The client portal sends invitations and single-use sign-in links by email
+(`lib/email/index.ts`, over SMTP). Without `SMTP_HOST` the app only logs each
+message (sign-in tokens redacted) and nothing is delivered.
+
+### Local: Mailpit
+
+`docker compose up` starts a `mailpit` service and points the `app` container
+at it (`SMTP_HOST=mailpit`, `SMTP_PORT=1025`, no user or password), whatever
+`SMTP_*` holds in `.env`. Read every message at <http://localhost:8025>. A host
+`npm run dev` reaches the same Mailpit with `SMTP_HOST=localhost` and
+`SMTP_PORT=1025` in `.env` (run `docker compose up -d mailpit` first).
+
+### Production: Gmail SMTP from one Workspace account
+
+Dev and prod are configured from the KCD console (`kcd.yml`). Set:
+
+| Variable | Value |
+|---|---|
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `465` (implicit TLS) |
+| `SMTP_USER` | The sending Workspace account, e.g. `portal@cincel.mx` |
+| `SMTP_PASSWORD` | That account's app password (secret) |
+| `MAIL_FROM` | `Cincel <portal@cincel.mx>`: the account itself or one of its verified "Send mail as" aliases, or Gmail rewrites it |
+
+Gmail setup, once:
+
+1. Create or choose the Workspace account that sends portal mail (e.g.
+   `portal@cincel.mx`). It needs a license, since it signs in to send.
+2. Turn on 2-Step Verification for that account (Google Account → Security).
+   If the Workspace admin enforces it, the account can enroll; if the admin
+   disabled it, they have to allow it for this account first.
+3. Signed in as that account, create an app password (Google Account →
+   Security → App passwords, or <https://myaccount.google.com/apppasswords>),
+   name it e.g. "Cincel portal", and paste the 16 characters into
+   `SMTP_PASSWORD` in the KCD console. Never put it in a file or commit it.
+4. If the app-password option is missing, the account usually doesn't have
+   2-Step Verification on, or is enrolled in Advanced Protection (which blocks
+   app passwords; use another account).
+
+Adding `SMTP_PASSWORD` to `kcd.yml` adds a secret without `generate`, so KCD
+holds auto-deploy for that recipe change until someone reviews it on the
+canvas and fills in the value. Gmail allows about 2,000 messages a day per
+Workspace account.
 
 ## Database migrations — REQUIRED on every deploy
 

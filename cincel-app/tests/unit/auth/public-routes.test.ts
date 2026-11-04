@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isPortalPath, isPublicPath, SIGN_OUT_TO_LOGIN_URL } from "@/lib/auth/public-routes";
+import { isPortalPath, isPublicPath, isPublicPortalPath, SIGN_OUT_TO_LOGIN_URL } from "@/lib/auth/public-routes";
 
 describe("public routes", () => {
   it.each(["/login", "/login/denegado", "/change-password", "/portal", "/portal/login", "/portal/proyectos/abc"])(
@@ -22,6 +22,15 @@ describe("public routes", () => {
     expect(isPortalPath("/portal/x")).toBe(true);
     expect(isPortalPath("/portales")).toBe(false);
     expect(isPortalPath("/login")).toBe(false);
+  });
+
+  it("keeps only /portal/login and /portal/acceder public inside the portal", () => {
+    expect(isPublicPortalPath("/portal/login")).toBe(true);
+    expect(isPublicPortalPath("/portal/acceder")).toBe(true);
+    expect(isPublicPortalPath("/portal")).toBe(false);
+    expect(isPublicPortalPath("/portal/proyectos/abc")).toBe(false);
+    expect(isPublicPortalPath("/portal/login/x")).toBe(false);
+    expect(isPublicPortalPath("/login")).toBe(false);
   });
 
   it("signs out to /login with an encoded next", () => {

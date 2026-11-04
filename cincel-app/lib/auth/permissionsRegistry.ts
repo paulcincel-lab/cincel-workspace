@@ -20,6 +20,8 @@ import {
   type TeamCapabilities,
   resolveWorkflowsCapabilitiesFromDefaults,
   type WorkflowsCapabilities,
+  resolvePortalCapabilitiesFromDefaults,
+  type PortalCapabilities,
 } from "@/lib/auth/permissions";
 
 export type PermissionValue = boolean | string;
@@ -493,5 +495,26 @@ export const PERMISSIONS_MODULES_REGISTRY = ([
       },
     ],
     isEnabled: (values) => values.canViewWorkflows === true,
+  },
+  {
+    id: "portal",
+    name: "Portal de clientes",
+    order: 11,
+    resolver: resolvePortalCapabilitiesFromDefaults,
+    actions: [
+      {
+        id: "manageAccess",
+        label: "Invitar y quitar acceso a clientes",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as PortalCapabilities).manageAccess,
+      },
+      {
+        id: "disableUsers",
+        label: "Deshabilitar usuarios del portal",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as PortalCapabilities).disableUsers,
+      },
+    ],
+    isEnabled: (values) => values.manageAccess === true || values.disableUsers === true,
   },
 ] satisfies PermissionsModuleDefinition[]).sort((a, b) => a.order - b.order);

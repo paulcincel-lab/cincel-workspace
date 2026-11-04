@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { isPublicPath, LOGIN_ROUTE } from "@/lib/auth/public-routes";
-import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
+import { isPortalPath, isPublicPath, isPublicPortalPath, LOGIN_ROUTE, PORTAL_LOGIN_ROUTE } from "@/lib/auth/public-routes";
+import { PORTAL_SESSION_COOKIE, PORTAL_SESSION_MAX_AGE_S, SESSION_COOKIE } from "@/lib/auth/session-cookie";
 
 /**
  * Enforces authentication before any protected page renders.
@@ -14,6 +14,16 @@ import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
  * may be stale (expired or deleted session row), and bouncing it to
  * `/dashboard` would loop. Public paths (including `/portal/*`) are outside
  * the staff redirect.
+ *
+ * `/portal/*` has its own gate on the portal cookie only (backend spec §B.7):
+ * without it the request goes to `/portal/login`. `/portal/login` and the
+ * magic-link landing page `/portal/acceder` stay public. A staff cookie never
+ * counts as a portal session. As with staff, a stale portal cookie passes here
+ * and `requirePortalUser()` clears it server-side.
+ *
+ * With the portal cookie on a protected portal page, the cookie is set again with a fresh 30-day expiry so the
+ * browser side of the sliding session keeps up with `portal_sessions` (pages are Server Components, which can't
+ * write cookies). An expired or revoked DB session still fails in `requirePortalUser()`.
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -24,6 +34,26 @@ export function middleware(request: NextRequest) {
     pathname.includes(".")
   ) {
     return NextResponse.next();
+  }
+
+  if (isPortalPath(pathname)) {
+    const portalToken = request.cookies.get(PORTAL_SESSION_COOKIE)?.value;
+    if (isPublicPortalPath(pathname)) return NextResponse.next();
+    if (!portalToken) {
+      const portalLoginUrl = request.nextUrl.clone();
+      portalLoginUrl.pathname = PORTAL_LOGIN_ROUTE;
+      portalLoginUrl.search = "";
+      return NextResponse.redirect(portalLoginUrl);
+    }
+    const response = NextResponse.next();
+    response.cookies.set(PORTAL_SESSION_COOKIE, portalToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: PORTAL_SESSION_MAX_AGE_S,
+    });
+    return response;
   }
 
   const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);

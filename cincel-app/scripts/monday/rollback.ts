@@ -11,7 +11,7 @@
  *   (c) rows outside the batch that point at a batch row, through every
  *       foreign key into a batch table (POINTER_CHECKS; a unit test checks
  *       the list against the schema's foreign keys);
- *   (d) `project_portal_access` rows on a batch project, once that table exists.
+ *   (d) `project_portal_access` rows on a batch project.
  *
  * A refusal exits non-zero and writes nothing; that is the signal to fix
  * forward.
@@ -237,6 +237,21 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     idSql: "c.id",
     owner: "import_files",
   },
+  // Portal history on a batch project (project_portal_access is check (d))
+  {
+    table: "portal_file_events",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "portal_audit_events",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
   // Into the cronograma
   {
     table: "schedule_tasks",
@@ -300,6 +315,13 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     column: "contact_id",
     target: "contact",
     idSql: "c.contact_id || ':' || c.kind || ':' || c.value",
+    owner: null,
+  },
+  {
+    table: "portal_users",
+    column: "contact_id",
+    target: "contact",
+    idSql: "c.id",
     owner: null,
   },
   {
@@ -453,17 +475,11 @@ async function foreignPointers(
   return out;
 }
 
-/** (d) Portal access on a batch project; skipped until the portal tables exist. */
+/** (d) Portal access on a batch project. */
 async function portalAccess(
   db: ImportDb,
   batchId: string,
 ): Promise<RollbackBlocker[]> {
-  const [exists] = await rows(
-    db,
-    sql`select 1 as ok from information_schema.columns
-      where table_schema = 'core' and table_name = 'project_portal_access' and column_name = 'project_id'`,
-  );
-  if (!exists) return [];
   const found = await rows(
     db,
     sql`select c.id::text as id, c.project_id::text as project_id

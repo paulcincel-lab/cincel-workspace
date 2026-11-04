@@ -22,6 +22,11 @@ env:
   LLM_API_KEY: { secret: true }
   LLM_BASE_URL: { description: "── AI Assistant (Phase 5, optional) ──────────────────────────────────────── OpenAI-compatible chat endpoint for /asistente. Point LLM_BASE_URL at any compatible /v1 surface (OpenAI, a local model, a Claude proxy, …). Leave unset to disable — the route returns 503 and the UI shows an error." }
   LLM_MODEL: { default: "gpt-4o-mini" }
+  MAIL_FROM: { description: "Sender of portal mail, e.g. \"Cincel <portal@cincel.mx>\". Must be SMTP_USER itself or one of its verified Gmail \"Send mail as\" aliases. Empty = \"Cincel <SMTP_USER>\"." }
+  SMTP_HOST: { description: "Client portal mail (invitations, sign-in links): smtp.gmail.com, sending from one Workspace account. Empty = mail is only logged and nothing is delivered. Setup in docs/deployment.md." }
+  SMTP_PASSWORD: { secret: true, description: "App password of the SMTP_USER Workspace account (Google Account > Security > App passwords; needs 2-Step Verification). See docs/deployment.md." }
+  SMTP_PORT: { default: "465", description: "SMTP port: 465 for smtp.gmail.com (implicit TLS)." }
+  SMTP_USER: { description: "The Workspace account that sends portal mail, e.g. portal@cincel.mx." }
   TOKEN_ENCRYPTION_KEY: { secret: true, generate: hex32, description: "AES-256 key for OAuth tokens at rest (32 bytes as 64 hex chars)." }
 needs:
   postgres: { version: "17" }
