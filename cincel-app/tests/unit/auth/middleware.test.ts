@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { middleware } from "@/middleware";
-import { PORTAL_SESSION_COOKIE, SESSION_COOKIE } from "@/lib/auth/session-cookie";
+import { PORTAL_SESSION_COOKIE, PORTAL_SESSION_MAX_AGE_S, SESSION_COOKIE } from "@/lib/auth/session-cookie";
 
 function run(path: string, withCookie: boolean, withPortalCookie = false) {
   const headers = new Headers();
@@ -68,6 +68,25 @@ describe("middleware portal gate", () => {
   it("lets /portal/* through with the portal cookie", () => {
     expect(redirectTarget(run("/portal", false, true))).toBeNull();
     expect(redirectTarget(run("/portal/proyectos/1", false, true))).toBeNull();
+  });
+
+  it("re-issues the portal cookie with a fresh 30-day expiry on every protected portal page", () => {
+    // Day 1: page render (Server Component slides the DB row but can't write the cookie); day 29: another page.
+    for (const path of ["/portal", "/portal/proyectos/1/cronograma"]) {
+      const cookie = (run(path, false, true) as NextResponse).cookies.get(PORTAL_SESSION_COOKIE);
+      expect(cookie?.value).toBe("fake-portal-token");
+      expect(cookie?.maxAge).toBe(PORTAL_SESSION_MAX_AGE_S);
+      expect(cookie?.httpOnly).toBe(true);
+      expect(cookie?.sameSite).toBe("lax");
+      expect(cookie?.path).toBe("/");
+    }
+  });
+
+  it("does not re-issue the portal cookie on public portal pages or without one", () => {
+    expect((run("/portal/login", false, true) as NextResponse).cookies.get(PORTAL_SESSION_COOKIE)).toBeUndefined();
+    expect((run("/portal/acceder?token=abc", false, true) as NextResponse).cookies.get(PORTAL_SESSION_COOKIE))
+      .toBeUndefined();
+    expect((run("/dashboard", true, true) as NextResponse).cookies.get(PORTAL_SESSION_COOKIE)).toBeUndefined();
   });
 
   it("does not accept the staff cookie as a portal session", () => {
