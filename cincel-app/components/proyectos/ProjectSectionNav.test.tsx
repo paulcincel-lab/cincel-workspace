@@ -1,0 +1,78 @@
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+
+const navigation = vi.hoisted(() => ({ pathname: "/proyectos/p1/ficha" }));
+
+vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
+
+import { activeProjectSection, ProjectSectionNav, projectSectionLinks } from "./ProjectSectionNav";
+
+// Base UI gives each tab role="tab", so look the anchors up by their label.
+function tab(label: string): HTMLAnchorElement {
+  const el = screen.getByText(label).closest("a");
+  if (!el) throw new Error(`no link for ${label}`);
+  return el;
+}
+
+afterEach(() => {
+  cleanup();
+  navigation.pathname = "/proyectos/p1/ficha";
+});
+
+describe("projectSectionLinks", () => {
+  it("lists Ficha, Cronograma and Archivos without Clientes by default", () => {
+    expect(projectSectionLinks("p1")).toEqual([
+      { section: "ficha", label: "Ficha", href: "/proyectos/p1/ficha" },
+      { section: "cronograma", label: "Cronograma", href: "/proyectos/p1/cronograma" },
+      { section: "archivos", label: "Archivos", href: "/proyectos/p1/archivos" },
+    ]);
+  });
+
+  it("adds Clientes last only when asked", () => {
+    const links = projectSectionLinks("p1", { showClientes: true });
+    expect(links.map((l) => l.label)).toEqual(["Ficha", "Cronograma", "Archivos", "Clientes"]);
+    expect(links[3].href).toBe("/proyectos/p1/clientes");
+  });
+});
+
+describe("activeProjectSection", () => {
+  it("reads the section from the path", () => {
+    expect(activeProjectSection("/proyectos/p1/ficha")).toBe("ficha");
+    expect(activeProjectSection("/proyectos/p1/archivos")).toBe("archivos");
+  });
+
+  it("keeps the parent tab on nested pages", () => {
+    expect(activeProjectSection("/proyectos/p1/cronograma/reporte")).toBe("cronograma");
+  });
+
+  it("returns null outside a project section", () => {
+    expect(activeProjectSection("/proyectos")).toBeNull();
+    expect(activeProjectSection("/proyectos/p1/otra")).toBeNull();
+    expect(activeProjectSection(null)).toBeNull();
+  });
+});
+
+describe("ProjectSectionNav", () => {
+  it("renders the three tabs as links and no Clientes tab", () => {
+    render(<ProjectSectionNav projectId="p1" />);
+    expect(tab("Ficha").getAttribute("href")).toBe("/proyectos/p1/ficha");
+    expect(tab("Cronograma").getAttribute("href")).toBe("/proyectos/p1/cronograma");
+    expect(tab("Archivos").getAttribute("href")).toBe("/proyectos/p1/archivos");
+    expect(screen.queryByText("Clientes")).toBeNull();
+  });
+
+  it("marks the current section as active", () => {
+    navigation.pathname = "/proyectos/p1/cronograma";
+    render(<ProjectSectionNav projectId="p1" />);
+    const active = tab("Cronograma");
+    expect(active.getAttribute("aria-current")).toBe("page");
+    expect(active.hasAttribute("data-active")).toBe(true);
+    expect(tab("Ficha").getAttribute("aria-current")).toBeNull();
+  });
+
+  it("renders Clientes when showClientes is set", () => {
+    render(<ProjectSectionNav projectId="p1" showClientes />);
+    expect(tab("Clientes").getAttribute("href")).toBe("/proyectos/p1/clientes");
+  });
+});

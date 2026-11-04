@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
+import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
 import { fetchScheduleAction, setTaskStatusAction, toggleTaskFlagAction, type ScheduleViewData } from "@/lib/actions/schedule-actions";
 import { computeProgress } from "@/lib/cronograma/metrics";
 import type { ScheduleStatus, ScheduleTask } from "@/lib/types/schedule";
@@ -135,6 +136,7 @@ export default function CronogramaView({ projectId, initialView }: CronogramaVie
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
         <main className="flex-1 overflow-y-auto p-6">
+          <ProjectSectionNav projectId={projectId} />
           {loading ? (
             <p className="text-sm text-muted-foreground">Cargando cronograma…</p>
           ) : notFound || !view || !today || !metrics ? (
