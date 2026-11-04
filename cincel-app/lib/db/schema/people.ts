@@ -39,6 +39,8 @@ export const staff = core.table(
     // One of WORKSPACE_DENIAL_REASONS in lib/types/workspace-access.ts (BE §A.4).
     accessRevokedReason: text("access_revoked_reason"),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    // First-login wizard (#671, #672) finished or skipped; null = show it on the next sign-in.
+    onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
     ...stamps,
     ...soft,
   },
