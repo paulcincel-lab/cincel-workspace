@@ -17,12 +17,7 @@ export type DriveBrowserEntry = {
 };
 
 type Crumb = { id: string; name: string };
-type AccountStatus = {
-  mode: "delegation" | "staff_token";
-  hasDriveGrant: boolean;
-  oauthAvailable: boolean;
-  connectedEmail: string | null;
-};
+type AccountStatus = { hasDriveGrant: boolean };
 
 type Props = {
   /** Only loads while true (a closed sheet shouldn't fetch). */
@@ -52,14 +47,9 @@ export function driveConsentUrl(returnTo: string): string {
 
 /**
  * Browse Drive — folder navigation and search. Shared by the Drive picker
- * sheet and Recursos' inline Drive view. The mode comes from
- * `GET /api/google/drive/status`:
- *   - "delegation": the caller's connected Google account (or their
- *     institutional identity when none is connected), with the connect /
- *     switch / disconnect account bar.
- *   - "staff_token": the staff member's own Google grant. Without it, or on a
- *     403 `needs_consent` from the list route, the browser shows
- *     **Conectar Google Drive**; there is no account switcher.
+ * sheet and Recursos' inline Drive view. It always uses the staff member's own
+ * Google grant (`GET /api/google/drive/status`): without it, or on a 403
+ * `needs_consent` from the list route, the browser shows **Conectar Google Drive**.
  */
 export default function DriveBrowser({
   active,
@@ -75,7 +65,6 @@ export default function DriveBrowser({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountStatus | null>(null);
-  const [switchingAccount, setSwitchingAccount] = useState(false);
   const [needsConsent, setNeedsConsent] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -89,13 +78,7 @@ export default function DriveBrowser({
         return;
       }
       const body = await res.json().catch(() => ({}));
-      const mode = body?.mode === "staff_token" ? "staff_token" : "delegation";
-      setAccount({
-        mode,
-        hasDriveGrant: Boolean(body?.hasDriveGrant),
-        oauthAvailable: mode === "delegation" && Boolean(body?.oauthAvailable),
-        connectedEmail: mode === "delegation" ? (body?.connectedEmail ?? null) : null,
-      });
+      setAccount({ hasDriveGrant: Boolean(body?.hasDriveGrant) });
     } catch {
       setAccount(null);
     }
@@ -106,25 +89,8 @@ export default function DriveBrowser({
     if (active) void loadAccountStatus();
   }, [active, loadAccountStatus]);
 
-  const connectGoogleAccount = () => {
-    const returnTo = `${window.location.pathname}${window.location.search}`;
-    window.location.href = `/api/google/oauth/start?return_to=${encodeURIComponent(returnTo)}`;
-  };
-
   const connectGoogleDrive = () => {
     window.location.href = driveConsentUrl(`${window.location.pathname}${window.location.search}`);
-  };
-
-  const disconnectGoogleAccount = async () => {
-    setSwitchingAccount(true);
-    try {
-      await fetch("/api/google/oauth/disconnect", { method: "POST" });
-      await loadAccountStatus();
-      setPath([]);
-      setSearch("");
-    } finally {
-      setSwitchingAccount(false);
-    }
   };
 
   const load = useCallback(
@@ -180,8 +146,7 @@ export default function DriveBrowser({
     setPath((p) => (index < 0 ? [] : p.slice(0, index + 1)));
   };
 
-  const staffTokenMode = account?.mode === "staff_token";
-  if (needsConsent || (staffTokenMode && account?.hasDriveGrant !== true)) {
+  if (needsConsent || account?.hasDriveGrant === false) {
     return (
       <div className="flex min-h-0 flex-1 flex-col p-4">
         <Alert>
@@ -199,38 +164,6 @@ export default function DriveBrowser({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {!staffTokenMode && account?.oauthAvailable ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-          {account.connectedEmail ? (
-            <>
-              <span>
-                Conectado como <span className="font-medium text-foreground">{account.connectedEmail}</span>
-              </span>
-              <span className="flex gap-2">
-                <Button variant="link" className="h-auto p-0 text-xs" onClick={connectGoogleAccount}>
-                  Cambiar cuenta
-                </Button>
-                <Button
-                  variant="link"
-                  className="h-auto p-0 text-xs text-destructive"
-                  disabled={switchingAccount}
-                  onClick={() => void disconnectGoogleAccount()}
-                >
-                  Desconectar
-                </Button>
-              </span>
-            </>
-          ) : (
-            <>
-              <span>Usando el correo institucional. Puedes conectar tu propia cuenta de Google.</span>
-              <Button variant="link" className="h-auto p-0 text-xs" onClick={connectGoogleAccount}>
-                Conectar cuenta de Google
-              </Button>
-            </>
-          )}
-        </div>
-      ) : null}
-
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-sm">
         <Button variant="link" className="h-auto p-0 font-medium" onClick={() => goToCrumb(-1)}>
           Inicio

@@ -14,7 +14,7 @@ const actions = vi.hoisted(() => ({
 
 vi.mock("@/lib/actions/calendar-actions", () => actions);
 
-import CalendarFeedDialog, { calendarConnectUrl } from "./CalendarFeedDialog";
+import CalendarFeedDialog, { CALENDAR_CONNECT_URL } from "./CalendarFeedDialog";
 
 const notConnected = {
   oauthAvailable: true,
@@ -26,17 +26,10 @@ const notConnected = {
   lastError: null,
 };
 
-describe("calendarConnectUrl", () => {
+describe("CALENDAR_CONNECT_URL", () => {
   it("starts the staff calendar consent and returns to /calendario", () => {
-    expect(calendarConnectUrl("staff_token", "/calendario?vista=mes")).toBe(
-      "/api/auth/google/start?scope=calendar&return_to=/calendario",
-    );
-  });
-
-  it("keeps the old OAuth flow in delegation mode", () => {
-    expect(calendarConnectUrl("delegation", "/calendario?vista=mes")).toBe(
-      "/api/google/oauth/start?scope=calendar&return_to=%2Fcalendario%3Fvista%3Dmes",
-    );
+    expect(CALENDAR_CONNECT_URL).toBe("/api/auth/google/start?scope=calendar&return_to=/calendario");
+    expect(CALENDAR_CONNECT_URL).not.toContain("/api/google/oauth");
   });
 });
 
@@ -51,6 +44,7 @@ describe("CalendarFeedDialog", () => {
     actions.fetchGoogleCalendarSyncStatusAction.mockResolvedValue(notConnected);
     render(<CalendarFeedDialog open onClose={() => {}} />);
     expect(await screen.findByRole("button", { name: "Conectar Google Calendar" })).toBeTruthy();
+    expect(screen.queryByText(/Conecta tu cuenta de Google/)).toBeNull();
   });
 
   it("offers Activar sincronización once the consent is granted", async () => {
@@ -62,5 +56,18 @@ describe("CalendarFeedDialog", () => {
     render(<CalendarFeedDialog open onClose={() => {}} />);
     expect(await screen.findByRole("button", { name: "Activar sincronización" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Conectar Google Calendar" })).toBeNull();
+  });
+
+  it("offers Reconectar Google Calendar after a sync error, not an account switch", async () => {
+    actions.fetchGoogleCalendarSyncStatusAction.mockResolvedValue({
+      ...notConnected,
+      connectedEmail: "ana@cincel.mx",
+      hasCalendarScope: true,
+      enabled: true,
+      lastError: "Google rechazó el acceso.",
+    });
+    render(<CalendarFeedDialog open onClose={() => {}} />);
+    expect(await screen.findByRole("button", { name: "Reconectar Google Calendar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reconectar cuenta" })).toBeNull();
   });
 });

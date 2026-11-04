@@ -39,12 +39,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("DriveBrowser in staff_token mode", () => {
+describe("DriveBrowser with the staff token", () => {
   it("shows Conectar Google Drive when the staff member has no Drive grant", async () => {
     mockFetch({
       status: {
         status: 200,
-        body: { configured: true, mode: "staff_token", hasDriveGrant: false, googleLinked: true, oauthAvailable: false },
+        body: { configured: true, mode: "staff_token", hasDriveGrant: false, googleLinked: true },
       },
       list: { status: 403, body: { error: "needs_consent" } },
     });
@@ -59,7 +59,7 @@ describe("DriveBrowser in staff_token mode", () => {
     mockFetch({
       status: {
         status: 200,
-        body: { configured: true, mode: "staff_token", hasDriveGrant: true, googleLinked: true, oauthAvailable: false },
+        body: { configured: true, mode: "staff_token", hasDriveGrant: true, googleLinked: true },
       },
       list: { status: 403, body: { error: "needs_consent" } },
     });
@@ -78,7 +78,7 @@ describe("DriveBrowser in staff_token mode", () => {
           mode: "staff_token",
           hasDriveGrant: true,
           googleLinked: true,
-          // even if a stale field said otherwise, staff_token mode never shows the switcher
+          // stale legacy fields never bring the switcher back
           oauthAvailable: true,
           connectedEmail: "otra@gmail.com",
         },
@@ -101,8 +101,8 @@ describe("DriveBrowser in staff_token mode", () => {
   });
 });
 
-describe("DriveBrowser in delegation mode", () => {
-  it("keeps the account switcher for a connected account", async () => {
+describe("DriveBrowser without the old connect-account UI", () => {
+  it("never shows the account switcher or Conectar cuenta de Google, even with legacy status fields", async () => {
     mockFetch({
       status: {
         status: 200,
@@ -119,39 +119,33 @@ describe("DriveBrowser in delegation mode", () => {
     });
     render(<DriveBrowser active />);
 
-    expect(await screen.findByText("persona@gmail.com")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Cambiar cuenta" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Desconectar" })).toBeTruthy();
     expect(await screen.findByText("Planos.pdf")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Conectar Google Drive" })).toBeNull();
+    expect(screen.queryByText("persona@gmail.com")).toBeNull();
+    expect(screen.queryByText("Cambiar cuenta")).toBeNull();
+    expect(screen.queryByText("Desconectar")).toBeNull();
+    expect(screen.queryByText("Conectar cuenta de Google")).toBeNull();
   });
 
-  it("offers Conectar cuenta de Google when no account is connected", async () => {
-    mockFetch({
-      status: {
-        status: 200,
-        body: { configured: true, oauthAvailable: true, connectedEmail: null },
-      },
+  it("never calls the old OAuth routes", async () => {
+    const fetchMock = mockFetch({
+      status: { status: 200, body: { configured: true, mode: "staff_token", hasDriveGrant: true, googleLinked: true } },
       list: { status: 200, body: { entries: [], nextPageToken: null } },
     });
     render(<DriveBrowser active />);
 
-    expect(await screen.findByRole("button", { name: "Conectar cuenta de Google" })).toBeTruthy();
     expect(await screen.findByText("Carpeta vacía.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Conectar Google Drive" })).toBeNull();
+    const urls = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(urls.some((url) => url.startsWith("/api/google/oauth"))).toBe(false);
   });
 
-  it("shows the route error as before", async () => {
+  it("shows other route errors inline", async () => {
     mockFetch({
-      status: { status: 200, body: { configured: true, mode: "delegation", oauthAvailable: false } },
-      list: {
-        status: 403,
-        body: { error: "Conecta tu cuenta de Google o configura un correo institucional." },
-      },
+      status: { status: 200, body: { configured: true, mode: "staff_token", hasDriveGrant: true, googleLinked: true } },
+      list: { status: 502, body: { error: "No se pudo consultar Google Drive." } },
     });
     render(<DriveBrowser active />);
 
-    expect(await screen.findByText("Conecta tu cuenta de Google o configura un correo institucional.")).toBeTruthy();
+    expect(await screen.findByText("No se pudo consultar Google Drive.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Conectar Google Drive" })).toBeNull();
   });
 });

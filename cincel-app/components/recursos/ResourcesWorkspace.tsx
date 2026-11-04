@@ -860,7 +860,7 @@ export default function ResourcesWorkspace({
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Google Drive</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Explorar Drive</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Navega tu Drive con la cuenta de Google conectada. Haz clic en un archivo para verlo.
+                Navega tu Drive con tu cuenta de Cincel. Haz clic en un archivo para verlo.
               </p>
               <div className="mt-6 flex h-[480px] flex-col overflow-hidden rounded-2xl border border-border">
                 <DriveBrowser active selectedId={drivePreview?.id ?? null} onFileClick={setDrivePreview} />
