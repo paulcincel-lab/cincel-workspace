@@ -42,6 +42,11 @@ LABEL dev.keter.kcd.schema="1" \
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.source="https://github.com/paulcincel-lab/cincel-workspace"
 
+# Run folders of the monday import wizard (MONDAY_IMPORT_DIR, the recipe's
+# /data/monday volume). /app belongs to root, so the folder is made here and
+# handed to nextuser; a fresh named volume takes this ownership.
+RUN mkdir -p /data/monday && chown nextuser:nextuser /data/monday
+
 # set non root user
 USER nextuser
 # expose 3000 on container

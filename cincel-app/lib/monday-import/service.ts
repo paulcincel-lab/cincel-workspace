@@ -34,6 +34,7 @@ import type { ImportDb } from "@/lib/import/refs";
 import { buildPreview } from "@/lib/monday-import/preview";
 import {
   createRun,
+  importRoot,
   jobView,
   latestRun,
   readDraftMapping,
@@ -210,11 +211,34 @@ export async function connectMonday(tokenInput: string | null | undefined, deps:
 // Runs
 // ---------------------------------------------------------------------------
 
+export const NOT_WRITABLE = "La carpeta de importación no tiene permisos de escritura.";
+
+/** File system codes meaning the import folder can't be created or written. */
+const NOT_WRITABLE_CODES = new Set(["EACCES", "EPERM", "EROFS"]);
+/** Folders already logged as not writable, so each one is logged once. */
+const loggedNotWritable = new Set<string>();
+
+/** A permission error on the import folder as a WizardError, logging its path once; anything else as is. */
+export function folderError(err: unknown, env: Env = process.env): unknown {
+  const code = (err as NodeJS.ErrnoException | null)?.code;
+  if (!code || !NOT_WRITABLE_CODES.has(code)) return err;
+  const root = importRoot(env);
+  if (!loggedNotWritable.has(root)) {
+    loggedNotWritable.add(root);
+    console.error(`[monday-import] import folder not writable (${code}): ${root}; set MONDAY_IMPORT_DIR`);
+  }
+  return new WizardError(NOT_WRITABLE);
+}
+
 /** The newest run, or a new one when there is none (or `fresh`). */
 export async function openRun(staffId: string, deps: WizardDeps, fresh = false): Promise<StoredRun> {
   const env = envOf(deps);
-  const latest = fresh ? null : await latestRun(env);
-  return latest ?? createRun(staffId, env);
+  try {
+    const latest = fresh ? null : await latestRun(env);
+    return latest ?? (await createRun(staffId, env));
+  } catch (err) {
+    throw folderError(err, env);
+  }
 }
 
 async function requireRun(runId: string, deps: WizardDeps): Promise<StoredRun> {
