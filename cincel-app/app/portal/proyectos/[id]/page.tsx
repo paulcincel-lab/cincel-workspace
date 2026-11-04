@@ -2,9 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
+import PortalFileBrowser from "@/components/portal/PortalFileBrowser";
 import PortalProjectSummary from "@/components/portal/PortalProjectSummary";
 import PortalProjectTabs from "@/components/portal/PortalProjectTabs";
 import PortalSchedule from "@/components/portal/PortalSchedule";
+import PortalUploader from "@/components/portal/PortalUploader";
 import { isPortalNotFound } from "@/lib/portal/drive-guard";
 import { parsePortalProjectTab } from "@/lib/portal/project-tabs";
 import { getPortalProject, getPortalSchedule } from "@/lib/portal/queries";
@@ -12,7 +14,7 @@ import { requirePortalUser, requireProjectAccess } from "@/lib/portal/session";
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string | string[] }>;
+  searchParams: Promise<{ tab?: string | string[]; folder?: string | string[] }>;
 };
 
 /**
@@ -20,7 +22,7 @@ type PageProps = {
  * A project the client has no active access to (unknown, revoked, another client's) is a 404, never a 403.
  */
 export default async function PortalProjectPage({ params, searchParams }: PageProps) {
-  const [{ id }, { tab }] = await Promise.all([params, searchParams]);
+  const [{ id }, { tab, folder }] = await Promise.all([params, searchParams]);
   const user = await requirePortalUser();
   try {
     await requireProjectAccess(id, user);
@@ -47,7 +49,15 @@ export default async function PortalProjectPage({ params, searchParams }: PagePr
         {project.code ? <p className="text-sm text-muted-foreground">{project.code}</p> : null}
       </header>
       <PortalProjectTabs projectId={project.id} active={active} />
-      {active === "cronograma" ? <PortalSchedule schedule={schedule} /> : <PortalProjectSummary project={project} />}
+      {active === "cronograma" ? (
+        <PortalSchedule schedule={schedule} />
+      ) : active === "archivos" ? (
+        <PortalFileBrowser projectId={project.id} initialFolderId={(Array.isArray(folder) ? folder[0] : folder) || null} />
+      ) : active === "enviar" ? (
+        <PortalUploader projectId={project.id} />
+      ) : (
+        <PortalProjectSummary project={project} />
+      )}
     </div>
   );
 }

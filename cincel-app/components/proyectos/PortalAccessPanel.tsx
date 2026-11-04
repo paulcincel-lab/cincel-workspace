@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { InvitePortalClientSheet, PORTAL_ERROR_MESSAGES } from "@/components/proyectos/InvitePortalClientSheet";
+import { PortalActivityCard } from "@/components/proyectos/PortalActivityCard";
+import { PortalClientFolderHint } from "@/components/proyectos/PortalClientFolderHint";
 import { DataTable } from "@/components/ui/DataTable";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import {
@@ -200,6 +202,8 @@ export function PortalAccessPanel({
         <Button onClick={() => setInviteOpen(true)}>Invitar cliente</Button>
       </div>
 
+      <PortalClientFolderHint projectId={projectId} />
+
       {notice ? (
         <Alert variant={notice.kind === "error" ? "destructive" : "default"} aria-live="polite">
           <AlertDescription>{notice.message}</AlertDescription>
@@ -212,6 +216,8 @@ export function PortalAccessPanel({
         getRowId={(row) => row.accessId}
         emptyMessage="Aún no hay clientes invitados a este proyecto."
       />
+
+      <PortalActivityCard projectId={projectId} />
 
       <InvitePortalClientSheet
         projectId={projectId}
