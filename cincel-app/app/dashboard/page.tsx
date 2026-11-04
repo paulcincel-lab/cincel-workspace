@@ -8,7 +8,7 @@ import { getFirstLoginState, type FirstLoginState } from "@/lib/onboarding/first
 import { DashboardClient } from "./DashboardClient";
 
 export default async function DashboardPage() {
-  // First-login wizards (#671, #672): sign-in lands here, so this is where an admin is sent to their setup.
+  // First-login wizards (issues 671 and 672): sign-in lands here, so this is where an admin is sent to their setup.
   let firstLogin: FirstLoginState | null = null;
   try {
     firstLogin = await getFirstLoginState();
