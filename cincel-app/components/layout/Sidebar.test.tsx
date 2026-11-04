@@ -52,3 +52,26 @@ describe("Sidebar — mobile navigation", () => {
     expect(screen.getByRole("link", { name: /Dashboard/i })).toBeTruthy();
   });
 });
+
+describe("Sidebar — icon button names", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 1280 });
+    window.dispatchEvent(new Event("resize"));
+  });
+
+  it("names the collapse toggle and every menu group toggle, and reports whether a group is open", () => {
+    render(<Sidebar />);
+    expect(screen.getAllByRole("button", { name: "Alternar barra lateral" }).length).toBeGreaterThan(0);
+
+    const groupToggles = screen.getAllByRole("button").filter((button) => button.hasAttribute("aria-expanded"));
+    expect(groupToggles.length).toBeGreaterThan(0);
+    for (const toggle of groupToggles) {
+      expect(toggle.getAttribute("aria-label")?.trim()).toBeTruthy();
+    }
+
+    const [first] = groupToggles;
+    const wasExpanded = first.getAttribute("aria-expanded") === "true";
+    fireEvent.click(first);
+    expect(first.getAttribute("aria-expanded")).toBe(wasExpanded ? "false" : "true");
+  });
+});
