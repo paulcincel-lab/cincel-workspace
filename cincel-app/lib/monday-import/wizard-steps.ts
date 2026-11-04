@@ -135,7 +135,7 @@ export function decodeStatusTarget(value: string): StatusTarget | null {
   return null;
 }
 
-export function encodeClient(client: ClientRef | null | undefined): string {
+export function encodeClient(client: BoardDraft["client"]): string {
   if (!client) return "none";
   if (client.kind === "contact") return `contact:${client.contactId}`;
   if (client.kind === "relation_column") return `relation:${client.columnId}`;
