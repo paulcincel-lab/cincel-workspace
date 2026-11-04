@@ -8,6 +8,9 @@ export const LOGIN_ROUTE = "/login";
 export const LOGIN_DENIED_ROUTE = "/login/denegado";
 export const CHANGE_PASSWORD_ROUTE = "/change-password";
 export const PORTAL_ROUTE = "/portal";
+export const PORTAL_LOGIN_ROUTE = "/portal/login";
+/** Magic-link landing page: the link in the email opens it before any portal cookie exists. */
+export const PORTAL_ACCESS_ROUTE = "/portal/acceder";
 
 /**
  * Sign-out route (§A.5.1): deletes the staff session row and cookie, then
@@ -22,6 +25,13 @@ const PUBLIC_STAFF_ROUTES: ReadonlySet<string> = new Set([LOGIN_ROUTE, LOGIN_DEN
 /** `/portal` and every path under it: the portal layout does its own checks. */
 export function isPortalPath(pathname: string): boolean {
   return pathname === PORTAL_ROUTE || pathname.startsWith(`${PORTAL_ROUTE}/`);
+}
+
+const PUBLIC_PORTAL_ROUTES: ReadonlySet<string> = new Set([PORTAL_LOGIN_ROUTE, PORTAL_ACCESS_ROUTE]);
+
+/** Portal paths that render without a portal session (sign-in and the magic-link landing page). */
+export function isPublicPortalPath(pathname: string): boolean {
+  return PUBLIC_PORTAL_ROUTES.has(pathname);
 }
 
 /** True for paths that never require a staff session. */

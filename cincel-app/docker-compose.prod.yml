@@ -30,6 +30,13 @@
 #   GOOGLE_OAUTH_CLIENT_ID/_SECRET and GOOGLE_SA_CLIENT_EMAIL/_PRIVATE_KEY.
 #   They are not listed under `environment:` below on purpose: an entry there
 #   would override the value from .env.production.
+#
+# Client portal email (set in .env.production; see .env.example and
+# docs/deployment.md): SMTP_HOST (smtp.gmail.com), SMTP_PORT (465), SMTP_USER
+#   (the Workspace account, e.g. portal@cincel.mx), the secret SMTP_PASSWORD
+#   (that account's app password, never committed) and MAIL_FROM. Without
+#   SMTP_HOST the app only logs messages and invitations are not delivered.
+#   Not listed under `environment:` for the same reason as above.
 
 services:
   db:

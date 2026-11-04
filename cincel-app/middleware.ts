@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { isPublicPath, LOGIN_ROUTE } from "@/lib/auth/public-routes";
-import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
+import { isPortalPath, isPublicPath, isPublicPortalPath, LOGIN_ROUTE, PORTAL_LOGIN_ROUTE } from "@/lib/auth/public-routes";
+import { PORTAL_SESSION_COOKIE, SESSION_COOKIE } from "@/lib/auth/session-cookie";
 
 /**
  * Enforces authentication before any protected page renders.
@@ -14,6 +14,12 @@ import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
  * may be stale (expired or deleted session row), and bouncing it to
  * `/dashboard` would loop. Public paths (including `/portal/*`) are outside
  * the staff redirect.
+ *
+ * `/portal/*` has its own gate on the portal cookie only (backend spec §B.7):
+ * without it the request goes to `/portal/login`. `/portal/login` and the
+ * magic-link landing page `/portal/acceder` stay public. A staff cookie never
+ * counts as a portal session. As with staff, a stale portal cookie passes here
+ * and `requirePortalUser()` clears it server-side.
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -23,6 +29,17 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/api") ||
     pathname.includes(".")
   ) {
+    return NextResponse.next();
+  }
+
+  if (isPortalPath(pathname)) {
+    const hasPortalSession = Boolean(request.cookies.get(PORTAL_SESSION_COOKIE)?.value);
+    if (!hasPortalSession && !isPublicPortalPath(pathname)) {
+      const portalLoginUrl = request.nextUrl.clone();
+      portalLoginUrl.pathname = PORTAL_LOGIN_ROUTE;
+      portalLoginUrl.search = "";
+      return NextResponse.redirect(portalLoginUrl);
+    }
     return NextResponse.next();
   }
 
