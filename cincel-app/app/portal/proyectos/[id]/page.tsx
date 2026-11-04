@@ -6,6 +6,7 @@ import PortalFileBrowser from "@/components/portal/PortalFileBrowser";
 import PortalProjectSummary from "@/components/portal/PortalProjectSummary";
 import PortalProjectTabs from "@/components/portal/PortalProjectTabs";
 import PortalSchedule from "@/components/portal/PortalSchedule";
+import PortalUploader from "@/components/portal/PortalUploader";
 import { isPortalNotFound } from "@/lib/portal/drive-guard";
 import { parsePortalProjectTab } from "@/lib/portal/project-tabs";
 import { getPortalProject, getPortalSchedule } from "@/lib/portal/queries";
@@ -52,6 +53,8 @@ export default async function PortalProjectPage({ params, searchParams }: PagePr
         <PortalSchedule schedule={schedule} />
       ) : active === "archivos" ? (
         <PortalFileBrowser projectId={project.id} initialFolderId={(Array.isArray(folder) ? folder[0] : folder) || null} />
+      ) : active === "enviar" ? (
+        <PortalUploader projectId={project.id} />
       ) : (
         <PortalProjectSummary project={project} />
       )}

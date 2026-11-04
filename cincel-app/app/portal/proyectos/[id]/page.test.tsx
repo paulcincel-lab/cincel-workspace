@@ -32,6 +32,9 @@ vi.mock("@/components/portal/PortalFileBrowser", () => ({
     <div data-testid="file-browser" data-project={projectId} data-folder={initialFolderId ?? ""} />
   ),
 }));
+vi.mock("@/components/portal/PortalUploader", () => ({
+  default: ({ projectId }: { projectId: string }) => <div data-testid="uploader" data-project={projectId} />,
+}));
 vi.mock("@/lib/portal/queries", () => ({
   getPortalProject: mocks.getPortalProject,
   getPortalSchedule: mocks.getPortalSchedule,
@@ -151,6 +154,16 @@ describe("/portal/proyectos/[id]", () => {
     const browser = screen.getByTestId("file-browser");
     expect(browser.getAttribute("data-project")).toBe(PID);
     expect(browser.getAttribute("data-folder")).toBe("fold-2");
+    expect(mocks.getPortalSchedule).not.toHaveBeenCalled();
+  });
+
+  it("renders Enviar archivos with the PortalUploader", async () => {
+    render(await renderPage("enviar"));
+
+    expect(screen.getByRole("tab", { name: "Enviar archivos" }).getAttribute("href")).toBe(
+      `/portal/proyectos/${PID}?tab=enviar`
+    );
+    expect(screen.getByTestId("uploader").getAttribute("data-project")).toBe(PID);
     expect(mocks.getPortalSchedule).not.toHaveBeenCalled();
   });
 
