@@ -22,6 +22,7 @@ const user = (overrides: Partial<{ email: string | null; googleLinked: boolean }
 beforeEach(() => {
   vi.resetAllMocks();
   vi.unstubAllEnvs();
+  vi.stubEnv("AUTH_GOOGLE_ENABLED", "true");
   staffOauthConfigMock.mockReturnValue({ clientId: "id", clientSecret: "s", redirectUri: "r", workspaceDomain: "cincel.mx" });
   requireSessionAccessMock.mockResolvedValue(user());
 });
@@ -61,10 +62,11 @@ describe("GET /api/google/drive/status", () => {
     expect(await (await GET()).json()).toMatchObject({ mode: "staff_token", hasDriveGrant: true, googleLinked: false });
   });
 
-  it("reports staff_token even with AUTH_GOOGLE_ENABLED=false", async () => {
+  it("reports not configured, still in staff_token mode, when Google sign-in is off", async () => {
     vi.stubEnv("AUTH_GOOGLE_ENABLED", "false");
     getStaffAccessTokenMock.mockResolvedValue({ status: "ok", accessToken: "staff-at" });
 
-    expect(await (await GET()).json()).toMatchObject({ mode: "staff_token", hasDriveGrant: true });
+    expect(await (await GET()).json()).toMatchObject({ configured: false, mode: "staff_token", hasDriveGrant: false });
+    expect(getStaffAccessTokenMock).not.toHaveBeenCalled();
   });
 });

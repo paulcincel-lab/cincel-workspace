@@ -27,6 +27,8 @@ const call = () => GET(new Request("http://x") as never, ctx("f1"));
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.unstubAllEnvs();
+  vi.stubEnv("AUTH_GOOGLE_ENABLED", "true");
   staffOauthConfigMock.mockReturnValue({ clientId: "id", clientSecret: "s", redirectUri: "r", workspaceDomain: "cincel.mx" });
   getStaffAccessTokenMock.mockResolvedValue({ status: "ok", accessToken: "staff-at" });
   requireCapabilityUserMock.mockResolvedValue(caller("ana@cincel.mx"));

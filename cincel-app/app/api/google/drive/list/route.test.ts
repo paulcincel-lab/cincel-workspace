@@ -30,6 +30,7 @@ const caller = (email: string) => ({ member: { id: "staff-1" }, email });
 beforeEach(() => {
   vi.resetAllMocks();
   vi.unstubAllEnvs();
+  vi.stubEnv("AUTH_GOOGLE_ENABLED", "true");
   vi.stubEnv("GOOGLE_DRIVE_ROOT_FOLDER_ID", "root-folder-id");
   staffOauthConfigMock.mockReturnValue({ clientId: "id", clientSecret: "s", redirectUri: "r", workspaceDomain: "cincel.mx" });
   getStaffAccessTokenMock.mockResolvedValue({ status: "ok", accessToken: "staff-at" });
@@ -91,14 +92,11 @@ describe("GET /api/google/drive/list", () => {
     expect(listFolderMock).not.toHaveBeenCalled();
   });
 
-  it("uses the staff token whatever AUTH_GOOGLE_ENABLED says", async () => {
+  it("503 when Google sign-in is off", async () => {
     vi.stubEnv("AUTH_GOOGLE_ENABLED", "false");
-    listFolderMock.mockResolvedValue({ entries: [], nextPageToken: null });
-
     const res = await GET(req("http://x/api/google/drive/list?folderId=f1"));
-
-    expect(res.status).toBe(200);
-    expect(getStaffAccessTokenMock).toHaveBeenCalledWith("staff-1", "drive");
+    expect(res.status).toBe(503);
+    expect(getStaffAccessTokenMock).not.toHaveBeenCalled();
   });
 
   it("503 when the staff OAuth client isn't configured", async () => {
