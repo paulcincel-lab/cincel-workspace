@@ -78,7 +78,7 @@ const guard = createDriveGuard({ getDrive: () => drive });
 const events: PortalFileEventInput[] = [];
 let deps: PortalFileDeps;
 
-const projectA = { projectId: "11111111-1111-1111-1111-111111111111", driveClientFolderId: "a-cliente" };
+const projectA: { projectId: string; driveClientFolderId: string | null } = { projectId: "11111111-1111-1111-1111-111111111111", driveClientFolderId: "a-cliente" };
 
 function deliver(fileId: string, kind: PortalFileKind = "download", project = projectA) {
   return deliverPortalFile(
