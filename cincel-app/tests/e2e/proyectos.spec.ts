@@ -3,7 +3,7 @@
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
 
@@ -14,12 +14,6 @@ const CLIENT_NAME = `Cliente E2E ${RUN_ID}`;
 
 const connectionString =
   process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
-
-// A project always belongs to a client (see AGENTS.md — "Cada proyecto
-// pertenece a un cliente"), so the label wraps a Select, not a plain input.
-function fieldContainer(page: Page, labelText: string) {
-  return page.locator("label").filter({ hasText: labelText }).last();
-}
 
 /**
  * Seeds a client contact directly (skips the directorio UI, out of scope here).
@@ -61,7 +55,7 @@ test.describe("Proyectos — create and edit", () => {
 
     // Cliente is required — a project always belongs to a client — so pick
     // the seeded client from the combobox before submitting.
-    await fieldContainer(page, "Cliente").getByRole("combobox").click();
+    await page.getByRole("combobox", { name: "Cliente" }).click();
     await page.getByRole("option", { name: CLIENT_NAME }).click();
 
     await page.getByRole("button", { name: "Crear proyecto" }).click();
@@ -167,7 +161,7 @@ test.describe("Proyectos — create and edit", () => {
 
     await page.getByRole("button", { name: "Editar" }).click();
     // First field of "Datos generales" in edit mode.
-    await page.locator("label").filter({ hasText: /^Cliente/ }).first().getByRole("combobox").click();
+    await page.getByRole("combobox", { name: "Cliente" }).first().click();
     await page.getByRole("option", { name: newClient }).click();
     page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "Guardar", exact: true }).click();
