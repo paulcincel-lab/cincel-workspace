@@ -84,6 +84,8 @@ import { MeDocument } from "@/scripts/monday/queries";
 import { createRollbackCommand, findRollbackBlockers, openServiceAccountDrive } from "@/scripts/monday/rollback";
 import { TOKEN_ENV } from "@/scripts/monday/token";
 
+import { importedProjectHref } from "./links";
+
 type Env = Record<string, string | undefined>;
 
 /** An error the wizard shows inline, in Spanish. */
@@ -676,7 +678,7 @@ export async function importedProjects(runId: string, deps: WizardDeps): Promise
           where r.batch_id = ${batch.id} and r.entity = 'project' and p.deleted_at is null
           order by p.name`,
   )) as unknown as { id: string; name: string }[];
-  return rows.map((r) => ({ id: r.id, name: r.name, href: `/proyectos/${r.id}` }));
+  return rows.map((r) => ({ id: r.id, name: r.name, href: importedProjectHref(r.id) }));
 }
 
 /** What blocks "Deshacer importación" (§9), read-only. */
