@@ -47,7 +47,10 @@ describe("ProjectFoldersBackfill", () => {
     expect(await screen.findByText("12 creadas, 2 omitidas, 1 con error")).toBeTruthy();
     expect(actions.ensureMissingProjectFoldersAction).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(router.refresh).toHaveBeenCalled());
-    expect((screen.getByRole("button", { name: "Crear carpetas faltantes" }) as HTMLButtonElement).disabled).toBe(false);
+    // The label switches back once the transition settles, which can lag the summary text.
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "Crear carpetas faltantes" }) as HTMLButtonElement).disabled).toBe(false)
+    );
   });
 
   it("shows an error when the action fails", async () => {
