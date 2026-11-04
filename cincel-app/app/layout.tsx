@@ -5,6 +5,9 @@ import SessionHydrator from "@/components/auth/SessionHydrator";
 import QueryProvider from "@/components/providers/QueryProvider";
 import { SessionAccessProvider } from "@/lib/auth/session-context";
 import { getSessionAccess } from "@/lib/auth/session";
+import { buildDefaultGeneralSettings } from "@/lib/settings/general-settings";
+import { getGeneralSettings } from "@/lib/settings/general-settings-server";
+import { GeneralSettingsProvider } from "@/lib/settings/use-general-settings";
 import { primaryColorCss } from "@/lib/theme/primary-color";
 import { getPrimaryColor } from "@/lib/theme/primary-color-server";
 import "./globals.css";
@@ -31,6 +34,8 @@ export default async function RootLayout({
 }>) {
   const [sessionAccess, primaryColor] = await Promise.all([getSessionAccess(), getPrimaryColor()]);
   const primaryCss = primaryColorCss(primaryColor);
+  // Company details stay off pages rendered without a session (login, public routes).
+  const generalSettings = sessionAccess.user ? (await getGeneralSettings()).settings : buildDefaultGeneralSettings();
 
   return (
     <html
@@ -42,7 +47,9 @@ export default async function RootLayout({
         <QueryProvider>
           <SessionAccessProvider value={sessionAccess}>
             <SessionHydrator value={sessionAccess} />
-            <AppRouteGuard>{children}</AppRouteGuard>
+            <GeneralSettingsProvider value={generalSettings}>
+              <AppRouteGuard>{children}</AppRouteGuard>
+            </GeneralSettingsProvider>
           </SessionAccessProvider>
         </QueryProvider>
       </body>

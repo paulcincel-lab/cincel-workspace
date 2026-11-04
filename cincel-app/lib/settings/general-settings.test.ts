@@ -3,54 +3,49 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   buildDefaultGeneralSettings,
+  clearLegacyGeneralSettings,
   formatGeneralSettingsSavedAt,
   GENERAL_SETTINGS_STORAGE_KEY,
-  loadGeneralSettings,
-  restoreDefaultGeneralSettings,
-  saveGeneralSettings,
+  readLegacyGeneralSettings,
 } from "./general-settings";
 
-describe("general settings save time", () => {
+describe("legacy general settings pickup", () => {
   afterEach(() => window.localStorage.clear());
 
-  it("stamps a save with its time and reads it back", () => {
-    const now = new Date("2026-11-04T16:30:00.000Z");
-    const savedAt = saveGeneralSettings(buildDefaultGeneralSettings(), now);
-
-    expect(savedAt).toBe(now.toISOString());
-    const loaded = loadGeneralSettings();
-    expect(loaded.hasCustom).toBe(true);
-    expect(loaded.savedAt).toBe(now.toISOString());
+  it("is null when this browser never saved settings", () => {
+    expect(readLegacyGeneralSettings()).toBeNull();
   });
 
-  it("has no save time before the first save or after restoring defaults", () => {
-    expect(loadGeneralSettings().savedAt).toBeNull();
+  it("reads a value saved before the settings moved to the server", () => {
+    const data = buildDefaultGeneralSettings();
+    data.company.tradeName = "Cincel Studio";
+    window.localStorage.setItem(
+      GENERAL_SETTINGS_STORAGE_KEY,
+      JSON.stringify({ version: 1, data, savedAt: "2026-11-04T16:30:00.000Z" }),
+    );
 
-    saveGeneralSettings(buildDefaultGeneralSettings());
-    restoreDefaultGeneralSettings();
-    expect(loadGeneralSettings().savedAt).toBeNull();
+    expect(readLegacyGeneralSettings()?.company.tradeName).toBe("Cincel Studio");
   });
 
-  it("keeps older payloads without a save time readable", () => {
+  it("ignores unreadable or unknown payloads", () => {
+    window.localStorage.setItem(GENERAL_SETTINGS_STORAGE_KEY, "{no json");
+    expect(readLegacyGeneralSettings()).toBeNull();
+
+    window.localStorage.setItem(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify({ version: 2, data: {} }));
+    expect(readLegacyGeneralSettings()).toBeNull();
+  });
+
+  it("clears the old value", () => {
     window.localStorage.setItem(
       GENERAL_SETTINGS_STORAGE_KEY,
       JSON.stringify({ version: 1, data: buildDefaultGeneralSettings() }),
     );
-
-    const loaded = loadGeneralSettings();
-    expect(loaded.hasCustom).toBe(true);
-    expect(loaded.savedAt).toBeNull();
+    clearLegacyGeneralSettings();
+    expect(window.localStorage.getItem(GENERAL_SETTINGS_STORAGE_KEY)).toBeNull();
   });
+});
 
-  it("ignores a save time that isn't a date", () => {
-    window.localStorage.setItem(
-      GENERAL_SETTINGS_STORAGE_KEY,
-      JSON.stringify({ version: 1, data: buildDefaultGeneralSettings(), savedAt: "ayer" }),
-    );
-
-    expect(loadGeneralSettings().savedAt).toBeNull();
-  });
-
+describe("general settings save label", () => {
   it("formats the label as Guardado plus the date in Mexico City time", () => {
     const label = formatGeneralSettingsSavedAt("2026-11-04T16:30:00.000Z");
     expect(label.startsWith("Guardado ")).toBe(true);

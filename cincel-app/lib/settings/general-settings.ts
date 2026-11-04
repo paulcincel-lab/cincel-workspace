@@ -1,7 +1,12 @@
-import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
+import { readStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 
+/** Where the settings lived before they moved to the database; read once to pick up an old value. */
 export const GENERAL_SETTINGS_STORAGE_KEY = "cincel.settings.general.v1";
-export const GENERAL_SETTINGS_CHANGED_EVENT = "cincel:general-settings-changed";
+/** core.app_settings key holding the settings as JSON. */
+export const GENERAL_SETTINGS_SETTING_KEY = "general_settings";
+
+/** Largest logo image accepted (bytes), so a save stays well under the server action body limit. */
+export const GENERAL_SETTINGS_LOGO_MAX_BYTES = 200 * 1024;
 
 export type GeneralLanguage = "es-MX";
 
@@ -49,8 +54,6 @@ export type GeneralSettings = {
 type StoredGeneralSettings = {
   version: 1;
   data: GeneralSettings;
-  // ISO time of the last save; older payloads don't carry it.
-  savedAt?: string;
 };
 
 export const GENERAL_SETTINGS_DEFAULTS: GeneralSettings = {
@@ -175,61 +178,38 @@ export function sanitizeGeneralSettings(candidate: unknown): GeneralSettings {
   };
 }
 
-function sanitizeSavedAt(candidate: unknown): string | null {
-  if (!candidate || typeof candidate !== "object") {
-    return null;
-  }
-
-  const savedAt = (candidate as StoredGeneralSettings).savedAt;
-
-  if (typeof savedAt !== "string" || Number.isNaN(Date.parse(savedAt))) {
-    return null;
-  }
-
-  return savedAt;
-}
-
 export type LoadedGeneralSettings = { settings: GeneralSettings; hasCustom: boolean; savedAt: string | null };
 
-export function loadGeneralSettings(): LoadedGeneralSettings {
+export function buildDefaultLoadedGeneralSettings(): LoadedGeneralSettings {
+  return { settings: deepCloneDefaults(), hasCustom: false, savedAt: null };
+}
+
+/** A settings value stored before they moved to the database (this browser only), or null. */
+export function readLegacyGeneralSettings(): GeneralSettings | null {
   if (typeof window === "undefined") {
-    return { settings: deepCloneDefaults(), hasCustom: false, savedAt: null };
+    return null;
   }
 
   const stored = readStorage(GENERAL_SETTINGS_STORAGE_KEY);
 
   if (!stored) {
-    return { settings: deepCloneDefaults(), hasCustom: false, savedAt: null };
+    return null;
   }
 
   try {
     const parsed = JSON.parse(stored);
-    return {
-      settings: sanitizeGeneralSettings(parsed),
-      hasCustom: true,
-      savedAt: sanitizeSavedAt(parsed),
-    };
+    return parsed && typeof parsed === "object" && parsed.version === 1 ? sanitizeGeneralSettings(parsed) : null;
   } catch {
-    return { settings: deepCloneDefaults(), hasCustom: false, savedAt: null };
+    return null;
   }
 }
 
-/** Saves the settings and returns the ISO time stamped on them (null when there's no browser). */
-export function saveGeneralSettings(settings: GeneralSettings, now: Date = new Date()): string | null {
+export function clearLegacyGeneralSettings(): void {
   if (typeof window === "undefined") {
-    return null;
+    return;
   }
 
-  const savedAt = now.toISOString();
-  const payload: StoredGeneralSettings = {
-    version: 1,
-    data: settings,
-    savedAt,
-  };
-
-  writeStorage(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
-  window.dispatchEvent(new Event(GENERAL_SETTINGS_CHANGED_EVENT));
-  return savedAt;
+  removeStorage(GENERAL_SETTINGS_STORAGE_KEY);
 }
 
 /** "Guardado 4 nov 2026, 10:30" style label for the last save. */
@@ -240,15 +220,6 @@ export function formatGeneralSettingsSavedAt(savedAt: string): string {
     timeZone: GENERAL_SETTINGS_DEFAULTS.regional.timeZone,
   }).format(new Date(savedAt));
   return `Guardado ${date}`;
-}
-
-export function restoreDefaultGeneralSettings(): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  removeStorage(GENERAL_SETTINGS_STORAGE_KEY);
-  window.dispatchEvent(new Event(GENERAL_SETTINGS_CHANGED_EVENT));
 }
 
 export function buildDefaultGeneralSettings(): GeneralSettings {

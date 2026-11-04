@@ -38,7 +38,7 @@ import {
   fetchContactsAction,
   updateContactAction,
 } from "@/lib/actions/contacts-actions";
-import { loadGeneralSettings } from "@/lib/settings/general-settings";
+import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 import type { ContactDetail, ContactListItem, ContactType, ProviderStatus, ProviderSubtype } from "@/lib/types/core";
@@ -130,6 +130,7 @@ function draftFromDetail(detail: ContactDetail): ContactDraft {
 }
 
 export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
+  const generalSettings = useGeneralSettings();
   const [contacts, setContacts] = useState(initialContacts);
   const [typeFilter, setTypeFilter] = useState<(typeof TYPE_FILTERS)[number]>("Todos");
   const [filters, setFilters] = useState(emptyFilters);
@@ -299,12 +300,11 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
   );
 
   async function exportDirectorio(format: "xlsx" | "pdf") {
-    const { settings } = loadGeneralSettings();
     await exportTableData({
       moduleName: "Directorio",
       fileName: `directorio-${typeFilter}-${Date.now()}`,
       format,
-      companyName: settings.company.tradeName || settings.company.legalName,
+      companyName: generalSettings.company.tradeName || generalSettings.company.legalName,
       columns: exportColumns,
       rows: visible,
       landscape: true,

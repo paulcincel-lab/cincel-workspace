@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/shadcn/button";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
-import { loadGeneralSettings } from "@/lib/settings/general-settings";
+import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import type { ProjectInput, ProjectStatus } from "@/lib/types/core";
@@ -34,6 +34,7 @@ const STATUS_LABEL: Record<ProjectStatus, string> = {
 };
 
 export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
+  const generalSettings = useGeneralSettings();
   const router = useRouter();
   const { projectsData, isLoadingData, authenticatedUser, updateProject, archiveProject, removeProject, addProject } =
     useProjectsData(initialProjects);
@@ -89,12 +90,11 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
   );
 
   async function exportProjects(format: "xlsx" | "pdf") {
-    const { settings } = loadGeneralSettings();
     await exportTableData({
       moduleName: "Proyectos",
       fileName: `proyectos-${view}-${Date.now()}`,
       format,
-      companyName: settings.company.tradeName || settings.company.legalName,
+      companyName: generalSettings.company.tradeName || generalSettings.company.legalName,
       columns: exportColumns,
       rows: visible,
       landscape: true,
