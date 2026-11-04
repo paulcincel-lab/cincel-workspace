@@ -28,8 +28,18 @@ import { createApplyCommand, NOTHING_NEW } from "@/scripts/monday/apply";
 import { createPhaseB } from "@/scripts/monday/apply-phase-b";
 import type { MondayDbHandle } from "@/scripts/monday/db";
 import type { MappingInput } from "@/scripts/monday/mapping.schema";
-import { createPlanCommand, PLAN_FILE } from "@/scripts/monday/plan";
-import { ENTITY_TABLES } from "@/scripts/monday/rollback";
+import {
+  buildPlan,
+  createPlanCommand,
+  createPlanDbLookups,
+  PLAN_FILE,
+  readPlanExport,
+} from "@/scripts/monday/plan";
+import {
+  deleteBatchRows,
+  ENTITY_TABLES,
+  findRollbackBlockers,
+} from "@/scripts/monday/rollback";
 
 import {
   fakeDrive,
@@ -40,6 +50,7 @@ import {
 
 const STAFF = "56656656-0000-4000-8000-000000000001";
 const CLIENT = "56656656-0000-4000-8000-0000000000c1";
+const WORKFLOW = "56656656-0000-4000-8000-0000000000f1";
 const STAFF_EMAIL = "integracion.apply@example.com";
 const ACCOUNT = "apply-integration-566";
 const SHARED_DRIVE = "sd-566";
@@ -396,6 +407,68 @@ describe.skipIf(!url)(
         expect(applied.err).toContain("STATUS_UNMAPPED board 901 item 2002");
         expect(await tableCounts(tx)).toEqual(before);
         expect(cmd.drive.writes()).toEqual([]);
+      });
+    });
+
+    it("a board workflow becomes the project's workflow, stage and phases, as planned; rollback removes them (#678)", async () => {
+      await inTx(async (tx) => {
+        await seed(tx);
+        await tx
+          .insert(schema.workflows)
+          .values({ id: WORKFLOW, key: `wf-${WORKFLOW}`, name: "Diseño" });
+        const mapping = nestedMapping(STAFF, CLIENT);
+        for (const board of mapping.boards)
+          if (board.strategy !== "crm_contacts") board.workflowId = WORKFLOW;
+        const dir = exportFolder(mapping);
+        const cmd = commands(tx);
+        const planned = await cmd.plan(dir);
+        expect(planned.code, planned.err).toBe(0);
+
+        // What the preview shows: the same plan the wizard builds.
+        const { data } = await readPlanExport(dir);
+        const plan = await buildPlan(data, mapping, createPlanDbLookups(tx));
+        const projects = plan.translation!.result.projects;
+        expect(projects.length).toBeGreaterThan(0);
+        expect(projects.every((p) => p.workflowId === WORKFLOW)).toBe(true);
+        expect(projects.some((p) => p.phases.length > 1)).toBe(true);
+
+        const before = await tableCounts(tx);
+        const applied = await cmd.apply(dir);
+        expect(applied.code, applied.err).toBe(0);
+        const [batch] = await batchesOf(tx);
+        const { refs } = await refsByEntity(tx, batch.id);
+        const rowOf = new Map(
+          refs
+            .filter((r) => r.entity === "project")
+            .map((r) => [r.externalId, r.rowId]),
+        );
+
+        for (const p of projects) {
+          const id = rowOf.get(p.externalId)!;
+          const [row] = await tx
+            .select()
+            .from(schema.projects)
+            .where(eq(schema.projects.id, id));
+          expect(row, p.externalId).toMatchObject({
+            currentWorkflowId: WORKFLOW,
+            phases: p.phases,
+            phase: p.phases.length > 0 ? p.phases.join(", ") : null,
+          });
+          const stages = await tx
+            .select()
+            .from(schema.projectStages)
+            .where(eq(schema.projectStages.projectId, id));
+          expect(stages.map((s) => s.workflowId)).toEqual([WORKFLOW]);
+        }
+        const added = diff(before, await tableCounts(tx));
+        expect(added.project_stages).toBe(projects.length);
+
+        // The stages are the batch's own: rollback isn't blocked and leaves nothing.
+        expect(await findRollbackBlockers(tx, batch.id)).toEqual([]);
+        await deleteBatchRows(tx, batch.id);
+        expect(diff(before, await tableCounts(tx))).toEqual({
+          import_batches: 1,
+        });
       });
     });
 

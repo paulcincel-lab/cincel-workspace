@@ -316,7 +316,8 @@ describe("monday wizard draft and preview", () => {
     expect(casaNido.samples.length).toBeLessThanOrEqual(5);
     expect(casaNido.samples.map((s) => s.mondayName)).toEqual(["Muros", "Planos", "Limpieza"]);
     expect(casaNido.samples[0]).toMatchObject({ entity: "tarea", cincel: { project: "Casa Nido" } });
-    expect(preview.boards[2].samples[0]).toMatchObject({ entity: "proyecto", mondayName: "Casa Mar" });
+    // An item-as-project shows its group as its phase, as apply writes it (#678).
+    expect(preview.boards[2].samples[0]).toMatchObject({ entity: "proyecto", mondayName: "Casa Mar", cincel: { phase: "2026" } });
     // a project sample counts its tasks as tareas, not subtareas
     expect(preview.boards[2].samples[0].cincel.childTasks).toBe(0);
     expect(preview.boards[3].samples[0]).toMatchObject({ entity: "contacto", mondayName: "Familia Mar" });

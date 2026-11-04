@@ -114,6 +114,8 @@ export interface ImportRefData {
   milestone?: true;
   /** Child tasks flattened from deeper levels: subitem names from the first level down. */
   path?: string[];
+  /** Projects: the workflow of the `project_stages` row the import wrote (rollback owns that row). */
+  stageWorkflowId?: string;
 }
 
 export interface PlannedContact {
@@ -158,6 +160,14 @@ export interface PlannedProject {
   progress: number;
   startDate: string | null;
   endDate: string | null;
+  /** The board's workflow: `current_workflow_id` and the project's one stage; null when none. */
+  workflowId: string | null;
+  /**
+   * Project phases from the monday groups, whether or not a workflow phase has
+   * the same name: every group of a `board_as_project` board, the item's group
+   * for `item_as_project`, none for `group_as_project`.
+   */
+  phases: string[];
   source: RowSource;
   data: ImportRefData;
 }
@@ -815,14 +825,30 @@ function resolveClient(
 
 // --- projects --------------------------------------------------------------
 
+/** Trimmed, without blanks or case-insensitive repeats, first seen first (as the Ficha keeps them). */
+export function projectPhases(titles: readonly (string | null | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of titles) {
+    const title = raw?.trim();
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    out.push(title);
+  }
+  return out;
+}
+
 function newProject(
+  bm: BoardMapping,
   externalId: string,
   name: string,
   code: string | null | undefined,
   client: RowRef | null,
   source: RowSource,
+  phases: string[],
   columns: ImportColumns = {},
 ): PlannedProject {
+  const workflowId = bm.workflowId ?? null;
   return {
     entity: "project",
     externalId,
@@ -833,8 +859,10 @@ function newProject(
     progress: 0,
     startDate: null,
     endDate: null,
+    workflowId,
+    phases,
     source,
-    data: { source, columns },
+    data: workflowId ? { source, columns, stageWorkflowId: workflowId } : { source, columns },
   };
 }
 
@@ -843,15 +871,20 @@ function translateBoardAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
   const items = activeItems(eb.items);
   const name = bm.projectNames[board.id] ?? board.name;
   const client = resolveClient(ctx, bm, bm.client, items, name);
+  const ranks = groupRanks(board.groups);
+  const groupsInOrder = [...board.groups].sort(
+    (a, b) => ranks.get(a.id)! - ranks.get(b.id)!,
+  );
   const project = newProject(
+    bm,
     board.id,
     name,
     bm.projectCode,
     client,
     sourceOf(board, null),
+    projectPhases(groupsInOrder.map((g) => g.title)),
   );
   ctx.out.projects.push(project);
-  const ranks = groupRanks(board.groups);
   const orderInGroup = new Map<string, number>();
   for (const item of items) {
     const groupId = item.group?.id ?? null;
@@ -889,11 +922,13 @@ function translateGroupAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
       name,
     );
     const project = newProject(
+      bm,
       `${board.id}:${group.id}`,
       name,
       bm.projectCodes[group.id],
       client,
       sourceOf(board, group.id),
+      [],
     );
     ctx.out.projects.push(project);
     groupItems.forEach((item, i) => {
@@ -920,11 +955,13 @@ function translateItemAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
     const client = resolveClient(ctx, bm, bm.client, [item], name, item.id);
     const source = sourceOf(board, groupId);
     const project = newProject(
+      bm,
       item.id,
       name,
       bm.projectCodes[item.id],
       client,
       source,
+      projectPhases([source.groupTitle]),
       importColumns(item, bm.columns, board.columns),
     );
     ctx.out.projects.push(project);

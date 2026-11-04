@@ -523,6 +523,29 @@ describe.skipIf(!url)("rollback blocker detection (test DB)", () => {
     });
   });
 
+  it("the stage the import wrote doesn't block; another stage on the project does (#678)", async () => {
+    await inBatch(async (tx, f) => {
+      const [imported, manual] = await tx
+        .insert(schema.workflows)
+        .values([
+          { key: `wf-${crypto.randomUUID()}`, name: "Diseño" },
+          { key: `wf-${crypto.randomUUID()}`, name: "Construcción" },
+        ])
+        .returning();
+      await tx.execute(
+        sql`update core.import_refs set data = jsonb_build_object('stageWorkflowId', ${imported.id}::text)
+          where batch_id = ${f.batch.id} and entity = 'project' and row_id = ${f.project.id}`,
+      );
+      await tx.insert(schema.projectStages).values({ projectId: f.project.id, workflowId: imported.id });
+      expect(await findRollbackBlockers(tx, f.batch.id)).toEqual([]);
+
+      await tx.insert(schema.projectStages).values({ projectId: f.project.id, workflowId: manual.id });
+      expect(pick(await findRollbackBlockers(tx, f.batch.id))).toEqual([
+        { kind: "reference", table: "project_stages", id: `${f.project.id}:${manual.id}` },
+      ]);
+    });
+  });
+
   it("names a manual dependency on an imported task from either side", async () => {
     await inBatch(async (tx, f) => {
       const [other] = await tx

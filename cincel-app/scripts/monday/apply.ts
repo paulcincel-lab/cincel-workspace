@@ -9,10 +9,10 @@
  * 3. Otherwise the plan runs (scripts/monday/plan.ts) and any blocking issue
  *    aborts before anything is written.
  * 4. Phase A, one transaction: `import_batches (applying)` → contacts
- *    (+ `contact_people`, `provider_profiles`) → projects →
- *    `project_schedules` → tasks → child tasks → checklist →
- *    `task_support` → `task_dependencies` → `history_events` →
- *    `schedule_tasks`; `import_files (pending)`; an `import_refs` row for
+ *    (+ `contact_people`, `provider_profiles`) → projects (+ the board
+ *    workflow's `project_stages` row) → `project_schedules` → tasks →
+ *    child tasks → checklist → `task_support` → `task_dependencies` →
+ *    `history_events` → `schedule_tasks`; `import_files (pending)`; an `import_refs` row for
  *    every created row, with `row_updated_at` = the row's `updated_at`
  *    after insert (null for rows without one). Rows already in
  *    `import_refs` are skipped, so a second apply of the same export
@@ -39,6 +39,7 @@ import {
   importFiles,
   projects,
   projectSchedules,
+  projectStages,
   providerProfiles,
   scheduleTasks,
   staff,
@@ -362,29 +363,41 @@ export async function writePhaseA(
     )
   ).length;
 
-  // --- projects, project_schedules ----------------------------------------
-  counts.projects = (
-    await step(
-      "project",
-      result.projects,
-      projects,
-      (p) => {
-        if (!p.client)
-          throw new Error(`apply: project ${p.externalId} has no client`);
-        return {
-          name: p.name,
-          code: p.code,
-          clientId: idOf(p.client),
-          status: p.status,
-          progress: p.progress,
-          startDate: p.startDate,
-          endDate: p.endDate,
-        };
-      },
-      byId,
-      (p) => p.data,
-    )
-  ).length;
+  // --- projects (+ their stage), project_schedules -------------------------
+  const newProjects = await step(
+    "project",
+    result.projects,
+    projects,
+    (p) => {
+      if (!p.client)
+        throw new Error(`apply: project ${p.externalId} has no client`);
+      return {
+        name: p.name,
+        code: p.code,
+        clientId: idOf(p.client),
+        status: p.status,
+        progress: p.progress,
+        startDate: p.startDate,
+        endDate: p.endDate,
+        currentWorkflowId: p.workflowId,
+        phases: p.phases,
+        phase: p.phases.length > 0 ? p.phases.join(", ") : null,
+      };
+    },
+    byId,
+    (p) => p.data,
+  );
+  counts.projects = newProjects.length;
+  // The board's workflow is the project's one stage, as the Ficha sets it. The
+  // project's import ref names it (`stageWorkflowId`), so rollback owns the row.
+  const stages = newProjects.flatMap((p) =>
+    p.workflowId
+      ? [{ projectId: idOf({ kind: "planned", entity: "project", externalId: p.externalId }), workflowId: p.workflowId }]
+      : [],
+  );
+  await insertAll(stages, (chunk) =>
+    tx.insert(projectStages).values(chunk as (typeof stages)[number][]).returning(),
+  );
   counts.projectSchedules = (
     await step(
       "project_schedule",
