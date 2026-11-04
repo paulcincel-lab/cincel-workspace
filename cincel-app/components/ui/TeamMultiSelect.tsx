@@ -133,6 +133,7 @@ export default function TeamMultiSelect({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder={placeholder}
+        aria-label={placeholder}
         className="mb-2 h-auto px-2 py-1.5 text-sm"
       />
 

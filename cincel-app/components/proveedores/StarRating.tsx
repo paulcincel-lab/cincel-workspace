@@ -19,6 +19,8 @@ export const StarRating = ({ rating, onRate }: { rating: number; onRate: (v: num
         <button
           key={star}
           type="button"
+          aria-label={star === 1 ? "1 estrella" : `${star} estrellas`}
+          aria-pressed={star <= rating}
           onClick={() => onRate(star)}
           onMouseEnter={() => setHover(star)}
           onMouseLeave={() => setHover(0)}

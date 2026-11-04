@@ -3,7 +3,9 @@
 import { GoogleManagedBadge } from "@/components/equipo/GoogleManagedBadge";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
+import { FormField } from "@/components/ui/shadcn/form-field";
 import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Switch } from "@/components/ui/shadcn/switch";
@@ -107,28 +109,28 @@ export function AreaEditorDrawer({
             <h3 className="text-sm font-semibold text-foreground">Información general</h3>
 
             <div className="mt-4 space-y-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Nombre</label>
+              <FormField>
+                <Label className="mb-2 block">Nombre</Label>
                 <Input
                   type="text"
                   value={draft.name}
                   disabled={!canManage}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, name: event.target.value }))}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Descripción</label>
+              <FormField>
+                <Label className="mb-2 block">Descripción</Label>
                 <Textarea
                   value={draft.description}
                   disabled={!canManage}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, description: event.target.value }))}
                   rows={3}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Responsable</label>
+              <FormField>
+                <Label className="mb-2 block">Responsable</Label>
                 <Select
                   items={{ [NO_LEAD_VALUE]: "Sin responsable", ...Object.fromEntries(staffOptions.map((o) => [o.id, o.name])) }}
                   value={draft.leadId ?? NO_LEAD_VALUE}
@@ -152,10 +154,10 @@ export function AreaEditorDrawer({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Color</label>
+              <FormField>
+                <Label className="mb-2 block">Color</Label>
                 <Select
                   items={{
                     [AUTO_COLOR_VALUE]: "Automático",
@@ -195,7 +197,7 @@ export function AreaEditorDrawer({
                   Color del área en etiquetas y gráficas.
                   {isCreating ? " Automático usa el color del departamento o el siguiente libre." : ""}
                 </p>
-              </div>
+              </FormField>
 
               <label className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted p-4">
                 <div>
@@ -205,6 +207,7 @@ export function AreaEditorDrawer({
                   </p>
                 </div>
                 <Switch
+                  aria-label="Área activa"
                   checked={draft.active}
                   disabled={!canManage}
                   onCheckedChange={(checked) => onChangeDraft((current) => ({ ...current, active: checked }))}
