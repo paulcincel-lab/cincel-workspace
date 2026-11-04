@@ -39,6 +39,7 @@
 import { getSessionAccess } from "@/lib/auth/session";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { db } from "@/lib/db/client";
+import { createFakeMondayClient, isMondayFake } from "@/lib/monday-import/fake-monday";
 import { isRunId, latestRun } from "@/lib/monday-import/runs";
 import {
   checkRollback,
@@ -85,7 +86,8 @@ const FORBIDDEN = "Solo un Administrador puede importar de monday.";
 const UNEXPECTED = "Algo salió mal. Intenta de nuevo.";
 const BAD_RUN = "No se encontró esta importación.";
 
-const deps = (): WizardDeps => ({ db });
+// MONDAY_FAKE=1 (local e2e only) answers with the CLI fixture account instead of calling monday.
+const deps = (): WizardDeps => (isMondayFake() ? { db, createClient: createFakeMondayClient } : { db });
 
 async function currentAdmin(): Promise<Admin | null> {
   try {
