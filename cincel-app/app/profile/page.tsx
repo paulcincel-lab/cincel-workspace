@@ -119,7 +119,7 @@ export default function ProfilePage() {
 
             <div className="mt-5 space-y-3 text-sm leading-relaxed">
               <p><span className="font-medium text-foreground">Correo institucional:</span> {member.institutionalEmail || "-"}</p>
-              <p><span className="font-medium text-foreground">Area:</span> {member.area || "-"}</p>
+              <p><span className="font-medium text-foreground">Área:</span> {member.area || "-"}</p>
               <p><span className="font-medium text-foreground">Teléfono:</span> {member.phone || "-"}</p>
             </div>
 

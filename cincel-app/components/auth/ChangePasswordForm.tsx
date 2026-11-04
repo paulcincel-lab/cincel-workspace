@@ -80,7 +80,7 @@ export default function ChangePasswordForm() {
           </div>
 
           <div className="mt-6 rounded-2xl border border-border bg-muted p-4 text-sm text-foreground">
-            <p className="font-semibold">Politica de seguridad V1</p>
+            <p className="font-semibold">Política de seguridad V1</p>
             <p className="mt-1 leading-relaxed text-muted-foreground">Usa una contraseña de al menos 8 caracteres. No pedimos complejidad extra por ahora para mantener el flujo simple.</p>
           </div>
 
