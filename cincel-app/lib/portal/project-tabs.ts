@@ -3,11 +3,12 @@
  * parse `?tab=` itself: a function exported from a client module can't be called on the server.
  */
 
-export type PortalProjectTab = "resumen" | "cronograma";
+export type PortalProjectTab = "resumen" | "cronograma" | "archivos";
 
 export const PORTAL_PROJECT_TABS: { tab: PortalProjectTab; label: string }[] = [
   { tab: "resumen", label: "Resumen" },
   { tab: "cronograma", label: "Cronograma" },
+  { tab: "archivos", label: "Archivos" },
 ];
 
 /** `?tab=` value → tab; anything unknown (or missing) is Resumen. */

@@ -27,6 +27,11 @@ vi.mock("@/lib/portal/drive-guard", () => ({
   PortalNotFoundError: mocks.PortalNotFoundError,
   isPortalNotFound: (e: unknown) => e instanceof mocks.PortalNotFoundError,
 }));
+vi.mock("@/components/portal/PortalFileBrowser", () => ({
+  default: ({ projectId, initialFolderId }: { projectId: string; initialFolderId: string | null }) => (
+    <div data-testid="file-browser" data-project={projectId} data-folder={initialFolderId ?? ""} />
+  ),
+}));
 vi.mock("@/lib/portal/queries", () => ({
   getPortalProject: mocks.getPortalProject,
   getPortalSchedule: mocks.getPortalSchedule,
@@ -56,10 +61,10 @@ const schedule: PortalScheduleDTO = {
   ],
 };
 
-function renderPage(tab?: string, id = PID) {
+function renderPage(tab?: string, id = PID, folder?: string) {
   return PortalProjectPage({
     params: Promise.resolve({ id }),
-    searchParams: Promise.resolve(tab ? { tab } : {}),
+    searchParams: Promise.resolve({ ...(tab ? { tab } : {}), ...(folder ? { folder } : {}) }),
   });
 }
 
@@ -137,6 +142,16 @@ describe("/portal/proyectos/[id]", () => {
     mocks.getPortalProject.mockResolvedValue(null);
 
     await expect(renderPage()).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("renders Archivos with the PortalFileBrowser and the ?folder= it was opened with", async () => {
+    render(await renderPage("archivos", PID, "fold-2"));
+
+    expect(screen.getByRole("tab", { name: "Archivos" }).getAttribute("href")).toBe(`/portal/proyectos/${PID}?tab=archivos`);
+    const browser = screen.getByTestId("file-browser");
+    expect(browser.getAttribute("data-project")).toBe(PID);
+    expect(browser.getAttribute("data-folder")).toBe("fold-2");
+    expect(mocks.getPortalSchedule).not.toHaveBeenCalled();
   });
 
   it("falls back to Resumen for an unknown tab", async () => {
