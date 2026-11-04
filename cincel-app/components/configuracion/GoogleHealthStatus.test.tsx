@@ -53,6 +53,28 @@ describe("GoogleHealthStatus", () => {
     expect(screen.getAllByText("No configurado")).toHaveLength(5);
   });
 
+  it("renders status badges in monochrome outline style with a warning icon", () => {
+    const { container } = render(
+      <GoogleHealthStatus
+        health={{
+          ...healthy,
+          workspaceDomain: null,
+          oauthClientConfigured: false,
+          lastDriveError: { at: "2026-11-01T10:00:00.000Z", message: "Shared Drive no encontrado" },
+        }}
+      />,
+    );
+    const badges = Array.from(container.querySelectorAll('[data-slot="badge"]'));
+    expect(badges.length).toBeGreaterThan(0);
+    for (const badge of badges) expect(badge.getAttribute("data-variant")).not.toBe("destructive");
+    for (const label of ["No configurado", "Error"]) {
+      for (const badge of badges.filter((b) => b.textContent === label)) {
+        expect(badge.getAttribute("data-variant")).toBe("outline");
+        expect(badge.querySelector("svg")).toBeTruthy();
+      }
+    }
+  });
+
   it("warns when there are no group mappings", () => {
     render(<GoogleHealthStatus health={{ ...healthy, groupMappingCount: 0, roleGroupMappingCount: 0 }} />);
     expect(screen.getByText("No hay grupos de Google asignados")).toBeTruthy();
