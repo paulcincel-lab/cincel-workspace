@@ -179,5 +179,14 @@ describe.skipIf(!url)("google_oauth_accounts row rule (test DB)", async () => {
       await expect(getStaffAccessToken(staffId, "drive", { now })).resolves.toEqual({ status: "needs_consent" });
       expect((await row(staffId)).accessToken).toBe("legacy-access-token");
     });
+
+    it("status lookup returns the staff-token row's email and scope, and nothing for a legacy row", async () => {
+      const staffId = await staffTokenRow();
+      await expect(repo.getStaffTokenAccount(staffId)).resolves.toEqual({
+        email: `rows-${run}-${n}@cincel.example`,
+        scope: `openid email profile ${DRIVE}`,
+      });
+      await expect(repo.getStaffTokenAccount(await legacyRow())).resolves.toBeNull();
+    });
   });
 });

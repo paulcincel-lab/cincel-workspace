@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
 import { db } from "@/lib/db/client";
@@ -37,6 +37,20 @@ const legacyRow = (staffId: string) => and(eq(googleOauthAccounts.staffId, staff
 export async function getGoogleOauthAccount(staffId: string): Promise<GoogleOauthAccount | null> {
   const [row] = await db.select().from(googleOauthAccounts).where(legacyRow(staffId)).limit(1);
   return row ? toAccount(row) : null;
+}
+
+/**
+ * Email and granted scope of the staff-token row (`google_sub` set), for
+ * status displays. Tokens stay out of it: they are ciphertext, read only
+ * through lib/google/staff-token.ts.
+ */
+export async function getStaffTokenAccount(staffId: string): Promise<{ email: string; scope: string } | null> {
+  const [row] = await db
+    .select({ email: googleOauthAccounts.email, scope: googleOauthAccounts.scope })
+    .from(googleOauthAccounts)
+    .where(and(eq(googleOauthAccounts.staffId, staffId), isNotNull(googleOauthAccounts.googleSub)))
+    .limit(1);
+  return row ?? null;
 }
 
 /**

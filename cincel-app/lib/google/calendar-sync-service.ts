@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import {
   GoogleCalendarError,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/google/calendar-api";
 import { planSync, toDesiredEvents, type DesiredEvent } from "@/lib/google/calendar-sync";
 import { CALENDAR_SCOPE, getOauthAccessToken, hasScope } from "@/lib/google/oauth";
+import { getStaffAccessToken } from "@/lib/google/staff-token";
 import * as syncRepository from "@/lib/repositories/google-calendar-sync-repository";
 import { getGoogleOauthAccount } from "@/lib/repositories/google-oauth-repository";
 import { listMyTasks } from "@/lib/repositories/tasks-repository";
@@ -41,8 +43,31 @@ async function inBatches<T>(items: T[], run: (item: T) => Promise<void>): Promis
   }
 }
 
-/** The access token, only if the connected account granted Calendar access. */
+/**
+ * Which token Calendar sync uses (backend spec §A.6.2): with AUTH_GOOGLE_ENABLED
+ * on, the staff member's own sign-in token with `calendar.app.created`
+ * (`staff_token`); off, the old connect flow's legacy row (`delegation`).
+ */
+export type CalendarTokenMode = "delegation" | "staff_token";
+
+export function calendarTokenMode(): CalendarTokenMode {
+  return isGoogleAuthEnabled() ? "staff_token" : "delegation";
+}
+
+/**
+ * The access token, only if the account granted Calendar access. The
+ * `google_calendar_syncs` row is keyed by staff id, not by token row, so a
+ * staff member who grants Calendar again through sign-in consent keeps their
+ * calendar id and synced events: `ensureCalendar` reuses the calendar when the
+ * new token can still see it, and otherwise starts a fresh one with the event
+ * map cleared, so nothing is created twice.
+ */
 async function calendarToken(staffId: string): Promise<string> {
+  if (calendarTokenMode() === "staff_token") {
+    const result = await getStaffAccessToken(staffId, "calendar");
+    if (result.status !== "ok") throw new CalendarNotConnectedError();
+    return result.accessToken;
+  }
   const account = await getGoogleOauthAccount(staffId);
   if (!account || !hasScope(account.scope, CALENDAR_SCOPE)) throw new CalendarNotConnectedError();
   const access = await getOauthAccessToken(staffId);
