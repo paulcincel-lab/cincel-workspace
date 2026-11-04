@@ -136,7 +136,7 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
   async function insertProject(name: string) {
     const [row] = await db
       .insert(schema.projects)
-      .values({ code: `T-${run}`, name, clientId })
+      .values({ code: `T-${run}-${ids.projects.length + 1}`, name, clientId })
       .returning({ id: schema.projects.id });
     ids.projects.push(row.id);
     return row.id;
@@ -265,7 +265,7 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
       const row = await projectRow(projectId);
       expect(row.driveFolderStatus).toBe("ready");
       expect(row.driveFolderError).toBeNull();
-      expect(tree.get(row.driveFolderId!)).toMatchObject({ name: `T-${run} · Casa ${run}`, parent: SHARED_DRIVE });
+      expect(tree.get(row.driveFolderId!)).toMatchObject({ name: `${row.code} · Casa ${run}`, parent: SHARED_DRIVE });
       expect(childrenOf(row.driveFolderId!).map((f) => f.name).sort()).toEqual([
         folders.INTERNAL_FOLDER_NAME,
         folders.CLIENT_FOLDER_NAME,
@@ -328,7 +328,7 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
       await expect(retryProjectFolders(projectId, folderDeps())).resolves.toEqual({ status: "ready" });
       const fixed = await projectRow(projectId);
       expect(fixed).toMatchObject({ driveFolderStatus: "ready", driveFolderError: null });
-      expect(tree.get(fixed.driveFolderId!)?.name).toBe(`T-${run} · Falla editada ${run}`);
+      expect(tree.get(fixed.driveFolderId!)?.name).toBe(`${fixed.code} · Falla editada ${run}`);
     });
 
     it("Reintentar carpeta is not_found for a soft-deleted project", async () => {
@@ -378,7 +378,7 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
       expect(first).toMatchObject({
         status: "ok",
         folderId: row.driveFolderId,
-        breadcrumbs: [{ id: row.driveFolderId, name: `T-${run} · Archivos ${run}` }],
+        breadcrumbs: [{ id: row.driveFolderId, name: `${row.code} · Archivos ${run}` }],
       });
       if (first.status !== "ok") throw new Error("expected ok");
       expect(first.items.map((i) => [i.name, i.kind])).toEqual([
