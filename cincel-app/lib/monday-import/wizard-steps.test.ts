@@ -98,12 +98,16 @@ let source: MondayExportSource;
 beforeAll(async () => {
   const data = await readExport(FIXTURE);
   mapping = JSON.parse(JSON.stringify(await draftMapping(data, lookups))) as MappingInput;
-  const labels = (cols: { id: string; type: string; title: string; settings: unknown }[]) =>
-    Object.fromEntries(
-      cols
-        .filter((c) => c.type === "status")
-        .map((c) => [c.id, statusLabels(c as never).map((l) => ({ id: l.id, name: l.label, isDone: l.isDone }))]),
-    );
+  const labels = (cols: { id: string; type: string; title: string; settings: unknown }[]) => {
+    const out: Record<string, { id: string; name: string; isDone: boolean }[]> = {};
+    for (const c of cols.filter((col) => col.type === "status")) {
+      const list = (out[c.id] ??= []);
+      for (const l of statusLabels(c as never)) {
+        if (!list.some((x) => x.id === l.id)) list.push({ id: l.id, name: l.label, isDone: l.isDone });
+      }
+    }
+    return out;
+  };
   source = {
     boards: data.boards.map(({ board, items }) => ({
       id: board.id,
@@ -111,7 +115,7 @@ beforeAll(async () => {
       columns: board.columns.map((c) => ({ id: c.id, title: c.title, type: c.type })),
       subitemColumns: (board.subitem_columns ?? []).map((c) => ({ id: c.id, title: c.title, type: c.type })),
       groups: board.groups.map((g) => ({ id: g.id, title: g.title })),
-      statusLabels: { ...labels(board.subitem_columns ?? []), ...labels(board.columns) },
+      statusLabels: labels([...board.columns, ...(board.subitem_columns ?? [])]),
       itemCount: items.length,
       items: items.map((i) => ({ id: i.id, name: i.name, groupId: i.group?.id ?? null })),
     })),

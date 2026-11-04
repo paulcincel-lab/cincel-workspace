@@ -413,11 +413,15 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
   if (!existsSync(join(dir, "manifest.json"))) throw new WizardError("Primero exporta los tableros.");
   const data = await readExport(dir);
   const picked = new Set(run.boardIds);
+  // An item and a subitem column can share an id; init maps the union of their labels, so the source lists it too.
   const labelsOf = (cols: { id: string; type: string; title: string; settings: unknown }[]) => {
     const out: Record<string, { id: string; name: string; isDone: boolean }[]> = {};
     for (const c of cols) {
       if (c.type !== "status") continue;
-      out[c.id] = statusLabels(c).map((l) => ({ id: l.id, name: l.label, isDone: l.isDone }));
+      const list = (out[c.id] ??= []);
+      for (const l of statusLabels(c)) {
+        if (!list.some((x) => x.id === l.id)) list.push({ id: l.id, name: l.label, isDone: l.isDone });
+      }
     }
     return out;
   };
@@ -432,7 +436,7 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
         columns: plain(board.columns),
         subitemColumns: plain(board.subitem_columns ?? []),
         groups: board.groups.map((g) => ({ id: g.id, title: g.title })),
-        statusLabels: { ...labelsOf(board.subitem_columns ?? []), ...labelsOf(board.columns) },
+        statusLabels: labelsOf([...board.columns, ...(board.subitem_columns ?? [])]),
         itemCount: items.length,
         items: items
           .filter((i) => i.state == null || i.state === "active")
