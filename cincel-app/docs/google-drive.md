@@ -94,7 +94,7 @@ Drive as a staff member.
 
 - `lib/google/picker-drive.ts` resolves the Drive caller for the picker routes
   from the staff member's token; no grant means `403 needs_consent`, no OAuth
-  client means `503`.
+  client or `AUTH_GOOGLE_ENABLED` off means `503` (the picker is hidden).
 - `lib/google/drive-repository.ts` — `listFolder` / `getFileMeta` /
   `searchFiles` with that caller.
 - `app/api/google/drive/{list,file/[id],file/[id]/content}/route.ts` — the

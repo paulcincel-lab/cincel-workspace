@@ -20,6 +20,7 @@ const OAUTH_CONFIG = { clientId: "id", clientSecret: "secret", redirectUri: "htt
 
 beforeEach(() => {
   vi.unstubAllEnvs();
+  vi.stubEnv("AUTH_GOOGLE_ENABLED", "true");
   getStaffAccessTokenMock.mockReset();
   staffOauthConfigMock.mockReset();
   staffOauthConfigMock.mockReturnValue(OAUTH_CONFIG);
@@ -40,9 +41,16 @@ describe("pickerDriveMode", () => {
 });
 
 describe("isPickerDriveConfigured", () => {
-  it("follows the staff OAuth client config only", () => {
+  it("follows the staff OAuth client config while Google sign-in is on", () => {
     expect(isPickerDriveConfigured()).toBe(true);
     staffOauthConfigMock.mockReturnValue(null);
+    expect(isPickerDriveConfigured()).toBe(false);
+  });
+
+  it("is false with AUTH_GOOGLE_ENABLED off, even with the OAuth client configured", () => {
+    vi.stubEnv("AUTH_GOOGLE_ENABLED", "false");
+    expect(isPickerDriveConfigured()).toBe(false);
+    vi.stubEnv("AUTH_GOOGLE_ENABLED", "");
     expect(isPickerDriveConfigured()).toBe(false);
   });
 
@@ -74,11 +82,13 @@ describe("resolvePickerDriveCaller", () => {
     expect(result).toEqual({ ok: true, caller: { staffId: "staff-1", email: "ana@cincel.mx", accessToken: "staff-at" } });
   });
 
-  it("uses the staff token with AUTH_GOOGLE_ENABLED=false too", async () => {
+  it("503 with AUTH_GOOGLE_ENABLED=false, without looking up a token", async () => {
     vi.stubEnv("AUTH_GOOGLE_ENABLED", "false");
     getStaffAccessTokenMock.mockResolvedValue({ status: "ok", accessToken: "staff-at" });
     const result = await resolvePickerDriveCaller("staff-1", "");
-    expect(result).toEqual({ ok: true, caller: { staffId: "staff-1", email: "", accessToken: "staff-at" } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.response.status).toBe(503);
+    expect(getStaffAccessTokenMock).not.toHaveBeenCalled();
   });
 
   it("403 { error: needs_consent } without a Drive grant, even with an institutional email", async () => {
@@ -120,10 +130,11 @@ describe("getPickerDriveStatus", () => {
     expect(await getPickerDriveStatus(user)).toMatchObject({ mode: "staff_token", hasDriveGrant: false });
   });
 
-  it("reports staff_token with AUTH_GOOGLE_ENABLED=false", async () => {
+  it("reports not configured with AUTH_GOOGLE_ENABLED=false", async () => {
     vi.stubEnv("AUTH_GOOGLE_ENABLED", "false");
-    getStaffAccessTokenMock.mockResolvedValue({ status: "needs_consent" });
-    expect(await getPickerDriveStatus(user)).toMatchObject({ mode: "staff_token", oauthAvailable: false, connectedEmail: null });
+    getStaffAccessTokenMock.mockResolvedValue({ status: "ok", accessToken: "staff-at" });
+    expect(await getPickerDriveStatus(user)).toMatchObject({ configured: false, mode: "staff_token", hasDriveGrant: false });
+    expect(getStaffAccessTokenMock).not.toHaveBeenCalled();
   });
 
   it("not configured: no token lookup", async () => {

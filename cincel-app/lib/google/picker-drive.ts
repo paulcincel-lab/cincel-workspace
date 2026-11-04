@@ -2,6 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
+import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
 import type { DriveCaller } from "@/lib/google/drive-repository";
 import { staffOauthConfig } from "@/lib/google/staff-oauth";
 import { getStaffAccessToken } from "@/lib/google/staff-token";
@@ -19,9 +20,13 @@ export function pickerDriveMode(): PickerDriveMode {
   return "staff_token";
 }
 
-/** Whether the picker can work at all: the staff OAuth client is configured. */
+/**
+ * Whether the picker can work at all: Google sign-in is on (consent goes through
+ * /api/auth/google/start) and the staff OAuth client is configured. Off, the
+ * routes answer 503 and Recursos falls back to manual URL entry.
+ */
 export function isPickerDriveConfigured(): boolean {
-  return staffOauthConfig() !== null;
+  return isGoogleAuthEnabled() && staffOauthConfig() !== null;
 }
 
 // A Shared Drive's id is also the id of its root folder, so it works as the start folder.
