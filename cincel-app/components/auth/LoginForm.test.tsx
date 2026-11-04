@@ -12,8 +12,8 @@ vi.mock("@/lib/auth/auth-actions", () => ({
 
 import LoginForm from "./LoginForm";
 
-// Credentials that must never be rendered on the public login page.
-const FORBIDDEN_SNIPPETS = ["CincelAdmin2026", "contraseña temporal inicial"];
+// Text that must never be rendered on the public login page; the password values come from the env below.
+const FORBIDDEN_SNIPPETS = ["contraseña temporal inicial"];
 
 afterEach(() => {
   cleanup();

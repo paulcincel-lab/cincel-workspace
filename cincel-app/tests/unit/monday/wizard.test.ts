@@ -195,13 +195,11 @@ describe("monday wizard runs", () => {
     expect(jobView(left, "apply")?.status).toBe("interrupted");
   });
 
-  it("fails a job with the body's message", async () => {
+  it("fails a job with the message the body returns", async () => {
     const run = await createRun(ADMIN, env);
-    startJob(run.runId, "apply", "x", async () => {
-      throw new Error("boom");
-    }, env);
+    startJob(run.runId, "apply", "x", async () => "La importación no se aplicó.", env);
     await waitForJob(run.runId, "apply");
-    expect((await readRun(run.runId, env))!.jobs.apply).toMatchObject({ status: "failed", error: "boom" });
+    expect((await readRun(run.runId, env))!.jobs.apply).toMatchObject({ status: "failed", error: "La importación no se aplicó." });
   });
 });
 
