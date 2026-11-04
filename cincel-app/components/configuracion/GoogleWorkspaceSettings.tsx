@@ -45,7 +45,8 @@ export function GoogleWorkspaceSettings({ mappings, areas, health }: GoogleWorks
 
       <GoogleGroupMappings mappings={mappings} areas={areas} />
 
-      <ProjectFoldersBackfill />
+      {/* Health unknown (load failed): leave the button enabled; the action reports its own errors. */}
+      <ProjectFoldersBackfill sharedDriveConfigured={health === null || health.sharedDriveId !== null} />
     </div>
   );
 }
