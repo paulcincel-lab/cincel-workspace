@@ -92,6 +92,7 @@ export default function PortalFileBrowser({ projectId, initialFolderId = null }:
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState({ status: "loading" });
     setFileError(null);
     (async () => {

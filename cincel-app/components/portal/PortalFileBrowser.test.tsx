@@ -96,20 +96,20 @@ describe("PortalFileBrowser", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(`/api/portal/projects/${PID}/files`);
     expect(screen.getByText("Archivos")).toBeTruthy();
 
-    const download = screen.getByRole("link", { name: "Descargar Plano.pdf" });
+    const download = screen.getByRole("button", { name: "Descargar Plano.pdf" });
     expect(download.getAttribute("href")).toBe(`/api/portal/projects/${PID}/files/f1/download`);
-    const preview = screen.getByRole("link", { name: "Ver Plano.pdf" });
+    const preview = screen.getByRole("button", { name: "Ver Plano.pdf" });
     expect(preview.getAttribute("href")).toBe(`/api/portal/projects/${PID}/files/f1/preview`);
     expect(preview.getAttribute("target")).toBe("_blank");
 
-    expect(screen.getByRole("link", { name: "Ver Foto.jpg" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Ver Presupuesto.xlsx" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Ver Logo.svg" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Descargar Presupuesto.xlsx" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Ver Foto.jpg" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Ver Presupuesto.xlsx" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ver Logo.svg" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Descargar Presupuesto.xlsx" })).toBeTruthy();
 
     expect(screen.getByText("PDF")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Descargar Memoria" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Descargar Renders" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Descargar Renders" })).toBeNull();
   });
 
   it("navigates into a folder and back through the breadcrumbs", async () => {
@@ -204,8 +204,9 @@ describe("PortalFileBrowser", () => {
       .mockResolvedValueOnce(new Response(new Blob(["%PDF"], { type: "application/pdf" }), { status: 200 }));
     render(<PortalFileBrowser projectId={PID} />);
 
+    const button = await screen.findByRole("button", { name: "Descargar Memoria" });
     await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: "Descargar Memoria" }));
+      fireEvent.click(button);
     });
     await waitFor(() => expect(click).toHaveBeenCalled());
     expect(createObjectURL).toHaveBeenCalled();
