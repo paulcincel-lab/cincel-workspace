@@ -83,14 +83,26 @@ export function BoardsStep({
             </TableHeader>
             <TableBody>
               {connection.boards.map((board) => (
-                <TableRow key={board.id}>
+                <TableRow
+                  key={board.id}
+                  data-state={selected.has(board.id) ? "selected" : undefined}
+                  className={running ? undefined : "cursor-pointer"}
+                  onClick={(event) => {
+                    // The checkbox and its hidden input toggle themselves; the rest of the row is a bigger target.
+                    if (running || (event.target as HTMLElement).closest("[role=checkbox], input")) return;
+                    toggle(board.id, !selected.has(board.id));
+                  }}
+                >
                   <TableCell>
-                    <Checkbox
-                      aria-label={`Importar ${board.name}`}
-                      checked={selected.has(board.id)}
-                      disabled={running}
-                      onCheckedChange={(checked) => toggle(board.id, checked === true)}
-                    />
+                    {/* Base UI's checkbox root is a <span>: it needs a flex parent to keep its size-4 box. */}
+                    <div className="flex items-center">
+                      <Checkbox
+                        aria-label={`Importar ${board.name}`}
+                        checked={selected.has(board.id)}
+                        disabled={running}
+                        onCheckedChange={(checked) => toggle(board.id, checked === true)}
+                      />
+                    </div>
                   </TableCell>
                   <TableCell>{board.name}</TableCell>
                   <TableCell className="text-muted-foreground">
