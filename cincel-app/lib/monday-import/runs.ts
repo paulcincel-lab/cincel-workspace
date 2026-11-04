@@ -200,6 +200,9 @@ export interface JobContext {
   note: (text: string) => void;
 }
 
+/** What a job shows when its body throws something it doesn't describe. */
+export const UNEXPECTED_JOB_ERROR = "Ocurrió un error inesperado. Revisa el registro técnico.";
+
 /** The Registro line of a progress update. */
 export function progressNote(done: number, total: number | null, label: string): string {
   return total && total > 1 ? `${label} (${done} de ${total})` : label;
@@ -208,7 +211,9 @@ export function progressNote(done: number, total: number | null, label: string):
 /**
  * Starts `body` in the background as the run's `kind` job. The body returns
  * an error message (Spanish) to fail the job, or null when it succeeded.
- * Throws when another job of the run is running.
+ * Throws when another job of the run is running. An error the body throws
+ * goes to the server log and the downloadable log as is; the screen gets
+ * `describeError(err)`, a fixed Spanish message by default.
  */
 export function startJob(
   runId: string,
@@ -216,6 +221,7 @@ export function startJob(
   label: string,
   body: (ctx: JobContext) => Promise<string | null>,
   env: Env = process.env,
+  describeError: (err: unknown) => string = () => UNEXPECTED_JOB_ERROR,
 ): MondayImportJob {
   if (runningJob(runId)) throw new Error("JOB_RUNNING");
   const job: MondayImportJob = {
@@ -270,7 +276,9 @@ export function startJob(
     try {
       error = await body(ctx);
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      console.error(`[monday-import] ${kind} job of run ${runId} failed:`, err);
+      push(err instanceof Error ? err.message : String(err));
+      error = describeError(err);
     }
     job.status = error ? "failed" : "succeeded";
     job.error = error;

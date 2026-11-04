@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createRun, progressNote, readRun, startJob, waitForJob } from "@/lib/monday-import/runs";
+import { createRun, progressNote, readRun, startJob, UNEXPECTED_JOB_ERROR, waitForJob } from "@/lib/monday-import/runs";
 
 const ADMIN = "33333333-3333-4333-8333-333333333333";
 
@@ -59,6 +59,29 @@ describe("job notes", () => {
     await waitForJob(run.runId, "apply");
     const job = (await readRun(run.runId, env))!.jobs.apply!;
     expect(job.notes).toEqual(["Importando a Cincel", "No se terminó."]);
+  });
+
+  it("shows a fixed Spanish error for a thrown error and keeps the raw text in the log", async () => {
+    const run = await createRun(ADMIN, env);
+    const raw = `ENOSPC: no space left on device, open '${root}/${run.runId}/wizard.json.tmp'`;
+    startJob(run.runId, "export", "Exportando tableros", async () => {
+      throw new Error(raw);
+    }, env);
+    await waitForJob(run.runId, "export");
+    const job = (await readRun(run.runId, env))!.jobs.export!;
+    expect(job.status).toBe("failed");
+    expect(job.error).toBe(UNEXPECTED_JOB_ERROR);
+    expect(job.log).toContain(raw);
+  });
+
+  it("lets the caller describe a thrown error", async () => {
+    const run = await createRun(ADMIN, env);
+    startJob(run.runId, "apply", "Importando a Cincel", async () => {
+      throw new Error("boom");
+    }, env, () => "La carpeta de importación no tiene permisos de escritura.");
+    await waitForJob(run.runId, "apply");
+    const job = (await readRun(run.runId, env))!.jobs.apply!;
+    expect(job.error).toBe("La carpeta de importación no tiene permisos de escritura.");
   });
 
   it("writes the counts only when there is more than one step", () => {

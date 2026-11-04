@@ -41,6 +41,7 @@ import {
   readRun,
   runDir,
   startJob,
+  UNEXPECTED_JOB_ERROR,
   updateRun,
   writeDraftMapping,
   type StoredRun,
@@ -228,6 +229,14 @@ export function folderError(err: unknown, env: Env = process.env): unknown {
     console.error(`[monday-import] import folder not writable (${code}): ${root}; set MONDAY_IMPORT_DIR`);
   }
   return new WizardError(NOT_WRITABLE);
+}
+
+/** The on-screen error of a job whose body threw: a WizardError's own text, else a fixed Spanish message. */
+function jobError(env: Env): (err: unknown) => string {
+  return (err) => {
+    const mapped = folderError(err, env);
+    return mapped instanceof WizardError ? mapped.message : UNEXPECTED_JOB_ERROR;
+  };
 }
 
 /** The newest run, or a new one when there is none (or `fresh`). */
@@ -422,6 +431,7 @@ export async function startExport(
         return null;
       },
       env,
+      jobError(env),
     );
   } catch (err) {
     if (err instanceof Error && err.message === "JOB_RUNNING") throw new WizardError("Ya hay un proceso en curso en esta importación.");
@@ -694,6 +704,7 @@ export async function startApply(
         return null;
       },
       env,
+      jobError(env),
     );
   } catch (err) {
     if (err instanceof Error && err.message === "JOB_RUNNING") throw new WizardError("Ya hay un proceso en curso en esta importación.");
@@ -748,6 +759,7 @@ export async function startRollback(runId: string, deps: WizardDeps): Promise<Mo
           : "No se pudo deshacer la importación. Revisa el registro.";
       },
       envOf(deps),
+      jobError(envOf(deps)),
     );
   } catch (err) {
     if (err instanceof Error && err.message === "JOB_RUNNING") throw new WizardError("Ya hay un proceso en curso en esta importación.");
