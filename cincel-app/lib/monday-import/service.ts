@@ -434,6 +434,9 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
         groups: board.groups.map((g) => ({ id: g.id, title: g.title })),
         statusLabels: { ...labelsOf(board.subitem_columns ?? []), ...labelsOf(board.columns) },
         itemCount: items.length,
+        items: items
+          .filter((i) => i.state == null || i.state === "active")
+          .map((i) => ({ id: i.id, name: i.name, groupId: i.group?.id ?? null })),
       })),
     users: data.users.map((u) => ({ id: u.id, name: u.name, email: u.email ?? null, kind: u.kind ?? null })),
     hasFiles: existsSync(join(dir, FILES_DIR, FILES_INDEX)),

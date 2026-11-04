@@ -112,6 +112,8 @@ export interface MondayBoardSource {
   /** Status columns' labels: columnId → labels. */
   statusLabels: Record<string, { id: string; name: string; isDone: boolean }[]>;
   itemCount: number;
+  /** Active top-level items, for template matches and project names by item. */
+  items: { id: string; name: string; groupId: string | null }[];
 }
 
 export interface MondayExportSource {
