@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolvePortalCapabilities, type PortalCapabilities } from "@/lib/auth/permissions";
 import { getAppOrigin } from "@/lib/auth/safe-return-to";
+import { driveWebViewLink } from "@/lib/google/drive-url";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { sendMail } from "@/lib/email";
 import { invitacionEmail } from "@/lib/email/templates";
@@ -185,4 +186,11 @@ export async function listProjectPortalAccessAction(projectId: string): Promise<
 export async function listProjectPortalActivityAction(projectId: string): Promise<PortalActivityRow[]> {
   if (!(await requireManageAccess()) || !isUuid(projectId)) return [];
   return portalRepository.listProjectActivity(projectId);
+}
+
+/** Drive link of the project's "02 Cliente" folder; null while it is missing or without `portal.manageAccess`. */
+export async function getProjectClientFolderUrlAction(projectId: string): Promise<string | null> {
+  if (!(await requireManageAccess()) || !isUuid(projectId)) return null;
+  const folderId = await portalRepository.findProjectClientFolderId(projectId);
+  return folderId ? driveWebViewLink(folderId, true) : null;
 }

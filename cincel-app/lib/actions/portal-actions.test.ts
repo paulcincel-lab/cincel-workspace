@@ -30,12 +30,14 @@ const repo = vi.hoisted(() => ({
   enablePortalUser: vi.fn(),
   listProjectAccess: vi.fn(),
   listProjectActivity: vi.fn(),
+  findProjectClientFolderId: vi.fn(),
 }));
 vi.mock("@/lib/repositories/portal-access-repository", () => repo);
 
 import {
   disablePortalUserAction,
   enablePortalUserAction,
+  getProjectClientFolderUrlAction,
   invitePortalClientAction,
   listProjectPortalAccessAction,
   listProjectPortalActivityAction,
@@ -252,5 +254,26 @@ describe("list actions", () => {
     await expect(listProjectPortalActivityAction(PROJECT)).resolves.toEqual([]);
     expect(repo.listProjectAccess).not.toHaveBeenCalled();
     expect(repo.listProjectActivity).not.toHaveBeenCalled();
+  });
+});
+
+describe("getProjectClientFolderUrlAction", () => {
+  it("links the 02 Cliente folder in Drive", async () => {
+    repo.findProjectClientFolderId.mockResolvedValue("folder-123");
+    await expect(getProjectClientFolderUrlAction(PROJECT)).resolves.toBe("https://drive.google.com/drive/folders/folder-123");
+    expect(repo.findProjectClientFolderId).toHaveBeenCalledWith(PROJECT);
+  });
+
+  it("returns null while the folder is missing", async () => {
+    repo.findProjectClientFolderId.mockResolvedValue(null);
+    await expect(getProjectClientFolderUrlAction(PROJECT)).resolves.toBeNull();
+  });
+
+  it("returns null without portal.manageAccess or for a bad id", async () => {
+    caps.value = { manageAccess: false, disableUsers: true };
+    await expect(getProjectClientFolderUrlAction(PROJECT)).resolves.toBeNull();
+    caps.value = { manageAccess: true, disableUsers: true };
+    await expect(getProjectClientFolderUrlAction("nope")).resolves.toBeNull();
+    expect(repo.findProjectClientFolderId).not.toHaveBeenCalled();
   });
 });

@@ -194,4 +194,13 @@ describe.skipIf(!url)("portal access repository (test DB)", async () => {
     expect(rows[0]).toMatchObject({ clientName: "Ana Cliente", fileName: "planos.pdf", action: "download" });
     expect(typeof rows[0]!.at).toBe("string");
   });
+
+  it("finds the project's 02 Cliente folder id", async () => {
+    await expect(repo.findProjectClientFolderId(otherProjectId)).resolves.toBeNull();
+    await db
+      .update(schema.projects)
+      .set({ driveClientFolderId: `client-folder-${run}` })
+      .where(eq(schema.projects.id, otherProjectId));
+    await expect(repo.findProjectClientFolderId(otherProjectId)).resolves.toBe(`client-folder-${run}`);
+  });
 });

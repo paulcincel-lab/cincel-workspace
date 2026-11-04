@@ -53,6 +53,16 @@ export async function findProject(projectId: string): Promise<{ id: string; name
   return row ?? null;
 }
 
+/** The project's "02 Cliente" Drive folder id; null while the folder is not created or the project is gone. */
+export async function findProjectClientFolderId(projectId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ folderId: projects.driveClientFolderId })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
+    .limit(1);
+  return row?.folderId ?? null;
+}
+
 /** A live contact. */
 export async function findContact(
   contactId: string,
