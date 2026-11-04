@@ -33,3 +33,54 @@ export type PortalScheduleSectionDTO = {
 export type PortalScheduleDTO = {
   sections: PortalScheduleSectionDTO[];
 } | null;
+
+// ── Staff side (FE §5): the Clientes tab, never sent to the portal ──────────
+
+export type PortalAccessStatus = "invited" | "active" | "disabled" | "revoked";
+
+export type PortalAccessRow = {
+  accessId: string;
+  portalUserId: string;
+  name: string;
+  email: string;
+  contact: { id: string; name: string; type: "cliente" | "socio" };
+  /** `revoked` when this project's access row is revoked, else the portal user's status. */
+  status: PortalAccessStatus;
+  invitedBy: string;
+  lastLoginAt: string | null;
+};
+
+export type PortalActionError =
+  | "forbidden"
+  | "not_found"
+  | "staff_domain"
+  | "disabled"
+  | "already_active"
+  | "not_project_contact"
+  | "socio_unconfirmed"
+  | "invalid_email"
+  | "rate_limited";
+
+export type PortalActivityRow = {
+  id: string;
+  clientName: string;
+  fileName: string;
+  action: "download" | "preview" | "upload";
+  at: string;
+};
+
+export type InvitePortalClientInput = {
+  projectId: string;
+  contactId: string;
+  email: string;
+  name: string;
+  confirmSocio?: boolean;
+};
+
+export type InvitePortalClientResult = { ok: true; emailSent: boolean } | { ok: false; error: PortalActionError };
+
+export type ResendPortalInviteResult =
+  | { ok: true; emailSent: boolean }
+  | { ok: false; error: "forbidden" | "not_found" | "rate_limited" };
+
+export type PortalMutationResult = { ok: true } | { ok: false; error: "forbidden" | "not_found" };
