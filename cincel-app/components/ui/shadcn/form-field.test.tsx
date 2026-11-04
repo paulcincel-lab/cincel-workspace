@@ -84,6 +84,7 @@ describe("FormField", () => {
       </>,
     );
     expect(screen.getByText("Suelto").hasAttribute("for")).toBe(false);
-    expect(screen.getByPlaceholderText("sin campo").hasAttribute("id")).toBe(false);
+    // Base UI gives every input its own id; outside a FormField nothing ties the label to it.
+    expect(screen.queryByLabelText("Suelto")).toBeNull();
   });
 });
