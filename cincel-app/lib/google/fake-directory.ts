@@ -22,6 +22,11 @@ export type FakeDirectoryState = {
   groups?: FakeDirectoryGroup[];
   /** Every call throws a `DirectoryError` of this kind. */
   failWith?: DirectoryErrorKind;
+  /**
+   * `hasMember` on a group that isn't listed: `error` (default) throws a 404 like Google; `empty` answers "not a
+   * member". DB tests running in parallel share `workspace_group_mappings` and see each other's groups.
+   */
+  unknownGroups?: "error" | "empty";
 };
 
 let state: FakeDirectoryState | null = null;
@@ -63,7 +68,10 @@ const fakeDirectory: DirectoryClient = {
   async hasMember(groupId, email) {
     failIfConfigured();
     const group = current().groups?.find((candidate) => candidate.id === groupId);
-    if (!group) throw new DirectoryError(`El grupo ${groupId} no existe`, "http", 404);
+    if (!group) {
+      if (current().unknownGroups === "empty") return false;
+      throw new DirectoryError(`El grupo ${groupId} no existe`, "http", 404);
+    }
     return (group.members ?? []).some((member) => lower(member) === lower(email));
   },
 

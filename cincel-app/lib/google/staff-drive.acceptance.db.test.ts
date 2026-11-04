@@ -466,6 +466,8 @@ describe.skipIf(!url)("Staff SSO Phase 3 acceptance (test DB)", async () => {
         .insert(schema.authCredentials)
         .values({ staffId, passwordHash: "x", salt: "y", mustChangePassword: false });
       setFakeDirectoryState({
+        // Other DB test files map their own groups at the same time.
+        unknownGroups: "empty",
         users: [{ id: who.sub, primaryEmail: who.email }],
         groups: [{ id: ROLE_GROUP, email: `${ROLE_GROUP}@${DOMAIN}`, members: [who.email] }],
       });

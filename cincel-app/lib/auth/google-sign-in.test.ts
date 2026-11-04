@@ -55,6 +55,8 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
 
   function directory(members: { sub: string; email: string; groups: string[] }[]) {
     setFakeDirectoryState({
+      // Other DB test files map their own groups at the same time.
+      unknownGroups: "empty",
       users: members.map((m) => ({ id: m.sub, primaryEmail: m.email })),
       groups: Object.values(GROUPS).map((id) => ({
         id,

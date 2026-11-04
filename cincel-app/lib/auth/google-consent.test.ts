@@ -47,6 +47,8 @@ describe.skipIf(!url)("grantGoogleScope (test DB)", async () => {
 
   function directory(members: { sub: string; email: string; inRoleGroup: boolean }[]) {
     setFakeDirectoryState({
+      // Other DB test files map their own groups at the same time.
+      unknownGroups: "empty",
       users: members.map((m) => ({ id: m.sub, primaryEmail: m.email })),
       groups: [
         {
