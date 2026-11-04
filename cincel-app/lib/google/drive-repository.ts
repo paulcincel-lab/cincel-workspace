@@ -4,8 +4,13 @@ import { getDriveClientFor } from "@/lib/google/client";
 import { getOauthAccessToken } from "@/lib/google/oauth";
 import { driveWebViewLink } from "@/lib/google/drive-url";
 
-/** Whoever is browsing Drive: their own connected OAuth account is tried first. */
-export type DriveCaller = { staffId: string; email: string };
+/**
+ * Whoever is browsing Drive. `accessToken` is the staff member's own Google
+ * token (staff_token mode, lib/google/picker-drive.ts) and is used as is;
+ * without it their old connected OAuth account is tried first, then
+ * delegation.
+ */
+export type DriveCaller = { staffId: string; email: string; accessToken?: string };
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
@@ -53,6 +58,8 @@ function normalize(raw: RawFile): DriveEntry {
 }
 
 async function resolveAccessToken(caller: DriveCaller): Promise<string> {
+  if (caller.accessToken) return caller.accessToken;
+
   const oauth = await getOauthAccessToken(caller.staffId);
   if (oauth) return oauth.token;
 

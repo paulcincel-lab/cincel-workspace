@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 
 const {
   requireCapabilityUserMock,
@@ -6,12 +6,16 @@ const {
   isDriveConfiguredMock,
   isOauthConfiguredMock,
   getGoogleOauthAccountMock,
+  getStaffAccessTokenMock,
+  staffOauthConfigMock,
 } = vi.hoisted(() => ({
   requireCapabilityUserMock: vi.fn(),
   getFileContentMock: vi.fn(),
   isDriveConfiguredMock: vi.fn(),
   isOauthConfiguredMock: vi.fn(),
   getGoogleOauthAccountMock: vi.fn(),
+  getStaffAccessTokenMock: vi.fn(),
+  staffOauthConfigMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/session", () => ({ requireCapabilityUser: requireCapabilityUserMock }));
@@ -23,6 +27,8 @@ vi.mock("@/lib/google/client", () => ({ isDriveConfigured: isDriveConfiguredMock
 vi.mock("@/lib/google/oauth", () => ({ isOauthConfigured: isOauthConfiguredMock }));
 vi.mock("@/lib/repositories/google-oauth-repository", () => ({ getGoogleOauthAccount: getGoogleOauthAccountMock }));
 vi.mock("@/lib/google/drive-repository", () => ({ getFileContent: getFileContentMock }));
+vi.mock("@/lib/google/staff-token", () => ({ getStaffAccessToken: getStaffAccessTokenMock }));
+vi.mock("@/lib/google/staff-oauth", () => ({ staffOauthConfig: staffOauthConfigMock }));
 
 import { GET } from "./route";
 
@@ -37,6 +43,12 @@ beforeEach(() => {
   isOauthConfiguredMock.mockReturnValue(false);
   getGoogleOauthAccountMock.mockResolvedValue(null);
   requireCapabilityUserMock.mockResolvedValue(caller("ana@cincel.mx"));
+  staffOauthConfigMock.mockReturnValue({ clientId: "id", clientSecret: "s", redirectUri: "r", workspaceDomain: "cincel.mx" });
+  vi.unstubAllEnvs();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("GET /api/google/drive/file/[id]/content", () => {
@@ -89,5 +101,30 @@ describe("GET /api/google/drive/file/[id]/content", () => {
   it("404 when Drive says the file isn't there", async () => {
     getFileContentMock.mockRejectedValue(new Error("DRIVE_API_404: nope"));
     expect((await call()).status).toBe(404);
+  });
+
+  describe("AUTH_GOOGLE_ENABLED=true (staff_token mode)", () => {
+    beforeEach(() => {
+      vi.stubEnv("AUTH_GOOGLE_ENABLED", "true");
+    });
+
+    it("fetches the bytes with the staff member's own token", async () => {
+      getStaffAccessTokenMock.mockResolvedValue({ status: "ok", accessToken: "staff-at" });
+      getFileContentMock.mockResolvedValue({ name: "a.pdf", mimeType: "application/pdf", body: body() });
+
+      expect((await call()).status).toBe(200);
+      expect(getFileContentMock).toHaveBeenCalledWith(
+        { staffId: "staff-1", email: "ana@cincel.mx", accessToken: "staff-at" },
+        "f1"
+      );
+    });
+
+    it("403 { error: needs_consent } without a Drive grant", async () => {
+      getStaffAccessTokenMock.mockResolvedValue({ status: "needs_consent" });
+      const res = await call();
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "needs_consent" });
+      expect(getFileContentMock).not.toHaveBeenCalled();
+    });
   });
 });

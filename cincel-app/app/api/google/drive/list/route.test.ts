@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 
 const {
   requireCapabilityUserMock,
@@ -7,6 +7,8 @@ const {
   isDriveConfiguredMock,
   isOauthConfiguredMock,
   getGoogleOauthAccountMock,
+  getStaffAccessTokenMock,
+  staffOauthConfigMock,
 } = vi.hoisted(() => ({
   requireCapabilityUserMock: vi.fn(),
   listFolderMock: vi.fn(),
@@ -14,6 +16,16 @@ const {
   isDriveConfiguredMock: vi.fn(),
   isOauthConfiguredMock: vi.fn(),
   getGoogleOauthAccountMock: vi.fn(),
+  getStaffAccessTokenMock: vi.fn(),
+  staffOauthConfigMock: vi.fn(),
+}));
+
+vi.mock("@/lib/google/staff-token", () => ({
+  getStaffAccessToken: getStaffAccessTokenMock,
+}));
+
+vi.mock("@/lib/google/staff-oauth", () => ({
+  staffOauthConfig: staffOauthConfigMock,
 }));
 
 vi.mock("@/lib/auth/session", () => ({
@@ -62,6 +74,14 @@ beforeEach(() => {
   isDriveConfiguredMock.mockReturnValue(true);
   isOauthConfiguredMock.mockReturnValue(false);
   getGoogleOauthAccountMock.mockResolvedValue(null);
+  getStaffAccessTokenMock.mockReset();
+  staffOauthConfigMock.mockReset();
+  staffOauthConfigMock.mockReturnValue({ clientId: "id", clientSecret: "s", redirectUri: "r", workspaceDomain: "cincel.mx" });
+  vi.unstubAllEnvs();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("GET /api/google/drive/list", () => {
@@ -118,5 +138,56 @@ describe("GET /api/google/drive/list", () => {
     requireCapabilityUserMock.mockResolvedValue(caller("ana@cincel.mx"));
     const res = await GET(req("http://x/api/google/drive/list?folderId=f1"));
     expect(res.status).toBe(503);
+  });
+
+  it("flag off: never reads the staff token", async () => {
+    vi.stubEnv("AUTH_GOOGLE_ENABLED", "false");
+    requireCapabilityUserMock.mockResolvedValue(caller("ana@cincel.mx"));
+    listFolderMock.mockResolvedValue({ entries: [], nextPageToken: null });
+
+    const res = await GET(req("http://x/api/google/drive/list?folderId=f1"));
+
+    expect(res.status).toBe(200);
+    expect(getStaffAccessTokenMock).not.toHaveBeenCalled();
+  });
+
+  describe("AUTH_GOOGLE_ENABLED=true (staff_token mode)", () => {
+    beforeEach(() => {
+      vi.stubEnv("AUTH_GOOGLE_ENABLED", "true");
+    });
+
+    it("lists with the staff member's own token", async () => {
+      requireCapabilityUserMock.mockResolvedValue(caller("ana@cincel.mx"));
+      getStaffAccessTokenMock.mockResolvedValue({ status: "ok", accessToken: "staff-at" });
+      listFolderMock.mockResolvedValue({ entries: [], nextPageToken: null });
+
+      const res = await GET(req("http://x/api/google/drive/list?folderId=f1"));
+
+      expect(res.status).toBe(200);
+      expect(getStaffAccessTokenMock).toHaveBeenCalledWith("staff-1", "drive");
+      expect(listFolderMock).toHaveBeenCalledWith(
+        { staffId: "staff-1", email: "ana@cincel.mx", accessToken: "staff-at" },
+        "f1",
+        undefined
+      );
+    });
+
+    it("403 { error: needs_consent } without a Drive grant", async () => {
+      requireCapabilityUserMock.mockResolvedValue(caller("ana@cincel.mx"));
+      getStaffAccessTokenMock.mockResolvedValue({ status: "needs_consent" });
+
+      const res = await GET(req("http://x/api/google/drive/list?folderId=f1"));
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "needs_consent" });
+      expect(listFolderMock).not.toHaveBeenCalled();
+    });
+
+    it("401 still means no session", async () => {
+      requireCapabilityUserMock.mockRejectedValue(new Error("FORBIDDEN"));
+      const res = await GET(req("http://x/api/google/drive/list?folderId=f1"));
+      expect(res.status).toBe(401);
+      expect(getStaffAccessTokenMock).not.toHaveBeenCalled();
+    });
   });
 });

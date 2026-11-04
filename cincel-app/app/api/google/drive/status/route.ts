@@ -1,27 +1,35 @@
 import { NextResponse } from "next/server";
 
-import { requireCapabilityUser } from "@/lib/auth/session";
-import { isDriveConfigured } from "@/lib/google/client";
-import { isOauthConfigured } from "@/lib/google/oauth";
-import { getGoogleOauthAccount } from "@/lib/repositories/google-oauth-repository";
+import { requireSessionAccess } from "@/lib/auth/session";
+import { getPickerDriveStatus, pickerDriveMode } from "@/lib/google/picker-drive";
 
 /**
  * GET /api/google/drive/status — for the picker's connect/switch-account UI
  * and for hiding the picker button entirely when nothing is configured.
+ * Returns `{ configured, mode, hasDriveGrant, googleLinked }` (backend spec
+ * §A.6.3) plus the old `oauthAvailable` / `connectedEmail` fields. The picker
+ * shows **Conectar Google Drive** when `mode = "staff_token"` and
+ * `hasDriveGrant` is false.
  */
 export async function GET(): Promise<NextResponse> {
-  let caller;
+  let user;
   try {
-    caller = await requireCapabilityUser();
+    user = await requireSessionAccess();
   } catch {
-    return NextResponse.json({ configured: false, oauthAvailable: false, connectedEmail: null }, { status: 401 });
+    return NextResponse.json(
+      {
+        configured: false,
+        mode: pickerDriveMode(),
+        hasDriveGrant: false,
+        googleLinked: false,
+        oauthAvailable: false,
+        connectedEmail: null,
+      },
+      { status: 401 }
+    );
   }
 
-  const account = isOauthConfigured() ? await getGoogleOauthAccount(caller.member.id) : null;
-
-  return NextResponse.json({
-    configured: isDriveConfigured() || isOauthConfigured(),
-    oauthAvailable: isOauthConfigured(),
-    connectedEmail: account?.email ?? null,
-  });
+  return NextResponse.json(
+    await getPickerDriveStatus({ staffId: user.id, email: user.email ?? "", googleLinked: user.googleLinked })
+  );
 }
