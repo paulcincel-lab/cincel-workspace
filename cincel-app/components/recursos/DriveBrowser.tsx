@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 
@@ -16,7 +17,12 @@ export type DriveBrowserEntry = {
 };
 
 type Crumb = { id: string; name: string };
-type AccountStatus = { oauthAvailable: boolean; connectedEmail: string | null };
+type AccountStatus = {
+  mode: "delegation" | "staff_token";
+  hasDriveGrant: boolean;
+  oauthAvailable: boolean;
+  connectedEmail: string | null;
+};
 
 type Props = {
   /** Only loads while true (a closed sheet shouldn't fetch). */
@@ -39,11 +45,21 @@ function formatModified(iso: string | null): string {
     : d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/** Incremental Drive consent; Google sends the staff member back to the current page. */
+export function driveConsentUrl(returnTo: string): string {
+  return `/api/auth/google/start?scope=drive&return_to=${encodeURIComponent(returnTo)}`;
+}
+
 /**
- * Browse Drive as the caller's connected Google account (or their
- * institutional identity when none is connected) — folder navigation,
- * search, and the connect / switch / disconnect account bar. Shared by the
- * Drive picker sheet and Recursos' inline Drive view.
+ * Browse Drive — folder navigation and search. Shared by the Drive picker
+ * sheet and Recursos' inline Drive view. The mode comes from
+ * `GET /api/google/drive/status`:
+ *   - "delegation": the caller's connected Google account (or their
+ *     institutional identity when none is connected), with the connect /
+ *     switch / disconnect account bar.
+ *   - "staff_token": the staff member's own Google grant. Without it, or on a
+ *     403 `needs_consent` from the list route, the browser shows
+ *     **Conectar Google Drive**; there is no account switcher.
  */
 export default function DriveBrowser({
   active,
@@ -60,6 +76,7 @@ export default function DriveBrowser({
   const [error, setError] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountStatus | null>(null);
   const [switchingAccount, setSwitchingAccount] = useState(false);
+  const [needsConsent, setNeedsConsent] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentFolderId = path.length > 0 ? path[path.length - 1].id : rootFolderId;
@@ -67,8 +84,18 @@ export default function DriveBrowser({
   const loadAccountStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/google/drive/status");
+      if (!res.ok) {
+        setAccount(null);
+        return;
+      }
       const body = await res.json().catch(() => ({}));
-      setAccount({ oauthAvailable: Boolean(body?.oauthAvailable), connectedEmail: body?.connectedEmail ?? null });
+      const mode = body?.mode === "staff_token" ? "staff_token" : "delegation";
+      setAccount({
+        mode,
+        hasDriveGrant: Boolean(body?.hasDriveGrant),
+        oauthAvailable: mode === "delegation" && Boolean(body?.oauthAvailable),
+        connectedEmail: mode === "delegation" ? (body?.connectedEmail ?? null) : null,
+      });
     } catch {
       setAccount(null);
     }
@@ -82,6 +109,10 @@ export default function DriveBrowser({
   const connectGoogleAccount = () => {
     const returnTo = `${window.location.pathname}${window.location.search}`;
     window.location.href = `/api/google/oauth/start?return_to=${encodeURIComponent(returnTo)}`;
+  };
+
+  const connectGoogleDrive = () => {
+    window.location.href = driveConsentUrl(`${window.location.pathname}${window.location.search}`);
   };
 
   const disconnectGoogleAccount = async () => {
@@ -107,11 +138,17 @@ export default function DriveBrowser({
         if (query.trim()) params.set("q", query.trim());
         const res = await fetch(`/api/google/drive/list?${params}`);
         const body = await res.json().catch(() => ({}));
+        if (res.status === 403 && body?.error === "needs_consent") {
+          setEntries([]);
+          setNeedsConsent(true);
+          return;
+        }
         if (!res.ok) {
           setEntries([]);
           setError(body.error ?? `Error ${res.status}`);
           return;
         }
+        setNeedsConsent(false);
         setEntries(body.entries ?? []);
       } catch {
         setEntries([]);
@@ -143,9 +180,26 @@ export default function DriveBrowser({
     setPath((p) => (index < 0 ? [] : p.slice(0, index + 1)));
   };
 
+  const staffTokenMode = account?.mode === "staff_token";
+  if (needsConsent || (staffTokenMode && account?.hasDriveGrant !== true)) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col p-4">
+        <Alert>
+          <AlertTitle>Conecta tu Google Drive</AlertTitle>
+          <AlertDescription>
+            Para ver tus archivos aquí, da permiso de solo lectura a tu Google Drive.
+          </AlertDescription>
+        </Alert>
+        <div className="pt-3">
+          <Button onClick={connectGoogleDrive}>Conectar Google Drive</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {account?.oauthAvailable ? (
+      {!staffTokenMode && account?.oauthAvailable ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
           {account.connectedEmail ? (
             <>
