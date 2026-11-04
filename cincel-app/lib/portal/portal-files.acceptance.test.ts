@@ -160,10 +160,34 @@ function headed(head: Uint8Array, size: number): Uint8Array {
   return file;
 }
 
+/**
+ * A one-file multipart request on a plain pull stream. undici's FormData body enqueues after the pipeline
+ * cancels it and leaves an unhandled rejection, so the body is built by hand.
+ */
 function multipartRequest(name: string, content: Uint8Array): Request {
-  const form = new FormData();
-  form.append("file", new File([content as BlobPart], name));
-  return new Request("http://localhost/api/portal/projects/p/uploads", { method: "POST", body: form });
+  const boundary = "----portal-acceptance-file";
+  const encoder = new TextEncoder();
+  const parts = [
+    encoder.encode(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\n` +
+        "Content-Type: application/octet-stream\r\n\r\n"
+    ),
+    content,
+    encoder.encode(`\r\n--${boundary}--\r\n`),
+  ];
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      const next = parts.shift();
+      if (next) controller.enqueue(next);
+      else controller.close();
+    },
+  });
+  return new Request("http://localhost/api/portal/projects/p/uploads", {
+    method: "POST",
+    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+    body,
+    duplex: "half",
+  } as RequestInit);
 }
 
 /** A multipart body of `size` bytes generated lazily, without a Content-Length, like a chunked client. */
@@ -386,7 +410,8 @@ describe("§B.8 #7: a 60 MB upload and a renamed .exe are rejected", () => {
         "content-type": "multipart/form-data; boundary=x",
         "content-length": String(60 * 1024 * 1024),
       }),
-      body: new ReadableStream({ pull }),
+      // highWaterMark 0: the stream only pulls when someone reads it.
+      body: new ReadableStream({ pull }, { highWaterMark: 0 }),
     } as unknown as Request;
 
     await expect(upload(request)).resolves.toEqual({ ok: false, error: "too_large" });
