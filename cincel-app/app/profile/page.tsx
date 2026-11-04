@@ -61,6 +61,10 @@ export default function ProfilePage() {
         draft.confirmPassword
       );
       if (!result.ok) {
+        if (result.reason === "password_login_disabled") {
+          setError("El acceso con contraseña está desactivado. Entra con Google.");
+          return;
+        }
         if (result.reason === "invalid_current_password") {
           setError("La contrasena actual no es correcta.");
           return;

@@ -10,6 +10,28 @@ import {
 } from "@/lib/auth/permissions";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
+import { GOOGLE_MANAGED_REFUSAL, type GoogleManagedRefusal } from "@/lib/types/workspace-access";
+
+const normalizeRole = (role: string | null | undefined) => role?.trim() || null;
+
+/**
+ * Role and áreas of Google-managed staff come from Workspace (BE §A.7): a
+ * change is refused even when the action is called directly. Sending the
+ * current value back (a full form save) is not a change. The refusal is
+ * returned, not thrown, so the client can show its message.
+ */
+async function isRoleLocked(staffId: string, patch: Partial<StaffInput>): Promise<boolean> {
+  if (patch.role === undefined) return false;
+  const lock = await staffRepository.getStaffRoleLock(staffId);
+  return Boolean(lock?.googleManaged && normalizeRole(patch.role) !== normalizeRole(lock.role));
+}
+
+async function areAreasLocked(staffId: string, areaIds: string[]): Promise<boolean> {
+  if (!(await staffRepository.googleManagedStaffIds([staffId])).has(staffId)) return false;
+  const current = new Set(await staffRepository.listStaffAreaIds(staffId));
+  const wanted = new Set(areaIds);
+  return current.size !== wanted.size || [...wanted].some((id) => !current.has(id));
+}
 
 /**
  * Everyone's emergency contact, for quick access in Equipo (#451). `null`
@@ -54,11 +76,15 @@ export async function createStaffAction(input: StaffInput): Promise<Staff> {
   return row;
 }
 
-export async function updateStaffAction(id: string, patch: Partial<StaffInput>): Promise<Staff> {
+export async function updateStaffAction(
+  id: string,
+  patch: Partial<StaffInput>
+): Promise<Staff | GoogleManagedRefusal> {
   const user = await requireCapabilityUser();
   if (!resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff edit");
   }
+  if (await isRoleLocked(id, patch)) return GOOGLE_MANAGED_REFUSAL;
   const row = await staffRepository.updateStaff(id, patch, user.member.id);
   revalidatePath("/equipo");
   return row;
@@ -96,11 +122,12 @@ export async function upsertStaffProfileAction(
   return row;
 }
 
-export async function setStaffAreasAction(staffId: string, areaIds: string[]): Promise<void> {
+export async function setStaffAreasAction(staffId: string, areaIds: string[]): Promise<GoogleManagedRefusal | void> {
   const user = await requireCapabilityUser();
   if (!resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff areas edit");
   }
+  if (await areAreasLocked(staffId, areaIds)) return GOOGLE_MANAGED_REFUSAL;
   await staffRepository.setStaffAreas(staffId, areaIds);
   revalidatePath("/equipo");
 }

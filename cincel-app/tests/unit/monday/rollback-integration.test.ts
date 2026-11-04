@@ -216,7 +216,8 @@ class Rollback extends Error {}
 
 type Row = Record<string, unknown>;
 
-describe.skipIf(!url)("rollback after apply (test DB, fake Drive)", () => {
+// Full apply runs per case; the default 5 s is short when the whole suite shares one machine.
+describe.skipIf(!url)("rollback after apply (test DB, fake Drive)", { timeout: 60_000 }, () => {
   const client = postgres(url ?? "", { max: 1, onnotice: () => {} });
   const db = drizzle(client, { schema });
   const dirs: string[] = [];
@@ -366,7 +367,8 @@ describe.skipIf(!url)("rollback after apply (test DB, fake Drive)", () => {
           rollback,
         });
         throw new Rollback();
-      })
+        // Repeatable read: snapshot() counts whole tables, and other DB test files commit rows meanwhile.
+      }, { isolationLevel: "repeatable read" })
       .catch((err) => {
         if (!(err instanceof Rollback)) throw err;
       });

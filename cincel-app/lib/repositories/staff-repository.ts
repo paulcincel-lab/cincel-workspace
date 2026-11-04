@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -34,7 +34,37 @@ export function toStaff(row: StaffRow): Staff {
     active: row.active,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    googleManaged: row.googleSub !== null,
+    lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
+    accessRevokedAt: row.accessRevokedAt?.toISOString() ?? null,
+    accessRevokedReason: row.accessRevokedReason,
   };
+}
+
+/** Which of `ids` are Google-managed (`google_sub` set, not deleted). */
+export async function googleManagedStaffIds(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(and(inArray(staff.id, ids), isNotNull(staff.googleSub), isNull(staff.deletedAt)));
+  return new Set(rows.map((row) => row.id));
+}
+
+/** Current role and Google lock of one staff member, or null when not found. */
+export async function getStaffRoleLock(id: string): Promise<{ role: string | null; googleManaged: boolean } | null> {
+  const [row] = await db
+    .select({ role: staff.role, googleSub: staff.googleSub })
+    .from(staff)
+    .where(and(eq(staff.id, id), isNull(staff.deletedAt)))
+    .limit(1);
+  return row ? { role: row.role, googleManaged: row.googleSub !== null } : null;
+}
+
+/** Ids of the áreas a staff member belongs to. */
+export async function listStaffAreaIds(staffId: string): Promise<string[]> {
+  const rows = await db.select({ areaId: areaMembers.areaId }).from(areaMembers).where(eq(areaMembers.staffId, staffId));
+  return rows.map((row) => row.areaId);
 }
 
 const STAFF_TRACKED_FIELDS = [

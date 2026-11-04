@@ -156,6 +156,12 @@ export async function softDeleteArea(id: string, actorId: string): Promise<void>
   });
 }
 
+/** Staff ids currently in an área. */
+export async function listAreaMemberIds(areaId: string): Promise<string[]> {
+  const rows = await db.select({ staffId: areaMembers.staffId }).from(areaMembers).where(eq(areaMembers.areaId, areaId));
+  return rows.map((row) => row.staffId);
+}
+
 /** Replace the members of an area. */
 export async function setAreaMembers(
   areaId: string,

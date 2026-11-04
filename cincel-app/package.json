@@ -15,6 +15,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:madrid22": "tsx scripts/seed-madrid22.ts",
+    "auth:disable-passwords": "tsx scripts/disable-passwords.ts",
     "db:setup": "drizzle-kit migrate && tsx scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
     "monday": "tsx scripts/monday/cli.ts",

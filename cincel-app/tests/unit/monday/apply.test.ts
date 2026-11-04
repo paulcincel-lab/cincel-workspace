@@ -105,7 +105,8 @@ const url = process.env.TEST_DATABASE_URL;
 
 class Rollback extends Error {}
 
-describe.skipIf(!url)("apply phase A (test DB)", () => {
+// Full apply runs per case; the default 5 s is short when the whole suite shares one machine.
+describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
   const client = postgres(url ?? "", { max: 1, onnotice: () => {} });
   const db = drizzle(client, { schema });
   const dirs: string[] = [];

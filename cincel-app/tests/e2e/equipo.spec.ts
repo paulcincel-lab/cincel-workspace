@@ -32,9 +32,9 @@ test.describe("Equipo — add team member", () => {
     await drawer.locator("label:has-text('Nombre') + input").first().fill(MEMBER_NAME);
     await drawer.locator("label:has-text('Apellidos') + input").fill("E2E");
 
-    // Fill other required fields: Puesto (free text), Áreas (multi-select
+    // Fill other required fields: Puesto (free text, its label sits next to the Google badge), Áreas (multi-select
     // against real core.areas — search then click the matching option).
-    await drawer.locator("label:has-text('Puesto') + input").fill("Arquitecto");
+    await drawer.locator("#member-role").fill("Arquitecto");
     await drawer.getByPlaceholder("Buscar área...").fill("Diseño");
     await drawer.getByRole("button", { name: /Diseño/ }).click();
 

@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveAreasCapabilities } from "@/lib/auth/permissions";
 import * as areasRepository from "@/lib/repositories/areas-repository";
+import { googleManagedStaffIds } from "@/lib/repositories/staff-repository";
 import type { Area, AreaDetail, AreaInput } from "@/lib/types/core";
+import { GOOGLE_MANAGED_REFUSAL, type GoogleManagedRefusal } from "@/lib/types/workspace-access";
 
 async function requireAreasCapabilities() {
   return resolveAreasCapabilities(await requireCapabilityUser());
@@ -55,11 +57,21 @@ export async function deleteAreaAction(id: string): Promise<void> {
 export async function setAreaMembersAction(
   areaId: string,
   members: Array<{ staffId: string; role?: string | null }>
-): Promise<void> {
+): Promise<GoogleManagedRefusal | void> {
   const user = await requireCapabilityUser();
   if (!resolveAreasCapabilities(user).canManageAreas) {
     throw new Error("FORBIDDEN: areas members edit");
   }
+  // Google-managed staff get their áreas from Workspace (BE §A.7): adding or
+  // removing one of them is refused (returned, so the client sees the message);
+  // their área role stays editable.
+  const current = new Set(await areasRepository.listAreaMemberIds(areaId));
+  const wanted = new Set(members.map((member) => member.staffId));
+  const changed = [
+    ...[...wanted].filter((id) => !current.has(id)),
+    ...[...current].filter((id) => !wanted.has(id)),
+  ];
+  if ((await googleManagedStaffIds(changed)).size > 0) return GOOGLE_MANAGED_REFUSAL;
   await areasRepository.setAreaMembers(areaId, members);
   revalidatePath("/configuracion/areas");
 }

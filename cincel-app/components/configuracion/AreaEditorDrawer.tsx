@@ -1,5 +1,6 @@
 "use client";
 
+import { GoogleManagedBadge } from "@/components/equipo/GoogleManagedBadge";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
@@ -10,6 +11,7 @@ import { Textarea } from "@/components/ui/shadcn/textarea";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 import { AREA_COLOR_SLOTS, areaColorClass, areaColorLabel } from "@/lib/areas/area-color";
 import type { AreasCapabilities } from "@/lib/auth/permissions";
+import { GOOGLE_MANAGED_TOOLTIP } from "@/lib/equipo/google-access";
 import { cn } from "@/lib/utils";
 import type { AreaDetail } from "@/lib/types/core";
 
@@ -58,6 +60,8 @@ interface AreaEditorDrawerProps {
   onChangeWorkflowNames: (names: string[]) => void;
   onSaveWorkflows: () => void;
   capabilities: AreasCapabilities;
+  /** Names of Google-managed staff: their membership comes from Workspace and can't change here (FE §2.6). */
+  lockedMemberNames?: string[];
 }
 
 /** Slide-in form for creating/editing an area, and — once it exists — managing
@@ -80,6 +84,7 @@ export function AreaEditorDrawer({
   onChangeWorkflowNames,
   onSaveWorkflows,
   capabilities,
+  lockedMemberNames = [],
 }: AreaEditorDrawerProps) {
   const canManage = capabilities.canManageAreas;
   const isCreating = editingArea === null;
@@ -218,7 +223,10 @@ export function AreaEditorDrawer({
 
           <section className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-foreground">Miembros</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground">Miembros</h3>
+                {lockedMemberNames.length > 0 ? <GoogleManagedBadge /> : null}
+              </div>
               <Badge variant="outline">{memberNames.length} integrantes</Badge>
             </div>
 
@@ -231,7 +239,14 @@ export function AreaEditorDrawer({
                   selected={memberNames}
                   onChange={onChangeMemberNames}
                   placeholder="Buscar colaborador..."
+                  locked={lockedMemberNames}
+                  lockedTitle={GOOGLE_MANAGED_TOOLTIP}
                 />
+                {lockedMemberNames.length > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Los colaboradores que entran con Google reciben sus áreas desde Google Workspace.
+                  </p>
+                ) : null}
                 {canManage ? (
                   <div className="flex justify-end">
                     <Button size="sm" variant="outline" onClick={onSaveMembers}>

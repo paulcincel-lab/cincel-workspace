@@ -62,6 +62,10 @@ export default function LoginForm({ googleEnabled, passwordEnabled, callbackErro
       const result = await loginAction(draft.email, draft.password);
 
       if (!result.ok) {
+        if (result.reason === "password_login_disabled") {
+          setError("El acceso con contraseña está desactivado. Entra con Google.");
+          return;
+        }
         if (result.reason === "inactive_member") {
           setError("Tu cuenta esta inactiva. Contacta a un administrador.");
           return;

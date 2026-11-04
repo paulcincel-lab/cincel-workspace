@@ -11,3 +11,13 @@ if (typeof Element !== "undefined" && !Element.prototype.getAnimations) {
     return [];
   };
 }
+
+/**
+ * Testing Library's async queries give up after 1 s by default. Under a full parallel run (many DB test files on
+ * one machine) a re-render after a mocked action can take longer, so DOM tests get 5 s.
+ */
+if (typeof document !== "undefined") {
+  const { configure } = await import("@testing-library/react");
+  configure({ asyncUtilTimeout: 5000 });
+}
+export {};

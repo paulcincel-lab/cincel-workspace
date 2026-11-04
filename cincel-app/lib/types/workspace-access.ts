@@ -21,6 +21,27 @@ export function isWorkspaceDenialReason(value: unknown): value is WorkspaceDenia
   return typeof value === "string" && (WORKSPACE_DENIAL_REASONS as readonly string[]).includes(value);
 }
 
+/**
+ * Refusal of a role or área change for staff whose role and áreas come from
+ * Google Workspace (BE §A.7, §A.11 #12).
+ */
+export const GOOGLE_MANAGED_ERROR = "Se administra en Google Workspace";
+
+/**
+ * What the staff and áreas actions return for that refusal. A returned value,
+ * not a thrown error: production builds hide thrown Server Action messages.
+ */
+export type GoogleManagedRefusal = { ok: false; error: typeof GOOGLE_MANAGED_ERROR };
+
+export const GOOGLE_MANAGED_REFUSAL: GoogleManagedRefusal = { ok: false, error: GOOGLE_MANAGED_ERROR };
+
+export function isGoogleManagedRefusal(value: unknown): value is GoogleManagedRefusal {
+  return (
+    typeof value === "object" && value !== null && "ok" in value && value.ok === false &&
+    "error" in value && value.error === GOOGLE_MANAGED_ERROR
+  );
+}
+
 /** Which Workspace group means which role or area (BE §A.7, FE §5). */
 export type GroupMappingKind = "role" | "area";
 
@@ -45,3 +66,38 @@ export type GroupMappingInput = {
 export type GroupMappingError = "group_not_found" | "duplicate" | "invalid" | "directory_error" | "forbidden";
 
 export type GroupMappingResult = { ok: true; mapping: GroupMapping } | { ok: false; error: GroupMappingError };
+
+/** Where a Directory failure happened (Configuración → Google → Estado). */
+export type DirectoryErrorSource = "sign_in" | "group_mapping" | "recheck";
+
+/** Integration health and cutover progress (BE §A.7, FE §5). Never carries a key or secret. */
+export type GoogleHealth = {
+  /** `GOOGLE_WORKSPACE_DOMAIN`, null when unset. */
+  workspaceDomain: string | null;
+  /** `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are both set. */
+  oauthClientConfigured: boolean;
+  /** Group mappings in total and of kind role; no role mapping means nobody can sign in with Google. */
+  groupMappingCount: number;
+  roleGroupMappingCount: number;
+  serviceAccountEmail: string | null;
+  sharedDriveId: string | null;
+  /** `TOKEN_ENCRYPTION_KEY` is set and well formed. */
+  tokenKeyConfigured: boolean;
+  lastDirectoryError: {
+    at: string;
+    source: DirectoryErrorSource;
+    /** `timeout`, `network` or `http`. */
+    kind: string;
+    status: number | null;
+    message: string;
+  } | null;
+  lastDriveError: { at: string; message: string } | null;
+  /** Active staff who already signed in with Google (`google_sub` set). */
+  googleLinkedStaff: number;
+  activeStaff: number;
+};
+
+/** `recheckStaffAccessAction` (BE §A.7). */
+export type RecheckStaffAccessResult =
+  | { ok: true; allowed: boolean; reason?: string }
+  | { ok: false; error: "directory_error" | "not_google_linked" | "forbidden" };

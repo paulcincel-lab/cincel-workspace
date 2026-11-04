@@ -26,6 +26,7 @@ import {
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import type { AreaDetail, Staff, WorkflowDetail } from "@/lib/types/core";
+import { isGoogleManagedRefusal } from "@/lib/types/workspace-access";
 
 const EMPTY_DRAFT: AreaDraft = {
   name: "",
@@ -87,6 +88,10 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
       staff
         .filter((member) => member.active)
         .map((member) => ({ id: member.id, name: member.name })),
+    [staff],
+  );
+  const lockedMemberNames = useMemo(
+    () => staff.filter((member) => member.googleManaged).map((member) => member.name),
     [staff],
   );
   const staffNameToId = useMemo(
@@ -180,10 +185,14 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
       const staffIds = memberNames
         .map((name) => staffNameToId.get(name))
         .filter((id): id is string => Boolean(id));
-      await setAreaMembersAction(
+      const result = await setAreaMembersAction(
         editingArea.id,
         staffIds.map((staffId) => ({ staffId })),
       );
+      if (isGoogleManagedRefusal(result)) {
+        setFormError(result.error);
+        return;
+      }
       const detail = await fetchAreaAction(editingArea.id);
       if (detail) {
         setEditingArea(detail);
@@ -341,6 +350,7 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
         onChangeWorkflowNames={setWorkflowNames}
         onSaveWorkflows={() => void saveWorkflows()}
         capabilities={capabilities}
+        lockedMemberNames={lockedMemberNames}
       />
     </div>
   );

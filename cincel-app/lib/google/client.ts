@@ -15,7 +15,8 @@ import { JWT } from "google-auth-library";
  * Configured through server-only env vars:
  *   GOOGLE_SA_CLIENT_EMAIL      – service account email
  *   GOOGLE_SA_PRIVATE_KEY       – PEM private key (literal \n allowed)
- *   GOOGLE_DRIVE_ROOT_FOLDER_ID – folder the picker starts in
+ *   GOOGLE_DRIVE_ROOT_FOLDER_ID – folder the picker starts in; when unset it
+ *                                 defaults to the root of GOOGLE_SHARED_DRIVE_ID
  *
  * The domain-wide delegation grant on the Workspace side must authorize only
  * `drive.readonly` for this service account — see docs/google-drive.md.
@@ -60,8 +61,9 @@ export function getDriveClientFor(userEmail: string): JWT | null {
   return client;
 }
 
+// A Shared Drive's id is also the id of its root folder, so it works as the start folder.
 export function getDriveRootFolderId(): string | null {
-  return process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID?.trim() || null;
+  return process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID?.trim() || process.env.GOOGLE_SHARED_DRIVE_ID?.trim() || null;
 }
 
 /**

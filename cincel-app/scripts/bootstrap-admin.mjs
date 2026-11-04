@@ -6,6 +6,9 @@
 //   - a staff row exists: its role is set to Administrador and it is reactivated
 //   - the password credential is written only when it is missing, disabled or
 //     doesn't match the env password, so the env value is the source of truth
+// With AUTH_PASSWORD_ENABLED=false nothing is created or re-enabled, so a deploy
+// never undoes scripts/disable-passwords.ts. Break-glass: set
+// AUTH_PASSWORD_ENABLED=true and the bootstrap vars, then redeploy.
 // Hashing must match lib/auth/password.ts (scrypt, 16-byte salt, 64-byte key, NFKC).
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
@@ -47,10 +50,24 @@ export function bootstrapAdminFromEnv(env = process.env) {
 }
 
 /**
- * Creates or updates the bootstrap admin with `sql` (a postgres.js client or
- * transaction). Returns what changed, for the log line.
+ * AUTH_PASSWORD_ENABLED as lib/auth/auth-flags.ts reads it: only "true" / "false"
+ * (any case, spaces ignored) change it; anything else keeps the default, true.
+ * @param {Record<string, string | undefined>} [env]
  */
-export async function ensureBootstrapAdmin(sql, admin) {
+export function passwordAuthEnabledFromEnv(env = process.env) {
+  return env.AUTH_PASSWORD_ENABLED?.trim().toLowerCase() !== "false";
+}
+
+export const SKIPPED_PASSWORDS_DISABLED = "skipped, passwords disabled";
+
+/**
+ * Creates or updates the bootstrap admin with `sql` (a postgres.js client or
+ * transaction). Returns what changed, for the log line. With
+ * `passwordEnabled: false` it touches nothing and returns [SKIPPED_PASSWORDS_DISABLED].
+ * @param {{ passwordEnabled?: boolean }} [options]
+ */
+export async function ensureBootstrapAdmin(sql, admin, { passwordEnabled = true } = {}) {
+  if (!passwordEnabled) return [SKIPPED_PASSWORDS_DISABLED];
   const changes = [];
   let [member] = await sql`
     select id, role, active from core.staff

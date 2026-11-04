@@ -36,6 +36,10 @@ export default function ChangePasswordForm() {
         draft.confirmPassword
       );
       if (!result.ok) {
+        if (result.reason === "password_login_disabled") {
+          setError("El acceso con contraseña está desactivado. Entra con Google.");
+          return;
+        }
         if (result.reason === "password_too_short") {
           setError("La nueva contrasena debe tener al menos 8 caracteres.");
           return;

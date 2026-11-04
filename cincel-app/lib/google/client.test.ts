@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { JWT } from "google-auth-library";
 
-import { getDriveClientFor, isDriveConfigured } from "./client";
+import { getDriveClientFor, getDriveRootFolderId, isDriveConfigured } from "./client";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -73,5 +73,33 @@ describe("isDriveConfigured", () => {
   it("is true once both credential env vars are set, independent of any user", () => {
     setCreds();
     expect(isDriveConfigured()).toBe(true);
+  });
+});
+
+describe("getDriveRootFolderId", () => {
+  beforeEach(() => {
+    delete process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    delete process.env.GOOGLE_SHARED_DRIVE_ID;
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  it("uses GOOGLE_DRIVE_ROOT_FOLDER_ID when set", () => {
+    process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID = " folder-1 ";
+    process.env.GOOGLE_SHARED_DRIVE_ID = "shared-1";
+    expect(getDriveRootFolderId()).toBe("folder-1");
+  });
+
+  it("defaults to the Shared Drive root when GOOGLE_DRIVE_ROOT_FOLDER_ID is unset or blank", () => {
+    process.env.GOOGLE_SHARED_DRIVE_ID = "shared-1";
+    expect(getDriveRootFolderId()).toBe("shared-1");
+    process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID = "  ";
+    expect(getDriveRootFolderId()).toBe("shared-1");
+  });
+
+  it("is null when neither is set", () => {
+    expect(getDriveRootFolderId()).toBeNull();
   });
 });

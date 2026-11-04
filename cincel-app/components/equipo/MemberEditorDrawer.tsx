@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 
+import { GoogleManagedBadge } from "@/components/equipo/GoogleManagedBadge";
+import { RecheckAccessButton } from "@/components/equipo/RecheckAccessButton";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
@@ -41,6 +43,11 @@ interface MemberEditorDrawerProps {
   teamCapabilities: TeamCapabilities;
   availabilityOptions: readonly string[];
   areaOptions: Area[];
+  /** Role and áreas come from Google Workspace: those fields are read-only (FE §2.6). */
+  googleManaged?: boolean;
+  /** Administrador viewing a Google-managed member: shows **Revisar acceso ahora**. */
+  canRecheckAccess?: boolean;
+  onAccessChecked?: () => void | Promise<void>;
 }
 
 /** Slide-in modal form for adding or editing a team member. */
@@ -57,6 +64,9 @@ export function MemberEditorDrawer({
   teamCapabilities,
   availabilityOptions,
   areaOptions,
+  googleManaged = false,
+  canRecheckAccess = false,
+  onAccessChecked,
 }: MemberEditorDrawerProps) {
   const canSave = editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator;
 
@@ -104,43 +114,70 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Puesto</label>
+                <div className="mb-2 flex items-center gap-2">
+                  <label htmlFor="member-role" className="block text-sm font-medium text-foreground">Puesto</label>
+                  {googleManaged ? <GoogleManagedBadge /> : null}
+                </div>
                 <Input
+                  id="member-role"
                   type="text"
                   value={draft.role}
+                  readOnly={googleManaged}
+                  disabled={googleManaged}
                   onChange={(event) => onChangeDraft((current) => ({ ...current, role: event.target.value }))}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">Cargo que desempeña dentro de la empresa.</p>
               </div>
 
               <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-foreground">Áreas</label>
-                <TeamMultiSelect
-                  options={areaNames}
-                  selected={selectedAreaNames}
-                  onChange={(names) => {
-                    const ids = names
-                      .map((name) => areaIdByName.get(name))
-                      .filter((id): id is string => Boolean(id));
-                    onChangeDraft((current) => ({ ...current, areaIds: ids }));
-                  }}
-                  placeholder="Buscar área..."
-                />
+                <div className="mb-2 flex items-center gap-2">
+                  <label className="block text-sm font-medium text-foreground">Áreas</label>
+                  {googleManaged ? <GoogleManagedBadge /> : null}
+                </div>
+                {googleManaged ? (
+                  <div className="flex flex-wrap gap-1" data-testid="member-areas-readonly">
+                    {selectedAreaNames.length > 0 ? (
+                      selectedAreaNames.map((name) => (
+                        <Badge key={name} variant="secondary">
+                          {name}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Sin área</span>
+                    )}
+                  </div>
+                ) : (
+                  <TeamMultiSelect
+                    options={areaNames}
+                    selected={selectedAreaNames}
+                    onChange={(names) => {
+                      const ids = names
+                        .map((name) => areaIdByName.get(name))
+                        .filter((id): id is string => Boolean(id));
+                      onChangeDraft((current) => ({ ...current, areaIds: ids }));
+                    }}
+                    placeholder="Buscar área..."
+                  />
+                )}
                 <p className="mt-1 text-xs text-muted-foreground">Departamentos a los que pertenece. Puede tener varias.</p>
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Acceso</label>
+                <div className="mb-2 flex items-center gap-2">
+                  <label className="block text-sm font-medium text-foreground">Acceso</label>
+                  {googleManaged ? <GoogleManagedBadge /> : null}
+                </div>
                 <Select
                   value={draft.access}
                   onValueChange={(value) => {
                     const normalized = normalizeSystemAccessRole(value as string) ?? DEFAULT_SYSTEM_ACCESS_ROLE;
                     onChangeDraft((current) => ({ ...current, access: normalized }));
                   }}
-                  disabled={!teamCapabilities.canChangeCollaboratorAccess}
+                  disabled={googleManaged || !teamCapabilities.canChangeCollaboratorAccess}
                 >
                   <SelectTrigger
                     className="w-full"
+                    aria-label="Acceso"
                     title={teamCapabilities.canChangeCollaboratorAccess ? "" : "No tienes permiso para cambiar el acceso"}
                   >
                     <SelectValue />
@@ -234,6 +271,12 @@ export function MemberEditorDrawer({
                 </Badge>
               </div>
             </div>
+
+            {editingId !== null && googleManaged && canRecheckAccess ? (
+              <div className="mt-4">
+                <RecheckAccessButton staffId={editingId} onChecked={onAccessChecked} />
+              </div>
+            ) : null}
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2 rounded-2xl border border-border bg-muted p-4">

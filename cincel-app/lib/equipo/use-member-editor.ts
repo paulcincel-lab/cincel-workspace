@@ -20,6 +20,7 @@ import {
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
 import type { Staff } from "@/lib/types/core";
+import { isGoogleManagedRefusal } from "@/lib/types/workspace-access";
 
 /**
  * Collaborator create/edit — draft state, validation, and credential
@@ -98,6 +99,10 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     editingStaff && authenticatedUser && authenticatedUser.member.id === editingStaff.id &&
       hasDefaultSystemAdministratorAccess(editingStaff.email)
   );
+
+  // Role and áreas of Google-managed staff come from Workspace (FE §2.6): the
+  // drawer shows them read-only and a save leaves them out.
+  const editingGoogleManaged = Boolean(editingId !== null && editingStaff?.googleManaged);
 
   const accessPreviewState = useMemo<AccessPreviewState>(() => {
     if (!draft.systemAccessEnabled) {
@@ -211,7 +216,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     const tempPassword = draft.temporaryPassword.trim();
     const tempPasswordConfirmation = draft.temporaryPasswordConfirmation.trim();
 
-    if (!name || !role || draft.areaIds.length === 0 || draft.capacity < 1) {
+    if (!name || (!editingGoogleManaged && (!role || draft.areaIds.length === 0)) || draft.capacity < 1) {
       setFormError("Completa nombre, puesto, al menos un área y una capacidad válida.");
       return;
     }
@@ -278,15 +283,19 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         ).id;
 
       if (editingId !== null) {
-        await updateStaffAction(editingId, {
+        const updated = await updateStaffAction(editingId, {
           name: staffInput.name,
           lastName: staffInput.lastName,
-          role: staffInput.role,
+          ...(editingGoogleManaged ? {} : { role: staffInput.role }),
           email: staffInput.email,
           phone: staffInput.phone,
           capacity: staffInput.capacity,
           availability: staffInput.availability,
         });
+        if (isGoogleManagedRefusal(updated)) {
+          setFormError(updated.error);
+          return;
+        }
       }
 
       await upsertStaffProfileAction(staffId, {
@@ -304,7 +313,13 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         emergencyContactAddress: draft.emergencyContactAddress.trim() || null,
       });
 
-      await setStaffAreasAction(staffId, draft.areaIds);
+      if (!editingGoogleManaged) {
+        const areasResult = await setStaffAreasAction(staffId, draft.areaIds);
+        if (isGoogleManagedRefusal(areasResult)) {
+          setFormError(areasResult.error);
+          return;
+        }
+      }
 
       if (teamCapabilities.canChangeCollaboratorAccess) {
         await setStaffCredentialAction(staffId, {
@@ -340,6 +355,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     formError,
     saving,
     isEditingSelfProtectedAdmin,
+    editingGoogleManaged,
     accessPreviewState,
     openAddEditor,
     openEditEditor,

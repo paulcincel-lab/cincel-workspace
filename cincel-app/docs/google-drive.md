@@ -72,14 +72,17 @@ GOOGLE_DRIVE_ROOT_FOLDER_ID=<a folder id the picker starts in>
 
 `GOOGLE_DRIVE_ROOT_FOLDER_ID` is just the picker's starting point — it does
 not grant access. Each user still only sees what they can already see under
-it.
+it. When it is unset (or blank) the picker starts at the root of the Shared
+Drive in `GOOGLE_SHARED_DRIVE_ID` (step 5); with neither set, browsing needs an
+explicit folder.
 
 ### 5. Shared Drive for project folders
 
 Project folders (`<project>` with `01 Interno` / `02 Cliente` /
 `03 Del cliente`) live in a company **Shared Drive**, written by the service
 account itself (not by impersonation). Used by the monday migration CLI
-(`npm run monday`); Staff SSO reuses it.
+(`npm run monday`) and by the app's project folders (created with a new
+project, or re-created from the project page); Staff SSO reuses it.
 
 1. In Google Drive, create a Shared Drive (e.g. *Cincel — Proyectos*).
 2. Manage members → add the service account's email
@@ -251,16 +254,95 @@ ACCESS_RECHECK_HOURS=4
 - Register the redirect URI `<APP_ORIGIN>/api/auth/google/callback` on the
   OAuth client for every environment (prod and staging).
 
-### Cutover (passwords → Google)
+### Access re-check
 
-1. Deploy with both flags on. Staff sign in with Google once.
-2. Configuración → Grupos de Google shows how many active staff already
-   signed in with Google. While both are on, password users keep working;
-   Drive and Calendar switch to each staff member's own token.
-3. Turn `AUTH_PASSWORD_ENABLED=false`: password routes return 404.
-4. Break-glass: `AUTH_PASSWORD_ENABLED=true` again re-enables password login.
-5. Cleanup (its own release, after step 3 has run in production): the
-   delegation client and the old connect flow are removed.
+Every `ACCESS_RECHECK_HOURS` (default `4`) the first request of a staff member
+linked to Google re-checks their Workspace groups (`lib/auth/access-recheck.ts`).
+Removed from every role group, or suspended, means their sessions are deleted
+and they land on `/login/denegado?motivo=revoked`; otherwise role and áreas are
+refreshed. A Directory error keeps access and retries about 5 minutes later.
+An unset, non-numeric, zero or negative value falls back to `4`; fractions
+work (`0.5` = 30 minutes). Staff without Google (password only, e.g. the
+bootstrap admin) are never re-checked. **Revisar acceso ahora** in Equipo
+(Administrador) ignores the interval.
 
-The full cutover is in `docs/specs/backend.md` §A.8–§A.9; the client's
-Workspace setup is in `docs/google-workspace-admin-checklist.md`.
+### Cutover runbook (passwords → Google)
+
+Env changes are made in the KCD console (the app's environment there), then
+the app is redeployed so the new values are read. Do every step on staging
+first, then on production.
+
+**Before you start**
+
+- The client's Workspace setup is done (`docs/google-workspace-admin-checklist.md`):
+  role groups, area groups, OAuth client with the redirect URI for this
+  environment, service account with the directory reader role.
+- The Google variables above are set, and Configuración → Google → **Estado**
+  shows no Directory error.
+- Keep the bootstrap admin values (`BOOTSTRAP_ADMIN_EMAIL`,
+  `BOOTSTRAP_ADMIN_PASSWORD`) somewhere safe; they are the break-glass account.
+
+**1. Both login methods on**
+
+- Set `AUTH_GOOGLE_ENABLED=true` and `AUTH_PASSWORD_ENABLED=true`, redeploy.
+- The login page shows **Entrar con Google** and the email/password form.
+- Ask every staff member to sign in once with **Entrar con Google**. Their row
+  gets `google_sub`; from then on role and áreas come from Workspace and are
+  read-only in Equipo / Áreas.
+- Anyone who lands on `/login/denegado` is not in a role group: fix it in
+  Google Admin, then they try again.
+
+**2. Wait for everyone**
+
+- Configuración → Google → **Estado** shows "N de M colaboradores activos ya
+  entraron con Google".
+- While both flags are on, password users keep working. Drive and Calendar use
+  each staff member's own token; a password user links Google by granting
+  Drive or by signing in with Google.
+- **Do not go to step 3 until N equals M.** Whoever is missing is locked out
+  once passwords are off. Deactivate staff who no longer work here instead of
+  waiting for them.
+
+**3. Passwords off**
+
+- Set `AUTH_PASSWORD_ENABLED=false`, redeploy.
+- The password form is hidden; the login, first access and change password
+  actions refuse server-side and return `password_login_disabled`, and
+  `/change-password` redirects.
+- With the flag false the migrate job skips the bootstrap admin
+  (`bootstrap admin <email>: skipped, passwords disabled`), so a deploy does
+  not turn its password back on.
+- Disable the stored passwords of staff who signed in with Google, with the
+  app's `DATABASE_URL`:
+
+  ```
+  npx tsx scripts/disable-passwords.ts
+  ```
+
+  It sets `auth_credentials.enabled = false` and
+  `must_change_password = false` only for staff with `google_sub`. It is
+  idempotent: running it again changes nothing.
+- Check: a Google sign-in works, the password form is gone, and an old
+  password no longer gets in.
+
+**4. Break-glass (Google sign-in broken)**
+
+Use this when nobody can get in with Google (OAuth client deleted, Directory
+down for long, wrong domain).
+
+- In the KCD console set `AUTH_PASSWORD_ENABLED=true` and the bootstrap
+  admin `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`, then redeploy.
+- The migrate job creates or re-enables that admin as Administrador with the
+  password from the env; sign in with it on the password form. Password login
+  also works again for any credential still `enabled` (the ones
+  `disable-passwords.ts` turned off stay off).
+- Fix the Google side, confirm **Entrar con Google** works, then repeat step 3
+  (`AUTH_PASSWORD_ENABLED=false`, redeploy). Change or clear
+  `BOOTSTRAP_ADMIN_PASSWORD` afterwards.
+
+**5. Cleanup (later, its own release)**
+
+After step 3 has run in production: the delegation client, the old connect
+flow and legacy `google_oauth_accounts` rows without `google_sub` are removed.
+
+The full cutover is in `docs/specs/backend.md` §A.8–§A.9.
