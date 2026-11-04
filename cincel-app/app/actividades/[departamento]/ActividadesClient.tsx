@@ -41,7 +41,7 @@ import {
 } from "@/lib/tasks/status-options";
 import { cn } from "@/lib/utils";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
-import { loadGeneralSettings } from "@/lib/settings/general-settings";
+import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
 import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 import {
@@ -119,6 +119,7 @@ export function ActividadesClient({
   initialProjects,
   initialStaff,
 }: ActividadesClientProps) {
+  const generalSettings = useGeneralSettings();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -625,12 +626,11 @@ export function ActividadesClient({
   );
 
   async function exportActivities(format: "xlsx" | "pdf") {
-    const { settings } = loadGeneralSettings();
     await exportTableData({
       moduleName: `Actividades ${pageLabel}`,
       fileName: `actividades-${slug}-${Date.now()}`,
       format,
-      companyName: settings.company.tradeName || settings.company.legalName,
+      companyName: generalSettings.company.tradeName || generalSettings.company.legalName,
       columns: exportColumns,
       rows: filteredTasks,
       landscape: true,

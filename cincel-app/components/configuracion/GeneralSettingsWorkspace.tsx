@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
@@ -16,14 +17,19 @@ import {
 } from "@/components/ui/shadcn/select";
 import { Switch } from "@/components/ui/shadcn/switch";
 import { PrimaryColorPicker } from "@/components/configuracion/PrimaryColorPicker";
-import type { AppearanceState } from "@/lib/actions/app-settings-actions";
+import {
+  type AppearanceState,
+  restoreGeneralSettingsAction,
+  saveGeneralSettingsAction,
+} from "@/lib/actions/app-settings-actions";
 import {
   buildDefaultGeneralSettings,
+  clearLegacyGeneralSettings,
   formatGeneralSettingsSavedAt,
+  GENERAL_SETTINGS_LOGO_MAX_BYTES,
   type GeneralSettings,
-  loadGeneralSettings,
-  restoreDefaultGeneralSettings,
-  saveGeneralSettings,
+  type LoadedGeneralSettings,
+  readLegacyGeneralSettings,
 } from "@/lib/settings/general-settings";
 import { APP_VERSION } from "@/lib/version";
 
@@ -50,43 +56,39 @@ function loadImageAsDataUrl(file: File): Promise<string> {
 
 interface GeneralSettingsWorkspaceProps {
   appearance: AppearanceState;
+  general: LoadedGeneralSettings;
 }
 
-export default function GeneralSettingsWorkspace({ appearance }: GeneralSettingsWorkspaceProps) {
+export default function GeneralSettingsWorkspace({ appearance, general }: GeneralSettingsWorkspaceProps) {
+  const router = useRouter();
   const defaultSettings = useMemo(() => buildDefaultGeneralSettings(), []);
-  const initialState = useMemo(() => loadGeneralSettings(), []);
+  const canManage = appearance.canManage;
 
-  const [settings, setSettings] = useState<GeneralSettings>(
-    initialState.settings,
-  );
-  const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(
-    initialState.hasCustom,
-  );
+  const [settings, setSettings] = useState<GeneralSettings>(general.settings);
+  const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(general.hasCustom);
   // What's stored now — "Guardar cambios" enables on any difference from it.
-  const [savedSettings, setSavedSettings] = useState<GeneralSettings>(
-    initialState.settings,
-  );
-  // Filled in by the mount refresh below, so the server and first client render agree.
-  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [savedSettings, setSavedSettings] = useState<GeneralSettings>(general.settings);
+  const [savedAt, setSavedAt] = useState<string | null>(general.savedAt);
+  const [error, setError] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<{ scope: "company" | "appearance"; message: string } | null>(null);
+  const [pickedUpLegacy, setPickedUpLegacy] = useState(false);
+  const [pending, startTransition] = useTransition();
 
+  // One-time pickup: a value saved in this browser before the settings moved to the server.
   useEffect(() => {
-    const refresh = () => {
-      const loaded = loadGeneralSettings();
-      setSettings(loaded.settings);
-      setSavedSettings(loaded.settings);
-      setHasCustomConfig(loaded.hasCustom);
-      setSavedAt(loaded.savedAt);
-    };
-
-    refresh();
-    window.addEventListener("focus", refresh);
-    window.addEventListener("storage", refresh);
-
-    return () => {
-      window.removeEventListener("focus", refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, []);
+    if (general.hasCustom) {
+      clearLegacyGeneralSettings();
+      return;
+    }
+    if (!canManage) return;
+    const legacy = readLegacyGeneralSettings();
+    if (legacy && JSON.stringify(legacy) !== JSON.stringify(general.settings)) {
+      // Browser storage is only readable after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSettings(legacy);
+      setPickedUpLegacy(true);
+    }
+  }, [canManage, general.hasCustom, general.settings]);
 
   const isDirty = useMemo(() => {
     return JSON.stringify(settings) !== JSON.stringify(savedSettings);
@@ -138,12 +140,19 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
     field: "logoUrl" | "systemLogoUrl",
     file: File | null,
   ) => {
+    setLogoError(null);
+
     if (!file) {
       return;
     }
 
     if (file.type !== "image/png" && file.type !== "image/jpeg") {
-      window.alert("Solo se permiten imágenes PNG o JPG.");
+      setLogoError({ scope, message: "Solo se permiten imágenes PNG o JPG." });
+      return;
+    }
+
+    if (file.size > GENERAL_SETTINGS_LOGO_MAX_BYTES) {
+      setLogoError({ scope, message: `La imagen debe pesar como máximo ${GENERAL_SETTINGS_LOGO_MAX_BYTES / 1024} KB.` });
       return;
     }
 
@@ -159,7 +168,7 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
         updateAppearanceField("systemLogoUrl", dataUrl);
       }
     } catch {
-      window.alert("No se pudo cargar la imagen. Intenta de nuevo.");
+      setLogoError({ scope, message: "No se pudo cargar la imagen. Intenta de nuevo." });
     }
   };
 
@@ -177,17 +186,37 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
   };
 
   const saveChanges = () => {
-    setSavedAt(saveGeneralSettings(settings));
-    setSavedSettings(settings);
-    setHasCustomConfig(true);
+    setError(null);
+    startTransition(async () => {
+      try {
+        const result = await saveGeneralSettingsAction(settings);
+        setSavedAt(result.savedAt);
+        setSavedSettings(settings);
+        setHasCustomConfig(true);
+        setPickedUpLegacy(false);
+        clearLegacyGeneralSettings();
+        router.refresh();
+      } catch {
+        setError("No se pudo guardar la configuración. Intenta de nuevo.");
+      }
+    });
   };
 
   const restoreDefaults = () => {
-    restoreDefaultGeneralSettings();
-    setSettings(defaultSettings);
-    setSavedSettings(defaultSettings);
-    setHasCustomConfig(false);
-    setSavedAt(null);
+    setError(null);
+    startTransition(async () => {
+      try {
+        await restoreGeneralSettingsAction();
+        setSettings(defaultSettings);
+        setSavedSettings(defaultSettings);
+        setHasCustomConfig(false);
+        setSavedAt(null);
+        setPickedUpLegacy(false);
+        router.refresh();
+      } catch {
+        setError("No se pudo restaurar la configuración. Intenta de nuevo.");
+      }
+    });
   };
 
   return (
@@ -217,6 +246,22 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
                 {savedAt ? (
                   <p className="mt-1 text-xs text-muted-foreground">{formatGeneralSettingsSavedAt(savedAt)}</p>
                 ) : null}
+                {!canManage ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Solo un administrador puede cambiar esta configuración.
+                  </p>
+                ) : null}
+                {pickedUpLegacy ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Se cargó la configuración guardada en este navegador. Guarda los cambios para compartirla con todo el
+                    equipo.
+                  </p>
+                ) : null}
+                {error ? (
+                  <p role="alert" className="mt-1 text-xs text-destructive">
+                    {error}
+                  </p>
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -224,7 +269,7 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
                   size="sm"
                   className="h-auto px-3 py-2 text-xs"
                   onClick={restoreDefaults}
-                  disabled={!hasCustomConfig}
+                  disabled={!canManage || pending || !hasCustomConfig}
                 >
                   Restaurar configuración por defecto
                 </Button>
@@ -232,7 +277,7 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
                   size="sm"
                   className="h-auto px-3 py-2 text-xs"
                   onClick={saveChanges}
-                  disabled={!isDirty}
+                  disabled={!canManage || pending || !isDirty}
                 >
                   Guardar cambios
                 </Button>
@@ -357,6 +402,11 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
                       }
                       className="file:mr-4 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-foreground hover:file:bg-accent"
                     />
+                    {logoError?.scope === "company" ? (
+                      <p role="alert" className="text-xs text-destructive">
+                        {logoError.message}
+                      </p>
+                    ) : null}
                     {settings.company.logoUrl ? (
                       <div className="mt-2 flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
                         <Image
@@ -510,6 +560,11 @@ export default function GeneralSettingsWorkspace({ appearance }: GeneralSettings
                       }
                       className="file:mr-4 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-foreground hover:file:bg-accent"
                     />
+                    {logoError?.scope === "appearance" ? (
+                      <p role="alert" className="text-xs text-destructive">
+                        {logoError.message}
+                      </p>
+                    ) : null}
                     {settings.appearance.systemLogoUrl ? (
                       <div className="mt-2 flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
                         <Image

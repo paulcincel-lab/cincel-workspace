@@ -33,7 +33,7 @@ import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { useMemberEditor } from "@/lib/equipo/use-member-editor";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { loadGeneralSettings } from "@/lib/settings/general-settings";
+import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { canExportStaff, exportStaffAction } from "@/lib/equipo/staff-export";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
 import type { Area, Staff } from "@/lib/types/core";
@@ -66,6 +66,7 @@ const AVAILABILITY_VARIANT: Record<string, "success" | "secondary" | "outline"> 
 };
 
 export function EquipoClient({ initialTeam }: EquipoClientProps) {
+  const generalSettings = useGeneralSettings();
   const [staff, setStaff] = useState<Staff[]>(initialTeam);
   const [areaOptions, setAreaOptions] = useState<Area[]>([]);
   const [areaNamesByStaffId, setAreaNamesByStaffId] = useState<Record<string, string[]>>({});
@@ -372,10 +373,9 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
   const coordinatorMember = withWorkload.find((m) => m.id === coordinatorMemberId) ?? null;
 
   async function exportTeam(format: "xlsx" | "pdf") {
-    const { settings } = loadGeneralSettings();
     await exportStaffAction(visible, format, {
       user: authenticatedUser,
-      companyName: settings.company.tradeName || settings.company.legalName,
+      companyName: generalSettings.company.tradeName || generalSettings.company.legalName,
     });
   }
 
