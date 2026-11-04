@@ -634,7 +634,7 @@ describe.skipIf(!url)("init lookups (test DB)", () => {
         .values({ workflowId: wf.id, title: "Retirado", active: false });
       const lookups = createDbLookups(tx);
       expect(await lookups.matchArea("construcción init")).toBe(area.id);
-      expect(await lookups.matchArea("Diseño")).toBeNull();
+      expect(await lookups.matchArea("Jardinería Init")).toBeNull();
       expect(await lookups.areaWorkflows(area.id)).toEqual([wf.id]);
       const found = await lookups.templateCandidates(wf.id, [
         "Levantamiento Topográfico",
