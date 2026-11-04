@@ -28,7 +28,7 @@ Two features, built in order:
 | Google OAuth (today) | Separate "connect your Google account" flow (any account) for Drive picker switching and Calendar sync; plaintext tokens in `core.google_oauth_accounts` | `lib/google/oauth.ts`, `app/api/google/oauth/*` |
 | Middleware | Redirects requests without the staff session cookie to `/login`, and `/login` with a cookie to `/dashboard`; skips `/api`, `/_next`, files. Next 16 calls this file `proxy.ts`; renaming it is out of scope | `middleware.ts` |
 | Client route guard | `AppRouteGuard` in the root layout: only `/login` and `/change-password` are public; everything else needs an active staff session; `/configuracion/*` needs Administrador; `pending_first_access` is forced to `/change-password` | `components/auth/AppRouteGuard.tsx`, `app/layout.tsx` |
-| Reverse proxy (self-hosted example) | `client_max_body_size 20m`, `proxy_read_timeout 60s` | `deploy/nginx/cincel-app.conf` |
+| Reverse proxy (self-hosted example) | `client_max_body_size 20m`, `proxy_read_timeout 60s`; portal uploads path 55m, unbuffered, 300s | `deploy/nginx/cincel-app.conf` |
 | Schema conventions | `core.table()` / `core.enum()` from `_schema.ts`, `...stamps` on mutable tables, `...soft` where rows are soft-deleted, uuid PKs, Drizzle migrations in `lib/db/migrations` | `lib/db/schema/_schema.ts` |
 | Server code | Server Actions per entity in `lib/actions/*-actions.ts`, thin `lib/repositories/*` delegates, route handlers under `app/api` | |
 | Deploy | Docker image on Keter Console (`kcd.yml`), Postgres 17 | `cincel-app/kcd.yml` |
