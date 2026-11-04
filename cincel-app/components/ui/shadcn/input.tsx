@@ -1,10 +1,15 @@
+"use client"
+
 import * as React from "react"
 import { Input as InputPrimitive } from "@base-ui/react/input"
+import { useFormFieldId } from "@/components/ui/shadcn/form-field"
 import { cn } from "@/lib/utils"
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input({ className, type, id, ...props }: React.ComponentProps<"input">) {
+  const fieldId = useFormFieldId()
   return (
     <InputPrimitive
+      id={id ?? fieldId}
       type={type}
       data-slot="input"
       className={cn(

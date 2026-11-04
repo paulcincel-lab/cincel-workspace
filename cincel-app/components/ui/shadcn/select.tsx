@@ -4,6 +4,7 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { CheckIcon, ChevronDownIcon } from "lucide-react"
 
+import { useFormFieldId } from "@/components/ui/shadcn/form-field"
 import { cn } from "@/lib/utils"
 
 /**
@@ -26,10 +27,13 @@ function SelectValue(props: React.ComponentProps<typeof SelectPrimitive.Value>) 
 function SelectTrigger({
   className,
   children,
+  id,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger>) {
+  const fieldId = useFormFieldId()
   return (
     <SelectPrimitive.Trigger
+      id={id ?? fieldId}
       data-slot="select-trigger"
       className={cn(
         "flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-border bg-transparent px-3 py-2 text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground",
