@@ -101,6 +101,8 @@ type Owner =
   | { entity: ImportEntity }
   /** `import_files` of the batch (matched by its batch_id). */
   | "import_files"
+  /** The stage apply wrote: its workflow is the batch project's `stageWorkflowId`. */
+  | "project_stage"
   /** It can't belong to a batch: every such row blocks. */
   | null;
 
@@ -221,7 +223,7 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     column: "project_id",
     target: "project",
     idSql: "c.project_id || ':' || c.workflow_id",
-    owner: null,
+    owner: "project_stage",
   },
   {
     table: "project_schedules",
@@ -361,6 +363,9 @@ function batchRef(
 function ownedBy(batchId: string, owner: Owner): SQL | null {
   if (owner === null) return null;
   if (owner === "import_files") return sql`c.batch_id = ${batchId}`;
+  if (owner === "project_stage") {
+    return sql`exists (select 1 from core.import_refs s where s.batch_id = ${batchId} and s.entity = 'project' and s.row_id = c.project_id and s.data->>'stageWorkflowId' = c.workflow_id::text)`;
+  }
   if (owner.entity === "task_support") {
     return sql`exists (select 1 from core.import_refs s where s.batch_id = ${batchId} and s.entity = 'task_support' and s.row_id = c.task_id and s.data->>'staffId' = c.staff_id::text)`;
   }
@@ -631,6 +636,11 @@ export const DELETE_STEPS: readonly DeleteStep[] = [
   },
   deleteRefs("task", "t.parent_task_id is not null", "child tasks"),
   deleteRefs("task"),
+  {
+    label: "project_stages",
+    query: (batchId) =>
+      sql`delete from core.project_stages t where exists (select 1 from core.import_refs r where r.batch_id = ${batchId} and r.entity = 'project' and r.row_id = t.project_id and r.data->>'stageWorkflowId' = t.workflow_id::text)`,
+  },
   deleteRefs("project"),
   deleteRefs("provider_profile"),
   deleteRefs("contact_person"),

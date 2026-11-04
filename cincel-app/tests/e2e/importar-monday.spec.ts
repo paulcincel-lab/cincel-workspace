@@ -56,8 +56,15 @@ test.describe("Importar de monday", () => {
     await expect(next(page)).toBeEnabled({ timeout: 60_000 });
     await next(page).click();
 
-    // Equivalencias and Personas: the init draft is valid as is.
+    // Equivalencias: the fixture boards have no client, so each gets a new contact; Personas is valid as is.
     await expect(currentStep(page)).toContainText("Equivalencias");
+    for (const board of ["Proyectos", "Casas"]) {
+      await page.getByRole("combobox", { name: "Tablero", exact: true }).click();
+      await page.getByRole("option", { name: new RegExp(`^${board}`) }).click();
+      await page.getByRole("combobox", { name: "Cliente", exact: true }).click();
+      await page.getByRole("option", { name: "Nuevo contacto" }).click();
+      await page.getByPlaceholder("Nombre del cliente").fill(`Cliente ${board}`);
+    }
     await next(page).click();
     await expect(page.getByText("Faltan equivalencias")).toHaveCount(0);
     await expect(currentStep(page)).toContainText("Personas");
@@ -80,13 +87,13 @@ test.describe("Importar de monday", () => {
 
     // Importar.
     await page.getByRole("button", { name: "Importar a Cincel" }).click();
-    await expect(page.getByText("Importación terminada")).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText("Importación terminada", { exact: true }).last()).toBeVisible({ timeout: 90_000 });
 
     // Deshacer.
     const undo = page.getByRole("button", { name: "Deshacer importación" });
     await expect(undo).toBeEnabled({ timeout: 30_000 });
     await undo.click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Deshacer importación" }).click();
-    await expect(page.getByText("Importación deshecha")).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText("Importación deshecha", { exact: true }).last()).toBeVisible({ timeout: 90_000 });
   });
 });

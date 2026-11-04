@@ -32,7 +32,8 @@ export function ImportStep({
   onFinish,
 }: {
   run: MondayImportRunState;
-  projects: MondayImportedProject[];
+  /** null while the result is loading. */
+  projects: MondayImportedProject[] | null;
   rollbackCheck: MondayRollbackCheck | null;
   isPending: boolean;
   error: string;
@@ -47,6 +48,7 @@ export function ImportStep({
   const applied = run.batchStatus === "applied";
   const rolledBack = run.batchStatus === "rolled_back";
   const canRetryApply = !applied && !rolledBack && (!apply || apply.status !== "running");
+  const loadingResult = applied && projects === null;
 
   return (
     <div className="space-y-6">
@@ -74,7 +76,9 @@ export function ImportStep({
           <Check aria-hidden="true" />
           <AlertTitle>Importación terminada</AlertTitle>
           <AlertDescription>
-            {projects.length > 0 ? (
+            {projects === null ? (
+              "Cargando los proyectos creados…"
+            ) : projects.length > 0 ? (
               <ul className="space-y-1">
                 {projects.map((project) => (
                   <li key={project.id}>
@@ -99,6 +103,7 @@ export function ImportStep({
           <p className="text-sm text-muted-foreground">
             Borra todo lo que creó esta importación. Solo se puede mientras nadie haya cambiado lo importado en Cincel.
           </p>
+          {loadingResult ? <p className="text-sm text-muted-foreground">Comprobando si se puede deshacer…</p> : null}
           {rollbackCheck && !rollbackCheck.canRollback ? (
             <Alert>
               <AlertTitle>No se puede deshacer</AlertTitle>

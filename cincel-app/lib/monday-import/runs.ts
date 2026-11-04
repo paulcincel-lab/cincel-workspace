@@ -191,16 +191,29 @@ export function jobView(run: StoredRun, kind: MondayImportJobKind): MondayImport
   return stored.status === "running" ? { ...stored, status: "interrupted" } : stored;
 }
 
-/** What a job body gets: a CLI io that feeds the log, and progress updates. */
+/** What a job body gets: a CLI io that feeds the log, progress updates and Spanish notes for the Registro. */
 export interface JobContext {
   io: CliIo;
+  /** Also notes the label (with "n de m") in the Registro when it changes. */
   progress: (done: number, total: number | null, label: string) => void;
+  /** One Spanish line for the Registro on screen; never a server path. */
+  note: (text: string) => void;
+}
+
+/** What a job shows when its body throws something it doesn't describe. */
+export const UNEXPECTED_JOB_ERROR = "Ocurrió un error inesperado. Revisa el registro técnico.";
+
+/** The Registro line of a progress update. */
+export function progressNote(done: number, total: number | null, label: string): string {
+  return total && total > 1 ? `${label} (${done} de ${total})` : label;
 }
 
 /**
  * Starts `body` in the background as the run's `kind` job. The body returns
  * an error message (Spanish) to fail the job, or null when it succeeded.
- * Throws when another job of the run is running.
+ * Throws when another job of the run is running. An error the body throws
+ * goes to the server log and the downloadable log as is; the screen gets
+ * `describeError(err)`, a fixed Spanish message by default.
  */
 export function startJob(
   runId: string,
@@ -208,6 +221,7 @@ export function startJob(
   label: string,
   body: (ctx: JobContext) => Promise<string | null>,
   env: Env = process.env,
+  describeError: (err: unknown) => string = () => UNEXPECTED_JOB_ERROR,
 ): MondayImportJob {
   if (runningJob(runId)) throw new Error("JOB_RUNNING");
   const job: MondayImportJob = {
@@ -217,6 +231,7 @@ export function startJob(
     finishedAt: null,
     progress: { done: 0, total: null, label },
     log: [],
+    notes: [label],
     error: null,
   };
   let lastSaved = 0;
@@ -240,12 +255,20 @@ export function startJob(
     if (job.log.length > JOB_LOG_LIMIT) job.log.splice(0, job.log.length - JOB_LOG_LIMIT);
     void persist();
   };
+  const note = (text: string) => {
+    const notes = (job.notes ??= []);
+    if (notes[notes.length - 1] === text) return;
+    notes.push(text);
+    if (notes.length > JOB_LOG_LIMIT) notes.splice(0, notes.length - JOB_LOG_LIMIT);
+    void persist();
+  };
   const ctx: JobContext = {
     io: { stdout: push, stderr: push },
     progress: (done, total, progressLabel) => {
       job.progress = { done, total, label: progressLabel };
-      void persist();
+      note(progressNote(done, total, progressLabel));
     },
+    note,
   };
   const promise = (async () => {
     await persist(true);
@@ -253,10 +276,13 @@ export function startJob(
     try {
       error = await body(ctx);
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      console.error(`[monday-import] ${kind} job of run ${runId} failed:`, err);
+      push(err instanceof Error ? err.message : String(err));
+      error = describeError(err);
     }
     job.status = error ? "failed" : "succeeded";
     job.error = error;
+    note(error ? "No se terminó." : "Terminado.");
     job.finishedAt = new Date().toISOString();
     await persist(true);
   })();

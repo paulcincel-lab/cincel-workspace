@@ -51,8 +51,10 @@ export interface MondayImportJob {
   finishedAt: string | null;
   /** 0..total; total is null while unknown. */
   progress: { done: number; total: number | null; label: string };
-  /** The command's output lines, oldest first (last 500). Never holds the token. */
+  /** The command's output lines, oldest first (last 500). Never holds the token. English; only downloaded. */
   log: string[];
+  /** What the job did, in Spanish and without server paths: the Registro shown on screen. Missing on older runs. */
+  notes?: string[];
   /** Spanish summary of why it failed. */
   error: string | null;
 }
@@ -153,7 +155,13 @@ export interface MondayPreviewIssue {
   blocking: boolean;
   boardId: string | null;
   itemId: string | null;
+  /** The monday board and item names it is about, when known. */
+  boardName: string | null;
+  itemName: string | null;
+  /** Spanish, without ids or server paths (lib/monday-import/preview-issues.ts). */
   message: string;
+  /** The step where it gets fixed ("Corregir" opens it on `boardId`). */
+  fixStep: MondayImportStep;
 }
 
 /** One monday item as the Cincel row apply creates for it. */
@@ -170,6 +178,8 @@ export interface MondayPreviewSample {
     priority: string | null;
     manager: string | null;
     phase: string | null;
+    /** A project sample's workflow (current_workflow_id and its stage); null otherwise. */
+    workflow: string | null;
     commitmentDate: string | null;
     deliveryDate: string | null;
     kind: "workflow" | "usuario" | null;
@@ -190,7 +200,7 @@ export interface MondayPreviewBoard {
   name: string;
   strategy: BoardStrategy;
   counts: MondayPreviewCounts;
-  /** Up to 5 items of the board. */
+  /** Up to 5 items of the board; boards whose items become tasks list up to 5 of their projects first. */
   samples: MondayPreviewSample[];
 }
 

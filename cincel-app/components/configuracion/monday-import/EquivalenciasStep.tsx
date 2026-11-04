@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 
-import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
@@ -17,12 +17,14 @@ import {
   COLUMN_TARGET_LABELS,
   CONTACT_TYPE_LABELS,
   SUBITEM_LABELS,
+  boardsWithoutClient,
   decodeClient,
   decodeStatusTarget,
   encodeClient,
   encodeStatusTarget,
   findBoard,
   groupEquivalent,
+  lacksClient,
   projectKeys,
   setBoardArea,
   setBoardWorkflow,
@@ -30,6 +32,7 @@ import {
   setRecordEntry,
   setStatusTarget,
   strategyDescription,
+  subitemsSection,
   templateCandidateItems,
   updateBoard,
   workflowsForBoard,
@@ -180,6 +183,7 @@ function BoardEquivalences({
   onStatusCreated: (status: { id: string; name: string; closes: boolean }) => void;
 }) {
   const isCrm = board.strategy === "crm_contacts";
+  const subitemsCopy = subitemsSection(board.strategy, board.subitems);
   const statusChoices: Choice[] = [
     ...Object.entries(BASE_STATUS_LABELS).map(([value, label]) => ({ value: `status:${value}`, label })),
     ...choices.statuses.map((status) => ({ value: `custom:${status.id}`, label: `${status.name} (personalizado)` })),
@@ -397,13 +401,26 @@ function BoardEquivalences({
             </EquivalenceTable>
           </Section>
 
-          <Section id={`client-${board.mondayBoardId}`} title="Cliente" description="El cliente de los proyectos de este tablero.">
+          <Section
+            id={`client-${board.mondayBoardId}`}
+            title="Cliente (obligatorio)"
+            description="El cliente de los proyectos de este tablero. Sin cliente no se pueden importar."
+          >
             <ChoiceSelect
               label="Cliente"
               value={encodeClient(board.client)}
               choices={clientChoices}
-              onChange={(value) => onBoardChange((current) => ({ ...current, client: decodeClient(value, current.name) }))}
+              onChange={(value) => onBoardChange((current) => ({ ...current, client: decodeClient(value) }))}
             />
+            {lacksClient(board, source) ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {board.strategy === "group_as_project"
+                    ? "Hay grupos sin cliente. Elige el cliente aquí o en cada grupo."
+                    : "Este tablero no tiene cliente. Elige un contacto, una columna o Nuevo contacto."}
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {board.client?.kind === "new" ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -411,6 +428,7 @@ function BoardEquivalences({
                   <Input
                     id={`client-name-${board.mondayBoardId}`}
                     value={board.client.name}
+                    placeholder="Nombre del cliente"
                     aria-invalid={board.client.name.trim() ? undefined : true}
                     onChange={(event) =>
                       onBoardChange((current) =>
@@ -446,16 +464,16 @@ function BoardEquivalences({
             ) : null}
           </Section>
 
-          <Section id={`subitems-${board.mondayBoardId}`} title="Subelementos" description="Qué serán los subelementos de monday.">
+          <Section id={`subitems-${board.mondayBoardId}`} title="Subelementos" description={subitemsCopy.description}>
             <ChoiceSelect
-              label="Subelementos"
+              label={subitemsCopy.selectLabel}
               value={board.subitems ?? "checklist"}
               choices={Object.entries(SUBITEM_LABELS).map(([value, label]) => ({ value, label }))}
               onChange={(value) =>
                 onBoardChange((current) => ({ ...current, subitems: value as NonNullable<BoardDraft["subitems"]> }))
               }
             />
-            {source.subitemColumns.length > 0 && (board.subitems ?? "checklist") !== "ignore" ? (
+            {source.subitemColumns.length > 0 && subitemsCopy.showColumns ? (
               <EquivalenceTable monday="Columna de subelementos" cincel="Campo de Cincel">
                 {columnRows(source.subitemColumns, true)}
               </EquivalenceTable>
@@ -617,16 +635,21 @@ export function EquivalenciasStep({
   choices,
   onMappingChange,
   onStatusCreated,
+  initialBoardId,
 }: {
   mapping: MappingInput;
   source: MondayExportSource;
   choices: MondayImportChoices;
   onMappingChange: (mapping: MappingInput) => void;
   onStatusCreated: (status: { id: string; name: string; closes: boolean }) => void;
+  /** The board to open on, e.g. from "Corregir" in Vista previa. */
+  initialBoardId?: string | null;
 }) {
-  const [boardId, setBoardId] = useState(mapping.boards[0]?.mondayBoardId ?? "");
+  const [boardId, setBoardId] = useState(initialBoardId ?? mapping.boards[0]?.mondayBoardId ?? "");
   const board = findBoard(mapping, boardId) ?? mapping.boards[0];
   const boardSource = source.boards.find((candidate) => candidate.id === board?.mondayBoardId);
+  const withoutClient = boardsWithoutClient(mapping, source);
+  const missingNames = withoutClient.map((candidate) => candidate.name).join(", ");
 
   if (!board) {
     return (
@@ -643,10 +666,35 @@ export function EquivalenciasStep({
         <ChoiceSelect
           label="Tablero"
           value={board.mondayBoardId}
-          choices={mapping.boards.map((candidate) => ({ value: candidate.mondayBoardId, label: candidate.name }))}
+          choices={mapping.boards.map((candidate) => ({
+            value: candidate.mondayBoardId,
+            label: withoutClient.includes(candidate) ? `${candidate.name} (sin cliente)` : candidate.name,
+          }))}
           onChange={setBoardId}
         />
       </div>
+      {withoutClient.length > 0 ? (
+        <Alert variant="destructive">
+          <AlertTitle>Faltan clientes</AlertTitle>
+          <AlertDescription>
+            <p>Estos tableros crean proyectos sin cliente y no se podrán importar:</p>
+            <ul className="flex flex-wrap gap-2 pt-1">
+              {withoutClient.map((candidate) => (
+                <li key={candidate.mondayBoardId}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={candidate.mondayBoardId === board.mondayBoardId}
+                    onClick={() => setBoardId(candidate.mondayBoardId)}
+                  >
+                    {candidate.name}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {boardSource ? (
         <BoardEquivalences
           key={board.mondayBoardId}
@@ -661,6 +709,13 @@ export function EquivalenciasStep({
           <AlertDescription>Este tablero no está en la exportación. Exporta otra vez en Tableros.</AlertDescription>
         </Alert>
       )}
+      {withoutClient.length > 0 ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Sin cliente: {missingNames}. Puedes seguir, pero la Vista previa no dejará importar hasta que elijas uno.
+          </AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }

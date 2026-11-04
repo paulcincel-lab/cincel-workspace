@@ -195,11 +195,9 @@ export default function LoginForm({ googleEnabled, passwordEnabled, callbackErro
                     value={draft.password}
                     onChange={(event) => setDraft((current) => ({ ...current, password: event.target.value }))}
                     placeholder="••••••••"
-                    aria-describedby="login-password-help"
                     className="h-11"
                   />
                 </div>
-                <p id="login-password-help" className="-mt-2 text-[11px] leading-5 text-muted-foreground">Si es tu primer acceso, usa la contraseña temporal inicial del administrador: CincelAdmin2026!.</p>
 
                 <label className="flex items-center gap-2 pt-1 text-[13px] text-muted-foreground">
                   <Checkbox />

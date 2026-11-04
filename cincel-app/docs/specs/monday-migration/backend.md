@@ -243,7 +243,7 @@ query Users($page: Int!) { users(limit: 1000, page: $page) { id name email statu
 | monday | Cincel |
 |---|---|
 | Item name | `tasks.title` (projects: `projects.name`, overridable per project in `projectNames`; contacts: `contacts.name`) |
-| Group | `tasks.phase`; cronograma `seccion`. Order: groups sorted by `position` (decimal), then dense rank 1..n → `seccion_order` |
+| Group | `tasks.phase`; cronograma `seccion`. Order: groups sorted by `position` (decimal), then dense rank 1..n → `seccion_order`. Also a project phase (`projects.phases`, `phase` = them joined with ", "), whether or not a workflow phase has that name: every group of a `board_as_project` board, in that order; the item's group for `item_as_project`; none for `group_as_project` (#678) |
 | Item order | Export order within its group → `tasks.sort_order` and `schedule_tasks.sort_order` (1..n, integers) |
 | Status column | Per label id: `{ status }` → `tasks.status`; or `{ customStatusId }` → `tasks.custom_status_id` with `tasks.status = underlyingStatus(customStatus)` (never set independently). Defaults: `is_done` → `completado`; `/stuck\|bloquead\|detenid/i` → `bloqueado`; `/working\|proceso\|curso/i` → `en_proceso`; else `pendiente`; a label whose text equals an existing `task_statuses.name` (case-insensitive) → that custom status |
 | Priority-like status column (`/prior/i` title) | `tasks.priority`: `/alta\|high\|urgent/i` → `alta`, `/baja\|low/i` → `baja`, else `media` |
@@ -260,6 +260,7 @@ query Users($page: Int!) { users(limit: 1000, page: $page) { id name email statu
 | Files on items and updates | Uploaded to Drive (§7 phase B) and linked: on tasks → `task_links` (`kind = 'interno'`, title = file name, url = Drive `webViewLink`); on projects (`item_as_project`) → `project_links` (`kind = 'interno'`); plus a `drive_files` cache row. Files on checklist-mode subitems go to the parent task |
 | Item `created_at` | `tasks.created_at`; `created_by_id` = the importing admin |
 | Workflow task | If the item is in `templateMatches`: `kind = 'workflow'` with that `template_id` and its `workflow_id`. Else `kind = 'usuario'` with `workflow_id` = the board's `workflowId` (when set), so the task shows under that department in Actividades |
+| Board workflow on the project | The board's `workflowId` (when set) is each of its projects' `current_workflow_id` and its one `project_stages` row; the project's import ref keeps it as `data.stageWorkflowId`, so rollback owns that row and deletes it (#678) |
 | `crm_contacts` with `contactType = 'proveedor'` | Also a `provider_profiles` row with the mapping's `providerSubtype` |
 | Source of every row | `import_refs.data.source = { boardId, boardName, groupId, groupTitle }` |
 

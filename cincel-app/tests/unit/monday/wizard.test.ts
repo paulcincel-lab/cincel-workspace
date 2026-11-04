@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/lib/db/schema";
 import type { DriveAdmin } from "@/lib/google/drive-admin";
@@ -195,13 +195,11 @@ describe("monday wizard runs", () => {
     expect(jobView(left, "apply")?.status).toBe("interrupted");
   });
 
-  it("fails a job with the body's message", async () => {
+  it("fails a job with the message the body returns", async () => {
     const run = await createRun(ADMIN, env);
-    startJob(run.runId, "apply", "x", async () => {
-      throw new Error("boom");
-    }, env);
+    startJob(run.runId, "apply", "x", async () => "La importación no se aplicó.", env);
     await waitForJob(run.runId, "apply");
-    expect((await readRun(run.runId, env))!.jobs.apply).toMatchObject({ status: "failed", error: "boom" });
+    expect((await readRun(run.runId, env))!.jobs.apply).toMatchObject({ status: "failed", error: "La importación no se aplicó." });
   });
 });
 
@@ -245,7 +243,7 @@ describe("monday wizard connect and export", () => {
 
     const stored = (await readRun(run.runId, env))!;
     expect(stored.jobs.export?.status).toBe("succeeded");
-    expect(stored.jobs.export?.progress).toMatchObject({ done: 1, total: 1 });
+    expect(stored.jobs.export?.progress).toMatchObject({ done: 1, total: 1, label: "Exportación terminada" });
     expect(stored.account).toEqual({ id: "555", slug: "acme", name: "Acme" });
     expect(stored.boardIds).toEqual(["101"]);
 
@@ -313,10 +311,14 @@ describe("monday wizard draft and preview", () => {
       ["904", "crm_contacts"],
     ]);
     const casaNido = preview.boards[0];
-    expect(casaNido.samples.length).toBeLessThanOrEqual(5);
-    expect(casaNido.samples.map((s) => s.mondayName)).toEqual(["Muros", "Planos", "Limpieza"]);
-    expect(casaNido.samples[0]).toMatchObject({ entity: "tarea", cincel: { project: "Casa Nido" } });
-    expect(preview.boards[2].samples[0]).toMatchObject({ entity: "proyecto", mondayName: "Casa Mar" });
+    expect(casaNido.samples.filter((s) => s.entity === "tarea").length).toBeLessThanOrEqual(5);
+    expect(casaNido.samples.map((s) => s.mondayName)).toEqual(["Casa Nido", "Muros", "Planos", "Limpieza"]);
+    // A board-as-project shows the project it makes, with its phases, ahead of its tasks (#678).
+    expect(casaNido.samples[0]).toMatchObject({ entity: "proyecto", cincel: { title: "Casa Nido", workflow: null } });
+    expect(casaNido.samples[0].cincel.phase).not.toBeNull();
+    expect(casaNido.samples[1]).toMatchObject({ entity: "tarea", cincel: { project: "Casa Nido" } });
+    // An item-as-project shows its group as its phase, as apply writes it (#678).
+    expect(preview.boards[2].samples[0]).toMatchObject({ entity: "proyecto", mondayName: "Casa Mar", cincel: { phase: "2026" } });
     // a project sample counts its tasks as tareas, not subtareas
     expect(preview.boards[2].samples[0].cincel.childTasks).toBe(0);
     expect(preview.boards[3].samples[0]).toMatchObject({ entity: "contacto", mondayName: "Familia Mar" });
@@ -383,10 +385,12 @@ describe.skipIf(!url)("monday wizard apply and rollback (test DB)", { timeout: 6
       const preview = await previewImport(run.runId, ANA, deps);
       expect(preview.canApply).toBe(true);
 
-      await startApply(run.runId, { email: "ana.wizard@example.com" }, deps);
+      const onApplied = vi.fn(async () => {});
+      await startApply(run.runId, { email: "ana.wizard@example.com" }, deps, onApplied);
       await waitForJob(run.runId, "apply");
       const state = await getRunState(run.runId, deps);
       expect(state.jobs.apply?.status).toBe("succeeded");
+      expect(onApplied).toHaveBeenCalledTimes(1);
       expect(state.batchStatus).toBe("applied");
       expect(drive.log).toEqual([]);
 
@@ -400,6 +404,7 @@ describe.skipIf(!url)("monday wizard apply and rollback (test DB)", { timeout: 6
       expect(check).toMatchObject({ canRollback: true, blockers: [] });
       await startRollback(run.runId, deps);
       await waitForJob(run.runId, "rollback");
+      expect((await getRunState(run.runId, deps)).jobs.rollback?.progress.label).toBe("Importación deshecha");
       const [batch] = await tx
         .select({ status: schema.importBatches.status })
         .from(schema.importBatches)

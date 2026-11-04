@@ -10,6 +10,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   canAdvance,
   clampOptions,
+  countLabel,
   decodeClient,
   decodePerson,
   decodeStatusTarget,
@@ -32,6 +33,7 @@ import {
   setPerson,
   setRecordEntry,
   setStatusTarget,
+  subitemsSection,
   suggestStaff,
   unmappedPeople,
   updateBoard,
@@ -337,5 +339,24 @@ describe("progress and results", () => {
     expect(rollbackBlockerText({ kind: "edited", table: "core.tasks", id: "t1", what: "Tarea «Muro»" })).toBe(
       "Se editó en Cincel después de importar: Tarea «Muro»",
     );
+  });
+});
+
+describe("copy", () => {
+  it("uses the singular for exactly one", () => {
+    expect(countLabel(1, "tarea", "tareas")).toBe("1 tarea");
+    expect(countLabel(0, "tarea", "tareas")).toBe("0 tareas");
+    expect(countLabel(3, "proyecto", "proyectos")).toBe("3 proyectos");
+    expect(countLabel(1200, "contacto", "contactos")).toBe("1,200 contactos");
+  });
+
+  it("explains Subelementos when the items are the projects", () => {
+    const asProject = subitemsSection("item_as_project", "ignore");
+    expect(asProject.description).toContain("serán las tareas del proyecto");
+    expect(asProject.selectLabel).toBe("Subelementos de las tareas");
+    expect(asProject.showColumns).toBe(true);
+
+    expect(subitemsSection("group_as_project", undefined)).toMatchObject({ selectLabel: "Subelementos", showColumns: true });
+    expect(subitemsSection("group_as_project", "ignore").showColumns).toBe(false);
   });
 });

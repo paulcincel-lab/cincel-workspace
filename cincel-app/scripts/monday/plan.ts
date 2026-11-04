@@ -243,7 +243,7 @@ const pairKey = (a: string, b: string) => `${a}|${b}`;
 export function createPlanDbLookups(db: ImportDb): PlanLookups {
   return {
     async translateLookups() {
-      const [statusRows, templateRows, staffRows] = await Promise.all([
+      const [statusRows, templateRows, staffRows, workflowRows] = await Promise.all([
         db
           .select({
             id: taskStatuses.id,
@@ -262,6 +262,10 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
           .select({ id: staff.id, name: staff.name })
           .from(staff)
           .where(isNull(staff.deletedAt)),
+        db
+          .select({ id: workflows.id, name: workflows.name })
+          .from(workflows)
+          .where(isNull(workflows.deletedAt)),
       ]);
       return {
         customStatuses: Object.fromEntries(
@@ -272,6 +276,9 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
         ),
         staff: Object.fromEntries(
           staffRows.map((r) => [r.id, { name: r.name }]),
+        ),
+        workflows: Object.fromEntries(
+          workflowRows.map((r) => [r.id, { name: r.name }]),
         ),
       };
     },

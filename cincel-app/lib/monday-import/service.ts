@@ -34,12 +34,14 @@ import type { ImportDb } from "@/lib/import/refs";
 import { buildPreview } from "@/lib/monday-import/preview";
 import {
   createRun,
+  importRoot,
   jobView,
   latestRun,
   readDraftMapping,
   readRun,
   runDir,
   startJob,
+  UNEXPECTED_JOB_ERROR,
   updateRun,
   writeDraftMapping,
   type StoredRun,
@@ -83,6 +85,8 @@ import {
 import { MeDocument } from "@/scripts/monday/queries";
 import { createRollbackCommand, findRollbackBlockers, openServiceAccountDrive } from "@/scripts/monday/rollback";
 import { TOKEN_ENV } from "@/scripts/monday/token";
+
+import { importedProjectHref } from "./links";
 
 type Env = Record<string, string | undefined>;
 
@@ -208,11 +212,42 @@ export async function connectMonday(tokenInput: string | null | undefined, deps:
 // Runs
 // ---------------------------------------------------------------------------
 
+export const NOT_WRITABLE = "La carpeta de importación no tiene permisos de escritura.";
+
+/** File system codes meaning the import folder can't be created or written. */
+const NOT_WRITABLE_CODES = new Set(["EACCES", "EPERM", "EROFS"]);
+/** Folders already logged as not writable, so each one is logged once. */
+const loggedNotWritable = new Set<string>();
+
+/** A permission error on the import folder as a WizardError, logging its path once; anything else as is. */
+export function folderError(err: unknown, env: Env = process.env): unknown {
+  const code = (err as NodeJS.ErrnoException | null)?.code;
+  if (!code || !NOT_WRITABLE_CODES.has(code)) return err;
+  const root = importRoot(env);
+  if (!loggedNotWritable.has(root)) {
+    loggedNotWritable.add(root);
+    console.error(`[monday-import] import folder not writable (${code}): ${root}; set MONDAY_IMPORT_DIR`);
+  }
+  return new WizardError(NOT_WRITABLE);
+}
+
+/** The on-screen error of a job whose body threw: a WizardError's own text, else a fixed Spanish message. */
+function jobError(env: Env): (err: unknown) => string {
+  return (err) => {
+    const mapped = folderError(err, env);
+    return mapped instanceof WizardError ? mapped.message : UNEXPECTED_JOB_ERROR;
+  };
+}
+
 /** The newest run, or a new one when there is none (or `fresh`). */
 export async function openRun(staffId: string, deps: WizardDeps, fresh = false): Promise<StoredRun> {
   const env = envOf(deps);
-  const latest = fresh ? null : await latestRun(env);
-  return latest ?? createRun(staffId, env);
+  try {
+    const latest = fresh ? null : await latestRun(env);
+    return latest ?? (await createRun(staffId, env));
+  } catch (err) {
+    throw folderError(err, env);
+  }
 }
 
 async function requireRun(runId: string, deps: WizardDeps): Promise<StoredRun> {
@@ -368,7 +403,7 @@ export async function startExport(
       runId,
       "export",
       "Exportando tableros",
-      async ({ io, progress }) => {
+      async ({ io, progress, note }) => {
         let code: number;
         try {
           code = await runExport(
@@ -391,10 +426,12 @@ export async function startExport(
           r.step = "tableros";
         }, env);
         await draftRunMapping(latest, deps);
-        io.stdout("Equivalencias preparadas a partir de la exportación.");
+        note("Equivalencias preparadas a partir de la exportación.");
+        progress(boardIds.length, boardIds.length, "Exportación terminada");
         return null;
       },
       env,
+      jobError(env),
     );
   } catch (err) {
     if (err instanceof Error && err.message === "JOB_RUNNING") throw new WizardError("Ya hay un proceso en curso en esta importación.");
@@ -617,11 +654,13 @@ export async function previewImport(runId: string, importedById: string, deps: W
  * Paso 7: runs `apply` in the background as `by` (an active staff email). A
  * run whose batch is still `applying` resumes phase B. The plan runs again
  * inside apply, so a blocking issue fails the job without writing anything.
+ * `onApplied` runs once the import succeeds (the action marks the admin's first-login wizard as finished).
  */
 export async function startApply(
   runId: string,
   by: { email: string },
   deps: WizardDeps,
+  onApplied?: () => Promise<void>,
 ): Promise<MondayImportJob> {
   const run = await requireRun(runId, deps);
   const env = envOf(deps);
@@ -655,9 +694,17 @@ export async function startApply(
             ? "Los datos se importaron pero faltan archivos por subir a Drive. Revisa el registro y vuelve a intentarlo."
             : "La importación no se aplicó. Revisa el registro.";
         progress(1, 1, "Importación terminada");
+        if (onApplied) {
+          try {
+            await onApplied();
+          } catch {
+            io.stderr("No se pudo marcar el asistente como terminado; usa «Ir al tablero».");
+          }
+        }
         return null;
       },
       env,
+      jobError(env),
     );
   } catch (err) {
     if (err instanceof Error && err.message === "JOB_RUNNING") throw new WizardError("Ya hay un proceso en curso en esta importación.");
@@ -676,7 +723,7 @@ export async function importedProjects(runId: string, deps: WizardDeps): Promise
           where r.batch_id = ${batch.id} and r.entity = 'project' and p.deleted_at is null
           order by p.name`,
   )) as unknown as { id: string; name: string }[];
-  return rows.map((r) => ({ id: r.id, name: r.name, href: `/proyectos/${r.id}` }));
+  return rows.map((r) => ({ id: r.id, name: r.name, href: importedProjectHref(r.id) }));
 }
 
 /** What blocks "Deshacer importación" (§9), read-only. */
@@ -700,15 +747,19 @@ export async function startRollback(runId: string, deps: WizardDeps): Promise<Mo
       runId,
       "rollback",
       "Deshaciendo importación",
-      async ({ io }) => {
+      async ({ io, progress }) => {
         const code = await command(["--batch", check.batchId], io);
-        if (code === 0) return null;
+        if (code === 0) {
+          progress(1, 1, "Importación deshecha");
+          return null;
+        }
         const after = await runBatch(deps.db, runDir(runId, envOf(deps)));
         return after?.status === "rolled_back"
           ? "Se borró lo importado en Cincel, pero algunos archivos de Drive no se movieron a la papelera. Revisa el registro."
           : "No se pudo deshacer la importación. Revisa el registro.";
       },
       envOf(deps),
+      jobError(envOf(deps)),
     );
   } catch (err) {
     if (err instanceof Error && err.message === "JOB_RUNNING") throw new WizardError("Ya hay un proceso en curso en esta importación.");

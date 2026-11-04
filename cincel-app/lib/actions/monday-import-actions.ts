@@ -28,7 +28,8 @@
  *   checkMondayRollbackAction(runId)                 → { check: MondayRollbackCheck }  blockers explain why not
  *   startMondayRollbackAction(runId)                 → { job }  background rollback
  *
- * Finishing or "Omitir" calls completeOnboardingAction (lib/actions/onboarding-actions.ts); the first-login
+ * "Ir al tablero" or "Omitir por ahora" calls completeOnboardingAction (lib/actions/onboarding-actions.ts) and a
+ * succeeded apply marks it too, so undoing the import later keeps the wizard finished; the first-login
  * routing (lib/onboarding/first-login.ts) sends Google-signed-in admins to /configuracion/importar-monday
  * until then, while no import is applied.
  *
@@ -248,7 +249,9 @@ export async function previewMondayImportAction(runId: string): Promise<MondayIm
 export async function startMondayApplyAction(runId: string): Promise<MondayImportResult<{ job: MondayImportJob }>> {
   return guarded("apply", async (admin) => {
     checkRunId(runId);
-    return { job: await startApply(runId, { email: admin.email }, deps()) };
+    // A finished import also finishes the admin's first-login wizard, even if they never click "Ir al tablero".
+    const onApplied = () => onboardingRepository.markOnboardingCompleted(admin.id);
+    return { job: await startApply(runId, { email: admin.email }, deps(), onApplied) };
   });
 }
 

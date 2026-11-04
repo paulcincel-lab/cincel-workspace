@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
 import { ChoiceSelect, type Choice } from "@/components/configuracion/monday-import/ChoiceSelect";
-import { decodePerson, encodePerson, setPerson, suggestStaff, unmappedPeople } from "@/lib/monday-import/wizard-steps";
+import { countLabel, decodePerson, encodePerson, setPerson, suggestStaff, unmappedPeople } from "@/lib/monday-import/wizard-steps";
 import type { MappingInput } from "@/scripts/monday/mapping.schema";
 import type { MondayExportSource, MondayImportChoices } from "@/lib/types/monday-import";
 
@@ -35,7 +35,9 @@ export function PeopleStep({
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {pending === 0 ? "Todas las personas tienen equivalente." : `${pending} personas sin asignar: sus tareas quedan sin responsable.`}
+        {pending === 0
+          ? "Todas las personas tienen equivalente."
+          : `${countLabel(pending, "persona sin asignar", "personas sin asignar")}: sus tareas quedan sin responsable.`}
       </p>
       <Table>
         <TableHeader>

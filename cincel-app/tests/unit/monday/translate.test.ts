@@ -440,6 +440,19 @@ describe("translate: board_as_project", () => {
     );
   });
 
+  it("board workflow → project workflow; every group → project phase, in position order (#678)", () => {
+    const p = project(run(), "301");
+    expect(p.workflowId).toBe(BOARD_WORKFLOW);
+    expect(p.phases).toEqual(["Diseño", "Extras", "Obra", "Entrega final"]);
+    expect(p.data.stageWorkflowId).toBe(BOARD_WORKFLOW);
+
+    const input = mappingInput();
+    input.boards[0].workflowId = null;
+    const none = project(run(exportData(), input), "301");
+    expect(none.workflowId).toBeNull();
+    expect(none.data).not.toHaveProperty("stageWorkflowId");
+  });
+
   it("project progress, dates and status", () => {
     const p = project(run(), "301");
     expect(p).toMatchObject({
@@ -496,6 +509,8 @@ describe("translate: contacts and other strategies", () => {
       phase: null,
     });
     expect(project(r, "6003").client).toBeNull();
+    // The item's group is its one phase; the board has no workflow.
+    expect(project(r, "6001")).toMatchObject({ workflowId: null, phases: ["Activas"] });
     expect(r.issues).toContainEqual(
       expect.objectContaining({
         code: "CLIENT_UNRESOLVED",
@@ -530,6 +545,8 @@ describe("translate: contacts and other strategies", () => {
     expect(project(r, "701:ga")).toMatchObject({
       status: "activo",
       progress: 0,
+      workflowId: null,
+      phases: [],
     });
   });
 
@@ -541,6 +558,17 @@ describe("translate: contacts and other strategies", () => {
     const r = run(data, input);
     expect(r.tasks.some((t) => t.externalId === "1001")).toBe(false);
     expect(r.projects.some((p) => p.source.boardId === "701")).toBe(false);
+  });
+
+  it("item_as_project and group_as_project take the board workflow (#678)", () => {
+    const input = mappingInput();
+    input.boards[2].workflowId = WORKFLOW;
+    input.boards[4].workflowId = WORKFLOW;
+    const r = run(exportData(), input);
+    for (const id of ["6001", "701:ga"]) {
+      expect(project(r, id).workflowId).toBe(WORKFLOW);
+      expect(project(r, id).data.stageWorkflowId).toBe(WORKFLOW);
+    }
   });
 
   it("is deterministic", () => {
