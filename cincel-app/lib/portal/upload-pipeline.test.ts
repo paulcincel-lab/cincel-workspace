@@ -39,6 +39,23 @@ function multipartRequest(name: string, content: Uint8Array, field = "file"): Re
   return new Request("http://localhost/api/portal/projects/p/uploads", { method: "POST", body: form });
 }
 
+/**
+ * The same request with its body re-sent in 64 KB pieces, the way a network stream arrives. It also stops
+ * cleanly when the pipeline aborts mid-body: undici's own FormData stream enqueues after cancel and rejects.
+ */
+async function inSmallChunks(request: Request): Promise<Request> {
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  let offset = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= bytes.length) return controller.close();
+      controller.enqueue(bytes.slice(offset, offset + 64 * 1024));
+      offset += 64 * 1024;
+    },
+  });
+  return new Request(request.url, { method: "POST", headers: request.headers, body, duplex: "half" } as RequestInit);
+}
+
 function upload(request: Request, drive: PortalUploadDrive) {
   return receivePortalUpload({ request, inboundFolderId: "inbound-1", clientName: "Ana López", now: NOW }, drive);
 }
@@ -91,11 +108,11 @@ describe("receivePortalUpload", () => {
     const exe = new Uint8Array(4096);
     exe.set(EXE_HEAD);
 
-    await expect(upload(multipartRequest("factura.pdf", exe), drive)).resolves.toEqual({
+    await expect(upload(await inSmallChunks(multipartRequest("factura.pdf", exe)), drive)).resolves.toEqual({
       ok: false,
       error: "unsupported_type",
     });
-    await expect(upload(multipartRequest("setup.exe", exe), drive)).resolves.toEqual({
+    await expect(upload(await inSmallChunks(multipartRequest("setup.exe", exe)), drive)).resolves.toEqual({
       ok: false,
       error: "unsupported_type",
     });
@@ -105,7 +122,8 @@ describe("receivePortalUpload", () => {
   it("aborts past 50 MB with too_large and cancels the Drive session", async () => {
     const { drive, chunks } = fakeDrive();
 
-    const result = await upload(multipartRequest("enorme.pdf", pdfOfSize(MAX_UPLOAD_BYTES + 10)), drive);
+    const request = await inSmallChunks(multipartRequest("enorme.pdf", pdfOfSize(MAX_UPLOAD_BYTES + 10)));
+    const result = await upload(request, drive);
 
     expect(result).toEqual({ ok: false, error: "too_large" });
     expect(drive.cancelResumableUpload).toHaveBeenCalledWith("https://upload.example/session");
@@ -126,7 +144,8 @@ describe("receivePortalUpload", () => {
         "content-type": "multipart/form-data; boundary=x",
         "content-length": String(60 * 1024 * 1024),
       }),
-      body: new ReadableStream({ pull }),
+      // highWaterMark 0: the stream only pulls when someone reads it.
+      body: new ReadableStream({ pull }, { highWaterMark: 0 }),
     } as unknown as Request;
 
     await expect(upload(request, drive)).resolves.toEqual({ ok: false, error: "too_large" });
