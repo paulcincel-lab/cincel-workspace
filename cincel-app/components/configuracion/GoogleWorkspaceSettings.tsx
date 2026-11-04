@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { GoogleGroupMappings } from "@/components/configuracion/GoogleGroupMappings";
+import { GoogleHealthStatus } from "@/components/configuracion/GoogleHealthStatus";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import {
   Breadcrumb,
@@ -10,15 +11,17 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/shadcn/breadcrumb";
-import type { GroupMapping } from "@/lib/types/workspace-access";
+import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
 
 export type GoogleWorkspaceSettingsProps = {
   mappings: GroupMapping[];
   areas: { id: string; name: string }[];
+  /** Null when `getGoogleHealthAction()` failed. */
+  health: GoogleHealth | null;
 };
 
 /** Configuración → Google (FE §2.5): breadcrumb and banner, then its sections in order. */
-export function GoogleWorkspaceSettings({ mappings, areas }: GoogleWorkspaceSettingsProps) {
+export function GoogleWorkspaceSettings({ mappings, areas, health }: GoogleWorkspaceSettingsProps) {
   return (
     <div className="space-y-6">
       <Breadcrumb>
@@ -36,6 +39,8 @@ export function GoogleWorkspaceSettings({ mappings, areas }: GoogleWorkspaceSett
       <Alert>
         <AlertDescription>Los roles y las áreas se administran en grupos de Google Workspace.</AlertDescription>
       </Alert>
+
+      <GoogleHealthStatus health={health} />
 
       <GoogleGroupMappings mappings={mappings} areas={areas} />
     </div>
