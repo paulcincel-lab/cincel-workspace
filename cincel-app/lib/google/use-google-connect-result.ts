@@ -20,7 +20,7 @@ export type GoogleConnectResult = { success: boolean; message: string };
 
 /**
  * Result for the `google_connected` / `motivo` (staff consent, BE §A.6.2) or
- * `reason` (old `/api/google/oauth` flow) query params; `null` without them.
+ * legacy `reason` query params; `null` without them.
  */
 export function googleConnectResultFrom(params: URLSearchParams): GoogleConnectResult | null {
   const status = params.get("google_connected");
@@ -33,11 +33,10 @@ export function googleConnectResultFrom(params: URLSearchParams): GoogleConnectR
 }
 
 /**
- * Reads the `google_connected=1|error` query params the OAuth callback routes
- * (app/api/auth/google/callback for staff consent, app/api/google/oauth/callback
- * for the old flow) redirect back with, returns a one-line result to show the
- * user, and strips the params from the URL so refreshing the page doesn't
- * re-show it.
+ * Reads the `google_connected=1|error` query params the OAuth callback route
+ * (app/api/auth/google/callback for staff consent) redirects back with, returns
+ * a one-line result to show the user, and strips the params from the URL so
+ * refreshing the page doesn't re-show it.
  */
 export function useGoogleConnectResult(): GoogleConnectResult | null {
   const [result, setResult] = useState<GoogleConnectResult | null>(null);

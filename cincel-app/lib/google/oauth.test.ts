@@ -1,23 +1,14 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-const { generateAuthUrlMock, getTokenMock, requestMock, refreshAccessTokenMock, revokeTokenMock, setCredentialsMock } =
-  vi.hoisted(() => ({
-    generateAuthUrlMock: vi.fn(),
-    getTokenMock: vi.fn(),
-    requestMock: vi.fn(),
-    refreshAccessTokenMock: vi.fn(),
-    revokeTokenMock: vi.fn(),
-    setCredentialsMock: vi.fn(),
-  }));
+const { refreshAccessTokenMock, setCredentialsMock } = vi.hoisted(() => ({
+  refreshAccessTokenMock: vi.fn(),
+  setCredentialsMock: vi.fn(),
+}));
 
 vi.mock("google-auth-library", () => ({
   OAuth2Client: vi.fn().mockImplementation(function OAuth2Client(this: object) {
     Object.assign(this, {
-      generateAuthUrl: generateAuthUrlMock,
-      getToken: getTokenMock,
-      request: requestMock,
       refreshAccessToken: refreshAccessTokenMock,
-      revokeToken: revokeTokenMock,
       setCredentials: setCredentialsMock,
     });
   }),
@@ -55,48 +46,6 @@ describe("isOauthConfigured", () => {
     delete process.env.GOOGLE_OAUTH_CLIENT_SECRET;
     const { isOauthConfigured } = await import("./oauth");
     expect(isOauthConfigured()).toBe(false);
-  });
-});
-
-describe("buildAuthUrl", () => {
-  it("requests the account chooser and a refresh token every time", async () => {
-    generateAuthUrlMock.mockReturnValue("https://accounts.google.com/o/oauth2/v2/auth?...");
-    const { buildAuthUrl } = await import("./oauth");
-
-    const url = buildAuthUrl("https://app.example/callback", "state-123");
-
-    expect(url).toBe("https://accounts.google.com/o/oauth2/v2/auth?...");
-    expect(generateAuthUrlMock).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: "select_account consent", state: "state-123", access_type: "offline" })
-    );
-  });
-
-  it("returns null when not configured", async () => {
-    delete process.env.GOOGLE_OAUTH_CLIENT_ID;
-    const { buildAuthUrl } = await import("./oauth");
-    expect(buildAuthUrl("https://app.example/callback", "state")).toBeNull();
-  });
-});
-
-describe("exchangeCodeForAccount", () => {
-  it("returns the connected account's email and tokens", async () => {
-    getTokenMock.mockResolvedValue({
-      tokens: { access_token: "at", refresh_token: "rt", scope: "s", expiry_date: Date.now() + 3600_000 },
-    });
-    requestMock.mockResolvedValue({ data: { email: "ana@gmail.com" } });
-    const { exchangeCodeForAccount } = await import("./oauth");
-
-    const account = await exchangeCodeForAccount("https://app.example/callback", "code-1");
-
-    expect(account?.email).toBe("ana@gmail.com");
-    expect(account?.accessToken).toBe("at");
-    expect(account?.refreshToken).toBe("rt");
-  });
-
-  it("returns null when Google doesn't return an access token", async () => {
-    getTokenMock.mockResolvedValue({ tokens: {} });
-    const { exchangeCodeForAccount } = await import("./oauth");
-    expect(await exchangeCodeForAccount("https://app.example/callback", "code-1")).toBeNull();
   });
 });
 

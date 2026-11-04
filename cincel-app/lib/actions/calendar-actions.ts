@@ -51,7 +51,7 @@ export type GoogleCalendarSyncStatus = {
   oauthAvailable: boolean;
   /**
    * `staff_token`: connect through `/api/auth/google/start?scope=calendar`
-   * (sign-in consent). `delegation`: the old `/api/google/oauth/start` flow.
+   * (sign-in consent). `delegation`: a legacy connected-account row, if any.
    */
   mode: CalendarTokenMode;
   connectedEmail: string | null;

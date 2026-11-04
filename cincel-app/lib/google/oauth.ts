@@ -7,15 +7,13 @@ import {
   updateGoogleOauthTokens,
 } from "@/lib/repositories/google-oauth-repository";
 
-/**
- * Real "Sign in with Google" — a staff member picks and connects their own
- * Google account (any account, not only their institutional one), through
- * Google's real account chooser. Distinct from lib/google/client.ts, which
- * impersonates the caller's institutional email via a service account with
- * no account choice involved. When both are available, callers prefer this
- * one — see lib/google/drive-repository.ts.
+/*
+ * Token refresh for the legacy `core.google_oauth_accounts` rows, plus the
+ * shared Google scope helpers. The old "connect any Google account" flow is
+ * gone: staff grant Drive and Calendar through sign-in consent
+ * (lib/google/staff-oauth.ts). What's left is still used by the Calendar sync
+ * and the picker until the delegation branch is removed.
  */
-const SCOPES = ["https://www.googleapis.com/auth/drive.readonly", "openid", "email"];
 
 /**
  * Asked for only when someone turns on Google Calendar sync (#434), as an
@@ -39,58 +37,10 @@ export function isOauthConfigured(): boolean {
   return credentials() !== null;
 }
 
-function client(redirectUri: string): OAuth2Client | null {
+function client(): OAuth2Client | null {
   const creds = credentials();
   if (!creds) return null;
-  return new OAuth2Client({ clientId: creds.clientId, clientSecret: creds.clientSecret, redirectUri });
-}
-
-/**
- * The consent-screen URL. `prompt: "select_account consent"` forces Google's
- * account chooser to show every time (not just on first-ever connect) and
- * guarantees a refresh_token comes back, so reconnecting with a different
- * account always works cleanly.
- */
-export function buildAuthUrl(
-  redirectUri: string,
-  state: string,
-  options: { extraScopes?: string[] } = {}
-): string | null {
-  const oauth2 = client(redirectUri);
-  if (!oauth2) return null;
-  return oauth2.generateAuthUrl({
-    access_type: "offline",
-    scope: [...SCOPES, ...(options.extraScopes ?? [])],
-    // Keep previously granted scopes (e.g. Drive) when adding Calendar.
-    include_granted_scopes: true,
-    prompt: "select_account consent",
-    state,
-  });
-}
-
-export async function exchangeCodeForAccount(
-  redirectUri: string,
-  code: string
-): Promise<{ email: string; accessToken: string; refreshToken: string | null; scope: string; expiresAt: Date } | null> {
-  const oauth2 = client(redirectUri);
-  if (!oauth2) return null;
-
-  const { tokens } = await oauth2.getToken(code);
-  if (!tokens.access_token) return null;
-
-  oauth2.setCredentials(tokens);
-  const { data } = await oauth2.request<{ email?: string }>({
-    url: "https://www.googleapis.com/oauth2/v2/userinfo",
-  });
-  if (!data.email) return null;
-
-  return {
-    email: data.email,
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token ?? null,
-    scope: tokens.scope ?? SCOPES.join(" "),
-    expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : new Date(Date.now() + 55 * 60 * 1000),
-  };
+  return new OAuth2Client({ clientId: creds.clientId, clientSecret: creds.clientSecret });
 }
 
 /**
@@ -111,7 +61,7 @@ export async function getOauthAccessToken(staffId: string): Promise<{ token: str
   }
   if (!account.refreshToken) return null;
 
-  const oauth2 = client("");
+  const oauth2 = client();
   if (!oauth2) return null;
   oauth2.setCredentials({ refresh_token: account.refreshToken });
 
@@ -123,15 +73,5 @@ export async function getOauthAccessToken(staffId: string): Promise<{ token: str
     return { token: refreshed.access_token, email: account.email };
   } catch {
     return null;
-  }
-}
-
-/** Best-effort revoke with Google; the local row is deleted regardless of the outcome. */
-export async function revokeOauthToken(accessToken: string): Promise<void> {
-  const oauth2 = client("");
-  try {
-    await oauth2?.revokeToken(accessToken);
-  } catch {
-    // Already revoked/expired on Google's side — nothing more to do.
   }
 }
