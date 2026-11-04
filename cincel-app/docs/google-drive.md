@@ -306,8 +306,9 @@ first, then on production.
 **3. Passwords off**
 
 - Set `AUTH_PASSWORD_ENABLED=false`, redeploy.
-- The password form is hidden; login, first access and change password are
-  refused server-side (404), and `/change-password` redirects.
+- The password form is hidden; the login, first access and change password
+  actions refuse server-side and return `password_login_disabled`, and
+  `/change-password` redirects.
 - With the flag false the migrate job skips the bootstrap admin
   (`bootstrap admin <email>: skipped, passwords disabled`), so a deploy does
   not turn its password back on.
