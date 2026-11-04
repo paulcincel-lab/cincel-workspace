@@ -175,6 +175,9 @@ export interface MondayPreviewSample {
     kind: "workflow" | "usuario" | null;
     template: boolean;
     checklistItems: number;
+    /** Top-level tasks of a project sample. */
+    tasks: number;
+    /** Subtasks of a task sample (parent_task children). */
     childTasks: number;
     comments: number;
     files: number;

@@ -39,6 +39,7 @@ function sampleDetails(sample: MondayPreviewSample): string {
     c.kind === "workflow" ? "Tarea de workflow" : null,
     c.template ? "De plantilla" : null,
     c.checklistItems ? `${c.checklistItems} de checklist` : null,
+    c.tasks ? `${c.tasks} tareas` : null,
     c.childTasks ? `${c.childTasks} subtareas` : null,
     c.comments ? `${c.comments} comentarios` : null,
     c.files ? `${c.files} archivos` : null,
