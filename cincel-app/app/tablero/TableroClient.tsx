@@ -336,8 +336,8 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
         />
       </div>
 
-      {/* Four built-in columns fill the width; custom status columns add on and scroll sideways. */}
-      <div className="flex gap-4 overflow-x-auto pb-2">
+      {/* Columns share the width and shrink to 220px; past that the board (not the page) scrolls sideways. */}
+      <div data-testid="tablero-board" className="flex w-full min-w-0 gap-4 overflow-x-auto pb-2">
         {columns.map(({ key: status, label }) => {
           const allTasks = filteredBoard[status] ?? [];
           const visible = visibleCount[status] ?? PAGE_SIZE;
@@ -359,7 +359,7 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
                 e.preventDefault();
                 void handleDrop(status);
               }}
-              className={`flex min-h-[200px] min-w-64 flex-1 flex-col gap-2 rounded-lg border p-3 transition-colors ${
+              className={`flex min-h-[200px] min-w-[220px] flex-1 basis-0 flex-col gap-2 rounded-lg border p-3 transition-colors ${
                 isDragOver ? "border-primary bg-muted" : "border-border bg-card"
               }`}
             >
