@@ -48,12 +48,11 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
 }));
 
 /**
- * A staff member's own connected Google account (real OAuth, distinct from
- * the service-account domain-wide-delegation impersonation in
- * lib/google/client.ts). One row per staff — connecting a different account
- * replaces it. `refreshToken` is nullable because Google only issues one on
- * the first consent with a given account; re-consenting (prompt=consent,
- * always requested here) keeps it populated on every (re)connect.
+ * A staff member's own connected Google account (real OAuth). One row per
+ * staff — connecting a different account replaces it. `refreshToken` is
+ * nullable because Google only issues one on the first consent with a given
+ * account; re-consenting (prompt=consent, always requested here) keeps it
+ * populated on every (re)connect.
  */
 export const googleOauthAccounts = core.table("google_oauth_accounts", {
   staffId: uuid("staff_id")

@@ -26,7 +26,6 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
   const { setFakeDirectoryState } = await import("@/lib/google/fake-directory");
   const { decryptToken, isEncryptedToken } = await import("@/lib/google/token-crypto");
   const { signInWithGoogle } = await import("./google-sign-in");
-  const { getGoogleOauthAccount } = await import("@/lib/repositories/google-oauth-repository");
 
   const staffIds: string[] = [];
   const subs: string[] = [];
@@ -163,8 +162,6 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
     expect(isEncryptedToken(account.accessToken)).toBe(true);
     expect(decryptToken(account.accessToken)).toBe("fake-access-token");
     expect(decryptToken(account.refreshToken ?? "")).toBe("fake-refresh-token");
-    // The old connect flow (picker, Calendar sync) never reads the encrypted row.
-    await expect(getGoogleOauthAccount(staffId)).resolves.toBeNull();
 
     // The Google account's email changes: the link holds through `sub`.
     const renamed = { ...who, email: `renombrada-${run}-${n}@${DOMAIN}` };
@@ -315,6 +312,5 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
       .from(schema.googleOauthAccounts)
       .where(eq(schema.googleOauthAccounts.staffId, staffId));
     expect(account).toMatchObject({ googleSub: null, accessToken: "legacy-plain-access" });
-    await expect(getGoogleOauthAccount(staffId)).resolves.toMatchObject({ accessToken: "legacy-plain-access" });
   });
 });

@@ -29,9 +29,11 @@ function formatSyncedAt(iso: string): string {
   return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/** Where "Conectar Google Calendar" sends the browser: the incremental staff consent (FE §2.7). */
+export const CALENDAR_CONNECT_URL = "/api/auth/google/start?scope=calendar&return_to=/calendario";
+
 /**
- * Direct sync (#434): with the user's own Google account connected (Calendar
- * scope), tasks are pushed into a "Cincel" calendar the app creates there —
+ * Direct sync (#434): once the staff member grants the Calendar consent, tasks are pushed into a "Cincel" calendar the app creates there —
  * updates land within minutes instead of Google's hours-long ICS polling.
  */
 function GoogleCalendarSyncSection({ open }: { open: boolean }) {
@@ -66,8 +68,7 @@ function GoogleCalendarSyncSection({ open }: { open: boolean }) {
   }
 
   function connect() {
-    const returnTo = `${window.location.pathname}${window.location.search}`;
-    window.location.href = `/api/google/oauth/start?scope=calendar&return_to=${encodeURIComponent(returnTo)}`;
+    window.location.href = CALENDAR_CONNECT_URL;
   }
 
   if (!status?.oauthAvailable) return null;
@@ -78,7 +79,7 @@ function GoogleCalendarSyncSection({ open }: { open: boolean }) {
       {!status.hasCalendarScope ? (
         <>
           <p className="text-muted-foreground">
-            Conecta tu cuenta de Google y crearemos un calendario «Cincel» con tus tareas. Solo podemos ver y editar ese
+            Da permiso a Google Calendar y crearemos un calendario «Cincel» con tus tareas. Solo podemos ver y editar ese
             calendario, nunca el resto de tu agenda.
           </p>
           <Button onClick={connect}>Conectar Google Calendar</Button>
@@ -119,7 +120,7 @@ function GoogleCalendarSyncSection({ open }: { open: boolean }) {
             </Button>
             {error || status.lastError ? (
               <Button variant="ghost" disabled={busy} onClick={connect}>
-                Reconectar cuenta
+                Reconectar Google Calendar
               </Button>
             ) : null}
           </div>

@@ -1,16 +1,12 @@
 import "server-only";
 
-import { getDriveClientFor } from "@/lib/google/client";
-import { getOauthAccessToken } from "@/lib/google/oauth";
 import { driveWebViewLink } from "@/lib/google/drive-url";
 
 /**
  * Whoever is browsing Drive. `accessToken` is the staff member's own Google
- * token (staff_token mode, lib/google/picker-drive.ts) and is used as is;
- * without it their old connected OAuth account is tried first, then
- * delegation.
+ * token with `drive.readonly` (lib/google/picker-drive.ts), used as is.
  */
-export type DriveCaller = { staffId: string; email: string; accessToken?: string };
+export type DriveCaller = { staffId: string; email: string; accessToken: string };
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
@@ -57,17 +53,9 @@ function normalize(raw: RawFile): DriveEntry {
   };
 }
 
-async function resolveAccessToken(caller: DriveCaller): Promise<string> {
-  if (caller.accessToken) return caller.accessToken;
-
-  const oauth = await getOauthAccessToken(caller.staffId);
-  if (oauth) return oauth.token;
-
-  const client = getDriveClientFor(caller.email);
-  if (!client) throw new Error("DRIVE_NOT_CONFIGURED");
-  const { token } = await client.getAccessToken();
-  if (!token) throw new Error("DRIVE_AUTH_FAILED");
-  return token;
+function resolveAccessToken(caller: DriveCaller): string {
+  if (!caller.accessToken) throw new Error("DRIVE_NOT_CONFIGURED");
+  return caller.accessToken;
 }
 
 async function driveFetch<T>(
@@ -75,7 +63,7 @@ async function driveFetch<T>(
   path: string,
   params: Record<string, string>
 ): Promise<T> {
-  const token = await resolveAccessToken(caller);
+  const token = resolveAccessToken(caller);
 
   const qs = new URLSearchParams({
     supportsAllDrives: "true",
@@ -94,9 +82,7 @@ async function driveFetch<T>(
 
 /**
  * Immediate children of `folderId`, folders first then files, name-sorted.
- * Scoped to `caller`'s own connected Google account when they have one,
- * else to what their institutional identity can see in Drive (see
- * lib/google/client.ts and lib/google/oauth.ts).
+ * Scoped to what `caller`'s own Google token can see in Drive.
  */
 export async function listFolder(
   caller: DriveCaller,
@@ -163,10 +149,10 @@ export type DriveFileContent = {
 };
 
 /**
- * The bytes of a file, fetched as `caller`'s connected Google account (or
- * institutional identity), so previews work regardless of which Google
- * account the browser happens to be signed into. Google-native docs/sheets/
- * slides can't be downloaded directly, so they're exported as PDF.
+ * The bytes of a file, fetched with `caller`'s own Google token, so previews
+ * work regardless of which Google account the browser happens to be signed
+ * into. Google-native docs/sheets/slides can't be downloaded directly, so
+ * they're exported as PDF.
  */
 export async function getFileContent(caller: DriveCaller, fileId: string): Promise<DriveFileContent> {
   const meta = await driveFetch<RawFile & { size?: string }>(
@@ -179,7 +165,7 @@ export async function getFileContent(caller: DriveCaller, fileId: string): Promi
   if (meta.size && Number(meta.size) > MAX_PREVIEW_BYTES) throw new Error("DRIVE_TOO_LARGE");
 
   const isNative = mimeType.startsWith(GOOGLE_NATIVE_PREFIX);
-  const token = await resolveAccessToken(caller);
+  const token = resolveAccessToken(caller);
   const url = isNative
     ? `${DRIVE_API}/files/${encodeURIComponent(fileId)}/export?mimeType=application/pdf`
     : `${DRIVE_API}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;

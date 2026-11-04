@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 
 /**
- * Whether the Google Drive picker is available (service account configured).
+ * Whether the Google Drive picker is available (staff OAuth client configured).
  * Client-side probe of /api/google/drive/status — for pages that aren't
- * Server Components and can't call `isDriveConfigured()` directly.
+ * Server Components and can't call `isPickerDriveConfigured()` directly.
  */
 export function useDriveEnabled(): boolean {
   const [enabled, setEnabled] = useState(false);

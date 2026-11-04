@@ -1,6 +1,5 @@
 import "server-only";
 
-import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import {
   GoogleCalendarError,
@@ -12,10 +11,8 @@ import {
   patchEvent,
 } from "@/lib/google/calendar-api";
 import { planSync, toDesiredEvents, type DesiredEvent } from "@/lib/google/calendar-sync";
-import { CALENDAR_SCOPE, getOauthAccessToken, hasScope } from "@/lib/google/oauth";
 import { getStaffAccessToken } from "@/lib/google/staff-token";
 import * as syncRepository from "@/lib/repositories/google-calendar-sync-repository";
-import { getGoogleOauthAccount } from "@/lib/repositories/google-oauth-repository";
 import { listMyTasks } from "@/lib/repositories/tasks-repository";
 
 /**
@@ -44,14 +41,14 @@ async function inBatches<T>(items: T[], run: (item: T) => Promise<void>): Promis
 }
 
 /**
- * Which token Calendar sync uses (backend spec §A.6.2): with AUTH_GOOGLE_ENABLED
- * on, the staff member's own sign-in token with `calendar.app.created`
- * (`staff_token`); off, the old connect flow's legacy row (`delegation`).
+ * Which token Calendar sync uses (backend spec §A.6.2): always the staff
+ * member's own sign-in token with `calendar.app.created`. The old connect
+ * flow's legacy rows are gone (migration 0021).
  */
-export type CalendarTokenMode = "delegation" | "staff_token";
+export type CalendarTokenMode = "staff_token";
 
 export function calendarTokenMode(): CalendarTokenMode {
-  return isGoogleAuthEnabled() ? "staff_token" : "delegation";
+  return "staff_token";
 }
 
 /**
@@ -63,16 +60,9 @@ export function calendarTokenMode(): CalendarTokenMode {
  * map cleared, so nothing is created twice.
  */
 async function calendarToken(staffId: string): Promise<string> {
-  if (calendarTokenMode() === "staff_token") {
-    const result = await getStaffAccessToken(staffId, "calendar");
-    if (result.status !== "ok") throw new CalendarNotConnectedError();
-    return result.accessToken;
-  }
-  const account = await getGoogleOauthAccount(staffId);
-  if (!account || !hasScope(account.scope, CALENDAR_SCOPE)) throw new CalendarNotConnectedError();
-  const access = await getOauthAccessToken(staffId);
-  if (!access) throw new CalendarNotConnectedError();
-  return access.token;
+  const result = await getStaffAccessToken(staffId, "calendar");
+  if (result.status !== "ok") throw new CalendarNotConnectedError();
+  return result.accessToken;
 }
 
 /** The existing Cincel calendar, or a new one if there is none or the user deleted it in Google. */
