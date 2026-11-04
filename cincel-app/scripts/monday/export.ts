@@ -621,6 +621,8 @@ export async function runExport(options: ExportOptions, deps: ExportDeps): Promi
         };
         saved++;
       }
+      // files/ doesn't exist yet when every asset of the first chunk failed.
+      await mkdir(filesDir, { recursive: true });
       await writeJson(indexPath, fileIndex);
     }
     return { saved, failed };
