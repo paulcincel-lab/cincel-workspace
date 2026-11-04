@@ -175,7 +175,7 @@ describe("POST /api/portal/auth/verify", () => {
     });
   });
 
-  it.each([
+  it.each<Record<string, string>>([
     { origin: "https://evil.example", "sec-fetch-site": "cross-site" },
     { origin: "https://evil.example" },
     { "sec-fetch-site": "same-site" },
