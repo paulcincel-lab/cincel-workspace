@@ -11,6 +11,9 @@ type Props = {
   onChange: (members: string[]) => void;
   placeholder?: string;
   onBlur?: () => void;
+  /** Options that can't be added or removed here, with the reason shown as their title. */
+  locked?: string[];
+  lockedTitle?: string;
 };
 
 export function getPersonInitials(name: string): string {
@@ -63,8 +66,11 @@ export default function TeamMultiSelect({
   onChange,
   placeholder = "Buscar colaborador...",
   onBlur,
+  locked = [],
+  lockedTitle,
 }: Props) {
   const [query, setQuery] = useState("");
+  const lockedSet = useMemo(() => new Set(locked), [locked]);
 
   const filteredOptions = useMemo(() => {
     const lowered = query.toLowerCase();
@@ -74,6 +80,7 @@ export default function TeamMultiSelect({
   }, [options, query]);
 
   const toggleMember = (member: string) => {
+    if (lockedSet.has(member)) return;
     if (selected.includes(member)) {
       onChange(selected.filter((item) => item !== member));
       return;
@@ -103,13 +110,14 @@ export default function TeamMultiSelect({
               variant="outline"
               className="h-auto gap-1.5 rounded-full border-border bg-muted px-2 py-1 text-xs font-medium text-foreground hover:bg-accent"
               onClick={() => toggleMember(member)}
-              title="Quitar integrante"
+              disabled={lockedSet.has(member)}
+              title={lockedSet.has(member) ? lockedTitle : "Quitar integrante"}
             >
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[9px] font-bold text-background">
                 {getPersonInitials(member)}
               </span>
               <span>{member}</span>
-              <span className="text-muted-foreground">×</span>
+              {lockedSet.has(member) ? null : <span className="text-muted-foreground">×</span>}
             </Button>
           ))
         ) : (
@@ -136,6 +144,8 @@ export default function TeamMultiSelect({
                 variant="ghost"
                 className={`h-auto w-full justify-start gap-2 px-2 py-1.5 text-left text-sm font-normal ${isSelected ? "bg-accent text-accent-foreground hover:bg-accent" : "text-foreground"}`}
                 onClick={() => toggleMember(member)}
+                disabled={lockedSet.has(member)}
+                title={lockedSet.has(member) ? lockedTitle : undefined}
               >
                 <span
                   className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-background ${isSelected ? "bg-foreground" : "bg-muted-foreground/50"}`}

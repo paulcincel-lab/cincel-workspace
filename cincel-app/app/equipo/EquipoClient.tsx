@@ -19,6 +19,8 @@ import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProject
 import { Button } from "@/components/ui/shadcn/button";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { resolveAreasCapabilities } from "@/lib/auth/permissions";
+import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
+import { formatLastLogin, revokedReasonLabel } from "@/lib/equipo/google-access";
 import {
   fetchEmergencyContactsAction,
   fetchStaffAction,
@@ -136,6 +138,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     formError,
     accessPreviewState,
     isEditingSelfProtectedAdmin,
+    editingGoogleManaged,
     teamCapabilities,
     openAddEditor,
     openEditEditor,
@@ -143,6 +146,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     saveMember,
   } = useMemberEditor({ authenticatedUser, onSaved: refresh });
   const areasCapabilities = useMemo(() => resolveAreasCapabilities(authenticatedUser), [authenticatedUser]);
+  const isAdministrator = authenticatedUser?.access === SYSTEM_ADMIN_ROLE;
 
   function toggle(id: string | number) {
     setSelected((cur) => {
@@ -247,6 +251,20 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
           <Badge variant={AVAILABILITY_VARIANT[row.original.availability ?? ""] ?? "outline"}>
             {row.original.availability || "Sin definir"}
           </Badge>
+        ),
+      },
+      {
+        id: "lastLogin",
+        header: "Último acceso",
+        cell: ({ row }) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">{formatLastLogin(row.original.lastLoginAt)}</span>
+            {row.original.accessRevokedAt ? (
+              <Badge variant="destructive" title={`Acceso retirado: ${revokedReasonLabel(row.original.accessRevokedReason)}`}>
+                Sin acceso
+              </Badge>
+            ) : null}
+          </div>
         ),
       },
       ...(emergencyContacts
@@ -435,6 +453,9 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         teamCapabilities={teamCapabilities}
         availabilityOptions={AVAILABILITY_OPTIONS}
         areaOptions={areaOptions}
+        googleManaged={editingGoogleManaged}
+        canRecheckAccess={isAdministrator}
+        onAccessChecked={refresh}
       />
     </div>
   );

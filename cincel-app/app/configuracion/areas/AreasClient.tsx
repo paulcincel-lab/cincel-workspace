@@ -89,6 +89,10 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
         .map((member) => ({ id: member.id, name: member.name })),
     [staff],
   );
+  const lockedMemberNames = useMemo(
+    () => staff.filter((member) => member.googleManaged).map((member) => member.name),
+    [staff],
+  );
   const staffNameToId = useMemo(
     () => new Map(staffOptions.map((option) => [option.name, option.id])),
     [staffOptions],
@@ -341,6 +345,7 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
         onChangeWorkflowNames={setWorkflowNames}
         onSaveWorkflows={() => void saveWorkflows()}
         capabilities={capabilities}
+        lockedMemberNames={lockedMemberNames}
       />
     </div>
   );

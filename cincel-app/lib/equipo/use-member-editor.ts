@@ -99,6 +99,10 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
       hasDefaultSystemAdministratorAccess(editingStaff.email)
   );
 
+  // Role and áreas of Google-managed staff come from Workspace (FE §2.6): the
+  // drawer shows them read-only and a save leaves them out.
+  const editingGoogleManaged = Boolean(editingId !== null && editingStaff?.googleManaged);
+
   const accessPreviewState = useMemo<AccessPreviewState>(() => {
     if (!draft.systemAccessEnabled) {
       return {
@@ -211,7 +215,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     const tempPassword = draft.temporaryPassword.trim();
     const tempPasswordConfirmation = draft.temporaryPasswordConfirmation.trim();
 
-    if (!name || !role || draft.areaIds.length === 0 || draft.capacity < 1) {
+    if (!name || (!editingGoogleManaged && (!role || draft.areaIds.length === 0)) || draft.capacity < 1) {
       setFormError("Completa nombre, puesto, al menos un área y una capacidad válida.");
       return;
     }
@@ -281,7 +285,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         await updateStaffAction(editingId, {
           name: staffInput.name,
           lastName: staffInput.lastName,
-          role: staffInput.role,
+          ...(editingGoogleManaged ? {} : { role: staffInput.role }),
           email: staffInput.email,
           phone: staffInput.phone,
           capacity: staffInput.capacity,
@@ -304,7 +308,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         emergencyContactAddress: draft.emergencyContactAddress.trim() || null,
       });
 
-      await setStaffAreasAction(staffId, draft.areaIds);
+      if (!editingGoogleManaged) await setStaffAreasAction(staffId, draft.areaIds);
 
       if (teamCapabilities.canChangeCollaboratorAccess) {
         await setStaffCredentialAction(staffId, {
@@ -340,6 +344,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     formError,
     saving,
     isEditingSelfProtectedAdmin,
+    editingGoogleManaged,
     accessPreviewState,
     openAddEditor,
     openEditEditor,
