@@ -311,9 +311,12 @@ describe("monday wizard draft and preview", () => {
       ["904", "crm_contacts"],
     ]);
     const casaNido = preview.boards[0];
-    expect(casaNido.samples.length).toBeLessThanOrEqual(5);
-    expect(casaNido.samples.map((s) => s.mondayName)).toEqual(["Muros", "Planos", "Limpieza"]);
-    expect(casaNido.samples[0]).toMatchObject({ entity: "tarea", cincel: { project: "Casa Nido" } });
+    expect(casaNido.samples.filter((s) => s.entity === "tarea").length).toBeLessThanOrEqual(5);
+    expect(casaNido.samples.map((s) => s.mondayName)).toEqual(["Casa Nido", "Muros", "Planos", "Limpieza"]);
+    // A board-as-project shows the project it makes, with its phases, ahead of its tasks (#678).
+    expect(casaNido.samples[0]).toMatchObject({ entity: "proyecto", cincel: { title: "Casa Nido", workflow: null } });
+    expect(casaNido.samples[0].cincel.phase).not.toBeNull();
+    expect(casaNido.samples[1]).toMatchObject({ entity: "tarea", cincel: { project: "Casa Nido" } });
     // An item-as-project shows its group as its phase, as apply writes it (#678).
     expect(preview.boards[2].samples[0]).toMatchObject({ entity: "proyecto", mondayName: "Casa Mar", cincel: { phase: "2026" } });
     // a project sample counts its tasks as tareas, not subtareas

@@ -2,12 +2,13 @@
  * The Vista previa payload of the monday import wizard (#672) from a `plan`
  * dry run (scripts/monday/plan.ts `buildPlan`): counts per Cincel entity per
  * board, the plan's issues and up to 5 items per board shown as the Cincel
- * row apply creates for them. Issues are in Spanish with the step that fixes
+ * row apply creates for them. Boards whose items become tasks also get up to 5
+ * rows for the projects the board makes, with their workflow and phases (#678). Issues are in Spanish with the step that fixes
  * them (#679). Pure: no DB, no files.
  */
 import { ISSUE_FIX_STEP, issueText } from "@/lib/monday-import/preview-issues";
 import type { CountKey, Plan } from "@/scripts/monday/plan";
-import type { ExportData, PlannedTask, RowRef, TaskStatus } from "@/scripts/monday/translate";
+import type { ExportData, PlannedProject, PlannedTask, RowRef, TaskStatus } from "@/scripts/monday/translate";
 import type {
   MondayPreview,
   MondayPreviewBoard,
@@ -30,6 +31,8 @@ const PRIORITY_LABELS: Record<string, string> = { alta: "Alta", media: "Media", 
 export interface PreviewNames {
   customStatuses: Record<string, { name: string }>;
   staff: Record<string, { name: string }>;
+  /** Workflow names for the project rows; a missing name shows as no workflow. */
+  workflows?: Record<string, { name: string }>;
 }
 
 export function toPreviewCounts(c: Record<CountKey, number>): MondayPreviewCounts {
@@ -102,6 +105,7 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     priority: null,
     manager: null,
     phase: null,
+    workflow: null,
     commitmentDate: null,
     deliveryDate: null,
     kind: null,
@@ -139,6 +143,24 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     },
   });
 
+  const projectSample = (p: PlannedProject, mondayName: string): MondayPreviewSample => ({
+    mondayItemId: p.externalId,
+    mondayName,
+    groupTitle: p.source.groupTitle,
+    entity: "proyecto",
+    cincel: {
+      ...empty,
+      title: p.name,
+      status: p.status === "completado" ? "Completado" : "Activo",
+      // The project's phases and workflow, as apply writes them (#678).
+      phase: p.phases.length > 0 ? p.phases.join(", ") : null,
+      workflow: p.workflowId ? (names.workflows?.[p.workflowId]?.name ?? null) : null,
+      tasks: projectTasks.get(p.externalId) ?? 0,
+      comments: comments.get(p.externalId) ?? 0,
+      files: files.get(p.externalId) ?? 0,
+    },
+  });
+
   const boards: MondayPreviewBoard[] = plan.boards.map((b) => {
     const strategy = strategyOf.get(b.boardId) ?? b.strategy;
     let samples: MondayPreviewSample[] = [];
@@ -162,27 +184,18 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
       samples = result.projects
         .filter((p) => p.source.boardId === b.boardId)
         .slice(0, SAMPLES_PER_BOARD)
-        .map((p): MondayPreviewSample => ({
-          mondayItemId: p.externalId,
-          mondayName: itemNames.get(p.externalId) ?? p.name,
-          groupTitle: p.source.groupTitle,
-          entity: "proyecto" as const,
-          cincel: {
-            ...empty,
-            title: p.name,
-            status: p.status === "completado" ? "Completado" : "Activo",
-            // The project's phases, as apply writes them (#678).
-            phase: p.phases.length > 0 ? p.phases.join(", ") : null,
-            tasks: projectTasks.get(p.externalId) ?? 0,
-            comments: comments.get(p.externalId) ?? 0,
-            files: files.get(p.externalId) ?? 0,
-          },
-        }));
+        .map((p) => projectSample(p, itemNames.get(p.externalId) ?? p.name));
     } else if (result) {
-      samples = result.tasks
+      // board_as_project / group_as_project: the projects first, named after the board or group.
+      const projects = result.projects
+        .filter((p) => p.source.boardId === b.boardId)
+        .slice(0, SAMPLES_PER_BOARD)
+        .map((p) => ({ ...projectSample(p, p.source.groupTitle ?? b.name), groupTitle: null }));
+      const tasks = result.tasks
         .filter((t) => !t.parentTask && t.source.boardId === b.boardId)
         .slice(0, SAMPLES_PER_BOARD)
         .map(taskSample);
+      samples = [...projects, ...tasks];
     }
     return { boardId: b.boardId, name: b.name, strategy, counts: toPreviewCounts(b), samples };
   });

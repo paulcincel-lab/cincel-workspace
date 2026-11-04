@@ -67,6 +67,8 @@ export interface CincelLookups {
   templates: Record<string, { workflowId: string }>;
   /** core.staff, by id. */
   staff: Record<string, { name: string }>;
+  /** core.workflows (not deleted), by id: names for the wizard's Vista previa. */
+  workflows?: Record<string, { name: string }>;
 }
 
 export interface TranslateOptions {

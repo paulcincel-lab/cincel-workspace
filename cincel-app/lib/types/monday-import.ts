@@ -178,6 +178,8 @@ export interface MondayPreviewSample {
     priority: string | null;
     manager: string | null;
     phase: string | null;
+    /** A project sample's workflow (current_workflow_id and its stage); null otherwise. */
+    workflow: string | null;
     commitmentDate: string | null;
     deliveryDate: string | null;
     kind: "workflow" | "usuario" | null;
@@ -198,7 +200,7 @@ export interface MondayPreviewBoard {
   name: string;
   strategy: BoardStrategy;
   counts: MondayPreviewCounts;
-  /** Up to 5 items of the board. */
+  /** Up to 5 items of the board; boards whose items become tasks list up to 5 of their projects first. */
   samples: MondayPreviewSample[];
 }
 

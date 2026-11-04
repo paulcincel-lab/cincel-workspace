@@ -66,6 +66,59 @@ describe("PreviewStep", () => {
     expect(onFix).toHaveBeenLastCalledWith("personas", "b1");
   });
 
+  it("says the workflow and phases a project gets, or that the groups stay task labels (#678)", () => {
+    const cincel = {
+      title: "Casa Nido",
+      project: null,
+      status: "Activo",
+      customStatus: null,
+      priority: null,
+      manager: null,
+      phase: "Diseño, Obra",
+      workflow: "Construcción",
+      commitmentDate: null,
+      deliveryDate: null,
+      kind: null,
+      template: false,
+      checklistItems: 0,
+      tasks: 2,
+      childTasks: 0,
+      comments: 0,
+      files: 0,
+      contactType: null,
+    };
+    const withProjects: MondayPreview = {
+      ...preview,
+      boards: [
+        {
+          boardId: "b1",
+          name: "Casa Nido",
+          strategy: "board_as_project",
+          counts: zero,
+          samples: [{ mondayItemId: "b1", mondayName: "Casa Nido", groupTitle: null, entity: "proyecto", cincel }],
+        },
+        {
+          boardId: "b2",
+          name: "Obras",
+          strategy: "group_as_project",
+          counts: zero,
+          samples: [
+            {
+              mondayItemId: "b2:g1",
+              mondayName: "Casa Mar",
+              groupTitle: null,
+              entity: "proyecto",
+              cincel: { ...cincel, title: "Casa Mar", phase: null, workflow: null },
+            },
+          ],
+        },
+      ],
+    };
+    render(<PreviewStep preview={withProjects} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
+    expect(screen.getByText(/Workflow: Construcción · Fases del proyecto: Diseño, Obra/)).toBeTruthy();
+    expect(screen.getByText(/Sin workflow · Sin fases: los grupos quedan solo como etiqueta de las tareas/)).toBeTruthy();
+  });
+
   it("shows no English plan text", () => {
     render(<PreviewStep preview={preview} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
     expect(screen.queryByText(/has no client/)).toBeNull();

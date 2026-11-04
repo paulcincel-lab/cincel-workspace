@@ -36,7 +36,14 @@ function sampleDetails(sample: MondayPreviewSample): string {
   const c = sample.cincel;
   const parts = [
     c.project ? `Proyecto: ${c.project}` : null,
-    c.phase ? `Fase: ${c.phase}` : null,
+    sample.entity === "proyecto" ? (c.workflow ? `Workflow: ${c.workflow}` : "Sin workflow") : null,
+    sample.entity === "proyecto"
+      ? c.phase
+        ? `Fases del proyecto: ${c.phase}`
+        : "Sin fases: los grupos quedan solo como etiqueta de las tareas"
+      : c.phase
+        ? `Fase: ${c.phase}`
+        : null,
     c.customStatus ?? c.status ? `Estatus: ${c.customStatus ?? c.status}` : null,
     c.priority ? `Prioridad: ${c.priority}` : null,
     c.manager ? `Responsable: ${c.manager}` : null,
