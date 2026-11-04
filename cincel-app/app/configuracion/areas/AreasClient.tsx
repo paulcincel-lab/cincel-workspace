@@ -158,13 +158,17 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
         const detail = await fetchAreaAction(created.id);
         if (detail) {
           setEditingArea(detail);
+          setDraft(draftFromArea(detail));
           setMemberNames(detail.members.map((member) => member.name));
           setWorkflowNames(detail.workflows.map((workflow) => workflow.name));
         }
       } else {
         await updateAreaAction(editingArea.id, input);
         const detail = await fetchAreaAction(editingArea.id);
-        if (detail) setEditingArea(detail);
+        if (detail) {
+          setEditingArea(detail);
+          setDraft(draftFromArea(detail));
+        }
       }
 
       await refresh();
