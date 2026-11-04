@@ -67,8 +67,14 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
+/**
+ * `/api/portal/projects/*` stays out of the matcher: Next buffers (and past
+ * 10 MB truncates) the request body of every request that runs through
+ * middleware, which would break the streamed 50 MB portal upload. The
+ * function returns early for `/api` anyway.
+ */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|api/portal/projects/).*)",
   ],
 };

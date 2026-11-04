@@ -34,6 +34,27 @@ export type PortalScheduleDTO = {
   sections: PortalScheduleSectionDTO[];
 } | null;
 
+/** One file the client sent (Mis envíos), from `portal_file_events` (`upload`). */
+export type PortalUploadDTO = { id: string; fileName: string; sizeBytes: number | null; at: string };
+
+/** One entry of a `02 Cliente` folder (BE §B.4.4). Never a Drive link, owner or permission. */
+export type PortalFileDTO = {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number | null;
+  modifiedAt: string;
+  kind: "file" | "folder";
+  /** `pdf` for Google Docs, Sheets, Slides and Drawings, which download as an exported PDF. */
+  deliveredAs: "original" | "pdf";
+};
+
+/** `breadcrumbs` run from the client folder (first) to `folderId` (last). */
+export type PortalFolderDTO = { folderId: string; breadcrumbs: { id: string; name: string }[]; items: PortalFileDTO[] };
+
+/** `GET /api/portal/projects/[pid]/files` while the project's Drive folders aren't ready. */
+export type PortalFolderPendingDTO = { pending: true };
+
 // ── Staff side (FE §5): the Clientes tab, never sent to the portal ──────────
 
 export type PortalAccessStatus = "invited" | "active" | "disabled" | "revoked";

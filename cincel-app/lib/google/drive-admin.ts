@@ -92,6 +92,17 @@ export type UploadInput = {
   fields?: string;
 };
 
+export type UploadChunkInput = {
+  chunk: Uint8Array;
+  /** Byte offset of `chunk` in the whole file. */
+  offset: number;
+  /** Total file size; only known (and required) on the last chunk. */
+  total?: number;
+};
+
+/** One PUT of a chunked resumable upload: Drive answers 308 until the last chunk. */
+export type UploadChunkResult = { done: false } | { done: true; file: DriveFile };
+
 export type DriveAdmin = {
   createFolder(name: string, parentId: string): Promise<DriveFile>;
   rename(fileId: string, name: string): Promise<DriveFile>;
@@ -110,6 +121,14 @@ export type DriveAdmin = {
   startResumableUpload(input: Omit<UploadInput, "body">): Promise<string>;
   /** Resumable upload in one request: opens the session, then sends the body. */
   uploadResumable(input: UploadInput): Promise<DriveFile>;
+  /**
+   * Sends one chunk to a resumable session for a stream of unknown length.
+   * Every chunk but the last must be a multiple of 256 KiB; the last one
+   * carries `total` and returns the created file.
+   */
+  uploadChunk(sessionUrl: string, input: UploadChunkInput): Promise<UploadChunkResult>;
+  /** Cancels an unfinished resumable session; never throws. */
+  cancelResumableUpload(sessionUrl: string): Promise<void>;
   /** Moves a file or folder to the trash (recoverable for 30 days). */
   trash(fileId: string): Promise<DriveFile>;
 };
@@ -319,6 +338,33 @@ export function createDriveAdmin(options: DriveAdminOptions): DriveAdmin {
         ...(isStream ? ({ duplex: "half" } as RequestInit) : {}),
       });
       return (await response.json()) as DriveFile;
+    },
+
+    async uploadChunk(sessionUrl, { chunk, offset, total }) {
+      const size = chunk.byteLength;
+      const range =
+        size === 0 ? `bytes */${total ?? offset}` : `bytes ${offset}-${offset + size - 1}/${total ?? "*"}`;
+      const token = await getAccessToken!();
+      const response = await fetchImpl(sessionUrl, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Length": String(size), "Content-Range": range },
+        body: chunk as BodyInit,
+        cache: "no-store",
+      });
+      // 308 Resume Incomplete: Drive kept the chunk and waits for the next one.
+      if (response.status === 308) return { done: false };
+      if (!response.ok) throw await toDriveError(response);
+      return { done: true, file: (await response.json()) as DriveFile };
+    },
+
+    async cancelResumableUpload(sessionUrl) {
+      try {
+        const token = await getAccessToken!();
+        // Drive answers 499 to a cancelled session.
+        await fetchImpl(sessionUrl, { method: "DELETE", headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      } catch {
+        // Unfinished sessions expire on their own after a week.
+      }
     },
 
     trash(fileId) {

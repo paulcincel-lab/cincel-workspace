@@ -5,8 +5,23 @@ import { cleanup, render, screen } from "@testing-library/react";
 const navigation = vi.hoisted(() => ({ pathname: "/proyectos/p1/ficha" }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
+// Custom permission overrides live in localStorage; stub it so the tests use the default matrix.
+vi.mock("@/lib/repositories/browser-state-repository", () => ({
+  readStorage: vi.fn().mockReturnValue(null),
+  writeStorage: vi.fn(),
+  removeStorage: vi.fn(),
+  readJsonStorage: vi.fn((_key: string, fallback: unknown) => fallback),
+}));
+
+import type { SessionAccess } from "@/lib/auth/session";
+import { useSessionStore } from "@/lib/stores/session-store";
 
 import { activeProjectSection, ProjectSectionNav, projectSectionLinks } from "./ProjectSectionNav";
+
+function signIn(access: "Administrador" | "Colaborador") {
+  const user = { id: "s1", name: "Ana", email: "ana@example.test", role: access, area: null, active: true, access };
+  useSessionStore.setState({ access: { status: "active", user } as unknown as SessionAccess });
+}
 
 // Base UI gives each tab role="tab", so look the anchors up by their label.
 function tab(label: string): HTMLAnchorElement {
@@ -18,6 +33,7 @@ function tab(label: string): HTMLAnchorElement {
 afterEach(() => {
   cleanup();
   navigation.pathname = "/proyectos/p1/ficha";
+  useSessionStore.setState({ access: { status: "guest", user: null } });
 });
 
 describe("projectSectionLinks", () => {
@@ -74,5 +90,23 @@ describe("ProjectSectionNav", () => {
   it("renders Clientes when showClientes is set", () => {
     render(<ProjectSectionNav projectId="p1" showClientes />);
     expect(tab("Clientes").getAttribute("href")).toBe("/proyectos/p1/clientes");
+  });
+
+  it("shows Clientes to staff with portal.manageAccess", () => {
+    signIn("Administrador");
+    render(<ProjectSectionNav projectId="p1" />);
+    expect(tab("Clientes").getAttribute("href")).toBe("/proyectos/p1/clientes");
+  });
+
+  it("hides Clientes from staff without portal.manageAccess", () => {
+    signIn("Colaborador");
+    render(<ProjectSectionNav projectId="p1" />);
+    expect(screen.queryByText("Clientes")).toBeNull();
+  });
+
+  it("lets showClientes={false} override the capability", () => {
+    signIn("Administrador");
+    render(<ProjectSectionNav projectId="p1" showClientes={false} />);
+    expect(screen.queryByText("Clientes")).toBeNull();
   });
 });
