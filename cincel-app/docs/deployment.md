@@ -18,7 +18,7 @@
 | `CINCEL_ADMIN_EMAILS` | Recommended | `lib/data/roles.ts` | Comma-separated emails that get the `Administrador` role automatically regardless of their `team_members.role`. Unset = no auto-escalation. |
 | `GOOGLE_SA_CLIENT_EMAIL` / `GOOGLE_SA_PRIVATE_KEY` / `GOOGLE_SA_SUBJECT` / `GOOGLE_DRIVE_ROOT_FOLDER_ID` | Optional | `lib/google/*` | Service-account access for the Drive pickers. Leave unset to disable (manual URL entry still works, API routes return 503). `GOOGLE_DRIVE_ROOT_FOLDER_ID` is the picker's start folder; when unset it defaults to the root of `GOOGLE_SHARED_DRIVE_ID`. |
 | `GOOGLE_SHARED_DRIVE_ID` | Optional | `npm run monday` (monday migration CLI), project folders (`lib/google/project-folders.ts`) | Company Shared Drive where project folders are created, both by the monday migration and when a project is created or its folders are re-created in the app. The service account must be a **Content manager** on it. Also the default start folder for the Drive picker when `GOOGLE_DRIVE_ROOT_FOLDER_ID` is unset. See `docs/google-drive.md`. |
-| `MONDAY_IMPORT_DIR` | Image: set to `/data/monday` | `lib/monday-import/runs.ts` (Configuración → Importar de monday) | Folder for the import wizard's runs (monday exports with client data and files). Unset = `<cwd>/exports/wizard`, which the image's `nextuser` can't create because `/app` belongs to root. The image makes `/data/monday` owned by `nextuser`; mount a persistent volume there (KCD: `kcd.yml` sets the default and the `/data/monday` volume). A folder the app can't write shows "La carpeta de importación no tiene permisos de escritura." and logs the path once. `MONDAY_TOKEN` is not needed: the wizard asks for the token and never stores it. |
+| `MONDAY_IMPORT_DIR` | Image: `ENV` set to `/data/monday` | `lib/monday-import/runs.ts` (Configuración → Importar de monday) | Folder for the import wizard's runs (monday exports with client data and files). Unset = `<cwd>/exports/wizard`, which the image's `nextuser` can't create because `/app` belongs to root. The image makes `/data/monday` owned by `nextuser`; mount a persistent volume there (KCD: `kcd.yml` sets the default and the `/data/monday` volume; `docker-compose.prod.yml`: the `cincel_monday_data` volume). A folder the app can't write shows "La carpeta de importación no tiene permisos de escritura." and logs the path once. `MONDAY_TOKEN` is not needed: the wizard asks for the token and never stores it. |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Optional | `lib/assistant/provider.ts` | OpenAI-compatible `/v1` endpoint for `/asistente`. Unset = assistant disabled (route returns 503, UI shows a notice). |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `MAIL_FROM` | Optional | `lib/email/index.ts` | Client portal mail (invitations, sign-in links, "archivo recibido"). Production: Gmail SMTP from one Workspace account (`smtp.gmail.com`, `465`, the account, its app password, see [Email](#email-client-portal)). `SMTP_PASSWORD` is a secret. Unset `SMTP_HOST` = messages are only logged. Local compose sends to Mailpit. |
 | `APP_PORT` | Compose only | `docker-compose.yml` | Host port mapped to the container's 3000. Default 3000. |
@@ -30,15 +30,16 @@ both the `app` and `migrate` compose services (`env_file`).
 
 ### monday import folder
 
-The import wizard writes one folder per run under `MONDAY_IMPORT_DIR`. In the
-image that is `/data/monday`, created and owned by `nextuser` before `USER`
-in the `Dockerfile`, so a new named volume mounted there starts writable.
+The import wizard writes one folder per run under `MONDAY_IMPORT_DIR`. The
+image sets it to `/data/monday` (`ENV` in the `Dockerfile`), a folder created and
+owned by `nextuser` before `USER`, so a new named volume mounted there starts writable.
 
 - **KCD:** `kcd.yml` lists the `/data/monday` volume and defaults
   `MONDAY_IMPORT_DIR` to it; nothing to fill in.
-- **docker-compose / other hosts:** set `MONDAY_IMPORT_DIR=/data/monday` and
-  mount a named volume at `/data/monday` on the `app` service. A bind mount
-  must be writable by the container's `nextuser`.
+- **docker-compose.prod.yml:** the `app` service mounts the `cincel_monday_data`
+  named volume at `/data/monday`; nothing to fill in.
+- **Other hosts:** mount a persistent volume at `/data/monday` so runs survive a
+  redeploy. A bind mount must be writable by the container's `nextuser`.
 
 ## Email (client portal)
 

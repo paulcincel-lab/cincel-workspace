@@ -91,6 +91,9 @@ services:
       # Inside the compose network the database is reachable as `db`,
       # overriding whatever DATABASE_URL is in .env.production.
       DATABASE_URL: postgres://${POSTGRES_USER:-cincel}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production — do not deploy with the local-dev default}@db:5432/${POSTGRES_DB:-cincel}
+    volumes:
+      # Monday import wizard runs (MONDAY_IMPORT_DIR, set to /data/monday in the image).
+      - cincel_monday_data:/data/monday
     depends_on:
       db:
         condition: service_healthy
@@ -100,3 +103,4 @@ services:
 
 volumes:
   cincel_db_data:
+  cincel_monday_data:
