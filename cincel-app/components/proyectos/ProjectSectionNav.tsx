@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolvePortalCapabilities } from "@/lib/auth/permissions";
+import { useSessionStore } from "@/lib/stores/session-store";
 
 export type ProjectSection = "ficha" | "cronograma" | "archivos" | "clientes";
 
@@ -17,8 +20,8 @@ const SECTION_LABELS: Record<ProjectSection, string> = {
 };
 
 /**
- * Tabs shown for a project, in order. Clientes needs `portal.manageAccess`; callers keep it off until the Clientes
- * page ships with Client Portal Phase 1.
+ * Tabs shown for a project, in order. Clientes needs `portal.manageAccess`, the capability the Clientes page and its
+ * actions check on the server.
  */
 export function projectSectionLinks(projectId: string, { showClientes = false } = {}): ProjectSectionLink[] {
   const sections: ProjectSection[] = ["ficha", "cronograma", "archivos", ...(showClientes ? ["clientes" as const] : [])];
@@ -33,10 +36,18 @@ export function activeProjectSection(pathname: string | null): ProjectSection | 
   return section && section in SECTION_LABELS ? (section as ProjectSection) : null;
 }
 
-export function ProjectSectionNav({ projectId, showClientes = false }: { projectId: string; showClientes?: boolean }) {
+/** Whether the signed-in staff member has `portal.manageAccess` (re-read when the session store changes). */
+function useCanManagePortalAccess(): boolean {
+  const access = useSessionStore((state) => state.access);
+  return access.status === "active" && resolvePortalCapabilities(getCurrentAuthenticatedUser()).manageAccess;
+}
+
+/** `showClientes` overrides the capability check (the Clientes page passes what the server resolved). */
+export function ProjectSectionNav({ projectId, showClientes }: { projectId: string; showClientes?: boolean }) {
   const pathname = usePathname();
   const active = activeProjectSection(pathname);
-  const links = projectSectionLinks(projectId, { showClientes });
+  const canManagePortalAccess = useCanManagePortalAccess();
+  const links = projectSectionLinks(projectId, { showClientes: showClientes ?? canManagePortalAccess });
 
   return (
     <nav aria-label="Secciones del proyecto" className="mb-6">
