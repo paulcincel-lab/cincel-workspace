@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import * as authRepository from "@/lib/repositories/auth-repository";
+import { isPasswordAuthEnabled } from "@/lib/auth/auth-flags";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession, getSession } from "@/lib/auth/session";
 
@@ -15,7 +16,8 @@ export type LoginActionResult =
         | "invalid_credentials"
         | "inactive_member"
         | "auth_disabled"
-        | "password_not_set";
+        | "password_not_set"
+        | "password_login_disabled";
     };
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -24,6 +26,8 @@ export async function loginAction(
   email: string,
   password: string
 ): Promise<LoginActionResult> {
+  // AUTH_PASSWORD_ENABLED=false: refuse even when the action is called directly (BE §A.8 step 3).
+  if (!isPasswordAuthEnabled()) return { ok: false, reason: "password_login_disabled" };
   const result = await authRepository.authenticate(email, password);
   if (!result.ok) return { ok: false, reason: result.reason };
 
@@ -45,6 +49,7 @@ export type ChangePasswordResult =
       ok: false;
       reason:
         | "no_session"
+        | "password_login_disabled"
         | "invalid_current_password"
         | "password_too_short"
         | "password_confirmation_mismatch";
@@ -59,6 +64,7 @@ export async function completeFirstAccessAction(
   newPassword: string,
   confirmation: string
 ): Promise<ChangePasswordResult> {
+  if (!isPasswordAuthEnabled()) return { ok: false, reason: "password_login_disabled" };
   const session = await getSession();
   if (!session) return { ok: false, reason: "no_session" };
 
@@ -80,6 +86,7 @@ export async function changePasswordAction(
   newPassword: string,
   confirmation: string
 ): Promise<ChangePasswordResult> {
+  if (!isPasswordAuthEnabled()) return { ok: false, reason: "password_login_disabled" };
   const session = await getSession();
   if (!session) return { ok: false, reason: "no_session" };
 

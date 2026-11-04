@@ -11,6 +11,7 @@ import { verifyPassword } from "@/lib/auth/password";
 import {
   bootstrapAdminFromEnv,
   ensureBootstrapAdmin,
+  passwordAuthEnabledFromEnv,
 } from "@/scripts/bootstrap-admin.mjs";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -50,6 +51,28 @@ describe("bootstrapAdminFromEnv", () => {
         BOOTSTRAP_ADMIN_PASSWORD: "x",
       }),
     ).toThrow(/not an email/);
+  });
+});
+
+describe("passwordAuthEnabledFromEnv", () => {
+  it("is true unless AUTH_PASSWORD_ENABLED is false", () => {
+    expect(passwordAuthEnabledFromEnv({})).toBe(true);
+    expect(passwordAuthEnabledFromEnv({ AUTH_PASSWORD_ENABLED: "true" })).toBe(true);
+    expect(passwordAuthEnabledFromEnv({ AUTH_PASSWORD_ENABLED: "off" })).toBe(true);
+    expect(passwordAuthEnabledFromEnv({ AUTH_PASSWORD_ENABLED: "" })).toBe(true);
+    expect(passwordAuthEnabledFromEnv({ AUTH_PASSWORD_ENABLED: "false" })).toBe(false);
+    expect(passwordAuthEnabledFromEnv({ AUTH_PASSWORD_ENABLED: " False " })).toBe(false);
+  });
+});
+
+describe("ensureBootstrapAdmin with passwords disabled", () => {
+  it("skips without touching the database", async () => {
+    const sql = () => {
+      throw new Error("no query expected");
+    };
+    expect(
+      await ensureBootstrapAdmin(sql, { email: "a@b.dev", password: "x" }, { passwordEnabled: false }),
+    ).toEqual(["skipped, passwords disabled"]);
   });
 });
 
@@ -121,6 +144,25 @@ describe.skipIf(!url)("ensureBootstrapAdmin (test DB)", () => {
       ).toEqual(["password updated"]);
       row = await read(tx);
       expect(row.enabled).toBe(true);
+    });
+  });
+
+  it("does not create or re-enable the credential when passwords are disabled", async () => {
+    await inTx(async (tx) => {
+      expect(
+        await ensureBootstrapAdmin(tx, { email, password: "first-pass" }, { passwordEnabled: false }),
+      ).toEqual(["skipped, passwords disabled"]);
+      expect(await read(tx)).toBeUndefined();
+
+      await ensureBootstrapAdmin(tx, { email, password: "first-pass" });
+      let row = await read(tx);
+      await tx`update core.auth_credentials set enabled = false where staff_id = ${row.id}`;
+      expect(
+        await ensureBootstrapAdmin(tx, { email, password: "other-pass" }, { passwordEnabled: false }),
+      ).toEqual(["skipped, passwords disabled"]);
+      row = await read(tx);
+      expect(row.enabled).toBe(false);
+      expect(await verifyPassword("first-pass", row.password_hash, row.salt)).toBe(true);
     });
   });
 });

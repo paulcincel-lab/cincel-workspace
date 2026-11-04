@@ -3,13 +3,14 @@
 // same journal table as `drizzle-kit migrate` (drizzle.__drizzle_migrations),
 // so either one can run against the same database. Safe to repeat.
 // Then creates or updates the bootstrap admin (scripts/bootstrap-admin.mjs)
-// when BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are set.
+// when BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are set, unless
+// AUTH_PASSWORD_ENABLED=false (then it is skipped and logged).
 import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
-import { bootstrapAdminFromEnv, ensureBootstrapAdmin } from "./bootstrap-admin.mjs";
+import { bootstrapAdminFromEnv, ensureBootstrapAdmin, passwordAuthEnabledFromEnv } from "./bootstrap-admin.mjs";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -31,7 +32,7 @@ try {
   await migrate(drizzle(sql), { migrationsFolder });
   console.log("migrations applied");
   if (admin) {
-    const changes = await ensureBootstrapAdmin(sql, admin);
+    const changes = await ensureBootstrapAdmin(sql, admin, { passwordEnabled: passwordAuthEnabledFromEnv() });
     console.log(`bootstrap admin ${admin.email}: ${changes.length ? changes.join(", ") : "up to date"}`);
   }
 } finally {
