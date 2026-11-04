@@ -154,6 +154,10 @@ export function ActividadesClient({
   }
   const groupByArea = isGeneral && groupBy === "actividad";
   const pageDescription = departamento?.description ?? GENERAL_DESCRIPTION;
+  // A department page whose workflow row doesn't exist yet (fresh install
+  // before #656's defaults) still renders its table and empty state, but
+  // can't create tasks: they'd land in "Sin área" instead of this department.
+  const missingWorkflow = !isGeneral && !workflow;
   const [tasks, setTasks] = useState<TaskListItem[]>(initialTasks);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -681,8 +685,6 @@ export function ActividadesClient({
   }, []);
 
   const columns = useMemo<ColumnDef<TaskListItem, unknown>[]>(() => {
-    if (!workflow && !isGeneral) return [];
-
     return [
       createSelectionColumn<TaskListItem>({
         getId: (t) => t.id,
@@ -1005,12 +1007,12 @@ export function ActividadesClient({
         }
       />
 
-      {!workflow && !isGeneral ? (
-        <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-          {pageDescription}
-        </div>
-      ) : (
-        <>
+      {missingWorkflow ? (
+        <p role="alert" className="mb-4 text-sm text-muted-foreground">
+          {`No hay un workflow de ${pageLabel}. Créalo en Configuración → Workflows para añadir tareas aquí.`}
+        </p>
+      ) : null}
+      <>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-5 rounded-lg border border-border bg-card p-4">
               {capacityByPerson.length === 0 ? (
@@ -1025,11 +1027,13 @@ export function ActividadesClient({
               {capabilities.canCreateActivity ? (
                 <>
                   {departamento ? (
-                    <Button variant="outline" onClick={() => setTemplateOpen(true)}>
+                    <Button variant="outline" disabled={missingWorkflow} onClick={() => setTemplateOpen(true)}>
                       Iniciar plantilla de {departamento.label}
                     </Button>
                   ) : null}
-                  <Button onClick={() => setNewTaskOpen(true)}>+ Nueva tarea</Button>
+                  <Button disabled={missingWorkflow} onClick={() => setNewTaskOpen(true)}>
+                    + Nueva tarea
+                  </Button>
                 </>
               ) : null}
             </div>
@@ -1164,7 +1168,11 @@ export function ActividadesClient({
             <DataTable
               columns={groupedColumns}
               data={[]}
-              emptyMessage="No hay tareas que coincidan con los filtros actuales."
+              emptyMessage={
+                !isGeneral && tasks.length === 0
+                  ? `Sin tareas en ${pageLabel}.`
+                  : "No hay tareas que coincidan con los filtros actuales."
+              }
               wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
             />
           ) : (
@@ -1243,8 +1251,7 @@ export function ActividadesClient({
               void changeSupport(activeTaskDetail, staffIds);
             }}
           />
-        </>
-      )}
+      </>
     </div>
   );
 }
