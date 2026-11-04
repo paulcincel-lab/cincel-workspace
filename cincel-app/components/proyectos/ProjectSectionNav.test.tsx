@@ -5,6 +5,13 @@ import { cleanup, render, screen } from "@testing-library/react";
 const navigation = vi.hoisted(() => ({ pathname: "/proyectos/p1/ficha" }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
+// Custom permission overrides live in localStorage; stub it so the tests use the default matrix.
+vi.mock("@/lib/repositories/browser-state-repository", () => ({
+  readStorage: vi.fn().mockReturnValue(null),
+  writeStorage: vi.fn(),
+  removeStorage: vi.fn(),
+  readJsonStorage: vi.fn((_key: string, fallback: unknown) => fallback),
+}));
 
 import type { SessionAccess } from "@/lib/auth/session";
 import { useSessionStore } from "@/lib/stores/session-store";

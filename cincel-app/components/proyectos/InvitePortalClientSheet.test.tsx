@@ -50,11 +50,6 @@ function submitButton(): HTMLButtonElement {
   return screen.getByRole("button", { name: "Enviar invitación" }) as HTMLButtonElement;
 }
 
-function socioCheckbox(): HTMLElement {
-  const label = screen.getByText(SOCIO_CHECKBOX).closest("label") as HTMLElement;
-  return label.querySelector("[role=checkbox]") as HTMLElement;
-}
-
 beforeAll(() => {
   // cmdk scrolls the selected item into view and observes its list size.
   Element.prototype.scrollIntoView ??= () => {};
@@ -100,7 +95,8 @@ describe("InvitePortalClientSheet", () => {
     fireEvent.change(screen.getByLabelText("Correo"), { target: { value: "delta@example.test" } });
     expect(submitButton().disabled).toBe(true);
 
-    fireEvent.click(socioCheckbox());
+    // Click the label: a click on the Base UI checkbox span inside it toggles twice in jsdom.
+    fireEvent.click(screen.getByText(SOCIO_CHECKBOX));
     await waitFor(() => expect(submitButton().disabled).toBe(false));
     fireEvent.click(submitButton());
 
@@ -122,7 +118,8 @@ describe("InvitePortalClientSheet", () => {
     fireEvent.click(submitButton());
 
     expect(await screen.findByText(SOCIO_CHECKBOX)).toBeTruthy();
-    expect(submitButton().disabled).toBe(true);
+    // The button reads "Enviando…" until the transition settles.
+    await waitFor(() => expect(submitButton().disabled).toBe(true));
   });
 
   it("maps server error codes to copy", async () => {
