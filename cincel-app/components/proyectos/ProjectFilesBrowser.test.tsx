@@ -142,7 +142,11 @@ describe("ProjectFilesBrowser", () => {
     expect(screen.getByRole("link", { name: "02 Cliente" }).getAttribute("href")).toBe(`${ARCHIVOS}?folder=cli`);
     // The current folder is the last crumb and isn't a link.
     expect(screen.getAllByText("Renders").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("link", { name: "Renders" })?.getAttribute("href")).toBe(`${ARCHIVOS}?folder=r1`);
+    // shadcn's BreadcrumbPage also has role="link" (aria-disabled, no href); only the folder row links to r1.
+    const renders = screen.getAllByRole("link", { name: "Renders" });
+    expect(renders.filter((el) => el.hasAttribute("href")).map((el) => el.getAttribute("href"))).toEqual([
+      `${ARCHIVOS}?folder=r1`,
+    ]);
     expect(screen.queryByText("Lo ven los clientes invitados")).toBeNull();
     // Abrir en Drive always opens the project folder.
     expect(screen.getByRole("link", { name: "Abrir en Drive" }).getAttribute("href")).toBe(
