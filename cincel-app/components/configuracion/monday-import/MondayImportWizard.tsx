@@ -178,12 +178,14 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
   );
 
   useEffect(() => {
-    if (runId && run?.exported && !source) void loadSource(runId);
     // Only on the first render with a run: later loads come from applyRun.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (runId && run?.exported && !source) void loadSource(runId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (runId && run?.batchStatus === "applied") void loadResult(runId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
@@ -204,6 +206,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
 
   useEffect(() => {
     if (step !== "opciones" || !runId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOptionsError("");
     getMondayImportOptionsAction(runId)
       .then((result) => (result.ok ? setOptionsInfo(result.options) : setOptionsError(result.error)))
@@ -225,6 +228,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (step === "vista_previa") refreshPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
