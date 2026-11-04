@@ -286,11 +286,12 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
     expect((await staffRow(staffId)).googleSub).toBeNull();
   });
 
-  it("asks for a retry on a Directory outage and writes nothing", async () => {
+  it("asks for a retry on a Directory outage and only records the Directory error", async () => {
     const who = person();
     setFakeDirectoryState({ failWith: "timeout" });
     await expect(signInWithGoogle(who, tokens(), meta)).resolves.toEqual({ status: "retry" });
-    expect(await events(who.email)).toEqual([]);
+    const rows = await events(who.email);
+    expect(rows.map((row) => [row.kind, row.reason, row.staffId])).toEqual([["staff_login_error", "timeout", null]]);
   });
 
   it("leaves a legacy plaintext token row of the old connect flow untouched", async () => {
