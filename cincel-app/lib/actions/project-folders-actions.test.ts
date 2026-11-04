@@ -17,7 +17,11 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 const afterCallbacks = vi.hoisted(() => [] as Array<() => unknown>);
 vi.mock("next/server", () => ({ after: (cb: () => unknown) => afterCallbacks.push(cb) }));
 
-const folders = vi.hoisted(() => ({ syncProjectFolders: vi.fn(), syncProjectFolderName: vi.fn() }));
+const folders = vi.hoisted(() => ({
+  syncProjectFolders: vi.fn(),
+  syncProjectFolderName: vi.fn(),
+  retryProjectFolders: vi.fn(),
+}));
 vi.mock("@/lib/google/project-folders-app", () => folders);
 
 const repo = vi.hoisted(() => ({ createProject: vi.fn(), updateProject: vi.fn() }));

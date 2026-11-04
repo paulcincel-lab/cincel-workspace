@@ -5,7 +5,7 @@ import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
-import { syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
+import { retryProjectFolders, syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
 import type {
   ApplyWorkflowPreview,
@@ -63,6 +63,28 @@ export async function updateProjectAction(
   if (patch.name !== undefined || patch.code !== undefined) after(() => syncProjectFolderName(id));
   revalidateProyectos(id);
   return row;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type RetryProjectFolderResult =
+  | { ok: true; status: "ready" | "failed"; error?: string }
+  | { ok: false; error: "forbidden" | "not_found" };
+
+/**
+ * Reintentar carpeta (BE §A.6.1): creates the project's Drive folders now, or
+ * only the missing ones, and waits for Drive. Gated by canEditProjectGeneral.
+ */
+export async function retryProjectFolderAction(projectId: string): Promise<RetryProjectFolderResult> {
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canEditProjectGeneral) return { ok: false, error: "forbidden" };
+  if (typeof projectId !== "string" || !UUID_RE.test(projectId)) return { ok: false, error: "not_found" };
+
+  const result = await retryProjectFolders(projectId);
+  if (result.status === "not_found") return { ok: false, error: "not_found" };
+  revalidateProyectos(projectId);
+  if (result.status === "ready") return { ok: true, status: "ready" };
+  return { ok: true, status: "failed", error: result.error };
 }
 
 export async function setProjectStageAction(id: string, workflowId: string): Promise<ProjectDetail> {
