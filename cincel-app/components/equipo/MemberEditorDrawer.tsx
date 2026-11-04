@@ -457,7 +457,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-foreground">Direccion</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Dirección</label>
                 <Input
                   type="text"
                   value={draft.address}
@@ -466,7 +466,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Telefono de casa</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Teléfono de casa</label>
                 <Input
                   type="text"
                   value={draft.homePhone}
@@ -475,7 +475,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Correo electronico personal</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Correo electrónico personal</label>
                 <Input
                   type="email"
                   value={draft.personalEmail}
@@ -499,7 +499,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Relacion</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Relación</label>
                 <Input
                   type="text"
                   value={draft.emergencyContactRelation}
@@ -508,7 +508,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Telefono</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Teléfono</label>
                 <Input
                   type="text"
                   value={draft.emergencyContactPhone}
@@ -517,7 +517,7 @@ export function MemberEditorDrawer({
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Direccion</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Dirección</label>
                 <Input
                   type="text"
                   value={draft.emergencyContactAddress}
