@@ -7,6 +7,7 @@ import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { APP_VERSION } from "@/lib/version";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { isNavPathActive } from "@/components/layout/nav-active";
 import {
   Sidebar as SidebarPrimitive,
   SidebarContent,
@@ -33,6 +34,7 @@ type MenuLinkItem = {
   href: string;
   icon: (props: IconProps) => React.JSX.Element;
   exact?: boolean;
+  excludePrefixes?: string[];
 };
 
 type MenuGroupItem = {
@@ -203,7 +205,7 @@ export default function Sidebar() {
     { label: "Mis tareas", href: "/mis-tareas", icon: MyTasksIcon },
     { label: "Calendario", href: "/calendario", icon: CalendarIcon },
     { label: "Proyectos", href: "/proyectos", icon: ProjectIcon },
-    { label: "Recursos", href: "/recursos", icon: ResourcesIcon },
+    { label: "Recursos", href: "/recursos", icon: ResourcesIcon, excludePrefixes: ["/recursos/empresa"] },
     {
       label: "Empresa",
       icon: CompanyIcon,
@@ -212,7 +214,7 @@ export default function Sidebar() {
         { label: "Manual de la empresa", href: "/recursos/empresa/manual-de-la-empresa", icon: ResourcesIcon },
         { label: "Imagen de la empresa", href: "/recursos/empresa/imagen-de-la-empresa", icon: ResourcesIcon },
         { label: "RFC", href: "/recursos/empresa/rfc", icon: ResourcesIcon },
-        { label: "Politicas de la empresa", href: "/recursos/empresa/politicas-de-la-empresa", icon: ResourcesIcon },
+        { label: "Políticas de la empresa", href: "/recursos/empresa/politicas-de-la-empresa", icon: ResourcesIcon },
       ],
     },
     { label: "Equipo", href: "/equipo", icon: TeamIcon },
@@ -229,27 +231,28 @@ export default function Sidebar() {
               { label: "Áreas", href: "/configuracion/areas", icon: SettingsIcon },
               { label: "Estatus", href: "/configuracion/estatus", icon: SettingsIcon },
               { label: "Workflows", href: "/configuracion/workflows", icon: SettingsIcon },
+              { label: "Google", href: "/configuracion/google", icon: SettingsIcon },
             ],
           } satisfies MenuGroupItem,
         ]
       : []),
   ];
 
-  const isActivePath = (href: string, exact = false) =>
-    exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+  const isActivePath = (href: string, exact = false, excludePrefixes?: string[]) =>
+    isNavPathActive(pathname, href, { exact, excludePrefixes });
   const currentProfileRole = (() => {
     for (const item of menu) {
       if (isGroup(item)) {
         const activeSub = item.submenu.find((sub) => isActivePath(sub.href, sub.exact));
         if (activeSub) return activeSub.label;
-      } else if (isActivePath(item.href)) {
+      } else if (isActivePath(item.href, item.exact, item.excludePrefixes)) {
         return item.label;
       }
     }
     return "Perfil";
   })();
 
-  const currentProfileLabel = "Pagina";
+  const currentProfileLabel = "Página";
   const currentProfileInitial = currentProfileRole.charAt(0).toUpperCase();
 
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
@@ -339,7 +342,7 @@ export default function Sidebar() {
                     );
                   }
 
-                  const active = isActivePath(item.href);
+                  const active = isActivePath(item.href, item.exact, item.excludePrefixes);
                   return (
                     <SidebarMenuItem key={item.label}>
                       <SidebarMenuButton
