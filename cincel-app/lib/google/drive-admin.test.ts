@@ -168,6 +168,36 @@ describe("drive-admin", () => {
     expect((call(1).init as RequestInit & { duplex?: string }).duplex).toBe("half");
   });
 
+  it("sends chunks with open-ended ranges until the last one, which returns the file", async () => {
+    fetchMock.mockResolvedValueOnce(reply(308)).mockResolvedValueOnce(reply(200, { id: "up3", name: "plano.dwg" }));
+    const first = new Uint8Array(256 * 1024);
+    const last = new Uint8Array(10);
+
+    await expect(drive().uploadChunk("https://upload.example/s", { chunk: first, offset: 0 })).resolves.toEqual({
+      done: false,
+    });
+    await expect(
+      drive().uploadChunk("https://upload.example/s", { chunk: last, offset: first.length, total: first.length + 10 })
+    ).resolves.toEqual({ done: true, file: { id: "up3", name: "plano.dwg" } });
+
+    expect(call(0).init.method).toBe("PUT");
+    expect(call(0).headers["Content-Range"]).toBe("bytes 0-262143/*");
+    expect(call(0).headers["Content-Length"]).toBe("262144");
+    expect(call(0).headers.Authorization).toBe("Bearer sa-token");
+    expect(call(1).headers["Content-Range"]).toBe("bytes 262144-262153/262154");
+  });
+
+  it("maps a failed chunk to a DriveAdminError and cancels sessions without throwing", async () => {
+    fetchMock.mockResolvedValueOnce(reply(500, { error: { message: "boom" } }));
+    await expect(
+      drive().uploadChunk("https://upload.example/s", { chunk: new Uint8Array(1), offset: 0, total: 1 })
+    ).rejects.toBeInstanceOf(DriveAdminError);
+
+    fetchMock.mockRejectedValueOnce(new Error("network"));
+    await expect(drive().cancelResumableUpload("https://upload.example/s")).resolves.toBeUndefined();
+    expect(call(1).init.method).toBe("DELETE");
+  });
+
   it("trashes instead of deleting", async () => {
     fetchMock.mockResolvedValue(reply(200, { id: "t", trashed: true }));
     await expect(drive().trash("t")).resolves.toMatchObject({ trashed: true });
