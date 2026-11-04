@@ -565,4 +565,29 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
       expect((await batchesOf(tx))[0].status).toBe("applying");
     });
   });
+
+  it("phase B without Drive ends the batch applied when files are excluded", async () => {
+    await inTx(async (tx) => {
+      await seed(tx);
+      const mapping = nestedMapping();
+      mapping.options = { includeUpdates: true, includeFiles: false };
+      const dir = exportFolder(mapping);
+      const drive = fakeDrive();
+      const phaseB = createPhaseB({ openDrive: () => drive.drive, env: {} });
+      const c = io();
+      expect(
+        await command(tx, phaseB)(
+          ["--export", dir, "--by", "ana.apply@example.com"],
+          c.cli,
+        ),
+      ).toBe(0);
+      expect(c.out()).toContain("Phase B skipped (GOOGLE_SHARED_DRIVE_ID is not set)");
+      const [batch] = await batchesOf(tx);
+      expect(batch.status).toBe("applied");
+      expect((batch.stats as { drive?: { skipped?: string } }).drive?.skipped).toBe(
+        "GOOGLE_SHARED_DRIVE_ID is not set",
+      );
+      expect(drive.log).toEqual([]);
+    });
+  });
 });
