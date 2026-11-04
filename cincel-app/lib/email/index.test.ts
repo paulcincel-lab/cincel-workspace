@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 function logged(spy: ReturnType<typeof vi.spyOn>): string {
-  return spy.mock.calls.map((call) => call.map(String).join(" ")).join("\n");
+  return spy.mock.calls.map((call: unknown[]) => call.map(String).join(" ")).join("\n");
 }
 
 describe("getSmtpConfig", () => {
