@@ -66,26 +66,26 @@ export default function ProfilePage() {
           return;
         }
         if (result.reason === "invalid_current_password") {
-          setError("La contrasena actual no es correcta.");
+          setError("La contraseña actual no es correcta.");
           return;
         }
         if (result.reason === "password_too_short") {
-          setError("La nueva contrasena debe tener al menos 8 caracteres.");
+          setError("La nueva contraseña debe tener al menos 8 caracteres.");
           return;
         }
         if (result.reason === "password_confirmation_mismatch") {
-          setError("La confirmacion no coincide con la nueva contrasena.");
+          setError("La confirmación no coincide con la nueva contraseña.");
           return;
         }
         if (result.reason === "no_session") {
-          setError("Tu sesion expiro. Inicia sesion de nuevo.");
+          setError("Tu sesión expiró. Inicia sesión de nuevo.");
           return;
         }
-        setError("No fue posible actualizar la contrasena.");
+        setError("No fue posible actualizar la contraseña.");
         return;
       }
 
-      setSuccess("Contrasena actualizada correctamente.");
+      setSuccess("Contraseña actualizada correctamente.");
       setDraft(EMPTY_PASSWORD_DRAFT);
     });
   };
@@ -102,7 +102,7 @@ export default function ProfilePage() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Perfil</p>
             <h1 className="mt-2 text-3xl font-bold text-foreground">Seguridad y datos de acceso</h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              Revisa el estado del colaborador, el estado del acceso y el cambio de contrasena desde una sola vista.
+              Revisa el estado del colaborador, el estado del acceso y el cambio de contraseña desde una sola vista.
             </p>
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function ProfilePage() {
             <div className="mt-5 space-y-3 text-sm leading-relaxed">
               <p><span className="font-medium text-foreground">Correo institucional:</span> {member.institutionalEmail || "-"}</p>
               <p><span className="font-medium text-foreground">Area:</span> {member.area || "-"}</p>
-              <p><span className="font-medium text-foreground">Telefono:</span> {member.phone || "-"}</p>
+              <p><span className="font-medium text-foreground">Teléfono:</span> {member.phone || "-"}</p>
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -169,13 +169,13 @@ export default function ProfilePage() {
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <div className="mb-4">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Seguridad</p>
-              <h2 className="mt-1 text-2xl font-bold text-foreground">Cambiar contrasena</h2>
-              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Actualiza tu contrasena sin cerrar sesion y manteniendo la continuidad del trabajo.</p>
+              <h2 className="mt-1 text-2xl font-bold text-foreground">Cambiar contraseña</h2>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Actualiza tu contraseña sin cerrar sesión y manteniendo la continuidad del trabajo.</p>
             </div>
 
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
               <label className="block">
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contrasena actual</span>
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contraseña actual</span>
                 <Input
                   type="password"
                   value={draft.currentPassword}
@@ -186,19 +186,19 @@ export default function ProfilePage() {
               <p id="profile-current-password-help" className="-mt-2 text-xs leading-relaxed text-muted-foreground">Necesaria para confirmar que la solicitud viene del usuario correcto.</p>
 
               <label className="block">
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nueva contrasena</span>
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nueva contraseña</span>
                 <Input
                   type="password"
                   value={draft.nextPassword}
                   onChange={(event) => setDraft((current) => ({ ...current, nextPassword: event.target.value }))}
-                  placeholder="Minimo 8 caracteres"
+                  placeholder="Mínimo 8 caracteres"
                   aria-describedby="profile-next-password-help"
                 />
               </label>
-              <p id="profile-next-password-help" className="-mt-2 text-xs leading-relaxed text-muted-foreground">Minimo 8 caracteres. Puedes usar una frase facil de recordar.</p>
+              <p id="profile-next-password-help" className="-mt-2 text-xs leading-relaxed text-muted-foreground">Mínimo 8 caracteres. Puedes usar una frase fácil de recordar.</p>
 
               <label className="block">
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Confirmar nueva contrasena</span>
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Confirmar nueva contraseña</span>
                 <Input
                   type="password"
                   value={draft.confirmPassword}
@@ -206,7 +206,7 @@ export default function ProfilePage() {
                   aria-describedby="profile-confirm-password-help"
                 />
               </label>
-              <p id="profile-confirm-password-help" className="-mt-2 text-xs leading-relaxed text-muted-foreground">Escribe la misma contrasena para evitar errores de captura.</p>
+              <p id="profile-confirm-password-help" className="-mt-2 text-xs leading-relaxed text-muted-foreground">Escribe la misma contraseña para evitar errores de captura.</p>
 
               {error ? (
                 <p role="alert" aria-live="polite" className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
@@ -221,7 +221,7 @@ export default function ProfilePage() {
               ) : null}
 
               <Button type="submit" disabled={isPending} className="w-full">
-                {isPending ? "Guardando..." : "Guardar nueva contrasena"}
+                {isPending ? "Guardando..." : "Guardar nueva contraseña"}
               </Button>
             </form>
           </section>

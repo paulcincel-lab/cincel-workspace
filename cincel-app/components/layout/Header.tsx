@@ -72,7 +72,7 @@ function DevelopmentMenu({ isVisible }: { isVisible: boolean }) {
             href="/change-password"
             className="block rounded-lg px-2 py-2 text-xs font-medium text-foreground transition hover:bg-accent"
           >
-            Cambio obligatorio de contrasena
+            Cambio obligatorio de contraseña
           </Link>
           <Link
             href="/profile"
@@ -109,8 +109,8 @@ function HeaderActions({ links }: { links: HeaderLinks }) {
         target="_blank"
         rel="noreferrer"
         className={headerActionClassName}
-        aria-label="Abrir pagina web"
-        title="Pagina web"
+        aria-label="Abrir página web"
+        title="Página web"
       >
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={headerActionIconClassName}>
           <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
@@ -393,8 +393,8 @@ export default function Header({ variant = "default" }: HeaderProps) {
                   variant="outline"
                   className="h-12 w-24 border-border bg-muted text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground"
                   onClick={handleLogout}
-                  aria-label="Cerrar sesion"
-                  title="Cerrar sesion"
+                  aria-label="Cerrar sesión"
+                  title="Cerrar sesión"
                 >
                   <SignOutIcon />
                 </Button>
@@ -429,8 +429,8 @@ export default function Header({ variant = "default" }: HeaderProps) {
                   variant="outline"
                   className="h-12 w-24 border-border bg-muted text-muted-foreground hover:border-foreground/30 hover:bg-accent hover:text-foreground"
                   onClick={handleLogout}
-                  aria-label="Cerrar sesion"
-                  title="Cerrar sesion"
+                  aria-label="Cerrar sesión"
+                  title="Cerrar sesión"
                 >
                   <SignOutIcon />
                 </Button>
@@ -459,7 +459,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
                       </label>
 
                       <label className="block">
-                        <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Pagina web</span>
+                        <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Página web</span>
                         <Input
                           value={linksDraft.website}
                           onChange={(event) => handleDraftLinkChange("website", event.target.value)}
