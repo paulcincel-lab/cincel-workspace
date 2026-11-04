@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import { syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
 import type {
   ApplyWorkflowPreview,
@@ -43,6 +45,8 @@ export async function createProjectAction(input: ProjectInput): Promise<ProjectD
     throw new Error("FORBIDDEN: project create");
   }
   const row = await projectsRepository.createProject(input, user.member.id);
+  // Drive runs after the response; a failure leaves the project with drive_folder_status = failed.
+  after(() => syncProjectFolders(row.id));
   revalidateProyectos(row.id);
   return row;
 }
@@ -56,6 +60,7 @@ export async function updateProjectAction(
     throw new Error("FORBIDDEN: project edit");
   }
   const row = await projectsRepository.updateProject(id, patch, user.member.id);
+  if (patch.name !== undefined || patch.code !== undefined) after(() => syncProjectFolderName(id));
   revalidateProyectos(id);
   return row;
 }
