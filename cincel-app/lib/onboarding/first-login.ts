@@ -19,11 +19,12 @@ export type FirstLoginWizard = (typeof FIRST_LOGIN_WIZARDS)[number];
 
 /**
  * Page of each wizard. Null while that wizard has no page yet: the dashboard only redirects to a wizard with a
- * route, so a wizard that isn't built never sends anyone to a 404. #672 sets `monday_import` when its page lands.
+ * route, so a wizard that isn't built never sends anyone to a 404. `monday_import` is the Configuración →
+ * Importar de monday page (#672).
  */
 export const FIRST_LOGIN_WIZARD_ROUTES: Record<FirstLoginWizard, string | null> = {
   google_groups: "/configuracion/google/primeros-pasos",
-  monday_import: null,
+  monday_import: "/configuracion/importar-monday",
 };
 
 /** `BOOTSTRAP_ADMIN_EMAIL`, trimmed and lowercased like `scripts/bootstrap-admin.mjs`; null when unset. */
