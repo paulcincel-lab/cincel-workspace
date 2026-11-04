@@ -37,7 +37,7 @@ const accessState: AccessPreviewState = {
 const draft: MemberDraft = {
   name: "Ana",
   lastName: "López",
-  access: "Diseño",
+  access: "Arquitecto Senior",
   systemAccessEnabled: true,
   temporaryPassword: "",
   temporaryPasswordConfirmation: "",
