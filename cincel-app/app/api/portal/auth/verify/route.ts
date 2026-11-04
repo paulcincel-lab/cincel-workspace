@@ -49,11 +49,13 @@ function invalidLink(json: boolean): NextResponse {
 /**
  * Login CSRF guard: a cross-site page must not be able to post an attacker's token here and plant
  * that portal session in the victim's browser. `Sec-Fetch-Site` other than same-origin/none, or an
- * `Origin` that isn't APP_ORIGIN (the Host header when APP_ORIGIN isn't set), is rejected.
+ * `Origin` that isn't APP_ORIGIN (the Host header when APP_ORIGIN isn't set), is rejected. When the
+ * browser sends `Sec-Fetch-Site` it decides alone: /portal/acceder is `no-referrer`, so its own
+ * form post arrives with `Origin: null`.
  */
 function isCrossSite(request: NextRequest): boolean {
   const site = request.headers.get("sec-fetch-site");
-  if (site && site !== "same-origin" && site !== "none") return true;
+  if (site) return site !== "same-origin" && site !== "none";
 
   const origin = request.headers.get("origin");
   if (!origin) return false;

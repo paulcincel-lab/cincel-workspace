@@ -194,6 +194,20 @@ describe("POST /api/portal/auth/verify", () => {
     expect(mocks.createPortalSession).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts the /portal/acceder post, which is no-referrer and so sends Origin: null", async () => {
+    link();
+    const res = await form(TOKEN, "10.0.0.5", { origin: "null", "sec-fetch-site": "same-origin" });
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/portal`);
+    expect(mocks.createPortalSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects Origin: null without Sec-Fetch-Site", async () => {
+    link();
+    const res = await form(TOKEN, "10.0.0.6", { origin: "null" });
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/portal/login?error=link`);
+    expect(mocks.links.get(TOKEN)?.usedAt).toBeNull();
+  });
+
   it("returns 429 on the eleventh verify from one IP in 15 minutes", async () => {
     for (let i = 0; i < 10; i++) expect((await form("c".repeat(64))).status).toBe(303);
     const res = await form("c".repeat(64));
