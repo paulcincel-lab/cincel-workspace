@@ -18,6 +18,7 @@ import {
   setStaffAreasAction,
 } from "@/lib/actions/staff-actions";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
+import type { GoogleAccessState } from "@/lib/equipo/google-access";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
 import type { Staff } from "@/lib/types/core";
 import { isGoogleManagedRefusal } from "@/lib/types/workspace-access";
@@ -103,6 +104,16 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
   // Role and áreas of Google-managed staff come from Workspace (FE §2.6): the
   // drawer shows them read-only and a save leaves them out.
   const editingGoogleManaged = Boolean(editingId !== null && editingStaff?.googleManaged);
+  // Google-linked staff sign in with Google, not a password (#657): the drawer
+  // shows their Google access state and a save leaves the credential alone.
+  const editingGoogleAccess: GoogleAccessState | null =
+    editingGoogleManaged && editingStaff
+      ? {
+          lastLoginAt: editingStaff.lastLoginAt,
+          accessRevokedAt: editingStaff.accessRevokedAt,
+          accessRevokedReason: editingStaff.accessRevokedReason,
+        }
+      : null;
 
   const accessPreviewState = useMemo<AccessPreviewState>(() => {
     if (!draft.systemAccessEnabled) {
@@ -230,10 +241,11 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     }
 
     const shouldAssignTemporaryPassword =
+      !editingGoogleManaged &&
       draft.systemAccessEnabled &&
       (editingId === null || !accessPreviewState.hasPasswordHash || Boolean(tempPassword) || Boolean(tempPasswordConfirmation));
 
-    if (draft.systemAccessEnabled && shouldAssignTemporaryPassword) {
+    if (shouldAssignTemporaryPassword) {
       if (!tempPassword) {
         setFormError("Asigna una contraseña temporal para habilitar el acceso al sistema.");
         return;
@@ -321,7 +333,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
         }
       }
 
-      if (teamCapabilities.canChangeCollaboratorAccess) {
+      if (teamCapabilities.canChangeCollaboratorAccess && !editingGoogleManaged) {
         await setStaffCredentialAction(staffId, {
           enableAccess: draft.systemAccessEnabled,
           temporaryPassword: shouldAssignTemporaryPassword ? tempPassword : undefined,
@@ -356,6 +368,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     saving,
     isEditingSelfProtectedAdmin,
     editingGoogleManaged,
+    editingGoogleAccess,
     accessPreviewState,
     openAddEditor,
     openEditEditor,

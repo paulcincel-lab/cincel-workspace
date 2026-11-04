@@ -25,3 +25,18 @@ describe("TeamMultiSelect locked options", () => {
     expect(onChange).toHaveBeenCalledWith(["Ana", "Marta"]);
   });
 });
+
+describe("TeamMultiSelect empty text", () => {
+  afterEach(cleanup);
+
+  it("defaults to the members empty text and accepts a custom one", () => {
+    const { rerender } = render(<TeamMultiSelect options={["Diseño"]} selected={[]} onChange={vi.fn()} />);
+    expect(screen.getByText("Sin integrantes asignados")).toBeTruthy();
+
+    rerender(
+      <TeamMultiSelect options={["Diseño"]} selected={[]} onChange={vi.fn()} emptyText="Sin workflows asignados" />,
+    );
+    expect(screen.getByText("Sin workflows asignados")).toBeTruthy();
+    expect(screen.queryByText("Sin integrantes asignados")).toBeNull();
+  });
+});

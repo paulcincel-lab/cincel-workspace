@@ -42,7 +42,36 @@ describe("PortalLoginForm", () => {
     expect(screen.getByText("Revisa tu correo")).toBeTruthy();
     expect(screen.getByText("Si tu correo tiene acceso, te enviamos un enlace.")).toBeTruthy();
     expect(screen.getByText("ana@example.com")).toBeTruthy();
+    const detail = screen.getByText("ana@example.com").closest("p");
+    expect(detail?.textContent).toBe(
+      "Si tiene acceso, el enlace llegará a ana@example.com. Vence en 15 minutos y solo funciona una vez.",
+    );
+    expect(screen.queryByText(/Enviamos el enlace a/)).toBeNull();
     expect(screen.queryByLabelText("Correo")).toBeNull();
+  });
+
+  it("shows the empty email error under the field, linked with aria-invalid and aria-describedby", async () => {
+    render(<PortalLoginForm linkError={false} />);
+    const input = screen.getByLabelText("Correo") as HTMLInputElement;
+    expect(input.getAttribute("aria-invalid")).toBeNull();
+    expect(input.getAttribute("aria-describedby")).toBeNull();
+    // The message slot is rendered before any error so showing one does not move the field or the button.
+    const slot = document.getElementById("portal-login-email-error");
+    expect(slot).toBeTruthy();
+    expect(slot?.textContent).toBe("");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Enviar enlace" }));
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const message = screen.getByText("Escribe un correo válido.");
+    expect(message).toBe(slot);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")).toBe("portal-login-email-error");
+    // Rendered after the field, inside its group, never above it.
+    expect(input.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("prefills the email and goes back to the request state with Cambiar correo", async () => {

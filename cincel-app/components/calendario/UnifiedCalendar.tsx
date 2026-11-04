@@ -303,7 +303,7 @@ export default function UnifiedCalendar({
                   className="h-auto px-2 py-1 text-xs"
                   onClick={() => setView(candidateView)}
                 >
-                  {candidateView === "month" ? "Mes" : candidateView === "week" ? "Semana" : "Dia"}
+                  {candidateView === "month" ? "Mes" : candidateView === "week" ? "Semana" : "Día"}
                 </Button>
               ))}
             </div>

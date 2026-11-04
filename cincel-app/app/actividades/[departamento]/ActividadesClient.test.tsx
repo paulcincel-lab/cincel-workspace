@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import type { TaskListItem } from "@/lib/types/core";
+import type { TaskListItem, WorkflowDetail } from "@/lib/types/core";
 import { ActividadesClient } from "./ActividadesClient";
 
 vi.mock("next/navigation", () => ({
@@ -14,8 +14,10 @@ vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => null,
 }));
 
+const capabilities = vi.hoisted(() => ({ current: {} as Record<string, boolean> }));
+
 vi.mock("@/lib/auth/permissions", () => ({
-  resolveActivitiesCapabilities: () => ({}),
+  resolveActivitiesCapabilities: () => capabilities.current,
   canChangeActivityStatus: () => false,
 }));
 
@@ -141,5 +143,85 @@ describe("ActividadesClient rows", () => {
     expect(
       within(plain).queryByText(/Subtarea de|subtareas|En espera/),
     ).toBeNull();
+  });
+});
+
+const presaleWorkflow: WorkflowDetail = {
+  id: "wf-presale",
+  key: "presale",
+  name: "Presale",
+  description: null,
+  active: true,
+  sortOrder: 0,
+  templates: [],
+  areas: [],
+};
+
+describe("ActividadesClient department pages", () => {
+  it.each([
+    ["presale", "Presale"],
+    ["diseno", "Taller de Diseño"],
+    ["construccion", "Construcción"],
+  ])("renders the table with an empty state on %s", (slug, label) => {
+    capabilities.current = { canCreateActivity: true };
+    render(
+      <ActividadesClient
+        slug={slug}
+        workflow={{ ...presaleWorkflow, id: `wf-${slug}`, key: slug, name: label }}
+        initialProjects={[]}
+        initialStaff={[]}
+        initialTasks={[]}
+      />,
+    );
+
+    expect(screen.getByText(`Sin tareas en ${label}.`)).toBeTruthy();
+    expect(screen.getByPlaceholderText("Buscar tarea...")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /Fase/ })).toBeTruthy();
+  });
+
+  it("opens Nueva tarea from a department page", () => {
+    capabilities.current = { canCreateActivity: true };
+    render(
+      <ActividadesClient
+        slug="presale"
+        workflow={presaleWorkflow}
+        initialProjects={[]}
+        initialStaff={[]}
+        initialTasks={[]}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "+ Nueva tarea" });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(button);
+    expect(screen.getAllByText("Nueva tarea").length).toBeGreaterThan(0);
+  });
+
+  it("lists the department's tasks grouped by project", () => {
+    capabilities.current = {};
+    render(
+      <ActividadesClient
+        slug="presale"
+        workflow={presaleWorkflow}
+        initialProjects={[]}
+        initialStaff={[]}
+        initialTasks={[makeTask({ id: "a", title: "Levantamiento", workflowId: "wf-presale" })]}
+      />,
+    );
+
+    expect(screen.getByText("Levantamiento")).toBeTruthy();
+    expect(screen.queryByText("Sin tareas en Presale.")).toBeNull();
+  });
+
+  it("still renders the table but blocks creation when the workflow is missing", () => {
+    capabilities.current = { canCreateActivity: true };
+    render(
+      <ActividadesClient slug="presale" workflow={null} initialProjects={[]} initialStaff={[]} initialTasks={[]} />,
+    );
+
+    expect(screen.getByText("Sin tareas en Presale.")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Configuración → Workflows");
+    const button = screen.getByRole("button", { name: "+ Nueva tarea" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 });

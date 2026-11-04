@@ -31,7 +31,7 @@ export default async function TableroPage() {
   return (
     <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
-      <section className="flex-1 overflow-y-auto p-10">
+      <section className="min-w-0 flex-1 overflow-y-auto p-10">
         <Header />
         <TableroClient initialBoard={initialBoard} customStatuses={customStatuses} workflows={workflows} />
       </section>

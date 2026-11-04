@@ -16,6 +16,8 @@ export const PORTAL_RESEND_SECONDS = 60;
 
 export const PORTAL_INVALID_EMAIL_MESSAGE = "Escribe un correo válido.";
 export const PORTAL_SEND_FAILED_MESSAGE = "No pudimos enviar el enlace. Intenta de nuevo.";
+const EMAIL_INPUT_ID = "portal-login-email";
+const EMAIL_ERROR_ID = "portal-login-email-error";
 
 type Step = "request" | "sent";
 
@@ -52,7 +54,10 @@ export default function PortalLoginForm({ linkError, initialEmail = "" }: Portal
   const [step, setStep] = useState<Step>("request");
   const [email, setEmail] = useState(initialEmail);
   const [sentTo, setSentTo] = useState("");
-  const [error, setError] = useState(linkError ? PORTAL_LINK_INVALID_MESSAGE : "");
+  // The expired-link notice is shown from the first render, so it never shifts the form; every other error goes
+  // under the field (or under the resend buttons) in a slot that keeps its height.
+  const [linkNotice, setLinkNotice] = useState(linkError);
+  const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
@@ -72,6 +77,7 @@ export default function PortalLoginForm({ linkError, initialEmail = "" }: Portal
       return;
     }
     setSentTo(address);
+    setLinkNotice(false);
     setStep("sent");
     setSecondsLeft(PORTAL_RESEND_SECONDS);
   };
@@ -103,34 +109,37 @@ export default function PortalLoginForm({ linkError, initialEmail = "" }: Portal
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div aria-live="polite" className="space-y-4">
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-          {step === "sent" ? (
-            <p className="text-sm text-muted-foreground">
-              Enviamos el enlace a <span className="font-medium text-foreground">{sentTo}</span>. Vence en 15 minutos
-              y solo funciona una vez.
-            </p>
-          ) : null}
-        </div>
+        {step === "request" && linkNotice ? (
+          <Alert variant="destructive">
+            <AlertDescription>{PORTAL_LINK_INVALID_MESSAGE}</AlertDescription>
+          </Alert>
+        ) : null}
+        {step === "sent" ? (
+          <p className="text-sm text-muted-foreground">
+            Si tiene acceso, el enlace llegará a <span className="font-medium text-foreground">{sentTo}</span>. Vence
+            en 15 minutos y solo funciona una vez.
+          </p>
+        ) : null}
 
         {step === "request" ? (
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="portal-login-email">Correo</Label>
+              <Label htmlFor={EMAIL_INPUT_ID}>Correo</Label>
               <Input
-                id="portal-login-email"
+                id={EMAIL_INPUT_ID}
                 type="email"
                 inputMode="email"
                 autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="tu@correo.com"
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? EMAIL_ERROR_ID : undefined}
                 className="h-11"
               />
+              <p id={EMAIL_ERROR_ID} aria-live="polite" className="min-h-5 text-sm text-destructive">
+                {error}
+              </p>
             </div>
             <Button type="submit" size="lg" disabled={pending} className="min-h-11 w-full">
               {pending ? "Enviando…" : "Enviar enlace"}
@@ -151,6 +160,9 @@ export default function PortalLoginForm({ linkError, initialEmail = "" }: Portal
             <Button type="button" size="lg" variant="ghost" onClick={changeEmail} className="min-h-11 w-full">
               Cambiar correo
             </Button>
+            <p aria-live="polite" className="min-h-5 text-sm text-destructive">
+              {error}
+            </p>
           </div>
         )}
       </CardContent>

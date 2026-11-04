@@ -14,6 +14,8 @@ type Props = {
   /** Options that can't be added or removed here, with the reason shown as their title. */
   locked?: string[];
   lockedTitle?: string;
+  /** Shown in the chip row when nothing is selected. */
+  emptyText?: string;
 };
 
 export function getPersonInitials(name: string): string {
@@ -68,6 +70,7 @@ export default function TeamMultiSelect({
   onBlur,
   locked = [],
   lockedTitle,
+  emptyText = "Sin integrantes asignados",
 }: Props) {
   const [query, setQuery] = useState("");
   const lockedSet = useMemo(() => new Set(locked), [locked]);
@@ -121,7 +124,7 @@ export default function TeamMultiSelect({
             </Button>
           ))
         ) : (
-          <span className="text-xs text-muted-foreground">Sin integrantes asignados</span>
+          <span className="text-xs text-muted-foreground">{emptyText}</span>
         )}
       </div>
 

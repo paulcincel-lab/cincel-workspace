@@ -60,7 +60,7 @@ type StoredPermissionsState = {
 
 const ACCESS_DESCRIPTIONS: Record<SystemAccessRole, string> = {
   Administrador: "Control total del ERP y configuración protegida del sistema.",
-  Dirección: "Gestion estratégica con administración avanzada de módulos.",
+  Dirección: "Gestión estratégica con administración avanzada de módulos.",
   "Jefe de Taller":
     "Coordinación operativa de diseño y seguimiento de proyectos.",
   "Jefe de Construcción": "Supervisión de obra y coordinación de ejecución.",
@@ -232,7 +232,7 @@ function buildAccessColumns(
     },
     {
       accessorKey: "description",
-      header: "Descripcion",
+      header: "Descripción",
       cell: ({ row }) => (
         <span className="text-muted-foreground">
           {row.original.description}

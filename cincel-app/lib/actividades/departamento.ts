@@ -12,6 +12,12 @@ export interface TemplateItem {
 /**
  * The firm's internal departments — Presale → Diseño → Construcción — each
  * keyed by its URL slug. (Decoración was retired; see migration 0010.)
+ *
+ * The Actividades tabs come from this fixed list, not from Áreas or the
+ * workflows table: each department carries its phase template and its place
+ * in the business flow, which Áreas don't hold. A department page finds its
+ * tasks through the workflow whose `key` equals the slug (created by default
+ * on a fresh install, see scripts/default-workflows.mjs).
  */
 export const DEPARTMENTOS: Array<{
   slug: string;

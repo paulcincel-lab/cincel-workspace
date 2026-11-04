@@ -53,6 +53,21 @@ describe("ProjectFoldersBackfill", () => {
     );
   });
 
+  it("disables the button with a hint when no Shared Drive is configured", () => {
+    render(<ProjectFoldersBackfill sharedDriveConfigured={false} />);
+    const button = screen.getByRole("button", { name: "Crear carpetas faltantes" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(screen.getByText("Configura GOOGLE_SHARED_DRIVE_ID para crear carpetas")).toBeTruthy();
+    fireEvent.click(button);
+    expect(actions.ensureMissingProjectFoldersAction).not.toHaveBeenCalled();
+  });
+
+  it("shows no hint when the Shared Drive is configured", () => {
+    render(<ProjectFoldersBackfill sharedDriveConfigured />);
+    expect((screen.getByRole("button", { name: "Crear carpetas faltantes" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText("Configura GOOGLE_SHARED_DRIVE_ID para crear carpetas")).toBeNull();
+  });
+
   it("shows an error when the action fails", async () => {
     actions.ensureMissingProjectFoldersAction.mockRejectedValue(new Error("FORBIDDEN"));
     render(<ProjectFoldersBackfill />);

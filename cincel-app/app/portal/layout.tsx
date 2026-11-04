@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
 import PortalShell from "@/components/portal/PortalShell";
@@ -6,6 +7,9 @@ import { getPortalUser } from "@/lib/portal/session";
 
 /** Portal cookie name (BE §B.2); only its presence is checked here, `getPortalUser()` validates it. */
 const PORTAL_SESSION_COOKIE = "cincel_portal_session";
+
+/** Every portal page shows its own tab title instead of the staff app's "Cincel Workspace". */
+export const metadata: Metadata = { title: "Portal de clientes · Cincel" };
 
 /**
  * Portal layout (FE §3): its own shell, never the staff sidebar or header.

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Switch } from "@/components/ui/shadcn/switch";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
@@ -158,7 +158,7 @@ export function AreaEditorDrawer({
                 <label className="mb-2 block text-sm font-medium text-foreground">Color</label>
                 <Select
                   items={{
-                    ...(isCreating ? { [AUTO_COLOR_VALUE]: "Automático" } : {}),
+                    [AUTO_COLOR_VALUE]: "Automático",
                     ...Object.fromEntries(AREA_COLOR_SLOTS.map((slot) => [String(slot), areaColorLabel(slot)])),
                     [NEUTRAL_COLOR_VALUE]: areaColorLabel(null),
                   }}
@@ -227,7 +227,14 @@ export function AreaEditorDrawer({
                 <h3 className="text-sm font-semibold text-foreground">Miembros</h3>
                 {lockedMemberNames.length > 0 ? <GoogleManagedBadge /> : null}
               </div>
-              <Badge variant="outline">{memberNames.length} integrantes</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{memberNames.length} integrantes</Badge>
+                {canManage && !isCreating ? (
+                  <Button size="sm" variant="outline" onClick={onSaveMembers}>
+                    Guardar miembros
+                  </Button>
+                ) : null}
+              </div>
             </div>
 
             {isCreating ? (
@@ -247,13 +254,6 @@ export function AreaEditorDrawer({
                     Los colaboradores que entran con Google reciben sus áreas desde Google Workspace.
                   </p>
                 ) : null}
-                {canManage ? (
-                  <div className="flex justify-end">
-                    <Button size="sm" variant="outline" onClick={onSaveMembers}>
-                      Guardar miembros
-                    </Button>
-                  </div>
-                ) : null}
               </div>
             )}
           </section>
@@ -261,7 +261,14 @@ export function AreaEditorDrawer({
           <section className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-foreground">Workflows asignados</h3>
-              <Badge variant="outline">{workflowNames.length} workflows</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{workflowNames.length} workflows</Badge>
+                {canManage && !isCreating ? (
+                  <Button size="sm" variant="outline" onClick={onSaveWorkflows}>
+                    Guardar workflows
+                  </Button>
+                ) : null}
+              </div>
             </div>
 
             {isCreating ? (
@@ -273,24 +280,12 @@ export function AreaEditorDrawer({
                   selected={workflowNames}
                   onChange={onChangeWorkflowNames}
                   placeholder="Buscar workflow..."
+                  emptyText="Sin workflows asignados"
                 />
-                {canManage ? (
-                  <div className="flex justify-end">
-                    <Button size="sm" variant="outline" onClick={onSaveWorkflows}>
-                      Guardar workflows
-                    </Button>
-                  </div>
-                ) : null}
               </div>
             )}
           </section>
         </div>
-
-        <SheetFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cerrar
-          </Button>
-        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

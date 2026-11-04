@@ -16,8 +16,11 @@ export function projectFoldersSummary(counts: EnsureMissingProjectFoldersCounts)
   return parts.join(", ");
 }
 
-/** Configuración → Google, section 3 "Carpetas de proyectos" (FE §2.5). The page is Administrador only. */
-export function ProjectFoldersBackfill() {
+/**
+ * Configuración → Google, section 3 "Carpetas de proyectos" (FE §2.5). The page is Administrador only.
+ * Without a Shared Drive there is nowhere to create folders, so the button stays disabled with a hint.
+ */
+export function ProjectFoldersBackfill({ sharedDriveConfigured = true }: { sharedDriveConfigured?: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [counts, setCounts] = useState<EnsureMissingProjectFoldersCounts | null>(null);
@@ -45,9 +48,21 @@ export function ProjectFoldersBackfill() {
         </p>
       </div>
 
-      <Button type="button" onClick={run} disabled={isPending}>
-        {isPending ? "Creando carpetas…" : "Crear carpetas faltantes"}
-      </Button>
+      <div className="space-y-2">
+        <Button
+          type="button"
+          onClick={run}
+          disabled={isPending || !sharedDriveConfigured}
+          aria-describedby={sharedDriveConfigured ? undefined : "project-folders-shared-drive-hint"}
+        >
+          {isPending ? "Creando carpetas…" : "Crear carpetas faltantes"}
+        </Button>
+        {sharedDriveConfigured ? null : (
+          <p id="project-folders-shared-drive-hint" className="text-sm text-muted-foreground">
+            Configura GOOGLE_SHARED_DRIVE_ID para crear carpetas
+          </p>
+        )}
+      </div>
 
       {error ? (
         <Alert variant="destructive">

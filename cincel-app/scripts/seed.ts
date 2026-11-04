@@ -22,6 +22,7 @@ import postgres from "postgres";
 import { defaultAreaColorSlot } from "../lib/areas/area-color";
 import { teamMembers as roster } from "../lib/data/team";
 import * as schema from "../lib/db/schema";
+import { DEFAULT_WORKFLOWS } from "./default-workflows.mjs";
 
 const connectionString =
   process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
@@ -41,11 +42,8 @@ async function hashPassword(password: string) {
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "paul@cincel.mx";
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "CincelAdmin2026!";
 
-const WORKFLOWS = [
-  { key: "presale", name: "Presale", area: "Presale" },
-  { key: "diseno", name: "Diseño", area: "Diseño" },
-  { key: "construccion", name: "Construcción", area: "Construcción" },
-] as const;
+// Shared with scripts/migrate.mjs, which creates them on a fresh install.
+const WORKFLOWS = DEFAULT_WORKFLOWS;
 
 const orNull = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
 

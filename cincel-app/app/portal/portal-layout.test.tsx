@@ -19,12 +19,16 @@ vi.mock("next/headers", () => ({
 vi.mock("next/navigation", () => ({ notFound }));
 vi.mock("@/lib/portal/session", () => ({ getPortalUser }));
 
-import PortalLayout from "./layout";
+import PortalLayout, { metadata } from "./layout";
 import PortalNotFound from "./not-found";
 import PortalError from "./error";
 import PortalMissingPage from "./[...missing]/page";
 
 describe("portal layout", () => {
+  it("sets its own tab title", () => {
+    expect(metadata.title).toBe("Portal de clientes · Cincel");
+  });
+
   beforeEach(() => {
     state.cookie = undefined;
     getPortalUser.mockReset();

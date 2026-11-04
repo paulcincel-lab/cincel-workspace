@@ -36,6 +36,7 @@ import {
 } from "@/lib/google/drive-url";
 import DriveBrowser, { type DriveBrowserEntry } from "@/components/recursos/DriveBrowser";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
+import { showsPersonSelector } from "@/components/recursos/person-selector";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 import type { DriveFileMeta, Staff } from "@/lib/types/core";
 import type {
@@ -73,7 +74,7 @@ const EMPRESA_SECTION_NAV = [
   { label: "Manual de la empresa", path: "/recursos/empresa/manual-de-la-empresa" },
   { label: "Imagen de la empresa", path: "/recursos/empresa/imagen-de-la-empresa" },
   { label: "RFC", path: "/recursos/empresa/rfc" },
-  { label: "Politicas de la empresa", path: "/recursos/empresa/politicas-de-la-empresa" },
+  { label: "Políticas de la empresa", path: "/recursos/empresa/politicas-de-la-empresa" },
 ] as const;
 
 const SECTION_LABEL: Record<ResourceSection, string> = {
@@ -434,6 +435,8 @@ export default function ResourcesWorkspace({
         // visible to the staff member currently selected in the picker.
         // Links with no personalFor are shared/general and always show.
         if (!link.personalFor) return true;
+        // Company sections have no person selector: their documents are shared.
+        if (!showsPersonSelector(mode)) return true;
         return link.personalFor.id === effectiveSelectedStaffId;
       })
       .filter((link) => {
@@ -671,12 +674,12 @@ export default function ResourcesWorkspace({
       })
     : false;
   const pagePreviewUnavailableReason = !pagePreviewSource
-    ? `No hay recursos en ${pageLabel.toLowerCase()}.`
+    ? `No hay recursos en ${pageLabel}.`
     : pagePreviewUrl
       ? null
       : pagePreviewSource.linkType === "web"
         ? "El enlace seleccionado es tipo web y no admite vista previa embebida."
-        : "No se pudo generar vista previa. Verifica que sea un enlace valido y compartido de Google Drive o Google Docs.";
+        : "No se pudo generar vista previa. Verifica que sea un enlace válido y compartido de Google Drive o Google Docs.";
 
   const openPageCreator = () => {
     openCreator({
@@ -767,18 +770,20 @@ export default function ResourcesWorkspace({
                   className="w-full sm:w-72"
                 />
 
-                <Select
-                  items={Object.fromEntries(activeStaff.map((m) => [m.id, m.name]))}
-                  value={effectiveSelectedStaffId ?? ""}
-                  onValueChange={(value) => setSelectedStaffId(value as string)}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {activeStaff.map((member) => (
-                      <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {showsPersonSelector(mode) ? (
+                  <Select
+                    items={Object.fromEntries(activeStaff.map((m) => [m.id, m.name]))}
+                    value={effectiveSelectedStaffId ?? ""}
+                    onValueChange={(value) => setSelectedStaffId(value as string)}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {activeStaff.map((member) => (
+                        <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
 
                 <Button
                   disabled={!canCreateInCurrentSection}
@@ -791,7 +796,7 @@ export default function ResourcesWorkspace({
                   })}
                   title={canCreateInCurrentSection ? "" : "No tienes permiso para agregar recursos en esta sección"}
                 >
-                  + Nuevo acceso
+                  + Agregar recurso
                 </Button>
               </div>
             </div>
@@ -953,7 +958,7 @@ export default function ResourcesWorkspace({
                       </span>
                     ) : null}
                     <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
-                      {pageDocuments.length} documentos
+                      {pageDocuments.length} {pageDocuments.length === 1 ? "documento" : "documentos"}
                     </span>
                     {pageDocuments.length > 0 ? (
                       <>

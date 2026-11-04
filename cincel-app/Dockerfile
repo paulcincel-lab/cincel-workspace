@@ -33,6 +33,7 @@ COPY --from=build --chown=nextuser:nextuser /app/node_modules/postgres ./node_mo
 COPY --from=build --chown=nextuser:nextuser /app/lib/db/migrations ./lib/db/migrations
 COPY --from=build --chown=nextuser:nextuser /app/scripts/migrate.mjs ./scripts/migrate.mjs
 COPY --from=build --chown=nextuser:nextuser /app/scripts/bootstrap-admin.mjs ./scripts/bootstrap-admin.mjs
+COPY --from=build --chown=nextuser:nextuser /app/scripts/default-workflows.mjs ./scripts/default-workflows.mjs
 COPY kcd.yml /kcd.yml
 ARG KCD_DIGEST KCD_CONTENT GIT_SHA
 LABEL dev.keter.kcd.schema="1" \
