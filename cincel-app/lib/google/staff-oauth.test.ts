@@ -17,6 +17,7 @@ import {
   clearStaffOauthCookie,
   createPkcePair,
   exchangeStaffCode,
+  hasGrantedScope,
   parseStaffOauthScope,
   refreshStaffAccessToken,
   staffOauthConfig,
@@ -81,6 +82,16 @@ describe("parseStaffOauthScope", () => {
     expect(parseStaffOauthScope("calendar")).toBe("calendar");
     expect(parseStaffOauthScope("admin")).toBeNull();
     expect(parseStaffOauthScope(null)).toBeNull();
+  });
+});
+
+describe("hasGrantedScope", () => {
+  it("looks for the incremental grant's Google scope in the granted list", () => {
+    const drive = "https://www.googleapis.com/auth/drive.readonly";
+    expect(hasGrantedScope(`openid email ${drive}`, "drive")).toBe(true);
+    expect(hasGrantedScope(`openid email ${drive}`, "calendar")).toBe(false);
+    expect(hasGrantedScope("", "drive")).toBe(false);
+    expect(hasGrantedScope(null, "drive")).toBe(false);
   });
 });
 

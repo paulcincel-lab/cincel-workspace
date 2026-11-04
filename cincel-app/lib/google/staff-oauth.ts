@@ -42,6 +42,12 @@ export function parseStaffOauthScope(value: unknown): StaffOauthScope | null {
   return value === "drive" || value === "calendar" ? value : null;
 }
 
+/** Whether a space-separated granted scope string includes an incremental grant's scope. */
+export function hasGrantedScope(scope: string | null | undefined, wanted: StaffOauthScope): boolean {
+  if (!scope) return false;
+  return scope.split(/\s+/).includes(STAFF_OAUTH_EXTRA_SCOPES[wanted]);
+}
+
 export type StaffOauthConfig = {
   clientId: string;
   clientSecret: string;
