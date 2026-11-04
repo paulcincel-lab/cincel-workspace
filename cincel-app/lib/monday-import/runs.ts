@@ -37,7 +37,10 @@ type Env = Record<string, string | undefined>;
 
 /** Where run folders live. */
 export function importRoot(env: Env = process.env): string {
-  return resolve(env.MONDAY_IMPORT_DIR?.trim() || join(process.cwd(), "exports", "wizard"));
+  const configured = env.MONDAY_IMPORT_DIR?.trim();
+  // Runtime folders, not app files: keep them out of the standalone output trace.
+  if (configured) return resolve(/*turbopackIgnore: true*/ configured);
+  return join(/*turbopackIgnore: true*/ process.cwd(), "exports", "wizard");
 }
 
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,7 +50,7 @@ export const isRunId = (value: unknown): value is string => typeof value === "st
 /** The run's export folder; throws on anything but a run id (no path tricks). */
 export function runDir(runId: string, env: Env = process.env): string {
   if (!isRunId(runId)) throw new Error("invalid run id");
-  return join(importRoot(env), runId.toLowerCase());
+  return join(/*turbopackIgnore: true*/ importRoot(env), runId.toLowerCase());
 }
 
 /** What wizard.json holds. */
