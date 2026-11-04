@@ -35,6 +35,7 @@ import { completeOnboardingAction } from "@/lib/actions/onboarding-actions";
 import {
   MONDAY_IMPORT_STEPS,
   canAdvance,
+  canJumpTo,
   clampOptions,
   initialStep,
   isJobRunning,
@@ -69,18 +70,43 @@ export type MondayImportWizardProps = {
   loadError: string | null;
 };
 
-function StepHeader({ current }: { current: MondayImportStep }) {
+/** The step chips; a finished step opens on click when going back is allowed (#679). */
+function StepHeader({
+  current,
+  canJump,
+  onJump,
+}: {
+  current: MondayImportStep;
+  canJump: (step: MondayImportStep) => boolean;
+  onJump: (step: MondayImportStep) => void;
+}) {
   const currentIndex = stepIndex(current);
   return (
     <ol className="flex flex-wrap gap-2" aria-label="Pasos">
-      {MONDAY_IMPORT_STEPS.map((step, index) => (
-        <li key={step.id} aria-current={index === currentIndex ? "step" : undefined}>
-          <Badge variant={index === currentIndex ? "default" : index < currentIndex ? "secondary" : "outline"}>
+      {MONDAY_IMPORT_STEPS.map((step, index) => {
+        const content = (
+          <>
             {index < currentIndex ? <Check data-icon="inline-start" aria-hidden="true" /> : null}
             {index + 1}. {step.label}
-          </Badge>
-        </li>
-      ))}
+          </>
+        );
+        return (
+          <li key={step.id} aria-current={index === currentIndex ? "step" : undefined}>
+            {canJump(step.id) ? (
+              <Badge
+                variant="secondary"
+                render={<button type="button" aria-label={`Volver a ${step.label}`} onClick={() => onJump(step.id)} />}
+              >
+                {content}
+              </Badge>
+            ) : (
+              <Badge variant={index === currentIndex ? "default" : index < currentIndex ? "secondary" : "outline"}>
+                {content}
+              </Badge>
+            )}
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -131,6 +157,8 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
   const [issues, setIssues] = useState<string[]>([]);
   const [error, setError] = useState(loadError ?? "");
   const [notice, setNotice] = useState("");
+  /** Board Equivalencias opens on ("Corregir" in Vista previa). */
+  const [focusBoardId, setFocusBoardId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const fileInput = useRef<HTMLInputElement>(null);
   const runId = run?.runId ?? null;
@@ -259,7 +287,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
     return result.issues;
   }
 
-  function goTo(target: MondayImportStep) {
+  function goTo(target: MondayImportStep, boardId: string | null = null) {
     setError("");
     setNotice("");
     startTransition(async () => {
@@ -281,6 +309,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
             return;
           }
         }
+        setFocusBoardId(boardId);
         setStep(target);
       } catch {
         setError(UNEXPECTED);
@@ -464,7 +493,11 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
   return (
     <Card className="mx-auto w-full max-w-5xl">
       <CardHeader>
-        <StepHeader current={step} />
+        <StepHeader
+          current={step}
+          canJump={(target) => !isPending && canJumpTo(target, step, state)}
+          onJump={(target) => goTo(target)}
+        />
         <CardTitle className="pt-2">{current.label}</CardTitle>
         <CardDescription>{current.description}</CardDescription>
         {mapping && !finished ? (
@@ -526,6 +559,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
             mapping={mapping}
             source={source}
             choices={choices}
+            initialBoardId={focusBoardId}
             onMappingChange={editMapping}
             onStatusCreated={(status) =>
               setChoices((previous) => (previous ? { ...previous, statuses: [...previous.statuses, status] } : previous))
@@ -539,7 +573,13 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
           <OptionsStep mapping={mapping} info={optionsInfo} error={optionsError} onMappingChange={editMapping} />
         ) : null}
         {step === "vista_previa" ? (
-          <PreviewStep preview={preview} error={previewError} isPending={isPending} onRefresh={refreshPreview} />
+          <PreviewStep
+            preview={preview}
+            error={previewError}
+            isPending={isPending}
+            onRefresh={refreshPreview}
+            onFix={(target, boardId) => goTo(target, boardId)}
+          />
         ) : null}
         {step === "importar" ? (
           <ImportStep

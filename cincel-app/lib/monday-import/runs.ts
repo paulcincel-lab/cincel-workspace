@@ -191,10 +191,18 @@ export function jobView(run: StoredRun, kind: MondayImportJobKind): MondayImport
   return stored.status === "running" ? { ...stored, status: "interrupted" } : stored;
 }
 
-/** What a job body gets: a CLI io that feeds the log, and progress updates. */
+/** What a job body gets: a CLI io that feeds the log, progress updates and Spanish notes for the Registro. */
 export interface JobContext {
   io: CliIo;
+  /** Also notes the label (with "n de m") in the Registro when it changes. */
   progress: (done: number, total: number | null, label: string) => void;
+  /** One Spanish line for the Registro on screen; never a server path. */
+  note: (text: string) => void;
+}
+
+/** The Registro line of a progress update. */
+export function progressNote(done: number, total: number | null, label: string): string {
+  return total && total > 1 ? `${label} (${done} de ${total})` : label;
 }
 
 /**
@@ -217,6 +225,7 @@ export function startJob(
     finishedAt: null,
     progress: { done: 0, total: null, label },
     log: [],
+    notes: [label],
     error: null,
   };
   let lastSaved = 0;
@@ -240,12 +249,20 @@ export function startJob(
     if (job.log.length > JOB_LOG_LIMIT) job.log.splice(0, job.log.length - JOB_LOG_LIMIT);
     void persist();
   };
+  const note = (text: string) => {
+    const notes = (job.notes ??= []);
+    if (notes[notes.length - 1] === text) return;
+    notes.push(text);
+    if (notes.length > JOB_LOG_LIMIT) notes.splice(0, notes.length - JOB_LOG_LIMIT);
+    void persist();
+  };
   const ctx: JobContext = {
     io: { stdout: push, stderr: push },
     progress: (done, total, progressLabel) => {
       job.progress = { done, total, label: progressLabel };
-      void persist();
+      note(progressNote(done, total, progressLabel));
     },
+    note,
   };
   const promise = (async () => {
     await persist(true);
@@ -257,6 +274,7 @@ export function startJob(
     }
     job.status = error ? "failed" : "succeeded";
     job.error = error;
+    note(error ? "No se terminó." : "Terminado.");
     job.finishedAt = new Date().toISOString();
     await persist(true);
   })();

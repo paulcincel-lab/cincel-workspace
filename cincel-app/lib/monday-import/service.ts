@@ -394,7 +394,7 @@ export async function startExport(
       runId,
       "export",
       "Exportando tableros",
-      async ({ io, progress }) => {
+      async ({ io, progress, note }) => {
         let code: number;
         try {
           code = await runExport(
@@ -417,7 +417,7 @@ export async function startExport(
           r.step = "tableros";
         }, env);
         await draftRunMapping(latest, deps);
-        io.stdout("Equivalencias preparadas a partir de la exportación.");
+        note("Equivalencias preparadas a partir de la exportación.");
         progress(boardIds.length, boardIds.length, "Exportación terminada");
         return null;
       },

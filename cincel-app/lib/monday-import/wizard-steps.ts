@@ -143,8 +143,11 @@ export function encodeClient(client: BoardDraft["client"]): string {
   return "new";
 }
 
-/** `new` takes the board name and is an empresa until the admin says otherwise. */
-export function decodeClient(value: string, newName: string): ClientRef | null {
+/**
+ * `new` is an empresa until the admin says otherwise. Its name starts empty for the board's client (the board name is
+ * rarely the client's, #679); a group's client, which has no name field, takes the group title.
+ */
+export function decodeClient(value: string, newName = ""): ClientRef | null {
   if (value.startsWith("contact:")) return { kind: "contact", contactId: value.slice("contact:".length) };
   if (value.startsWith("relation:")) return { kind: "relation_column", columnId: value.slice("relation:".length) };
   if (value === "new") return { kind: "new", name: newName, contactKind: "empresa" };
@@ -343,6 +346,41 @@ export function clampOptions(mapping: MappingInput, info: MondayImportOptionsInf
   };
   if ((!disabled.updates || !current.includeUpdates) && (!disabled.files || !current.includeFiles)) return mapping;
   return setOptions(mapping, current, disabled);
+}
+
+// --- Clients (#679) -----------------------------------------------------------------------------------------------
+
+const PROJECT_STRATEGIES = new Set<BoardStrategy>(["board_as_project", "group_as_project", "item_as_project"]);
+
+/** Whether the board's strategy creates projects, which need a client. */
+export function needsClient(strategy: BoardStrategy): boolean {
+  return PROJECT_STRATEGIES.has(strategy);
+}
+
+/**
+ * Whether a board's projects are left without a client: a project strategy with no Cliente, and on
+ * `group_as_project` some group without its own client either (groups fall back to the board's).
+ */
+export function lacksClient(board: BoardDraft, source?: MondayBoardSource): boolean {
+  if (!needsClient(board.strategy) || board.client) return false;
+  if (board.strategy !== "group_as_project") return true;
+  const groups = source?.groups ?? [];
+  return groups.length === 0 || groups.some((group) => !board.groupClients?.[group.id]);
+}
+
+/** The boards whose projects have no client yet, for the warnings on Equivalencias. */
+export function boardsWithoutClient(mapping: MappingInput, source: MondayExportSource | null): BoardDraft[] {
+  return mapping.boards.filter((board) =>
+    lacksClient(board, source?.boards.find((candidate) => candidate.id === board.mondayBoardId)),
+  );
+}
+
+/** Clickable step chips: the finished ones, while nothing runs and the import isn't applied yet (#679). */
+export function canJumpTo(target: MondayImportStep, current: MondayImportStep, state: WizardState): boolean {
+  if (stepIndex(target) >= stepIndex(current)) return false;
+  const run = state.run;
+  if (!run || run.batchId) return false;
+  return !Object.values(run.jobs).some((job) => isJobRunning(job));
 }
 
 // --- Validation and Next ---------------------------------------------------------------------------------------

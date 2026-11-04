@@ -5,7 +5,13 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
 import { countLabel, PREVIEW_COUNT_LABELS, STRATEGY_OPTIONS } from "@/lib/monday-import/wizard-steps";
-import type { MondayPreview, MondayPreviewCounts, MondayPreviewSample } from "@/lib/types/monday-import";
+import type {
+  MondayImportStep,
+  MondayPreview,
+  MondayPreviewCounts,
+  MondayPreviewIssue,
+  MondayPreviewSample,
+} from "@/lib/types/monday-import";
 
 const ENTITY_LABELS: Record<MondayPreviewSample["entity"], string> = {
   proyecto: "Proyecto",
@@ -48,17 +54,42 @@ function sampleDetails(sample: MondayPreviewSample): string {
   return parts.filter(Boolean).join(" · ");
 }
 
+/** One problem: the board and item it is about, the Spanish message and a "Corregir" link to where it gets fixed. */
+function IssueItem({
+  issue,
+  isPending,
+  onFix,
+}: {
+  issue: MondayPreviewIssue;
+  isPending: boolean;
+  onFix: (step: MondayImportStep, boardId: string | null) => void;
+}) {
+  const where = [issue.boardName, issue.itemName].filter(Boolean).join(" › ");
+  return (
+    <li className="break-words">
+      {where ? <span className="font-medium">{where}: </span> : null}
+      {issue.message}{" "}
+      <Button variant="link" size="sm" disabled={isPending} onClick={() => onFix(issue.fixStep, issue.boardId)}>
+        Corregir
+      </Button>
+    </li>
+  );
+}
+
 /** Paso 6: the plan dry run. Next (Importar) stays disabled while a blocking issue is left. */
 export function PreviewStep({
   preview,
   error,
   isPending,
   onRefresh,
+  onFix,
 }: {
   preview: MondayPreview | null;
   error: string;
   isPending: boolean;
   onRefresh: () => void;
+  /** Opens the step where an issue gets fixed, on its board. */
+  onFix: (step: MondayImportStep, boardId: string | null) => void;
 }) {
   const blocking = preview?.issues.filter((issue) => issue.blocking) ?? [];
   const warnings = preview?.issues.filter((issue) => !issue.blocking) ?? [];
@@ -85,7 +116,7 @@ export function PreviewStep({
               <AlertDescription>
                 <ul className="list-disc space-y-1 pl-4">
                   {blocking.map((issue, index) => (
-                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+                    <IssueItem key={`${issue.code}-${index}`} issue={issue} isPending={isPending} onFix={onFix} />
                   ))}
                 </ul>
               </AlertDescription>
@@ -98,7 +129,7 @@ export function PreviewStep({
               <AlertDescription>
                 <ul className="list-disc space-y-1 pl-4">
                   {warnings.map((issue, index) => (
-                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+                    <IssueItem key={`${issue.code}-${index}`} issue={issue} isPending={isPending} onFix={onFix} />
                   ))}
                 </ul>
               </AlertDescription>
