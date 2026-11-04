@@ -286,6 +286,15 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
           <section className="rounded-2xl border border-border bg-card p-8 shadow-sm text-sm text-muted-foreground">
             No tienes permiso para ver los workflows.
           </section>
+        ) : workflows.length === 0 ? (
+          <section className="rounded-2xl border border-border bg-card p-8 shadow-sm text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">Todavía no hay workflows.</p>
+            <p className="mt-2">
+              Los workflows predeterminados (Presale, Diseño y Construcción) se crean al desplegar la aplicación.
+              Si esta lista sigue vacía, pide a soporte que vuelva a ejecutar la migración de la base de datos;
+              sin un workflow no se pueden crear proyectos ni tareas.
+            </p>
+          </section>
         ) : (
           <>
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
