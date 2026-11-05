@@ -211,7 +211,7 @@ Ver [`.env.example`](./.env.example). Las relevantes:
 | Variable | Uso | Default |
 |---|---|---|
 | `DATABASE_URL` | Conexión Postgres — `lib/db/client.ts`, drizzle-kit, `scripts/seed.ts` | `postgres://cincel:cincel@localhost:5432/cincel` |
-| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Credencial admin que crea `npm run db:seed` | `paul@cincel.mx` / `CincelAdmin2026!` |
+| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Credencial admin que crea `npm run db:seed`. Sin `SEED_ADMIN_PASSWORD`, el seed genera una contraseña aleatoria y la imprime | `paul@cincel.mx` / `<tu-contraseña>` |
 | `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | Administrador con contraseña que el job de migración crea o actualiza en cada despliegue (sin seed) | vacío |
 | `BOOTSTRAP_ADMIN_NAME` | Nombre visible del administrador inicial; una fila existente solo se renombra mientras su nombre sea el email | `Administrador` |
 | `CINCEL_ADMIN_EMAILS` | Emails con escalación automática a Administrador (solo servidor) | vacío |
@@ -225,7 +225,7 @@ npm run start            # sirve el build de producción
 npm run lint             # eslint
 npm run test:unit        # vitest (permisos por rol, auth, reglas de negocio de tareas, authz de repos)
 npm run test:unit:watch  # vitest en modo watch
-npm run test:e2e         # playwright (levanta el server automáticamente; requiere db migrada + seed)
+npm run test:e2e         # playwright (levanta el server automáticamente; requiere db migrada + seed y E2E_ADMIN_PASSWORD = SEED_ADMIN_PASSWORD)
 npm run test:e2e:ui      # playwright con UI interactiva
 npm run db:generate      # drizzle-kit generate — nueva migración desde el schema
 npm run db:migrate       # drizzle-kit migrate — aplica migraciones pendientes

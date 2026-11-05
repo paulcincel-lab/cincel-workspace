@@ -7,7 +7,8 @@ import type { Page } from "@playwright/test";
  * `core.sessions`, scrypt, opaque cookie — see `lib/auth/session.ts` and
  * `lib/auth/auth-actions.ts`). The admin credential is created by
  * `npm run db:seed` (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`), which CI runs
- * before starting the web server.
+ * before starting the web server. `E2E_ADMIN_PASSWORD` must hold the same value
+ * as `SEED_ADMIN_PASSWORD`; there is no built-in default.
  *
  * `loginAsAdmin` therefore exercises the real end-to-end flow: the login page
  * renders, the form submits to the `loginAction` Server Action, which verifies
@@ -19,7 +20,17 @@ import type { Page } from "@playwright/test";
  */
 
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "paul@cincel.mx";
-const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "CincelAdmin2026!";
+
+/** The seeded admin's password, from E2E_ADMIN_PASSWORD. Throws when it is unset. */
+export function e2eAdminPassword(env: Record<string, string | undefined> = process.env): string {
+  const password = env.E2E_ADMIN_PASSWORD?.trim();
+  if (!password) {
+    throw new Error(
+      "E2E_ADMIN_PASSWORD is not set. Set it to the SEED_ADMIN_PASSWORD used for `npm run db:seed`."
+    );
+  }
+  return password;
+}
 
 /**
  * Retained for backwards compatibility with existing specs. Auth fixtures now
@@ -35,7 +46,7 @@ export async function loginAsAdmin(page: Page, baseUrl: string): Promise<void> {
   // hydrated before we fill the controlled inputs.
   await page.goto(`${baseUrl}/login`, { waitUntil: "load" });
   await page.getByLabel("Correo institucional").fill(ADMIN_EMAIL);
-  await page.locator('input[type="password"]').first().fill(ADMIN_PASSWORD);
+  await page.locator('input[type="password"]').first().fill(e2eAdminPassword());
   await page.getByRole("button", { name: "Entrar" }).click();
   await page.waitForURL(
     /\/dashboard|\/directorio|\/proyectos|\/tareas|\/equipo|\/change-password/,
