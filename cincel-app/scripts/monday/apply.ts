@@ -9,7 +9,8 @@
  * 3. Otherwise the plan runs (scripts/monday/plan.ts) and any blocking issue
  *    aborts before anything is written.
  * 4. Phase A, one transaction: `import_batches (applying)` → contacts
- *    (+ `contact_people`, `provider_profiles`) → projects (+ the board
+ *    (+ `contact_people`, `provider_profiles`) → áreas for tasks' monday
+ *    values (+ `area_workflows`, #686) → projects (+ the board
  *    workflow's `project_stages` row) → `project_schedules` → tasks →
  *    child tasks → checklist → `task_support` → `task_dependencies` →
  *    `history_events` → `schedule_tasks`; `import_files (pending)`; an `import_refs` row for
@@ -32,6 +33,8 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 
 import {
+  areas,
+  areaWorkflows,
   contactPeople,
   contacts,
   historyEvents,
@@ -166,6 +169,8 @@ export interface PhaseACounts {
   comments: number;
   cronogramaRows: number;
   files: number;
+  /** Áreas created for tasks' monday values (#686). */
+  areas: number;
 }
 
 function emptyCounts(): PhaseACounts {
@@ -183,6 +188,7 @@ function emptyCounts(): PhaseACounts {
     comments: 0,
     cronogramaRows: 0,
     files: 0,
+    areas: 0,
   };
 }
 
@@ -362,6 +368,25 @@ export async function writePhaseA(
       }),
     )
   ).length;
+
+  // --- áreas for tasks' monday values (+ their area_workflows), #686 -----------
+  // The área's import ref names its workflows (`workflowIds`), so rollback owns those links.
+  const newAreas = await step(
+    "area",
+    result.areas,
+    areas,
+    (a) => ({ name: a.name }),
+    byId,
+    (a) => ({ workflowIds: a.workflowIds }),
+  );
+  counts.areas = newAreas.length;
+  const areaLinks = newAreas.flatMap((a) => {
+    const areaId = idsOf("area").get(a.externalId)!;
+    return a.workflowIds.map((workflowId) => ({ areaId, workflowId }));
+  });
+  await insertAll(areaLinks, (chunk) =>
+    tx.insert(areaWorkflows).values(chunk as (typeof areaLinks)[number][]).returning(),
+  );
 
   // --- projects (+ their stage), project_schedules -------------------------
   const newProjects = await step(
@@ -621,7 +646,7 @@ class Blocked extends Error {
 }
 
 function formatCounts(c: PhaseACounts): string {
-  return `${c.contacts} contacts, ${c.contactPeople} contact people, ${c.providerProfiles} provider profiles, ${c.projects} projects, ${c.projectSchedules} cronogramas, ${c.tasks} tasks, ${c.childTasks} child tasks, ${c.checklistItems} checklist items, ${c.taskSupport} task support rows, ${c.dependencies} dependencies, ${c.comments} comments, ${c.cronogramaRows} cronograma rows, ${c.files} files pending upload`;
+  return `${c.contacts} contacts, ${c.contactPeople} contact people, ${c.providerProfiles} provider profiles, ${c.projects} projects, ${c.projectSchedules} cronogramas, ${c.tasks} tasks, ${c.childTasks} child tasks, ${c.checklistItems} checklist items, ${c.taskSupport} task support rows, ${c.dependencies} dependencies, ${c.comments} comments, ${c.cronogramaRows} cronograma rows, ${c.files} files pending upload${c.areas ? `, ${c.areas} áreas` : ""}`;
 }
 
 /** Builds the `apply` handler; tests pass their own database, Drive and phase B. */

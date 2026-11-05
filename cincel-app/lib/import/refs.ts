@@ -34,6 +34,8 @@ export const IMPORT_ENTITIES = [
   "task_link",
   "project_link",
   "drive_file",
+  // Áreas created for tasks' monday values (#686); `data.workflowIds` names the area_workflows rows it owns.
+  "area",
 ] as const;
 
 export type ImportEntity = (typeof IMPORT_ENTITIES)[number];

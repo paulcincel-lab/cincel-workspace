@@ -33,6 +33,8 @@ export interface PreviewNames {
   staff: Record<string, { name: string }>;
   /** Workflow names for the project rows; a missing name shows as no workflow. */
   workflows?: Record<string, { name: string }>;
+  /** Área names for the task rows (#686). */
+  areas?: Record<string, { name: string }>;
 }
 
 export function toPreviewCounts(c: Record<CountKey, number>): MondayPreviewCounts {
@@ -118,6 +120,17 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     contactType: null,
   } satisfies Omit<MondayPreviewSample["cincel"], "title">;
 
+  const boardAreaOf = new Map(plan.translation?.mapping.boards.map((b) => [b.mondayBoardId, b.areaId ?? null]) ?? []);
+  /** The task's área (#686): its own value's, else the board's; a new one by name. */
+  const taskArea = (t: PlannedTask): string | null => {
+    if (t.area?.status === "mapped") {
+      if (t.area.newArea) return `${t.area.newArea} (nueva)`;
+      return t.area.areaId ? (names.areas?.[t.area.areaId]?.name ?? null) : null;
+    }
+    const boardArea = boardAreaOf.get(t.source.boardId);
+    return boardArea ? (names.areas?.[boardArea]?.name ?? null) : null;
+  };
+
   const taskSample = (t: PlannedTask): MondayPreviewSample => ({
     mondayItemId: t.externalId,
     mondayName: itemNames.get(t.externalId) ?? t.title,
@@ -132,6 +145,10 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
       priority: PRIORITY_LABELS[t.priority] ?? t.priority,
       manager: t.managerId ? (names.staff[t.managerId]?.name ?? null) : null,
       phase: t.phase,
+      // The task's área and workflow as apply writes them (#686).
+      workflow: t.workflowId ? (names.workflows?.[t.workflowId]?.name ?? null) : null,
+      area: taskArea(t),
+      areaUnmapped: t.area?.status === "unmapped",
       commitmentDate: t.commitmentDate,
       deliveryDate: t.deliveryDate,
       kind: t.kind,

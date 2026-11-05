@@ -96,6 +96,7 @@ export const ENTITY_TABLES: Record<
   task_link: { table: "task_links", key: "id", hasUpdatedAt: true },
   project_link: { table: "project_links", key: "id", hasUpdatedAt: true },
   drive_file: { table: "drive_files", key: "id", hasUpdatedAt: true },
+  area: { table: "areas", key: "id", hasUpdatedAt: true },
 };
 
 /** How a pointing row is recognized as the batch's own. */
@@ -106,6 +107,8 @@ type Owner =
   | "import_files"
   /** A stage apply wrote: its workflow is the batch project's `stageWorkflowId` or in its `stageWorkflowIds` (#687). */
   | "project_stage"
+  /** An `area_workflows` link apply wrote: its workflow is in the batch área's `workflowIds` (#686). */
+  | "area_workflow"
   /** It can't belong to a batch: every such row blocks. */
   | null;
 
@@ -352,6 +355,28 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     owner: null,
   },
   // Into task_checklist_items is task_attachments.checklist_item_id, above.
+  // Into áreas created for tasks' monday values (#686)
+  {
+    table: "area_workflows",
+    column: "area_id",
+    target: "area",
+    idSql: "c.area_id || ':' || c.workflow_id",
+    owner: "area_workflow",
+  },
+  {
+    table: "area_members",
+    column: "area_id",
+    target: "area",
+    idSql: "c.area_id || ':' || c.staff_id",
+    owner: null,
+  },
+  {
+    table: "workspace_group_mappings",
+    column: "area_id",
+    target: "area",
+    idSql: "c.id",
+    owner: null,
+  },
 ];
 
 /** The batch rows of one entity, as a subquery over `import_refs` for `exists`. */
@@ -366,6 +391,9 @@ function batchRef(
 function ownedBy(batchId: string, owner: Owner): SQL | null {
   if (owner === null) return null;
   if (owner === "import_files") return sql`c.batch_id = ${batchId}`;
+  if (owner === "area_workflow") {
+    return sql`exists (select 1 from core.import_refs s where s.batch_id = ${batchId} and s.entity = 'area' and s.row_id = c.area_id and s.data->'workflowIds' @> to_jsonb(c.workflow_id::text))`;
+  }
   if (owner === "project_stage") {
     return sql`exists (select 1 from core.import_refs s where s.batch_id = ${batchId} and s.entity = 'project' and s.row_id = c.project_id and (s.data->>'stageWorkflowId' = c.workflow_id::text or s.data->'stageWorkflowIds' @> to_jsonb(c.workflow_id::text)))`;
   }
@@ -645,6 +673,12 @@ export const DELETE_STEPS: readonly DeleteStep[] = [
       sql`delete from core.project_stages t where exists (select 1 from core.import_refs r where r.batch_id = ${batchId} and r.entity = 'project' and r.row_id = t.project_id and (r.data->>'stageWorkflowId' = t.workflow_id::text or r.data->'stageWorkflowIds' @> to_jsonb(t.workflow_id::text)))`,
   },
   deleteRefs("project"),
+  {
+    label: "area_workflows",
+    query: (batchId) =>
+      sql`delete from core.area_workflows t where exists (select 1 from core.import_refs r where r.batch_id = ${batchId} and r.entity = 'area' and r.row_id = t.area_id and r.data->'workflowIds' @> to_jsonb(t.workflow_id::text))`,
+  },
+  deleteRefs("area"),
   deleteRefs("provider_profile"),
   deleteRefs("contact_person"),
   deleteRefs("contact"),
@@ -689,6 +723,9 @@ export async function deleteBatchRows(
       ),
     ),
   });
+  // Staff "Crear integrante" made for this batch (#689), unless used since.
+  const createdStaff = await removeUnusedCreatedStaff(tx, batchId);
+  counts.push({ label: "created staff", count: createdStaff.removed.length });
   await tx.execute(
     sql`update core.import_batches
       set status = 'rolled_back', rolled_back_at = now(), updated_at = now()
@@ -723,9 +760,6 @@ const asIds = (value: unknown): string[] =>
 
 /** Appends `id` to the `stats.<key>` array of the batch. */
 async function recordDone(
-  // Staff "Crear integrante" made for this batch (#689), unless used since.
-  const createdStaff = await removeUnusedCreatedStaff(tx, batchId);
-  counts.push({ label: "created staff", count: createdStaff.removed.length });
   db: ImportDb,
   batchId: string,
   key: "driveTrashed" | "driveKept",

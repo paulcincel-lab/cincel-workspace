@@ -24,6 +24,8 @@ export const ISSUE_FIX_STEP: Record<PlanIssueCode, MondayImportStep> = {
   RELATION_MISSING: "equivalencias",
   DATES_MISSING: "equivalencias",
   FILE_MISSING: "opciones",
+  AREA_NAME_TAKEN: "equivalencias",
+  AREA_UNMAPPED: "equivalencias",
 };
 
 /** The first "quoted" value of a plan message (a monday name, label or code), or null. */
@@ -75,6 +77,8 @@ export function issueText(code: PlanIssueCode, message: string): string {
     case "MAPPING_INVALID":
       if (message.startsWith("workflowId")) return "El workflow elegido ya no existe. Elige otro.";
       if (message.startsWith("areaId")) return "El departamento elegido ya no existe. Elige otro.";
+      if (message.startsWith("taskAreas"))
+        return "Un área o workflow elegido en Área y workflow de las tareas ya no existe o no va con esa área. Elige otro.";
       if (message.startsWith("contactMatches")) return "Un contacto elegido no existe o no es del tipo del tablero. Elige otro.";
       return "Falta una equivalencia o no es válida. Revisa este tablero.";
     case "PERSON_UNMATCHED": {
@@ -87,6 +91,10 @@ export function issueText(code: PlanIssueCode, message: string): string {
       return `${named(name, "Un elemento")} no tiene línea de tiempo; no entra al cronograma.`;
     case "FILE_MISSING":
       return `El archivo ${named(name, "de un elemento")} no se descargó; no se importa. Exporta otra vez o apaga los archivos en Opciones.`;
+    case "AREA_NAME_TAKEN":
+      return `Ya existe un área llamada ${named(name, "igual")}. Elígela en Área y workflow de las tareas en vez de crearla.`;
+    case "AREA_UNMAPPED":
+      return `El valor ${named(name, "de un elemento")} no tiene área ni workflow; sus tareas quedan con el workflow del tablero. Elígelos en Área y workflow de las tareas.`;
   }
 }
 

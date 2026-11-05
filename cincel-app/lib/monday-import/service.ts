@@ -85,6 +85,7 @@ import {
 import { MeDocument } from "@/scripts/monday/queries";
 import { createRollbackCommand, findRollbackBlockers, openServiceAccountDrive } from "@/scripts/monday/rollback";
 import { TOKEN_ENV } from "@/scripts/monday/token";
+import { taskAreaValue } from "@/scripts/monday/translate";
 
 import { importedProjectHref } from "./links";
 
@@ -448,6 +449,38 @@ async function readManifestAccount(dir: string): Promise<StoredRun["account"]> {
 // Equivalencias
 // ---------------------------------------------------------------------------
 
+/** Column types whose values can give tasks their área and workflow (#686). */
+const TASK_AREA_COLUMN_TYPES = new Set(["dropdown", "status", "text"]);
+/** Values listed per column; more are mapped in mapping.json by hand. */
+const TASK_AREA_VALUES_MAX = 200;
+
+/**
+ * Distinct values per dropdown, status or text column (#686), read as translate reads them: item columns from the
+ * active items, subitem columns from their active subitems (the tasks of item_as_project boards).
+ */
+function taskAreaColumnValues(
+  board: Awaited<ReturnType<typeof readExport>>["boards"][number]["board"],
+  items: Awaited<ReturnType<typeof readExport>>["boards"][number]["items"],
+): Record<string, string[]> {
+  const active = <T extends { state?: unknown }>(list: readonly (T | null | undefined)[]): T[] =>
+    list.filter((i): i is T => i != null && (i.state == null || i.state === "active"));
+  const out: Record<string, string[]> = {};
+  const collect = (columns: readonly { id: string; type: string }[], rows: readonly unknown[]) => {
+    for (const c of columns) {
+      if (!TASK_AREA_COLUMN_TYPES.has(c.type)) continue;
+      const values = (out[c.id] ??= []);
+      for (const row of rows) {
+        const value = taskAreaValue(row as Parameters<typeof taskAreaValue>[0], c.id);
+        if (value && !values.includes(value) && values.length < TASK_AREA_VALUES_MAX) values.push(value);
+      }
+    }
+  };
+  const top = active(items);
+  collect(board.columns, top);
+  collect(board.subitem_columns ?? [], top.flatMap((i) => active(i.subitems ?? [])));
+  return out;
+}
+
 /** Paso 2–4 source side: every board's columns, groups, status labels and the monday users. */
 export async function getExportSource(runId: string, deps: WizardDeps): Promise<MondayExportSource> {
   const run = await requireRun(runId, deps);
@@ -483,6 +516,7 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
         items: items
           .filter((i) => i.state == null || i.state === "active")
           .map((i) => ({ id: i.id, name: i.name, groupId: i.group?.id ?? null })),
+        taskAreaValues: taskAreaColumnValues(board, items),
       })),
     users: data.users.map((u) => ({ id: u.id, name: u.name, email: u.email ?? null, kind: u.kind ?? null })),
     hasFiles: existsSync(join(dir, FILES_DIR, FILES_INDEX)),

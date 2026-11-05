@@ -70,6 +70,10 @@ export interface CincelLookups {
   staff: Record<string, { name: string }>;
   /** core.workflows (not deleted), by id: names for the wizard's Vista previa. */
   workflows?: Record<string, { name: string }>;
+  /** core.areas (not deleted), by id: names for the Vista previa (#686). */
+  areas?: Record<string, { name: string }>;
+  /** Titles of the active workflow_task_templates, by id: template matching for tasks with their own workflow (#686). */
+  templateTitles?: Record<string, string>;
 }
 
 export interface TranslateOptions {
@@ -216,8 +220,33 @@ export interface PlannedTask {
   createdById: string;
   /** Assignees with no staff match; kept in the import data. */
   unmatchedPeople: UnmatchedPerson[];
+  /** The área and workflow of the task's own monday value (#686); null when the board's workflow applies. */
+  area: PlannedTaskArea | null;
   source: RowSource;
   data: ImportRefData;
+}
+
+/**
+ * How a task's monday value (its group, or the text of the board's área column) mapped (#686). `mapped`: the
+ * task carries the target's workflow; `ignored` and `unmapped` keep the board's.
+ */
+export interface PlannedTaskArea {
+  value: string;
+  status: "mapped" | "ignored" | "unmapped";
+  /** An existing área. */
+  areaId: string | null;
+  /** An área this import creates (`PlannedArea.name`). */
+  newArea: string | null;
+}
+
+/** An área the import creates (#686), linked to the workflows its values were mapped to. */
+export interface PlannedArea {
+  entity: "area";
+  /** `name:<lower-case name>`: one área per name across boards. */
+  externalId: string;
+  name: string;
+  /** `area_workflows` rows apply writes for it; the import ref keeps them so rollback owns them. */
+  workflowIds: string[];
 }
 
 export interface PlannedTaskSupport {
@@ -322,11 +351,13 @@ export interface PlannedScheduleTask {
 export type TranslateIssueCode =
   | "CLIENT_UNRESOLVED"
   | "STATUS_UNMAPPED"
+  | "STATUS_DEFAULTED"
   | "TEMPLATE_INVALID"
   | "PERSON_UNMATCHED"
   | "RELATION_MISSING"
   | "DATES_MISSING"
-  | "FILE_MISSING";
+  | "FILE_MISSING"
+  | "AREA_UNMAPPED";
 
 export interface TranslateIssue {
   code: TranslateIssueCode;
@@ -348,6 +379,8 @@ export interface TranslateResult {
   files: PlannedImportFile[];
   projectSchedules: PlannedProjectSchedule[];
   scheduleTasks: PlannedScheduleTask[];
+  /** Áreas created for tasks' monday values (#686). */
+  areas: PlannedArea[];
   issues: TranslateIssue[];
 }
 
@@ -356,7 +389,6 @@ export interface TranslateResult {
 // ---------------------------------------------------------------------------
 
 /** Default status for a label (BE §5.2), used by `init` and as documentation. */
-  | "STATUS_DEFAULTED"
 export function defaultStatusForLabel(
   label: string,
   isDone: boolean,
@@ -526,6 +558,10 @@ interface Ctx {
   targets: Map<string, ItemTarget>;
   /** task external id → cronograma inputs (boards with `schedule.enabled`). */
   schedule: Map<string, ScheduleCandidate>;
+  /** project external id → templates its tasks use, so a matched template is used once per project (#686). */
+  usedTemplates: Map<string, Set<string>>;
+  /** `<boardId>|<value key>` of the área values reported as AREA_UNMAPPED already. */
+  unmappedAreas: Set<string>;
 }
 
 /** Translates an export with a validated mapping into planned rows. Pure. */
@@ -548,6 +584,7 @@ export function translate(
     files: [],
     projectSchedules: [],
     scheduleTasks: [],
+    areas: [],
     issues: [],
   };
   const exported = new Map(data.boards.map((b) => [b.board.id, b]));
@@ -567,6 +604,8 @@ export function translate(
     contactPersonKeys: new Set(),
     targets: new Map(),
     schedule: new Map(),
+    usedTemplates: new Map(),
+    unmappedAreas: new Set(),
   };
 
   // Contacts first: projects may point at them through a relation column.
@@ -583,13 +622,48 @@ export function translate(
       translateGroupAsProject(ctx, bm, eb);
     else if (bm.strategy === "item_as_project")
       translateItemAsProject(ctx, bm, eb);
+    if (PROJECT_BOARD_STRATEGIES.has(bm.strategy))
+      reportDefaultedStatuses(ctx, bm, eb);
   }
   translateDependencies(ctx, exported);
-  for (const project of out.projects) rollUpProject(project, out.tasks);
+  for (const project of out.projects) {
+    rollUpProject(project, out.tasks);
+    addTaskStages(project, out.tasks);
+  }
   translateUpdates(ctx, exported);
   translateFiles(ctx, exported, data.files ?? {});
   translateSchedules(ctx);
   return out;
+}
+
+const PROJECT_BOARD_STRATEGIES = new Set<BoardMapping["strategy"]>([
+  "board_as_project",
+  "group_as_project",
+  "item_as_project",
+]);
+
+/**
+ * One STATUS_DEFAULTED warning per status label init found no equivalent for
+ * (`defaulted`): its tasks import as pendiente until the admin picks one.
+ */
+function reportDefaultedStatuses(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
+  const defs = [...eb.board.columns, ...(eb.board.subitem_columns ?? [])];
+  for (const [columnId, labels] of Object.entries(bm.statusMaps)) {
+    const known = defs
+      .filter((d) => d.id === columnId)
+      .flatMap((d) => statusLabels(d));
+    for (const [labelId, target] of Object.entries(labels)) {
+      if (!("status" in target) || !target.defaulted) continue;
+      const text = known.find((l) => l.id === labelId)?.label ?? labelId;
+      issue(
+        ctx,
+        "STATUS_DEFAULTED",
+        bm.mondayBoardId,
+        undefined,
+        `Status label ${labelId} ("${text}") of column ${columnId} has no equivalent; defaulted to pendiente`,
+      );
+    }
+  }
 }
 
 function activeItems<T extends { state: string | null }>(
@@ -624,8 +698,6 @@ function columnsFor(
   );
   return [...ordered, ...extra];
 }
-    if (PROJECT_BOARD_STRATEGIES.has(bm.strategy))
-      reportDefaultedStatuses(ctx, bm, eb);
 
 function valueOf(
   item: ItemLike,
@@ -638,36 +710,6 @@ function valueOf(
 
 function textOf(value: MondayColumnValue | undefined): string | null {
   const text = value?.text?.trim();
-const PROJECT_BOARD_STRATEGIES = new Set<BoardMapping["strategy"]>([
-  "board_as_project",
-  "group_as_project",
-  "item_as_project",
-]);
-
-/**
- * One STATUS_DEFAULTED warning per status label init found no equivalent for
- * (`defaulted`): its tasks import as pendiente until the admin picks one.
- */
-function reportDefaultedStatuses(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
-  const defs = [...eb.board.columns, ...(eb.board.subitem_columns ?? [])];
-  for (const [columnId, labels] of Object.entries(bm.statusMaps)) {
-    const known = defs
-      .filter((d) => d.id === columnId)
-      .flatMap((d) => statusLabels(d));
-    for (const [labelId, target] of Object.entries(labels)) {
-      if (!("status" in target) || !target.defaulted) continue;
-      const text = known.find((l) => l.id === labelId)?.label ?? labelId;
-      issue(
-        ctx,
-        "STATUS_DEFAULTED",
-        bm.mondayBoardId,
-        undefined,
-        `Status label ${labelId} ("${text}") of column ${columnId} has no equivalent; defaulted to pendiente`,
-      );
-    }
-  }
-}
-
   return text ? text : null;
 }
 
@@ -1105,6 +1147,8 @@ interface TaskPlacement {
   seccionOrder: number | null;
   sortOrder: number;
   groupId: string | null;
+  /** Child tasks: the task of the parent item, whose área and workflow they keep when they have no value. */
+  parent?: PlannedTask;
 }
 
 function addTask(
@@ -1138,7 +1182,8 @@ function addTask(
     dateOf(valueOf(item, first("commitment_date"))) ?? toDate(tl?.to);
   const deliveryDate = dateOf(valueOf(item, first("delivery_date")));
 
-  const { kind, templateId, workflowId } = taskKind(ctx, bm, item);
+  const area = taskAreaFor(ctx, bm, board, item, at);
+  const { kind, templateId, workflowId } = taskKind(ctx, bm, item, project, area);
   const people = taskPeople(ctx, bm, item, first("people"), project.client);
 
   const source = sourceOf(board, at.groupId);
@@ -1180,6 +1225,7 @@ function addTask(
     createdAt: item.created_at ?? null,
     createdById: ctx.options.importedById,
     unmatchedPeople: people.unmatched,
+    area: area.area,
     source,
     data,
   };
@@ -1264,33 +1310,185 @@ function taskStatus(
   return { status: target.status, customStatusId: null };
 }
 
+/** Where a task's workflow comes from (#686): `workflowId` is set only when its own monday value was mapped. */
+interface TaskAreaResolution {
+  area: PlannedTaskArea | null;
+  /** Set: the task takes this workflow instead of the board's. */
+  workflowId?: string | null;
+}
+
+/**
+ * The text a task's área column holds (#686): a status label, a dropdown's first label or the cell's text,
+ * trimmed; null when empty. The wizard lists the same values (lib/monday-import/service.ts).
+ */
+export function taskAreaValue(
+  item: Pick<ItemLike, "column_values">,
+  columnId: string,
+): string | null {
+  const value = item.column_values.find((v) => v.id === columnId);
+  const text = textOf(value);
+  if (text == null) return null;
+  if ((value as { __typename?: string }).__typename === "DropdownValue")
+    return text.split(",")[0].trim() || null;
+  return text;
+}
+
+/** Lower case, no accents, single spaces: how área and workflow names are compared (#686). */
+export function areaNameKey(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** The área the import creates for `name`, once per name across boards, linked to `workflowId`. */
+function plannedArea(ctx: Ctx, name: string, workflowId: string | null): PlannedArea {
+  const trimmed = name.trim();
+  const externalId = `name:${trimmed.toLowerCase()}`;
+  let area = ctx.out.areas.find((a) => a.externalId === externalId);
+  if (!area) {
+    area = { entity: "area", externalId, name: trimmed, workflowIds: [] };
+    ctx.out.areas.push(area);
+  }
+  if (workflowId && !area.workflowIds.includes(workflowId))
+    area.workflowIds.push(workflowId);
+  return area;
+}
+
+/**
+ * The task's área and workflow from the board's `taskAreaSource` (#686). A child task without its own value
+ * keeps its parent's. Values with no entry in `taskAreas` are reported once per board as AREA_UNMAPPED and keep
+ * the board's workflow, as `ignore` does.
+ */
+function taskAreaFor(
+  ctx: Ctx,
+  bm: BoardMapping,
+  board: BoardFile,
+  item: ItemLike,
+  at: TaskPlacement,
+): TaskAreaResolution {
+  const source = bm.taskAreaSource;
+  if (source.kind === "board") return { area: null };
+  let key: string | null;
+  let value: string | null;
+  if (source.kind === "group") {
+    key = at.groupId;
+    value = board.groups.find((g) => g.id === key)?.title ?? key;
+  } else {
+    key = taskAreaValue(item, source.columnId);
+    value = key;
+  }
+  if (key == null || value == null) {
+    const parent = at.parent;
+    if (!parent?.area) return { area: null };
+    return parent.area.status === "mapped"
+      ? { area: parent.area, workflowId: parent.workflowId }
+      : { area: parent.area };
+  }
+  const target = bm.taskAreas[key];
+  const base = { value, areaId: null, newArea: null };
+  if (!target) {
+    const reported = `${bm.mondayBoardId}|${key}`;
+    if (!ctx.unmappedAreas.has(reported)) {
+      ctx.unmappedAreas.add(reported);
+      issue(
+        ctx,
+        "AREA_UNMAPPED",
+        bm.mondayBoardId,
+        undefined,
+        `Task área value "${value}" has no área; its tasks keep the board's workflow`,
+      );
+    }
+    return { area: { ...base, status: "unmapped" } };
+  }
+  if (target.action === "ignore") return { area: { ...base, status: "ignored" } };
+  if (target.action === "area") {
+    return {
+      area: { ...base, status: "mapped", areaId: target.areaId },
+      workflowId: target.workflowId,
+    };
+  }
+  const area = plannedArea(ctx, target.name, target.workflowId);
+  return {
+    area: { ...base, status: "mapped", newArea: area.name },
+    workflowId: target.workflowId,
+  };
+}
+
+/**
+ * The active template of `workflowId` titled like the item (same `areaNameKey`), not used yet in the
+ * project nor picked by hand for another item of the board; null when there is none.
+ */
+function matchTemplate(
+  ctx: Ctx,
+  bm: BoardMapping,
+  project: PlannedProject,
+  workflowId: string,
+  name: string,
+): string | null {
+  const titles = ctx.lookups.templateTitles;
+  if (!titles) return null;
+  const used = ctx.usedTemplates.get(project.externalId);
+  const picked = new Set(Object.values(bm.templateMatches));
+  const key = areaNameKey(name);
+  for (const [id, title] of Object.entries(titles)) {
+    if (ctx.lookups.templates[id]?.workflowId !== workflowId) continue;
+    if (used?.has(id) || picked.has(id) || areaNameKey(title) !== key) continue;
+    return id;
+  }
+  return null;
+}
+
+function useTemplate(ctx: Ctx, project: PlannedProject, templateId: string) {
+  let used = ctx.usedTemplates.get(project.externalId);
+  if (!used) ctx.usedTemplates.set(project.externalId, (used = new Set()));
+  used.add(templateId);
+}
+
+/**
+ * Workflow task with its template, or usuario task. With its own mapped workflow (#686) a task keeps a
+ * hand-picked template of that workflow only, else gets the template `matchTemplate` finds, else none.
+ */
 function taskKind(
   ctx: Ctx,
   bm: BoardMapping,
   item: ItemLike,
+  project: PlannedProject,
+  resolved: TaskAreaResolution,
 ): {
   kind: "workflow" | "usuario";
   templateId: string | null;
   workflowId: string | null;
 } {
+  const own = resolved.workflowId !== undefined;
+  const workflowId = own ? (resolved.workflowId ?? null) : (bm.workflowId ?? null);
   const templateId = bm.templateMatches[item.id];
   if (templateId) {
     const template = ctx.lookups.templates[templateId];
-    if (template)
+    if (template && (!own || template.workflowId === workflowId)) {
+      useTemplate(ctx, project, templateId);
       return { kind: "workflow", templateId, workflowId: template.workflowId };
-    issue(
-      ctx,
-      "TEMPLATE_INVALID",
-      bm.mondayBoardId,
-      item.id,
-      `Template ${templateId} does not exist`,
-    );
+    }
+    if (!template) {
+      issue(
+        ctx,
+        "TEMPLATE_INVALID",
+        bm.mondayBoardId,
+        item.id,
+        `Template ${templateId} does not exist`,
+      );
+    }
   }
-  return {
-    kind: "usuario",
-    templateId: null,
-    workflowId: bm.workflowId ?? null,
-  };
+  if (own && workflowId) {
+    const matched = matchTemplate(ctx, bm, project, workflowId, item.name);
+    if (matched) {
+      useTemplate(ctx, project, matched);
+      return { kind: "workflow", templateId: matched, workflowId };
+    }
+  }
+  return { kind: "usuario", templateId: null, workflowId };
 }
 
 /**
@@ -1440,6 +1638,7 @@ function addSubitems(
         seccionOrder: parent.seccionOrder,
         sortOrder: ++n,
         groupId: parent.source.groupId,
+        parent,
       });
       child.parentTask = parentRef;
       const childPath = [...path, sub.name];
@@ -1709,6 +1908,29 @@ function translateDependencies(ctx: Ctx, exported: Map<string, ExportBoard>) {
  * progress = % `completado`; dates = min/max of task dates; `completado` when
  * every top-level task is, else `activo` (also for a project with no tasks).
  */
+/**
+ * The workflows of tasks whose own monday value was mapped (#686) become stages of their project too, past the
+ * board workflow and the group stages (#687): apply writes their `project_stages` rows, rollback owns them.
+ */
+export function addTaskStages(
+  project: PlannedProject,
+  tasks: readonly PlannedTask[],
+): void {
+  const fromTasks = tasks.flatMap((t) =>
+    t.project.externalId === project.externalId &&
+    t.area?.status === "mapped" &&
+    t.workflowId
+      ? [t.workflowId]
+      : [],
+  );
+  const extra = [...new Set([...(project.extraStages ?? []), ...fromTasks])].filter(
+    (id) => id !== project.workflowId,
+  );
+  if (extra.length === 0) return;
+  project.extraStages = extra;
+  project.data.stageWorkflowIds = extra;
+}
+
 export function rollUpProject(
   project: PlannedProject,
   tasks: readonly PlannedTask[],

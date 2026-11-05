@@ -44,6 +44,9 @@ function sampleDetails(sample: MondayPreviewSample): string {
       : c.phase
         ? `Fase: ${c.phase}`
         : null,
+    // The task's área and workflow (#686).
+    sample.entity === "tarea" ? (c.area ? `Área: ${c.area}` : "Sin área") : null,
+    sample.entity === "tarea" ? (c.workflow ? `Workflow: ${c.workflow}` : "Sin workflow") : null,
     c.customStatus ?? c.status ? `Estatus: ${c.customStatus ?? c.status}` : null,
     c.priority ? `Prioridad: ${c.priority}` : null,
     c.manager ? `Responsable: ${c.manager}` : null,
@@ -179,6 +182,11 @@ export function PreviewStep({
                             {ENTITY_LABELS[sample.entity]}: {sample.cincel.title}
                           </span>
                           <span className="block text-xs text-muted-foreground">{sampleDetails(sample)}</span>
+                          {sample.cincel.areaUnmapped ? (
+                            <Badge variant="outline" className="mt-1">
+                              Área sin equivalente
+                            </Badge>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}

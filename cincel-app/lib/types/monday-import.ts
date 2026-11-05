@@ -117,6 +117,11 @@ export interface MondayBoardSource {
   itemCount: number;
   /** Active top-level items, for template matches and project names by item. */
   items: { id: string; name: string; groupId: string | null }[];
+  /**
+   * Distinct values of the dropdown, status and text columns that can give tasks their área and workflow (#686):
+   * columnId → values, as translate reads them. Subitem columns on item_as_project boards, item columns otherwise.
+   */
+  taskAreaValues?: Record<string, string[]>;
 }
 
 export interface MondayExportSource {
@@ -181,6 +186,10 @@ export interface MondayPreviewSample {
     phase: string | null;
     /** A project sample's workflow and any stages its groups add (#687), joined; null otherwise. */
     workflow: string | null;
+    /** A task sample's área, from its monday value or the board (#686); null when it has none. */
+    area?: string | null;
+    /** A task sample whose monday área value has no equivalent yet (#686): it keeps the board's workflow. */
+    areaUnmapped?: boolean;
     commitmentDate: string | null;
     deliveryDate: string | null;
     kind: "workflow" | "usuario" | null;

@@ -76,6 +76,28 @@ export const GroupTarget = z.discriminatedUnion("kind", [
 ]);
 export type GroupTarget = z.infer<typeof GroupTarget>;
 
+/**
+ * Where a task's área and workflow come from (#686): the board's own (`areaId` / `workflowId`, the behaviour
+ * before #686), its monday group, or one of its dropdown, status or text columns. On `item_as_project` boards the
+ * column is a subitem column, since subitems are the tasks there.
+ */
+export const TaskAreaSource = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("board") }),
+  z.object({ kind: z.literal("group") }),
+  z.object({ kind: z.literal("column"), columnId: z.string().min(1) }),
+]);
+export type TaskAreaSource = z.infer<typeof TaskAreaSource>;
+
+/** The Cincel área and workflow of one monday value (#686). `ignore`: the task keeps the board's workflow. */
+export const TaskAreaTarget = z.discriminatedUnion("action", [
+  // An existing área; the workflow must be one of its `area_workflows` when it has any.
+  z.object({ action: z.literal("area"), areaId: z.uuid(), workflowId: z.uuid().nullable() }),
+  // A new área the import creates (and rollback removes), linked to the workflow when one is given.
+  z.object({ action: z.literal("create_area"), name: z.string().trim().min(1), workflowId: z.uuid().nullable() }),
+  z.object({ action: z.literal("ignore") }),
+]);
+export type TaskAreaTarget = z.infer<typeof TaskAreaTarget>;
+
 export const BoardMapping = z.object({
   mondayBoardId: z.string(),
   name: z.string(),
@@ -118,6 +140,9 @@ export const BoardMapping = z.object({
     .default({ enabled: false, planta: { fixed: "General" } }),
   // monday item id → workflow_task_templates.id
   templateMatches: z.record(z.string(), z.uuid()).default({}),
+  // Tasks' área and workflow (#686): the source, and its value (group id, or the column's text) → target
+  taskAreaSource: TaskAreaSource.default({ kind: "board" }),
+  taskAreas: z.record(z.string(), TaskAreaTarget).default({}),
 });
 export type BoardMapping = z.infer<typeof BoardMapping>;
 
