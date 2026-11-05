@@ -1441,7 +1441,7 @@ function matchTemplate(
   return null;
 }
 
-function useTemplate(ctx: Ctx, project: PlannedProject, templateId: string) {
+function applyTemplate(ctx: Ctx, project: PlannedProject, templateId: string) {
   let used = ctx.usedTemplates.get(project.externalId);
   if (!used) ctx.usedTemplates.set(project.externalId, (used = new Set()));
   used.add(templateId);
@@ -1468,7 +1468,7 @@ function taskKind(
   if (templateId) {
     const template = ctx.lookups.templates[templateId];
     if (template && (!own || template.workflowId === workflowId)) {
-      useTemplate(ctx, project, templateId);
+      applyTemplate(ctx, project, templateId);
       return { kind: "workflow", templateId, workflowId: template.workflowId };
     }
     if (!template) {
@@ -1484,7 +1484,7 @@ function taskKind(
   if (own && workflowId) {
     const matched = matchTemplate(ctx, bm, project, workflowId, item.name);
     if (matched) {
-      useTemplate(ctx, project, matched);
+      applyTemplate(ctx, project, matched);
       return { kind: "workflow", templateId: matched, workflowId };
     }
   }

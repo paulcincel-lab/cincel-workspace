@@ -379,6 +379,7 @@ describe("plan: codes", () => {
       "PROVIDER_SUBTYPE_MISSING",
       "SCHEDULE_EXISTS",
       "DRIVE_NOT_CONFIGURED",
+      "AREA_NAME_TAKEN",
     ]);
     expect([...WARNING_CODES]).toEqual([
       "PERSON_UNMATCHED",
