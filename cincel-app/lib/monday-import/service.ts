@@ -61,6 +61,7 @@ import type {
 } from "@/lib/types/monday-import";
 import { createApplyCommand, type PhaseB } from "@/scripts/monday/apply";
 import { createMondayClient, MondayApiError, type MondayClient } from "@/scripts/monday/client";
+import { keepVerifiedCreatedStaff } from "@/scripts/monday/created-staff";
 import type { MondayDbHandle } from "@/scripts/monday/db";
 import {
   DONE_FILE,
@@ -608,6 +609,16 @@ export function mappingIssues(raw: unknown): string[] {
   return parsed.error.issues.map((i) => `${i.path.map(String).join(".") || "(raíz)"}: ${i.message}`);
 }
 
+/** The staff ids this run's "Crear integrante" made, kept server side (#689). */
+const createdStaffOf = (run: StoredRun): ReadonlySet<string> => new Set(run.createdStaffIds ?? []);
+
+/** Remembers a staff member "Crear integrante" made for the run, so its mapping may mark them `created`. */
+export async function recordCreatedStaff(runId: string, staffId: string, deps: WizardDeps): Promise<void> {
+  await updateRun(runId, (r) => {
+    r.createdStaffIds = [...new Set([...(r.createdStaffIds ?? []), staffId])];
+  }, envOf(deps));
+}
+
 /**
  * Saves the draft (even an incomplete one, so the wizard resumes where the
  * admin left it) and returns what `mapping.schema.ts` still rejects.
@@ -618,11 +629,11 @@ export async function saveDraft(
   step: MondayImportStep | null,
   deps: WizardDeps,
 ): Promise<{ issues: string[] }> {
-  await requireRun(runId, deps);
+  const run = await requireRun(runId, deps);
   if (!mapping || typeof mapping !== "object" || Array.isArray(mapping))
     throw new WizardError("Las equivalencias no tienen un formato válido.");
   const env = envOf(deps);
-  await writeDraftMapping(runId, mapping, env);
+  await writeDraftMapping(runId, keepVerifiedCreatedStaff(mapping, createdStaffOf(run)), env);
   if (step) await saveStep(runId, step, deps);
   return { issues: mappingIssues(mapping) };
 }
@@ -637,7 +648,7 @@ export async function downloadDraft(runId: string, deps: WizardDeps): Promise<{ 
 
 /** mapping.json upload: replaces the draft only when it parses and validates. */
 export async function uploadDraft(runId: string, text: string, deps: WizardDeps): Promise<{ issues: string[] }> {
-  await requireRun(runId, deps);
+  const run = await requireRun(runId, deps);
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -646,7 +657,7 @@ export async function uploadDraft(runId: string, text: string, deps: WizardDeps)
   }
   const issues = mappingIssues(raw);
   if (issues.length > 0) return { issues };
-  await writeDraftMapping(runId, raw, envOf(deps));
+  await writeDraftMapping(runId, keepVerifiedCreatedStaff(raw, createdStaffOf(run)), envOf(deps));
   return { issues: [] };
 }
 
@@ -730,8 +741,11 @@ export async function startApply(
   const dir = runDir(run.runId, env);
   const batch = await runBatch(deps.db, dir);
   if (batch?.status === "applied") throw new WizardError("Esta importación ya se aplicó.");
-  const stored = await readDraftMapping(run.runId, env);
-  if (!stored) throw new WizardError("Todavía no hay equivalencias.");
+  const draft = await readDraftMapping(run.runId, env);
+  if (!draft) throw new WizardError("Todavía no hay equivalencias.");
+  // The batch's mapping is what rollback reads: only staff this run created may stay marked `created`.
+  const stored = keepVerifiedCreatedStaff(draft, createdStaffOf(run));
+  if (stored !== draft) await writeDraftMapping(run.runId, stored, env);
   await enforceDisabledOptions(run, stored, deps);
   if (!by.email) throw new WizardError("Tu cuenta no tiene correo; no se puede registrar quién importó.");
   const command = createApplyCommand({

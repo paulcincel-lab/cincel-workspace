@@ -2,7 +2,9 @@
  * "Crear integrante" of the import wizard's Personas (#689): a monday person with no staff account becomes a
  * staff member with monday's name and email, pending until their first Google sign-in (active, no `google_sub`:
  * the sign-in links the row by email). The mapping marks the person `{ action: "staff", staffId, created: true }`,
- * so plan and apply treat them like any staff member and the batch's mapping says who the import created.
+ * so plan and apply treat them like any staff member and the batch's mapping says who the import created. The
+ * wizard keeps the ids it made in the run (wizard.json) and drops `created` from any other staff target when a
+ * draft is saved or uploaded and before apply, so a hand-edited mapping can't make a rollback remove someone else.
  *
  * A rollback removes (soft-deletes) those staff members unless they have been used since: signed in, edited, still
  * pointed at by any row once the batch's rows are gone, or mapped by another batch that isn't rolled back.
@@ -104,6 +106,28 @@ export function createdStaffIds(mapping: unknown): string[] {
     if (t?.action === "staff" && t.created === true && typeof t.staffId === "string") ids.add(t.staffId);
   }
   return [...ids];
+}
+
+/**
+ * The mapping with `created` dropped from every staff target whose id isn't in `allowed` (the ids the run's
+ * "Crear integrante" actually made), so a hand-edited or uploaded mapping can't mark an existing staff member as
+ * created and have a rollback remove them. Returns the mapping itself when nothing changes.
+ */
+export function keepVerifiedCreatedStaff<T>(mapping: T, allowed: ReadonlySet<string>): T {
+  const people = (mapping as { people?: unknown } | null)?.people;
+  if (!people || typeof people !== "object" || Array.isArray(people)) return mapping;
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, target] of Object.entries(people as Record<string, unknown>)) {
+    const t = target as { action?: unknown; staffId?: unknown; created?: unknown } | null;
+    if (t && typeof t === "object" && "created" in t && !(typeof t.staffId === "string" && allowed.has(t.staffId))) {
+      const rest: Record<string, unknown> = { ...t };
+      delete rest.created;
+      next[key] = rest;
+      changed = true;
+    } else next[key] = target;
+  }
+  return changed ? ({ ...(mapping as object), people: next } as T) : mapping;
 }
 
 const ident = (name: string) => `"${name.replace(/"/g, '""')}"`;

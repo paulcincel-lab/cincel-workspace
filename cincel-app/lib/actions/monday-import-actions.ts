@@ -56,6 +56,7 @@ import {
   isStep,
   openRun,
   previewImport,
+  recordCreatedStaff,
   saveDraft,
   saveStep,
   startApply,
@@ -216,7 +217,9 @@ export async function createMondayStaffAction(
     const user = source.users.find((u) => u.id === String(mondayUserId));
     if (!user) throw new WizardError("Esta persona no está en la exportación.");
     try {
-      return { staff: await createStaffFromMonday(deps().db, user) };
+      const staff = await createStaffFromMonday(deps().db, user);
+      await recordCreatedStaff(runId, staff.id, deps());
+      return { staff };
     } catch (err) {
       if (err instanceof CreateStaffRefused) throw new WizardError(err.message);
       throw err;

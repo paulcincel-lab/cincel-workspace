@@ -16,6 +16,7 @@ import {
   createdStaffIds,
   createStaffFromMonday,
   CreateStaffRefused,
+  keepVerifiedCreatedStaff,
   removeUnusedCreatedStaff,
 } from "@/scripts/monday/created-staff";
 import { createDbLookups, peopleTargets } from "@/scripts/monday/init";
@@ -67,6 +68,25 @@ describe("init people (#689)", () => {
     expect(mapping.people["1"]).toEqual({ action: "staff", staffId: ANA, created: true });
     expect(createdStaffIds(mapping)).toEqual([ANA]);
     expect(createdStaffIds(null)).toEqual([]);
+  });
+
+  it("drops the created mark from staff the run didn't create", () => {
+    const mapping = {
+      version: 1,
+      people: {
+        "1": { action: "staff", staffId: ANA, created: true },
+        "2": { action: "staff", staffId: BETO, created: true },
+        "3": { action: "ignore" },
+      },
+    };
+    const kept = keepVerifiedCreatedStaff(mapping, new Set([BETO]));
+    expect(kept.people).toEqual({
+      "1": { action: "staff", staffId: ANA },
+      "2": { action: "staff", staffId: BETO, created: true },
+      "3": { action: "ignore" },
+    });
+    expect(createdStaffIds(kept)).toEqual([BETO]);
+    expect(keepVerifiedCreatedStaff(mapping, new Set([ANA, BETO]))).toBe(mapping);
   });
 });
 
@@ -203,6 +223,17 @@ describe.skipIf(!url)("Crear integrante and rollback (test DB)", () => {
       const [s] = await tx.insert(schema.staff).values({ name: "Init Por Nombre 689" }).returning();
       const found = await createDbLookups(tx).staffByName?.([" init por nombre 689", "Nadie 689"]);
       expect(found).toEqual(new Map([["init por nombre 689", s.id]]));
+    });
+  });
+
+  it("leaves out a name two live staff share, so init doesn't pick one of them", async () => {
+    await inTx(async (tx) => {
+      await tx.insert(schema.staff).values([{ name: "Doble Nombre 689" }, { name: "doble nombre 689" }]);
+      const [s] = await tx.insert(schema.staff).values({ name: "Unico Nombre 689" }).returning();
+      const found = await createDbLookups(tx).staffByName?.(["Doble Nombre 689", "Unico Nombre 689"]);
+      expect(found).toEqual(new Map([["unico nombre 689", s.id]]));
+      const targets = peopleTargets([{ id: "9", name: "Doble Nombre 689", email: null, kind: "member" }], new Map(), found);
+      expect(targets).toEqual({ "9": null });
     });
   });
 });

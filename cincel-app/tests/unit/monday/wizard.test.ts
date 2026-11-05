@@ -39,6 +39,7 @@ import {
   importedProjects,
   mergeDraft,
   previewImport,
+  recordCreatedStaff,
   resolveWizardToken,
   saveDraft,
   startApply,
@@ -301,6 +302,26 @@ describe("monday wizard draft and preview", () => {
 
     expect((await uploadDraft(run.runId, "{nope", deps)).issues).toEqual(["El archivo no es JSON válido."]);
     expect((await uploadDraft(run.runId, JSON.stringify(nestedMapping(ANA, CLIENT)), deps)).issues).toEqual([]);
+  });
+
+  it("keeps `created` only on staff the run's Crear integrante made (#689)", async () => {
+    const run = await nestedRun(nestedMapping(ANA, CLIENT));
+    const deps = { db: {} as ImportDb, env };
+    const made = "44444444-4444-4444-8444-444444444444";
+    await recordCreatedStaff(run.runId, made, deps);
+    expect((await readRun(run.runId, env))!.createdStaffIds).toEqual([made]);
+    const people = {
+      "1": { action: "staff", staffId: ANA, created: true },
+      "2": { action: "staff", staffId: made, created: true },
+    };
+    const stored = () => JSON.parse(readFileSync(join(runDir(run.runId, env), "mapping.json"), "utf8")) as MappingInput;
+
+    await saveDraft(run.runId, { ...nestedMapping(ANA, CLIENT), people }, null, deps);
+    expect(stored().people).toEqual({ "1": { action: "staff", staffId: ANA }, "2": people["2"] });
+
+    const upload = JSON.stringify({ ...nestedMapping(ANA, CLIENT), people });
+    expect((await uploadDraft(run.runId, upload, deps)).issues).toEqual([]);
+    expect(stored().people).toEqual({ "1": { action: "staff", staffId: ANA }, "2": people["2"] });
   });
 
   it("previews the plan as counts per Cincel entity and 5 sample items per board", async () => {
