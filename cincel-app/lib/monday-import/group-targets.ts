@@ -11,7 +11,7 @@ import {
   resolveGroupTarget,
   workflowPhaseNames,
 } from "@/scripts/monday/group-targets";
-import type { ClientRef, GroupTarget } from "@/scripts/monday/mapping.schema";
+import type { GroupTarget } from "@/scripts/monday/mapping.schema";
 import type { MondayBoardSource, MondayImportChoices } from "@/lib/types/monday-import";
 import type { BoardDraft } from "@/lib/monday-import/wizard-steps";
 
@@ -127,7 +127,7 @@ export function applyGroupAsProject(
   choices: MondayImportChoices,
 ): BoardDraft {
   const byName = new Map(choices.clients.map((client) => [nameKey(client.name), client.id]));
-  const groupClients: Record<string, ClientRef> = { ...(board.groupClients ?? {}) };
+  const groupClients: NonNullable<BoardDraft["groupClients"]> = { ...(board.groupClients ?? {}) };
   for (const group of source.groups) {
     const contactId = byName.get(nameKey(group.title));
     if (contactId && !groupClients[group.id]) groupClients[group.id] = { kind: "contact", contactId };

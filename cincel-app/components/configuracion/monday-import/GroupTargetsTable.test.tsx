@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { GroupTargetsTable } from "./GroupTargetsTable";
 import type { BoardDraft } from "@/lib/monday-import/wizard-steps";
@@ -46,7 +46,9 @@ function Harness({ groups }: { groups: MondayBoardSource["groups"] }) {
     columns: {},
     statusMaps: {},
   });
-  latest = board;
+  useEffect(() => {
+    latest = board;
+  });
   return (
     <GroupTargetsTable
       board={board}

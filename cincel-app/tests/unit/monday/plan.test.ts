@@ -387,6 +387,7 @@ describe("plan: codes", () => {
       "DATES_MISSING",
       "FILE_MISSING",
       "STATUS_DEFAULTED",
+      "AREA_UNMAPPED",
     ]);
   });
 });
@@ -1118,7 +1119,7 @@ describe.skipIf(!url)("plan lookups (test DB)", () => {
 
       const l = createPlanDbLookups(tx);
       const t = await l.translateLookups();
-      expect(t.templates[template.id]).toEqual({ workflowId: wf.id });
+      expect(t.templates[template.id]).toEqual({ workflowId: wf.id, phase: null });
       expect(t.staff[admin.id]).toEqual({ name: "Plan Admin" });
       expect(await l.importedRefs("project", ["plan-901", "plan-902"])).toEqual(
         new Map([["plan-901", other.id]]),
