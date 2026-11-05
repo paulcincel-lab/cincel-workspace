@@ -509,22 +509,6 @@ const BLOCKED = /stuck|bloquead|detenid/i;
 const IN_PROGRESS = /working|proceso|curso/i;
 
 /**
- * One label's target (§5.2): a label named like an existing custom status
- * (case-insensitive) → that status; is_done → completado; named like a base
- * status or matching the blocked and in-progress patterns → that status; else
- * pendiente, flagged `defaulted` so the admin reviews it. A label monday
- * doesn't mark done never defaults to completado.
- */
-export function statusTarget(
-  label: StatusLabel,
-  customStatuses: ReadonlyMap<string, string>,
-): StatusTarget {
-  const custom = customStatuses.get(label.label.trim().toLowerCase());
-  if (custom) return { customStatusId: custom };
-  if (label.isDone) return { status: "completado" };
-  if (BLOCKED.test(label.label)) return { status: "bloqueado" };
-  if (IN_PROGRESS.test(label.label)) return { status: "en_proceso" };
-/**
  * Base statuses by their Cincel name, accents and case ignored. Completado is
  * left out: only monday's done marker drafts it.
  */
@@ -544,6 +528,24 @@ const normalizeName = (name: string) =>
     .trim()
     .toLowerCase();
 
+/**
+ * One label's target (§5.2): a label named like an existing custom status
+ * (case-insensitive) → that status; is_done → completado; named like a base
+ * status or matching the blocked and in-progress patterns → that status; else
+ * pendiente, flagged `defaulted` so the admin reviews it. A label monday
+ * doesn't mark done never defaults to completado.
+ */
+export function statusTarget(
+  label: StatusLabel,
+  customStatuses: ReadonlyMap<string, string>,
+): StatusTarget {
+  const custom = customStatuses.get(label.label.trim().toLowerCase());
+  if (custom) return { customStatusId: custom };
+  if (label.isDone) return { status: "completado" };
+  const base = BASE_BY_NAME[normalizeName(label.label)];
+  if (base) return { status: base };
+  if (BLOCKED.test(label.label)) return { status: "bloqueado" };
+  if (IN_PROGRESS.test(label.label)) return { status: "en_proceso" };
   return { status: "pendiente", defaulted: true };
 }
 
@@ -556,8 +558,6 @@ function walk(
 ) {
   for (const item of items) {
     if (!item) continue;
-  const base = BASE_BY_NAME[normalizeName(label.label)];
-  if (base) return { status: base };
     visit(item);
     walk(
       ((item as { subitems?: (ItemNode | null)[] | null }).subitems ??
@@ -580,6 +580,7 @@ function doneFromItems(
       if (v.__typename !== "StatusValue" || v.is_done !== true) continue;
       const entry = out.get(v.id) ?? { indexes: new Set(), labels: new Set() };
       if (v.label) entry.labels.add(v.label);
+      else if (v.index != null) entry.indexes.add(String(v.index));
       out.set(v.id, entry);
     }
   });
@@ -594,7 +595,6 @@ function doneFromItems(
  */
 export function statusMaps(
   columns: { defs: ColumnDef[]; targets: Record<string, ColumnTarget> }[],
-      else if (v.index != null) entry.indexes.add(String(v.index));
   items: MondayItem[],
   customStatuses: ReadonlyMap<string, string>,
 ): Record<string, Record<string, StatusTarget>> {

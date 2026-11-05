@@ -385,6 +385,7 @@ describe("plan: codes", () => {
       "RELATION_MISSING",
       "DATES_MISSING",
       "FILE_MISSING",
+      "STATUS_DEFAULTED",
     ]);
   });
 });
