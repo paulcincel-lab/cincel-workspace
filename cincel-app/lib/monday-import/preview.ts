@@ -154,7 +154,12 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
       status: p.status === "completado" ? "Completado" : "Activo",
       // The project's phases and workflow, as apply writes them (#678).
       phase: p.phases.length > 0 ? p.phases.join(", ") : null,
-      workflow: p.workflowId ? (names.workflows?.[p.workflowId]?.name ?? null) : null,
+      // Its stages: the board workflow, then the stages groups were mapped to (#687).
+      workflow:
+        [...(p.workflowId ? [p.workflowId] : []), ...(p.extraStages ?? [])]
+          .map((id) => names.workflows?.[id]?.name)
+          .filter((name): name is string => Boolean(name))
+          .join(", ") || null,
       tasks: projectTasks.get(p.externalId) ?? 0,
       comments: comments.get(p.externalId) ?? 0,
       files: files.get(p.externalId) ?? 0,

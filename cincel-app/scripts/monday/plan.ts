@@ -258,6 +258,8 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
           .select({
             id: workflowTaskTemplates.id,
             workflowId: workflowTaskTemplates.workflowId,
+            phase: workflowTaskTemplates.phase,
+            active: workflowTaskTemplates.active,
           })
           .from(workflowTaskTemplates),
         db
@@ -274,7 +276,8 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
           statusRows.map((r) => [r.id, { name: r.name, closes: r.closes }]),
         ),
         templates: Object.fromEntries(
-          templateRows.map((r) => [r.id, { workflowId: r.workflowId }]),
+          // Only active templates name the workflow's phases, as the wizard lists them (#687).
+          templateRows.map((r) => [r.id, { workflowId: r.workflowId, phase: r.active ? r.phase : null }]),
         ),
         staff: Object.fromEntries(
           staffRows.map((r) => [r.id, { name: r.name }]),
@@ -499,6 +502,13 @@ const PROJECT_STRATEGIES = new Set<BoardMapping["strategy"]>([
   "item_as_project",
 ]);
 
+/** [groupId, workflowId] of the board's groups mapped to a workflow stage (#687). */
+function stageWorkflowIds(bm: BoardMapping): [string, string][] {
+  return Object.entries(bm.groupTargets).flatMap(([groupId, t]) =>
+    t.kind === "stage" ? [[groupId, t.workflowId] as [string, string]] : [],
+  );
+}
+
 /** MAPPING_INVALID for each Zod issue, with its path and the board it is under. */
 function zodIssues(
   raw: unknown,
@@ -567,7 +577,10 @@ export async function buildPlan(
   const [contactTypes, liveWorkflows, areaWorkflowMap] = await Promise.all([
     lookups.contactTypes([...clientIds, ...matchIds]),
     lookups.workflowIds(
-      active.flatMap((b) => (b.workflowId ? [b.workflowId] : [])),
+      active.flatMap((b) => [
+        ...(b.workflowId ? [b.workflowId] : []),
+        ...stageWorkflowIds(b).map(([, id]) => id),
+      ]),
     ),
     lookups.areaWorkflowIds(
       active.flatMap((b) => (b.areaId ? [b.areaId] : [])),
@@ -628,6 +641,15 @@ export async function buildPlan(
         `workflowId: workflow ${bm.workflowId} does not exist`,
         boardId,
       );
+    }
+    for (const [groupId, workflowId] of stageWorkflowIds(bm)) {
+      if (!liveWorkflows.has(workflowId)) {
+        add(
+          "MAPPING_INVALID",
+          `groupTargets.${groupId}: workflow ${workflowId} does not exist`,
+          boardId,
+        );
+      }
     }
     if (bm.areaId && !areaWorkflowMap.has(bm.areaId)) {
       add(

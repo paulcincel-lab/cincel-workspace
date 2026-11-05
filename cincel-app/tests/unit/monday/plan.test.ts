@@ -537,6 +537,21 @@ describe("plan: blocking issues (each cleared by editing the mapping)", () => {
     ]);
   });
 
+  it("MAPPING_INVALID: a group mapped to a stage whose workflow doesn't exist (#687)", async () => {
+    const input = mappingInput();
+    board(input, "301").groupTargets = {
+      g_obra: { kind: "stage", workflowId: "f0000000-0000-4000-8000-000000000002" },
+      g_diseno: { kind: "stage", workflowId: OTHER_WORKFLOW },
+    };
+    const p = await plan(input);
+    expect(ofCode(p, "MAPPING_INVALID")).toEqual([
+      expect.objectContaining({
+        boardId: "301",
+        message: expect.stringContaining("groupTargets.g_obra"),
+      }),
+    ]);
+  });
+
   it("CLIENT_UNRESOLVED: no client, or a client that isn't a live cliente", async () => {
     const p = await plan();
     expect(ofCode(p, "CLIENT_UNRESOLVED")).toEqual([]);

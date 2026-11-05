@@ -58,6 +58,24 @@ export const BoardStrategy = z.enum([
 ]);
 export type BoardStrategy = z.infer<typeof BoardStrategy>;
 
+/**
+ * What one monday group becomes on a `board_as_project` or `item_as_project` board (#687). Unset groups take
+ * the board workflow's phase of the same name (`workflow_phase`), else a new project phase named after the group.
+ */
+export const GroupTarget = z.discriminatedUnion("kind", [
+  // A new project phase named after the group (the behaviour before #687).
+  z.object({ kind: z.literal("phase") }),
+  // A phase of the board's workflow (its templates' `phase`), by name.
+  z.object({ kind: z.literal("workflow_phase"), phase: z.string().trim().min(1) }),
+  // A workflow stage: the project gets a `project_stages` row for it; the group's tasks get no phase.
+  z.object({ kind: z.literal("stage"), workflowId: z.uuid() }),
+  // Its own project, as `group_as_project` does for every group (board_as_project only).
+  z.object({ kind: z.literal("project") }),
+  // The group's items are not imported.
+  z.object({ kind: z.literal("ignore") }),
+]);
+export type GroupTarget = z.infer<typeof GroupTarget>;
+
 export const BoardMapping = z.object({
   mondayBoardId: z.string(),
   name: z.string(),
@@ -72,8 +90,10 @@ export const BoardMapping = z.object({
   // usuario tasks' workflow (Actividades department)
   workflowId: z.uuid().nullable().optional(),
   client: ClientRef.nullable().optional(),
-  // group_as_project: groupId → client
+  // group_as_project, and groups mapped to their own project: groupId → client
   groupClients: z.record(z.string(), ClientRef).optional(),
+  // board_as_project / item_as_project: groupId → what the group becomes (#687)
+  groupTargets: z.record(z.string(), GroupTarget).default({}),
   // board_as_project
   projectCode: z.string().optional(),
   // board/group/item id → project name override

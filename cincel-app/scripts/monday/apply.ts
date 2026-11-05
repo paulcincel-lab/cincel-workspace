@@ -388,13 +388,14 @@ export async function writePhaseA(
     (p) => p.data,
   );
   counts.projects = newProjects.length;
-  // The board's workflow is the project's one stage, as the Ficha sets it. The
-  // project's import ref names it (`stageWorkflowId`), so rollback owns the row.
-  const stages = newProjects.flatMap((p) =>
-    p.workflowId
-      ? [{ projectId: idOf({ kind: "planned", entity: "project", externalId: p.externalId }), workflowId: p.workflowId }]
-      : [],
-  );
+  // The board's workflow is the project's stage, as the Ficha sets it, plus the
+  // stages groups were mapped to (#687). The project's import ref names them
+  // (`stageWorkflowId`, `stageWorkflowIds`), so rollback owns the rows.
+  const stages = newProjects.flatMap((p) => {
+    const projectId = idOf({ kind: "planned", entity: "project", externalId: p.externalId });
+    const ids = [...new Set([...(p.workflowId ? [p.workflowId] : []), ...(p.extraStages ?? [])])];
+    return ids.map((workflowId) => ({ projectId, workflowId }));
+  });
   await insertAll(stages, (chunk) =>
     tx.insert(projectStages).values(chunk as (typeof stages)[number][]).returning(),
   );

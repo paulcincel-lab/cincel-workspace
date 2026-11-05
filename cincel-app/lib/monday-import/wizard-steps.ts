@@ -25,6 +25,7 @@ import type {
 } from "@/lib/types/monday-import";
 import type { RollbackBlocker } from "@/scripts/monday/rollback";
 import { matchStaff } from "@/lib/monday-import/people";
+import { ownProjectGroups, pruneGroupTargets } from "@/lib/monday-import/group-targets";
 
 export type BoardDraft = MappingInput["boards"][number];
 
@@ -277,13 +278,13 @@ export function workflowsForBoard(board: BoardDraft, choices: MondayImportChoice
   return choices.workflows.filter((workflow) => area.workflowIds.includes(workflow.id));
 }
 
-/** Changing the workflow drops template matches that belong to another workflow. */
+/** Changing the workflow drops template matches and group phases (#687) that belong to another workflow. */
 export function setBoardWorkflow(board: BoardDraft, workflowId: string | null, choices: MondayImportChoices): BoardDraft {
   const allowed = new Set(choices.templates.filter((t) => t.workflowId === workflowId).map((t) => t.id));
   const templateMatches = Object.fromEntries(
     Object.entries(board.templateMatches ?? {}).filter(([, templateId]) => allowed.has(templateId)),
   );
-  return { ...board, workflowId, templateMatches };
+  return pruneGroupTargets({ ...board, workflowId, templateMatches }, choices);
 }
 
 /** What a monday group becomes in Cincel for the board's strategy. */
@@ -306,7 +307,11 @@ export function groupEquivalent(strategy: BoardStrategy, groupTitle: string): st
 export function projectKeys(board: BoardDraft, source: MondayBoardSource): { id: string; mondayName: string }[] {
   switch (board.strategy) {
     case "board_as_project":
-      return [{ id: board.mondayBoardId, mondayName: source.name }];
+      return [
+        { id: board.mondayBoardId, mondayName: source.name },
+        // Groups mapped to their own project (#687).
+        ...ownProjectGroups(board, source).map((group) => ({ id: group.id, mondayName: group.title })),
+      ];
     case "group_as_project":
       return source.groups.map((group) => ({ id: group.id, mondayName: group.title }));
     case "item_as_project":

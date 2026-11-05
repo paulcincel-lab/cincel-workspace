@@ -510,7 +510,12 @@ export async function getImportChoices(db: ImportDb): Promise<MondayImportChoice
       .where(and(isNull(workflows.deletedAt), eq(workflows.active, true)))
       .orderBy(asc(workflows.sortOrder), asc(workflows.name)),
     db
-      .select({ id: workflowTaskTemplates.id, workflowId: workflowTaskTemplates.workflowId, name: workflowTaskTemplates.title })
+      .select({
+        id: workflowTaskTemplates.id,
+        workflowId: workflowTaskTemplates.workflowId,
+        name: workflowTaskTemplates.title,
+        phase: workflowTaskTemplates.phase,
+      })
       .from(workflowTaskTemplates)
       .where(eq(workflowTaskTemplates.active, true))
       .orderBy(asc(workflowTaskTemplates.workflowId), asc(workflowTaskTemplates.sortOrder)),

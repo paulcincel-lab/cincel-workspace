@@ -16,6 +16,7 @@
  * `import_refs.data` and cronograma rows (BE §5.2, §6.1).
  */
 import type { BoardFile, ColumnDef, FileIndex, UpdateLine } from "./export";
+import { groupPhase, resolveGroupTarget, workflowPhaseNames } from "./group-targets";
 import type {
   BoardMapping,
   ClientRef,
@@ -63,8 +64,8 @@ export interface ExportData {
 export interface CincelLookups {
   /** core.task_statuses (not deleted), by id. */
   customStatuses: Record<string, { name: string; closes: boolean }>;
-  /** core.workflow_task_templates, by id. */
-  templates: Record<string, { workflowId: string }>;
+  /** core.workflow_task_templates, by id; `phase` of active ones names the workflow's phases (#687). */
+  templates: Record<string, { workflowId: string; phase?: string | null }>;
   /** core.staff, by id. */
   staff: Record<string, { name: string }>;
   /** core.workflows (not deleted), by id: names for the wizard's Vista previa. */
@@ -118,6 +119,8 @@ export interface ImportRefData {
   path?: string[];
   /** Projects: the workflow of the `project_stages` row the import wrote (rollback owns that row). */
   stageWorkflowId?: string;
+  /** Projects: further `project_stages` rows the import wrote, from groups mapped to a stage (#687). */
+  stageWorkflowIds?: string[];
 }
 
 export interface PlannedContact {
@@ -170,6 +173,8 @@ export interface PlannedProject {
    * for `item_as_project`, none for `group_as_project`.
    */
   phases: string[];
+  /** Workflow stages besides `workflowId`, from groups mapped to a stage (#687): more `project_stages` rows. */
+  extraStages?: string[];
   source: RowSource;
   data: ImportRefData;
 }
@@ -901,42 +906,116 @@ function newProject(
   };
 }
 
+/** The board workflow's phases, from the active templates in the lookups. */
+function boardWorkflowPhases(ctx: Ctx, bm: BoardMapping): string[] {
+  return workflowPhaseNames(Object.values(ctx.lookups.templates), bm.workflowId);
+}
+
+/** Adds the stages of groups mapped to a stage (#687), past the board workflow; apply writes their rows. */
+function addExtraStages(project: PlannedProject, workflowIds: readonly string[]) {
+  const extra = [...new Set(workflowIds)].filter((id) => id !== project.workflowId);
+  if (extra.length === 0) return;
+  project.extraStages = extra;
+  project.data.stageWorkflowIds = extra;
+}
+
 function translateBoardAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
   const board = eb.board;
   const items = activeItems(eb.items);
-  const name = bm.projectNames[board.id] ?? board.name;
-  const client = resolveClient(ctx, bm, bm.client, items, name);
   const ranks = groupRanks(board.groups);
   const groupsInOrder = [...board.groups].sort(
     (a, b) => ranks.get(a.id)! - ranks.get(b.id)!,
   );
-  const project = newProject(
-    bm,
-    board.id,
-    name,
-    bm.projectCode,
-    client,
-    sourceOf(board, null),
-    projectPhases(groupsInOrder.map((g) => g.title)),
-  );
-  ctx.out.projects.push(project);
+  const phases = boardWorkflowPhases(ctx, bm);
+  const targets = new Map(groupsInOrder.map((g) => [g.id, resolveGroupTarget(bm, g, phases)]));
+  const kindOf = (groupId: string | null) => (groupId ? targets.get(groupId)?.kind : undefined);
+  const inBoardProject = (groupId: string | null) =>
+    kindOf(groupId) !== "project" && kindOf(groupId) !== "ignore";
+
+  // Groups mapped to their own project, as group_as_project makes them (#687).
+  const groupProjects = new Map<string, PlannedProject>();
+  for (const group of groupsInOrder) {
+    if (targets.get(group.id)?.kind !== "project") continue;
+    const groupItems = items.filter((i) => i.group?.id === group.id);
+    groupProjects.set(group.id, addGroupProject(ctx, bm, board, group, groupItems));
+  }
+
+  // The board's project, unless every group went elsewhere.
+  let project: PlannedProject | null = null;
+  const mapped = groupsInOrder.filter((g) => inBoardProject(g.id));
+  const loose = items.some((i) => !targets.has(i.group?.id ?? ""));
+  if (board.groups.length === 0 || mapped.length > 0 || loose) {
+    const name = bm.projectNames[board.id] ?? board.name;
+    const client = resolveClient(ctx, bm, bm.client, items.filter((i) => inBoardProject(i.group?.id ?? null)), name);
+    project = newProject(
+      bm,
+      board.id,
+      name,
+      bm.projectCode,
+      client,
+      sourceOf(board, null),
+      projectPhases(mapped.map((g) => groupPhase(targets.get(g.id)!, g.title))),
+    );
+    addExtraStages(
+      project,
+      mapped.flatMap((g) => {
+        const t = targets.get(g.id)!;
+        return t.kind === "stage" ? [t.workflowId] : [];
+      }),
+    );
+    ctx.out.projects.push(project);
+  }
+
   const orderInGroup = new Map<string, number>();
   for (const item of items) {
     const groupId = item.group?.id ?? null;
+    const target = groupId ? targets.get(groupId) : undefined;
+    if (target?.kind === "ignore") continue;
+    const owner = target?.kind === "project" ? groupProjects.get(groupId!)! : project;
+    if (!owner) continue;
     const n = (orderInGroup.get(groupId ?? "") ?? 0) + 1;
     orderInGroup.set(groupId ?? "", n);
     const group = board.groups.find((g) => g.id === groupId);
-    const task = addTask(ctx, bm, board, item, project, {
+    const task = addTask(ctx, bm, board, item, owner, {
       columns: bm.columns,
       defs: board.columns,
-      phase: group?.title ?? null,
+      phase: target ? groupPhase(target, group?.title ?? "") : (group?.title ?? null),
       seccion: group?.title ?? null,
       seccionOrder: groupId ? (ranks.get(groupId) ?? null) : null,
       sortOrder: n,
       groupId,
     });
-    addSubitems(ctx, bm, board, item, task, project);
+    addSubitems(ctx, bm, board, item, task, owner);
   }
+}
+
+/** One group's project (`<boardId>:<groupId>`): its name, code and client, else the board's client. */
+function addGroupProject(
+  ctx: Ctx,
+  bm: BoardMapping,
+  board: BoardFile,
+  group: BoardFile["groups"][number],
+  groupItems: readonly ItemLike[],
+): PlannedProject {
+  const name = bm.projectNames[group.id] ?? group.title;
+  const client = resolveClient(
+    ctx,
+    bm,
+    bm.groupClients?.[group.id] ?? bm.client,
+    groupItems,
+    name,
+  );
+  const project = newProject(
+    bm,
+    `${board.id}:${group.id}`,
+    name,
+    bm.projectCodes[group.id],
+    client,
+    sourceOf(board, group.id),
+    [],
+  );
+  ctx.out.projects.push(project);
+  return project;
 }
 
 function translateGroupAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
@@ -948,24 +1027,7 @@ function translateGroupAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
   );
   for (const group of groups) {
     const groupItems = items.filter((i) => i.group?.id === group.id);
-    const name = bm.projectNames[group.id] ?? group.title;
-    const client = resolveClient(
-      ctx,
-      bm,
-      bm.groupClients?.[group.id] ?? bm.client,
-      groupItems,
-      name,
-    );
-    const project = newProject(
-      bm,
-      `${board.id}:${group.id}`,
-      name,
-      bm.projectCodes[group.id],
-      client,
-      sourceOf(board, group.id),
-      [],
-    );
-    ctx.out.projects.push(project);
+    const project = addGroupProject(ctx, bm, board, group, groupItems);
     groupItems.forEach((item, i) => {
       const task = addTask(ctx, bm, board, item, project, {
         columns: bm.columns,
@@ -984,8 +1046,13 @@ function translateGroupAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
 function translateItemAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
   const board = eb.board;
   const ranks = groupRanks(board.groups);
+  const phases = boardWorkflowPhases(ctx, bm);
   for (const item of activeItems(eb.items)) {
     const groupId = item.group?.id ?? null;
+    const group = board.groups.find((g) => g.id === groupId);
+    // What the item's group becomes on its project (#687); ignored groups import none of their items.
+    const target = group ? resolveGroupTarget(bm, group, phases) : null;
+    if (target?.kind === "ignore") continue;
     const name = bm.projectNames[item.id] ?? item.name;
     const client = resolveClient(ctx, bm, bm.client, [item], name, item.id);
     const source = sourceOf(board, groupId);
@@ -996,9 +1063,10 @@ function translateItemAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
       bm.projectCodes[item.id],
       client,
       source,
-      projectPhases([source.groupTitle]),
+      projectPhases([target ? groupPhase(target, source.groupTitle ?? "") : source.groupTitle]),
       importColumns(item, bm.columns, board.columns),
     );
+    if (target?.kind === "stage") addExtraStages(project, [target.workflowId]);
     ctx.out.projects.push(project);
     const projectRef: RowRef = {
       kind: "planned",
@@ -1012,7 +1080,6 @@ function translateItemAsProject(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
       files: { project: projectRef, task: null, groupName: source.groupTitle },
       source,
     });
-    const group = board.groups.find((g) => g.id === groupId);
     activeItems(item.subitems ?? []).forEach((sub, i) => {
       const task = addTask(ctx, bm, board, sub, project, {
         columns: bm.subitemColumns,

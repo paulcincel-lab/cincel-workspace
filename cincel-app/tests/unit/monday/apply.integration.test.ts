@@ -472,6 +472,57 @@ describe.skipIf(!url)(
       });
     });
 
+    it("groups mapped to a stage, their own project or ignored import as planned; rollback removes it all (#687)", async () => {
+      await inTx(async (tx) => {
+        await seed(tx);
+        const STAGE = "56656656-0000-4000-8000-0000000000f2";
+        await tx.insert(schema.workflows).values([
+          { id: WORKFLOW, key: `wf-${WORKFLOW}`, name: "Diseño" },
+          { id: STAGE, key: `wf-${STAGE}`, name: "Construcción" },
+        ]);
+        const mapping = nestedMapping(STAFF, CLIENT);
+        mapping.boards[0].workflowId = WORKFLOW;
+        mapping.boards[0].groupTargets = {
+          g_obra: { kind: "stage", workflowId: STAGE },
+          g_diseno: { kind: "project" },
+        };
+        mapping.boards[0].projectNames = { g_diseno: "Casa Nido · Diseño" };
+        mapping.boards[1].groupTargets = { g1: { kind: "ignore" } };
+        const dir = exportFolder(mapping);
+        const cmd = commands(tx);
+        const planned = await cmd.plan(dir);
+        expect(planned.code, planned.err).toBe(0);
+
+        const { data } = await readPlanExport(dir);
+        const plan = await buildPlan(data, mapping, createPlanDbLookups(tx));
+        const result = plan.translation!.result;
+        const board = result.projects.find((p) => p.externalId === "901")!;
+        expect(board.phases).toEqual([]);
+        expect(board.extraStages).toEqual([STAGE]);
+        expect(result.projects.find((p) => p.externalId === "901:g_diseno")?.name).toBe("Casa Nido · Diseño");
+        expect(result.projects.some((p) => p.externalId === "902")).toBe(false);
+        expect(result.tasks.find((t) => t.externalId === "2002")?.project.externalId).toBe("901:g_diseno");
+
+        const before = await tableCounts(tx);
+        const applied = await cmd.apply(dir);
+        expect(applied.code, applied.err).toBe(0);
+        const [batch] = await batchesOf(tx);
+        const { refs } = await refsByEntity(tx, batch.id);
+        const boardId = refs.find((r) => r.entity === "project" && r.externalId === "901")!.rowId;
+        const stages = await tx
+          .select()
+          .from(schema.projectStages)
+          .where(eq(schema.projectStages.projectId, boardId));
+        expect(stages.map((s) => s.workflowId).sort()).toEqual([WORKFLOW, STAGE].sort());
+
+        expect(await findRollbackBlockers(tx, batch.id)).toEqual([]);
+        await deleteBatchRows(tx, batch.id);
+        expect(diff(before, await tableCounts(tx))).toEqual({
+          import_batches: 1,
+        });
+      });
+    });
+
     it("phase B killed after any upload resumes without duplicate uploads", async () => {
       // The number of files to upload, from plan.md.
       let files = 0;

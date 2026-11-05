@@ -98,7 +98,8 @@ export interface MondayImportChoices {
   statuses: { id: string; name: string; closes: boolean }[];
   areas: { id: string; name: string; workflowIds: string[] }[];
   workflows: { id: string; name: string }[];
-  templates: { id: string; workflowId: string; name: string }[];
+  /** Active templates; `phase` names their workflow's phases for the groups table (#687). */
+  templates: { id: string; workflowId: string; name: string; phase?: string | null }[];
   clients: { id: string; name: string }[];
   staff: { id: string; name: string; email: string | null }[];
   providerSubtypes: string[];
@@ -178,7 +179,7 @@ export interface MondayPreviewSample {
     priority: string | null;
     manager: string | null;
     phase: string | null;
-    /** A project sample's workflow (current_workflow_id and its stage); null otherwise. */
+    /** A project sample's workflow and any stages its groups add (#687), joined; null otherwise. */
     workflow: string | null;
     commitmentDate: string | null;
     deliveryDate: string | null;
