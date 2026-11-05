@@ -191,7 +191,7 @@ never runs them against a database.
 
 ```bash
 # login page renders + seeded admin can log in and reach a private route
-CI=1 E2E_BASE_URL='https://your-host' npx playwright test tests/e2e/smoke.spec.ts
+CI=1 E2E_BASE_URL='https://your-host' E2E_ADMIN_PASSWORD='<admin-password>' npx playwright test tests/e2e/smoke.spec.ts
 ```
 
 Or manually: open `/login`, sign in as the seeded admin, confirm you land on

@@ -56,7 +56,7 @@ export const importBatches = core.table(
  *
  * `entity`: contact | contact_person | provider_profile | project |
  * project_schedule | task | checklist_item | task_support | task_dependency |
- * history_event | schedule_task | task_link | project_link | drive_file.
+ * history_event | schedule_task | task_link | project_link | drive_file | area.
  * `external_id`: the source id; task_support uses "<itemId>:<userId>", groups
  * "<boardId>:<groupId>". `row_id`: the Cincel row id; task_support stores the
  * task id (the staff id goes in `data.staffId`).

@@ -11,6 +11,9 @@ import { Label } from "@/components/ui/shadcn/label";
 import { Switch } from "@/components/ui/shadcn/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
 import { ChoiceSelect, type Choice } from "@/components/configuracion/monday-import/ChoiceSelect";
+import { TaskAreaWorkflowSection } from "@/components/configuracion/monday-import/TaskAreaWorkflowSection";
+import { GroupTargetsTable } from "@/components/configuracion/monday-import/GroupTargetsTable";
+import { hasGroupTargets } from "@/lib/monday-import/group-targets";
 import { createTaskStatusAction } from "@/lib/actions/task-statuses-actions";
 import {
   BASE_STATUS_LABELS,
@@ -24,6 +27,7 @@ import {
   encodeStatusTarget,
   findBoard,
   groupEquivalent,
+  isDefaultedStatus,
   lacksClient,
   projectKeys,
   setBoardArea,
@@ -84,12 +88,15 @@ function EquivalenceTable({ monday, cincel, children }: { monday: string; cincel
 function StatusLabelRow({
   label,
   value,
+  defaulted,
   statusChoices,
   onChange,
   onStatusCreated,
 }: {
   label: { id: string; name: string; isDone: boolean };
   value: string;
+  /** No equivalent was found and it defaulted to Pendiente: flagged until the admin picks one. */
+  defaulted: boolean;
   statusChoices: Choice[];
   onChange: (value: string) => void;
   onStatusCreated: (status: { id: string; name: string; closes: boolean }) => void;
@@ -126,6 +133,11 @@ function StatusLabelRow({
         {label.isDone ? (
           <Badge variant="outline" className="ml-2">
             Terminado en monday
+          </Badge>
+        ) : null}
+        {defaulted ? (
+          <Badge variant="secondary" className="ml-2">
+            Sin equivalente, revisar
           </Badge>
         ) : null}
       </TableCell>
@@ -169,7 +181,8 @@ function StatusLabelRow({
   );
 }
 
-function BoardEquivalences({
+/** One board's full mapping; also the body of its card in the board gallery (#685). */
+export function BoardEquivalences({
   board,
   source,
   choices,
@@ -279,6 +292,7 @@ function BoardEquivalences({
                   key={label.id}
                   label={label}
                   value={encodeStatusTarget(board.statusMaps[columnId]?.[label.id])}
+                  defaulted={isDefaultedStatus(board.statusMaps[columnId]?.[label.id])}
                   statusChoices={statusChoices}
                   onStatusCreated={onStatusCreated}
                   onChange={(value) => {
@@ -373,33 +387,45 @@ function BoardEquivalences({
                 />
               </div>
             </div>
-            <EquivalenceTable monday="Grupo de monday" cincel="En Cincel">
-              {source.groups.map((group) => (
-                <TableRow key={group.id}>
-                  <TableCell className="align-top">{group.title}</TableCell>
-                  <TableCell className="space-y-2 whitespace-normal">
-                    <span className="text-foreground">{groupEquivalent(board.strategy, group.title)}</span>
-                    {board.strategy === "group_as_project" ? (
-                      <ChoiceSelect
-                        label={`Cliente de ${group.title}`}
-                        value={board.groupClients?.[group.id] ? encodeClient(board.groupClients[group.id]) : "none"}
-                        choices={clientChoices}
-                        onChange={(value) =>
-                          onBoardChange((current) => {
-                            const groupClients = { ...(current.groupClients ?? {}) };
-                            const client = decodeClient(value, group.title);
-                            if (client) groupClients[group.id] = client;
-                            else delete groupClients[group.id];
-                            return { ...current, groupClients };
-                          })
-                        }
-                      />
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </EquivalenceTable>
+            {hasGroupTargets(board) ? (
+              <GroupTargetsTable
+                board={board}
+                source={source}
+                choices={choices}
+                clientChoices={clientChoices}
+                onBoardChange={onBoardChange}
+              />
+            ) : (
+              <EquivalenceTable monday="Grupo de monday" cincel="En Cincel">
+                {source.groups.map((group) => (
+                  <TableRow key={group.id}>
+                    <TableCell className="align-top">{group.title}</TableCell>
+                    <TableCell className="space-y-2 whitespace-normal">
+                      <span className="text-foreground">{groupEquivalent(board.strategy, group.title)}</span>
+                      {board.strategy === "group_as_project" ? (
+                        <ChoiceSelect
+                          label={`Cliente de ${group.title}`}
+                          value={board.groupClients?.[group.id] ? encodeClient(board.groupClients[group.id]) : "none"}
+                          choices={clientChoices}
+                          onChange={(value) =>
+                            onBoardChange((current) => {
+                              const groupClients = { ...(current.groupClients ?? {}) };
+                              const client = decodeClient(value, group.title);
+                              if (client) groupClients[group.id] = client;
+                              else delete groupClients[group.id];
+                              return { ...current, groupClients };
+                            })
+                          }
+                        />
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </EquivalenceTable>
+            )}
           </Section>
+
+          <TaskAreaWorkflowSection board={board} source={source} choices={choices} onBoardChange={onBoardChange} />
 
           <Section
             id={`client-${board.mondayBoardId}`}
@@ -515,13 +541,13 @@ function BoardEquivalences({
                         <Input
                           aria-label={`Código de ${key.mondayName}`}
                           value={
-                            board.strategy === "board_as_project"
+                            key.id === board.mondayBoardId && board.strategy === "board_as_project"
                               ? (board.projectCode ?? "")
                               : (board.projectCodes?.[key.id] ?? "")
                           }
                           onChange={(event) =>
                             onBoardChange((current) =>
-                              current.strategy === "board_as_project"
+                              key.id === current.mondayBoardId && current.strategy === "board_as_project"
                                 ? { ...current, projectCode: event.target.value || undefined }
                                 : {
                                     ...current,

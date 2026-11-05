@@ -39,6 +39,7 @@ import {
   importedProjects,
   mergeDraft,
   previewImport,
+  recordCreatedStaff,
   resolveWizardToken,
   saveDraft,
   startApply,
@@ -259,6 +260,12 @@ describe("monday wizard connect and export", () => {
     const source = await getExportSource(run.runId, deps);
     expect(source.boards[0]).toMatchObject({ id: "101", name: "Proyectos", itemCount: 3 });
     expect(source.boards[0].statusLabels.status).toEqual([{ id: "1", name: "Listo", isDone: false }]);
+    // The card avatars (#685): only monday users, each once, from the board's people columns.
+    const userIds = new Set(source.users.map((user) => user.id));
+    for (const board of source.boards) {
+      expect(new Set(board.userIds).size).toBe(board.userIds?.length);
+      for (const id of board.userIds ?? []) expect(userIds.has(id)).toBe(true);
+    }
     expect((await getOptionsInfo(run.runId, deps)).filesDisabledReason).toBe("Los archivos no se exportaron de monday.");
   });
 
@@ -295,6 +302,26 @@ describe("monday wizard draft and preview", () => {
 
     expect((await uploadDraft(run.runId, "{nope", deps)).issues).toEqual(["El archivo no es JSON válido."]);
     expect((await uploadDraft(run.runId, JSON.stringify(nestedMapping(ANA, CLIENT)), deps)).issues).toEqual([]);
+  });
+
+  it("keeps `created` only on staff the run's Crear integrante made (#689)", async () => {
+    const run = await nestedRun(nestedMapping(ANA, CLIENT));
+    const deps = { db: {} as ImportDb, env };
+    const made = "44444444-4444-4444-8444-444444444444";
+    await recordCreatedStaff(run.runId, made, deps);
+    expect((await readRun(run.runId, env))!.createdStaffIds).toEqual([made]);
+    const people = {
+      "1": { action: "staff", staffId: ANA, created: true },
+      "2": { action: "staff", staffId: made, created: true },
+    };
+    const stored = () => JSON.parse(readFileSync(join(runDir(run.runId, env), "mapping.json"), "utf8")) as MappingInput;
+
+    await saveDraft(run.runId, { ...nestedMapping(ANA, CLIENT), people }, null, deps);
+    expect(stored().people).toEqual({ "1": { action: "staff", staffId: ANA }, "2": people["2"] });
+
+    const upload = JSON.stringify({ ...nestedMapping(ANA, CLIENT), people });
+    expect((await uploadDraft(run.runId, upload, deps)).issues).toEqual([]);
+    expect(stored().people).toEqual({ "1": { action: "staff", staffId: ANA }, "2": people["2"] });
   });
 
   it("previews the plan as counts per Cincel entity and 5 sample items per board", async () => {
@@ -398,7 +425,11 @@ describe.skipIf(!url)("monday wizard apply and rollback (test DB)", { timeout: 6
         sql`select count(*)::int as n from core.import_refs where batch_id = ${state.batchId} and entity = 'project'`,
       )) as unknown as { n: number }[];
       expect(n).toBe(preview.totals.proyectos);
-      expect((await importedProjects(run.runId, deps)).length).toBe(preview.totals.proyectos);
+      const imported = await importedProjects(run.runId, deps);
+      expect(imported.length).toBe(preview.totals.proyectos);
+      // Each project names its monday board, so its card turns into its link (#685).
+      const boardIds = new Set(preview.boards.map((board) => board.boardId));
+      for (const project of imported) expect(boardIds.has(project.boardId ?? "")).toBe(true);
 
       const check = await checkRollback(run.runId, deps);
       expect(check).toMatchObject({ canRollback: true, blockers: [] });

@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Download, Upload } from "lucide-react";
+import { Check, Download, Upload, X } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
+import { SelectionBar } from "@/components/configuracion/monday-import/BoardGallery";
 import { BoardsStep, type ExportChoice } from "@/components/configuracion/monday-import/BoardsStep";
 import { ConnectStep } from "@/components/configuracion/monday-import/ConnectStep";
 import { EquivalenciasStep } from "@/components/configuracion/monday-import/EquivalenciasStep";
@@ -32,6 +32,7 @@ import {
   uploadMondayMappingAction,
 } from "@/lib/actions/monday-import-actions";
 import { completeOnboardingAction } from "@/lib/actions/onboarding-actions";
+import { buildBoardCards, needsExport, selectionTotals } from "@/lib/monday-import/board-cards";
 import {
   MONDAY_IMPORT_STEPS,
   canAdvance,
@@ -41,6 +42,7 @@ import {
   isJobRunning,
   nextStep,
   previousStep,
+  setPerson,
   stepIndex,
   validateMapping,
 } from "@/lib/monday-import/wizard-steps";
@@ -56,11 +58,38 @@ import type {
   MondayPreview,
   MondayRollbackCheck,
 } from "@/lib/types/monday-import";
+import type { CreatedStaff } from "@/scripts/monday/created-staff";
 
 const POLL_MS = 2000;
 const UNEXPECTED = "Algo salió mal. Intenta de nuevo.";
 /** Steps that edit the draft: leaving one saves it. */
 const DRAFT_STEPS: MondayImportStep[] = ["tableros", "equivalencias", "personas", "opciones"];
+/** Where the ✕ goes; the run stays on the server and opening the page again resumes it. */
+const CLOSE_HREF = "/configuracion";
+
+/** Boards whose card was opened, per run, in this browser only (a convenience: «mapear» until opened). */
+function reviewedKey(runId: string): string {
+  return `monday-import:reviewed:${runId}`;
+}
+
+function readReviewed(runId: string | null): string[] {
+  if (!runId) return [];
+  try {
+    const raw = window.localStorage.getItem(reviewedKey(runId));
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeReviewed(runId: string, ids: string[]): void {
+  try {
+    window.localStorage.setItem(reviewedKey(runId), JSON.stringify(ids));
+  } catch {
+    // Without storage the chips just start at «mapear» again next time.
+  }
+}
 
 export type MondayImportWizardProps = {
   initialRun: MondayImportRunState | null;
@@ -159,6 +188,8 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
   const [notice, setNotice] = useState("");
   /** Board Equivalencias opens on ("Corregir" in Vista previa). */
   const [focusBoardId, setFocusBoardId] = useState<string | null>(null);
+  const [focusPersonId, setFocusPersonId] = useState<string | null>(null);
+  const [reviewed, setReviewed] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const fileInput = useRef<HTMLInputElement>(null);
   const runId = run?.runId ?? null;
@@ -180,6 +211,22 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
     setProjects(projectsResult.ok ? projectsResult.projects : []);
     setRollbackCheck(checkResult.ok ? checkResult.check : null);
   }, []);
+
+  useEffect(() => {
+    // Browser storage is only readable after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReviewed(readReviewed(runId));
+  }, [runId]);
+
+  function markReviewed(boardId: string) {
+    if (!runId) return;
+    setReviewed((current) => {
+      if (current.includes(boardId)) return current;
+      const next = [...current, boardId];
+      writeReviewed(runId, next);
+      return next;
+    });
+  }
 
   const runRef = useRef(run);
   const mappingRef = useRef(mapping);
@@ -277,6 +324,29 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
     if (issues.length > 0) setIssues(validateMapping(next));
   }
 
+  /** "Crear integrante" on a Vista previa warning (#689): maps the person as Personas does, saves and recalculates. */
+  function staffCreatedInPreview(mondayUserId: string, member: CreatedStaff) {
+    if (!runId || !mapping) return;
+    const next = setPerson(mapping, mondayUserId, { action: "staff", staffId: member.id, created: true });
+    setChoices((current) => (current ? { ...current, staff: [...current.staff, member] } : current));
+    editMapping(next);
+    setPreviewError("");
+    startTransition(async () => {
+      try {
+        const saved = await saveMondayMappingDraftAction(runId, next);
+        if (!saved.ok) {
+          setPreviewError(saved.error);
+          return;
+        }
+        const result = await previewMondayImportAction(runId);
+        if (result.ok) setPreview(result.preview);
+        else setPreviewError(result.error);
+      } catch {
+        setPreviewError(UNEXPECTED);
+      }
+    });
+  }
+
   async function saveDraft(target: MondayImportStep): Promise<string[] | null> {
     if (!runId || !mapping) return [];
     const result = await saveMondayMappingDraftAction(runId, mapping, target);
@@ -287,7 +357,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
     return result.issues;
   }
 
-  function goTo(target: MondayImportStep, boardId: string | null = null) {
+  function goTo(target: MondayImportStep, boardId: string | null = null, personId: string | null = null) {
     setError("");
     setNotice("");
     startTransition(async () => {
@@ -310,6 +380,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
           }
         }
         setFocusBoardId(boardId);
+        setFocusPersonId(personId);
         setStep(target);
       } catch {
         setError(UNEXPECTED);
@@ -396,6 +467,22 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
     });
   }
 
+  /** ✕: saves the draft (if this step edits it) and leaves; the run is resumed when the page opens again. */
+  function close() {
+    setError("");
+    startTransition(async () => {
+      try {
+        if (DRAFT_STEPS.includes(step) && mapping && runId && !run?.batchId) {
+          const saved = await saveDraft(step);
+          if (saved === null) return;
+        }
+        router.push(CLOSE_HREF);
+      } catch {
+        setError(UNEXPECTED);
+      }
+    });
+  }
+
   function complete() {
     setError("");
     startTransition(async () => {
@@ -474,34 +561,74 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
   const needsData = step === "equivalencias" || step === "personas";
   const ready = Boolean(mapping && source && choices);
   const finished = run?.batchStatus === "applied" || run?.batchStatus === "rolled_back";
+  const cards = useMemo(
+    () => buildBoardCards({ connection, mapping, source, preview, reviewed: new Set(reviewed) }),
+    [connection, mapping, source, preview, reviewed],
+  );
+  const totals = selectionTotals(cards, selectedBoardIds);
+  const exportRunning = isJobRunning(run?.jobs.export);
+  const mustExport = needsExport(Boolean(run?.exported), run?.boardIds ?? [], selectedBoardIds);
+  const importBoards = (mapping?.boards ?? [])
+    .filter((board) => board.strategy !== "skip")
+    .map((board) => ({ id: board.mondayBoardId, name: board.name }));
+
+  /** "Importar n tableros": exports the picked boards when they aren't the exported ones, else goes on to map them. */
+  function importSelected() {
+    if (mustExport) startExport();
+    else goTo(nextStep("tableros"));
+  }
+
+  const topBar = (
+    <header className="sticky top-0 z-20 border-b bg-background">
+      <div className="mx-auto flex w-full max-w-6xl items-start justify-between gap-4 px-4 py-3 md:px-6">
+        <div className="min-w-0 space-y-2">
+          <h1 className="text-lg font-semibold text-foreground">Importar de monday</h1>
+          {run ? (
+            <StepHeader
+              current={step}
+              canJump={(target) => !isPending && canJumpTo(target, step, state)}
+              onJump={(target) => goTo(target)}
+            />
+          ) : null}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Cerrar"
+          title="Cerrar (la importación se guarda)"
+          disabled={isPending}
+          onClick={close}
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </div>
+    </header>
+  );
 
   if (!run) {
     return (
-      <Card className="mx-auto w-full max-w-3xl">
-        <CardHeader>
-          <CardTitle>Importar de monday</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="flex min-h-screen flex-col bg-background">
+        {topBar}
+        <div className="mx-auto w-full max-w-3xl px-4 py-6">
           <Alert variant="destructive">
             <AlertDescription>{error || "No se pudo abrir la importación. Recarga la página."}</AlertDescription>
           </Alert>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="mx-auto w-full max-w-5xl">
-      <CardHeader>
-        <StepHeader
-          current={step}
-          canJump={(target) => !isPending && canJumpTo(target, step, state)}
-          onJump={(target) => goTo(target)}
-        />
-        <CardTitle className="pt-2">{current.label}</CardTitle>
-        <CardDescription>{current.description}</CardDescription>
+    <div className="flex min-h-screen flex-col bg-background">
+      {topBar}
+
+      <div className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-4 py-6 md:px-6">
+        <div className="space-y-1">
+          <h2 className="text-base font-medium text-foreground">{current.label}</h2>
+          <p className="text-sm text-muted-foreground">{current.description}</p>
+        </div>
         {mapping && !finished ? (
-          <div className="flex flex-wrap gap-2 pt-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" disabled={isPending} onClick={download}>
               <Download data-icon="inline-start" aria-hidden="true" />
               Descargar mapping.json
@@ -524,75 +651,96 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
             />
           </div>
         ) : null}
-      </CardHeader>
 
-      <CardContent className="space-y-4">
-        {step === "conectar" ? (
-          <ConnectStep
-            token={token}
-            onTokenChange={setToken}
-            hasServerToken={hasServerToken}
-            connection={connection}
-            onConnected={(next) => {
-              setConnection(next);
-              if (selectedBoardIds.length === 0) setSelectedBoardIds(next.boards.map((board) => board.id));
-            }}
-          />
-        ) : null}
-        {step === "tableros" ? (
-          <BoardsStep
-            connection={connection}
-            run={run}
-            selectedBoardIds={selectedBoardIds}
-            onSelectedChange={setSelectedBoardIds}
-            exportChoice={exportChoice}
-            onExportChoiceChange={setExportChoice}
-            onStartExport={startExport}
-            isPending={isPending}
-            mapping={mapping}
-            onMappingChange={editMapping}
-          />
-        ) : null}
-        {needsData && !ready ? <p className="text-sm text-muted-foreground">Cargando equivalencias…</p> : null}
-        {step === "equivalencias" && mapping && source && choices ? (
-          <EquivalenciasStep
-            mapping={mapping}
-            source={source}
-            choices={choices}
-            initialBoardId={focusBoardId}
-            onMappingChange={editMapping}
-            onStatusCreated={(status) =>
-              setChoices((previous) => (previous ? { ...previous, statuses: [...previous.statuses, status] } : previous))
-            }
-          />
-        ) : null}
-        {step === "personas" && mapping && source && choices ? (
-          <PeopleStep mapping={mapping} source={source} choices={choices} onMappingChange={editMapping} />
-        ) : null}
-        {step === "opciones" && mapping ? (
-          <OptionsStep mapping={mapping} info={optionsInfo} error={optionsError} onMappingChange={editMapping} />
-        ) : null}
-        {step === "vista_previa" ? (
-          <PreviewStep
-            preview={preview}
-            error={previewError}
-            isPending={isPending}
-            onRefresh={refreshPreview}
-            onFix={(target, boardId) => goTo(target, boardId)}
-          />
-        ) : null}
-        {step === "importar" ? (
-          <ImportStep
-            run={run}
-            projects={projects}
-            rollbackCheck={rollbackCheck}
-            isPending={isPending}
-            error={error}
-            onStartApply={startApply}
-            onStartRollback={startRollback}
-            onFinish={complete}
-          />
-        ) : null}
+        {/* Keyed by step so each step fades in; motion-safe keeps it still with prefers-reduced-motion. */}
+        <div key={step} className="space-y-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200">
+          {step === "conectar" ? (
+            <ConnectStep
+              token={token}
+              onTokenChange={setToken}
+              hasServerToken={hasServerToken}
+              connection={connection}
+              onConnected={setConnection}
+            />
+          ) : null}
+          {step === "tableros" ? (
+            <BoardsStep
+              connection={connection}
+              run={run}
+              selectedBoardIds={selectedBoardIds}
+              onSelectedChange={setSelectedBoardIds}
+              exportChoice={exportChoice}
+              onExportChoiceChange={setExportChoice}
+              onStartExport={startExport}
+              isPending={isPending}
+              mapping={mapping}
+              onMappingChange={editMapping}
+              cards={cards}
+              source={source}
+              choices={choices}
+              onBoardOpened={markReviewed}
+              onStatusCreated={(status) =>
+                setChoices((previous) => (previous ? { ...previous, statuses: [...previous.statuses, status] } : previous))
+              }
+              onStaffCreated={(member) =>
+                setChoices((previous) => (previous ? { ...previous, staff: [...previous.staff, member] } : previous))
+              }
+            />
+          ) : null}
+          {needsData && !ready ? <p className="text-sm text-muted-foreground">Cargando equivalencias…</p> : null}
+          {step === "equivalencias" && mapping && source && choices ? (
+            <EquivalenciasStep
+              mapping={mapping}
+              source={source}
+              choices={choices}
+              initialBoardId={focusBoardId}
+              onMappingChange={editMapping}
+              onStatusCreated={(status) =>
+                setChoices((previous) => (previous ? { ...previous, statuses: [...previous.statuses, status] } : previous))
+              }
+            />
+          ) : null}
+          {step === "personas" && mapping && source && choices ? (
+            <PeopleStep
+              mapping={mapping}
+              source={source}
+              choices={choices}
+              runId={runId}
+              onMappingChange={editMapping}
+              onStaffCreated={(member) =>
+                setChoices((current) => (current ? { ...current, staff: [...current.staff, member] } : current))
+              }
+              focusPersonId={focusPersonId}
+            />
+          ) : null}
+          {step === "opciones" && mapping ? (
+            <OptionsStep mapping={mapping} info={optionsInfo} error={optionsError} onMappingChange={editMapping} />
+          ) : null}
+          {step === "vista_previa" ? (
+            <PreviewStep
+              preview={preview}
+              error={previewError}
+              isPending={isPending}
+              onRefresh={refreshPreview}
+              onFix={(target, boardId, personId) => goTo(target, boardId, personId ?? null)}
+              runId={runId}
+              onStaffCreated={staffCreatedInPreview}
+            />
+          ) : null}
+          {step === "importar" ? (
+            <ImportStep
+              run={run}
+              projects={projects}
+              rollbackCheck={rollbackCheck}
+              isPending={isPending}
+              error={error}
+              onStartApply={startApply}
+              onStartRollback={startRollback}
+              onFinish={complete}
+              boards={importBoards}
+            />
+          ) : null}
+        </div>
 
         <IssueList issues={issues} />
         {notice ? (
@@ -605,43 +753,53 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
-      </CardContent>
+      </div>
 
-      <CardFooter className="flex flex-wrap justify-between gap-2">
-        <div className="flex flex-wrap gap-2">
-          {finished ? null : (
-            <Button variant="ghost" disabled={isPending} onClick={complete}>
-              Omitir por ahora
-            </Button>
-          )}
-          {run.batchStatus === "rolled_back" ? (
-            <Button variant="outline" disabled={isPending || anyJobRunning} onClick={startOver}>
-              Empezar una importación nueva
-            </Button>
+      <footer className="sticky bottom-0 z-20 border-t bg-background">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3 md:px-6">
+          <div className="flex flex-wrap items-center gap-2">
+            {finished ? null : (
+              <Button variant="ghost" disabled={isPending} onClick={complete}>
+                Omitir por ahora
+              </Button>
+            )}
+            {run.batchStatus === "rolled_back" ? (
+              <Button variant="outline" disabled={isPending || anyJobRunning} onClick={startOver}>
+                Empezar una importación nueva
+              </Button>
+            ) : null}
+          </div>
+          {step === "tableros" && connection && !run.batchId ? (
+            <SelectionBar
+              totals={totals}
+              exporting={exportRunning}
+              disabled={isPending || anyJobRunning || (!mustExport && !canAdvance(step, state))}
+              onImport={importSelected}
+            />
           ) : null}
+          <div className="flex flex-wrap gap-2">
+            {step !== "conectar" && step !== "importar" ? (
+              <Button variant="outline" disabled={isPending || anyJobRunning} onClick={() => goTo(previousStep(step))}>
+                Atrás
+              </Button>
+            ) : null}
+            {step === "importar" && !run.batchId && !anyJobRunning ? (
+              <Button variant="outline" disabled={isPending} onClick={() => goTo("vista_previa")}>
+                Atrás
+              </Button>
+            ) : null}
+            {step !== "importar" ? (
+              <Button
+                disabled={isPending || anyJobRunning || !canAdvance(step, state)}
+                aria-describedby={issues.length > 0 ? "monday-mapping-issues" : undefined}
+                onClick={() => goTo(nextStep(step))}
+              >
+                {step === "vista_previa" ? "Continuar a importar" : "Siguiente"}
+              </Button>
+            ) : null}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {step !== "conectar" && step !== "importar" ? (
-            <Button variant="outline" disabled={isPending || anyJobRunning} onClick={() => goTo(previousStep(step))}>
-              Atrás
-            </Button>
-          ) : null}
-          {step === "importar" && !run.batchId && !anyJobRunning ? (
-            <Button variant="outline" disabled={isPending} onClick={() => goTo("vista_previa")}>
-              Atrás
-            </Button>
-          ) : null}
-          {step !== "importar" ? (
-            <Button
-              disabled={isPending || anyJobRunning || !canAdvance(step, state)}
-              aria-describedby={issues.length > 0 ? "monday-mapping-issues" : undefined}
-              onClick={() => goTo(nextStep(step))}
-            >
-              {step === "vista_previa" ? "Continuar a importar" : "Siguiente"}
-            </Button>
-          ) : null}
-        </div>
-      </CardFooter>
-    </Card>
+      </footer>
+    </div>
   );
 }

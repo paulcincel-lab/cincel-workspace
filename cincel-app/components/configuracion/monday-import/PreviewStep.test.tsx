@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
 /** Vista previa problems in Spanish with a "Corregir" link to where each gets fixed (#679). */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+
+const createMondayStaffAction = vi.fn();
+vi.mock("@/lib/actions/monday-import-actions", () => ({
+  createMondayStaffAction: (...args: unknown[]) => createMondayStaffAction(...args),
+}));
 
 import { PreviewStep } from "./PreviewStep";
 import type { MondayPreview, MondayPreviewCounts } from "@/lib/types/monday-import";
@@ -47,7 +52,16 @@ const preview: MondayPreview = {
   ],
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  createMondayStaffAction.mockReset();
+});
+
+const NEW_ID = "cccccccc-3333-4333-8333-cccccccccccc";
+const unmatched: MondayPreview = {
+  ...preview,
+  issues: [{ ...preview.issues[1], personId: "7", personName: "Luis Prueba" }],
+};
 
 describe("PreviewStep", () => {
   it("lists each problem with its board and a Corregir link to its step", () => {
@@ -117,6 +131,49 @@ describe("PreviewStep", () => {
     render(<PreviewStep preview={withProjects} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
     expect(screen.getByText(/Workflow: Construcción · Fases del proyecto: Diseño, Obra/)).toBeTruthy();
     expect(screen.getByText(/Sin workflow · Sin fases: los grupos quedan solo como etiqueta de las tareas/)).toBeTruthy();
+  });
+
+  it("opens an unmatched person's row of Personas (#689)", () => {
+    const onFix = vi.fn();
+    render(<PreviewStep preview={unmatched} error="" isPending={false} onRefresh={() => {}} onFix={onFix} />);
+    fireEvent.click(screen.getByRole("button", { name: "Corregir" }));
+    expect(onFix).toHaveBeenCalledWith("personas", "b1", "7");
+  });
+
+  it("creates the staff member of an unmatched person right in the warning (#689)", async () => {
+    const staff = { id: NEW_ID, name: "Luis Prueba", email: "luis@example.test" };
+    createMondayStaffAction.mockResolvedValue({ ok: true, staff });
+    const onStaffCreated = vi.fn();
+    render(
+      <PreviewStep
+        preview={unmatched}
+        error=""
+        isPending={false}
+        onRefresh={() => {}}
+        onFix={() => {}}
+        runId="run-1"
+        onStaffCreated={onStaffCreated}
+      />,
+    );
+    const warnings = screen.getByText("Avisos").closest("[role=alert]") as HTMLElement;
+    fireEvent.click(within(warnings).getByRole("button", { name: "Crear integrante" }));
+    await waitFor(() => expect(onStaffCreated).toHaveBeenCalledWith("7", staff));
+    expect(createMondayStaffAction).toHaveBeenCalledWith("run-1", "7");
+  });
+
+  it("offers Crear integrante only on unmatched people with a run", () => {
+    render(
+      <PreviewStep
+        preview={preview}
+        error=""
+        isPending={false}
+        onRefresh={() => {}}
+        onFix={() => {}}
+        runId="run-1"
+        onStaffCreated={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Crear integrante" })).toBeNull();
   });
 
   it("shows no English plan text", () => {

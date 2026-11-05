@@ -61,6 +61,7 @@ import type {
 } from "@/lib/types/monday-import";
 import { createApplyCommand, type PhaseB } from "@/scripts/monday/apply";
 import { createMondayClient, MondayApiError, type MondayClient } from "@/scripts/monday/client";
+import { keepVerifiedCreatedStaff } from "@/scripts/monday/created-staff";
 import type { MondayDbHandle } from "@/scripts/monday/db";
 import {
   DONE_FILE,
@@ -85,6 +86,7 @@ import {
 import { MeDocument } from "@/scripts/monday/queries";
 import { createRollbackCommand, findRollbackBlockers, openServiceAccountDrive } from "@/scripts/monday/rollback";
 import { TOKEN_ENV } from "@/scripts/monday/token";
+import { taskAreaValue } from "@/scripts/monday/translate";
 
 import { importedProjectHref } from "./links";
 
@@ -448,6 +450,61 @@ async function readManifestAccount(dir: string): Promise<StoredRun["account"]> {
 // Equivalencias
 // ---------------------------------------------------------------------------
 
+/** Column types whose values can give tasks their área and workflow (#686). */
+const TASK_AREA_COLUMN_TYPES = new Set(["dropdown", "status", "text"]);
+/** Values listed per column; more are mapped in mapping.json by hand. */
+const TASK_AREA_VALUES_MAX = 200;
+
+/**
+ * Distinct values per dropdown, status or text column (#686), read as translate reads them: item columns from the
+ * active items, subitem columns from their active subitems (the tasks of item_as_project boards).
+ */
+function taskAreaColumnValues(
+  board: Awaited<ReturnType<typeof readExport>>["boards"][number]["board"],
+  items: Awaited<ReturnType<typeof readExport>>["boards"][number]["items"],
+): Record<string, string[]> {
+  const active = <T extends { state?: unknown }>(list: readonly (T | null | undefined)[]): T[] =>
+    list.filter((i): i is T => i != null && (i.state == null || i.state === "active"));
+  const out: Record<string, string[]> = {};
+  const collect = (columns: readonly { id: string; type: string }[], rows: readonly unknown[]) => {
+    for (const c of columns) {
+      if (!TASK_AREA_COLUMN_TYPES.has(c.type)) continue;
+      const values = (out[c.id] ??= []);
+      for (const row of rows) {
+        const value = taskAreaValue(row as Parameters<typeof taskAreaValue>[0], c.id);
+        if (value && !values.includes(value) && values.length < TASK_AREA_VALUES_MAX) values.push(value);
+      }
+    }
+  };
+  const top = active(items);
+  collect(board.columns, top);
+  collect(board.subitem_columns ?? [], top.flatMap((i) => active(i.subitems ?? [])));
+  return out;
+}
+
+/** monday people in the people columns of the active items and subitems, in first-seen order (#685). */
+function boardPeople(items: Awaited<ReturnType<typeof readExport>>["boards"][number]["items"]): string[] {
+  const out = new Set<string>();
+  const visit = (row: unknown) => {
+    const values = (row as { column_values?: unknown[] } | null)?.column_values ?? [];
+    for (const value of values) {
+      const v = value as { __typename?: string; persons_and_teams?: { id: string; kind?: string | null }[] | null };
+      if (v?.__typename !== "PeopleValue") continue;
+      for (const p of v.persons_and_teams ?? []) if (p.kind === "person") out.add(String(p.id));
+    }
+  };
+  const active = (row: unknown) => {
+    const state = (row as { state?: unknown } | null)?.state;
+    return row != null && (state == null || state === "active");
+  };
+  for (const item of items) {
+    if (!active(item)) continue;
+    visit(item);
+    for (const sub of (item as { subitems?: unknown[] | null }).subitems ?? []) if (active(sub)) visit(sub);
+  }
+  return [...out];
+}
+
 /** Paso 2–4 source side: every board's columns, groups, status labels and the monday users. */
 export async function getExportSource(runId: string, deps: WizardDeps): Promise<MondayExportSource> {
   const run = await requireRun(runId, deps);
@@ -483,6 +540,8 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
         items: items
           .filter((i) => i.state == null || i.state === "active")
           .map((i) => ({ id: i.id, name: i.name, groupId: i.group?.id ?? null })),
+        taskAreaValues: taskAreaColumnValues(board, items),
+        userIds: boardPeople(items),
       })),
     users: data.users.map((u) => ({ id: u.id, name: u.name, email: u.email ?? null, kind: u.kind ?? null })),
     hasFiles: existsSync(join(dir, FILES_DIR, FILES_INDEX)),
@@ -510,7 +569,12 @@ export async function getImportChoices(db: ImportDb): Promise<MondayImportChoice
       .where(and(isNull(workflows.deletedAt), eq(workflows.active, true)))
       .orderBy(asc(workflows.sortOrder), asc(workflows.name)),
     db
-      .select({ id: workflowTaskTemplates.id, workflowId: workflowTaskTemplates.workflowId, name: workflowTaskTemplates.title })
+      .select({
+        id: workflowTaskTemplates.id,
+        workflowId: workflowTaskTemplates.workflowId,
+        name: workflowTaskTemplates.title,
+        phase: workflowTaskTemplates.phase,
+      })
       .from(workflowTaskTemplates)
       .where(eq(workflowTaskTemplates.active, true))
       .orderBy(asc(workflowTaskTemplates.workflowId), asc(workflowTaskTemplates.sortOrder)),
@@ -545,6 +609,16 @@ export function mappingIssues(raw: unknown): string[] {
   return parsed.error.issues.map((i) => `${i.path.map(String).join(".") || "(raíz)"}: ${i.message}`);
 }
 
+/** The staff ids this run's "Crear integrante" made, kept server side (#689). */
+const createdStaffOf = (run: StoredRun): ReadonlySet<string> => new Set(run.createdStaffIds ?? []);
+
+/** Remembers a staff member "Crear integrante" made for the run, so its mapping may mark them `created`. */
+export async function recordCreatedStaff(runId: string, staffId: string, deps: WizardDeps): Promise<void> {
+  await updateRun(runId, (r) => {
+    r.createdStaffIds = [...new Set([...(r.createdStaffIds ?? []), staffId])];
+  }, envOf(deps));
+}
+
 /**
  * Saves the draft (even an incomplete one, so the wizard resumes where the
  * admin left it) and returns what `mapping.schema.ts` still rejects.
@@ -555,11 +629,11 @@ export async function saveDraft(
   step: MondayImportStep | null,
   deps: WizardDeps,
 ): Promise<{ issues: string[] }> {
-  await requireRun(runId, deps);
+  const run = await requireRun(runId, deps);
   if (!mapping || typeof mapping !== "object" || Array.isArray(mapping))
     throw new WizardError("Las equivalencias no tienen un formato válido.");
   const env = envOf(deps);
-  await writeDraftMapping(runId, mapping, env);
+  await writeDraftMapping(runId, keepVerifiedCreatedStaff(mapping, createdStaffOf(run)), env);
   if (step) await saveStep(runId, step, deps);
   return { issues: mappingIssues(mapping) };
 }
@@ -574,7 +648,7 @@ export async function downloadDraft(runId: string, deps: WizardDeps): Promise<{ 
 
 /** mapping.json upload: replaces the draft only when it parses and validates. */
 export async function uploadDraft(runId: string, text: string, deps: WizardDeps): Promise<{ issues: string[] }> {
-  await requireRun(runId, deps);
+  const run = await requireRun(runId, deps);
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -583,7 +657,7 @@ export async function uploadDraft(runId: string, text: string, deps: WizardDeps)
   }
   const issues = mappingIssues(raw);
   if (issues.length > 0) return { issues };
-  await writeDraftMapping(runId, raw, envOf(deps));
+  await writeDraftMapping(runId, keepVerifiedCreatedStaff(raw, createdStaffOf(run)), envOf(deps));
   return { issues: [] };
 }
 
@@ -667,8 +741,11 @@ export async function startApply(
   const dir = runDir(run.runId, env);
   const batch = await runBatch(deps.db, dir);
   if (batch?.status === "applied") throw new WizardError("Esta importación ya se aplicó.");
-  const stored = await readDraftMapping(run.runId, env);
-  if (!stored) throw new WizardError("Todavía no hay equivalencias.");
+  const draft = await readDraftMapping(run.runId, env);
+  if (!draft) throw new WizardError("Todavía no hay equivalencias.");
+  // The batch's mapping is what rollback reads: only staff this run created may stay marked `created`.
+  const stored = keepVerifiedCreatedStaff(draft, createdStaffOf(run));
+  if (stored !== draft) await writeDraftMapping(run.runId, stored, env);
   await enforceDisabledOptions(run, stored, deps);
   if (!by.email) throw new WizardError("Tu cuenta no tiene correo; no se puede registrar quién importó.");
   const command = createApplyCommand({
@@ -718,12 +795,12 @@ export async function importedProjects(runId: string, deps: WizardDeps): Promise
   const batch = await runBatch(deps.db, runDir(run.runId, envOf(deps)));
   if (!batch || batch.status === "rolled_back") return [];
   const rows = (await deps.db.execute(
-    sql`select p.id::text as id, p.name from core.import_refs r
+    sql`select p.id::text as id, p.name, r.data->'source'->>'boardId' as "boardId" from core.import_refs r
           join ${projects} p on p.id = r.row_id
           where r.batch_id = ${batch.id} and r.entity = 'project' and p.deleted_at is null
           order by p.name`,
-  )) as unknown as { id: string; name: string }[];
-  return rows.map((r) => ({ id: r.id, name: r.name, href: importedProjectHref(r.id) }));
+  )) as unknown as { id: string; name: string; boardId: string | null }[];
+  return rows.map((r) => ({ id: r.id, name: r.name, href: importedProjectHref(r.id), boardId: r.boardId ?? null }));
 }
 
 /** What blocks "Deshacer importación" (§9), read-only. */

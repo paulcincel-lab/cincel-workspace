@@ -24,6 +24,8 @@ import type {
   MondayPreview,
 } from "@/lib/types/monday-import";
 import type { RollbackBlocker } from "@/scripts/monday/rollback";
+import { matchStaff } from "@/lib/monday-import/people";
+import { ownProjectGroups, pruneGroupTargets } from "@/lib/monday-import/group-targets";
 
 export type BoardDraft = MappingInput["boards"][number];
 
@@ -186,9 +188,30 @@ export function updateBoard(
   };
 }
 
-/** A label's first target: done labels close the task, the rest start Pendiente (same default as init). */
-export function defaultStatusTarget(label: { isDone: boolean }): StatusTarget {
-  return { status: label.isDone ? "completado" : "pendiente" };
+const BASE_STATUS_BY_NAME: Record<string, "pendiente" | "en_proceso" | "bloqueado"> = {
+  pendiente: "pendiente",
+  "en proceso": "en_proceso",
+  bloqueado: "bloqueado",
+};
+
+/**
+ * A label's first target, by the same rules as init: done labels close the task; a label named like a base status
+ * (or blocked / in progress) gets it; the rest start Pendiente flagged `defaulted` for review, never Completado.
+ */
+export function defaultStatusTarget(label: { name?: string; isDone: boolean }): StatusTarget {
+  if (label.isDone) return { status: "completado" };
+  const name = label.name ?? "";
+  const key = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  const base = BASE_STATUS_BY_NAME[key];
+  if (base) return { status: base };
+  if (/stuck|bloquead|detenid/i.test(name)) return { status: "bloqueado" };
+  if (/working|proceso|curso/i.test(name)) return { status: "en_proceso" };
+  return { status: "pendiente", defaulted: true };
+}
+
+/** Whether init (or the wizard) found no equivalent for the label and drafted Pendiente: «Sin equivalente, revisar». */
+export function isDefaultedStatus(target: StatusTarget | undefined): boolean {
+  return Boolean(target && "status" in target && target.defaulted);
 }
 
 /**
@@ -255,13 +278,13 @@ export function workflowsForBoard(board: BoardDraft, choices: MondayImportChoice
   return choices.workflows.filter((workflow) => area.workflowIds.includes(workflow.id));
 }
 
-/** Changing the workflow drops template matches that belong to another workflow. */
+/** Changing the workflow drops template matches and group phases (#687) that belong to another workflow. */
 export function setBoardWorkflow(board: BoardDraft, workflowId: string | null, choices: MondayImportChoices): BoardDraft {
   const allowed = new Set(choices.templates.filter((t) => t.workflowId === workflowId).map((t) => t.id));
   const templateMatches = Object.fromEntries(
     Object.entries(board.templateMatches ?? {}).filter(([, templateId]) => allowed.has(templateId)),
   );
-  return { ...board, workflowId, templateMatches };
+  return pruneGroupTargets({ ...board, workflowId, templateMatches }, choices);
 }
 
 /** What a monday group becomes in Cincel for the board's strategy. */
@@ -284,7 +307,11 @@ export function groupEquivalent(strategy: BoardStrategy, groupTitle: string): st
 export function projectKeys(board: BoardDraft, source: MondayBoardSource): { id: string; mondayName: string }[] {
   switch (board.strategy) {
     case "board_as_project":
-      return [{ id: board.mondayBoardId, mondayName: source.name }];
+      return [
+        { id: board.mondayBoardId, mondayName: source.name },
+        // Groups mapped to their own project (#687).
+        ...ownProjectGroups(board, source).map((group) => ({ id: group.id, mondayName: group.title })),
+      ];
     case "group_as_project":
       return source.groups.map((group) => ({ id: group.id, mondayName: group.title }));
     case "item_as_project":
@@ -304,14 +331,12 @@ export function setPerson(mapping: MappingInput, userId: string, target: PersonT
   return { ...mapping, people: { ...mapping.people, [userId]: target } };
 }
 
-/** Suggested staff for a monday user, by email (case insensitive). */
+/** Suggested staff for a monday user: same email, else same name (case insensitive); none for deleted users and bots. */
 export function suggestStaff(
-  user: { email: string | null },
+  user: { id?: string; name?: string; email: string | null; kind?: string | null },
   staff: MondayImportChoices["staff"],
 ): MondayImportChoices["staff"][number] | null {
-  const email = user.email?.trim().toLowerCase();
-  if (!email) return null;
-  return staff.find((member) => member.email?.trim().toLowerCase() === email) ?? null;
+  return matchStaff({ id: user.id ?? "", name: user.name ?? "", email: user.email, kind: user.kind }, staff)?.member ?? null;
 }
 
 /** monday users still without an equivalent (null target). */

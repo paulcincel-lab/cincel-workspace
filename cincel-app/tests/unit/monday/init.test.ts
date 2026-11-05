@@ -38,6 +38,7 @@ import {
   pickTemplates,
   readExport,
   statusLabels,
+  statusMaps,
   statusTarget,
   type InitLookups,
   type TemplateCandidate,
@@ -224,8 +225,9 @@ describe("init: the fixture draft", () => {
       "1": { status: "completado" },
       "2": { status: "bloqueado" },
       "3": { customStatusId: ID.revision },
-      "7": { status: "pendiente" },
-      "9": { status: "pendiente" },
+      // No equivalent: an open status flagged for review, never completado.
+      "7": { status: "pendiente", defaulted: true },
+      "9": { status: "pendiente", defaulted: true },
       // From the subitem column of the same id.
       "4": { status: "en_proceso" },
     });
@@ -415,7 +417,9 @@ describe("init: heuristics", () => {
     expect(t("Working on it")).toEqual({ status: "en_proceso" });
     expect(t("En proceso")).toEqual({ status: "en_proceso" });
     expect(t("En curso")).toEqual({ status: "en_proceso" });
-    expect(t("")).toEqual({ status: "pendiente" });
+    expect(t("")).toEqual({ status: "pendiente", defaulted: true });
+    expect(t("Pendiente")).toEqual({ status: "pendiente" });
+    expect(t("EN PROCESO")).toEqual({ status: "en_proceso" });
     expect(
       statusTarget(
         { id: "1", label: " REVISIÓN cliente", index: null, isDone: true },
@@ -423,6 +427,60 @@ describe("init: heuristics", () => {
       ),
     ).toEqual({
       customStatusId: ID.revision,
+    });
+  });
+
+  it("never drafts a label monday doesn't mark done as completado", () => {
+    const t = (label: string) =>
+      statusTarget({ id: "3", label, index: "1", isDone: false }, new Map());
+    for (const label of ["Urgente", "Completado", "Listo", "Hecho", "Done"])
+      expect(t(label)).toEqual({ status: "pendiente", defaulted: true });
+    expect(
+      statusTarget(
+        { id: "3", label: "Listo", index: "1", isDone: true },
+        new Map(),
+      ),
+    ).toEqual({ status: "completado" });
+  });
+
+  it("drafts Urgente as an open status even when a done item shares its index", () => {
+    const column = col(
+      "s",
+      "status",
+      "Estado",
+      JSON.stringify({
+        labels: [
+          { id: 1, label: "Listo", index: 0, is_done: true },
+          { id: 5, label: "Urgente", index: 1, is_done: false },
+        ],
+      }),
+    );
+    // monday reports the done label "Listo" with index 1, the display index of "Urgente".
+    const doneItem = {
+      id: "1",
+      name: "Tarea",
+      column_values: [
+        {
+          __typename: "StatusValue",
+          id: "s",
+          label: "Listo",
+          index: 1,
+          is_done: true,
+        },
+      ],
+      subitems: [],
+    } as unknown as MondayItem;
+    expect(
+      statusMaps(
+        [{ defs: [column], targets: { s: "status" } }],
+        [doneItem],
+        new Map(),
+      ),
+    ).toEqual({
+      s: {
+        "1": { status: "completado" },
+        "5": { status: "pendiente", defaulted: true },
+      },
     });
   });
 

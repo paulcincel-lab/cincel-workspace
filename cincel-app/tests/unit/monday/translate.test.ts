@@ -310,6 +310,20 @@ describe("translate: board_as_project", () => {
     );
   });
 
+  it("a defaulted status label imports as pendiente and is listed once for review", () => {
+    const input = mappingInput();
+    input.boards[0].statusMaps.status["3"] = { status: "pendiente", defaulted: true };
+    const r = run(exportData(), input);
+    const defaulted = r.issues.filter((i) => i.code === "STATUS_DEFAULTED");
+    expect(defaulted).toEqual([
+      {
+        code: "STATUS_DEFAULTED",
+        boardId: "301",
+        message: 'Status label 3 ("Revisión cliente") of column status has no equivalent; defaulted to pendiente',
+      },
+    ]);
+  });
+
   it("priority from the priority column", () => {
     const r = run();
     expect(task(r, "1001").priority).toBe("alta");
@@ -573,5 +587,127 @@ describe("translate: contacts and other strategies", () => {
 
   it("is deterministic", () => {
     expect(run()).toEqual(run());
+  });
+});
+
+describe("translate: group targets (#687)", () => {
+  const PHASE_TEMPLATE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const withPhases: CincelLookups = {
+    ...lookups,
+    templates: {
+      ...lookups.templates,
+      [PHASE_TEMPLATE]: { workflowId: BOARD_WORKFLOW, phase: " DISEÑO " },
+    },
+  };
+  const runWith = (input: MappingInput, l: CincelLookups = withPhases) =>
+    translate(exportData(), Mapping.parse(input), l, { importedById: ADMIN });
+
+  it("a group named like a phase of the board workflow takes that phase; the others a new phase", () => {
+    const r = runWith(mappingInput());
+    expect(project(r, "301").phases).toEqual(["DISEÑO", "Extras", "Obra", "Entrega final"]);
+    expect(task(r, "1001").phase).toBe("DISEÑO");
+    expect(task(r, "1003").phase).toBe("Obra");
+  });
+
+  it("phase and workflow_phase targets name the phase; a stage adds a project stage and no phase", () => {
+    const input = mappingInput();
+    input.boards[0].groupTargets = {
+      g_diseno: { kind: "phase" },
+      g_extra: { kind: "workflow_phase", phase: "Acabados" },
+      g_obra: { kind: "stage", workflowId: WORKFLOW },
+    };
+    const r = runWith(input);
+    const p = project(r, "301");
+    expect(p.phases).toEqual(["Diseño", "Acabados", "Entrega final"]);
+    expect(p.extraStages).toEqual([WORKFLOW]);
+    expect(p.data.stageWorkflowId).toBe(BOARD_WORKFLOW);
+    expect(p.data.stageWorkflowIds).toEqual([WORKFLOW]);
+    expect(task(r, "1001").phase).toBe("Diseño");
+    expect(task(r, "1005").phase).toBe("Acabados");
+    expect(task(r, "1003").phase).toBeNull();
+    expect(task(r, "1003").project.externalId).toBe("301");
+  });
+
+  it("a stage on the board workflow itself adds no extra stage", () => {
+    const input = mappingInput();
+    input.boards[0].groupTargets = { g_obra: { kind: "stage", workflowId: BOARD_WORKFLOW } };
+    const p = project(runWith(input), "301");
+    expect(p.extraStages).toBeUndefined();
+    expect(p.data).not.toHaveProperty("stageWorkflowIds");
+  });
+
+  it("a group as its own project takes its items, name, code and client", () => {
+    const input = mappingInput();
+    input.boards[0].groupTargets = { g_extra: { kind: "project" } };
+    input.boards[0].projectNames = { g_extra: "Casa Lomas · Extras" };
+    input.boards[0].projectCodes = { g_extra: "CL-EX" };
+    input.boards[0].groupClients = { g_extra: { kind: "contact", contactId: SOL } };
+    const r = runWith(input);
+    const own = project(r, "301:g_extra");
+    expect(own).toMatchObject({
+      name: "Casa Lomas · Extras",
+      code: "CL-EX",
+      client: { kind: "existing", id: SOL },
+      phases: [],
+      workflowId: BOARD_WORKFLOW,
+    });
+    expect(own.source.groupId).toBe("g_extra");
+    expect(task(r, "1005")).toMatchObject({ phase: null, seccion: "Extras", project: { externalId: "301:g_extra" } });
+    expect(project(r, "301").phases).toEqual(["DISEÑO", "Obra", "Entrega final"]);
+    expect(r.tasks.filter((t) => t.project.externalId === "301").map((t) => t.externalId)).toEqual([
+      "1001",
+      "1002",
+      "1003",
+      "1004",
+    ]);
+  });
+
+  it("ignored groups import none of their items", () => {
+    const input = mappingInput();
+    input.boards[0].groupTargets = { g_diseno: { kind: "ignore" } };
+    const r = runWith(input);
+    expect(r.tasks.some((t) => t.externalId === "1001" || t.externalId === "1002")).toBe(false);
+    expect(project(r, "301").phases).toEqual(["Extras", "Obra", "Entrega final"]);
+  });
+
+  it("no board project when every group is its own project or ignored", () => {
+    const input = mappingInput();
+    input.boards[0].client = null;
+    input.boards[0].groupClients = {
+      g_diseno: { kind: "contact", contactId: SOL },
+      g_obra: { kind: "contact", contactId: SOL },
+    };
+    input.boards[0].groupTargets = {
+      g_diseno: { kind: "project" },
+      g_obra: { kind: "project" },
+      g_extra: { kind: "ignore" },
+      g_final: { kind: "ignore" },
+    };
+    const r = runWith(input);
+    expect(r.projects.some((p) => p.externalId === "301")).toBe(false);
+    expect(r.projects.filter((p) => p.source.boardId === "301").map((p) => p.externalId)).toEqual([
+      "301:g_diseno",
+      "301:g_obra",
+    ]);
+    expect(r.issues.some((i) => i.code === "CLIENT_UNRESOLVED" && i.boardId === "301")).toBe(false);
+  });
+
+  it("item_as_project: the group's target sets each item project's phase or stage; ignore skips its items", () => {
+    const input = mappingInput();
+    input.boards[2].groupTargets = { g1: { kind: "stage", workflowId: WORKFLOW } };
+    const staged = project(runWith(input), "6001");
+    expect(staged.phases).toEqual([]);
+    expect(staged.extraStages).toEqual([WORKFLOW]);
+
+    input.boards[2].groupTargets = { g1: { kind: "ignore" } };
+    const ignored = runWith(input);
+    expect(ignored.projects.some((p) => p.source.boardId === "501")).toBe(false);
+    expect(ignored.tasks.some((t) => t.source.boardId === "501")).toBe(false);
+  });
+
+  it("a project target on item_as_project falls back to the default phase", () => {
+    const input = mappingInput();
+    input.boards[2].groupTargets = { g1: { kind: "project" } };
+    expect(project(runWith(input), "6001").phases).toEqual(["Activas"]);
   });
 });

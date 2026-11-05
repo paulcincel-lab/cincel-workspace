@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
 
-import Header from "@/components/layout/Header";
-import Sidebar from "@/components/layout/Sidebar";
 import { MondayImportWizard } from "@/components/configuracion/monday-import/MondayImportWizard";
 import {
   getMondayImportChoicesAction,
@@ -16,7 +14,8 @@ import type { MondayImportChoices, MondayImportRunState } from "@/lib/types/mond
 /**
  * Configuración → Importar de monday (#672), also the first-login wizard of Google-signed-in admins. Administrador
  * only and never the bootstrap admin, checked here on the server and again by every action. Opening the page
- * resumes the latest import (or starts one).
+ * resumes the latest import (or starts one). A full-screen takeover (#685): no sidebar; its ✕ goes back to
+ * Configuración and keeps the run.
  */
 export default async function ImportarMondayPage() {
   const access = await getSessionAccess();
@@ -43,17 +42,13 @@ export default async function ImportarMondayPage() {
   }
 
   return (
-    <main className="flex min-h-screen bg-background text-foreground">
-      <Sidebar />
-      <section className="min-w-0 flex-1 overflow-y-auto px-4 py-14 md:p-10">
-        <Header />
-        <MondayImportWizard
-          initialRun={run}
-          initialChoices={choices}
-          hasServerToken={hasServerToken}
-          loadError={loadError}
-        />
-      </section>
+    <main className="min-h-screen bg-background text-foreground">
+      <MondayImportWizard
+        initialRun={run}
+        initialChoices={choices}
+        hasServerToken={hasServerToken}
+        loadError={loadError}
+      />
     </main>
   );
 }

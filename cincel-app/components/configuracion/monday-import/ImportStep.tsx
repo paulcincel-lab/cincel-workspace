@@ -16,9 +16,83 @@ import {
 } from "@/components/ui/shadcn/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
+import { Progress } from "@/components/ui/shadcn/progress";
 import { JobProgress } from "@/components/configuracion/monday-import/JobProgress";
-import { isJobRunning, rollbackBlockerText } from "@/lib/monday-import/wizard-steps";
+import { isJobRunning, jobPercent, rollbackBlockerText } from "@/lib/monday-import/wizard-steps";
 import type { MondayImportedProject, MondayImportRunState, MondayRollbackCheck } from "@/lib/types/monday-import";
+
+/**
+ * One card per imported board (#685): its progress while apply runs, then the links to the projects it created, or
+ * why it failed.
+ */
+function BoardImportCards({
+  boards,
+  run,
+  projects,
+}: {
+  boards: { id: string; name: string }[];
+  run: MondayImportRunState;
+  projects: MondayImportedProject[] | null;
+}) {
+  const apply = run.jobs.apply;
+  const running = isJobRunning(apply);
+  const percent = jobPercent(apply);
+  const failed = apply && (apply.status === "failed" || apply.status === "interrupted") && !run.batchStatus;
+  return (
+    <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Tableros importados">
+      {boards.map((board) => {
+        const own = (projects ?? []).filter((project) => project.boardId === board.id);
+        return (
+          <li key={board.id}>
+            <Card
+              role="group"
+              aria-label={board.name}
+              size="sm"
+              className="h-full motion-safe:animate-in motion-safe:fade-in-0"
+            >
+              <CardHeader>
+                <CardTitle className="break-words">{board.name}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2" aria-live="polite">
+                {running ? (
+                  <>
+                    <Progress value={percent} aria-label={`Importando ${board.name}`} />
+                    <p className="text-muted-foreground">{apply?.progress.label ?? "Importando…"}</p>
+                  </>
+                ) : run.batchStatus === "rolled_back" ? (
+                  <p className="text-muted-foreground">Deshecho.</p>
+                ) : run.batchStatus === "applied" ? (
+                  projects === null ? (
+                    <p className="text-muted-foreground">Cargando…</p>
+                  ) : own.length > 0 ? (
+                    <ul className="space-y-1">
+                      {own.map((project) => (
+                        <li key={project.id}>
+                          <Link href={project.href} className="underline underline-offset-4">
+                            {project.name}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground">Importado, sin proyectos (contactos u otros registros).</p>
+                  )
+                ) : failed ? (
+                  <p className="text-destructive">{apply?.error ?? "No se pudo importar. Revisa el registro."}</p>
+                ) : run.batchStatus === "applying" ? (
+                  <p className="text-muted-foreground">Faltan archivos por subir. Reintenta la importación.</p>
+                ) : (
+                  <p className="text-muted-foreground">Listo para importar.</p>
+                )}
+              </CardContent>
+            </Card>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 /** Paso 7: apply in the background, links to the created projects, and "Deshacer importación" with its blockers. */
 export function ImportStep({
@@ -30,6 +104,7 @@ export function ImportStep({
   onStartApply,
   onStartRollback,
   onFinish,
+  boards = [],
 }: {
   run: MondayImportRunState;
   /** null while the result is loading. */
@@ -40,6 +115,8 @@ export function ImportStep({
   onStartApply: () => void;
   onStartRollback: () => void;
   onFinish: () => void;
+  /** The boards being imported (not skipped), one card each (#685). */
+  boards?: { id: string; name: string }[];
 }) {
   const [confirming, setConfirming] = useState(false);
   const apply = run.jobs.apply;
@@ -49,6 +126,9 @@ export function ImportStep({
   const rolledBack = run.batchStatus === "rolled_back";
   const canRetryApply = !applied && !rolledBack && (!apply || apply.status !== "running");
   const loadingResult = applied && projects === null;
+  const onCards = new Set(boards.map((board) => board.id));
+  // Projects without a card (no board in their import ref) keep their link in the summary.
+  const loose = (projects ?? []).filter((project) => !project.boardId || !onCards.has(project.boardId));
 
   return (
     <div className="space-y-6">
@@ -62,6 +142,8 @@ export function ImportStep({
           ) : null}
         </div>
       ) : null}
+
+      {boards.length > 0 ? <BoardImportCards boards={boards} run={run} projects={projects} /> : null}
 
       {apply ? <JobProgress job={apply} title="Importación" /> : null}
 
@@ -78,9 +160,9 @@ export function ImportStep({
           <AlertDescription>
             {projects === null ? (
               "Cargando los proyectos creados…"
-            ) : projects.length > 0 ? (
+            ) : loose.length > 0 ? (
               <ul className="space-y-1">
-                {projects.map((project) => (
+                {loose.map((project) => (
                   <li key={project.id}>
                     <Link href={project.href} className="underline underline-offset-4">
                       {project.name}
@@ -88,6 +170,8 @@ export function ImportStep({
                   </li>
                 ))}
               </ul>
+            ) : projects.length > 0 ? (
+              "Abre cada proyecto desde la tarjeta de su tablero."
             ) : (
               "No se crearon proyectos (solo contactos u otros registros)."
             )}

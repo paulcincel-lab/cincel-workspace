@@ -379,12 +379,15 @@ describe("plan: codes", () => {
       "PROVIDER_SUBTYPE_MISSING",
       "SCHEDULE_EXISTS",
       "DRIVE_NOT_CONFIGURED",
+      "AREA_NAME_TAKEN",
     ]);
     expect([...WARNING_CODES]).toEqual([
       "PERSON_UNMATCHED",
       "RELATION_MISSING",
       "DATES_MISSING",
       "FILE_MISSING",
+      "STATUS_DEFAULTED",
+      "AREA_UNMAPPED",
     ]);
   });
 });
@@ -533,6 +536,21 @@ describe("plan: blocking issues (each cleared by editing the mapping)", () => {
         boardId: "401",
         itemId: "5002",
         message: expect.stringContaining("not a cliente"),
+      }),
+    ]);
+  });
+
+  it("MAPPING_INVALID: a group mapped to a stage whose workflow doesn't exist (#687)", async () => {
+    const input = mappingInput();
+    board(input, "301").groupTargets = {
+      g_obra: { kind: "stage", workflowId: "f0000000-0000-4000-8000-000000000002" },
+      g_diseno: { kind: "stage", workflowId: OTHER_WORKFLOW },
+    };
+    const p = await plan(input);
+    expect(ofCode(p, "MAPPING_INVALID")).toEqual([
+      expect.objectContaining({
+        boardId: "301",
+        message: expect.stringContaining("groupTargets.g_obra"),
       }),
     ]);
   });
@@ -1101,7 +1119,7 @@ describe.skipIf(!url)("plan lookups (test DB)", () => {
 
       const l = createPlanDbLookups(tx);
       const t = await l.translateLookups();
-      expect(t.templates[template.id]).toEqual({ workflowId: wf.id });
+      expect(t.templates[template.id]).toEqual({ workflowId: wf.id, phase: null });
       expect(t.staff[admin.id]).toEqual({ name: "Plan Admin" });
       expect(await l.importedRefs("project", ["plan-901", "plan-902"])).toEqual(
         new Map([["plan-901", other.id]]),

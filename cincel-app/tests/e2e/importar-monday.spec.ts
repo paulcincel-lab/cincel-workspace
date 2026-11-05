@@ -5,9 +5,10 @@
  *
  *   MONDAY_FAKE=1 MONDAY_IMPORT_DIR=/tmp/cincel-monday-e2e (no GOOGLE_SA_* / GOOGLE_SHARED_DRIVE_ID)
  *
- * and E2E_MONDAY_FAKE=1 for the run; without it the tests are skipped. It walks Conectar, export, Equivalencias,
- * Personas, Opciones (files off because Drive isn't configured), Vista previa, Importar and Deshacer, so the
- * import it creates is rolled back at the end.
+ * and E2E_MONDAY_FAKE=1 for the run; without it the tests are skipped. It walks Conectar, the board gallery (#685:
+ * select one board → export → open its card and map it), Equivalencias, Personas, Opciones (files off because Drive
+ * isn't configured), Vista previa, Importar (the card turns into its project's link) and Deshacer, so the import it
+ * creates is rolled back at the end.
  */
 import { test, expect, type Page } from "@playwright/test";
 import { loginAsAdmin } from "./helpers/seed-auth";
@@ -34,7 +35,7 @@ test.describe("Importar de monday", () => {
   test.skip(!ENABLED, "needs E2E_MONDAY_FAKE=1 and a server started with MONDAY_FAKE=1");
   test.describe.configure({ mode: "serial", timeout: 180_000 });
 
-  test("connects, exports, maps, imports and rolls back", async ({ page }) => {
+  test("selects one board, maps it from its card, previews, imports and rolls back", async ({ page }) => {
     await loginAsAdmin(page, BASE_URL);
     await openFreshRun(page);
 
@@ -46,25 +47,35 @@ test.describe("Importar de monday", () => {
       await next(page).click();
     }
 
-    // Tableros: pick both boards and export with files (Drive is off; Opciones must turn files off).
+    // Tableros: the full-screen gallery, nothing preselected; one click on a card selects it.
     await expect(currentStep(page)).toContainText("Tableros");
-    for (const name of ["Proyectos", "Casas"]) {
-      const box = page.getByRole("checkbox", { name: `Importar ${name}` });
-      if (!(await box.isChecked())) await box.check();
-    }
-    await page.getByRole("button", { name: /Exportar (tableros|otra vez)/ }).click();
+    await expect(page.getByRole("button", { name: "Cerrar" })).toBeVisible();
+    for (const name of ["Proyectos", "Casas"])
+      await expect(page.getByRole("checkbox", { name: `Importar ${name}` })).not.toBeChecked();
+    await page.getByRole("group", { name: "Proyectos" }).getByText("Proyectos", { exact: true }).click();
+    await expect(page.getByRole("checkbox", { name: "Importar Proyectos" })).toBeChecked();
+    await expect(page.getByText("Seleccionados: 1")).toBeVisible();
+    // "Importar 1 tablero" exports the picked board first.
+    await page.getByRole("button", { name: "Importar 1 tablero" }).click();
     await expect(next(page)).toBeEnabled({ timeout: 60_000 });
+
+    // Its card opens its whole mapping; the fixture board has no client, so it gets a new contact.
+    const card = page.getByRole("group", { name: "Proyectos" });
+    await page.getByRole("button", { name: "Abrir mapeo de Proyectos" }).click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.getByText("Qué será en Cincel")).toBeVisible();
+    await sheet.getByRole("combobox", { name: "Cliente", exact: true }).click();
+    await page.getByRole("option", { name: "Nuevo contacto" }).click();
+    await sheet.getByPlaceholder("Nombre del cliente").fill("Cliente Proyectos");
+    await expect(sheet.getByText("Sin cliente.")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(card.getByText("Sin cliente.")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Exportar otra vez" })).toBeVisible();
     await next(page).click();
 
-    // Equivalencias: the fixture boards have no client, so each gets a new contact; Personas is valid as is.
+    // Equivalencias still lists the board as mapped from its card.
     await expect(currentStep(page)).toContainText("Equivalencias");
-    for (const board of ["Proyectos", "Casas"]) {
-      await page.getByRole("combobox", { name: "Tablero", exact: true }).click();
-      await page.getByRole("option", { name: new RegExp(`^${board}`) }).click();
-      await page.getByRole("combobox", { name: "Cliente", exact: true }).click();
-      await page.getByRole("option", { name: "Nuevo contacto" }).click();
-      await page.getByPlaceholder("Nombre del cliente").fill(`Cliente ${board}`);
-    }
+    await expect(page.getByPlaceholder("Nombre del cliente")).toHaveValue("Cliente Proyectos");
     await next(page).click();
     await expect(page.getByText("Faltan equivalencias")).toHaveCount(0);
     await expect(currentStep(page)).toContainText("Personas");
@@ -85,9 +96,11 @@ test.describe("Importar de monday", () => {
     await expect(toImport).toBeEnabled({ timeout: 30_000 });
     await toImport.click();
 
-    // Importar.
+    // Importar: the board's card shows its progress, then the link to its project.
     await page.getByRole("button", { name: "Importar a Cincel" }).click();
     await expect(page.getByText("Importación terminada", { exact: true }).last()).toBeVisible({ timeout: 90_000 });
+    const imported = page.getByRole("list", { name: "Tableros importados" }).getByRole("group", { name: "Proyectos" });
+    await expect(imported.getByRole("link").first()).toBeVisible({ timeout: 30_000 });
 
     // Deshacer.
     const undo = page.getByRole("button", { name: "Deshacer importación" });

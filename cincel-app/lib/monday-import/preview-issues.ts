@@ -14,6 +14,7 @@ export const ISSUE_FIX_STEP: Record<PlanIssueCode, MondayImportStep> = {
   PROJECT_NAME_TAKEN: "equivalencias",
   PROJECT_CODE_TAKEN: "equivalencias",
   STATUS_UNMAPPED: "equivalencias",
+  STATUS_DEFAULTED: "equivalencias",
   TEMPLATE_COLLISION: "equivalencias",
   TEMPLATE_INVALID: "equivalencias",
   PROVIDER_SUBTYPE_MISSING: "equivalencias",
@@ -23,6 +24,8 @@ export const ISSUE_FIX_STEP: Record<PlanIssueCode, MondayImportStep> = {
   RELATION_MISSING: "equivalencias",
   DATES_MISSING: "equivalencias",
   FILE_MISSING: "opciones",
+  AREA_NAME_TAKEN: "equivalencias",
+  AREA_UNMAPPED: "equivalencias",
 };
 
 /** The first "quoted" value of a plan message (a monday name, label or code), or null. */
@@ -59,6 +62,8 @@ export function issueText(code: PlanIssueCode, message: string): string {
       return name
         ? `La etiqueta de estatus «${name}» no tiene equivalente. Elígelo en Estatus.`
         : "Un estatus personalizado elegido ya no existe. Elige otro en Estatus.";
+    case "STATUS_DEFAULTED":
+      return `La etiqueta de estatus ${named(name, "sin nombre")} no tiene equivalente; sus tareas quedan como Pendiente. Revísala en Estatus.`;
     case "TEMPLATE_COLLISION":
       return `${named(name, "Un elemento")} coincide con una plantilla que ya se usa en su proyecto. Quita una en Plantillas del workflow.`;
     case "TEMPLATE_INVALID":
@@ -72,11 +77,13 @@ export function issueText(code: PlanIssueCode, message: string): string {
     case "MAPPING_INVALID":
       if (message.startsWith("workflowId")) return "El workflow elegido ya no existe. Elige otro.";
       if (message.startsWith("areaId")) return "El departamento elegido ya no existe. Elige otro.";
+      if (message.startsWith("taskAreas"))
+        return "Un área o workflow elegido en Área y workflow de las tareas ya no existe o no va con esa área. Elige otro.";
       if (message.startsWith("contactMatches")) return "Un contacto elegido no existe o no es del tipo del tablero. Elige otro.";
       return "Falta una equivalencia o no es válida. Revisa este tablero.";
     case "PERSON_UNMATCHED": {
       const person = /\(([^)]+)\) has no staff match/.exec(message)?.[1];
-      return `${person && person !== "?" ? `«${person}»` : "Una persona de monday"} no tiene equivalente en el equipo; sus tareas quedan sin responsable. Elígela en Personas.`;
+      return `${person && person !== "?" ? `«${person}»` : "Una persona de monday"} no tiene equivalente en el equipo; sus tareas quedan sin responsable. Elígela o usa Crear integrante en Personas.`;
     }
     case "RELATION_MISSING":
       return "Un elemento vinculado no está en la exportación; ese vínculo no se importa.";
@@ -84,5 +91,22 @@ export function issueText(code: PlanIssueCode, message: string): string {
       return `${named(name, "Un elemento")} no tiene línea de tiempo; no entra al cronograma.`;
     case "FILE_MISSING":
       return `El archivo ${named(name, "de un elemento")} no se descargó; no se importa. Exporta otra vez o apaga los archivos en Opciones.`;
+    case "AREA_NAME_TAKEN":
+      return `Ya existe un área llamada ${named(name, "igual")}. Elígela en Área y workflow de las tareas en vez de crearla.`;
+    case "AREA_UNMAPPED":
+      return `El valor ${named(name, "de un elemento")} no tiene área ni workflow; sus tareas quedan con el workflow del tablero. Elígelos en Área y workflow de las tareas.`;
   }
+}
+
+/** The monday user id of a PERSON_UNMATCHED issue (#689), so the Vista previa links to that row of Personas. */
+export function issuePersonId(code: PlanIssueCode, message: string): string | null {
+  if (code !== "PERSON_UNMATCHED") return null;
+  return /monday user (\S+) \(/.exec(message)?.[1] ?? null;
+}
+
+/** The monday user name of a PERSON_UNMATCHED issue, or null when the plan didn't know it. */
+export function issuePersonName(code: PlanIssueCode, message: string): string | null {
+  if (code !== "PERSON_UNMATCHED") return null;
+  const name = /monday user \S+ \((.+)\) has no staff match/.exec(message)?.[1];
+  return name && name !== "?" ? name : null;
 }

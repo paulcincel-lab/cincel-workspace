@@ -11,8 +11,10 @@
  *   Blocking  MAPPING_INVALID, CLIENT_UNRESOLVED, CONTACT_NAME_TAKEN,
  *             PROJECT_NAME_TAKEN, PROJECT_CODE_TAKEN, STATUS_UNMAPPED,
  *             TEMPLATE_COLLISION, TEMPLATE_INVALID, PROVIDER_SUBTYPE_MISSING,
- *             SCHEDULE_EXISTS, DRIVE_NOT_CONFIGURED (only with files on).
- *   Warnings  PERSON_UNMATCHED, RELATION_MISSING, DATES_MISSING, FILE_MISSING.
+ *             SCHEDULE_EXISTS, DRIVE_NOT_CONFIGURED (only with files on),
+ *             AREA_NAME_TAKEN (an área to create exists already, #686).
+ *   Warnings  PERSON_UNMATCHED, RELATION_MISSING, DATES_MISSING, FILE_MISSING,
+ *             STATUS_DEFAULTED (a status label init drafted as pendiente).
  *
  * Rows already in `core.import_refs` (files: already in `core.import_files`)
  * are skipped: `apply` doesn't create them again, so they are counted apart
@@ -92,6 +94,7 @@ export const BLOCKING_CODES = [
   "PROVIDER_SUBTYPE_MISSING",
   "SCHEDULE_EXISTS",
   "DRIVE_NOT_CONFIGURED",
+  "AREA_NAME_TAKEN",
 ] as const;
 
 export const WARNING_CODES = [
@@ -99,6 +102,8 @@ export const WARNING_CODES = [
   "RELATION_MISSING",
   "DATES_MISSING",
   "FILE_MISSING",
+  "STATUS_DEFAULTED",
+  "AREA_UNMAPPED",
 ] as const;
 
 export type PlanIssueCode =
@@ -235,9 +240,28 @@ export interface PlanLookups {
   ): Promise<Set<string>>;
   /** Projects among `projectIds` with a `project_schedules` row this import didn't create. */
   foreignSchedules(projectIds: string[]): Promise<Set<string>>;
+  /** lower(name) of live áreas among `lowerNames` (#686); absent in fakes that create no áreas. */
+  areaNamesTaken?(lowerNames: string[]): Promise<Set<string>>;
 }
 
 const pairKey = (a: string, b: string) => `${a}|${b}`;
+
+/** Área names and active template titles for tasks mapped to their own área and workflow (#686). */
+async function taskAreaLookups(
+  db: ImportDb,
+): Promise<Pick<CincelLookups, "areas" | "templateTitles">> {
+  const [areaRows, titleRows] = await Promise.all([
+    db.select({ id: areas.id, name: areas.name }).from(areas).where(isNull(areas.deletedAt)),
+    db
+      .select({ id: workflowTaskTemplates.id, title: workflowTaskTemplates.title })
+      .from(workflowTaskTemplates)
+      .where(eq(workflowTaskTemplates.active, true)),
+  ]);
+  return {
+    areas: Object.fromEntries(areaRows.map((r) => [r.id, { name: r.name }])),
+    templateTitles: Object.fromEntries(titleRows.map((r) => [r.id, r.title])),
+  };
+}
 
 /** `PlanLookups` over the Cincel DB. */
 export function createPlanDbLookups(db: ImportDb): PlanLookups {
@@ -256,6 +280,8 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
           .select({
             id: workflowTaskTemplates.id,
             workflowId: workflowTaskTemplates.workflowId,
+            phase: workflowTaskTemplates.phase,
+            active: workflowTaskTemplates.active,
           })
           .from(workflowTaskTemplates),
         db
@@ -272,7 +298,8 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
           statusRows.map((r) => [r.id, { name: r.name, closes: r.closes }]),
         ),
         templates: Object.fromEntries(
-          templateRows.map((r) => [r.id, { workflowId: r.workflowId }]),
+          // Only active templates name the workflow's phases, as the wizard lists them (#687).
+          templateRows.map((r) => [r.id, { workflowId: r.workflowId, phase: r.active ? r.phase : null }]),
         ),
         staff: Object.fromEntries(
           staffRows.map((r) => [r.id, { name: r.name }]),
@@ -280,7 +307,17 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
         workflows: Object.fromEntries(
           workflowRows.map((r) => [r.id, { name: r.name }]),
         ),
+        ...(await taskAreaLookups(db)),
       };
+    },
+    async areaNamesTaken(lowerNames) {
+      if (lowerNames.length === 0) return new Set();
+      const lower = sql<string>`lower(${areas.name})`;
+      const found = await db
+        .selectDistinct({ name: lower })
+        .from(areas)
+        .where(and(isNull(areas.deletedAt), inArray(lower, [...new Set(lowerNames)])));
+      return new Set(found.map((r) => r.name));
     },
     async importedRefs(entity, externalIds) {
       if (externalIds.length === 0) return new Map();
@@ -497,6 +534,51 @@ const PROJECT_STRATEGIES = new Set<BoardMapping["strategy"]>([
   "item_as_project",
 ]);
 
+/** [groupId, workflowId] of the board's groups mapped to a workflow stage (#687). */
+function stageWorkflowIds(bm: BoardMapping): [string, string][] {
+  return Object.entries(bm.groupTargets).flatMap(([groupId, t]) =>
+    t.kind === "stage" ? [[groupId, t.workflowId] as [string, string]] : [],
+  );
+}
+
+/** The workflows the board's task área values map to (#686). */
+function taskAreaWorkflowIds(bm: BoardMapping): string[] {
+  if (bm.taskAreaSource.kind === "board") return [];
+  return Object.values(bm.taskAreas).flatMap((t) => (t.action !== "ignore" && t.workflowId ? [t.workflowId] : []));
+}
+
+/**
+ * MAPPING_INVALID for task área targets (#686): an área or workflow that doesn't exist, or a workflow that isn't
+ * one of the área's (when it has any), which the wizard never offers.
+ */
+async function taskAreaIssues(
+  boards: readonly BoardMapping[],
+  lookups: PlanLookups,
+): Promise<PlanIssue[]> {
+  const mapped = boards.filter((b) => PROJECT_STRATEGIES.has(b.strategy) && b.taskAreaSource.kind !== "board");
+  const targets = mapped.flatMap((b) => Object.entries(b.taskAreas).map(([key, t]) => ({ b, key, t })));
+  const areaIds = targets.flatMap(({ t }) => (t.action === "area" ? [t.areaId] : []));
+  const workflowIds = targets.flatMap(({ t }) => (t.action !== "ignore" && t.workflowId ? [t.workflowId] : []));
+  if (areaIds.length === 0 && workflowIds.length === 0) return [];
+  const [flows, live] = await Promise.all([lookups.areaWorkflowIds(areaIds), lookups.workflowIds(workflowIds)]);
+  const out: PlanIssue[] = [];
+  for (const { b, key, t } of targets) {
+    if (t.action === "ignore") continue;
+    const where = `taskAreas.${key}`;
+    if (t.workflowId && !live.has(t.workflowId))
+      out.push(makeIssue("MAPPING_INVALID", `${where}: workflow ${t.workflowId} does not exist`, b.mondayBoardId));
+    if (t.action !== "area") continue;
+    const areaFlows = flows.get(t.areaId);
+    if (!areaFlows)
+      out.push(makeIssue("MAPPING_INVALID", `${where}: area ${t.areaId} does not exist`, b.mondayBoardId));
+    else if (t.workflowId && areaFlows.length > 0 && !areaFlows.includes(t.workflowId))
+      out.push(
+        makeIssue("MAPPING_INVALID", `${where}: workflow ${t.workflowId} is not a workflow of area ${t.areaId}`, b.mondayBoardId),
+      );
+  }
+  return out;
+}
+
 /** MAPPING_INVALID for each Zod issue, with its path and the board it is under. */
 function zodIssues(
   raw: unknown,
@@ -565,7 +647,10 @@ export async function buildPlan(
   const [contactTypes, liveWorkflows, areaWorkflowMap] = await Promise.all([
     lookups.contactTypes([...clientIds, ...matchIds]),
     lookups.workflowIds(
-      active.flatMap((b) => (b.workflowId ? [b.workflowId] : [])),
+      active.flatMap((b) => [
+        ...(b.workflowId ? [b.workflowId] : []),
+        ...stageWorkflowIds(b).map(([, id]) => id),
+      ]),
     ),
     lookups.areaWorkflowIds(
       active.flatMap((b) => (b.areaId ? [b.areaId] : [])),
@@ -627,6 +712,15 @@ export async function buildPlan(
         boardId,
       );
     }
+    for (const [groupId, workflowId] of stageWorkflowIds(bm)) {
+      if (!liveWorkflows.has(workflowId)) {
+        add(
+          "MAPPING_INVALID",
+          `groupTargets.${groupId}: workflow ${workflowId} does not exist`,
+          boardId,
+        );
+      }
+    }
     if (bm.areaId && !areaWorkflowMap.has(bm.areaId)) {
       add(
         "MAPPING_INVALID",
@@ -636,9 +730,12 @@ export async function buildPlan(
     }
     if (PROJECT_STRATEGIES.has(bm.strategy)) {
       const areaFlows = bm.areaId ? areaWorkflowMap.get(bm.areaId) : undefined;
+      const taskFlows = taskAreaWorkflowIds(bm);
       for (const [itemId, templateId] of Object.entries(bm.templateMatches)) {
         const template = translateLookups.templates[templateId];
         if (!template) continue; // translate reports it for the item
+        // A template of a workflow a task value maps to is checked with that value (#686).
+        if (taskFlows.includes(template.workflowId)) continue;
         if (!bm.areaId) {
           add(
             "TEMPLATE_INVALID",
@@ -657,6 +754,8 @@ export async function buildPlan(
       }
     }
   }
+
+  issues.push(...(await taskAreaIssues(active, lookups)));
 
   // --- translate ----------------------------------------------------------
   const result = translate(data, mapping, translateLookups, {
@@ -787,6 +886,24 @@ export async function buildPlan(
         projectItem(p),
       );
     }
+  }
+
+  // --- AREA_NAME_TAKEN (#686) ---------------------------------------------
+  const newAreas = result.areas.filter((a) => isNew("area", a.externalId));
+  const takenAreas =
+    newAreas.length > 0 && lookups.areaNamesTaken
+      ? await lookups.areaNamesTaken(newAreas.map((a) => a.name.toLowerCase()))
+      : new Set<string>();
+  for (const a of newAreas) {
+    if (!takenAreas.has(a.name.toLowerCase())) continue;
+    const board = active.find((b) =>
+      Object.values(b.taskAreas).some((t) => t.action === "create_area" && t.name.trim().toLowerCase() === a.name.toLowerCase()),
+    );
+    add(
+      "AREA_NAME_TAKEN",
+      `An área named "${a.name}" exists already; map the value to it instead of creating it`,
+      board?.mondayBoardId,
+    );
   }
 
   // --- TEMPLATE_COLLISION -------------------------------------------------
@@ -1029,6 +1146,7 @@ async function importedSets(
     ["task_dependency", result.taskDependencies],
     ["history_event", result.historyEvents],
     ["schedule_task", result.scheduleTasks],
+    ["area", result.areas],
   ];
   const refs = new Map<ImportEntity, Map<string, string>>();
   for (const [entity, rows] of byEntity) {

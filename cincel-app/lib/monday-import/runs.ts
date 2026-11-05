@@ -64,6 +64,8 @@ export interface StoredRun {
   boardIds: string[];
   exportOptions: { updates: boolean; files: boolean };
   batchId: string | null;
+  /** Staff ids "Crear integrante" made in this run (#689): the only ones a mapping may mark `created`. */
+  createdStaffIds?: string[];
   jobs: Partial<Record<MondayImportJobKind, MondayImportJob>>;
 }
 

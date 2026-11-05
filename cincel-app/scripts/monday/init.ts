@@ -8,7 +8,8 @@
  * validated with the Zod `Mapping` before it is written; nothing else is
  * written. An existing mapping.json is kept unless `--force` is passed.
  *
- *   People    monday email (lower-case) → core.staff → { action: "staff" };
+ *   People    deleted monday users and bots → { action: "ignore" }; monday
+ *             email (lower-case), else name → core.staff → { action: "staff" };
  *             guests → { action: "contact" }; no match → null.
  *   Strategy  per board (§5.1): crm_contacts when email/phone columns
  *             dominate, item_as_project when most items have subitems,
@@ -17,8 +18,9 @@
  *   Columns   by type (§5.2), board and subitem columns.
  *   Statuses  by label id (§5.2): a label named like an existing
  *             task_statuses row → that custom status; is_done → completado;
- *             /stuck|bloquead|detenid/i → bloqueado;
- *             /working|proceso|curso/i → en_proceso; else pendiente.
+ *             named like a base status, /stuck|bloquead|detenid/i → bloqueado,
+ *             /working|proceso|curso/i → en_proceso; else pendiente flagged
+ *             `defaulted` for review. Never completado unless monday says done.
  *   Client    a connect-boards column to a crm_contacts board →
  *             relation_column; else the board name vs cliente contacts by
  *             trigram (≥ 0.8) → contact; else null.
@@ -39,6 +41,7 @@ import { join, resolve } from "node:path";
 import { sql } from "drizzle-orm";
 
 import type { ImportDb } from "../../lib/import/refs";
+import { isRetiredMondayUser } from "../../lib/monday-import/people";
 import { createMondayDb, type MondayDbHandle } from "./db";
 import type { BoardFile, ColumnDef, Manifest } from "./export";
 import { DONE_FILE } from "./export";
@@ -177,6 +180,8 @@ export interface TemplateCandidate {
 export interface InitLookups {
   /** lower(email) → staff id, for live staff with one of these emails. */
   staffByEmail(emails: string[]): Promise<Map<string, string>>;
+  /** lower(name) → staff id, for names only one live staff member has (#689: the match after email). */
+  staffByName?(names: string[]): Promise<Map<string, string>>;
   /** lower(name) → task_statuses id. */
   customStatuses(): Promise<Map<string, string>>;
   /** The most similar cliente contact with similarity ≥ `CLIENT_SIMILARITY`. */
@@ -226,6 +231,18 @@ export function createDbLookups(db: ImportDb): InitLookups {
           where deleted_at is null and email is not null and lower(email) = any(${textArray(lower)})`,
       );
       return new Map(found.map((r) => [String(r.email), String(r.id)]));
+    },
+    async staffByName(names) {
+      const lower = [...new Set(names.map((n) => n.trim().toLowerCase()).filter(Boolean))];
+      if (lower.length === 0) return new Map();
+      const found = await rows(
+        db,
+        // A name shared by two live staff can't be told apart: left out, so the person stays unmapped (as matchStaff).
+        sql`select lower(name) as name, (array_agg(id::text))[1] as id from core.staff
+          where deleted_at is null and lower(name) = any(${textArray(lower)})
+          group by lower(name) having count(*) = 1`,
+      );
+      return new Map(found.map((r) => [String(r.name), String(r.id)]));
     },
     async customStatuses() {
       const found = await rows(
@@ -494,9 +511,31 @@ const BLOCKED = /stuck|bloquead|detenid/i;
 const IN_PROGRESS = /working|proceso|curso/i;
 
 /**
+ * Base statuses by their Cincel name, accents and case ignored. Completado is
+ * left out: only monday's done marker drafts it.
+ */
+const BASE_BY_NAME: Record<
+  string,
+  "pendiente" | "en_proceso" | "bloqueado"
+> = {
+  pendiente: "pendiente",
+  "en proceso": "en_proceso",
+  bloqueado: "bloqueado",
+};
+
+const normalizeName = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+/**
  * One label's target (§5.2): a label named like an existing custom status
- * (case-insensitive) → that status; is_done → completado; the blocked and
- * in-progress patterns; else pendiente.
+ * (case-insensitive) → that status; is_done → completado; named like a base
+ * status or matching the blocked and in-progress patterns → that status; else
+ * pendiente, flagged `defaulted` so the admin reviews it. A label monday
+ * doesn't mark done never defaults to completado.
  */
 export function statusTarget(
   label: StatusLabel,
@@ -505,9 +544,11 @@ export function statusTarget(
   const custom = customStatuses.get(label.label.trim().toLowerCase());
   if (custom) return { customStatusId: custom };
   if (label.isDone) return { status: "completado" };
+  const base = BASE_BY_NAME[normalizeName(label.label)];
+  if (base) return { status: base };
   if (BLOCKED.test(label.label)) return { status: "bloqueado" };
   if (IN_PROGRESS.test(label.label)) return { status: "en_proceso" };
-  return { status: "pendiente" };
+  return { status: "pendiente", defaulted: true };
 }
 
 type ItemNode =
@@ -528,7 +569,10 @@ function walk(
   }
 }
 
-/** Label indexes and texts that items report as done for each status column. */
+/**
+ * Label texts that items report as done for each status column; an item's `index` counts only when it has no
+ * label text, so an index that means another label can't mark a label done.
+ */
 function doneFromItems(
   items: MondayItem[],
 ): Map<string, { indexes: Set<string>; labels: Set<string> }> {
@@ -537,8 +581,8 @@ function doneFromItems(
     for (const v of item.column_values ?? []) {
       if (v.__typename !== "StatusValue" || v.is_done !== true) continue;
       const entry = out.get(v.id) ?? { indexes: new Set(), labels: new Set() };
-      if (v.index != null) entry.indexes.add(String(v.index));
       if (v.label) entry.labels.add(v.label);
+      else if (v.index != null) entry.indexes.add(String(v.index));
       out.set(v.id, entry);
     }
   });
@@ -568,8 +612,8 @@ export function statusMaps(
         const isDone =
           label.isDone ||
           (seen != null &&
-            ((label.index != null && seen.indexes.has(label.index)) ||
-              seen.labels.has(label.label)));
+            (seen.labels.has(label.label) ||
+              (label.index != null && seen.indexes.has(label.index))));
         map[label.id] = statusTarget({ ...label, isDone }, customStatuses);
       }
     }
@@ -577,16 +621,24 @@ export function statusMaps(
   return out;
 }
 
-/** People (§5.3): staff by lower(email), guests → contact, else null. */
+/**
+ * People (§5.3): deleted users and bots ignored (#689); staff by lower(email),
+ * else by lower(name); guests → contact, else null.
+ */
 export function peopleTargets(
   users: ExportUser[],
   staffByEmail: ReadonlyMap<string, string>,
+  staffByName: ReadonlyMap<string, string> = new Map(),
 ): Record<string, PersonTarget> {
   const out: Record<string, PersonTarget> = {};
   for (const u of users) {
-    const staffId = u.email
-      ? staffByEmail.get(u.email.toLowerCase())
-      : undefined;
+    if (isRetiredMondayUser(u)) {
+      out[u.id] = { action: "ignore" };
+      continue;
+    }
+    const staffId =
+      (u.email ? staffByEmail.get(u.email.toLowerCase()) : undefined) ??
+      staffByName.get(u.name.trim().toLowerCase());
     if (staffId) out[u.id] = { action: "staff", staffId };
     else if ((u.kind ?? "").toLowerCase() === "guest")
       out[u.id] = { action: "contact" };
@@ -661,6 +713,8 @@ export async function draftMapping(
   const staffByEmail = await lookups.staffByEmail(
     data.users.flatMap((u) => (u.email ? [u.email] : [])),
   );
+  const staffByName =
+    (await lookups.staffByName?.(data.users.map((u) => u.name))) ?? new Map<string, string>();
   const workspaceName = new Map(
     data.workspaces.map((w) => [String(w.id), w.name]),
   );
@@ -755,7 +809,7 @@ export async function draftMapping(
   return Mapping.parse({
     version: 1,
     boards,
-    people: peopleTargets(data.users, staffByEmail),
+    people: peopleTargets(data.users, staffByEmail, staffByName),
     options: { includeUpdates: true, includeFiles: true },
   } satisfies MappingInput);
 }

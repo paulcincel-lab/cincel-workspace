@@ -17,6 +17,7 @@
  *                                                    → { job }  background export, then init drafts mapping.json
  *   getMondayExportSourceAction(runId)               → { source: MondayExportSource }  monday side of Pasos 2–4
  *   getMondayImportChoicesAction()                   → { choices: MondayImportChoices }  Cincel side of Pasos 2–4
+ *   createMondayStaffAction(runId, mondayUserId)     → { staff }  Paso 4 "Crear integrante": pending until Google sign-in
  *   saveMondayMappingDraftAction(runId, mapping, step?)
  *                                                    → { issues: string[] }  saved even when issues remain
  *   downloadMondayMappingAction(runId)               → { fileName, content }  mapping.json
@@ -55,6 +56,7 @@ import {
   isStep,
   openRun,
   previewImport,
+  recordCreatedStaff,
   saveDraft,
   saveStep,
   startApply,
@@ -66,6 +68,7 @@ import {
   type WizardDeps,
 } from "@/lib/monday-import/service";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
+import { createStaffFromMonday, CreateStaffRefused, type CreatedStaff } from "@/scripts/monday/created-staff";
 import * as onboardingRepository from "@/lib/repositories/onboarding-repository";
 import type {
   MondayConnection,
@@ -197,6 +200,31 @@ export async function getMondayExportSourceAction(
 
 export async function getMondayImportChoicesAction(): Promise<MondayImportResult<{ choices: MondayImportChoices }>> {
   return guarded("choices", async () => ({ choices: await getImportChoices(db) }));
+}
+
+/**
+ * "Crear integrante" (#689): the staff member of a monday person of the run's export, with monday's name and
+ * email (never the client's), pending until they first sign in with Google. The screen then maps the person to it
+ * with `created: true`, so a rollback of the import removes it while unused.
+ */
+export async function createMondayStaffAction(
+  runId: string,
+  mondayUserId: string,
+): Promise<MondayImportResult<{ staff: CreatedStaff }>> {
+  return guarded("create-staff", async () => {
+    checkRunId(runId);
+    const source = await getExportSource(runId, deps());
+    const user = source.users.find((u) => u.id === String(mondayUserId));
+    if (!user) throw new WizardError("Esta persona no está en la exportación.");
+    try {
+      const staff = await createStaffFromMonday(deps().db, user);
+      await recordCreatedStaff(runId, staff.id, deps());
+      return { staff };
+    } catch (err) {
+      if (err instanceof CreateStaffRefused) throw new WizardError(err.message);
+      throw err;
+    }
+  });
 }
 
 export async function saveMondayMappingDraftAction(

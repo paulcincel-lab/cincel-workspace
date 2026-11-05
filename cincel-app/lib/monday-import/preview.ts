@@ -6,7 +6,7 @@
  * rows for the projects the board makes, with their workflow and phases (#678). Issues are in Spanish with the step that fixes
  * them (#679). Pure: no DB, no files.
  */
-import { ISSUE_FIX_STEP, issueText } from "@/lib/monday-import/preview-issues";
+import { ISSUE_FIX_STEP, issuePersonId, issuePersonName, issueText } from "@/lib/monday-import/preview-issues";
 import type { CountKey, Plan } from "@/scripts/monday/plan";
 import type { ExportData, PlannedProject, PlannedTask, RowRef, TaskStatus } from "@/scripts/monday/translate";
 import type {
@@ -33,6 +33,8 @@ export interface PreviewNames {
   staff: Record<string, { name: string }>;
   /** Workflow names for the project rows; a missing name shows as no workflow. */
   workflows?: Record<string, { name: string }>;
+  /** Área names for the task rows (#686). */
+  areas?: Record<string, { name: string }>;
 }
 
 export function toPreviewCounts(c: Record<CountKey, number>): MondayPreviewCounts {
@@ -87,6 +89,8 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     itemName: (i.itemId && itemNames.get(i.itemId)) || null,
     message: issueText(i.code, i.message),
     fixStep: ISSUE_FIX_STEP[i.code],
+    personId: issuePersonId(i.code, i.message),
+    personName: issuePersonName(i.code, i.message),
   }));
 
   const result = plan.translation?.result;
@@ -118,6 +122,17 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     contactType: null,
   } satisfies Omit<MondayPreviewSample["cincel"], "title">;
 
+  const boardAreaOf = new Map(plan.translation?.mapping.boards.map((b) => [b.mondayBoardId, b.areaId ?? null]) ?? []);
+  /** The task's área (#686): its own value's, else the board's; a new one by name. */
+  const taskArea = (t: PlannedTask): string | null => {
+    if (t.area?.status === "mapped") {
+      if (t.area.newArea) return `${t.area.newArea} (nueva)`;
+      return t.area.areaId ? (names.areas?.[t.area.areaId]?.name ?? null) : null;
+    }
+    const boardArea = boardAreaOf.get(t.source.boardId);
+    return boardArea ? (names.areas?.[boardArea]?.name ?? null) : null;
+  };
+
   const taskSample = (t: PlannedTask): MondayPreviewSample => ({
     mondayItemId: t.externalId,
     mondayName: itemNames.get(t.externalId) ?? t.title,
@@ -132,6 +147,10 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
       priority: PRIORITY_LABELS[t.priority] ?? t.priority,
       manager: t.managerId ? (names.staff[t.managerId]?.name ?? null) : null,
       phase: t.phase,
+      // The task's área and workflow as apply writes them (#686).
+      workflow: t.workflowId ? (names.workflows?.[t.workflowId]?.name ?? null) : null,
+      area: taskArea(t),
+      areaUnmapped: t.area?.status === "unmapped",
       commitmentDate: t.commitmentDate,
       deliveryDate: t.deliveryDate,
       kind: t.kind,
@@ -154,7 +173,12 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
       status: p.status === "completado" ? "Completado" : "Activo",
       // The project's phases and workflow, as apply writes them (#678).
       phase: p.phases.length > 0 ? p.phases.join(", ") : null,
-      workflow: p.workflowId ? (names.workflows?.[p.workflowId]?.name ?? null) : null,
+      // Its stages: the board workflow, then the stages groups were mapped to (#687).
+      workflow:
+        [...(p.workflowId ? [p.workflowId] : []), ...(p.extraStages ?? [])]
+          .map((id) => names.workflows?.[id]?.name)
+          .filter((name): name is string => Boolean(name))
+          .join(", ") || null,
       tasks: projectTasks.get(p.externalId) ?? 0,
       comments: comments.get(p.externalId) ?? 0,
       files: files.get(p.externalId) ?? 0,

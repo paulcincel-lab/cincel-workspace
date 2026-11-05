@@ -98,7 +98,8 @@ export interface MondayImportChoices {
   statuses: { id: string; name: string; closes: boolean }[];
   areas: { id: string; name: string; workflowIds: string[] }[];
   workflows: { id: string; name: string }[];
-  templates: { id: string; workflowId: string; name: string }[];
+  /** Active templates; `phase` names their workflow's phases for the groups table (#687). */
+  templates: { id: string; workflowId: string; name: string; phase?: string | null }[];
   clients: { id: string; name: string }[];
   staff: { id: string; name: string; email: string | null }[];
   providerSubtypes: string[];
@@ -116,6 +117,13 @@ export interface MondayBoardSource {
   itemCount: number;
   /** Active top-level items, for template matches and project names by item. */
   items: { id: string; name: string; groupId: string | null }[];
+  /**
+   * Distinct values of the dropdown, status and text columns that can give tasks their área and workflow (#686):
+   * columnId → values, as translate reads them. Subitem columns on item_as_project boards, item columns otherwise.
+   */
+  taskAreaValues?: Record<string, string[]>;
+  /** monday people in the people columns of the board's items and subitems, for the card avatars (#685). */
+  userIds?: string[];
 }
 
 export interface MondayExportSource {
@@ -162,6 +170,9 @@ export interface MondayPreviewIssue {
   message: string;
   /** The step where it gets fixed ("Corregir" opens it on `boardId`). */
   fixStep: MondayImportStep;
+  /** PERSON_UNMATCHED (#689): the monday user, so "Corregir" opens their row of Personas and "Crear integrante" works here. */
+  personId?: string | null;
+  personName?: string | null;
 }
 
 /** One monday item as the Cincel row apply creates for it. */
@@ -178,8 +189,12 @@ export interface MondayPreviewSample {
     priority: string | null;
     manager: string | null;
     phase: string | null;
-    /** A project sample's workflow (current_workflow_id and its stage); null otherwise. */
+    /** A project sample's workflow and any stages its groups add (#687), joined; null otherwise. */
     workflow: string | null;
+    /** A task sample's área, from its monday value or the board (#686); null when it has none. */
+    area?: string | null;
+    /** A task sample whose monday área value has no equivalent yet (#686): it keeps the board's workflow. */
+    areaUnmapped?: boolean;
     commitmentDate: string | null;
     deliveryDate: string | null;
     kind: "workflow" | "usuario" | null;
@@ -218,6 +233,8 @@ export interface MondayImportedProject {
   id: string;
   name: string;
   href: string;
+  /** The monday board it came from (its import ref's source), for the board cards (#685). */
+  boardId?: string | null;
 }
 
 export interface MondayRollbackCheck {

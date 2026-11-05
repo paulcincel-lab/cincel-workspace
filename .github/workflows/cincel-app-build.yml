@@ -111,8 +111,9 @@ jobs:
     env:
       DATABASE_URL: postgres://cincel:cincel@localhost:5432/cincel
       SEED_ADMIN_EMAIL: paul@cincel.mx
-      SEED_ADMIN_PASSWORD: CincelAdmin2026!
-      E2E_ADMIN_PASSWORD: CincelAdmin2026!
+      # Throwaway value for the CI database only; no deployed instance uses it.
+      SEED_ADMIN_PASSWORD: ci-e2e-admin-password
+      E2E_ADMIN_PASSWORD: ci-e2e-admin-password
 
     steps:
       - name: Check out the repo

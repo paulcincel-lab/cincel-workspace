@@ -23,6 +23,7 @@ import { defaultAreaColorSlot } from "../lib/areas/area-color";
 import { teamMembers as roster } from "../lib/data/team";
 import * as schema from "../lib/db/schema";
 import { DEFAULT_WORKFLOWS } from "./default-workflows.mjs";
+import { resolveSeedAdminPassword } from "./seed-admin-password";
 
 const connectionString =
   process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
@@ -40,7 +41,7 @@ async function hashPassword(password: string) {
 }
 
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "paul@cincel.mx";
-const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "CincelAdmin2026!";
+const ADMIN_PASSWORD = resolveSeedAdminPassword(process.env);
 
 // Shared with scripts/migrate.mjs, which creates them on a fresh install.
 const WORKFLOWS = DEFAULT_WORKFLOWS;
@@ -186,7 +187,7 @@ async function seedAdminCredential() {
       .where(eq(schema.staff.id, member.id));
   }
 
-  const { hash, salt } = await hashPassword(ADMIN_PASSWORD);
+  const { hash, salt } = await hashPassword(ADMIN_PASSWORD.password);
   const credential = {
     passwordHash: hash,
     salt,
@@ -199,6 +200,10 @@ async function seedAdminCredential() {
     .values({ staffId: member.id, ...credential })
     .onConflictDoUpdate({ target: schema.authCredentials.staffId, set: credential });
   console.log(`  auth_credentials: admin ${email} upserted`);
+  if (ADMIN_PASSWORD.generated) {
+    console.log(`  SEED_ADMIN_PASSWORD is not set; generated password for ${email}: ${ADMIN_PASSWORD.password}`);
+    console.log("  Store it now: it is not saved anywhere else, and the next seed run replaces it.");
+  }
 }
 
 async function main() {
