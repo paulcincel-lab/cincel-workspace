@@ -259,6 +259,12 @@ describe("monday wizard connect and export", () => {
     const source = await getExportSource(run.runId, deps);
     expect(source.boards[0]).toMatchObject({ id: "101", name: "Proyectos", itemCount: 3 });
     expect(source.boards[0].statusLabels.status).toEqual([{ id: "1", name: "Listo", isDone: false }]);
+    // The card avatars (#685): only monday users, each once, from the board's people columns.
+    const userIds = new Set(source.users.map((user) => user.id));
+    for (const board of source.boards) {
+      expect(new Set(board.userIds).size).toBe(board.userIds?.length);
+      for (const id of board.userIds ?? []) expect(userIds.has(id)).toBe(true);
+    }
     expect((await getOptionsInfo(run.runId, deps)).filesDisabledReason).toBe("Los archivos no se exportaron de monday.");
   });
 
@@ -398,7 +404,11 @@ describe.skipIf(!url)("monday wizard apply and rollback (test DB)", { timeout: 6
         sql`select count(*)::int as n from core.import_refs where batch_id = ${state.batchId} and entity = 'project'`,
       )) as unknown as { n: number }[];
       expect(n).toBe(preview.totals.proyectos);
-      expect((await importedProjects(run.runId, deps)).length).toBe(preview.totals.proyectos);
+      const imported = await importedProjects(run.runId, deps);
+      expect(imported.length).toBe(preview.totals.proyectos);
+      // Each project names its monday board, so its card turns into its link (#685).
+      const boardIds = new Set(preview.boards.map((board) => board.boardId));
+      for (const project of imported) expect(boardIds.has(project.boardId ?? "")).toBe(true);
 
       const check = await checkRollback(run.runId, deps);
       expect(check).toMatchObject({ canRollback: true, blockers: [] });

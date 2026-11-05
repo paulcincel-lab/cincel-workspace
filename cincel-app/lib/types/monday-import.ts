@@ -122,6 +122,8 @@ export interface MondayBoardSource {
    * columnId → values, as translate reads them. Subitem columns on item_as_project boards, item columns otherwise.
    */
   taskAreaValues?: Record<string, string[]>;
+  /** monday people in the people columns of the board's items and subitems, for the card avatars (#685). */
+  userIds?: string[];
 }
 
 export interface MondayExportSource {
@@ -228,6 +230,8 @@ export interface MondayImportedProject {
   id: string;
   name: string;
   href: string;
+  /** The monday board it came from (its import ref's source), for the board cards (#685). */
+  boardId?: string | null;
 }
 
 export interface MondayRollbackCheck {

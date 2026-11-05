@@ -4,13 +4,17 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 
 import { BoardsStep } from "./BoardsStep";
+import { buildBoardCards } from "@/lib/monday-import/board-cards";
 import type { MondayConnection, MondayImportRunState } from "@/lib/types/monday-import";
 
 const connection: MondayConnection = {
   account: { id: "1", slug: "cincel", name: "Cincel" },
-  tokenUser: { name: "Ana López", email: "ana@example.test" },
+  tokenUser: { name: "Ana Prueba", email: "ana@example.test" },
   tokenSource: "input",
-  workspaces: [{ id: "w1", name: "Obras" }],
+  workspaces: [
+    { id: "w1", name: "Obras" },
+    { id: "w2", name: "Ventas" },
+  ],
   boards: [
     {
       id: "b1",
@@ -30,8 +34,17 @@ const connection: MondayConnection = {
       hierarchyType: null,
       estimatedCalls: 2,
     },
+    {
+      id: "b3",
+      name: "Clientes",
+      workspaceId: "w2",
+      workspaceName: "Ventas",
+      itemsCount: 7,
+      hierarchyType: null,
+      estimatedCalls: 1,
+    },
   ],
-  estimatedCalls: 5,
+  estimatedCalls: 6,
 };
 
 const run: MondayImportRunState = {
@@ -66,6 +79,7 @@ function Harness({ initial, onChange }: { initial: string[]; onChange: (ids: str
       isPending={false}
       mapping={null}
       onMappingChange={() => {}}
+      cards={buildBoardCards({ connection, mapping: null, source: null, preview: null, reviewed: new Set() })}
     />
   );
 }
@@ -74,7 +88,7 @@ afterEach(() => {
   cleanup();
 });
 
-describe("BoardsStep board checkboxes", () => {
+describe("BoardsStep board cards (#685)", () => {
   it("names each checkbox after its board and shows its checked state", () => {
     render(<Harness initial={["b1"]} onChange={() => {}} />);
 
@@ -103,7 +117,7 @@ describe("BoardsStep board checkboxes", () => {
     expect(box.getAttribute("aria-checked")).toBe("true");
   });
 
-  it("toggles the board from anywhere in its row", () => {
+  it("toggles the board from anywhere on its card", () => {
     const onChange = vi.fn();
     render(<Harness initial={["b2"]} onChange={onChange} />);
 
@@ -114,5 +128,40 @@ describe("BoardsStep board checkboxes", () => {
     fireEvent.click(screen.getByText("Casa Ruiz"));
     expect(onChange).toHaveBeenLastCalledWith(["b1"]);
     expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("selects nothing by default; Seleccionar todos and Ninguno act on the visible cards", () => {
+    const onChange = vi.fn();
+    render(<Harness initial={[]} onChange={onChange} />);
+
+    for (const name of ["Casa Ruiz", "Depto Gómez", "Clientes"])
+      expect(screen.getByRole("checkbox", { name: `Importar ${name}` }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("button", { name: "Ninguno" }).hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar tableros" }), { target: { value: "obras" } });
+    expect(screen.queryByText("Clientes")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos" }));
+    expect(onChange).toHaveBeenLastCalledWith(["b1", "b2"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ninguno" }));
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("shows each board's workspace, item count and «mapear» before the export, with its mapping closed", () => {
+    render(<Harness initial={[]} onChange={() => {}} />);
+
+    const card = screen.getByRole("group", { name: "Casa Ruiz" });
+    expect(card.textContent).toContain("Obras");
+    expect(card.textContent).toContain("12 elementos");
+    expect(card.textContent).toContain("mapear");
+    expect(screen.getByRole("button", { name: "Abrir mapeo de Casa Ruiz" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("filters the cards by workspace", () => {
+    render(<Harness initial={[]} onChange={() => {}} />);
+
+    expect(screen.getByRole("combobox", { name: "Espacio de trabajo" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar tableros" }), { target: { value: "zzz" } });
+    expect(screen.getByText("Ningún tablero coincide con la búsqueda.")).toBeTruthy();
   });
 });

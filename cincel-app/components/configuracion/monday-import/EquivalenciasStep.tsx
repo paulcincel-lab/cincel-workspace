@@ -181,7 +181,8 @@ function StatusLabelRow({
   );
 }
 
-function BoardEquivalences({
+/** One board's full mapping; also the body of its card in the board gallery (#685). */
+export function BoardEquivalences({
   board,
   source,
   choices,

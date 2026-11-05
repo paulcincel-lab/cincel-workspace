@@ -481,6 +481,29 @@ function taskAreaColumnValues(
   return out;
 }
 
+/** monday people in the people columns of the active items and subitems, in first-seen order (#685). */
+function boardPeople(items: Awaited<ReturnType<typeof readExport>>["boards"][number]["items"]): string[] {
+  const out = new Set<string>();
+  const visit = (row: unknown) => {
+    const values = (row as { column_values?: unknown[] } | null)?.column_values ?? [];
+    for (const value of values) {
+      const v = value as { __typename?: string; persons_and_teams?: { id: string; kind?: string | null }[] | null };
+      if (v?.__typename !== "PeopleValue") continue;
+      for (const p of v.persons_and_teams ?? []) if (p.kind === "person") out.add(String(p.id));
+    }
+  };
+  const active = (row: unknown) => {
+    const state = (row as { state?: unknown } | null)?.state;
+    return row != null && (state == null || state === "active");
+  };
+  for (const item of items) {
+    if (!active(item)) continue;
+    visit(item);
+    for (const sub of (item as { subitems?: unknown[] | null }).subitems ?? []) if (active(sub)) visit(sub);
+  }
+  return [...out];
+}
+
 /** Paso 2–4 source side: every board's columns, groups, status labels and the monday users. */
 export async function getExportSource(runId: string, deps: WizardDeps): Promise<MondayExportSource> {
   const run = await requireRun(runId, deps);
@@ -517,6 +540,7 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
           .filter((i) => i.state == null || i.state === "active")
           .map((i) => ({ id: i.id, name: i.name, groupId: i.group?.id ?? null })),
         taskAreaValues: taskAreaColumnValues(board, items),
+        userIds: boardPeople(items),
       })),
     users: data.users.map((u) => ({ id: u.id, name: u.name, email: u.email ?? null, kind: u.kind ?? null })),
     hasFiles: existsSync(join(dir, FILES_DIR, FILES_INDEX)),
@@ -757,12 +781,12 @@ export async function importedProjects(runId: string, deps: WizardDeps): Promise
   const batch = await runBatch(deps.db, runDir(run.runId, envOf(deps)));
   if (!batch || batch.status === "rolled_back") return [];
   const rows = (await deps.db.execute(
-    sql`select p.id::text as id, p.name from core.import_refs r
+    sql`select p.id::text as id, p.name, r.data->'source'->>'boardId' as "boardId" from core.import_refs r
           join ${projects} p on p.id = r.row_id
           where r.batch_id = ${batch.id} and r.entity = 'project' and p.deleted_at is null
           order by p.name`,
-  )) as unknown as { id: string; name: string }[];
-  return rows.map((r) => ({ id: r.id, name: r.name, href: importedProjectHref(r.id) }));
+  )) as unknown as { id: string; name: string; boardId: string | null }[];
+  return rows.map((r) => ({ id: r.id, name: r.name, href: importedProjectHref(r.id), boardId: r.boardId ?? null }));
 }
 
 /** What blocks "Deshacer importación" (§9), read-only. */
