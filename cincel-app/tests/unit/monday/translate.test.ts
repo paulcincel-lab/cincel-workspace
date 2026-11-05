@@ -310,6 +310,20 @@ describe("translate: board_as_project", () => {
     );
   });
 
+  it("a defaulted status label imports as pendiente and is listed once for review", () => {
+    const input = mappingInput();
+    input.boards[0].statusMaps.status["3"] = { status: "pendiente", defaulted: true };
+    const r = run(exportData(), input);
+    const defaulted = r.issues.filter((i) => i.code === "STATUS_DEFAULTED");
+    expect(defaulted).toEqual([
+      {
+        code: "STATUS_DEFAULTED",
+        boardId: "301",
+        message: 'Status label 3 ("Revisión cliente") of column status has no equivalent; defaulted to pendiente',
+      },
+    ]);
+  });
+
   it("priority from the priority column", () => {
     const r = run();
     expect(task(r, "1001").priority).toBe("alta");

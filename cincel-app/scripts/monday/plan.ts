@@ -12,7 +12,8 @@
  *             PROJECT_NAME_TAKEN, PROJECT_CODE_TAKEN, STATUS_UNMAPPED,
  *             TEMPLATE_COLLISION, TEMPLATE_INVALID, PROVIDER_SUBTYPE_MISSING,
  *             SCHEDULE_EXISTS, DRIVE_NOT_CONFIGURED (only with files on).
- *   Warnings  PERSON_UNMATCHED, RELATION_MISSING, DATES_MISSING, FILE_MISSING.
+ *   Warnings  PERSON_UNMATCHED, RELATION_MISSING, DATES_MISSING, FILE_MISSING,
+ *             STATUS_DEFAULTED (a status label init drafted as pendiente).
  *
  * Rows already in `core.import_refs` (files: already in `core.import_files`)
  * are skipped: `apply` doesn't create them again, so they are counted apart
@@ -99,6 +100,7 @@ export const WARNING_CODES = [
   "RELATION_MISSING",
   "DATES_MISSING",
   "FILE_MISSING",
+  "STATUS_DEFAULTED",
 ] as const;
 
 export type PlanIssueCode =

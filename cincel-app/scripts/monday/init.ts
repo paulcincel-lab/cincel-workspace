@@ -17,8 +17,9 @@
  *   Columns   by type (§5.2), board and subitem columns.
  *   Statuses  by label id (§5.2): a label named like an existing
  *             task_statuses row → that custom status; is_done → completado;
- *             /stuck|bloquead|detenid/i → bloqueado;
- *             /working|proceso|curso/i → en_proceso; else pendiente.
+ *             named like a base status, /stuck|bloquead|detenid/i → bloqueado,
+ *             /working|proceso|curso/i → en_proceso; else pendiente flagged
+ *             `defaulted` for review. Never completado unless monday says done.
  *   Client    a connect-boards column to a crm_contacts board →
  *             relation_column; else the board name vs cliente contacts by
  *             trigram (≥ 0.8) → contact; else null.
@@ -495,8 +496,10 @@ const IN_PROGRESS = /working|proceso|curso/i;
 
 /**
  * One label's target (§5.2): a label named like an existing custom status
- * (case-insensitive) → that status; is_done → completado; the blocked and
- * in-progress patterns; else pendiente.
+ * (case-insensitive) → that status; is_done → completado; named like a base
+ * status or matching the blocked and in-progress patterns → that status; else
+ * pendiente, flagged `defaulted` so the admin reviews it. A label monday
+ * doesn't mark done never defaults to completado.
  */
 export function statusTarget(
   label: StatusLabel,
@@ -507,7 +510,27 @@ export function statusTarget(
   if (label.isDone) return { status: "completado" };
   if (BLOCKED.test(label.label)) return { status: "bloqueado" };
   if (IN_PROGRESS.test(label.label)) return { status: "en_proceso" };
-  return { status: "pendiente" };
+/**
+ * Base statuses by their Cincel name, accents and case ignored. Completado is
+ * left out: only monday's done marker drafts it.
+ */
+const BASE_BY_NAME: Record<
+  string,
+  "pendiente" | "en_proceso" | "bloqueado"
+> = {
+  pendiente: "pendiente",
+  "en proceso": "en_proceso",
+  bloqueado: "bloqueado",
+};
+
+const normalizeName = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+  return { status: "pendiente", defaulted: true };
 }
 
 type ItemNode =
@@ -519,6 +542,8 @@ function walk(
 ) {
   for (const item of items) {
     if (!item) continue;
+  const base = BASE_BY_NAME[normalizeName(label.label)];
+  if (base) return { status: base };
     visit(item);
     walk(
       ((item as { subitems?: (ItemNode | null)[] | null }).subitems ??
@@ -528,7 +553,10 @@ function walk(
   }
 }
 
-/** Label indexes and texts that items report as done for each status column. */
+/**
+ * Label texts that items report as done for each status column; an item's `index` counts only when it has no
+ * label text, so an index that means another label can't mark a label done.
+ */
 function doneFromItems(
   items: MondayItem[],
 ): Map<string, { indexes: Set<string>; labels: Set<string> }> {
@@ -537,7 +565,6 @@ function doneFromItems(
     for (const v of item.column_values ?? []) {
       if (v.__typename !== "StatusValue" || v.is_done !== true) continue;
       const entry = out.get(v.id) ?? { indexes: new Set(), labels: new Set() };
-      if (v.index != null) entry.indexes.add(String(v.index));
       if (v.label) entry.labels.add(v.label);
       out.set(v.id, entry);
     }
@@ -553,6 +580,7 @@ function doneFromItems(
  */
 export function statusMaps(
   columns: { defs: ColumnDef[]; targets: Record<string, ColumnTarget> }[],
+      else if (v.index != null) entry.indexes.add(String(v.index));
   items: MondayItem[],
   customStatuses: ReadonlyMap<string, string>,
 ): Record<string, Record<string, StatusTarget>> {
@@ -568,8 +596,8 @@ export function statusMaps(
         const isDone =
           label.isDone ||
           (seen != null &&
-            ((label.index != null && seen.indexes.has(label.index)) ||
-              seen.labels.has(label.label)));
+            (seen.labels.has(label.label) ||
+              (label.index != null && seen.indexes.has(label.index))));
         map[label.id] = statusTarget({ ...label, isDone }, customStatuses);
       }
     }

@@ -41,6 +41,8 @@ export type ClientRef = z.infer<typeof ClientRef>;
 export const StatusTarget = z.union([
   z.object({
     status: z.enum(["pendiente", "en_proceso", "completado", "bloqueado"]),
+    // init found no equivalent and drafted an open status; cleared once the admin picks one.
+    defaulted: z.literal(true).optional(),
   }),
   // tasks.status is derived via underlyingStatus(), never set alongside it.
   z.object({ customStatusId: z.uuid() }),

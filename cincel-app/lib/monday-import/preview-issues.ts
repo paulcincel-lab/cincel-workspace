@@ -14,6 +14,7 @@ export const ISSUE_FIX_STEP: Record<PlanIssueCode, MondayImportStep> = {
   PROJECT_NAME_TAKEN: "equivalencias",
   PROJECT_CODE_TAKEN: "equivalencias",
   STATUS_UNMAPPED: "equivalencias",
+  STATUS_DEFAULTED: "equivalencias",
   TEMPLATE_COLLISION: "equivalencias",
   TEMPLATE_INVALID: "equivalencias",
   PROVIDER_SUBTYPE_MISSING: "equivalencias",
@@ -59,6 +60,8 @@ export function issueText(code: PlanIssueCode, message: string): string {
       return name
         ? `La etiqueta de estatus «${name}» no tiene equivalente. Elígelo en Estatus.`
         : "Un estatus personalizado elegido ya no existe. Elige otro en Estatus.";
+    case "STATUS_DEFAULTED":
+      return `La etiqueta de estatus ${named(name, "sin nombre")} no tiene equivalente; sus tareas quedan como Pendiente. Revísala en Estatus.`;
     case "TEMPLATE_COLLISION":
       return `${named(name, "Un elemento")} coincide con una plantilla que ya se usa en su proyecto. Quita una en Plantillas del workflow.`;
     case "TEMPLATE_INVALID":

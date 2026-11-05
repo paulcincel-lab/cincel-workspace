@@ -24,6 +24,7 @@ import {
   encodeStatusTarget,
   findBoard,
   groupEquivalent,
+  isDefaultedStatus,
   lacksClient,
   projectKeys,
   setBoardArea,
@@ -84,12 +85,15 @@ function EquivalenceTable({ monday, cincel, children }: { monday: string; cincel
 function StatusLabelRow({
   label,
   value,
+  defaulted,
   statusChoices,
   onChange,
   onStatusCreated,
 }: {
   label: { id: string; name: string; isDone: boolean };
   value: string;
+  /** No equivalent was found and it defaulted to Pendiente: flagged until the admin picks one. */
+  defaulted: boolean;
   statusChoices: Choice[];
   onChange: (value: string) => void;
   onStatusCreated: (status: { id: string; name: string; closes: boolean }) => void;
@@ -126,6 +130,11 @@ function StatusLabelRow({
         {label.isDone ? (
           <Badge variant="outline" className="ml-2">
             Terminado en monday
+          </Badge>
+        ) : null}
+        {defaulted ? (
+          <Badge variant="secondary" className="ml-2">
+            Sin equivalente, revisar
           </Badge>
         ) : null}
       </TableCell>
@@ -279,6 +288,7 @@ function BoardEquivalences({
                   key={label.id}
                   label={label}
                   value={encodeStatusTarget(board.statusMaps[columnId]?.[label.id])}
+                  defaulted={isDefaultedStatus(board.statusMaps[columnId]?.[label.id])}
                   statusChoices={statusChoices}
                   onStatusCreated={onStatusCreated}
                   onChange={(value) => {

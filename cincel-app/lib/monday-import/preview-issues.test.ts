@@ -31,6 +31,7 @@ const PLAN_MESSAGES: [PlanIssueCode, string][] = [
   ["DATES_MISSING", '"Planos" has no timeline; left out of the cronograma'],
   ["FILE_MISSING", 'File 88 ("plano.pdf") is in files/index.json but /data/monday/run-1/files/88/plano.pdf is not on disk'],
   ["FILE_MISSING", 'File 89 ("foto.jpg") is not in files/index.json'],
+  ["STATUS_DEFAULTED", 'Status label 5 ("Urgente") of column status has no equivalent; defaulted to pendiente'],
 ];
 
 describe("issueText", () => {
@@ -49,6 +50,9 @@ describe("issueText", () => {
     expect(issueText("STATUS_UNMAPPED", PLAN_MESSAGES[8][1])).toContain("«Revisión»");
     expect(issueText("PERSON_UNMATCHED", PLAN_MESSAGES[19][1])).toContain("«Luis Pérez»");
     expect(issueText("FILE_MISSING", PLAN_MESSAGES[22][1])).toContain("«plano.pdf»");
+    expect(issueText("STATUS_DEFAULTED", PLAN_MESSAGES[24][1])).toBe(
+      "La etiqueta de estatus «Urgente» no tiene equivalente; sus tareas quedan como Pendiente. Revísala en Estatus.",
+    );
   });
 
   it("tells a taken name from a repeated one", () => {

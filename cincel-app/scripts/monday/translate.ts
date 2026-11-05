@@ -351,6 +351,7 @@ export interface TranslateResult {
 // ---------------------------------------------------------------------------
 
 /** Default status for a label (BE §5.2), used by `init` and as documentation. */
+  | "STATUS_DEFAULTED"
 export function defaultStatusForLabel(
   label: string,
   isDone: boolean,
@@ -618,6 +619,8 @@ function columnsFor(
   );
   return [...ordered, ...extra];
 }
+    if (PROJECT_BOARD_STRATEGIES.has(bm.strategy))
+      reportDefaultedStatuses(ctx, bm, eb);
 
 function valueOf(
   item: ItemLike,
@@ -630,6 +633,36 @@ function valueOf(
 
 function textOf(value: MondayColumnValue | undefined): string | null {
   const text = value?.text?.trim();
+const PROJECT_BOARD_STRATEGIES = new Set<BoardMapping["strategy"]>([
+  "board_as_project",
+  "group_as_project",
+  "item_as_project",
+]);
+
+/**
+ * One STATUS_DEFAULTED warning per status label init found no equivalent for
+ * (`defaulted`): its tasks import as pendiente until the admin picks one.
+ */
+function reportDefaultedStatuses(ctx: Ctx, bm: BoardMapping, eb: ExportBoard) {
+  const defs = [...eb.board.columns, ...(eb.board.subitem_columns ?? [])];
+  for (const [columnId, labels] of Object.entries(bm.statusMaps)) {
+    const known = defs
+      .filter((d) => d.id === columnId)
+      .flatMap((d) => statusLabels(d));
+    for (const [labelId, target] of Object.entries(labels)) {
+      if (!("status" in target) || !target.defaulted) continue;
+      const text = known.find((l) => l.id === labelId)?.label ?? labelId;
+      issue(
+        ctx,
+        "STATUS_DEFAULTED",
+        bm.mondayBoardId,
+        undefined,
+        `Status label ${labelId} ("${text}") of column ${columnId} has no equivalent; defaulted to pendiente`,
+      );
+    }
+  }
+}
+
   return text ? text : null;
 }
 

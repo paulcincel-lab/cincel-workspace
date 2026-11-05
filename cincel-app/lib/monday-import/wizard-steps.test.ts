@@ -14,6 +14,7 @@ import {
   decodeClient,
   decodePerson,
   decodeStatusTarget,
+  defaultStatusTarget,
   encodeClient,
   encodePerson,
   encodeStatusTarget,
@@ -21,6 +22,7 @@ import {
   findBoard,
   groupEquivalent,
   initialStep,
+  isDefaultedStatus,
   jobPercent,
   nextStep,
   previousStep,
@@ -253,8 +255,27 @@ describe("draft edits over the fixture", () => {
     const listo = src.statusLabels.status_1.find((l) => l.name === "Listo")!;
     const detenido = src.statusLabels.status_1.find((l) => l.name === "Detenido")!;
     expect(on.statusMaps.status_1[listo.id]).toEqual({ status: "completado" });
-    expect(on.statusMaps.status_1[detenido.id]).toEqual({ status: "pendiente" });
+    const porIniciar = src.statusLabels.status_1.find((l) => l.name === "Por iniciar")!;
+    expect(on.statusMaps.status_1[detenido.id]).toEqual({ status: "bloqueado" });
+    expect(on.statusMaps.status_1[porIniciar.id]).toEqual({ status: "pendiente", defaulted: true });
     expect(on.columns.status_1).toBe("status");
+  });
+
+  it("never defaults a label monday doesn't mark done to Completado", () => {
+    expect(defaultStatusTarget({ name: "Urgente", isDone: false })).toEqual({ status: "pendiente", defaulted: true });
+    expect(defaultStatusTarget({ name: "Completado", isDone: false })).toEqual({ status: "pendiente", defaulted: true });
+    expect(defaultStatusTarget({ name: "Pendiente", isDone: false })).toEqual({ status: "pendiente" });
+    expect(defaultStatusTarget({ name: "Listo", isDone: true })).toEqual({ status: "completado" });
+    expect(isDefaultedStatus({ status: "pendiente", defaulted: true })).toBe(true);
+    expect(isDefaultedStatus({ status: "pendiente" })).toBe(false);
+    expect(isDefaultedStatus(undefined)).toBe(false);
+  });
+
+  it("clears the review flag once a label's status is picked", () => {
+    const board = findBoard(mapping, "101")!;
+    const picked = decodeStatusTarget(encodeStatusTarget({ status: "pendiente", defaulted: true }))!;
+    const next = setStatusTarget(board, "status", "7", picked);
+    expect(next.statusMaps.status["7"]).toEqual({ status: "pendiente" });
   });
 
   it("sets one status label, keeping the others", () => {

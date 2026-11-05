@@ -186,9 +186,30 @@ export function updateBoard(
   };
 }
 
-/** A label's first target: done labels close the task, the rest start Pendiente (same default as init). */
-export function defaultStatusTarget(label: { isDone: boolean }): StatusTarget {
-  return { status: label.isDone ? "completado" : "pendiente" };
+const BASE_STATUS_BY_NAME: Record<string, "pendiente" | "en_proceso" | "bloqueado"> = {
+  pendiente: "pendiente",
+  "en proceso": "en_proceso",
+  bloqueado: "bloqueado",
+};
+
+/**
+ * A label's first target, by the same rules as init: done labels close the task; a label named like a base status
+ * (or blocked / in progress) gets it; the rest start Pendiente flagged `defaulted` for review, never Completado.
+ */
+export function defaultStatusTarget(label: { name?: string; isDone: boolean }): StatusTarget {
+  if (label.isDone) return { status: "completado" };
+  const name = label.name ?? "";
+  const key = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  const base = BASE_STATUS_BY_NAME[key];
+  if (base) return { status: base };
+  if (/stuck|bloquead|detenid/i.test(name)) return { status: "bloqueado" };
+  if (/working|proceso|curso/i.test(name)) return { status: "en_proceso" };
+  return { status: "pendiente", defaulted: true };
+}
+
+/** Whether init (or the wizard) found no equivalent for the label and drafted Pendiente: «Sin equivalente, revisar». */
+export function isDefaultedStatus(target: StatusTarget | undefined): boolean {
+  return Boolean(target && "status" in target && target.defaulted);
 }
 
 /**
