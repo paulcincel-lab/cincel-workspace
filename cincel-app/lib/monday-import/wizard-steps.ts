@@ -24,6 +24,7 @@ import type {
   MondayPreview,
 } from "@/lib/types/monday-import";
 import type { RollbackBlocker } from "@/scripts/monday/rollback";
+import { matchStaff } from "@/lib/monday-import/people";
 
 export type BoardDraft = MappingInput["boards"][number];
 
@@ -325,14 +326,12 @@ export function setPerson(mapping: MappingInput, userId: string, target: PersonT
   return { ...mapping, people: { ...mapping.people, [userId]: target } };
 }
 
-/** Suggested staff for a monday user, by email (case insensitive). */
+/** Suggested staff for a monday user: same email, else same name (case insensitive); none for deleted users and bots. */
 export function suggestStaff(
-  user: { email: string | null },
+  user: { id?: string; name?: string; email: string | null; kind?: string | null },
   staff: MondayImportChoices["staff"],
 ): MondayImportChoices["staff"][number] | null {
-  const email = user.email?.trim().toLowerCase();
-  if (!email) return null;
-  return staff.find((member) => member.email?.trim().toLowerCase() === email) ?? null;
+  return matchStaff({ id: user.id ?? "", name: user.name ?? "", email: user.email, kind: user.kind }, staff)?.member ?? null;
 }
 
 /** monday users still without an equivalent (null target). */

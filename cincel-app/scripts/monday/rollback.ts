@@ -19,7 +19,9 @@
  * Step 2, one transaction: the check runs again inside it, then the Drive ids
  * to trash go into `import_batches.stats.driveTrash` and every batch row is
  * deleted in reverse order, then `import_files` and `import_refs`; the batch
- * ends `rolled_back` with `rolled_back_at`. Deleting the import's own
+ * ends `rolled_back` with `rolled_back_at`. Staff members the wizard's
+ * "Crear integrante" made for the batch are soft-deleted unless used since
+ * (scripts/monday/created-staff.ts). Deleting the import's own
  * history is the one sanctioned exception to "nunca eliminar historial".
  *
  * Step 3, after commit: trash (never delete) the uploaded files, the import
@@ -38,6 +40,7 @@ import {
 } from "../../lib/google/drive-admin";
 import { getServiceAccountTokenSource } from "../../lib/google/service-account";
 import type { ImportDb, ImportEntity } from "../../lib/import/refs";
+import { removeUnusedCreatedStaff } from "./created-staff";
 import { createMondayDb, type MondayDbHandle } from "./db";
 import type { CliIo, CommandHandler } from "./run";
 
@@ -720,6 +723,9 @@ const asIds = (value: unknown): string[] =>
 
 /** Appends `id` to the `stats.<key>` array of the batch. */
 async function recordDone(
+  // Staff "Crear integrante" made for this batch (#689), unless used since.
+  const createdStaff = await removeUnusedCreatedStaff(tx, batchId);
+  counts.push({ label: "created staff", count: createdStaff.removed.length });
   db: ImportDb,
   batchId: string,
   key: "driveTrashed" | "driveKept",

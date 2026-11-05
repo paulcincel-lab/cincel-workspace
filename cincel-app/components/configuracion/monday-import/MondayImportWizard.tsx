@@ -567,7 +567,16 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
           />
         ) : null}
         {step === "personas" && mapping && source && choices ? (
-          <PeopleStep mapping={mapping} source={source} choices={choices} onMappingChange={editMapping} />
+          <PeopleStep
+            mapping={mapping}
+            source={source}
+            choices={choices}
+            runId={runId}
+            onMappingChange={editMapping}
+            onStaffCreated={(member) =>
+              setChoices((current) => (current ? { ...current, staff: [...current.staff, member] } : current))
+            }
+          />
         ) : null}
         {step === "opciones" && mapping ? (
           <OptionsStep mapping={mapping} info={optionsInfo} error={optionsError} onMappingChange={editMapping} />

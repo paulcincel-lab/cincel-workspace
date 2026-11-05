@@ -102,7 +102,8 @@ export const BoardMapping = z.object({
 export type BoardMapping = z.infer<typeof BoardMapping>;
 
 export const PersonTarget = z.union([
-  z.object({ action: z.literal("staff"), staffId: z.uuid() }),
+  // created: the wizard's "Crear integrante" made this staff member; rollback removes it while unused (#689).
+  z.object({ action: z.literal("staff"), staffId: z.uuid(), created: z.boolean().optional() }),
   z.object({ action: z.literal("contact"), contactId: z.uuid().optional() }),
   z.object({ action: z.literal("ignore") }),
   z.null(),

@@ -79,7 +79,7 @@ export function issueText(code: PlanIssueCode, message: string): string {
       return "Falta una equivalencia o no es válida. Revisa este tablero.";
     case "PERSON_UNMATCHED": {
       const person = /\(([^)]+)\) has no staff match/.exec(message)?.[1];
-      return `${person && person !== "?" ? `«${person}»` : "Una persona de monday"} no tiene equivalente en el equipo; sus tareas quedan sin responsable. Elígela en Personas.`;
+      return `${person && person !== "?" ? `«${person}»` : "Una persona de monday"} no tiene equivalente en el equipo; sus tareas quedan sin responsable. Elígela o usa Crear integrante en Personas.`;
     }
     case "RELATION_MISSING":
       return "Un elemento vinculado no está en la exportación; ese vínculo no se importa.";
@@ -88,4 +88,10 @@ export function issueText(code: PlanIssueCode, message: string): string {
     case "FILE_MISSING":
       return `El archivo ${named(name, "de un elemento")} no se descargó; no se importa. Exporta otra vez o apaga los archivos en Opciones.`;
   }
+}
+
+/** The monday user id of a PERSON_UNMATCHED issue (#689), so the Vista previa links to that row of Personas. */
+export function issuePersonId(code: PlanIssueCode, message: string): string | null {
+  if (code !== "PERSON_UNMATCHED") return null;
+  return /monday user (\S+) \(/.exec(message)?.[1] ?? null;
 }
