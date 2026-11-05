@@ -49,7 +49,7 @@ describe("no hard-coded admin password", () => {
   });
 
   it(".env.example shows a placeholder", () => {
-    expect(read(".env.example")).toMatch(/^SEED_ADMIN_PASSWORD=(<[^>]+>)?$/m);
+    expect(read(".env.example")).toMatch(/^SEED_ADMIN_PASSWORD=$/m);
   });
 
   it("no file keeps the old initial password", () => {
