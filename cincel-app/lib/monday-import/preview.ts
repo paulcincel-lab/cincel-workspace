@@ -6,7 +6,7 @@
  * rows for the projects the board makes, with their workflow and phases (#678). Issues are in Spanish with the step that fixes
  * them (#679). Pure: no DB, no files.
  */
-import { ISSUE_FIX_STEP, issueText } from "@/lib/monday-import/preview-issues";
+import { ISSUE_FIX_STEP, issuePersonId, issuePersonName, issueText } from "@/lib/monday-import/preview-issues";
 import type { CountKey, Plan } from "@/scripts/monday/plan";
 import type { ExportData, PlannedProject, PlannedTask, RowRef, TaskStatus } from "@/scripts/monday/translate";
 import type {
@@ -89,6 +89,8 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     itemName: (i.itemId && itemNames.get(i.itemId)) || null,
     message: issueText(i.code, i.message),
     fixStep: ISSUE_FIX_STEP[i.code],
+    personId: issuePersonId(i.code, i.message),
+    personName: issuePersonName(i.code, i.message),
   }));
 
   const result = plan.translation?.result;

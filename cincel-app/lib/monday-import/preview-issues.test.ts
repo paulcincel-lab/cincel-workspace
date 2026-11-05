@@ -2,7 +2,7 @@
 /** Vista previa problems in Spanish with the step that fixes them (#679). */
 import { describe, expect, it } from "vitest";
 
-import { ISSUE_FIX_STEP, issueText } from "@/lib/monday-import/preview-issues";
+import { ISSUE_FIX_STEP, issuePersonId, issuePersonName, issueText } from "@/lib/monday-import/preview-issues";
 import { BLOCKING_CODES, WARNING_CODES, type PlanIssueCode } from "@/scripts/monday/plan";
 
 /** English plan messages as scripts/monday/plan.ts and translate.ts write them. */
@@ -72,5 +72,13 @@ describe("ISSUE_FIX_STEP", () => {
     expect(ISSUE_FIX_STEP.CLIENT_UNRESOLVED).toBe("equivalencias");
     expect(ISSUE_FIX_STEP.PERSON_UNMATCHED).toBe("personas");
     expect(ISSUE_FIX_STEP.DRIVE_NOT_CONFIGURED).toBe("opciones");
+  });
+
+  it("reads the monday user of an unmatched person, for its Personas link and Crear integrante (#689)", () => {
+    const message = "monday user 7 (Luis Pérez (Obra)) has no staff match";
+    expect(issuePersonId("PERSON_UNMATCHED", message)).toBe("7");
+    expect(issuePersonName("PERSON_UNMATCHED", message)).toBe("Luis Pérez (Obra)");
+    expect(issuePersonName("PERSON_UNMATCHED", "monday user 8 (?) has no staff match")).toBeNull();
+    expect(issuePersonId("RELATION_MISSING", message)).toBeNull();
   });
 });

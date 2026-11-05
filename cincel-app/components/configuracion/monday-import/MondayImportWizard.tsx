@@ -42,6 +42,7 @@ import {
   isJobRunning,
   nextStep,
   previousStep,
+  setPerson,
   stepIndex,
   validateMapping,
 } from "@/lib/monday-import/wizard-steps";
@@ -57,6 +58,7 @@ import type {
   MondayPreview,
   MondayRollbackCheck,
 } from "@/lib/types/monday-import";
+import type { CreatedStaff } from "@/scripts/monday/created-staff";
 
 const POLL_MS = 2000;
 const UNEXPECTED = "Algo salió mal. Intenta de nuevo.";
@@ -186,6 +188,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
   const [notice, setNotice] = useState("");
   /** Board Equivalencias opens on ("Corregir" in Vista previa). */
   const [focusBoardId, setFocusBoardId] = useState<string | null>(null);
+  const [focusPersonId, setFocusPersonId] = useState<string | null>(null);
   const [reviewed, setReviewed] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -321,6 +324,29 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
     if (issues.length > 0) setIssues(validateMapping(next));
   }
 
+  /** "Crear integrante" on a Vista previa warning (#689): maps the person as Personas does, saves and recalculates. */
+  function staffCreatedInPreview(mondayUserId: string, member: CreatedStaff) {
+    if (!runId || !mapping) return;
+    const next = setPerson(mapping, mondayUserId, { action: "staff", staffId: member.id, created: true });
+    setChoices((current) => (current ? { ...current, staff: [...current.staff, member] } : current));
+    editMapping(next);
+    setPreviewError("");
+    startTransition(async () => {
+      try {
+        const saved = await saveMondayMappingDraftAction(runId, next);
+        if (!saved.ok) {
+          setPreviewError(saved.error);
+          return;
+        }
+        const result = await previewMondayImportAction(runId);
+        if (result.ok) setPreview(result.preview);
+        else setPreviewError(result.error);
+      } catch {
+        setPreviewError(UNEXPECTED);
+      }
+    });
+  }
+
   async function saveDraft(target: MondayImportStep): Promise<string[] | null> {
     if (!runId || !mapping) return [];
     const result = await saveMondayMappingDraftAction(runId, mapping, target);
@@ -331,7 +357,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
     return result.issues;
   }
 
-  function goTo(target: MondayImportStep, boardId: string | null = null) {
+  function goTo(target: MondayImportStep, boardId: string | null = null, personId: string | null = null) {
     setError("");
     setNotice("");
     startTransition(async () => {
@@ -354,6 +380,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
           }
         }
         setFocusBoardId(boardId);
+        setFocusPersonId(personId);
         setStep(target);
       } catch {
         setError(UNEXPECTED);
@@ -683,6 +710,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
               onStaffCreated={(member) =>
                 setChoices((current) => (current ? { ...current, staff: [...current.staff, member] } : current))
               }
+              focusPersonId={focusPersonId}
             />
           ) : null}
           {step === "opciones" && mapping ? (
@@ -694,7 +722,9 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
               error={previewError}
               isPending={isPending}
               onRefresh={refreshPreview}
-              onFix={(target, boardId) => goTo(target, boardId)}
+              onFix={(target, boardId, personId) => goTo(target, boardId, personId ?? null)}
+              runId={runId}
+              onStaffCreated={staffCreatedInPreview}
             />
           ) : null}
           {step === "importar" ? (

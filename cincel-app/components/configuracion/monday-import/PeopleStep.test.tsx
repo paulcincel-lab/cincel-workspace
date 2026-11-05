@@ -117,4 +117,27 @@ describe("PeopleStep (#689)", () => {
     expect(within(row).queryByRole("button", { name: "Crear integrante" })).toBeNull();
     expect(within(row).getByLabelText("Equivalente de Persona Nueva").textContent).toContain("Persona Nueva");
   });
+
+  it("scrolls to the person a Vista previa Corregir opens", () => {
+    const scrolled: string[] = [];
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      scrolled.push(this.id);
+    };
+    try {
+      render(
+        <PeopleStep
+          mapping={mapping}
+          source={source}
+          choices={choices}
+          runId="run-1"
+          onMappingChange={vi.fn()}
+          focusPersonId="2"
+        />,
+      );
+      expect(scrolled).toEqual(["persona-2"]);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
 });

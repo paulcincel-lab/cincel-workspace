@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/aler
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
+import { CreateStaffButton } from "@/components/configuracion/monday-import/CreateStaffButton";
 import { countLabel, PREVIEW_COUNT_LABELS, STRATEGY_OPTIONS } from "@/lib/monday-import/wizard-steps";
 import type {
   MondayImportStep,
@@ -12,6 +13,10 @@ import type {
   MondayPreviewIssue,
   MondayPreviewSample,
 } from "@/lib/types/monday-import";
+import type { CreatedStaff } from "@/scripts/monday/created-staff";
+
+/** "Corregir": the step, its board and, for an unmatched person (#689), the monday user whose row of Personas opens. */
+export type PreviewFix = (step: MondayImportStep, boardId: string | null, personId?: string | null) => void;
 
 const ENTITY_LABELS: Record<MondayPreviewSample["entity"], string> = {
   proyecto: "Proyecto",
@@ -64,24 +69,44 @@ function sampleDetails(sample: MondayPreviewSample): string {
   return parts.filter(Boolean).join(" · ");
 }
 
-/** One problem: the board and item it is about, the Spanish message and a "Corregir" link to where it gets fixed. */
+/**
+ * One problem: the board and item it is about, the Spanish message and a "Corregir" link to where it gets fixed. An
+ * unmatched person (#689) links to their row of Personas and can be made a staff member right here.
+ */
 function IssueItem({
   issue,
   isPending,
+  runId,
   onFix,
+  onStaffCreated,
 }: {
   issue: MondayPreviewIssue;
   isPending: boolean;
-  onFix: (step: MondayImportStep, boardId: string | null) => void;
+  runId?: string | null;
+  onFix: PreviewFix;
+  onStaffCreated?: (mondayUserId: string, staff: CreatedStaff) => void;
 }) {
   const where = [issue.boardName, issue.itemName].filter(Boolean).join(" › ");
+  const personId = issue.code === "PERSON_UNMATCHED" ? (issue.personId ?? null) : null;
   return (
     <li className="break-words">
       {where ? <span className="font-medium">{where}: </span> : null}
       {issue.message}{" "}
-      <Button variant="link" size="sm" disabled={isPending} onClick={() => onFix(issue.fixStep, issue.boardId)}>
+      <Button
+        variant="link"
+        size="sm"
+        disabled={isPending}
+        onClick={() => (personId ? onFix(issue.fixStep, issue.boardId, personId) : onFix(issue.fixStep, issue.boardId))}
+      >
         Corregir
       </Button>
+      {personId && runId && onStaffCreated ? (
+        <CreateStaffButton
+          runId={runId}
+          user={{ id: personId, name: issue.personName ?? "" }}
+          onCreated={(staff) => onStaffCreated(personId, staff)}
+        />
+      ) : null}
     </li>
   );
 }
@@ -93,14 +118,30 @@ export function PreviewStep({
   isPending,
   onRefresh,
   onFix,
+  runId,
+  onStaffCreated,
 }: {
   preview: MondayPreview | null;
   error: string;
   isPending: boolean;
   onRefresh: () => void;
-  /** Opens the step where an issue gets fixed, on its board. */
-  onFix: (step: MondayImportStep, boardId: string | null) => void;
+  /** Opens the step where an issue gets fixed, on its board (and person). */
+  onFix: PreviewFix;
+  /** Enables "Crear integrante" on unmatched people. */
+  runId?: string | null;
+  /** A staff member made for a monday user here: the caller maps that user to it, as Personas does. */
+  onStaffCreated?: (mondayUserId: string, staff: CreatedStaff) => void;
 }) {
+  const item = (issue: MondayPreviewIssue, index: number) => (
+    <IssueItem
+      key={`${issue.code}-${index}`}
+      issue={issue}
+      isPending={isPending}
+      runId={runId}
+      onFix={onFix}
+      onStaffCreated={onStaffCreated}
+    />
+  );
   const blocking = preview?.issues.filter((issue) => issue.blocking) ?? [];
   const warnings = preview?.issues.filter((issue) => !issue.blocking) ?? [];
 
@@ -125,9 +166,7 @@ export function PreviewStep({
               <AlertTitle>Corrige esto antes de importar</AlertTitle>
               <AlertDescription>
                 <ul className="list-disc space-y-1 pl-4">
-                  {blocking.map((issue, index) => (
-                    <IssueItem key={`${issue.code}-${index}`} issue={issue} isPending={isPending} onFix={onFix} />
-                  ))}
+                  {blocking.map(item)}
                 </ul>
               </AlertDescription>
             </Alert>
@@ -138,9 +177,7 @@ export function PreviewStep({
               <AlertTitle>Avisos</AlertTitle>
               <AlertDescription>
                 <ul className="list-disc space-y-1 pl-4">
-                  {warnings.map((issue, index) => (
-                    <IssueItem key={`${issue.code}-${index}`} issue={issue} isPending={isPending} onFix={onFix} />
-                  ))}
+                  {warnings.map(item)}
                 </ul>
               </AlertDescription>
             </Alert>

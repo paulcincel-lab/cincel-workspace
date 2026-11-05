@@ -170,6 +170,9 @@ export interface MondayPreviewIssue {
   message: string;
   /** The step where it gets fixed ("Corregir" opens it on `boardId`). */
   fixStep: MondayImportStep;
+  /** PERSON_UNMATCHED (#689): the monday user, so "Corregir" opens their row of Personas and "Crear integrante" works here. */
+  personId?: string | null;
+  personName?: string | null;
 }
 
 /** One monday item as the Cincel row apply creates for it. */

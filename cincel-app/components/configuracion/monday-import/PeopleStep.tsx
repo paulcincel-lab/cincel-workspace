@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
 import { ChoiceSelect, type Choice } from "@/components/configuracion/monday-import/ChoiceSelect";
@@ -25,6 +27,7 @@ export function PeopleStep({
   runId,
   onMappingChange,
   onStaffCreated,
+  focusPersonId,
 }: {
   mapping: MappingInput;
   source: MondayExportSource;
@@ -34,7 +37,13 @@ export function PeopleStep({
   onMappingChange: (mapping: MappingInput) => void;
   /** A staff member "Crear integrante" made, so the caller adds it to `choices.staff`. */
   onStaffCreated?: (staff: StaffChoice) => void;
+  /** The monday user whose row a Vista previa "Corregir" opens (#689): scrolled into view. */
+  focusPersonId?: string | null;
 }) {
+  useEffect(() => {
+    if (focusPersonId) document.getElementById(personRowId(focusPersonId))?.scrollIntoView?.({ block: "center" });
+  }, [focusPersonId]);
+
   // A staff member made here may not be in `choices` yet (choices load once): list it from the mapping.
   const known = new Set(choices.staff.map((member) => member.id));
   const madeHere: StaffChoice[] = source.users.flatMap((user) => {

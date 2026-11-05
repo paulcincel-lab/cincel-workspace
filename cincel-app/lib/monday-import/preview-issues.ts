@@ -103,3 +103,10 @@ export function issuePersonId(code: PlanIssueCode, message: string): string | nu
   if (code !== "PERSON_UNMATCHED") return null;
   return /monday user (\S+) \(/.exec(message)?.[1] ?? null;
 }
+
+/** The monday user name of a PERSON_UNMATCHED issue, or null when the plan didn't know it. */
+export function issuePersonName(code: PlanIssueCode, message: string): string | null {
+  if (code !== "PERSON_UNMATCHED") return null;
+  const name = /monday user \S+ \((.+)\) has no staff match/.exec(message)?.[1];
+  return name && name !== "?" ? name : null;
+}
