@@ -228,6 +228,8 @@ describe.skipIf(!url)("Crear integrante and rollback (test DB)", () => {
 
   it("leaves out a name two live staff share, so init doesn't pick one of them", async () => {
     await inTx(async (tx) => {
+      // staff_name_lower_uq rules this out today; dropped inside the rolled-back tx to cover data from before it.
+      await tx.execute(sql`drop index core.staff_name_lower_uq`);
       await tx.insert(schema.staff).values([{ name: "Doble Nombre 689" }, { name: "doble nombre 689" }]);
       const [s] = await tx.insert(schema.staff).values({ name: "Unico Nombre 689" }).returning();
       const found = await createDbLookups(tx).staffByName?.(["Doble Nombre 689", "Unico Nombre 689"]);
