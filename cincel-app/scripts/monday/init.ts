@@ -180,7 +180,7 @@ export interface TemplateCandidate {
 export interface InitLookups {
   /** lower(email) → staff id, for live staff with one of these emails. */
   staffByEmail(emails: string[]): Promise<Map<string, string>>;
-  /** lower(name) → staff id, for live staff with one of these names (#689: the match after email). */
+  /** lower(name) → staff id, for names only one live staff member has (#689: the match after email). */
   staffByName?(names: string[]): Promise<Map<string, string>>;
   /** lower(name) → task_statuses id. */
   customStatuses(): Promise<Map<string, string>>;
@@ -237,8 +237,10 @@ export function createDbLookups(db: ImportDb): InitLookups {
       if (lower.length === 0) return new Map();
       const found = await rows(
         db,
-        sql`select lower(name) as name, id::text as id from core.staff
-          where deleted_at is null and lower(name) = any(${textArray(lower)})`,
+        // A name shared by two live staff can't be told apart: left out, so the person stays unmapped (as matchStaff).
+        sql`select lower(name) as name, (array_agg(id::text))[1] as id from core.staff
+          where deleted_at is null and lower(name) = any(${textArray(lower)})
+          group by lower(name) having count(*) = 1`,
       );
       return new Map(found.map((r) => [String(r.name), String(r.id)]));
     },

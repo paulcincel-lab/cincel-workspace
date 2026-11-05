@@ -232,8 +232,8 @@ describe.skipIf(!url)("Crear integrante and rollback (test DB)", () => {
       const [s] = await tx.insert(schema.staff).values({ name: "Unico Nombre 689" }).returning();
       const found = await createDbLookups(tx).staffByName?.(["Doble Nombre 689", "Unico Nombre 689"]);
       expect(found).toEqual(new Map([["unico nombre 689", s.id]]));
-      const targets = peopleTargets([{ id: "9", name: "Doble Nombre 689", email: null, kind: "member" }], new Map(), found);
-      expect(targets).toEqual({ "9": null });
+      const users = [{ id: "9", name: "Doble Nombre 689", email: null, kind: "member" }];
+      expect(peopleTargets(users, new Map(), found)).toEqual({ "9": null });
     });
   });
 });
