@@ -104,6 +104,7 @@ export function ImportStep({
   onStartApply,
   onStartRollback,
   onFinish,
+  onStartNew,
   boards = [],
 }: {
   run: MondayImportRunState;
@@ -115,6 +116,8 @@ export function ImportStep({
   onStartApply: () => void;
   onStartRollback: () => void;
   onFinish: () => void;
+  /** Opens a new run for more boards; boards imported before are skipped by the plan. */
+  onStartNew: () => void;
   /** The boards being imported (not skipped), one card each (#685). */
   boards?: { id: string; name: string }[];
 }) {
@@ -223,9 +226,17 @@ export function ImportStep({
       ) : null}
 
       {applied || rolledBack ? (
-        <Button variant="outline" disabled={busy} onClick={onFinish}>
-          Ir al tablero
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={busy} onClick={onStartNew}>
+            {applied ? "Importar más tableros" : "Empezar una importación nueva"}
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={onFinish}>
+            Ir al tablero
+          </Button>
+        </div>
+      ) : null}
+      {applied ? (
+        <p className="text-sm text-muted-foreground">Los tableros que ya importaste se omiten en la importación nueva.</p>
       ) : null}
 
       <AlertDialog open={confirming} onOpenChange={setConfirming}>

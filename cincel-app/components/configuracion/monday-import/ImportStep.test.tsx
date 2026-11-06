@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { ImportStep } from "./ImportStep";
 import type { MondayImportJob, MondayImportRunState } from "@/lib/types/monday-import";
@@ -41,7 +41,11 @@ function runWith(overrides: Partial<MondayImportRunState>): MondayImportRunState
   };
 }
 
-function renderStep(run: MondayImportRunState, projects: Parameters<typeof ImportStep>[0]["projects"] = null) {
+function renderStep(
+  run: MondayImportRunState,
+  projects: Parameters<typeof ImportStep>[0]["projects"] = null,
+  onStartNew: () => void = () => {},
+) {
   return render(
     <ImportStep
       run={run}
@@ -52,6 +56,7 @@ function renderStep(run: MondayImportRunState, projects: Parameters<typeof Impor
       onStartApply={() => {}}
       onStartRollback={() => {}}
       onFinish={() => {}}
+      onStartNew={onStartNew}
       boards={boards}
     />,
   );
@@ -87,6 +92,28 @@ describe("ImportStep board cards (#685)", () => {
     expect(within(screen.getByRole("group", { name: "Clientes" })).getByText(/sin proyectos/)).toBeTruthy();
     expect(screen.getByText("Importación terminada")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Deshacer importación" })).toBeTruthy();
+  });
+
+  it("lets the admin import more boards after a finished import", () => {
+    const onStartNew = vi.fn();
+    renderStep(runWith({ jobs: { apply: job("succeeded") }, batchId: "x", batchStatus: "applied" }), [], onStartNew);
+
+    fireEvent.click(screen.getByRole("button", { name: "Importar más tableros" }));
+    expect(onStartNew).toHaveBeenCalledOnce();
+    expect(screen.getByText(/ya importaste se omiten/)).toBeTruthy();
+  });
+
+  it("offers a new import after undoing one", () => {
+    renderStep(runWith({ jobs: { apply: job("succeeded") }, batchId: "x", batchStatus: "rolled_back" }));
+
+    expect(screen.getByRole("button", { name: "Empezar una importación nueva" })).toBeTruthy();
+  });
+
+  it("hides the new-import button while the import has not finished", () => {
+    renderStep(runWith({ jobs: { apply: job("running") } }));
+
+    expect(screen.queryByRole("button", { name: "Importar más tableros" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Empezar una importación nueva" })).toBeNull();
   });
 
   it("shows a failure on the cards", () => {
