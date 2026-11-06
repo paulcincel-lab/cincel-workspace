@@ -737,6 +737,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
               onStartApply={startApply}
               onStartRollback={startRollback}
               onFinish={complete}
+              onStartNew={startOver}
               boards={importBoards}
             />
           ) : null}
@@ -763,11 +764,6 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
                 Omitir por ahora
               </Button>
             )}
-            {run.batchStatus === "rolled_back" ? (
-              <Button variant="outline" disabled={isPending || anyJobRunning} onClick={startOver}>
-                Empezar una importación nueva
-              </Button>
-            ) : null}
           </div>
           {step === "tableros" && connection && !run.batchId ? (
             <SelectionBar
