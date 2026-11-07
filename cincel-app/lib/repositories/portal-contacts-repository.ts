@@ -30,7 +30,9 @@ export async function listInvitableContacts(projectId: string): Promise<PortalIn
     .select({ contactId: projectContacts.contactId })
     .from(projectContacts)
     .where(eq(projectContacts.projectId, projectId));
-  const ids = [...new Set([project.clientId, ...linked.map((row) => row.contactId)])];
+  const ids = [
+    ...new Set([project.clientId, ...linked.map((row) => row.contactId)].filter((id): id is string => id !== null)),
+  ];
 
   const rows = await db
     .select({ id: contacts.id, name: contacts.name, type: contacts.type, email: contacts.email })

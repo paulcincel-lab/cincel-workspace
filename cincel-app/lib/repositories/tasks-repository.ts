@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
   contacts,
   historyEvents,
+  projectSpaces,
   projects,
   staff,
   taskAttachments,
@@ -13,12 +14,16 @@ import {
   taskStatuses,
   taskSupport,
   tasks,
+  workflowPhases,
   workflows,
 } from "@/lib/db/schema";
+import { notImplemented } from "@/lib/project-flow/not-implemented";
+import type { AdminTaskFilters } from "@/lib/validation/project-flow";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
 import { underlyingStatus } from "@/lib/repositories/task-statuses-repository";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import type {
+  AdminTaskInput,
   HistoryEvent,
   StaffRef,
   Task,
@@ -34,6 +39,7 @@ import type {
   TaskStatus,
   SubtaskInput,
   UserTaskInput,
+  ViewerScope,
 } from "@/lib/types/core";
 
 type TaskRow = typeof tasks.$inferSelect;
@@ -51,6 +57,9 @@ export function toTask(row: TaskRow): Task {
     templateId: row.templateId,
     workflowId: row.workflowId,
     phase: row.phase,
+    phaseId: row.phaseId,
+    spaceId: row.spaceId,
+    closedAt: row.closedAt ? row.closedAt.toISOString() : null,
     title: row.title,
     notes: row.notes,
     createdById: row.createdById,
@@ -273,12 +282,17 @@ async function loadSupport(taskIds: string[]): Promise<Map<string, StaffRef[]>> 
 
 function whereFilters(f: TaskFilters) {
   const statuses = f.status ? (Array.isArray(f.status) ? f.status : [f.status]) : undefined;
+  const kinds = f.kind ? (Array.isArray(f.kind) ? f.kind : [f.kind]) : undefined;
   return and(
     isNull(tasks.deletedAt),
     isNull(projects.deletedAt),
     f.archived === undefined ? eq(tasks.archived, false) : eq(tasks.archived, f.archived),
     f.projectId ? eq(tasks.projectId, f.projectId) : undefined,
     f.workflowId ? eq(tasks.workflowId, f.workflowId) : undefined,
+    f.phaseId ? eq(tasks.phaseId, f.phaseId) : undefined,
+    f.spaceId ? eq(tasks.spaceId, f.spaceId) : undefined,
+    // Admin tasks only when asked for; the actions also check the viewer is admin (FE §7.6).
+    kinds && kinds.length > 0 ? inArray(tasks.kind, kinds) : ne(tasks.kind, "admin"),
     statuses && statuses.length > 0 ? inArray(tasks.status, statuses) : undefined,
     f.managerId ? eq(tasks.managerId, f.managerId) : undefined,
     f.involvesStaffId
@@ -306,11 +320,16 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
       workflowId: workflows.id,
       workflowKey: workflows.key,
       workflowName: workflows.name,
+      workflowSortOrder: workflows.sortOrder,
+      phaseName: workflowPhases.name,
+      phaseSortOrder: workflowPhases.sortOrder,
+      spaceName: projectSpaces.name,
       // Color of the área that owns the workflow (first by sort order).
       areaColorSlot: sql<number | null>`(select a.color_slot from core.area_workflows aw join core.areas a on a.id = aw.area_id where aw.workflow_id = ${tasks.workflowId} and a.deleted_at is null order by a.sort_order, a.name limit 1)`,
       managerName: staff.name,
       customStatusName: taskStatuses.name,
       customStatusCloses: taskStatuses.closes,
+      customStatusCountsAsCompleted: taskStatuses.countsAsCompleted,
       checklistTotal: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id})::int`,
       checklistDone: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id} and c.completed)::int`,
       // A deleted parent reads as no parent title ("Tarea padre eliminada").
@@ -322,8 +341,11 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .innerJoin(contacts, eq(contacts.id, projects.clientId))
+    // A project's client is optional (project flow): a left join keeps its tasks.
+    .leftJoin(contacts, eq(contacts.id, projects.clientId))
     .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
     .leftJoin(staff, eq(staff.id, tasks.managerId))
     .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
     .where(whereFilters(filters))
@@ -334,10 +356,19 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     ...toTask(r.task),
     customStatus:
       r.task.customStatusId && r.customStatusName
-        ? { id: r.task.customStatusId, name: r.customStatusName, closes: Boolean(r.customStatusCloses) }
+        ? {
+            id: r.task.customStatusId,
+            name: r.customStatusName,
+            closes: Boolean(r.customStatusCloses),
+            countsAsCompleted: Boolean(r.customStatusCountsAsCompleted),
+          }
         : null,
-    project: { id: r.task.projectId, name: r.projectName, clientName: r.clientName },
-    workflow: r.workflowId ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName! } : null,
+    project: { id: r.task.projectId, name: r.projectName, clientName: r.clientName ?? null },
+    workflow: r.workflowId
+      ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName!, sortOrder: r.workflowSortOrder! }
+      : null,
+    phaseRef: r.task.phaseId && r.phaseName ? { id: r.task.phaseId, name: r.phaseName, sortOrder: r.phaseSortOrder! } : null,
+    space: r.task.spaceId && r.spaceName ? { id: r.task.spaceId, name: r.spaceName } : null,
     areaColorSlot: r.areaColorSlot ?? null,
     manager: r.task.managerId ? { id: r.task.managerId, name: r.managerName! } : null,
     support: support.get(r.task.id) ?? [],
@@ -348,6 +379,24 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     subtaskDoneCount: r.subtaskDoneCount,
     waitingOn: r.waitingOn,
   }));
+}
+
+/** Open admin tasks (or all with `includeClosed`), by commitment date then project name (BE §8.6). */
+export async function listAdminTasks(filters: AdminTaskFilters = {}): Promise<TaskListItem[]> {
+  return notImplemented("listAdminTasks", filters);
+}
+
+/** A `kind = 'admin'` task; administrator assignees only (ASSIGNEE_NOT_ADMIN); NOT_FOUND (project). */
+export async function createAdminTask(input: AdminTaskInput, actorId: string): Promise<TaskDetail> {
+  return notImplemented("createAdminTask", input, actorId);
+}
+
+/**
+ * Guard for task-scoped reads and writes (BE §12): an admin task is invisible
+ * to non-admins. Throws FORBIDDEN for them (reads map it to null / []).
+ */
+export async function assertTaskVisible(taskId: string, viewer: ViewerScope): Promise<void> {
+  return notImplemented("assertTaskVisible", taskId, viewer);
 }
 
 /** Tasks where the staff member is manager or support. */

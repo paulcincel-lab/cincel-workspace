@@ -238,6 +238,22 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     idSql: "c.id",
     owner: own("project_schedule"),
   },
+  // Project flow (#695): an import doesn't create spaces or tramo starts yet,
+  // so any such row on a batch project was made after the import and blocks.
+  {
+    table: "project_spaces",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "tramo_start_batches",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
   {
     table: "import_files",
     column: "project_id",

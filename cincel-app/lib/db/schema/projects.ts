@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   foreignKey,
@@ -8,6 +9,8 @@ import {
   numeric,
   primaryKey,
   text,
+  timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -21,27 +24,35 @@ import { workflows } from "./workflows";
 export const driveFolderStatus = core.enum("drive_folder_status", ["pending", "ready", "failed"]);
 export type DriveFolderStatus = (typeof driveFolderStatus.enumValues)[number];
 
-/** Part C.4. A project belongs to a client, and only a client (rule 1). */
+/**
+ * Part C.4. A project's client is optional and admin-only (project flow, ADR
+ * 0003); when set it is a contact of type cliente (rule 1, composite FK).
+ */
 export const projects = core.table(
   "projects",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     code: text("code"),
     name: text("name").notNull(),
-    clientId: uuid("client_id").notNull(),
+    /** Null until an admin assigns one ("Asignar cliente y origen"). The composite FK is skipped while null. */
+    clientId: uuid("client_id"),
     clientType: contactType("client_type")
       .notNull()
       .generatedAlwaysAs(sql`'cliente'::core.contact_type`),
     status: projectStatus("status").notNull().default("activo"),
+    /** Who brought the project in, free text (admin only). */
+    origin: text("origin"),
+    /** Staff member who brought the project in (admin only). */
+    originStaffId: uuid("origin_staff_id").references(() => staff.id, { onDelete: "set null" }),
     // The primary (most advanced) stage. All active stages — a project can run
     // several in parallel (#435) — live in `project_stages`; this one is kept in
     // sync as the most advanced of them, for everything that needs just one.
     currentWorkflowId: uuid("current_workflow_id").references(() => workflows.id, {
       onDelete: "set null",
     }),
-    /** Legacy single phase, kept in sync as `phases` joined with ", ". */
+    /** @deprecated Legacy single phase. Dropped in release B (0025); fases derive from tasks. */
     phase: text("phase"),
-    /** Project phases (#435) — several can be active at once. */
+    /** @deprecated Free-text project phases (#435). Reported by 0024 and dropped in release B (0025). */
     phases: text("phases").array().notNull().default(sql`'{}'::text[]`),
     projectType: text("project_type"),
     addressStreet: text("address_street"),
@@ -86,11 +97,14 @@ export const projects = core.table(
     uniqueIndex("projects_code_uq")
       .on(t.code)
       .where(sql`${t.deletedAt} is null and ${t.code} is not null`),
+    // Replaced by projects_name_lower_uq (firm-wide, live active/paused) in 0024 step 11, after
+    // duplicate names are made unique.
     uniqueIndex("projects_client_name_lower_uq")
       .on(t.clientId, sql`lower(${t.name})`)
       .where(sql`${t.deletedAt} is null`),
     index("idx_projects_name_trgm").using("gin", sql`${t.name} gin_trgm_ops`),
     index("idx_projects_client_id").on(t.clientId),
+    index("idx_projects_origin_staff_id").on(t.originStaffId),
     index("idx_projects_manager_id").on(t.managerId),
     index("idx_projects_status").on(t.status),
     index("idx_projects_current_workflow_id").on(t.currentWorkflowId),
@@ -178,11 +192,15 @@ export const clientStats = core.view("client_stats").as((qb) =>
         ),
     })
     .from(projects)
-    .where(sql`${projects.deletedAt} is null`)
+    .where(sql`${projects.deletedAt} is null and ${projects.clientId} is not null`)
     .groupBy(projects.clientId)
 );
 
-/** Every stage a project is actively in (#435). */
+/**
+ * Every tramo a project has started (#435; project flow BE §3.7). Only
+ * `startTramo` writes rows. `projects.current_workflow_id`, when set, must
+ * have a row here (enforced by the repositories).
+ */
 export const projectStages = core.table(
   "project_stages",
   {
@@ -192,10 +210,88 @@ export const projectStages = core.table(
     workflowId: uuid("workflow_id")
       .notNull()
       .references(() => workflows.id, { onDelete: "cascade" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    startedById: uuid("started_by_id").references(() => staff.id, { onDelete: "set null" }),
+    /** Set when every live, unarchived task of this tramo on the project is closed; cleared when one reopens or is added. */
+    closedAt: timestamp("closed_at", { withTimezone: true }),
     ...stamps,
   },
-  (t) => [primaryKey({ columns: [t.projectId, t.workflowId] }), index("idx_project_stages_workflow_id").on(t.workflowId)]
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.workflowId] }),
+    index("idx_project_stages_workflow_id").on(t.workflowId),
+    index("idx_project_stages_started_by_id").on(t.startedById),
+  ]
 );
+
+/** Espacios: an optional per-project list (e.g. "Depto 201"). A filter, not history: hard-deleted (BE §3.8). */
+export const projectSpaces = core.table(
+  "project_spaces",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...stamps,
+  },
+  (t) => [
+    // Target of tasks_space_fk: a task's espacio belongs to the task's project.
+    unique("project_spaces_id_project_uq").on(t.id, t.projectId),
+    uniqueIndex("project_spaces_name_lower_uq").on(t.projectId, sql`lower(${t.name})`),
+    index("idx_project_spaces_project_order").on(t.projectId, t.sortOrder),
+  ]
+);
+
+/**
+ * One "Iniciar tramo" run that created tasks (BE §3.9), for undo. Written only
+ * when at least one task was created.
+ */
+export const tramoStartBatches = core.table(
+  "tramo_start_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    workflowId: uuid("workflow_id")
+      .notNull()
+      .references(() => workflows.id, { onDelete: "restrict" }),
+    startedById: uuid("started_by_id").references(() => staff.id, { onDelete: "set null" }),
+    /** 'manual' (sheet) | 'on_create' | 'on_ready' (auto-start). */
+    trigger: text("trigger").notNull().default("manual"),
+    phaseIds: uuid("phase_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    /** self | by_phase | none */
+    assignmentMode: text("assignment_mode").notNull(),
+    createdCount: integer("created_count").notNull().default(0),
+    stageCreated: boolean("stage_created").notNull().default(false),
+    previousCurrentWorkflowId: uuid("previous_current_workflow_id").references(() => workflows.id, {
+      onDelete: "set null",
+    }),
+    currentChanged: boolean("current_changed").notNull().default(false),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+    undoneById: uuid("undone_by_id").references(() => staff.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("tramo_start_batches_trigger_check", sql`${t.trigger} in ('manual','on_create','on_ready')`),
+    check("tramo_start_batches_mode_check", sql`${t.assignmentMode} in ('self','by_phase','none')`),
+    index("idx_tramo_start_batches_project_workflow").on(t.projectId, t.workflowId, t.createdAt),
+    index("idx_tramo_start_batches_workflow_id").on(t.workflowId),
+    index("idx_tramo_start_batches_started_by_id").on(t.startedById),
+    index("idx_tramo_start_batches_undone_by_id").on(t.undoneById),
+    index("idx_tramo_start_batches_previous_current").on(t.previousCurrentWorkflowId),
+  ]
+);
+
+export const projectSpacesRelations = relations(projectSpaces, ({ one }) => ({
+  project: one(projects, { fields: [projectSpaces.projectId], references: [projects.id] }),
+}));
+
+export const tramoStartBatchesRelations = relations(tramoStartBatches, ({ one }) => ({
+  project: one(projects, { fields: [tramoStartBatches.projectId], references: [projects.id] }),
+  workflow: one(workflows, { fields: [tramoStartBatches.workflowId], references: [workflows.id] }),
+}));
 
 export const projectStagesRelations = relations(projectStages, ({ one }) => ({
   project: one(projects, { fields: [projectStages.projectId], references: [projects.id] }),
@@ -222,6 +318,12 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   contacts: many(projectContacts),
   links: many(projectLinks),
   stages: many(projectStages),
+  spaces: many(projectSpaces),
+  originStaff: one(staff, {
+    fields: [projects.originStaffId],
+    references: [staff.id],
+    relationName: "project_origin_staff",
+  }),
 }));
 
 export const projectMembersRelations = relations(projectMembers, ({ one }) => ({

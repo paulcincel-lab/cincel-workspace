@@ -1,12 +1,18 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { areaWorkflows, areas, workflowTaskTemplates, workflows } from "@/lib/db/schema";
+import { areaWorkflows, areas, workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
+import { READINESS } from "@/lib/project-flow/catalog";
+import { notImplemented } from "@/lib/project-flow/not-implemented";
 import { recordChanges } from "@/lib/repositories/history-repository";
+import { listPhasesByWorkflow } from "@/lib/repositories/workflow-phases-repository";
 import type {
+  TramoReadiness,
   Workflow,
   WorkflowDetail,
   WorkflowInput,
+  WorkflowPhase,
+  WorkflowRef,
   WorkflowTaskTemplate,
   WorkflowTaskTemplateInput,
 } from "@/lib/types/core";
@@ -24,13 +30,23 @@ function toWorkflow(row: typeof workflows.$inferSelect): Workflow {
     description: row.description,
     active: row.active,
     sortOrder: row.sortOrder,
+    autoStart: row.autoStart,
   };
 }
 
-export function toTemplate(row: typeof workflowTaskTemplates.$inferSelect): WorkflowTaskTemplate {
+/**
+ * `phaseNames`: fase id → name. `phaseId`/`phaseName` are "" only for a
+ * template without a fase, which exists only before 0024 backfills them.
+ */
+export function toTemplate(
+  row: typeof workflowTaskTemplates.$inferSelect,
+  phaseNames?: ReadonlyMap<string, string>
+): WorkflowTaskTemplate {
   return {
     id: row.id,
     workflowId: row.workflowId,
+    phaseId: row.phaseId ?? "",
+    phaseName: (row.phaseId && phaseNames?.get(row.phaseId)) || "",
     phase: row.phase,
     title: row.title,
     notes: row.notes,
@@ -43,8 +59,44 @@ export function toTemplate(row: typeof workflowTaskTemplates.$inferSelect): Work
   };
 }
 
+async function phaseNamesOf(phaseIds: Array<string | null>): Promise<Map<string, string>> {
+  const ids = [...new Set(phaseIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ id: workflowPhases.id, name: workflowPhases.name })
+    .from(workflowPhases)
+    .where(inArray(workflowPhases.id, ids));
+  return new Map(rows.map((r) => [r.id, r.name]));
+}
+
+const toRef = (w: { id: string; key: string; name: string; sortOrder: number }): WorkflowRef => ({
+  id: w.id,
+  key: w.key,
+  name: w.name,
+  sortOrder: w.sortOrder,
+});
+
+/**
+ * Readiness from `READINESS` (lib/project-flow/catalog.ts), resolved through
+ * `workflow_phases.key` among live workflows. Null for a tramo with no rule,
+ * or when the previous tramo or its gate fase is missing.
+ */
+function resolveReadiness(
+  workflow: { key: string },
+  byKey: ReadonlyMap<string, { id: string; key: string; name: string; sortOrder: number }>,
+  phasesOf: (workflowId: string) => Array<{ id: string; name: string; sortOrder: number; key: string | null }>
+): TramoReadiness {
+  const rule = READINESS[workflow.key];
+  if (!rule) return null;
+  const after = byKey.get(rule.after);
+  if (!after) return null;
+  const gate = phasesOf(after.id).find((p) => p.key === rule.phaseKey);
+  if (!gate) return null;
+  return { afterWorkflow: toRef(after), afterPhase: { id: gate.id, name: gate.name, sortOrder: gate.sortOrder } };
+}
+
 export async function listWorkflows(
-  options: { includeInactive?: boolean; includeInactiveTemplates?: boolean } = {}
+  options: { includeInactive?: boolean; includeInactiveTemplates?: boolean; includeInactivePhases?: boolean } = {}
 ): Promise<WorkflowDetail[]> {
   const rows = await db.query.workflows.findMany({
     where: and(
@@ -57,15 +109,43 @@ export async function listWorkflows(
         where: options.includeInactiveTemplates ? undefined : eq(workflowTaskTemplates.active, true),
         orderBy: asc(workflowTaskTemplates.sortOrder),
       },
-      areas: { with: { area: true } },
     },
   });
+  const ids = rows.map((r) => r.id);
+  const [phases, gateRows, areaRows] = await Promise.all([
+    listPhasesByWorkflow(ids, { includeInactive: options.includeInactivePhases }),
+    // Every fase with a key of every live workflow: readiness gates may sit in a tramo filtered out above.
+    db
+      .select({
+        id: workflowPhases.id,
+        workflowId: workflowPhases.workflowId,
+        key: workflowPhases.key,
+        name: workflowPhases.name,
+        sortOrder: workflowPhases.sortOrder,
+      })
+      .from(workflowPhases),
+    // Deprecated `areas` field, kept until the UI stops reading it.
+    ids.length
+      ? db
+          .select({ workflowId: areaWorkflows.workflowId, id: areas.id, name: areas.name })
+          .from(areaWorkflows)
+          .innerJoin(areas, eq(areas.id, areaWorkflows.areaId))
+          .where(and(inArray(areaWorkflows.workflowId, ids), isNull(areas.deletedAt)))
+      : Promise.resolve([] as Array<{ workflowId: string; id: string; name: string }>),
+  ]);
+  const allWorkflows = await db
+    .select({ id: workflows.id, key: workflows.key, name: workflows.name, sortOrder: workflows.sortOrder })
+    .from(workflows)
+    .where(isNull(workflows.deletedAt));
+  const byKey = new Map(allWorkflows.map((w) => [w.key, w]));
+  const phaseNames = new Map(gateRows.map((p) => [p.id, p.name]));
+  const phasesOf = (workflowId: string) => gateRows.filter((p) => p.workflowId === workflowId);
   return rows.map((r) => ({
     ...toWorkflow(r),
-    templates: r.templates.map(toTemplate),
-    areas: r.areas
-      .filter((a) => a.area.deletedAt === null)
-      .map((a) => ({ id: a.area.id, name: a.area.name })),
+    phases: phases.get(r.id) ?? ([] as WorkflowPhase[]),
+    templates: r.templates.map((t) => toTemplate(t, phaseNames)),
+    readiness: resolveReadiness(r, byKey, phasesOf),
+    areas: areaRows.filter((a) => a.workflowId === r.id).map((a) => ({ id: a.id, name: a.name })),
   }));
 }
 
@@ -153,6 +233,8 @@ export async function softDeleteWorkflow(id: string, actorId: string): Promise<v
 function toTemplateValues(input: WorkflowTaskTemplateInput) {
   return {
     phase: clean(input.phase),
+    // Old-UI fallback (phaseId from the old `phase` text, else the first fase) lands in #739.
+    ...(input.phaseId ? { phaseId: input.phaseId } : {}),
     title: input.title.trim(),
     notes: clean(input.notes),
     defaultPriority: input.defaultPriority ?? "media",
@@ -178,7 +260,8 @@ export async function listTemplates(
       )
     )
     .orderBy(asc(workflowTaskTemplates.sortOrder), asc(workflowTaskTemplates.title));
-  return rows.map(toTemplate);
+  const names = await phaseNamesOf(rows.map((r) => r.phaseId));
+  return rows.map((r) => toTemplate(r, names));
 }
 
 export async function createTemplate(
@@ -196,7 +279,7 @@ export async function createTemplate(
     .values({ workflowId, ...values })
     .returning();
   await recordChange(workflowId, actorId, "template_added", null, row.title);
-  return toTemplate(row);
+  return toTemplate(row, await phaseNamesOf([row.phaseId]));
 }
 
 export async function updateTemplate(
@@ -212,6 +295,7 @@ export async function updateTemplate(
   if (!before) throw new Error("TEMPLATE_NOT_FOUND");
   const merged = toTemplateValues({
     phase: patch.phase === undefined ? before.phase : patch.phase,
+    phaseId: patch.phaseId ?? before.phaseId ?? undefined,
     title: patch.title ?? before.title,
     notes: patch.notes === undefined ? before.notes : patch.notes,
     defaultPriority: patch.defaultPriority ?? before.defaultPriority,
@@ -234,7 +318,7 @@ export async function updateTemplate(
   if (before.active !== after.active) {
     await recordChange(before.workflowId, actorId, "template_active", `${before.title}: ${before.active}`, `${after.title}: ${after.active}`);
   }
-  return toTemplate(after);
+  return toTemplate(after, await phaseNamesOf([after.phaseId]));
 }
 
 /** Templates are never hard-deleted while tasks may reference them; deactivate. */
@@ -253,6 +337,20 @@ export async function reorderTemplates(workflowId: string, orderedIds: string[])
   });
 }
 
+/** Active tramos for the sidebar and tabs, by `sortOrder` (BE §8.2). */
+export async function listTramosNav(): Promise<WorkflowRef[]> {
+  return notImplemented("listTramosNav");
+}
+
+/**
+ * The UI switch (BE §7.1): `true` stores `on_create` for the first active
+ * tramo and `on_ready` for the others; `false` stores `manual`. NOT_FOUND.
+ */
+export async function setWorkflowAutoStart(id: string, enabled: boolean, actorId: string): Promise<Workflow> {
+  return notImplemented("setWorkflowAutoStart", id, enabled, actorId);
+}
+
+/** @deprecated Áreas are removed (ADR 0003). */
 export async function listAreasForWorkflow(workflowId: string) {
   return db
     .select({ id: areas.id, name: areas.name })

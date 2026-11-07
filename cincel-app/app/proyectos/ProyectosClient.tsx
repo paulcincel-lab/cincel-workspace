@@ -80,7 +80,7 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
   const exportColumns = useMemo<ExportColumn<ProjectItem>[]>(
     () => [
       { key: "project", header: "Proyecto", getValue: (p) => p.name },
-      { key: "client", header: "Cliente", getValue: (p) => p.client.name },
+      { key: "client", header: "Cliente", getValue: (p) => p.client?.name ?? "" },
       { key: "stage", header: "Etapas", getValue: (p) => p.stages.map((s) => s.name).join(", ") || "Sin etapa" },
       { key: "manager", header: "Encargado", getValue: (p) => p.manager?.name ?? "Sin encargado" },
       { key: "status", header: "Estado", getValue: (p) => STATUS_LABEL[p.status] },

@@ -168,3 +168,42 @@ export const Mapping = z.object({
 export type Mapping = z.infer<typeof Mapping>;
 /** The shape accepted before defaults are applied (what `init` writes and the admin edits). */
 export type MappingInput = z.input<typeof Mapping>;
+
+// ---------------------------------------------------------------------------
+// Project flow (docs/specs/project-flow/frontend.md §7.8, backend.md §10.1).
+// Additive contracts for Phase 4: the current GroupTarget / BoardMapping /
+// Mapping (version 1) stay as they are until the importer switches.
+// ---------------------------------------------------------------------------
+
+/**
+ * What one monday group becomes under the project flow: one of the six
+ * targets (Tramo, Fase, Espacio, Proyecto aparte, Tareas de administración,
+ * Ignorar). A group never creates a fase. Replaces `GroupTarget` (under that
+ * name) when the importer switches to mapping v2.
+ */
+export const ProjectFlowGroupTarget = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("tramo"), workflowId: z.uuid() }),
+  z.object({ kind: z.literal("phase"), phaseId: z.uuid() }),
+  z.object({ kind: z.literal("space") }),
+  z.object({ kind: z.literal("project") }),
+  // "Tareas de administración" (RD-1)
+  z.object({ kind: z.literal("admin") }),
+  z.object({ kind: z.literal("ignore") }),
+]);
+export type ProjectFlowGroupTarget = z.infer<typeof ProjectFlowGroupTarget>;
+
+/** A monday status label's Cincel status and optional priority in the firm-wide map. */
+export const StatusMapEntry = z.object({
+  target: StatusTarget,
+  priority: z.enum(["alta", "media", "baja"]).nullable().default(null),
+});
+export type StatusMapEntry = z.infer<typeof StatusMapEntry>;
+
+/** The firm-wide monday status map (app_settings `monday.status_map`), keyed by `statusLabelKey(label)`. */
+export const MondayStatusMap = z.record(z.string(), StatusMapEntry);
+export type MondayStatusMap = Record<string /* statusLabelKey(label) */, StatusMapEntry>;
+
+/** The key of a monday status label in the firm-wide map. Shared by the wizard, translate and the saved map. */
+export function statusLabelKey(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, " ");
+}

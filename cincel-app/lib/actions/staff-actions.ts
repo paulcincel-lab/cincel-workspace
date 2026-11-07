@@ -8,6 +8,7 @@ import {
   resolveAreasCapabilities,
   resolveTeamCapabilities,
 } from "@/lib/auth/permissions";
+import { notImplemented } from "@/lib/project-flow/not-implemented";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
 import { GOOGLE_MANAGED_REFUSAL, type GoogleManagedRefusal } from "@/lib/types/workspace-access";
@@ -155,4 +156,17 @@ export async function reorderStaffAction(orderedIds: string[]): Promise<void> {
   }
   await staffRepository.reorderStaff(orderedIds);
   revalidatePath("/equipo");
+}
+
+/**
+ * Replaces setStaffAreasAction (project flow BE §7.2). `team.canEditCollaborator`.
+ * Returns GOOGLE_MANAGED_REFUSAL for a Google-managed person when position
+ * mappings exist and the set differs from the workspace rows. Errors:
+ * FORBIDDEN, NOT_FOUND.
+ */
+export async function setStaffPositionsAction(
+  staffId: string,
+  positionIds: string[]
+): Promise<GoogleManagedRefusal | void> {
+  return notImplemented("setStaffPositionsAction", staffId, positionIds);
 }

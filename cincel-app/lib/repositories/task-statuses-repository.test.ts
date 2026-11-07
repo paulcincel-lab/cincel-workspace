@@ -9,9 +9,18 @@ describe("normalizeTaskStatusInput", () => {
     expect(normalizeTaskStatusInput({ name: "  En revisión " })).toEqual({
       name: "En revisión",
       closes: false,
+      countsAsCompleted: false,
       sortOrder: 0,
     });
     expect(normalizeTaskStatusInput({ name: "Entregado", closes: true }).closes).toBe(true);
+  });
+
+  it("only lets a closing status count as completed", () => {
+    expect(normalizeTaskStatusInput({ name: "Entregado", closes: true }).countsAsCompleted).toBe(true);
+    expect(
+      normalizeTaskStatusInput({ name: "Cancelado", closes: true, countsAsCompleted: false }).countsAsCompleted
+    ).toBe(false);
+    expect(() => normalizeTaskStatusInput({ name: "En espera", countsAsCompleted: true })).toThrow("INVALID");
   });
 
   it("rejects empty names", () => {

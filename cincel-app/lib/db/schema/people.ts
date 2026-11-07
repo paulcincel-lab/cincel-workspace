@@ -12,8 +12,14 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { core, soft, stamps, staffKind } from "./_schema";
+import { workflowPhases, workflows } from "./workflows";
 
-/** Whether a Workspace group mapping grants a role or an área (BE §A.3). */
+/**
+ * Whether a Workspace group mapping grants a role or an área (BE §A.3).
+ * Project flow: migration 0024 step 13 renames 'area' to 'position' (and swaps
+ * `workspace_group_mappings_kind_check`) together with the code switch to
+ * puestos, so 0023 leaves the enum and the check untouched (BE §4.1).
+ */
 export const groupMappingKind = core.enum("group_mapping_kind", ["role", "area"]);
 
 /** Internal person: employee, freelance or servicio social (Part C.1). */
@@ -131,6 +137,81 @@ export const areaMembers = core.table(
   ]
 );
 
+/** @deprecated Which workflows an area owns. Dropped in release B (0025); puestos replace áreas. */
+export const areaWorkflows = core.table(
+  "area_workflows",
+  {
+    areaId: uuid("area_id")
+      .notNull()
+      .references(() => areas.id, { onDelete: "cascade" }),
+    workflowId: uuid("workflow_id")
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    ...stamps,
+  },
+  (t) => [
+    primaryKey({ columns: [t.areaId, t.workflowId] }),
+    index("idx_area_workflows_workflow_id").on(t.workflowId),
+  ]
+);
+
+/** Puestos: the firm's job positions (BE §3.10). Separate from the access role (`staff.role`). */
+export const positions = core.table(
+  "positions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    ...stamps,
+    ...soft,
+  },
+  (t) => [
+    uniqueIndex("positions_name_lower_uq")
+      .on(sql`lower(${t.name})`)
+      .where(sql`${t.deletedAt} is null`),
+  ]
+);
+
+/** staff ↔ puesto, many-to-many. */
+export const staffPositions = core.table(
+  "staff_positions",
+  {
+    staffId: uuid("staff_id")
+      .notNull()
+      .references(() => staff.id, { onDelete: "cascade" }),
+    positionId: uuid("position_id")
+      .notNull()
+      .references(() => positions.id, { onDelete: "cascade" }),
+    /** 'manual' | 'workspace' (from a Google group mapping), as area_members.source was. */
+    source: text("source").notNull().default("manual"),
+    ...stamps,
+  },
+  (t) => [
+    primaryKey({ columns: [t.staffId, t.positionId] }),
+    index("idx_staff_positions_position_id").on(t.positionId),
+    check("staff_positions_source_check", sql`${t.source} in ('manual','workspace')`),
+  ]
+);
+
+/** puesto ↔ candidate fase. Candidates are suggestions only, never enforced. */
+export const positionPhases = core.table(
+  "position_phases",
+  {
+    positionId: uuid("position_id")
+      .notNull()
+      .references(() => positions.id, { onDelete: "cascade" }),
+    phaseId: uuid("phase_id")
+      .notNull()
+      .references(() => workflowPhases.id, { onDelete: "cascade" }),
+    ...stamps,
+  },
+  (t) => [
+    primaryKey({ columns: [t.positionId, t.phaseId] }),
+    index("idx_position_phases_phase_id").on(t.phaseId),
+  ]
+);
+
 /** Admin-configured: which Workspace group means which role or area (BE §A.3). */
 export const workspaceGroupMappings = core.table(
   "workspace_group_mappings",
@@ -140,12 +221,16 @@ export const workspaceGroupMappings = core.table(
     groupId: text("group_id").notNull(), // from groups.get; survives renames
     kind: groupMappingKind("kind").notNull(),
     role: text("role"), // kind = role: one of OFFICIAL_CINCEL_ROLES
+    /** @deprecated kind = area; always null once 0024 runs. Dropped in release B (0025). */
     areaId: uuid("area_id").references(() => areas.id, { onDelete: "cascade" }), // kind = area
+    /** kind = position (after 0024 renames the enum value). `restrict`: a mapped puesto can't be deleted. */
+    positionId: uuid("position_id").references(() => positions.id, { onDelete: "restrict" }),
     rank: integer("rank").notNull().default(0), // kind = role: higher wins
     ...stamps,
   },
   (t) => [
     uniqueIndex("workspace_group_mappings_group_uq").on(t.groupId, t.kind),
+    index("idx_workspace_group_mappings_position_id").on(t.positionId),
     check(
       "workspace_group_mappings_kind_check",
       sql`(${t.kind} = 'role' and ${t.role} is not null and ${t.areaId} is null) or (${t.kind} = 'area' and ${t.areaId} is not null and ${t.role} is null)`
@@ -156,6 +241,7 @@ export const workspaceGroupMappings = core.table(
 export const staffRelations = relations(staff, ({ one, many }) => ({
   profile: one(staffProfiles, { fields: [staff.id], references: [staffProfiles.staffId] }),
   areaMemberships: many(areaMembers),
+  positions: many(staffPositions),
 }));
 
 export const staffProfilesRelations = relations(staffProfiles, ({ one }) => ({
@@ -165,6 +251,7 @@ export const staffProfilesRelations = relations(staffProfiles, ({ one }) => ({
 export const areasRelations = relations(areas, ({ one, many }) => ({
   lead: one(staff, { fields: [areas.leadId], references: [staff.id] }),
   members: many(areaMembers),
+  workflows: many(areaWorkflows),
 }));
 
 export const areaMembersRelations = relations(areaMembers, ({ one }) => ({
@@ -174,4 +261,25 @@ export const areaMembersRelations = relations(areaMembers, ({ one }) => ({
 
 export const workspaceGroupMappingsRelations = relations(workspaceGroupMappings, ({ one }) => ({
   area: one(areas, { fields: [workspaceGroupMappings.areaId], references: [areas.id] }),
+  position: one(positions, { fields: [workspaceGroupMappings.positionId], references: [positions.id] }),
+}));
+
+export const areaWorkflowsRelations = relations(areaWorkflows, ({ one }) => ({
+  area: one(areas, { fields: [areaWorkflows.areaId], references: [areas.id] }),
+  workflow: one(workflows, { fields: [areaWorkflows.workflowId], references: [workflows.id] }),
+}));
+
+export const positionsRelations = relations(positions, ({ many }) => ({
+  staff: many(staffPositions),
+  phases: many(positionPhases),
+}));
+
+export const staffPositionsRelations = relations(staffPositions, ({ one }) => ({
+  staff: one(staff, { fields: [staffPositions.staffId], references: [staff.id] }),
+  position: one(positions, { fields: [staffPositions.positionId], references: [positions.id] }),
+}));
+
+export const positionPhasesRelations = relations(positionPhases, ({ one }) => ({
+  position: one(positions, { fields: [positionPhases.positionId], references: [positions.id] }),
+  phase: one(workflowPhases, { fields: [positionPhases.phaseId], references: [workflowPhases.id] }),
 }));

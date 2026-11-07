@@ -10,7 +10,10 @@ export type ProviderSubtype = "contratista" | "colaborador" | "tienda";
 export type ProviderStatus = "activo" | "inactivo" | "pausado" | "prospecto" | "lista_negra";
 export type StaffKind = "empleado" | "freelance" | "servicio_social";
 export type ProjectStatus = "activo" | "pausado" | "completado" | "cancelado";
-export type TaskKind = "workflow" | "usuario";
+/** `admin`: admin-only task, no tramo / fase / espacio, administrators only (project flow). */
+export type TaskKind = "workflow" | "usuario" | "admin";
+/** When a tramo starts by itself (BE §3.2). The UI shows it as one switch: `manual` = off. */
+export type WorkflowAutoStart = "on_create" | "on_ready" | "manual";
 export type TaskStatus = "pendiente" | "en_proceso" | "completado" | "bloqueado";
 export type TaskPriority = "alta" | "media" | "baja";
 export type HistoryEntity =
@@ -45,6 +48,12 @@ export type Staff = {
   /** Set when the access re-check revoked access (ISO); cleared by the next allowed sign-in. */
   accessRevokedAt: string | null;
   accessRevokedReason: string | null;
+  /**
+   * Project flow (FE §7.1): the person's puestos and the candidate fases they
+   * suggest. Optional until the staff DTOs fill them (Equipo, Phase 3).
+   */
+  positions?: PositionRef[];
+  candidatePhases?: Array<WorkflowPhaseRef & { workflowName: string }>;
 };
 
 /** A collaborator's emergency contact, for quick access in Equipo (#451). */
@@ -73,6 +82,7 @@ export type StaffAccess = {
   lastLoginAt: string | null;
 };
 
+/** @deprecated Áreas are replaced by puestos (ADR 0003). */
 export type StaffAreaRef = { id: string; name: string; role: string | null };
 
 export type StaffDetail = Staff & {
@@ -93,6 +103,7 @@ export type StaffInput = {
   active?: boolean;
 };
 
+/** @deprecated Áreas are replaced by puestos (ADR 0003). */
 export type Area = {
   id: string;
   name: string;
@@ -104,12 +115,14 @@ export type Area = {
   colorSlot: number | null;
 };
 
+/** @deprecated Áreas are replaced by puestos (ADR 0003). */
 export type AreaDetail = Area & {
   lead: { id: string; name: string } | null;
   members: Array<{ staffId: string; name: string; role: string | null; active: boolean }>;
   workflows: Array<{ id: string; key: string; name: string }>;
 };
 
+/** @deprecated Áreas are replaced by puestos (ADR 0003). */
 export type AreaInput = {
   name: string;
   description?: string | null;
@@ -119,6 +132,19 @@ export type AreaInput = {
   /** Omitted on create = the área's default slot; null = neutral. */
   colorSlot?: number | null;
 };
+
+// ── Puestos (project flow, FE §7.1) ─────────────────────────────────────────
+export type PositionRef = { id: string; name: string };
+export type Position = PositionRef & {
+  sortOrder: number;
+  active: boolean;
+  /** Candidate fases, in tramo then catalog order. Suggestions only. */
+  phases: Array<WorkflowPhaseRef & { workflowId: string; workflowName: string }>;
+  staffCount: number;
+  /** Referenced by a Google group mapping (can't be deleted: IN_USE). */
+  googleManaged: boolean;
+};
+export type PositionInput = { name: string; active?: boolean };
 
 // ── People outside (CRM) ────────────────────────────────────────────────────
 export type Contact = {
@@ -201,6 +227,7 @@ export type ContactInput = {
 };
 
 // ── Method ──────────────────────────────────────────────────────────────────
+/** A tramo (Presale, Diseño, Construcción). */
 export type Workflow = {
   id: string;
   key: string;
@@ -208,11 +235,32 @@ export type Workflow = {
   description: string | null;
   active: boolean;
   sortOrder: number;
+  autoStart: WorkflowAutoStart;
 };
+
+/** A fase of a tramo's catalog. */
+export type WorkflowPhaseRef = { id: string; name: string; sortOrder: number };
+export type WorkflowPhase = WorkflowPhaseRef & {
+  workflowId: string;
+  active: boolean;
+  /** Active templates in this fase. */
+  templateCount: number;
+};
+export type WorkflowPhaseInput = { name: string; active?: boolean };
+
+/** Read-only: when this tramo's projects become "Listos para iniciar". Null for the first tramo. */
+export type TramoReadiness = { afterWorkflow: WorkflowRef; afterPhase: WorkflowPhaseRef } | null;
 
 export type WorkflowTaskTemplate = {
   id: string;
   workflowId: string;
+  /**
+   * The template's fase. `phase_id` stays nullable in the DB until release B
+   * (0025); 0024 backfills every template, so "" only shows before 0024 runs.
+   */
+  phaseId: string;
+  phaseName: string;
+  /** @deprecated Free-text fase; removed when the UI switches to `phaseId` (Phase 2). */
   phase: string | null;
   title: string;
   notes: string | null;
@@ -225,7 +273,11 @@ export type WorkflowTaskTemplate = {
 };
 
 export type WorkflowDetail = Workflow & {
+  /** Catalog order. */
+  phases: WorkflowPhase[];
   templates: WorkflowTaskTemplate[];
+  readiness: TramoReadiness;
+  /** @deprecated Áreas are removed (ADR 0003); always read from area_workflows, empty on dev. */
   areas: Array<{ id: string; name: string }>;
 };
 
@@ -238,6 +290,12 @@ export type WorkflowInput = {
 };
 
 export type WorkflowTaskTemplateInput = {
+  /**
+   * Required once the UI sends it (Phase 2, FE §7.1). Until then the backend
+   * falls back to the `phase` text by nameKey, else the tramo's first fase.
+   */
+  phaseId?: string;
+  /** @deprecated Free-text fase; removed in Phase 2. */
   phase?: string | null;
   title: string;
   notes?: string | null;
@@ -254,11 +312,17 @@ export type Project = {
   id: string;
   code: string | null;
   name: string;
-  clientId: string;
+  /** Optional (ADR 0003). Admin only: null for non-admins once DTOs take a ViewerScope. */
+  clientId: string | null;
+  /** Who brought the project in. Admin only (null for others). */
+  origin: string | null;
+  /** Admin only. */
+  originStaffId: string | null;
   status: ProjectStatus;
   currentWorkflowId: string | null;
+  /** @deprecated Removed in Phase 2; fases derive from tasks. */
   phase: string | null;
-  /** Several phases can be active at once (#435). */
+  /** @deprecated Several phases can be active at once (#435). Removed in Phase 2. */
   phases: string[];
   projectType: string | null;
   addressStreet: string | null;
@@ -276,17 +340,31 @@ export type Project = {
 
 export type StaffRef = { id: string; name: string };
 export type ContactRef = { id: string; name: string; type: ContactType };
-export type WorkflowRef = { id: string; key: string; name: string };
+export type WorkflowRef = { id: string; key: string; name: string; sortOrder: number };
+
+/** A tramo started on a project. */
+export type ProjectTramo = WorkflowRef & { startedAt: string | null; closedAt: string | null; current: boolean };
+
+// ── Espacios ────────────────────────────────────────────────────────────────
+export type ProjectSpaceRef = { id: string; name: string };
+export type ProjectSpace = ProjectSpaceRef & { projectId: string; sortOrder: number; taskCount: number };
 
 export type ProjectListItem = Project & {
-  client: ContactRef;
+  /** Null: no client, or the viewer isn't admin. */
+  client: ContactRef | null;
   currentWorkflow: WorkflowRef | null;
-  /** Every stage the project is in, in workflow order; includes `currentWorkflow`. */
+  /** Started tramos in tramo order, with dates and `current`. Replaces `stages`. */
+  tramos: ProjectTramo[];
+  /** First catalog fase of the current tramo with open tasks. */
+  activePhase: WorkflowPhaseRef | null;
+  /** No current tramo (migration flag "Asignar tramo"). */
+  needsTramo: boolean;
+  /** @deprecated Every stage the project is in, in workflow order; use `tramos`. */
   stages: WorkflowRef[];
   manager: StaffRef | null;
   coordinator: StaffRef | null;
   taskCounts: { total: number; open: number; blocked: number };
-  /** Área that owns the primary stage (`currentWorkflowId`); null when none. */
+  /** @deprecated Área that owns the primary stage (`currentWorkflowId`); null when none. */
   area: { id: string; name: string; colorSlot: number | null } | null;
 };
 
@@ -302,24 +380,40 @@ export type ProjectLink = {
 export type ProjectLinkInput = { kind: TaskLinkKind; title: string; url: string };
 
 export type ProjectDetail = Project & {
-  client: ContactRef;
+  /** Null: no client, or the viewer isn't admin. */
+  client: ContactRef | null;
   currentWorkflow: WorkflowRef | null;
-  /** Every stage the project is in, in workflow order; includes `currentWorkflow`. */
+  tramos: ProjectTramo[];
+  needsTramo: boolean;
+  /** @deprecated Every stage the project is in, in workflow order; use `tramos`. */
   stages: WorkflowRef[];
   manager: StaffRef | null;
   coordinator: StaffRef | null;
+  /** Admin only. */
+  originStaff: StaffRef | null;
+  /** Admins only (null for others, and for projects not imported): the monday boards it came from. */
+  mondayImport: { boards: Array<{ id: string; name: string }> } | null;
   members: Array<StaffRef & { role: string | null; active: boolean }>;
   contacts: Array<ContactRef & { role: string | null }>;
   links: ProjectLink[];
 };
 
+/** "+ Nuevo proyecto": the name only (FE §3.4). */
+export type ProjectCreateInput = { name: string };
+
 export type ProjectInput = {
   code?: string | null;
   name: string;
-  clientId: string;
+  clientId: string | null;
+  /** Admin only. */
+  origin?: string | null;
+  /** Admin only. */
+  originStaffId?: string | null;
   status?: ProjectStatus;
   currentWorkflowId: string | null;
+  /** @deprecated Removed in Phase 2. */
   phase?: string | null;
+  /** @deprecated Removed in Phase 2. */
   phases?: string[];
   projectType?: string | null;
   addressStreet?: string | null;
@@ -333,6 +427,7 @@ export type ProjectInput = {
   contractAmountMxn?: string | null;
 };
 
+/** @deprecated Removed with applyWorkflow (Phase 2); startTramo replaces it. */
 export type ApplyWorkflowPreview = {
   workflow: WorkflowRef;
   create: WorkflowTaskTemplate[];
@@ -345,7 +440,14 @@ export type Task = {
   kind: TaskKind;
   templateId: string | null;
   workflowId: string | null;
+  /** @deprecated Free-text fase; `phaseId` replaces it (removed in Phase 2, #706). */
   phase: string | null;
+  /** A fase of the task's tramo; null = "Sin fase · revisar". */
+  phaseId: string | null;
+  /** An espacio of the task's project. */
+  spaceId: string | null;
+  /** When the task last closed; null while open. */
+  closedAt: string | null;
   title: string;
   notes: string | null;
   createdById: string;
@@ -364,25 +466,39 @@ export type Task = {
   updatedAt: string;
 };
 
-/** An admin-defined status of its own; `closes` = counts as finished work. */
+/**
+ * An admin-defined status of its own. `closes` = closes the task;
+ * `countsAsCompleted` = counts as finished work (only when it closes).
+ */
 export type TaskStatusOption = {
   id: string;
   name: string;
   closes: boolean;
+  countsAsCompleted: boolean;
   sortOrder: number;
 };
 
 export type TaskStatusInput = {
   name: string;
   closes?: boolean;
+  /** `true` with `closes: false` → INVALID. */
+  countsAsCompleted?: boolean;
   sortOrder?: number;
 };
 
 export type TaskListItem = Task & {
-  customStatus: { id: string; name: string; closes: boolean } | null;
-  project: { id: string; name: string; clientName: string };
+  customStatus: { id: string; name: string; closes: boolean; countsAsCompleted: boolean } | null;
+  /** `clientName` is null when the project has no client, or the viewer isn't admin. */
+  project: { id: string; name: string; clientName: string | null };
   workflow: WorkflowRef | null;
-  /** Color slot of the área that owns the task's workflow; null = neutral. */
+  /**
+   * The task's fase (FE §7.1 `phase`). Named `phaseRef` while the deprecated
+   * `phase` string is still on `Task`; #706 removes that string and renames
+   * this to `phase: WorkflowPhaseRef | null`.
+   */
+  phaseRef: WorkflowPhaseRef | null;
+  space: ProjectSpaceRef | null;
+  /** @deprecated Color slot of the área that owns the task's workflow; null = neutral. */
   areaColorSlot: number | null;
   manager: StaffRef | null;
   support: StaffRef[];
@@ -460,8 +576,14 @@ export type UserTaskInput = {
   projectId: string;
   title: string;
   notes?: string | null;
+  /** Required for usuario tasks from Phase 2 (#706). */
   workflowId?: string | null;
+  /** @deprecated Free-text fase; removed in Phase 2 (#706). */
   phase?: string | null;
+  /** Must belong to `workflowId` (PHASE_MISMATCH). */
+  phaseId?: string | null;
+  /** Must belong to `projectId` (SPACE_MISMATCH). */
+  spaceId?: string | null;
   managerId?: string | null;
   supportIds?: string[];
   priority?: TaskPriority;
@@ -470,8 +592,11 @@ export type UserTaskInput = {
   deliveryDate?: string | null;
 };
 
-/** Input for a child task: project, phase and workflow come from the parent. */
-export type SubtaskInput = Omit<UserTaskInput, "projectId" | "phase" | "workflowId">;
+/** Input for a child task: project, fase and tramo come from the parent; `spaceId` allowed. */
+export type SubtaskInput = Omit<UserTaskInput, "projectId" | "phase" | "phaseId" | "workflowId">;
+
+/** "+ Tarea de administración": no tramo, fase or espacio; administrator assignees only. */
+export type AdminTaskInput = Omit<UserTaskInput, "workflowId" | "phase" | "phaseId" | "spaceId">;
 
 export type TaskPatch = Partial<
   Pick<
@@ -479,6 +604,8 @@ export type TaskPatch = Partial<
     | "title"
     | "notes"
     | "phase"
+    | "phaseId"
+    | "spaceId"
     | "priority"
     | "status"
     | "managerId"
@@ -487,11 +614,15 @@ export type TaskPatch = Partial<
     | "deliveryDate"
     | "workflowId"
   >
->;
+>; // `phase` is deprecated (removed in #706); `workflowId` only when the task has none (else INVALID)
 
 export type TaskFilters = {
   projectId?: string;
   workflowId?: string;
+  phaseId?: string;
+  spaceId?: string;
+  /** Default excludes "admin"; admin tasks only when asked and the viewer is admin. */
+  kind?: TaskKind | TaskKind[];
   status?: TaskStatus | TaskStatus[];
   managerId?: string;
   involvesStaffId?: string;
@@ -500,6 +631,81 @@ export type TaskFilters = {
   dateTo?: string;
   search?: string;
 };
+
+// ── Starting a tramo (FE §7.1, BE §9) ────────────────────────────────────────
+export type TramoCandidateProject = {
+  project: { id: string; name: string };
+  currentTramo: WorkflowRef | null;
+  /** ISO; null in "Próximos". */
+  readySince: string | null;
+  /** "Próximos" only. */
+  pending: { tramo: WorkflowRef; phase: WorkflowPhaseRef; open: number; total: number } | null;
+};
+
+export type TramoBoard = {
+  workflow: WorkflowRef;
+  /** Not started here, readiness met. */
+  ready: TramoCandidateProject[];
+  /** Not started here, readiness not met. */
+  upcoming: TramoCandidateProject[];
+  /** Projects with this tramo started; drives "Deshacer inicio" on the project block. */
+  started: Array<{
+    projectId: string;
+    /** Latest start batch of this tramo; null if none. */
+    batchId: string | null;
+    createdCount: number;
+    /** No created task edited yet, and no later batch. */
+    canUndo: boolean;
+  }>;
+};
+
+export type StaffCandidate = { id: string; name: string; positions: string[]; openTasks: number };
+
+export type StartTramoPreview = {
+  project: { id: string; name: string };
+  workflow: WorkflowRef;
+  alreadyStarted: boolean;
+  /** workflow.autoStart !== "manual" */
+  autoStart: boolean;
+  phases: Array<{
+    phase: WorkflowPhaseRef;
+    /** Templates still to create (idempotent). */
+    templates: Array<{ id: string; title: string }>;
+    /** Templates already created on this project. */
+    existing: number;
+    /** Staff whose puestos list this fase. */
+    candidates: StaffCandidate[];
+  }>;
+};
+
+export type StartTramoAssignment =
+  | { mode: "self" }
+  | { mode: "by_phase"; managers: Record<string /* phaseId */, string | null> }
+  | { mode: "none" };
+
+export type StartTramoInput = {
+  projectId: string;
+  workflowId: string;
+  /** Checked fases. */
+  phaseIds: string[];
+  assignment: StartTramoAssignment;
+  /** Admin only; sets the firm-wide setting. */
+  autoStart?: boolean;
+};
+
+export type StartTramoResult = {
+  /** Null when nothing was created. */
+  batchId: string | null;
+  createdCount: number;
+  skippedCount: number;
+  /** A project_stages row was opened. */
+  stageCreated: boolean;
+  project: { id: string; name: string };
+  workflow: WorkflowRef;
+};
+
+/** Who is reading: passed from actions to repositories and DTO builders (BE §6). */
+export type ViewerScope = { staffId: string; isAdmin: boolean };
 
 // ── Shared ──────────────────────────────────────────────────────────────────
 export type HistoryEvent = {

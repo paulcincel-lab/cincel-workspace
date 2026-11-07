@@ -19,6 +19,8 @@ import { listHistory, recordChanges, recordComment } from "@/lib/repositories/hi
 import { toTemplate } from "@/lib/repositories/workflows-repository";
 import type {
   ApplyWorkflowPreview,
+  ContactRef,
+  ContactType,
   DriveFileInput,
   HistoryEvent,
   Project,
@@ -28,9 +30,12 @@ import type {
   ProjectLinkInput,
   ProjectListItem,
   ProjectStatus,
+  ProjectTramo,
   Task,
+  WorkflowPhaseRef,
   WorkflowRef,
 } from "@/lib/types/core";
+import { notImplemented } from "@/lib/project-flow/not-implemented";
 import { toTask } from "@/lib/repositories/tasks-repository";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import { normalizePhases } from "@/lib/proyectos/phases";
@@ -48,6 +53,9 @@ export function toProject(row: ProjectRow): Project {
     code: row.code,
     name: row.name,
     clientId: row.clientId,
+    // Not written by any path yet; filtered by viewer once DTOs take a ViewerScope.
+    origin: row.origin,
+    originStaffId: row.originStaffId,
     status: row.status,
     currentWorkflowId: row.currentWorkflowId,
     phase: row.phase,
@@ -86,23 +94,54 @@ const PROJECT_TRACKED_FIELDS = [
   "contractAmountMxn",
 ] as const;
 
-/** Every stage of each project, in workflow order (Presale → Diseño → …). */
-async function loadStages(projectIds: string[]): Promise<Map<string, WorkflowRef[]>> {
-  const out = new Map<string, WorkflowRef[]>();
+type StageRow = WorkflowRef & { startedAt: Date; closedAt: Date | null };
+
+/** Every started tramo of each project, in workflow order (Presale → Diseño → …). */
+async function loadStageRows(projectIds: string[]): Promise<Map<string, StageRow[]>> {
+  const out = new Map<string, StageRow[]>();
   if (projectIds.length === 0) return out;
   const rows = await db
-    .select({ projectId: projectStages.projectId, id: workflows.id, key: workflows.key, name: workflows.name })
+    .select({
+      projectId: projectStages.projectId,
+      id: workflows.id,
+      key: workflows.key,
+      name: workflows.name,
+      sortOrder: workflows.sortOrder,
+      startedAt: projectStages.startedAt,
+      closedAt: projectStages.closedAt,
+    })
     .from(projectStages)
     .innerJoin(workflows, eq(workflows.id, projectStages.workflowId))
     .where(and(inArray(projectStages.projectId, projectIds), isNull(workflows.deletedAt)))
     .orderBy(asc(workflows.sortOrder), asc(workflows.name));
-  for (const r of rows) {
-    const list = out.get(r.projectId) ?? [];
-    list.push({ id: r.id, key: r.key, name: r.name });
-    out.set(r.projectId, list);
+  for (const { projectId, ...r } of rows) {
+    const list = out.get(projectId) ?? [];
+    list.push(r);
+    out.set(projectId, list);
   }
   return out;
 }
+
+const stageRef = (r: StageRow): WorkflowRef => ({ id: r.id, key: r.key, name: r.name, sortOrder: r.sortOrder });
+
+/** Every stage of each project, in workflow order (Presale → Diseño → …). */
+async function loadStages(projectIds: string[]): Promise<Map<string, WorkflowRef[]>> {
+  const rows = await loadStageRows(projectIds);
+  return new Map([...rows].map(([id, list]) => [id, list.map(stageRef)]));
+}
+
+/** `ProjectTramo`s from stage rows; `current` = the project's `current_workflow_id`. */
+function toTramos(rows: StageRow[] | undefined, currentWorkflowId: string | null): ProjectTramo[] {
+  return (rows ?? []).map((r) => ({
+    ...stageRef(r),
+    startedAt: r.startedAt.toISOString(),
+    closedAt: r.closedAt ? r.closedAt.toISOString() : null,
+    current: r.id === currentWorkflowId,
+  }));
+}
+
+const toClient = (clientId: string | null, name: string | null, type: ContactType | null): ContactRef | null =>
+  clientId && name && type ? { id: clientId, name, type } : null;
 
 const manager = alias(staff, "manager");
 const coordinator = alias(staff, "coordinator");
@@ -133,6 +172,7 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
       workflowId: workflows.id,
       workflowKey: workflows.key,
       workflowName: workflows.name,
+      workflowSortOrder: workflows.sortOrder,
       managerId: manager.id,
       managerName: manager.name,
       coordinatorId: coordinator.id,
@@ -144,9 +184,12 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
       areaId: sql<string | null>`(select a.id ${primaryAreaFrom})`,
       areaName: sql<string | null>`(select a.name ${primaryAreaFrom})`,
       areaColorSlot: sql<number | null>`(select a.color_slot ${primaryAreaFrom})`,
+      // First catalog fase of the current tramo with an open, live, unarchived task.
+      activePhase: sql<WorkflowPhaseRef | null>`(select json_build_object('id', p.id, 'name', p.name, 'sortOrder', p.sort_order) from core.workflow_phases p where p.workflow_id = ${projects.currentWorkflowId} and exists (select 1 from core.tasks t where t.project_id = ${projects.id} and t.phase_id = p.id and t.deleted_at is null and t.archived = false and t.status <> 'completado') order by p.sort_order, p.name limit 1)`,
     })
     .from(projects)
-    .innerJoin(contacts, eq(contacts.id, projects.clientId))
+    // A project's client is optional (project flow): a left join keeps client-less projects.
+    .leftJoin(contacts, eq(contacts.id, projects.clientId))
     .leftJoin(workflows, eq(workflows.id, projects.currentWorkflowId))
     .leftJoin(manager, eq(manager.id, projects.managerId))
     .leftJoin(coordinator, eq(coordinator.id, projects.coordinatorId))
@@ -170,14 +213,17 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
     )
     .orderBy(asc(projects.name));
 
-  const stagesByProject = await loadStages(rows.map((r) => r.project.id));
+  const stagesByProject = await loadStageRows(rows.map((r) => r.project.id));
   return rows.map((r) => ({
     ...toProject(r.project),
-    client: { id: r.project.clientId, name: r.clientName, type: r.clientType },
+    client: toClient(r.project.clientId, r.clientName, r.clientType),
     currentWorkflow: r.workflowId
-      ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName! }
+      ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName!, sortOrder: r.workflowSortOrder! }
       : null,
-    stages: stagesByProject.get(r.project.id) ?? [],
+    tramos: toTramos(stagesByProject.get(r.project.id), r.project.currentWorkflowId),
+    activePhase: r.activePhase ?? null,
+    needsTramo: r.project.currentWorkflowId === null,
+    stages: (stagesByProject.get(r.project.id) ?? []).map(stageRef),
     manager: r.managerId ? { id: r.managerId, name: r.managerName! } : null,
     coordinator: r.coordinatorId ? { id: r.coordinatorId, name: r.coordinatorName! } : null,
     taskCounts: { total: r.totalTasks, open: r.openTasks, blocked: r.blockedTasks },
@@ -193,22 +239,33 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
       currentWorkflow: true,
       manager: true,
       coordinator: true,
+      originStaff: true,
       members: { with: { staff: true } },
       contacts: { with: { contact: true } },
       links: { orderBy: asc(projectLinks.createdAt) },
     },
   });
   if (!row) return null;
-  const stages = (await loadStages([row.id])).get(row.id) ?? [];
+  const stageRows = (await loadStageRows([row.id])).get(row.id);
   return {
     ...toProject(row),
-    client: { id: row.client.id, name: row.client.name, type: row.client.type },
+    client: row.client ? { id: row.client.id, name: row.client.name, type: row.client.type } : null,
     currentWorkflow: row.currentWorkflow
-      ? { id: row.currentWorkflow.id, key: row.currentWorkflow.key, name: row.currentWorkflow.name }
+      ? {
+          id: row.currentWorkflow.id,
+          key: row.currentWorkflow.key,
+          name: row.currentWorkflow.name,
+          sortOrder: row.currentWorkflow.sortOrder,
+        }
       : null,
-    stages,
+    tramos: toTramos(stageRows, row.currentWorkflowId),
+    needsTramo: row.currentWorkflowId === null,
+    stages: (stageRows ?? []).map(stageRef),
     manager: row.manager ? { id: row.manager.id, name: row.manager.name } : null,
     coordinator: row.coordinator ? { id: row.coordinator.id, name: row.coordinator.name } : null,
+    originStaff: row.originStaff ? { id: row.originStaff.id, name: row.originStaff.name } : null,
+    // Admins only; filled once getProject takes a ViewerScope (BE §8.5).
+    mondayImport: null,
     members: row.members
       .filter((m) => m.staff.deletedAt === null)
       .map((m) => ({ id: m.staff.id, name: m.staff.name, role: m.role, active: m.staff.active }))
@@ -387,6 +444,14 @@ export async function setProjectStages(
   return (await getProject(id))!;
 }
 
+/**
+ * Sets the current tramo (BE §8.5), replacing setProjectStage/setProjectStages:
+ * requires a `project_stages` row (NOT_STARTED) and records the history change.
+ */
+export async function setProjectCurrentTramo(id: string, workflowId: string, actorId: string): Promise<ProjectDetail> {
+  return notImplemented("setProjectCurrentTramo", id, workflowId, actorId);
+}
+
 /** Soft delete. Tasks stay linked; they disappear with the project on read. */
 export async function softDeleteProject(id: string, actorId: string): Promise<void> {
   const [row] = await db
@@ -530,7 +595,7 @@ export async function previewApplyWorkflow(
   workflowId: string
 ): Promise<ApplyWorkflowPreview> {
   const [wf] = await db
-    .select({ id: workflows.id, key: workflows.key, name: workflows.name })
+    .select({ id: workflows.id, key: workflows.key, name: workflows.name, sortOrder: workflows.sortOrder })
     .from(workflows)
     .where(and(eq(workflows.id, workflowId), isNull(workflows.deletedAt)))
     .limit(1);
@@ -548,8 +613,8 @@ export async function previewApplyWorkflow(
     .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt), ne(tasks.kind, "usuario")));
   const appliedIds = new Set(applied.map((a) => a.templateId));
 
-  const create = templates.filter((t) => !appliedIds.has(t.id)).map(toTemplate);
-  const skip = templates.filter((t) => appliedIds.has(t.id)).map(toTemplate);
+  const create = templates.filter((t) => !appliedIds.has(t.id)).map((t) => toTemplate(t));
+  const skip = templates.filter((t) => appliedIds.has(t.id)).map((t) => toTemplate(t));
   return { workflow: wf, create, skip };
 }
 

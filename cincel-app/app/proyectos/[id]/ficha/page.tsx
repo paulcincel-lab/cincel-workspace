@@ -163,7 +163,7 @@ export default function ProjectFichaPage() {
   function startEditing() {
     if (!project || !caps.canEditProjectGeneral) return;
     setDraft({
-      clientId: project.client.id,
+      clientId: project.client?.id ?? null,
       projectType: project.projectType,
       phases: project.phases,
       addressStreet: project.addressStreet,
@@ -180,10 +180,10 @@ export default function ProjectFichaPage() {
 
   async function saveEditing() {
     if (!project) return;
-    const newClient = draft.clientId && draft.clientId !== project.client.id ? clients.find((c) => c.id === draft.clientId) : null;
+    const newClient = draft.clientId && draft.clientId !== project.client?.id ? clients.find((c) => c.id === draft.clientId) : null;
     if (
       newClient &&
-      !window.confirm(`¿Cambiar el cliente de "${project.name}" de ${project.client.name} a ${newClient.name}?`)
+      !window.confirm(`¿Cambiar el cliente de "${project.name}" de ${project.client?.name ?? "sin cliente"} a ${newClient.name}?`)
     ) {
       return;
     }
@@ -310,9 +310,13 @@ export default function ProjectFichaPage() {
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               Cliente:{" "}
-              <Link href={`/directorio?contact=${project.client.id}`} className="underline">
-                {project.client.name}
-              </Link>
+              {project.client ? (
+                <Link href={`/directorio?contact=${project.client.id}`} className="underline">
+                  {project.client.name}
+                </Link>
+              ) : (
+                "Por asignar"
+              )}
             </p>
           </div>
           <div className="flex gap-2">
@@ -344,7 +348,7 @@ export default function ProjectFichaPage() {
                     <Label className="block text-sm font-normal text-muted-foreground">Cliente</Label>
                     <Select
                       items={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
-                      value={draft.clientId ?? project.client.id}
+                      value={draft.clientId ?? project.client?.id ?? null}
                       onValueChange={(v) => setDraft((d) => ({ ...d, clientId: v as string }))}
                     >
                       <SelectTrigger className="mt-1 w-full">
