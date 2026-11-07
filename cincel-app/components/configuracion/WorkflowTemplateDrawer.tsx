@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Textarea } from "@/components/ui/shadcn/textarea";
-import type { TaskPriority } from "@/lib/types/core";
+import type { TaskPriority, WorkflowPhaseRef } from "@/lib/types/core";
 
 export interface TemplateDraft {
   title: string;
-  phase: string;
+  phaseId: string;
   notes: string;
   defaultPriority: TaskPriority;
   commitmentOffsetDays: string;
@@ -21,7 +21,7 @@ export interface TemplateDraft {
 
 export const emptyTemplateDraft: TemplateDraft = {
   title: "",
-  phase: "",
+  phaseId: "",
   notes: "",
   defaultPriority: "media",
   commitmentOffsetDays: "",
@@ -41,6 +41,8 @@ interface WorkflowTemplateDrawerProps {
   onClose: () => void;
   editingId: string | null;
   workflowName: string;
+  /** The tramo's fases, in catalog order. */
+  phases: WorkflowPhaseRef[];
   draft: TemplateDraft;
   onChangeDraft: React.Dispatch<React.SetStateAction<TemplateDraft>>;
   formError: string;
@@ -54,6 +56,7 @@ export function WorkflowTemplateDrawer({
   onClose,
   editingId,
   workflowName,
+  phases,
   draft,
   onChangeDraft,
   formError,
@@ -87,13 +90,20 @@ export function WorkflowTemplateDrawer({
 
           <div>
             <label className="mb-2 block text-sm font-medium text-foreground">Fase</label>
-            <Input
-              type="text"
-              value={draft.phase}
-              onChange={(event) => onChangeDraft((current) => ({ ...current, phase: event.target.value }))}
-              placeholder="Ej. Anteproyecto"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">Opcional. Agrupa la tarea dentro del workflow.</p>
+            <Select
+              items={Object.fromEntries(phases.map((p) => [p.id, p.name]))}
+              value={draft.phaseId || null}
+              onValueChange={(value) => onChangeDraft((current) => ({ ...current, phaseId: (value as string | null) ?? "" }))}
+            >
+              <SelectTrigger className="w-full"><SelectValue placeholder="Elige una fase" /></SelectTrigger>
+              <SelectContent>
+                {phases.map((phase) => (
+                  <SelectItem key={phase.id} value={phase.id}>
+                    {phase.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>

@@ -28,7 +28,7 @@ describe("actions — writes reject instead of falling back", () => {
 
   it("createUserTaskAction throws when the caller lacks a session", async () => {
     await expect(
-      createUserTaskAction({ projectId: "00000000-0000-0000-0000-000000000001", title: "Test" })
+      createUserTaskAction({ projectId: "00000000-0000-0000-0000-000000000001", title: "Test", workflowId: null })
     ).rejects.toThrow();
   });
 
@@ -36,7 +36,7 @@ describe("actions — writes reject instead of falling back", () => {
     const localStorageSpy = vi.spyOn(Storage.prototype, "setItem");
 
     await expect(
-      createUserTaskAction({ projectId: "00000000-0000-0000-0000-000000000001", title: "Test" })
+      createUserTaskAction({ projectId: "00000000-0000-0000-0000-000000000001", title: "Test", workflowId: null })
     ).rejects.toThrow();
 
     expect(localStorageSpy).not.toHaveBeenCalled();

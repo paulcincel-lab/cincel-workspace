@@ -1,11 +1,10 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { areaWorkflows, areas, workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
 import { READINESS } from "@/lib/project-flow/catalog";
 import type { FlowExecutor } from "@/lib/project-flow/db";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
-import { matchPhaseByName, resolveTemplatePhaseId } from "@/lib/project-flow/old-ui-compat";
 import { recordChanges } from "@/lib/repositories/history-repository";
 import { assertPhaseInWorkflow, listPhasesByWorkflow } from "@/lib/repositories/workflow-phases-repository";
 import type {
@@ -49,7 +48,6 @@ export function toTemplate(
     workflowId: row.workflowId,
     phaseId: row.phaseId ?? "",
     phaseName: (row.phaseId && phaseNames?.get(row.phaseId)) || "",
-    phase: row.phase,
     title: row.title,
     notes: row.notes,
     defaultPriority: row.defaultPriority,
@@ -232,9 +230,28 @@ export async function softDeleteWorkflow(id: string, actorId: string): Promise<v
 }
 
 // ── Templates ───────────────────────────────────────────────────────────────
+const UNIQUE_VIOLATION = "23505";
+const TITLE_UNIQUE_INDEX = "workflow_task_templates_title_lower_uq";
+
+/** Whether an error (or its `cause`, as drizzle wraps driver errors) is the per-fase title unique violation. */
+function isTitleTaken(err: unknown): boolean {
+  let current: unknown = err;
+  for (let depth = 0; current && depth < 5; depth++) {
+    if (typeof current === "object") {
+      const e = current as { code?: unknown; constraint_name?: unknown; constraint?: unknown };
+      if (e.code === UNIQUE_VIOLATION) {
+        const constraint = e.constraint_name ?? e.constraint;
+        return constraint === undefined || constraint === TITLE_UNIQUE_INDEX;
+      }
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 function toTemplateValues(input: WorkflowTaskTemplateInput) {
   return {
-    phase: clean(input.phase),
+    phaseId: input.phaseId,
     title: input.title.trim(),
     notes: clean(input.notes),
     defaultPriority: input.defaultPriority ?? "media",
@@ -246,35 +263,31 @@ function toTemplateValues(input: WorkflowTaskTemplateInput) {
   };
 }
 
-/** Every fase of the tramo (inactive included), for the old-UI fallbacks. */
-async function phaseCandidatesOf(workflowId: string) {
-  return db
-    .select({
-      id: workflowPhases.id,
-      name: workflowPhases.name,
-      sortOrder: workflowPhases.sortOrder,
-      active: workflowPhases.active,
-    })
-    .from(workflowPhases)
-    .where(eq(workflowPhases.workflowId, workflowId));
-}
-
 /**
- * The template's fase (BE §4.3 step 2): `phaseId` (checked against the tramo,
- * PHASE_MISMATCH), else the old `phase` text by nameKey, else the tramo's
- * first fase. NO_PHASES when the tramo has none, so `phase_id` is never null.
+ * NAME_TAKEN when another active template of the same fase has the same title
+ * (case-insensitive), mirroring `workflow_task_templates_title_lower_uq`.
  */
-async function templatePhaseIdFor(
+async function assertTitleFree(
+  executor: FlowExecutor,
   workflowId: string,
-  source: { phaseId?: string | null; phase?: string | null }
-): Promise<string> {
-  if (source.phaseId) {
-    await assertPhaseInWorkflow(db, source.phaseId, workflowId);
-    return source.phaseId;
-  }
-  const phaseId = resolveTemplatePhaseId(source, await phaseCandidatesOf(workflowId));
-  if (!phaseId) throw flowError(FLOW_ERROR.NO_PHASES, "workflow");
-  return phaseId;
+  phaseId: string,
+  title: string,
+  exceptId?: string
+): Promise<void> {
+  const [clash] = await executor
+    .select({ id: workflowTaskTemplates.id })
+    .from(workflowTaskTemplates)
+    .where(
+      and(
+        eq(workflowTaskTemplates.workflowId, workflowId),
+        eq(workflowTaskTemplates.phaseId, phaseId),
+        eq(workflowTaskTemplates.active, true),
+        sql`lower(${workflowTaskTemplates.title}) = lower(${title})`,
+        exceptId ? ne(workflowTaskTemplates.id, exceptId) : undefined
+      )
+    )
+    .limit(1);
+  if (clash) throw flowError(FLOW_ERROR.NAME_TAKEN, "template title");
 }
 
 export async function listTemplates(
@@ -295,67 +308,111 @@ export async function listTemplates(
   return rows.map((r) => toTemplate(r, names));
 }
 
+/** `phaseId` is required. Errors: NOT_FOUND (tramo), INVALID (no fase), PHASE_MISMATCH, NAME_TAKEN. */
 export async function createTemplate(
   workflowId: string,
   input: WorkflowTaskTemplateInput,
   actorId: string
 ): Promise<WorkflowTaskTemplate> {
+  if (!input.phaseId) throw flowError(FLOW_ERROR.INVALID, "phaseId");
   const values = toTemplateValues(input);
-  const phaseId = await templatePhaseIdFor(workflowId, input);
-  if (input.sortOrder === undefined) {
-    const existing = await listTemplates(workflowId, { includeInactive: true });
-    values.sortOrder = existing.length;
+  let row: typeof workflowTaskTemplates.$inferSelect;
+  try {
+    row = await db.transaction(async (tx) => {
+      const [workflow] = await tx
+        .select({ id: workflows.id })
+        .from(workflows)
+        .where(and(eq(workflows.id, workflowId), isNull(workflows.deletedAt)))
+        .limit(1);
+      if (!workflow) throw flowError(FLOW_ERROR.NOT_FOUND, "workflow");
+      await assertPhaseInWorkflow(tx, values.phaseId, workflowId);
+      if (values.active) await assertTitleFree(tx, workflowId, values.phaseId, values.title);
+      if (input.sortOrder === undefined) {
+        const [{ n }] = await tx
+          .select({ n: count() })
+          .from(workflowTaskTemplates)
+          .where(eq(workflowTaskTemplates.workflowId, workflowId));
+        values.sortOrder = Number(n);
+      }
+      const [inserted] = await tx
+        .insert(workflowTaskTemplates)
+        .values({ workflowId, ...values })
+        .returning();
+      return inserted;
+    });
+  } catch (err) {
+    if (isTitleTaken(err)) throw flowError(FLOW_ERROR.NAME_TAKEN, "template title");
+    throw err;
   }
-  const [row] = await db
-    .insert(workflowTaskTemplates)
-    .values({ workflowId, ...values, phaseId })
-    .returning();
   await recordChange(workflowId, actorId, "template_added", null, row.title);
   return toTemplate(row, await phaseNamesOf([row.phaseId]));
 }
 
+/**
+ * Partial patch. The result must have a fase: a patch without `phaseId` keeps
+ * the current one, and a template with none needs one. Errors: NOT_FOUND,
+ * INVALID (no fase), PHASE_MISMATCH, NAME_TAKEN.
+ */
 export async function updateTemplate(
   id: string,
   patch: Partial<WorkflowTaskTemplateInput>,
   actorId: string
 ): Promise<WorkflowTaskTemplate> {
-  const [before] = await db
-    .select()
-    .from(workflowTaskTemplates)
-    .where(eq(workflowTaskTemplates.id, id))
-    .limit(1);
-  if (!before) throw new Error("TEMPLATE_NOT_FOUND");
-  const merged = toTemplateValues({
-    phase: patch.phase === undefined ? before.phase : patch.phase,
-    title: patch.title ?? before.title,
-    notes: patch.notes === undefined ? before.notes : patch.notes,
-    defaultPriority: patch.defaultPriority ?? before.defaultPriority,
-    commitmentOffsetDays:
-      patch.commitmentOffsetDays === undefined ? before.commitmentOffsetDays : patch.commitmentOffsetDays,
-    reviewOffsetDays: patch.reviewOffsetDays === undefined ? before.reviewOffsetDays : patch.reviewOffsetDays,
-    deliveryOffsetDays:
-      patch.deliveryOffsetDays === undefined ? before.deliveryOffsetDays : patch.deliveryOffsetDays,
-    sortOrder: patch.sortOrder ?? before.sortOrder,
-    active: patch.active ?? before.active,
-  });
-  // A new phaseId wins; an edited old `phase` text moves the template to the
-  // fase of that name when there is one; otherwise it keeps its fase, and a
-  // template still without one gets the fallback.
-  let phaseId: string;
-  if (patch.phaseId) {
-    phaseId = await templatePhaseIdFor(before.workflowId, { phaseId: patch.phaseId });
-  } else {
-    const byText =
-      patch.phase !== undefined ? matchPhaseByName(patch.phase, await phaseCandidatesOf(before.workflowId)) : null;
-    phaseId = byText ?? before.phaseId ?? (await templatePhaseIdFor(before.workflowId, { phase: merged.phase }));
+  let before: typeof workflowTaskTemplates.$inferSelect;
+  let after: typeof workflowTaskTemplates.$inferSelect;
+  try {
+    [before, after] = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(workflowTaskTemplates)
+        .where(eq(workflowTaskTemplates.id, id))
+        .limit(1);
+      if (!current) throw flowError(FLOW_ERROR.NOT_FOUND, "template");
+      const phaseId = patch.phaseId === undefined ? current.phaseId : patch.phaseId;
+      if (!phaseId) throw flowError(FLOW_ERROR.INVALID, "phaseId");
+      const merged = toTemplateValues({
+        phaseId,
+        title: patch.title ?? current.title,
+        notes: patch.notes === undefined ? current.notes : patch.notes,
+        defaultPriority: patch.defaultPriority ?? current.defaultPriority,
+        commitmentOffsetDays:
+          patch.commitmentOffsetDays === undefined ? current.commitmentOffsetDays : patch.commitmentOffsetDays,
+        reviewOffsetDays: patch.reviewOffsetDays === undefined ? current.reviewOffsetDays : patch.reviewOffsetDays,
+        deliveryOffsetDays:
+          patch.deliveryOffsetDays === undefined ? current.deliveryOffsetDays : patch.deliveryOffsetDays,
+        sortOrder: patch.sortOrder ?? current.sortOrder,
+        active: patch.active ?? current.active,
+      });
+      if (phaseId !== current.phaseId) await assertPhaseInWorkflow(tx, phaseId, current.workflowId);
+      const competes =
+        merged.active &&
+        (phaseId !== current.phaseId ||
+          !current.active ||
+          merged.title.toLowerCase() !== current.title.toLowerCase());
+      if (competes) await assertTitleFree(tx, current.workflowId, phaseId, merged.title, id);
+      const [updated] = await tx
+        .update(workflowTaskTemplates)
+        .set(merged)
+        .where(eq(workflowTaskTemplates.id, id))
+        .returning();
+      return [current, updated] as const;
+    });
+  } catch (err) {
+    if (isTitleTaken(err)) throw flowError(FLOW_ERROR.NAME_TAKEN, "template title");
+    throw err;
   }
-  const [after] = await db
-    .update(workflowTaskTemplates)
-    .set({ ...merged, phaseId })
-    .where(eq(workflowTaskTemplates.id, id))
-    .returning();
   if (before.title !== after.title) {
     await recordChange(before.workflowId, actorId, "template_title", before.title, after.title);
+  }
+  if (before.phaseId !== after.phaseId) {
+    const names = await phaseNamesOf([before.phaseId, after.phaseId]);
+    await recordChange(
+      before.workflowId,
+      actorId,
+      "template_phase",
+      `${before.title}: ${(before.phaseId && names.get(before.phaseId)) || "—"}`,
+      `${after.title}: ${(after.phaseId && names.get(after.phaseId)) || "—"}`
+    );
   }
   if (before.active !== after.active) {
     await recordChange(before.workflowId, actorId, "template_active", `${before.title}: ${before.active}`, `${after.title}: ${after.active}`);

@@ -260,8 +260,6 @@ export type WorkflowTaskTemplate = {
    */
   phaseId: string;
   phaseName: string;
-  /** @deprecated Free-text fase; removed when the UI switches to `phaseId` (Phase 2). */
-  phase: string | null;
   title: string;
   notes: string | null;
   defaultPriority: TaskPriority;
@@ -290,13 +288,8 @@ export type WorkflowInput = {
 };
 
 export type WorkflowTaskTemplateInput = {
-  /**
-   * Required once the UI sends it (Phase 2, FE §7.1). Until then the backend
-   * falls back to the `phase` text by nameKey, else the tramo's first fase.
-   */
-  phaseId?: string;
-  /** @deprecated Free-text fase; removed in Phase 2. */
-  phase?: string | null;
+  /** Required: a fase of the template's tramo (else PHASE_MISMATCH). */
+  phaseId: string;
   title: string;
   notes?: string | null;
   defaultPriority?: TaskPriority;
@@ -320,10 +313,6 @@ export type Project = {
   originStaffId: string | null;
   status: ProjectStatus;
   currentWorkflowId: string | null;
-  /** @deprecated Removed in Phase 2; fases derive from tasks. */
-  phase: string | null;
-  /** @deprecated Several phases can be active at once (#435). Removed in Phase 2. */
-  phases: string[];
   projectType: string | null;
   addressStreet: string | null;
   addressCity: string | null;
@@ -364,8 +353,6 @@ export type ProjectListItem = Project & {
   manager: StaffRef | null;
   coordinator: StaffRef | null;
   taskCounts: { total: number; open: number; blocked: number };
-  /** @deprecated Área that owns the primary stage (`currentWorkflowId`); null when none. */
-  area: { id: string; name: string; colorSlot: number | null } | null;
 };
 
 /** Same audiences as task links: for the internal team or for the client. */
@@ -410,11 +397,6 @@ export type ProjectInput = {
   /** Admin only. */
   originStaffId?: string | null;
   status?: ProjectStatus;
-  currentWorkflowId: string | null;
-  /** @deprecated Removed in Phase 2. */
-  phase?: string | null;
-  /** @deprecated Removed in Phase 2. */
-  phases?: string[];
   projectType?: string | null;
   addressStreet?: string | null;
   addressCity?: string | null;
@@ -427,21 +409,12 @@ export type ProjectInput = {
   contractAmountMxn?: string | null;
 };
 
-/** @deprecated Removed with applyWorkflow (Phase 2); startTramo replaces it. */
-export type ApplyWorkflowPreview = {
-  workflow: WorkflowRef;
-  create: WorkflowTaskTemplate[];
-  skip: WorkflowTaskTemplate[];
-};
-
 export type Task = {
   id: string;
   projectId: string;
   kind: TaskKind;
   templateId: string | null;
   workflowId: string | null;
-  /** @deprecated Free-text fase; `phaseId` replaces it (removed in Phase 2, #706). */
-  phase: string | null;
   /** A fase of the task's tramo; null = "Sin fase · revisar". */
   phaseId: string | null;
   /** An espacio of the task's project. */
@@ -491,12 +464,8 @@ export type TaskListItem = Task & {
   /** `clientName` is null when the project has no client, or the viewer isn't admin. */
   project: { id: string; name: string; clientName: string | null };
   workflow: WorkflowRef | null;
-  /**
-   * The task's fase (FE §7.1 `phase`). Named `phaseRef` while the deprecated
-   * `phase` string is still on `Task`; #706 removes that string and renames
-   * this to `phase: WorkflowPhaseRef | null`.
-   */
-  phaseRef: WorkflowPhaseRef | null;
+  /** The task's fase (FE §7.1); null = "Sin fase · revisar". */
+  phase: WorkflowPhaseRef | null;
   space: ProjectSpaceRef | null;
   /** @deprecated Color slot of the área that owns the task's workflow; null = neutral. */
   areaColorSlot: number | null;
@@ -576,10 +545,8 @@ export type UserTaskInput = {
   projectId: string;
   title: string;
   notes?: string | null;
-  /** Required for usuario tasks from Phase 2 (#706). */
-  workflowId?: string | null;
-  /** @deprecated Free-text fase; removed in Phase 2 (#706). */
-  phase?: string | null;
+  /** The task's tramo. Required: null (or an unknown tramo) → INVALID. */
+  workflowId: string | null;
   /** Must belong to `workflowId` (PHASE_MISMATCH). */
   phaseId?: string | null;
   /** Must belong to `projectId` (SPACE_MISMATCH). */
@@ -593,17 +560,16 @@ export type UserTaskInput = {
 };
 
 /** Input for a child task: project, fase and tramo come from the parent; `spaceId` allowed. */
-export type SubtaskInput = Omit<UserTaskInput, "projectId" | "phase" | "phaseId" | "workflowId">;
+export type SubtaskInput = Omit<UserTaskInput, "projectId" | "phaseId" | "workflowId">;
 
 /** "+ Tarea de administración": no tramo, fase or espacio; administrator assignees only. */
-export type AdminTaskInput = Omit<UserTaskInput, "workflowId" | "phase" | "phaseId" | "spaceId">;
+export type AdminTaskInput = Omit<UserTaskInput, "workflowId" | "phaseId" | "spaceId">;
 
 export type TaskPatch = Partial<
   Pick<
     Task,
     | "title"
     | "notes"
-    | "phase"
     | "phaseId"
     | "spaceId"
     | "priority"
@@ -614,7 +580,7 @@ export type TaskPatch = Partial<
     | "deliveryDate"
     | "workflowId"
   >
->; // `phase` is deprecated (removed in #706); `workflowId` only when the task has none (else INVALID)
+>; // `workflowId` only when the task has none and isn't an admin task (else INVALID)
 
 export type TaskFilters = {
   projectId?: string;

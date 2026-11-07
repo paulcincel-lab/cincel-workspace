@@ -15,8 +15,6 @@ import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { FormField } from "@/components/ui/shadcn/form-field";
 import { Label } from "@/components/ui/shadcn/label";
-import { Checkbox } from "@/components/ui/shadcn/checkbox";
-import { normalizePhases, projectPhaseOptions } from "@/lib/proyectos/phases";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
 import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard";
@@ -25,17 +23,15 @@ import { hasImportData, ImportDataPanel, useImportData } from "@/components/ui/I
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import {
   fetchProjectAction,
   updateProjectAction,
-  setProjectStagesAction,
+  setProjectCurrentTramoAction,
   setProjectMembersAction,
   setProjectContactsAction,
   addProjectLinkAction,
   removeProjectLinkAction,
-  previewApplyWorkflowAction,
-  applyWorkflowAction,
 } from "@/lib/actions/projects-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { fetchContactsAction } from "@/lib/actions/contacts-actions";
@@ -43,7 +39,6 @@ import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import type {
-  ApplyWorkflowPreview,
   ContactListItem,
   ProjectDetail,
   Staff,
@@ -74,7 +69,7 @@ export default function ProjectFichaPage() {
   const phaseGroups = useMemo(() => {
     const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
     for (const task of tasks) {
-      const name = task.phase?.trim() || "Sin fase";
+      const name = task.phase?.name.trim() || "Sin fase";
       const group = groups.get(name) ?? { id: name, name, tasks: [] };
       group.tasks.push(task);
       groups.set(name, group);
@@ -89,11 +84,10 @@ export default function ProjectFichaPage() {
   const [notFound, setNotFound] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Partial<ProjectDetail>>({});
-  const [applyPreview, setApplyPreview] = useState<ApplyWorkflowPreview | null>(null);
-  const [applyWorkflowId, setApplyWorkflowId] = useState("");
-  const [customPhase, setCustomPhase] = useState("");
+  const [tramoError, setTramoError] = useState("");
   const authenticatedUser = getCurrentAuthenticatedUser();
   const caps = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
+  const isAdmin = canSeeAdminData(authenticatedUser);
 
   async function reload() {
     try {
@@ -165,7 +159,6 @@ export default function ProjectFichaPage() {
     setDraft({
       clientId: project.client?.id ?? null,
       projectType: project.projectType,
-      phases: project.phases,
       addressStreet: project.addressStreet,
       addressCity: project.addressCity,
       addressState: project.addressState,
@@ -196,32 +189,20 @@ export default function ProjectFichaPage() {
     }
   }
 
-  async function toggleStage(workflowId: string) {
-    if (!project) return;
-    const current = project.stages.map((s) => s.id);
-    const next = current.includes(workflowId) ? current.filter((id) => id !== workflowId) : [...current, workflowId];
-    if (next.length === 0) return; // a project always keeps at least one stage
+  async function changeCurrentTramo(workflowId: string) {
+    if (!project || workflowId === project.currentWorkflowId) return;
+    setTramoError("");
     try {
-      await setProjectStagesAction(project.id, next);
+      await setProjectCurrentTramoAction(project.id, workflowId);
       await reload();
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
+      setTramoError(
+        err instanceof Error && err.message.startsWith("NOT_STARTED")
+          ? "Ese tramo aún no se ha iniciado en este proyecto."
+          : "No se pudo cambiar el tramo actual."
+      );
     }
-  }
-
-  function toggleDraftPhase(phase: string) {
-    setDraft((d) => {
-      const current = d.phases ?? [];
-      const has = current.some((p) => p.toLowerCase() === phase.toLowerCase());
-      return { ...d, phases: has ? current.filter((p) => p.toLowerCase() !== phase.toLowerCase()) : [...current, phase] };
-    });
-  }
-
-  function addCustomPhase() {
-    const value = customPhase.trim();
-    if (!value) return;
-    setDraft((d) => ({ ...d, phases: normalizePhases([...(d.phases ?? []), value]) }));
-    setCustomPhase("");
   }
 
   async function toggleMember(staffId: string) {
@@ -266,23 +247,6 @@ export default function ProjectFichaPage() {
     if (!project) return;
     try {
       await removeProjectLinkAction(project.id, linkId);
-      await reload();
-    } catch (err) {
-      if (err instanceof RepositoryError) reportRepositoryError(err);
-    }
-  }
-
-  async function openApplyPreview() {
-    if (!project || !applyWorkflowId) return;
-    const preview = await previewApplyWorkflowAction(project.id, applyWorkflowId);
-    setApplyPreview(preview);
-  }
-
-  async function confirmApply() {
-    if (!project || !applyWorkflowId) return;
-    try {
-      await applyWorkflowAction(project.id, applyWorkflowId, { managerId: project.manager?.id });
-      setApplyPreview(null);
       await reload();
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
@@ -369,38 +333,6 @@ export default function ProjectFichaPage() {
                       className="mt-1"
                     />
                   </FormField>
-                  <fieldset className="text-sm text-muted-foreground sm:col-span-2">
-                    <legend>Fases (puedes elegir varias)</legend>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
-                      {projectPhaseOptions(draft.phases ?? []).map((phase) => (
-                        <label key={phase} className="flex items-center gap-2 text-foreground">
-                          <Checkbox
-                            checked={(draft.phases ?? []).some((p) => p.toLowerCase() === phase.toLowerCase())}
-                            onCheckedChange={() => toggleDraftPhase(phase)}
-                          />
-                          {phase}
-                        </label>
-                      ))}
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <Input
-                        value={customPhase}
-                        onChange={(e) => setCustomPhase(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addCustomPhase();
-                          }
-                        }}
-                        placeholder="Otra fase…"
-                        aria-label="Otra fase"
-                        className="h-8 max-w-xs"
-                      />
-                      <Button type="button" variant="outline" size="sm" className="h-8" onClick={addCustomPhase}>
-                        Agregar fase
-                      </Button>
-                    </div>
-                  </fieldset>
                   <FormField>
                     <Label className="block text-sm font-normal text-muted-foreground">Calle</Label>
                     <Input
@@ -448,14 +380,6 @@ export default function ProjectFichaPage() {
               ) : (
                 <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
                   <div><dt className="text-muted-foreground">Tipo</dt><dd>{project.projectType || "—"}</dd></div>
-                  <div>
-                    <dt className="text-muted-foreground">Fases</dt>
-                    <dd className="mt-0.5 flex flex-wrap gap-1">
-                      {project.phases.length > 0
-                        ? project.phases.map((phase) => <Badge key={phase} variant="outline">{phase}</Badge>)
-                        : "—"}
-                    </dd>
-                  </div>
                   <div><dt className="text-muted-foreground">Dirección</dt><dd>{[project.addressStreet, project.addressCity, project.addressState].filter(Boolean).join(", ") || "—"}</dd></div>
                   <div><dt className="text-muted-foreground">Inicio</dt><dd>{project.startDate || "—"}</dd></div>
                   <div><dt className="text-muted-foreground">Encargado</dt><dd>{project.manager?.name ?? "Sin encargado"}</dd></div>
@@ -466,63 +390,41 @@ export default function ProjectFichaPage() {
 
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-foreground">Etapas</h2>
+                <h2 className="text-lg font-semibold text-foreground">Tramos</h2>
                 <div className="flex flex-wrap gap-1">
-                  {project.stages.length > 0
-                    ? project.stages.map((stage) => <Badge key={stage.id} variant="outline">{stage.name}</Badge>)
-                    : <Badge variant="outline">Sin etapa</Badge>}
+                  {project.tramos.length > 0
+                    ? project.tramos.map((tramo) => (
+                        <Badge key={tramo.id} variant={tramo.current ? "secondary" : "outline"}>{tramo.name}</Badge>
+                      ))
+                    : <Badge variant="outline">Sin tramo</Badge>}
                 </div>
               </div>
-              {caps.canChangeProjectStage ? (
-                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2" role="group" aria-label="Etapas del proyecto">
-                  {workflows.map((w) => {
-                    const checked = project.stages.some((s) => s.id === w.id);
-                    const isOnlyStage = checked && project.stages.length === 1;
+              {caps.canChangeProjectStage && (project.tramos.length > 0 || (isAdmin && project.needsTramo)) ? (
+                <FormField className="mt-4 max-w-xs">
+                  <Label className="block text-sm font-normal text-muted-foreground">
+                    {project.needsTramo ? "Asignar tramo" : "Tramo actual"}
+                  </Label>
+                  {(() => {
+                    const options: Array<{ id: string; name: string }> =
+                      project.needsTramo && isAdmin ? workflows : project.tramos;
                     return (
-                      <label key={w.id} className="flex items-center gap-2 text-sm text-foreground" title={isOnlyStage ? "Un proyecto necesita al menos una etapa" : undefined}>
-                        <Checkbox checked={checked} disabled={isOnlyStage} onCheckedChange={() => void toggleStage(w.id)} />
-                        {w.name}
-                      </label>
+                      <Select
+                        items={Object.fromEntries(options.map((w) => [w.id, w.name]))}
+                        value={project.currentWorkflowId ?? null}
+                        onValueChange={(v) => void changeCurrentTramo(v as string)}
+                      >
+                        <SelectTrigger className="mt-1 w-full"><SelectValue placeholder="Sin tramo" /></SelectTrigger>
+                        <SelectContent>
+                          {options.map((w) => (
+                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     );
-                  })}
-                </div>
+                  })()}
+                </FormField>
               ) : null}
-              {caps.canChangeProjectStage ? (
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <Select
-                    items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
-                    value={applyWorkflowId}
-                    onValueChange={(v) => setApplyWorkflowId(v as string)}
-                  >
-                    <SelectTrigger className="w-56"><SelectValue placeholder="Aplicar workflow" /></SelectTrigger>
-                    <SelectContent>
-                      {workflows.map((w) => (
-                        <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline" disabled={!applyWorkflowId} onClick={() => void openApplyPreview()}>
-                    Ver preview
-                  </Button>
-                </div>
-              ) : null}
-
-              {applyPreview ? (
-                <div className="mt-4 rounded-lg border border-border p-4 text-sm">
-                  <p className="font-medium">{applyPreview.workflow.name}</p>
-                  <p className="mt-2 text-muted-foreground">Se crearán {applyPreview.create.length} tareas:</p>
-                  <ul className="mt-1 list-inside list-disc">
-                    {applyPreview.create.map((t) => <li key={t.id}>{t.title}</li>)}
-                  </ul>
-                  {applyPreview.skip.length > 0 ? (
-                    <p className="mt-2 text-muted-foreground">Ya aplicadas ({applyPreview.skip.length}): {applyPreview.skip.map((t) => t.title).join(", ")}</p>
-                  ) : null}
-                  <div className="mt-4 flex gap-2">
-                    <Button variant="outline" onClick={() => setApplyPreview(null)}>Cancelar</Button>
-                    <Button onClick={() => void confirmApply()}>Confirmar</Button>
-                  </div>
-                </div>
-              ) : null}
+              {tramoError ? <p className="mt-2 text-sm text-destructive">{tramoError}</p> : null}
             </section>
 
             <section className="space-y-4">

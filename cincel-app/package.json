@@ -20,7 +20,8 @@
     "db:studio": "drizzle-kit studio",
     "monday": "tsx scripts/monday/cli.ts",
     "monday:codegen": "graphql-codegen --config scripts/monday/codegen.ts",
-    "monday:schema": "tsx scripts/monday/fetch-schema.ts"
+    "monday:schema": "tsx scripts/monday/fetch-schema.ts",
+    "flow:report": "tsx scripts/project-flow-report.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.51",

@@ -7,6 +7,7 @@ import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { notImplemented } from "@/lib/project-flow/not-implemented";
 import * as taskDependenciesRepository from "@/lib/repositories/task-dependencies-repository";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
+import { scheduleTaskClosingHook } from "@/lib/tasks/closing-hook";
 import type {
   AdminTaskInput,
   HistoryEvent,
@@ -70,6 +71,11 @@ export async function fetchTaskAction(id: string): Promise<TaskDetail | null> {
   return tasksRepository.getTask(id);
 }
 
+/**
+ * A user task in a tramo. Errors: INVALID (no `workflowId` or not a live
+ * tramo), PHASE_MISMATCH (fase not of that tramo), SPACE_MISMATCH (espacio not
+ * of the project). Never starts the tramo: no `project_stages` row is written.
+ */
 export async function createUserTaskAction(input: UserTaskInput): Promise<TaskDetail> {
   const user = await requireCapabilityUser();
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
@@ -86,9 +92,9 @@ const SUBTASK_ERRORS: Record<string, string> = {
 };
 
 /**
- * Creates a `usuario` child task with the parent's project, phase and
- * workflow. Same permission as creating a task. Throws FORBIDDEN, NOT_FOUND
- * or NESTED (the parent is already a subtask).
+ * Creates a `usuario` child task with the parent's project, tramo and fase.
+ * Same permission as creating a task. Throws FORBIDDEN, NOT_FOUND, NESTED
+ * (the parent is already a subtask) or SPACE_MISMATCH.
  */
 export async function createSubtaskAction(parentId: string, input: SubtaskInput): Promise<TaskDetail> {
   const user = await requireCapabilityUser();
@@ -111,6 +117,11 @@ export async function listSubtasksAction(parentId: string): Promise<TaskRef[]> {
   return tasksRepository.listSubtasks(parentId);
 }
 
+/**
+ * `phaseId` within the task's tramo (PHASE_MISMATCH), `spaceId` of its project
+ * (SPACE_MISMATCH), neither on an admin task (ADMIN_TASK). `workflowId` only
+ * when the task has none (else INVALID).
+ */
 export async function updateTaskAction(id: string, patch: TaskPatch): Promise<TaskDetail> {
   const user = await requireCapabilityUser();
   const caps = resolveActivitiesCapabilities(user);
@@ -125,6 +136,7 @@ export async function updateTaskAction(id: string, patch: TaskPatch): Promise<Ta
   }
   const row = await tasksRepository.updateTask(id, patch, user.member.id);
   revalidateTareas(row.projectId);
+  if (patch.status !== undefined) await scheduleTaskClosingHook(row, user.member.id);
   return row;
 }
 
@@ -135,6 +147,7 @@ export async function setTaskStatusAction(id: string, status: TaskStatus): Promi
   }
   const row = await tasksRepository.setTaskStatus(id, status, user.member.id);
   revalidateTareas(row.projectId);
+  await scheduleTaskClosingHook(row, user.member.id);
   return row;
 }
 
@@ -296,6 +309,7 @@ export async function setTaskCustomStatusAction(id: string, customStatusId: stri
   }
   const row = await tasksRepository.setTaskCustomStatus(id, customStatusId, user.member.id);
   revalidateTareas(row.projectId);
+  await scheduleTaskClosingHook(row, user.member.id);
   return row;
 }
 

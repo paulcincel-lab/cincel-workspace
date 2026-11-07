@@ -276,7 +276,16 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
 
   const projectsByDepartment = useMemo(
     () =>
-      projectsByArea(scopedProjectsData.filter((p) => p.status === "activo")),
+      // Projects no longer carry an área: group by the current tramo until projectsByTramo replaces this.
+      projectsByArea(
+        scopedProjectsData
+          .filter((p) => p.status === "activo")
+          .map((p) => ({
+            area: p.currentWorkflow
+              ? { id: p.currentWorkflow.id, name: p.currentWorkflow.name, colorSlot: p.currentWorkflow.sortOrder + 1 }
+              : null,
+          })),
+      ),
     [scopedProjectsData],
   );
 

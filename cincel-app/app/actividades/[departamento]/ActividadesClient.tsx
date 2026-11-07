@@ -98,12 +98,6 @@ function areaLabel(task: TaskListItem): string {
   return DEPARTMENTOS.find((d) => d.slug === task.workflow?.key)?.label ?? task.workflow?.name ?? "Sin área";
 }
 
-/** Phase list for a task's own department — the General view mixes several. */
-function phasesForTask(task: TaskListItem): string[] {
-  const departamento = DEPARTMENTOS.find((d) => d.slug === task.workflow?.key);
-  return departamento ? phasesFor(departamento.template) : [];
-}
-
 interface ActividadesClientProps {
   slug: string;
   workflow: WorkflowDetail | null;
@@ -263,7 +257,7 @@ export function ActividadesClient({
         ? []
         : phases.map((phase) => ({
             phase,
-            percent: tasks.length === 0 ? 0 : (tasks.filter((t) => t.phase === phase).length / tasks.length) * 100,
+            percent: tasks.length === 0 ? 0 : (tasks.filter((t) => t.phase?.name === phase).length / tasks.length) * 100,
           })),
     [tasks, phases, view, isGeneral]
   );
@@ -314,7 +308,7 @@ export function ActividadesClient({
         !query ||
         t.project.name.toLowerCase().includes(query) ||
         t.title.toLowerCase().includes(query) ||
-        (t.phase ?? "").toLowerCase().includes(query) ||
+        (t.phase?.name ?? "").toLowerCase().includes(query) ||
         (t.manager?.name ?? "").toLowerCase().includes(query) ||
         t.status.toLowerCase().includes(query);
       const matchesProject = !projectFromQuery || t.project.id === projectFromQuery;
@@ -438,7 +432,6 @@ export function ActividadesClient({
             createUserTaskAction({
               projectId,
               title: item.description,
-              phase: item.phase,
               workflowId: workflow?.id ?? null,
               priority: DEFAULT_PRIORITY,
             })
@@ -459,7 +452,6 @@ export function ActividadesClient({
           title: values.title,
           notes: values.notes || null,
           workflowId: workflow?.id ?? null,
-          phase: values.phase || null,
           managerId: values.managerId,
           supportIds: values.supportIds,
           priority: DEFAULT_PRIORITY,
@@ -615,7 +607,7 @@ export function ActividadesClient({
   const exportColumns = useMemo<ExportColumn<TaskListItem>[]>(
     () => [
       { key: "project", header: "Proyecto", getValue: (t) => t.project.name },
-      { key: "phase", header: "Fase", getValue: (t) => t.phase || "" },
+      { key: "phase", header: "Fase", getValue: (t) => t.phase?.name || "" },
       { key: "title", header: "Actividad", getValue: (t) => t.title },
       { key: "manager", header: "Responsable", getValue: (t) => t.manager?.name || "Sin responsable" },
       { key: "reviewDate", header: "Próxima revisión", isDate: true, getValue: (t) => t.reviewDate || "" },
@@ -695,22 +687,23 @@ export function ActividadesClient({
       {
         id: "phase",
         header: "Fase",
-        accessorFn: (t) => t.phase ?? "",
+        accessorFn: (t) => t.phase?.name ?? "",
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
-          const currentPhase = task.phase ?? "";
+          const currentPhase = task.phase?.name ?? "";
           const display = (
             <span className="block max-w-24 truncate text-sm" title={currentPhase || undefined}>
               {currentPhase || <span className="text-muted-foreground">Sin fase</span>}
             </span>
           );
-          if (!capabilities.canReorderPhases) return display;
-          const taskPhases = isGeneral ? phasesForTask(task) : phases;
-          const selectablePhases = Array.from(new Set([...taskPhases, "Otro...", currentPhase].filter(Boolean)));
+          // Fases of the task's own tramo; General mixes tramos, so it's display only there.
+          const taskPhases =
+            !isGeneral && workflow && task.workflowId === workflow.id ? workflow.phases.filter((p) => p.active) : [];
+          if (!capabilities.canReorderPhases || taskPhases.length === 0) return display;
           return (
             <InlineEditable
               value={currentPhase}
-              onCommit={(value) => updateField(task, { phase: value || null })}
+              onCommit={(value) => updateField(task, { phaseId: taskPhases.find((p) => p.name === value)?.id ?? null })}
               commitOnChange
               renderDisplay={() => display}
               renderEditor={({ onChange, onBlur }) => (
@@ -718,21 +711,14 @@ export function ActividadesClient({
                   defaultOpen
                   value={currentPhase}
                   onValueChange={(next) => {
-                    const value = next as string;
-                    if (value === "Otro...") {
-                      const custom = window.prompt("Nueva fase", "")?.trim();
-                      if (custom) onChange(custom);
-                      onBlur();
-                      return;
-                    }
-                    onChange(value);
+                    onChange(next as string);
                     onBlur();
                   }}
                 >
                   <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {selectablePhases.map((p) => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    {taskPhases.map((p) => (
+                      <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

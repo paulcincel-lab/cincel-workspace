@@ -220,7 +220,7 @@ export default function TaskDrawer({
 
               <div className="mt-4 flex flex-wrap gap-2 text-sm text-muted-foreground">
                 <span className="rounded-full bg-muted px-3 py-1">{task.project.name}</span>
-                {task.phase ? <span className="rounded-full bg-muted px-3 py-1">{task.phase}</span> : null}
+                {task.phase ? <span className="rounded-full bg-muted px-3 py-1">{task.phase.name}</span> : null}
                 <span className="rounded-full bg-muted px-3 py-1">{task.customStatus?.name ?? STATUS_LABEL[task.status]}</span>
                 <WaitingBadge waitingOn={task.waitingOn} />
               </div>

@@ -8,9 +8,8 @@ import { FormField } from "@/components/ui/shadcn/form-field";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { fetchContactsAction } from "@/lib/actions/contacts-actions";
-import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
-import type { ContactListItem, ProjectInput, Staff, Workflow } from "@/lib/types/core";
+import type { ContactListItem, ProjectInput, Staff } from "@/lib/types/core";
 
 const PROJECT_TYPE_OPTIONS = ["Habitacional", "Oficinas", "Comercial", "Mobiliario", "Mantenimiento", "Otro"];
 const NO_VALUE = "__none__";
@@ -24,23 +23,20 @@ interface ProjectCreateModalProps {
 function friendlyCreateError(err: unknown): string {
   if (err instanceof Error) {
     if (err.message === "PROJECT_CLIENT_REQUIRED") return "Selecciona un cliente.";
-    if (err.message === "PROJECT_STAGE_REQUIRED") return "Selecciona una etapa inicial.";
+    if (err.message === "NAME_TAKEN") return "Ya existe un proyecto con ese nombre.";
   }
   return "No se pudo crear el proyecto. Intenta de nuevo.";
 }
 
 /**
- * Modal for creating a new project. A project belongs to exactly one client
- * and one stage (workflow) — see the model's rule 1 — so both are required
- * single-selects, not the old multi-checkbox "stages" field.
+ * Modal for creating a new project. The client is still required here; the
+ * first tramo (Presale) starts on its own when it is set to auto-start.
  */
 export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalProps) {
   const [clients, setClients] = useState<ContactListItem[]>([]);
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [name, setName] = useState("");
   const [clientId, setClientId] = useState("");
-  const [workflowId, setWorkflowId] = useState("");
   const [type, setType] = useState(PROJECT_TYPE_OPTIONS[0]);
   const [managerId, setManagerId] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -49,10 +45,6 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
 
   useEffect(() => {
     void fetchContactsAction({ type: "cliente" }).then(setClients);
-    void fetchWorkflowsAction().then((rows) => {
-      setWorkflows(rows);
-      if (rows[0]) setWorkflowId(rows[0].id);
-    });
     void fetchStaffAction().then(setStaff);
   }, []);
 
@@ -66,17 +58,12 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
       setError("Selecciona un cliente.");
       return;
     }
-    if (!workflowId) {
-      setError("Selecciona una etapa inicial.");
-      return;
-    }
     setError("");
     setSaving(true);
     try {
       await onConfirm({
         name: trimmedName,
         clientId,
-        currentWorkflowId: workflowId,
         projectType: type,
         managerId: managerId || null,
         startDate: startDate || null,
@@ -128,24 +115,6 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
                     <SelectItem key={client.id} value={client.id}>
                       {client.name} ({client.kind === "empresa" ? "Empresa" : "Particular"})
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormField>
-
-            <FormField>
-              <Label className="block text-sm font-normal text-muted-foreground">Etapa inicial</Label>
-              <Select
-                items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
-                value={workflowId}
-                onValueChange={(value) => setWorkflowId(value as string)}
-              >
-                <SelectTrigger className="mt-1 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {workflows.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

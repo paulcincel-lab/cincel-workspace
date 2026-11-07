@@ -8,7 +8,13 @@ import { resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import * as workflowPhasesRepository from "@/lib/repositories/workflow-phases-repository";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
-import { OrderedIdsSchema, UuidSchema, WorkflowPhaseInputSchema, parseInput } from "@/lib/validation/project-flow";
+import {
+  OrderedIdsSchema,
+  UuidSchema,
+  WorkflowPhaseInputSchema,
+  WorkflowTaskTemplateInputSchema,
+  parseInput,
+} from "@/lib/validation/project-flow";
 import type {
   Workflow,
   WorkflowDetail,
@@ -19,6 +25,8 @@ import type {
   WorkflowTaskTemplate,
   WorkflowTaskTemplateInput,
 } from "@/lib/types/core";
+
+const TRAMOS_PATH = "/configuracion/tramos";
 
 async function requireWorkflowsCapabilities() {
   return resolveWorkflowsCapabilities(await requireCapabilityUser());
@@ -41,15 +49,23 @@ function revalidateTramos(options: { positions?: boolean; projects?: boolean } =
 }
 
 /**
- * Every staff session reads the active tramos (Actividades, Proyectos,
- * Equipo and Puestos all use them). The `includeInactive*` flags need
- * `canManageWorkflows` and are ignored otherwise (BE §7.1).
+ * Any staff session reads the active tramos, fases and templates (Actividades,
+ * Proyectos, Equipo and Puestos all need them). An `includeInactive*` flag
+ * requires `canManageWorkflows` (else FORBIDDEN).
  */
 export async function fetchWorkflowsAction(
   options: { includeInactive?: boolean; includeInactiveTemplates?: boolean; includeInactivePhases?: boolean } = {}
 ): Promise<WorkflowDetail[]> {
   const caps = await requireWorkflowsCapabilities();
-  return workflowsRepository.listWorkflows(caps.canManageWorkflows ? options : {});
+  const wantsInactive = Boolean(
+    options.includeInactive || options.includeInactiveTemplates || options.includeInactivePhases
+  );
+  if (wantsInactive && !caps.canManageWorkflows) throw flowError(FLOW_ERROR.FORBIDDEN, "inactive workflows");
+  return workflowsRepository.listWorkflows({
+    includeInactive: options.includeInactive === true,
+    includeInactiveTemplates: options.includeInactiveTemplates === true,
+    includeInactivePhases: options.includeInactivePhases === true,
+  });
 }
 
 export async function fetchWorkflowAction(id: string): Promise<WorkflowDetail | null> {
@@ -87,29 +103,43 @@ export async function deleteWorkflowAction(id: string): Promise<void> {
   revalidatePath("/configuracion/workflows");
 }
 
+function revalidateTemplates(layout: boolean) {
+  revalidatePath(TRAMOS_PATH);
+  if (layout) revalidatePath("/actividades", "layout");
+}
+
+/** `phaseId` is required. Errors: FORBIDDEN, NOT_FOUND, EMPTY, INVALID, PHASE_MISMATCH, NAME_TAKEN. */
 export async function createTemplateAction(
   workflowId: string,
   input: WorkflowTaskTemplateInput
 ): Promise<WorkflowTaskTemplate> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
-    throw new Error("FORBIDDEN: template create");
+    throw flowError(FLOW_ERROR.FORBIDDEN, "template create");
   }
-  const row = await workflowsRepository.createTemplate(workflowId, input, user.member.id);
-  revalidateTramos();
+  const id = parseInput(UuidSchema, workflowId);
+  const parsed = parseInput(WorkflowTaskTemplateInputSchema, input);
+  const row = await workflowsRepository.createTemplate(id, parsed, user.member.id);
+  revalidateTemplates(true);
   return row;
 }
 
+/**
+ * Partial patch; `phaseId`, when sent, must be a fase of the template's tramo.
+ * Errors: FORBIDDEN, NOT_FOUND, EMPTY, INVALID, PHASE_MISMATCH, NAME_TAKEN.
+ */
 export async function updateTemplateAction(
   id: string,
   patch: Partial<WorkflowTaskTemplateInput>
 ): Promise<WorkflowTaskTemplate> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
-    throw new Error("FORBIDDEN: template edit");
+    throw flowError(FLOW_ERROR.FORBIDDEN, "template edit");
   }
-  const row = await workflowsRepository.updateTemplate(id, patch, user.member.id);
-  revalidateTramos();
+  const templateId = parseInput(UuidSchema, id);
+  const parsed = parseInput(WorkflowTaskTemplateInputSchema.partial(), patch);
+  const row = await workflowsRepository.updateTemplate(templateId, parsed, user.member.id);
+  revalidateTemplates(true);
   return row;
 }
 
@@ -119,7 +149,7 @@ export async function deactivateTemplateAction(id: string): Promise<WorkflowTask
     throw new Error("FORBIDDEN: template deactivate");
   }
   const row = await workflowsRepository.deactivateTemplate(id, user.member.id);
-  revalidateTramos();
+  revalidateTemplates(false);
   return row;
 }
 
@@ -129,7 +159,7 @@ export async function reorderTemplatesAction(workflowId: string, orderedIds: str
     throw new Error("FORBIDDEN: template reorder");
   }
   await workflowsRepository.reorderTemplates(workflowId, orderedIds);
-  revalidateTramos();
+  revalidateTemplates(false);
 }
 
 // ── Tramos y fases (project flow BE §7.1) ───────────────────────────────────

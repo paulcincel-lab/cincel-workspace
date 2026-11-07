@@ -270,7 +270,7 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         !query ||
         t.project.name.toLowerCase().includes(query) ||
         t.title.toLowerCase().includes(query) ||
-        (t.phase ?? "").toLowerCase().includes(query) ||
+        (t.phase?.name ?? "").toLowerCase().includes(query) ||
         taskStatusLabel(t).toLowerCase().includes(query);
       const matchesStatus = !statusFilter || statusSelectValue(t) === statusFilter;
       // An explicit status filter wins, so picking Completado still shows those tasks.

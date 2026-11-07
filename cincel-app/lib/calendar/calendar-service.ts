@@ -71,7 +71,7 @@ function defaultTimeFor(task: TaskListItem, type: CalendarEventType): string {
 }
 
 function inferAdditionalType(task: TaskListItem): CalendarEventType | null {
-  const phase = (task.phase || "").toLowerCase();
+  const phase = (task.phase?.name || "").toLowerCase();
 
   if (phase.includes("reuni")) {
     return "Reunion";
@@ -126,7 +126,7 @@ export function buildCalendarEvents(tasks: TaskListItem[]): CalendarEvent[] {
         responsible: task.manager?.name || "Sin responsable",
         stage: workflowKey ?? "sin-area",
         stageLabel,
-        phase: task.phase || "",
+        phase: task.phase?.name || "",
         type,
         href: baseHref,
       });

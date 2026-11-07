@@ -33,6 +33,21 @@ export const OrderedIdsSchema = z.array(uuid).max(500);
 /** `setPositionPhasesAction`, `setStaffPositionsAction`. */
 export const UuidArraySchema = z.array(uuid);
 
+const offsetDays = z.number().int().min(-3650).max(3650).nullable().optional();
+
+/** `createTemplateAction`; `updateTemplateAction` parses `.partial()`. `phaseId` is required. */
+export const WorkflowTaskTemplateInputSchema = z.object({
+  phaseId: uuid,
+  title: z.string().trim().min(1, "EMPTY").max(500),
+  notes: z.string().nullable().optional(),
+  defaultPriority: z.enum(["alta", "media", "baja"]).optional(),
+  commitmentOffsetDays: offsetDays,
+  reviewOffsetDays: offsetDays,
+  deliveryOffsetDays: offsetDays,
+  sortOrder: z.number().int().min(0).optional(),
+  active: z.boolean().optional(),
+});
+
 export const StartTramoAssignmentSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("self") }),
   z.object({ mode: z.literal("by_phase"), managers: z.record(uuid, uuid.nullable()) }),

@@ -51,7 +51,6 @@ const tasks: TaskListItem[] = [
     project: { id: "p1", name: "Residencia Valle Alto", clientName: "Cliente" },
     workflow: { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 },
     areaColorSlot: 2,
-    phaseRef: null,
     space: null,
     manager: { id: "u1", name: "Ana Ruiz" },
     support: [],

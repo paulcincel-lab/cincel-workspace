@@ -109,7 +109,7 @@ describe("GoogleGroupMappings", () => {
     expect(router.refresh).not.toHaveBeenCalled();
   });
 
-  it("edits a position mapping, keeping its puesto", async () => {
+  it("edits a puesto mapping, keeping its puesto", async () => {
     actions.updateGroupMappingAction.mockResolvedValue({ ok: true, mapping: positionMapping });
     renderMappings();
 
@@ -122,6 +122,46 @@ describe("GoogleGroupMappings", () => {
       kind: "position",
       role: null,
       positionId: POSITION_ID,
+      rank: 0,
+    });
+  });
+
+  it("offers Rol and Puesto as the kinds", async () => {
+    renderMappings([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Agregar grupo" }));
+    fireEvent.click(await screen.findByLabelText("Tipo"));
+    expect(await screen.findByRole("option", { name: "Puesto" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Rol" })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: "Área" })).toBeNull();
+  });
+
+  it("changes the puesto of a puesto mapping from the Puesto select", async () => {
+    const OTHER_ID = "00000000-0000-4000-8000-000000000002";
+    actions.updateGroupMappingAction.mockResolvedValue({ ok: true, mapping: positionMapping });
+    render(
+      <GoogleGroupMappings
+        mappings={[positionMapping]}
+        positions={[
+          { id: OTHER_ID, name: "Arquitecto" },
+          { id: POSITION_ID, name: "Diseñador" },
+        ]}
+      />,
+    );
+
+    await openRowMenu(positionMapping.groupEmail, "Editar");
+    fireEvent.click(await screen.findByLabelText("Puesto"));
+    // happy-dom only commits a click on the first option of a base-ui Select.
+    fireEvent.click(await screen.findByRole("option", { name: "Arquitecto" }));
+    expect(screen.queryByLabelText("Rango")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+    expect(actions.updateGroupMappingAction).toHaveBeenCalledWith(positionMapping.id, {
+      groupEmail: positionMapping.groupEmail,
+      kind: "position",
+      role: null,
+      positionId: OTHER_ID,
       rank: 0,
     });
   });

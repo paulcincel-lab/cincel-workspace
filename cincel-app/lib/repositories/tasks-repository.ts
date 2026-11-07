@@ -18,9 +18,12 @@ import {
   workflows,
 } from "@/lib/db/schema";
 import { closedAtPatch } from "@/lib/project-flow/closing";
+import { flowError } from "@/lib/project-flow/errors";
 import { notImplemented } from "@/lib/project-flow/not-implemented";
 import type { AdminTaskFilters } from "@/lib/validation/project-flow";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
+import { assertSpaceInProject } from "@/lib/repositories/project-spaces-repository";
+import { assertPhaseInWorkflow } from "@/lib/repositories/workflow-phases-repository";
 import { underlyingStatus } from "@/lib/repositories/task-statuses-repository";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import type {
@@ -57,7 +60,6 @@ export function toTask(row: TaskRow): Task {
     kind: row.kind,
     templateId: row.templateId,
     workflowId: row.workflowId,
-    phase: row.phase,
     phaseId: row.phaseId,
     spaceId: row.spaceId,
     closedAt: row.closedAt ? row.closedAt.toISOString() : null,
@@ -252,7 +254,8 @@ export async function removeTaskLink(id: string, actorId: string): Promise<void>
 const TASK_TRACKED_FIELDS = [
   "title",
   "notes",
-  "phase",
+  "phaseId",
+  "spaceId",
   "workflowId",
   "managerId",
   "status",
@@ -308,7 +311,17 @@ function whereFilters(f: TaskFilters) {
     f.dateTo
       ? or(lte(tasks.commitmentDate, f.dateTo), lte(tasks.reviewDate, f.dateTo), lte(tasks.deliveryDate, f.dateTo))
       : undefined,
-    f.search ? sql`${tasks.title} ilike ${"%" + f.search.trim() + "%"}` : undefined
+    f.search ? searchMatch(f.search) : undefined
+  );
+}
+
+/** Title, fase name or espacio name (listTasks joins both). */
+function searchMatch(search: string) {
+  const pattern = "%" + search.trim() + "%";
+  return or(
+    sql`${tasks.title} ilike ${pattern}`,
+    sql`${workflowPhases.name} ilike ${pattern}`,
+    sql`${projectSpaces.name} ilike ${pattern}`
   );
 }
 
@@ -350,7 +363,14 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     .leftJoin(staff, eq(staff.id, tasks.managerId))
     .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
     .where(whereFilters(filters))
-    .orderBy(sql`${tasks.sortOrder} is null`, asc(tasks.sortOrder), asc(tasks.commitmentDate), asc(tasks.title));
+    // Tramo, then fase, then manual order (BE §8.6); tasks without one go last.
+    .orderBy(
+      sql`${workflows.sortOrder} asc nulls last`,
+      sql`${workflowPhases.sortOrder} asc nulls last`,
+      sql`${tasks.sortOrder} asc nulls last`,
+      asc(tasks.commitmentDate),
+      asc(tasks.title)
+    );
 
   const support = await loadSupport(rows.map((r) => r.task.id));
   return rows.map((r) => ({
@@ -368,7 +388,7 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     workflow: r.workflowId
       ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName!, sortOrder: r.workflowSortOrder! }
       : null,
-    phaseRef: r.task.phaseId && r.phaseName ? { id: r.task.phaseId, name: r.phaseName, sortOrder: r.phaseSortOrder! } : null,
+    phase: r.task.phaseId && r.phaseName ? { id: r.task.phaseId, name: r.phaseName, sortOrder: r.phaseSortOrder! } : null,
     space: r.task.spaceId && r.spaceName ? { id: r.task.spaceId, name: r.spaceName } : null,
     areaColorSlot: r.areaColorSlot ?? null,
     manager: r.task.managerId ? { id: r.task.managerId, name: r.managerName! } : null,
@@ -447,9 +467,25 @@ async function loadLiveTask(id: string): Promise<TaskRow> {
   return row;
 }
 
-/** A user task: free-form, on a project, optionally placed in a stage. */
+/**
+ * A user task on a project, in a tramo (`workflowId` required: INVALID when
+ * missing or not a live tramo), optionally in one of its fases
+ * (PHASE_MISMATCH) and one of the project's espacios (SPACE_MISMATCH). Never
+ * writes `project_stages`: only startTramo starts a tramo (BE §7.5).
+ */
 export async function createUserTask(input: UserTaskInput, actorId: string): Promise<TaskDetail> {
+  if (!input.workflowId) throw flowError("INVALID", "workflowId");
   return insertUserTask(input, actorId, null);
+}
+
+/** Throws INVALID unless `workflowId` is a live (not deleted) tramo. */
+async function assertLiveWorkflow(workflowId: string): Promise<void> {
+  const [row] = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(and(eq(workflows.id, workflowId), isNull(workflows.deletedAt)))
+    .limit(1);
+  if (!row) throw flowError("INVALID", "workflowId");
 }
 
 async function insertUserTask(
@@ -460,6 +496,17 @@ async function insertUserTask(
   if (!input.projectId) throw new Error("TASK_PROJECT_REQUIRED");
   const title = input.title.trim();
   if (!title) throw new Error("TASK_TITLE_REQUIRED");
+  const workflowId = input.workflowId ?? null;
+  const phaseId = input.phaseId ?? null;
+  const spaceId = input.spaceId ?? null;
+  // A subtask takes its parent's tramo and fase as they are (the FK already ties them).
+  if (workflowId && !parentTaskId) await assertLiveWorkflow(workflowId);
+  if (phaseId && !parentTaskId) {
+    // A fase needs a tramo (tasks_phase_needs_workflow_check).
+    if (!workflowId) throw flowError("PHASE_MISMATCH");
+    await assertPhaseInWorkflow(db, phaseId, workflowId);
+  }
+  if (spaceId) await assertSpaceInProject(db, spaceId, input.projectId);
 
   const [row] = await db
     .insert(tasks)
@@ -468,8 +515,9 @@ async function insertUserTask(
       parentTaskId,
       kind: "usuario",
       templateId: null,
-      workflowId: input.workflowId ?? null,
-      phase: clean(input.phase),
+      workflowId,
+      phaseId,
+      spaceId,
       title,
       notes: clean(input.notes),
       createdById: actorId,
@@ -521,11 +569,14 @@ export async function loadSubtaskParent(parentId: string): Promise<TaskRow> {
   return parent;
 }
 
-/** A `usuario` child task with the parent's project, phase and workflow. One level only. */
+/**
+ * A `usuario` child task with the parent's project, tramo and fase; `spaceId`
+ * allowed (must be an espacio of the project). One level only.
+ */
 export async function createSubtask(parentId: string, input: SubtaskInput, actorId: string): Promise<TaskDetail> {
   const parent = await loadSubtaskParent(parentId);
   return insertUserTask(
-    { ...input, projectId: parent.projectId, phase: parent.phase, workflowId: parent.workflowId },
+    { ...input, projectId: parent.projectId, workflowId: parent.workflowId, phaseId: parent.phaseId },
     actorId,
     parent.id
   );
@@ -554,12 +605,50 @@ export async function listSubtasks(parentId: string): Promise<TaskRef[]> {
   }));
 }
 
+/**
+ * Tramo, fase and espacio rules of updateTask (BE §7.5):
+ * - `workflowId` only on a usuario task that has none (legacy tasks the
+ *   backfill couldn't place); any other change → INVALID. Sending the
+ *   current tramo again is a no-op.
+ * - `phaseId` must be a fase of the task's tramo (the new one when set in the
+ *   same patch) → PHASE_MISMATCH; null clears it.
+ * - `spaceId` must be an espacio of the task's project → SPACE_MISMATCH.
+ * - On an admin task, `phaseId` / `spaceId` → ADMIN_TASK.
+ */
+async function applyFlowPatch(before: TaskRow, patch: TaskPatch, set: Partial<TaskRow>): Promise<void> {
+  const isAdmin = before.kind === "admin";
+  if (isAdmin && (patch.phaseId !== undefined || patch.spaceId !== undefined)) throw flowError("ADMIN_TASK");
+
+  let workflowId = before.workflowId;
+  if (patch.workflowId !== undefined && patch.workflowId !== before.workflowId) {
+    if (before.workflowId || isAdmin || before.kind !== "usuario" || !patch.workflowId) {
+      throw flowError("INVALID", "workflowId");
+    }
+    await assertLiveWorkflow(patch.workflowId);
+    set.workflowId = patch.workflowId;
+    workflowId = patch.workflowId;
+  }
+
+  if (patch.phaseId !== undefined) {
+    if (patch.phaseId) {
+      if (!workflowId) throw flowError("PHASE_MISMATCH");
+      await assertPhaseInWorkflow(db, patch.phaseId, workflowId);
+    }
+    set.phaseId = patch.phaseId || null;
+  }
+
+  if (patch.spaceId !== undefined) {
+    if (patch.spaceId) await assertSpaceInProject(db, patch.spaceId, before.projectId);
+    set.spaceId = patch.spaceId || null;
+  }
+}
+
 export async function updateTask(id: string, patch: TaskPatch, actorId: string): Promise<TaskDetail> {
   const before = await loadLiveTask(id);
   const set: Partial<TaskRow> = {};
   if (patch.title !== undefined) set.title = patch.title.trim() || before.title;
   if (patch.notes !== undefined) set.notes = clean(patch.notes);
-  if (patch.phase !== undefined) set.phase = clean(patch.phase);
+  await applyFlowPatch(before, patch, set);
   if (patch.priority !== undefined) set.priority = patch.priority;
   // Picking a built-in status leaves any custom one.
   if (patch.status !== undefined) {
@@ -571,10 +660,10 @@ export async function updateTask(id: string, patch: TaskPatch, actorId: string):
   if (patch.commitmentDate !== undefined) set.commitmentDate = clean(patch.commitmentDate);
   if (patch.reviewDate !== undefined) set.reviewDate = clean(patch.reviewDate);
   if (patch.deliveryDate !== undefined) set.deliveryDate = clean(patch.deliveryDate);
-  // Workflow tasks keep the workflow of their template (rule 2); only user tasks move.
-  if (patch.workflowId !== undefined && before.kind === "usuario") set.workflowId = patch.workflowId;
 
-  const [after] = await db.update(tasks).set(set).where(eq(tasks.id, id)).returning();
+  // A patch that changes nothing (e.g. the current tramo sent again) writes nothing.
+  const [after] =
+    Object.keys(set).length > 0 ? await db.update(tasks).set(set).where(eq(tasks.id, id)).returning() : [before];
   await recordChanges({ entity: "task", entityId: id, actorId, before, after, fields: TASK_TRACKED_FIELDS });
   return (await getTask(id))!;
 }

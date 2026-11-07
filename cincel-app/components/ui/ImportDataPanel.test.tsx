@@ -184,7 +184,6 @@ function makeTask(): TaskDetail {
     },
     workflow: null,
     areaColorSlot: null,
-    phaseRef: null,
     space: null,
     manager: null,
     support: [],

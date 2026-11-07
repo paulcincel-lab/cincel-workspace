@@ -449,3 +449,21 @@ this repo):
 
 | Client | Token created by / on | Export date | Staging batch | Production batch | Go-live | Token revoked | Archive handed to / on | Deleted on |
 | ------ | --------------------- | ----------- | ------------- | ---------------- | ------- | ------------- | ---------------------- | ---------- |
+
+## Stored exports still on disk (project flow pre-flight)
+
+The project flow remap (`docs/specs/project-flow/backend.md` §11.2) reads
+the stored export of each imported project from `import_batches.export_path`.
+Check that the folders are still there before the remap is planned:
+
+```bash
+DATABASE_URL=... npx tsx scripts/monday/check-exports.ts \
+  --projects "Madrid 22,Guadalajara 83,Local Espiropapa" > exports-check.md
+```
+
+Run it where the paths in `export_path` resolve (wizard imports live under
+`MONDAY_IMPORT_DIR`, `/data/monday` in the image). It is read only. Each
+project prints `presente` or `FALTA: <reason>`, with every source board's
+files and `.done` marker; the exit code is 1 when anything is missing. Re-export
+a missing project's boards from monday, then run it again. Paste the output
+on the tracking issue.

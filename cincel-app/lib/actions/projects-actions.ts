@@ -4,14 +4,13 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { retryProjectFolders, syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
 import { notImplemented } from "@/lib/project-flow/not-implemented";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import * as projectSpacesRepository from "@/lib/repositories/project-spaces-repository";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
 import type {
-  ApplyWorkflowPreview,
   HistoryEvent,
   ProjectDetail,
   ProjectInput,
@@ -32,6 +31,14 @@ function revalidateProyectos(id?: string) {
   if (id) revalidatePath(`/proyectos/${id}/ficha`);
 }
 
+/** Changes that move a project between tramos also show on Actividades, Dashboard and Tablero (BE §7.3). */
+function revalidateProjectFlow(id: string) {
+  revalidateProyectos(id);
+  revalidatePath("/actividades", "layout");
+  revalidatePath("/dashboard");
+  revalidatePath("/tablero");
+}
+
 export async function fetchProjectsAction(filters: ProjectFilters = {}): Promise<ProjectListItem[]> {
   const caps = await requireProjectsCapabilities();
   if (!caps.canViewProjects) return [];
@@ -44,6 +51,11 @@ export async function fetchProjectAction(id: string): Promise<ProjectDetail | nu
   return projectsRepository.getProject(id);
 }
 
+/**
+ * Creates the project and, when the first tramo auto-starts on create, starts
+ * it with every fase and no assignee (BE §9.4). Errors: FORBIDDEN,
+ * PROJECT_CLIENT_REQUIRED, EMPTY, INVALID, NAME_TAKEN.
+ */
 export async function createProjectAction(input: ProjectInput): Promise<ProjectDetail> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canCreateProject) {
@@ -52,7 +64,7 @@ export async function createProjectAction(input: ProjectInput): Promise<ProjectD
   const row = await projectsRepository.createProject(input, user.member.id);
   // Drive runs after the response; a failure leaves the project with drive_folder_status = failed.
   after(() => syncProjectFolders(row.id));
-  revalidateProyectos(row.id);
+  revalidateProjectFlow(row.id);
   return row;
 }
 
@@ -66,7 +78,7 @@ export async function updateProjectAction(
   }
   const row = await projectsRepository.updateProject(id, patch, user.member.id);
   if (patch.name !== undefined || patch.code !== undefined) after(() => syncProjectFolderName(id));
-  revalidateProyectos(id);
+  revalidateProjectFlow(id);
   return row;
 }
 
@@ -90,27 +102,6 @@ export async function retryProjectFolderAction(projectId: string): Promise<Retry
   revalidateProyectos(projectId);
   if (result.status === "ready") return { ok: true, status: "ready" };
   return { ok: true, status: "failed", error: result.error };
-}
-
-export async function setProjectStageAction(id: string, workflowId: string): Promise<ProjectDetail> {
-  const user = await requireCapabilityUser();
-  if (!resolveProjectsCapabilities(user).canChangeProjectStage) {
-    throw new Error("FORBIDDEN: project stage change");
-  }
-  const row = await projectsRepository.setProjectStage(id, workflowId, user.member.id);
-  revalidateProyectos(id);
-  return row;
-}
-
-/** Sets every stage the project is in (#435); the most advanced becomes the primary one. */
-export async function setProjectStagesAction(id: string, workflowIds: string[]): Promise<ProjectDetail> {
-  const user = await requireCapabilityUser();
-  if (!resolveProjectsCapabilities(user).canChangeProjectStage) {
-    throw new Error("FORBIDDEN: project stage change");
-  }
-  const row = await projectsRepository.setProjectStages(id, workflowIds, user.member.id);
-  revalidateProyectos(id);
-  return row;
 }
 
 export async function archiveProjectAction(id: string, status: "completado" | "cancelado"): Promise<ProjectDetail> {
@@ -205,38 +196,31 @@ export async function addProjectCommentAction(projectId: string, text: string): 
   revalidateProyectos(projectId);
 }
 
-export async function previewApplyWorkflowAction(
-  projectId: string,
-  workflowId: string
-): Promise<ApplyWorkflowPreview> {
-  const caps = await requireProjectsCapabilities();
-  if (!caps.canEditProjectGeneral) throw new Error("FORBIDDEN: apply workflow preview");
-  return projectsRepository.previewApplyWorkflow(projectId, workflowId);
-}
-
-export async function applyWorkflowAction(
-  projectId: string,
-  workflowId: string,
-  options: { managerId?: string | null; setAsStage?: boolean } = {}
-) {
-  const user = await requireCapabilityUser();
-  if (!resolveProjectsCapabilities(user).canEditProjectGeneral) {
-    throw new Error("FORBIDDEN: apply workflow");
-  }
-  const created = await projectsRepository.applyWorkflow(projectId, workflowId, user.member.id, options);
-  revalidateProyectos(projectId);
-  revalidatePath("/tareas");
-  return created;
-}
-
 // ── Current tramo and espacios (project flow BE §7.3) ───────────────────────
 
+const isUuid = (value: unknown): value is string => typeof value === "string" && UUID_RE.test(value);
+
 /**
- * Replaces setProjectStageAction / setProjectStagesAction.
- * `canChangeProjectStage`. Errors: FORBIDDEN, NOT_FOUND, NOT_STARTED.
+ * Makes an already started tramo the project's current one (BE §7.3).
+ * `canChangeProjectStage`. A tramo with no stage row gives NOT_STARTED, except
+ * for an admin on a project without a current tramo ("Asignar tramo"): that
+ * opens the stage through `startTramo` with `stageOnly` (no fases, no tasks).
+ * Errors: FORBIDDEN, NOT_FOUND, NOT_STARTED.
  */
 export async function setProjectCurrentTramoAction(id: string, workflowId: string): Promise<ProjectDetail> {
-  return notImplemented("setProjectCurrentTramoAction", id, workflowId);
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canChangeProjectStage) throw new Error("FORBIDDEN");
+  if (!isUuid(id) || !isUuid(workflowId)) throw new Error("NOT_FOUND");
+
+  let row: ProjectDetail;
+  try {
+    row = await projectsRepository.setProjectCurrentTramo(id, workflowId, user.member.id);
+  } catch (err) {
+    if (!(err instanceof Error && err.message === "NOT_STARTED" && canSeeAdminData(user))) throw err;
+    row = await projectsRepository.assignProjectTramo(id, workflowId, user.member.id);
+  }
+  revalidateProjectFlow(id);
+  return row;
 }
 
 /** Signed-in user allowed to edit the project's general data (espacios); FORBIDDEN otherwise. */

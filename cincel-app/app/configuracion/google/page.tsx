@@ -13,7 +13,9 @@ export default async function ConfiguracionGooglePage() {
   try {
     const [mappingRows, positionRows] = await Promise.all([listGroupMappingsAction(), fetchPositionsAction()]);
     mappings = mappingRows;
-    positions = positionRows.map((position) => ({ id: position.id, name: position.name }));
+    positions = positionRows
+      .filter((position) => position.active || position.googleManaged)
+      .map((position) => ({ id: position.id, name: position.name }));
   } catch {
     // Not authorized or no session: the guard redirects and nothing is loaded.
   }

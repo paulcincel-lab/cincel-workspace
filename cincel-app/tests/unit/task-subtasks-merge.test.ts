@@ -121,10 +121,14 @@ describe.skipIf(!url)("subtasks and mergeTasks (test DB)", () => {
   }
 
   describe("createSubtask", () => {
-    it("creates a usuario child with the parent's project, phase and workflow", async () => {
+    it("creates a usuario child with the parent's project, fase and tramo", async () => {
       await inTx(async (tx, ctx) => {
+        const [fase] = await tx
+          .insert(schema.workflowPhases)
+          .values({ workflowId: ctx.workflowId, name: "Anteproyecto" })
+          .returning();
         const parent = await addTask(tx, ctx, "Padre", {
-          phase: "Anteproyecto",
+          phaseId: fase.id,
           workflowId: ctx.workflowId,
         });
         const child = await createSubtask(
@@ -140,7 +144,8 @@ describe.skipIf(!url)("subtasks and mergeTasks (test DB)", () => {
           kind: "usuario",
           title: "Hija",
           projectId: ctx.projectId,
-          phase: "Anteproyecto",
+          phaseId: fase.id,
+          phase: { id: fase.id, name: "Anteproyecto" },
           workflowId: ctx.workflowId,
           parentTaskId: parent.id,
           parentTitle: "Padre",

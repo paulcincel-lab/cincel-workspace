@@ -38,7 +38,7 @@ const PRIORITY_LABEL: Record<string, string> = {
 function toDraft(template: WorkflowTaskTemplate): TemplateDraft {
   return {
     title: template.title,
-    phase: template.phase ?? "",
+    phaseId: template.phaseId,
     notes: template.notes ?? "",
     defaultPriority: template.defaultPriority,
     commitmentOffsetDays:
@@ -67,7 +67,7 @@ function toInput(draft: TemplateDraft): WorkflowTaskTemplateInput {
 
   return {
     title: draft.title.trim(),
-    phase: draft.phase.trim() || null,
+    phaseId: draft.phaseId,
     notes: draft.notes.trim() || null,
     defaultPriority: draft.defaultPriority,
     commitmentOffsetDays: toOffset(draft.commitmentOffsetDays),
@@ -146,6 +146,10 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
       setFormError("El título es obligatorio.");
       return;
     }
+    if (!draft.phaseId) {
+      setFormError("Elige una fase.");
+      return;
+    }
 
     try {
       const input = toInput(draft);
@@ -210,7 +214,7 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
         id: "phase",
         header: "Fase",
         cell: ({ row }) =>
-          row.original.phase || (
+          row.original.phaseName || (
             <span className="text-muted-foreground">—</span>
           ),
       },
@@ -341,6 +345,7 @@ export function WorkflowsClient({ initialWorkflows }: WorkflowsClientProps) {
         onClose={closeEditor}
         editingId={editingId}
         workflowName={selectedWorkflow?.name ?? ""}
+        phases={selectedWorkflow?.phases ?? []}
         draft={draft}
         onChangeDraft={setDraft}
         formError={formError}

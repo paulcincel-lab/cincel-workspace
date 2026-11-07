@@ -86,7 +86,6 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     project: { id: "p1", name: "Residencia Valle Alto", clientName: "Cliente" },
     workflow: null,
     areaColorSlot: null,
-    phaseRef: null,
     space: null,
     manager: { id: "u1", name: "Ana Ruiz" },
     support: [],

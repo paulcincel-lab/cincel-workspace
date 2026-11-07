@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
@@ -11,15 +11,11 @@ import {
   projectStages,
   projects,
   staff,
-  tasks,
-  workflowTaskTemplates,
+  workflowPhases,
   workflows,
 } from "@/lib/db/schema";
-import { rethrowProjectNameTaken } from "@/lib/project-flow/old-ui-compat";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
-import { toTemplate } from "@/lib/repositories/workflows-repository";
 import type {
-  ApplyWorkflowPreview,
   ContactRef,
   ContactType,
   DriveFileInput,
@@ -32,14 +28,13 @@ import type {
   ProjectListItem,
   ProjectStatus,
   ProjectTramo,
-  Task,
   WorkflowPhaseRef,
   WorkflowRef,
 } from "@/lib/types/core";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
-import { toTask } from "@/lib/repositories/tasks-repository";
+import { flowError } from "@/lib/project-flow/errors";
+import { startTramo } from "@/lib/project-flow/start-tramo";
+import type { FlowTx } from "@/lib/project-flow/db";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
-import { normalizePhases } from "@/lib/proyectos/phases";
 
 type ProjectRow = typeof projects.$inferSelect;
 
@@ -59,8 +54,6 @@ export function toProject(row: ProjectRow): Project {
     originStaffId: row.originStaffId,
     status: row.status,
     currentWorkflowId: row.currentWorkflowId,
-    phase: row.phase,
-    phases: row.phases,
     projectType: row.projectType,
     addressStreet: row.addressStreet,
     addressCity: row.addressCity,
@@ -82,7 +75,6 @@ const PROJECT_TRACKED_FIELDS = [
   "clientId",
   "status",
   "currentWorkflowId",
-  "phase",
   "projectType",
   "addressStreet",
   "addressCity",
@@ -125,12 +117,6 @@ async function loadStageRows(projectIds: string[]): Promise<Map<string, StageRow
 
 const stageRef = (r: StageRow): WorkflowRef => ({ id: r.id, key: r.key, name: r.name, sortOrder: r.sortOrder });
 
-/** Every stage of each project, in workflow order (Presale → Diseño → …). */
-async function loadStages(projectIds: string[]): Promise<Map<string, WorkflowRef[]>> {
-  const rows = await loadStageRows(projectIds);
-  return new Map([...rows].map(([id, list]) => [id, list.map(stageRef)]));
-}
-
 /** `ProjectTramo`s from stage rows; `current` = the project's `current_workflow_id`. */
 function toTramos(rows: StageRow[] | undefined, currentWorkflowId: string | null): ProjectTramo[] {
   return (rows ?? []).map((r) => ({
@@ -146,8 +132,6 @@ const toClient = (clientId: string | null, name: string | null, type: ContactTyp
 
 const manager = alias(staff, "manager");
 const coordinator = alias(staff, "coordinator");
-
-const primaryAreaFrom = sql`from core.area_workflows aw join core.areas a on a.id = aw.area_id where aw.workflow_id = ${projects.currentWorkflowId} and a.deleted_at is null order by a.sort_order, a.name limit 1`;
 
 export type ProjectFilters = {
   status?: ProjectStatus | ProjectStatus[];
@@ -181,10 +165,6 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
       totalTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false)::int`,
       openTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status <> 'completado')::int`,
       blockedTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status = 'bloqueado')::int`,
-      // Área that owns the primary stage (first by sort order), as on tasks.
-      areaId: sql<string | null>`(select a.id ${primaryAreaFrom})`,
-      areaName: sql<string | null>`(select a.name ${primaryAreaFrom})`,
-      areaColorSlot: sql<number | null>`(select a.color_slot ${primaryAreaFrom})`,
       // First catalog fase of the current tramo with an open, live, unarchived task.
       activePhase: sql<WorkflowPhaseRef | null>`(select json_build_object('id', p.id, 'name', p.name, 'sortOrder', p.sort_order) from core.workflow_phases p where p.workflow_id = ${projects.currentWorkflowId} and exists (select 1 from core.tasks t where t.project_id = ${projects.id} and t.phase_id = p.id and t.deleted_at is null and t.archived = false and t.status <> 'completado') order by p.sort_order, p.name limit 1)`,
     })
@@ -228,7 +208,6 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
     manager: r.managerId ? { id: r.managerId, name: r.managerName! } : null,
     coordinator: r.coordinatorId ? { id: r.coordinatorId, name: r.coordinatorName! } : null,
     taskCounts: { total: r.totalTasks, open: r.openTasks, blocked: r.blockedTasks },
-    area: r.areaId ? { id: r.areaId, name: r.areaName!, colorSlot: r.areaColorSlot ?? null } : null,
   }));
 }
 
@@ -282,16 +261,13 @@ function toLink(row: typeof projectLinks.$inferSelect): ProjectLink {
   return { id: row.id, kind: row.kind as ProjectLink["kind"], title: row.title, url: row.url, driveFileId: row.driveFileId };
 }
 
+/** Column values of a project input; the current tramo is written only by `startTramo` / `setProjectCurrentTramo`. */
 function toValues(input: ProjectInput) {
-  const phases = normalizePhases(input.phases ?? [input.phase]);
   return {
     code: clean(input.code),
     name: input.name.trim(),
     clientId: input.clientId,
     status: input.status ?? "activo",
-    currentWorkflowId: input.currentWorkflowId ?? null,
-    phases,
-    phase: phases.length > 0 ? phases.join(", ") : null,
     projectType: clean(input.projectType),
     addressStreet: clean(input.addressStreet),
     addressCity: clean(input.addressCity),
@@ -305,31 +281,94 @@ function toValues(input: ProjectInput) {
   };
 }
 
+const UNIQUE_VIOLATION = "23505";
+/** `projects_name_lower_uq` (0024) and the per-client index it replaces. */
+const PROJECT_NAME_INDEXES = new Set(["projects_name_lower_uq", "projects_client_name_lower_uq"]);
+
+/** Whether an error (or its `cause`, as drizzle wraps driver errors) is a project name unique violation. */
+export function isProjectNameTaken(err: unknown): boolean {
+  let current: unknown = err;
+  for (let depth = 0; current && depth < 5; depth++) {
+    if (typeof current === "object") {
+      const e = current as { code?: unknown; constraint_name?: unknown; constraint?: unknown };
+      if (e.code === UNIQUE_VIOLATION) {
+        const constraint = e.constraint_name ?? e.constraint;
+        return typeof constraint === "string" && PROJECT_NAME_INDEXES.has(constraint);
+      }
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/** Rethrows a project name unique violation as NAME_TAKEN. */
+function rethrowNameTaken(err: unknown): never {
+  if (isProjectNameTaken(err)) throw flowError("NAME_TAKEN");
+  throw err;
+}
+
+/** The first active tramo by `sort_order` when it auto-starts on create, with its active fases in catalog order. */
+async function onCreateTramo(tx: FlowTx): Promise<{ id: string; phaseIds: string[] } | null> {
+  const [first] = await tx
+    .select({ id: workflows.id, autoStart: workflows.autoStart })
+    .from(workflows)
+    .where(and(eq(workflows.active, true), isNull(workflows.deletedAt)))
+    .orderBy(asc(workflows.sortOrder), asc(workflows.name))
+    .limit(1);
+  if (!first || first.autoStart !== "on_create") return null;
+  const phases = await tx
+    .select({ id: workflowPhases.id })
+    .from(workflowPhases)
+    .where(and(eq(workflowPhases.workflowId, first.id), eq(workflowPhases.active, true)))
+    .orderBy(asc(workflowPhases.sortOrder), asc(workflowPhases.name));
+  return { id: first.id, phaseIds: phases.map((p) => p.id) };
+}
+
 /**
- * Create a project. The client must be a `cliente` contact and the stage a
- * workflow; the database enforces the first, this checks the second up front
- * so the caller gets a clear error.
+ * Create a project (BE §9.4), in one transaction: insert it, then, when the
+ * first active tramo auto-starts on create, start it with every active fase
+ * and no assignee (`startTramo`, trigger `on_create`). The create form still
+ * requires a client until the name-only sheet ships. Errors:
+ * PROJECT_CLIENT_REQUIRED, EMPTY, NAME_TAKEN.
  */
 export async function createProject(input: ProjectInput, actorId: string): Promise<ProjectDetail> {
   if (!input.clientId) throw new Error("PROJECT_CLIENT_REQUIRED");
-  if (!input.currentWorkflowId) throw new Error("PROJECT_STAGE_REQUIRED");
+  const name = input.name?.trim() ?? "";
+  if (!name) throw flowError("EMPTY");
+  if (name.length > 120) throw flowError("INVALID", "name");
 
-  // NAME_TAKEN: lower(name) is unique among live active/paused projects (BE §9.9).
-  const [row] = await db
-    .insert(projects)
-    .values(toValues(input))
-    .returning()
-    .catch(rethrowProjectNameTaken);
-  await db.insert(projectStages).values({ projectId: row.id, workflowId: input.currentWorkflowId }).onConflictDoNothing();
-  await recordChanges({
-    entity: "project",
-    entityId: row.id,
-    actorId,
-    before: { name: null },
-    after: { name: row.name },
-    fields: ["name"],
-  });
-  return (await getProject(row.id))!;
+  const id = await db
+    .transaction(async (tx) => {
+      const [row] = await tx
+        .insert(projects)
+        .values({ ...toValues({ ...input, name }), currentWorkflowId: null })
+        .returning();
+      const tramo = await onCreateTramo(tx);
+      if (tramo && tramo.phaseIds.length > 0) {
+        await startTramo(tx, {
+          projectId: row.id,
+          workflowId: tramo.id,
+          phaseIds: tramo.phaseIds,
+          assignment: { mode: "none" },
+          actorId,
+          trigger: "on_create",
+        });
+      }
+      await recordChanges(
+        {
+          entity: "project",
+          entityId: row.id,
+          actorId,
+          before: { name: null },
+          after: { name: row.name },
+          fields: ["name"],
+        },
+        tx
+      );
+      return row.id;
+    })
+    .catch(rethrowNameTaken);
+  return (await getProject(id))!;
 }
 
 export async function updateProject(
@@ -352,14 +391,6 @@ export async function updateProject(
     name: pick("name") ?? before.name,
     clientId: pick("clientId") ?? before.clientId,
     status: pick("status"),
-    currentWorkflowId: pick("currentWorkflowId") ?? null,
-    // `phases` wins; a caller that only sends the legacy single `phase` replaces the list with it.
-    phases:
-      patch.phases !== undefined
-        ? patch.phases
-        : patch.phase !== undefined
-          ? normalizePhases([patch.phase])
-          : before.phases,
     projectType: pick("projectType"),
     addressStreet: pick("addressStreet"),
     addressCity: pick("addressCity"),
@@ -372,12 +403,13 @@ export async function updateProject(
     contractAmountMxn: pick("contractAmountMxn"),
   });
   // NAME_TAKEN also on un-archiving a project whose name is now taken (BE §7.3).
+  if (!merged.name) throw flowError("EMPTY");
   const [after] = await db
     .update(projects)
     .set(merged)
     .where(eq(projects.id, id))
     .returning()
-    .catch(rethrowProjectNameTaken);
+    .catch(rethrowNameTaken);
   await recordChanges({
     entity: "project",
     entityId: id,
@@ -389,79 +421,72 @@ export async function updateProject(
   return (await getProject(id))!;
 }
 
-/** Adds `workflowId` to the project's stages and makes it the primary one. */
-export async function setProjectStage(
+/** The live project's current tramo and whether `workflowId` has a stage row on it. */
+async function loadTramoState(
   id: string,
-  workflowId: string,
-  actorId: string
-): Promise<ProjectDetail> {
-  await db.insert(projectStages).values({ projectId: id, workflowId }).onConflictDoNothing();
-  return updateProject(id, { currentWorkflowId: workflowId }, actorId);
-}
-
-/**
- * Replaces the set of stages a project is in (#435). At least one is required.
- * The most advanced selected stage (highest workflow sort order) becomes the
- * primary `currentWorkflowId`, which the rest of the app still reads.
- */
-export async function setProjectStages(
-  id: string,
-  workflowIds: string[],
-  actorId: string
-): Promise<ProjectDetail> {
-  const wanted = Array.from(new Set(workflowIds));
-  if (wanted.length === 0) throw new Error("PROJECT_STAGE_REQUIRED");
-
-  const [project] = await db
-    .select()
+  workflowId: string
+): Promise<{ currentWorkflowId: string | null; started: boolean } | null> {
+  const [row] = await db
+    .select({
+      currentWorkflowId: projects.currentWorkflowId,
+      started: sql<boolean>`exists (select 1 from core.project_stages ps where ps.project_id = ${projects.id} and ps.workflow_id = ${workflowId})`,
+    })
     .from(projects)
     .where(and(eq(projects.id, id), isNull(projects.deletedAt)))
     .limit(1);
-  if (!project) throw new Error("PROJECT_NOT_FOUND");
+  return row ?? null;
+}
 
-  const selected = await db
-    .select({ id: workflows.id, name: workflows.name, sortOrder: workflows.sortOrder })
-    .from(workflows)
-    .where(and(inArray(workflows.id, wanted), isNull(workflows.deletedAt)))
-    .orderBy(asc(workflows.sortOrder), asc(workflows.name));
-  if (selected.length !== wanted.length) throw new Error("WORKFLOW_NOT_FOUND");
-
-  const before = (await loadStages([id])).get(id) ?? [];
-  const primary = selected[selected.length - 1].id;
-
-  await db.transaction(async (tx) => {
-    await tx
-      .delete(projectStages)
-      .where(and(eq(projectStages.projectId, id), sql`${projectStages.workflowId} not in (${sql.join(wanted.map((w) => sql`${w}`), sql`, `)})`));
-    await tx
-      .insert(projectStages)
-      .values(wanted.map((workflowId) => ({ projectId: id, workflowId })))
-      .onConflictDoNothing();
-    if (project.currentWorkflowId !== primary) {
-      await tx.update(projects).set({ currentWorkflowId: primary }).where(eq(projects.id, id));
-    }
-    await recordChanges(
-      {
-        entity: "project",
-        entityId: id,
-        actorId,
-        before: { stages: before.map((s) => s.name).join(", ") || null },
-        after: { stages: selected.map((s) => s.name).join(", ") },
-        fields: ["stages"],
-      },
-      tx
-    );
-  });
-
+/**
+ * Sets the current tramo (BE §8.5), replacing the old stage setters:
+ * requires a `project_stages` row (NOT_STARTED) and records the history change.
+ * Errors: NOT_FOUND (project or tramo), NOT_STARTED.
+ */
+export async function setProjectCurrentTramo(id: string, workflowId: string, actorId: string): Promise<ProjectDetail> {
+  const state = await loadTramoState(id, workflowId);
+  if (!state) throw flowError("NOT_FOUND");
+  if (!state.started) throw flowError("NOT_STARTED");
+  if (state.currentWorkflowId !== workflowId) {
+    await db.transaction(async (tx) => {
+      await tx.update(projects).set({ currentWorkflowId: workflowId }).where(eq(projects.id, id));
+      await recordChanges(
+        {
+          entity: "project",
+          entityId: id,
+          actorId,
+          before: { currentWorkflowId: state.currentWorkflowId },
+          after: { currentWorkflowId: workflowId },
+          fields: ["currentWorkflowId"],
+        },
+        tx
+      );
+    });
+  }
   return (await getProject(id))!;
 }
 
 /**
- * Sets the current tramo (BE §8.5), replacing setProjectStage/setProjectStages:
- * requires a `project_stages` row (NOT_STARTED) and records the history change.
+ * Admin "Asignar tramo" (BE §7.3): on a project without a current tramo, opens
+ * the stage of `workflowId` and makes it current through `startTramo` with
+ * `stageOnly` (no fases, no tasks), so only `startTramo` writes stages.
+ * Errors: NOT_FOUND, NOT_STARTED (the project already has a current tramo).
  */
-export async function setProjectCurrentTramo(id: string, workflowId: string, actorId: string): Promise<ProjectDetail> {
-  return notImplemented("setProjectCurrentTramo", id, workflowId, actorId);
+export async function assignProjectTramo(id: string, workflowId: string, actorId: string): Promise<ProjectDetail> {
+  const state = await loadTramoState(id, workflowId);
+  if (!state) throw flowError("NOT_FOUND");
+  if (state.currentWorkflowId !== null) throw flowError("NOT_STARTED");
+  await db.transaction((tx) =>
+    startTramo(tx, {
+      projectId: id,
+      workflowId,
+      phaseIds: [],
+      assignment: { mode: "none" },
+      actorId,
+      trigger: "manual",
+      stageOnly: true,
+    })
+  );
+  return (await getProject(id))!;
 }
 
 /** Soft delete. Tasks stay linked; they disappear with the project on read. */
@@ -597,125 +622,4 @@ export async function upsertDriveFile(input: DriveFileInput): Promise<string> {
     .onConflictDoUpdate({ target: driveFiles.googleFileId, set: values })
     .returning({ id: driveFiles.id });
   return row.id;
-}
-
-// ── Apply workflow ──────────────────────────────────────────────────────────
-
-/** Which templates would be created and which are already on the project. */
-export async function previewApplyWorkflow(
-  projectId: string,
-  workflowId: string
-): Promise<ApplyWorkflowPreview> {
-  const [wf] = await db
-    .select({ id: workflows.id, key: workflows.key, name: workflows.name, sortOrder: workflows.sortOrder })
-    .from(workflows)
-    .where(and(eq(workflows.id, workflowId), isNull(workflows.deletedAt)))
-    .limit(1);
-  if (!wf) throw new Error("WORKFLOW_NOT_FOUND");
-
-  const templates = await db
-    .select()
-    .from(workflowTaskTemplates)
-    .where(and(eq(workflowTaskTemplates.workflowId, workflowId), eq(workflowTaskTemplates.active, true)))
-    .orderBy(asc(workflowTaskTemplates.sortOrder));
-
-  const applied = await db
-    .select({ templateId: tasks.templateId })
-    .from(tasks)
-    .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt), ne(tasks.kind, "usuario")));
-  const appliedIds = new Set(applied.map((a) => a.templateId));
-
-  const create = templates.filter((t) => !appliedIds.has(t.id)).map((t) => toTemplate(t));
-  const skip = templates.filter((t) => appliedIds.has(t.id)).map((t) => toTemplate(t));
-  return { workflow: wf, create, skip };
-}
-
-function addDays(base: string | null, days: number | null): string | null {
-  if (!base || days === null) return null;
-  const d = new Date(`${base}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-/**
- * Create one workflow task per template not yet on the project. Idempotent:
- * the partial unique on (project, template) makes a re-apply a no-op.
- * Dates are offsets from the project's start date when both are set.
- */
-export async function applyWorkflow(
-  projectId: string,
-  workflowId: string,
-  actorId: string,
-  options: { managerId?: string | null; setAsStage?: boolean } = {}
-): Promise<Task[]> {
-  const [project] = await db
-    .select()
-    .from(projects)
-    .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
-    .limit(1);
-  if (!project) throw new Error("PROJECT_NOT_FOUND");
-
-  const preview = await previewApplyWorkflow(projectId, workflowId);
-  if (preview.create.length === 0 && !options.setAsStage) return [];
-
-  const rows = await db.transaction(async (tx) => {
-    const inserted =
-      preview.create.length === 0
-        ? []
-        : await tx
-            .insert(tasks)
-            .values(
-              preview.create.map((t) => ({
-                projectId,
-                kind: "workflow" as const,
-                templateId: t.id,
-                workflowId,
-                phase: t.phase,
-                title: t.title,
-                notes: t.notes,
-                createdById: actorId,
-                managerId: options.managerId ?? project.managerId ?? null,
-                priority: t.defaultPriority,
-                commitmentDate: addDays(project.startDate, t.commitmentOffsetDays),
-                reviewDate: addDays(project.startDate, t.reviewOffsetDays),
-                deliveryDate: addDays(project.startDate, t.deliveryOffsetDays),
-              }))
-            )
-            .onConflictDoNothing()
-            .returning();
-
-    if (options.setAsStage) {
-      await tx.insert(projectStages).values({ projectId, workflowId }).onConflictDoNothing();
-    }
-    if (options.setAsStage && project.currentWorkflowId !== workflowId) {
-      await tx.update(projects).set({ currentWorkflowId: workflowId }).where(eq(projects.id, projectId));
-      await recordChanges(
-        {
-          entity: "project",
-          entityId: projectId,
-          actorId,
-          before: { currentWorkflowId: project.currentWorkflowId },
-          after: { currentWorkflowId: workflowId },
-          fields: ["currentWorkflowId"],
-        },
-        tx
-      );
-    }
-    if (inserted.length > 0) {
-      await recordChanges(
-        {
-          entity: "project",
-          entityId: projectId,
-          actorId,
-          before: { workflow_applied: null },
-          after: { workflow_applied: `${preview.workflow.key}: ${inserted.length}` },
-          fields: ["workflow_applied"],
-        },
-        tx
-      );
-    }
-    return inserted;
-  });
-
-  return rows.map(toTask);
 }

@@ -61,7 +61,6 @@ function makeTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
     },
     workflow: null,
     areaColorSlot: null,
-    phaseRef: null,
     space: null,
     manager: null,
     support: [],

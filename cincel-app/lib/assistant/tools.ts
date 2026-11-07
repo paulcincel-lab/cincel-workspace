@@ -9,7 +9,8 @@ import {
   resolveClientsCapabilities,
   resolveProjectsCapabilities,
 } from "@/lib/auth/permissions";
-import { fetchProjectsAction, createProjectAction, applyWorkflowAction, deleteProjectAction } from "@/lib/actions/projects-actions";
+import { fetchProjectsAction, createProjectAction, deleteProjectAction } from "@/lib/actions/projects-actions";
+import { startTramoAction } from "@/lib/actions/tramo-start-actions";
 import { fetchTasksAction, createUserTaskAction, assignTaskAction, mergeTasksAction } from "@/lib/actions/tasks-actions";
 import { fetchContactsAction, createContactAction, mergeContactsAction } from "@/lib/actions/contacts-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
@@ -189,7 +190,7 @@ export const list_activities_due = tool({
       description: t.title,
       project: t.project.name,
       workflow: t.workflow?.name ?? null,
-      phase: t.phase,
+      phase: t.phase?.name ?? null,
       status: t.status,
       priority: t.priority,
       commitmentDate: t.commitmentDate,
@@ -307,11 +308,10 @@ export const create_task = tool({
     workflow: WORKFLOW_ENUM.describe("Flujo de trabajo"),
     manager: z.string().optional().describe("Nombre del responsable"),
     priority: z.enum(["alta", "media", "baja"]).default("media"),
-    phase: z.string().optional(),
     commitmentDate: z.string().optional().describe("Fecha de entrega YYYY-MM-DD"),
     reviewDate: z.string().optional().describe("Fecha de revisión YYYY-MM-DD"),
   }),
-  execute: async ({ description, project, workflow, manager, priority, phase, commitmentDate, reviewDate }) => {
+  execute: async ({ description, project, workflow, manager, priority, commitmentDate, reviewDate }) => {
     const projectResolved = await resolveProject(project);
     if (!projectResolved.ok) return projectResolved;
 
@@ -329,7 +329,6 @@ export const create_task = tool({
       projectId: projectResolved.value.id,
       title: description,
       workflowId: workflowResolved.value.id,
-      phase,
       managerId,
       priority: priority as TaskPriority,
       commitmentDate,
@@ -495,11 +494,22 @@ export const onboard_client = tool({
     const project = await createProjectAction({
       name: projectName,
       clientId: contact.id,
-      currentWorkflowId: workflowResolved.value.id,
       managerId,
     });
 
-    const createdTasks = await applyWorkflowAction(project.id, workflowResolved.value.id, { managerId });
+    // Creating the project may already have started the first tramo; startTramo
+    // only adds the templates still missing, so this is safe either way.
+    const phaseIds = workflowResolved.value.phases.filter((p) => p.active).map((p) => p.id);
+    if (phaseIds.length > 0) {
+      await startTramoAction({
+        projectId: project.id,
+        workflowId: workflowResolved.value.id,
+        phaseIds,
+        assignment: managerId
+          ? { mode: "by_phase", managers: Object.fromEntries(phaseIds.map((id) => [id, managerId])) }
+          : { mode: "none" },
+      });
+    }
 
     for (const title of extraTasks ?? []) {
       await createUserTaskAction({
@@ -515,7 +525,8 @@ export const onboard_client = tool({
       client: { id: contact.id, name: contact.name },
       project: { id: project.id, name: project.name },
       workflow: workflowResolved.value.name,
-      tasksCreated: createdTasks.length + (extraTasks?.length ?? 0),
+      // Counts the auto-started tasks too, which the start above skips.
+      tasksCreated: (await fetchTasksAction({ projectId: project.id })).length,
     };
   },
 });
