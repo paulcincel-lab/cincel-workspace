@@ -21,9 +21,11 @@ const forbiddenImports = [
 
 let eslint: ESLint;
 
-beforeAll(() => {
+beforeAll(async () => {
   eslint = new ESLint({ cwd: appRoot });
-});
+  // Load the config and plugins once here, so the cold start does not count against the first case.
+  await eslint.lintText("export {};\n", { filePath: resolve(appRoot, portalPaths[0]) });
+}, 120_000);
 
 async function restrictedImportMessages(code: string, filePath: string) {
   const [result] = await eslint.lintText(code, { filePath: resolve(appRoot, filePath) });

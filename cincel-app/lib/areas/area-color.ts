@@ -71,3 +71,22 @@ export function areaColorVar(slot: number | null | undefined): string {
 export function areaColorLabel(slot: number | null | undefined): string {
   return isAreaColorSlot(slot) ? `Color ${slot}` : "Neutro";
 }
+
+/**
+ * Tinted chip classes for a color slot (redesign FE §14.5): the chart color
+ * mixed into the surface (14 % light, 22 % dark) with the slot's ink as text,
+ * falling back to the foreground while a theme has no ink token. Null slot =
+ * neutral muted chip.
+ */
+const TINT_CLASS: Record<AreaColorSlot, string> = {
+  1: "bg-chart-1/14 dark:bg-chart-1/22 text-[color:var(--chart-1-ink,var(--foreground))]",
+  2: "bg-chart-2/14 dark:bg-chart-2/22 text-[color:var(--chart-2-ink,var(--foreground))]",
+  3: "bg-chart-3/14 dark:bg-chart-3/22 text-[color:var(--chart-3-ink,var(--foreground))]",
+  4: "bg-chart-4/14 dark:bg-chart-4/22 text-[color:var(--chart-4-ink,var(--foreground))]",
+  5: "bg-chart-5/14 dark:bg-chart-5/22 text-[color:var(--chart-5-ink,var(--foreground))]",
+};
+const NEUTRAL_TINT_CLASS = "bg-muted text-foreground";
+
+export function areaTintClass(slot: number | null | undefined): string {
+  return isAreaColorSlot(slot) ? TINT_CLASS[slot] : NEUTRAL_TINT_CLASS;
+}

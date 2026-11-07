@@ -12,13 +12,9 @@ import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { formatDateDMY } from "@/lib/utils/date";
 import { tramoPhaseLabel } from "@/lib/tasks/labels";
-import {
-  BASE_STATUSES,
-  BASE_STATUS_LABEL,
-  customStatusValue,
-  parseStatusValue,
-  statusSelectValue,
-} from "@/lib/tasks/status-options";
+import { parseStatusValue, statusSelectValue } from "@/lib/tasks/status-options";
+import { boardColumns, flattenBoard, groupTasksByColumn } from "@/components/tablero/board-model";
+import { useBoardDrag } from "@/components/tablero/useBoardDrag";
 import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import {
   fetchBoardAction,
@@ -44,9 +40,6 @@ import type {
   WorkflowDetail,
   WorkflowRef,
 } from "@/lib/types/core";
-
-/** A board column: one per built-in status, then one per custom status. Keyed by the status select value. */
-type BoardColumn = { key: string; label: string };
 
 // The board query itself stays cheap even with thousands of tasks (see
 // docs/phases/rebuild-phase-8-hardening.md profiling notes), but rendering
@@ -76,10 +69,6 @@ interface TableroClientProps {
   projectTramos?: Record<string, WorkflowRef | null>;
 }
 
-function flattenBoard(board: Record<TaskStatus, TaskListItem[]>): TaskListItem[] {
-  return BASE_STATUSES.flatMap((s) => board[s] ?? []);
-}
-
 export function TableroClient({ initialBoard, customStatuses, workflows, projectTramos = {} }: TableroClientProps) {
   const [boardTasks, setBoardTasks] = useState<TaskListItem[]>(() => flattenBoard(initialBoard));
   const [visibleCount, setVisibleCount] = useState<Record<string, number>>({});
@@ -87,8 +76,6 @@ export function TableroClient({ initialBoard, customStatuses, workflows, project
   const [projectId, setProjectId] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
-  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
-  const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
 
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const capabilities = useMemo(() => resolveActivitiesCapabilities(authenticatedUser), [authenticatedUser]);
@@ -102,26 +89,17 @@ export function TableroClient({ initialBoard, customStatuses, workflows, project
     [workflows]
   );
 
-  const columns = useMemo<BoardColumn[]>(
-    () => [
-      ...BASE_STATUSES.map((s) => ({ key: s as string, label: BASE_STATUS_LABEL[s] })),
-      ...customStatuses.map((c) => ({ key: customStatusValue(c.id), label: c.name })),
-    ],
-    [customStatuses]
-  );
+  const columns = useMemo(() => boardColumns(customStatuses), [customStatuses]);
 
   // Each task sits in its custom status's column when it has one, else in its built-in status's.
-  const filteredBoard = useMemo(() => {
-    const keys = new Set(columns.map((c) => c.key));
-    const next: Record<string, TaskListItem[]> = Object.fromEntries(columns.map((c) => [c.key, []]));
-    boardTasks
-      .filter((t) => matchesMemberFilter(t, memberIds) && matchesProjectFilter(t, projectId))
-      .forEach((t) => {
-        const key = statusSelectValue(t);
-        next[keys.has(key) ? key : t.status].push(t);
-      });
-    return next;
-  }, [boardTasks, columns, memberIds, projectId]);
+  const filteredBoard = useMemo(
+    () =>
+      groupTasksByColumn(
+        boardTasks.filter((t) => matchesMemberFilter(t, memberIds) && matchesProjectFilter(t, projectId)),
+        columns
+      ),
+    [boardTasks, columns, memberIds, projectId]
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -169,26 +147,11 @@ export function TableroClient({ initialBoard, customStatuses, workflows, project
     });
   }
 
-  function handleDragStart(task: TaskListItem) {
-    if (!canDragTask(task)) return;
-    setDraggingTaskId(task.id);
-  }
-
-  function handleDragEnd() {
-    setDraggingTaskId(null);
-    setDragOverStatus(null);
-  }
-
   // The drag-and-drop flow must never move a card locally before the server
   // confirms the status change — only after setTaskStatusAction resolves do
   // we update `board`, so the UI never shows a status the server hasn't
   // accepted (see docs/phases/rebuild-phase-6-tasks.md risk note).
-  async function handleDrop(columnKey: string) {
-    const taskId = draggingTaskId;
-    setDraggingTaskId(null);
-    setDragOverStatus(null);
-    if (!taskId) return;
-
+  async function handleDrop(taskId: string, columnKey: string) {
     const task = boardTasks.find((t) => t.id === taskId);
     if (!task || statusSelectValue(task) === columnKey || !canDragTask(task)) return;
 
@@ -206,6 +169,11 @@ export function TableroClient({ initialBoard, customStatuses, workflows, project
       await refresh();
     }
   }
+
+  const { draggingTaskId, dragOverKey: dragOverStatus, cardProps, columnProps } = useBoardDrag<TaskListItem>({
+    canDrag: canDragTask,
+    onDrop: handleDrop,
+  });
 
   async function reloadAfterDependencyChange() {
     if (!selectedTaskId) return;
@@ -348,16 +316,7 @@ export function TableroClient({ initialBoard, customStatuses, workflows, project
               key={status}
               role="group"
               aria-label={label}
-              onDragOver={(e) => {
-                if (!draggingTaskId) return;
-                e.preventDefault();
-                setDragOverStatus(status);
-              }}
-              onDragLeave={() => setDragOverStatus((cur) => (cur === status ? null : cur))}
-              onDrop={(e) => {
-                e.preventDefault();
-                void handleDrop(status);
-              }}
+              {...columnProps(status)}
               className={`flex min-h-[200px] min-w-[220px] flex-1 basis-0 flex-col gap-2 rounded-lg border p-3 transition-colors ${
                 isDragOver ? "border-primary bg-muted" : "border-border bg-card"
               }`}
@@ -373,20 +332,18 @@ export function TableroClient({ initialBoard, customStatuses, workflows, project
                 </p>
               ) : (
                 tasks.map((task) => {
-                  const draggable = canDragTask(task);
+                  const drag = cardProps(task);
                   const projectTramo = projectTramos[task.projectId] ?? null;
                   const showProjectTramo =
                     !workflowFilter && !!task.workflow && !!projectTramo && projectTramo.id !== task.workflow.id;
                   return (
                     <div
                       key={task.id}
-                      draggable={draggable}
-                      onDragStart={() => handleDragStart(task)}
-                      onDragEnd={handleDragEnd}
+                      {...drag}
                       onClick={() => setSelectedTaskId(task.id)}
                       className={`cursor-pointer rounded-md border border-border bg-card p-3 text-sm shadow-sm transition-opacity hover:border-primary ${
                         draggingTaskId === task.id ? "opacity-50" : ""
-                      } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+                      } ${drag.draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
                     >
                       <p className="font-medium">{task.title}</p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">{task.project.name}</p>

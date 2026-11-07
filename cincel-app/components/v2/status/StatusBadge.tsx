@@ -3,10 +3,19 @@ import { statusDotClass, statusTintClass, type StatusColorToken } from "@/lib/ta
 import { cn } from "@/lib/utils";
 
 /** A task status label: outline badge with a light status tint and the status
- * color dot. The label is always shown, so the color is never the only cue. */
-export function StatusBadge({ label, token }: { label: string; token: StatusColorToken }) {
+ * color dot. The label is always shown, so the color is never the only cue.
+ * `size="md"` is the larger chip used in sheets and headers. */
+export function StatusBadge({
+  label,
+  token,
+  size = "sm",
+}: {
+  label: string;
+  token: StatusColorToken;
+  size?: "sm" | "md";
+}) {
   return (
-    <Badge variant="outline" className={statusTintClass(token)}>
+    <Badge variant="outline" className={cn(statusTintClass(token), size === "md" && "h-6 px-2.5 text-sm")}>
       <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", statusDotClass(token))} />
       {label}
     </Badge>

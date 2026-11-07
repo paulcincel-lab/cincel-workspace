@@ -2,36 +2,88 @@
 
 import type { ReactNode } from "react";
 
-import type { EmptyStateProps } from "@/components/shell/EmptyState";
-import type { PageHeaderProps } from "@/components/shell/PageHeader";
-import type { EntityCardGridProps } from "@/components/widgets/EntityCardGrid";
-import type { PeopleWidgetProps } from "@/components/widgets/PeopleWidget";
-import type { RecordTableProps } from "@/components/widgets/RecordTable";
+import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
+import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
+import { PageHeader, type PageHeaderProps } from "@/components/shell/PageHeader";
+import { EntityCardGrid, type EntityCardGridProps } from "@/components/widgets/EntityCardGrid";
+import { PeopleWidget, type PeopleWidgetProps } from "@/components/widgets/PeopleWidget";
+import { RecordTable, type RecordTableProps } from "@/components/widgets/RecordTable";
+import { TaskBoardWidget, type TaskBoardWidgetProps } from "@/components/widgets/TaskBoardWidget";
 import type { TaskBoard } from "@/lib/types/redesign";
 import type { EntityCard, PersonDatum, RecordTableData } from "@/lib/types/widgets";
 
 /**
  * List page pattern (redesign FE §4.11): `PageHeader` + `EstiloSwitch` +
- * filters + one library widget chosen by `spec.kind`. Never imports
- * `StyleView`; pages never pass per-style markup.
- *
- * Contract stub: renders nothing until its owning issue implements it.
+ * tabs + filters + one library widget chosen by `spec.kind`. The widget
+ * decides how each presentation style looks; this pattern never branches on
+ * the style itself and pages never pass per-style markup.
  */
 export type ListSpec =
   | { kind: "table"; data: RecordTableData; renderCell?: RecordTableProps["renderCell"]; rowActions?: RecordTableProps["rowActions"] }
   | { kind: "cards"; items: EntityCard[]; table: RecordTableData; footer?: EntityCardGridProps["footer"] }
   | { kind: "people"; people: PersonDatum[]; show: PeopleWidgetProps["show"] }
-  | { kind: "board"; board: TaskBoard; table: RecordTableData };
+  | {
+      kind: "board";
+      board: TaskBoard;
+      table: RecordTableData;
+      /** Status change on drop; without it the board is read-only and drops are ignored. */
+      onMove?: TaskBoardWidgetProps["onMove"];
+    };
 
 export type ListPageProps = {
   header: PageHeaderProps;
   filters?: ReactNode;
   tabs?: ReactNode;
   spec: ListSpec;
+  /** Rendered instead of the widget when the spec carries no records. */
   empty?: EmptyStateProps;
 };
 
-export function ListPage(props: ListPageProps) {
-  void props;
-  return null;
+/** True when the spec has no records to show. */
+export function isListSpecEmpty(spec: ListSpec): boolean {
+  switch (spec.kind) {
+    case "table":
+      return spec.data.rows.length === 0;
+    case "cards":
+      return spec.items.length === 0;
+    case "people":
+      return spec.people.length === 0;
+    case "board":
+      return Object.values(spec.board).every((tasks) => tasks.length === 0);
+  }
+}
+
+const readOnlyMove: TaskBoardWidgetProps["onMove"] = () => Promise.resolve();
+
+function ListWidget({ spec }: { spec: ListSpec }) {
+  switch (spec.kind) {
+    case "table":
+      return <RecordTable data={spec.data} renderCell={spec.renderCell} rowActions={spec.rowActions} />;
+    case "cards":
+      return <EntityCardGrid items={spec.items} table={spec.table} footer={spec.footer} />;
+    case "people":
+      return <PeopleWidget people={spec.people} show={spec.show} />;
+    case "board":
+      return <TaskBoardWidget board={spec.board} table={spec.table} onMove={spec.onMove ?? readOnlyMove} />;
+  }
+}
+
+export function ListPage({ header, filters, tabs, spec, empty }: ListPageProps) {
+  const showEmpty = empty !== undefined && isListSpecEmpty(spec);
+  return (
+    <div className="flex min-w-0 flex-col gap-4" data-list-kind={spec.kind}>
+      <PageHeader
+        {...header}
+        actions={
+          <>
+            {header.actions}
+            <EstiloSwitch scope="staff" />
+          </>
+        }
+      />
+      {tabs ? <div className="min-w-0">{tabs}</div> : null}
+      {filters ? <div className="min-w-0">{filters}</div> : null}
+      <div className="min-w-0">{showEmpty ? <EmptyState {...empty} /> : <ListWidget spec={spec} />}</div>
+    </div>
+  );
 }
