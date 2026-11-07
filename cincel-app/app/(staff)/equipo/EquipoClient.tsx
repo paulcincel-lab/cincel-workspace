@@ -38,17 +38,9 @@ import { canExportStaff, exportStaffAction } from "@/lib/equipo/staff-export";
 import { formatCandidatePhases, summarizeCandidatePhases } from "@/lib/equipo/candidate-phases";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
 import type { Position, Staff } from "@/lib/types/core";
+import { MEMBER_AVAILABILITY_OPTIONS } from "@/lib/equipo/availability-options";
 
-const AVAILABILITY_OPTIONS = [
-  "Disponible",
-  "Medio Tiempo",
-  "Mixto",
-  "No disponible",
-  "Vacaciones",
-  "Permiso",
-  "Capacitacion",
-  "Home Office",
-];
+const AVAILABILITY_OPTIONS = MEMBER_AVAILABILITY_OPTIONS;
 
 function loadLabel(percent: number, isActive: boolean): string {
   if (!isActive) return "Inactivo";

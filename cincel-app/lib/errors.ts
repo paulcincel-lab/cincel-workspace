@@ -141,6 +141,10 @@ function codeText(code: string, context: ActionErrorContext): string {
       return "Este proyecto no viene de una importación de monday.";
     case "EXPORT_MISSING":
       return "Ya no están los archivos de la exportación de monday de este proyecto. Vuelve a exportar el tablero para reacomodarlo.";
+    case "OVERLAP":
+      return "Ya tienes una solicitud en esas fechas.";
+    case "STARTED":
+      return "Esa solicitud ya empezó; ya no se puede cancelar. Habla con quien la aprobó.";
     case "ASSIGNEE_NOT_ADMIN":
       return "Las tareas de administración solo se asignan a administradores.";
     case "OVERRIDE_DISABLED":

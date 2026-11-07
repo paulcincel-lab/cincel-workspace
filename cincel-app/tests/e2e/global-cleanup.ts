@@ -76,10 +76,32 @@ async function purgeE2ERows(): Promise<void> {
   }
 }
 
+/**
+ * Specs that flip the admin's redesign flag (helpers/redesign.ts) put it back
+ * in afterAll; this also resets it when a run was interrupted, so the legacy
+ * (flag off) specs start from the org default.
+ */
+async function resetAdminRedesignFlag(): Promise<void> {
+  const sql = postgres(connectionString, { max: 1 });
+  try {
+    await sql`
+      update core.user_preferences set redesign_enabled = null
+      where staff_id in (
+        select id from core.staff
+        where lower(email) = lower(${process.env.E2E_ADMIN_EMAIL ?? "paul@cincel.mx"})
+      )`;
+  } catch (err) {
+    console.warn("[e2e global-cleanup] redesign flag reset skipped:", (err as Error).message);
+  } finally {
+    await sql.end();
+  }
+}
+
 export default async function globalSetup(): Promise<() => Promise<void>> {
   await purgeE2ERows();
   // Flag-on specs pin the admin's redesign flag; a crashed run must not leave it on.
   await resetRedesignFlag();
+  await resetAdminRedesignFlag();
   // E2E_KEEP_ROWS leaves rows in place after the run for manual DB inspection.
   return process.env.E2E_KEEP_ROWS ? async () => {} : purgeE2ERows;
 }

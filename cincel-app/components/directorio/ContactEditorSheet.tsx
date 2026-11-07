@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/shadcn/textarea";
 import { CONTACT_TYPE_LABEL, PROVIDER_STATUS_LABEL } from "@/lib/directorio/types";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import type {
+  ContactDetail,
   ContactInput,
   ContactKind,
   ContactPersonInput,
@@ -95,6 +96,44 @@ export const emptyContactDraft: ContactDraft = {
   startDate: "",
   staffId: null,
 };
+
+/** Loads an existing contact into the editor's draft shape (Directorio and Personas share it). */
+export function contactDraftFromDetail(detail: ContactDetail): ContactDraft {
+  const provider = detail.providerProfile;
+  return {
+    ...emptyContactDraft,
+    type: detail.type,
+    kind: detail.kind,
+    name: detail.name,
+    phone: detail.phone ?? "",
+    email: detail.email ?? "",
+    website: detail.website ?? "",
+    location: detail.location ?? "",
+    acquisitionChannel: detail.acquisitionChannel ?? "",
+    notes: detail.notes ?? "",
+    people: detail.people.map((p) => ({
+      id: p.id,
+      name: p.name,
+      role: p.role ?? "",
+      phone: p.phone ?? "",
+      email: p.email ?? "",
+      isPrimary: p.isPrimary,
+    })),
+    categoriaTagsText: detail.tags.filter((t) => t.kind === "categoria").map((t) => t.value).join(", "),
+    habilidadTagsText: detail.tags.filter((t) => t.kind === "habilidad").map((t) => t.value).join(", "),
+    providerSubtype: provider?.subtype ?? "contratista",
+    providerStatus: provider?.status ?? "activo",
+    mainSpecialty: provider?.mainSpecialty ?? "",
+    department: provider?.department ?? "",
+    seniority: provider?.seniority ?? "",
+    priceLevel: provider?.priceLevel ?? "",
+    availability: provider?.availability ?? "",
+    comments: provider?.comments ?? "",
+    rating: provider?.rating ?? 0,
+    startDate: provider?.startDate ?? "",
+    staffId: provider?.staffId ?? null,
+  };
+}
 
 /** Builds the payload for createContactAction/updateContactAction from a draft. */
 export function draftToContactInput(draft: ContactDraft): ContactInput {
