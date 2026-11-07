@@ -50,6 +50,9 @@ export function toAgendaItems(
     | { kind: "tasks"; items: TaskListItem[] }
     | { kind: "absences"; items: TeamAbsence[] },
 ): AgendaItem[] {
+  if (source.kind === "reminders") {
+    return source.items.map((reminder) => ({ id: reminder.id, title: reminder.text, start: reminder.dueAt }));
+  }
   return notImplemented("toAgendaItems", source);
 }
 

@@ -26,7 +26,7 @@ import { isGoogleManagedRefusal } from "@/lib/types/workspace-access";
 /**
  * Collaborator create/edit — draft state, validation, and credential
  * assignment (temporary password + system access toggle) — used by
- * app/equipo/EquipoClient.tsx.
+ * app/(staff)/equipo/EquipoClient.tsx.
  *
  * `staff.role` holds the system access role only, edited through the
  * drawer's "Acceso" dropdown (`draft.access`). Job positions are puestos,

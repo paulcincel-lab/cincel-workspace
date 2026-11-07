@@ -86,12 +86,12 @@ describe("change and late colors", () => {
 
 // Components that show a task status must take its color from the mapping above.
 const STATUS_COMPONENTS = [
-  "app/dashboard/DashboardClient.tsx",
+  "app/(staff)/dashboard/DashboardClient.tsx",
   "components/tareas/TaskStatusCell.tsx",
   "components/v2/status/StatusBadge.tsx",
   "components/cronograma/task-card.tsx",
-  "app/configuracion/estatus/EstatusClient.tsx",
-  "app/proyectos/[id]/ficha/page.tsx",
+  "app/(staff)/configuracion/estatus/EstatusClient.tsx",
+  "app/(staff)/proyectos/[id]/ficha/page.tsx",
 ];
 
 describe("status components", () => {

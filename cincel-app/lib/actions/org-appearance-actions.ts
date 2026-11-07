@@ -1,17 +1,19 @@
 "use server";
 
-import { notImplementedAction, stubDefault } from "@/lib/stubs";
+import { requireCapabilityUser } from "@/lib/auth/session";
+import { notImplementedAction } from "@/lib/stubs";
 import type { OrgAppearance, ThemeId } from "@/lib/types/redesign";
-import { DEFAULT_ORG_APPEARANCE } from "@/lib/ui/themes";
+import { getStoredOrgAppearance, withoutVersion } from "@/lib/ui/preferences-server";
 
 /**
- * Organization appearance (redesign BE §7.1). Phase 1 contract stubs; guards
- * follow `app-settings-actions.ts` when implemented.
+ * Organization appearance (redesign BE §7.1). The reader is implemented;
+ * save / reset are Phase 6 stubs (guards follow `app-settings-actions.ts`).
  */
 
 /** The stored org appearance (Azul preset when missing). Auth: staff. */
 export async function fetchOrgAppearanceAction(): Promise<OrgAppearance> {
-  return stubDefault(DEFAULT_ORG_APPEARANCE);
+  await requireCapabilityUser();
+  return withoutVersion(await getStoredOrgAppearance());
 }
 
 /**

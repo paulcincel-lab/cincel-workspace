@@ -27,10 +27,22 @@ export function reportRepositoryError(error: RepositoryError): void {
   console.error(`  Detail    : ${error.detail}`);
 }
 
-// ── Action error copy (project flow, FE §9) ────────────────────────────────
+// ── Action error copy (project flow + redesign, FE §9 / BE §9.10) ──────────
+
+/**
+ * Where the failing call came from, for codes whose copy depends on it
+ * (`INVALID` in search, `RATE_LIMITED` in Gmail sync, `DISABLED` for Cutto and
+ * the redesign opt-in). `"redesign"` selects the opt-in `DISABLED` copy.
+ */
+export type ErrorContextName = "search" | "cutto" | "photo" | "gmail" | "vacations" | "redesign";
+
+/** The one context argument of `actionErrorText`: a redesign context name or Project Flow's keys. */
+export type ErrorContext = ErrorContextName | ActionErrorContext;
 
 /** What the failing action was about, to pick the right copy for shared codes. */
 export type ActionErrorContext = {
+  /** Redesign context (same as passing the name directly). */
+  area?: ErrorContextName;
   /** `NAME_TAKEN`: which kind of name collided. */
   entity?: "project" | "phase" | "position" | "space" | "template";
   /** `INVALID`: "status" for the "Cuenta como completada" rule; anything else is generic. */
@@ -49,8 +61,26 @@ const NAME_TAKEN_COPY: Record<NonNullable<ActionErrorContext["entity"]>, (ctx: A
   template: (ctx) => `Ya existe una tarea de plantilla con ese nombre en ${ctx.phaseName ?? "esta fase"}.`,
 };
 
-/** The leading `CODE` of an action error (`Error("CODE")` or `Error("CODE: detail")`), or "". */
+/** Error code for an HTTP status (photo route and other route handlers). */
+const HTTP_STATUS_CODES: Record<number, string> = {
+  400: "INVALID",
+  401: "FORBIDDEN",
+  403: "FORBIDDEN",
+  404: "NOT_FOUND",
+  413: "TOO_LARGE",
+  415: "INVALID_TYPE",
+  422: "INVALID",
+  429: "RATE_LIMITED",
+  501: "NOT_IMPLEMENTED",
+};
+
+/**
+ * The leading `CODE` of an action error, or "". Accepts `Error("CODE")`,
+ * `Error("CODE: detail")`, a `"CODE: detail"` string, `{ error: "CODE" }`, an
+ * HTTP status number, or a response-like `{ status }`.
+ */
 export function actionErrorCode(err: unknown): string {
+  if (typeof err === "number") return HTTP_STATUS_CODES[err] ?? "";
   const raw =
     err instanceof Error
       ? err.message
@@ -60,12 +90,25 @@ export function actionErrorCode(err: unknown): string {
           ? (err as { error: string }).error
           : "";
   const match = /^([A-Z_]+)(?::|$)/.exec(raw.trim());
-  return match ? match[1] : "";
+  if (match) return match[1];
+  if (err && typeof err === "object" && "status" in err && typeof (err as { status: unknown }).status === "number") {
+    return HTTP_STATUS_CODES[(err as { status: number }).status] ?? "";
+  }
+  return "";
 }
 
-/** Spanish copy for a project-flow action error (FE §9). Unknown errors get the generic copy. */
-export function actionErrorText(err: unknown, context: ActionErrorContext = {}): string {
-  switch (actionErrorCode(err)) {
+/**
+ * Spanish copy for an action error (FE §9). `context` is a redesign context
+ * name (`"search"`, `"cutto"`, `"photo"`, `"gmail"`, `"vacations"`,
+ * `"redesign"`) or Project Flow's keys. Unknown errors get the generic copy.
+ */
+export function actionErrorText(err: unknown, context: ErrorContext = {}): string {
+  const ctx: ActionErrorContext = typeof context === "string" ? { area: context } : context;
+  return codeText(actionErrorCode(err), ctx);
+}
+
+function codeText(code: string, context: ActionErrorContext): string {
+  switch (code) {
     case "FORBIDDEN":
       return "No tienes permiso para realizar esta acción.";
     case "NOT_FOUND":
@@ -89,9 +132,9 @@ export function actionErrorText(err: unknown, context: ActionErrorContext = {}):
     case "IN_USE":
       return "Este puesto se asigna desde un grupo de Google. Quita el grupo en Configuración → Google primero.";
     case "INVALID":
-      return context.invalid === "status"
-        ? "Solo un estatus que cierra la tarea puede contar como completado."
-        : "Faltan datos o no son válidos. Revisa el formulario e intenta de nuevo.";
+      if (context.invalid === "status") return "Solo un estatus que cierra la tarea puede contar como completado.";
+      if (context.area === "search") return "Escribe al menos 2 letras.";
+      return "Faltan datos o no son válidos. Revisa el formulario e intenta de nuevo.";
     case "STATUS_NOT_FOUND":
       return "Uno de los estatus elegidos ya no existe. Elige otro y vuelve a guardar.";
     case "NOT_IMPORTED":
@@ -100,6 +143,42 @@ export function actionErrorText(err: unknown, context: ActionErrorContext = {}):
       return "Ya no están los archivos de la exportación de monday de este proyecto. Vuelve a exportar el tablero para reacomodarlo.";
     case "ASSIGNEE_NOT_ADMIN":
       return "Las tareas de administración solo se asignan a administradores.";
+    case "OVERRIDE_DISABLED":
+      return "La organización fijó el tema y el estilo. Pídele a un administrador que lo cambie.";
+    case "LOW_CONTRAST":
+      return "Algunos textos no se leerían bien (contraste menor a 4.5:1). Ajusta los colores marcados.";
+    case "INVALID_TYPE":
+      return "Ese archivo no es una imagen. Usa JPG, PNG o WebP.";
+    case "PAST_TIME":
+      return "Esa fecha ya pasó. Elige una hora futura.";
+    case "NOT_CONNECTED":
+      return "Gmail no está conectado. Conéctalo en Ajustes › Gmail, calendario y Cutto.";
+    case "SCOPE_MISSING":
+      return "Falta dar permiso para leer el correo. Vuelve a conectar Gmail.";
+    case "CONFIRM_REQUIRED":
+      return "Confirma el envío antes de continuar.";
+    case "EXPIRED":
+      return "Esta confirmación venció. Vuelve a intentarlo.";
+    case "ALREADY_ON":
+      return "Ya registraste tu entrada hoy.";
+    case "NOT_ON":
+      return "Tu jornada no está en curso.";
+    case "DISABLED":
+      if (context.area === "redesign") return "El nuevo diseño no está disponible por ahora.";
+      if (context.area === "cutto") return "La integración con Cutto aún no está disponible. Usa el enlace para abrir Cutto.";
+      return "Esta función está desactivada.";
+    case "OVERLAP":
+      return "Ya tienes una solicitud en esas fechas.";
+    case "NOT_IMPLEMENTED":
+      return "Esta función todavía no está disponible.";
+    case "RATE_LIMITED":
+      return context.area === "gmail"
+        ? "Se sincronizó hace un momento. Intenta de nuevo en unos minutos."
+        : "Demasiados intentos seguidos. Espera unos segundos e intenta de nuevo.";
+    case "STARTED":
+      return "Esa solicitud ya empezó; ya no se puede cancelar. Habla con quien la aprobó.";
+    case "TOO_LARGE":
+      return "La imagen pesa más de 2 MB. Elige una más ligera.";
     default:
       return "No se pudo completar la acción. Intenta de nuevo.";
   }

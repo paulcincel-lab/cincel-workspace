@@ -204,6 +204,17 @@ cookie-less request for a protected route to `/login`; full session validation
 - **App**: redeploy the previous image tag (e.g. the previous release's `X.Y.Z`). The schema is forward-compatible
   within a release train, but a rollback across a migration that dropped/renamed
   a column will break — check `lib/db/migrations` between the two versions.
+- **General settings company links**: images from before the redesign parse
+  `general_settings` with a `.strict()` save schema that doesn't know
+  `company.instagramUrl` / `company.contactEmail`. After rolling back to such an
+  image, strip the two keys so the stored row matches what that image expects:
+
+  ```sql
+  update core.app_settings
+     set value = ((value::jsonb) #- '{data,company,instagramUrl}' #- '{data,company,contactEmail}')::text,
+         updated_at = now()
+   where key = 'general_settings';
+  ```
 - **Migrations**: drizzle-kit has no down-migrations. To undo, write a new
   forward migration. Take a `pg_dump` before applying migrations on a database
   that holds real data (see `docs/backup-recovery.md`).

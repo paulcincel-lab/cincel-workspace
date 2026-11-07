@@ -25,6 +25,10 @@ export type GeneralCompanySettings = {
   address: string;
   rfc: string;
   logoUrl: string;
+  /** Instagram profile linked from the avatar menu (`https://` only); null hides the link. */
+  instagramUrl: string | null;
+  /** Address behind "Contactar al administrador" and the avatar-menu mail link; null hides it. */
+  contactEmail: string | null;
 };
 
 export type RegionalSettings = {
@@ -66,6 +70,8 @@ export const GENERAL_SETTINGS_DEFAULTS: GeneralSettings = {
     address: "Guadalajara, Jalisco, Mexico",
     rfc: "",
     logoUrl: "/favicon.ico",
+    instagramUrl: null,
+    contactEmail: null,
   },
   regional: {
     language: "es-MX",
@@ -94,6 +100,28 @@ function deepCloneDefaults(): GeneralSettings {
 
 function sanitizeString(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;
+}
+
+/** An absolute `https://` URL with a dotted host. */
+export function isHttpsUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.includes(".") && !/\s/.test(value);
+  } catch {
+    return false;
+  }
+}
+
+/** A plain `name@domain.tld` address. */
+export function isContactEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+/** A stored link kept only when it is a non-empty string of the right shape; anything else is null. */
+function sanitizeLink(value: unknown, isValid: (candidate: string) => boolean): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed !== "" && isValid(trimmed) ? trimmed : null;
 }
 
 function sanitizeBoolean(value: unknown, fallback: boolean): boolean {
@@ -144,6 +172,8 @@ export function sanitizeGeneralSettings(candidate: unknown): GeneralSettings {
       address: sanitizeString(companyCandidate.address, defaults.company.address),
       rfc: sanitizeString(companyCandidate.rfc, defaults.company.rfc),
       logoUrl: sanitizeString(companyCandidate.logoUrl, defaults.company.logoUrl),
+      instagramUrl: sanitizeLink(companyCandidate.instagramUrl, isHttpsUrl),
+      contactEmail: sanitizeLink(companyCandidate.contactEmail, isContactEmail),
     },
     regional: {
       language: sanitizeEnum({

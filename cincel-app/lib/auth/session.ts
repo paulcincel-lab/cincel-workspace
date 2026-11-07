@@ -84,6 +84,10 @@ export async function createSession(
     expires: expiresAt,
   });
 
+  // Appearance cookie from the DB row at sign-in (redesign BE §8.2); never fails the sign-in.
+  const { writeAppearanceCookieForStaff } = await import("@/lib/ui/preferences-server");
+  await writeAppearanceCookieForStaff(staffId);
+
   return token;
 }
 

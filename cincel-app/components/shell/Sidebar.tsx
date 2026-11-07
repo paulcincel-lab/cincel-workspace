@@ -1,14 +1,37 @@
 "use client";
 
+import Link from "next/link";
+import { Search } from "lucide-react";
+import type { ReactNode } from "react";
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
+import { Button } from "@/components/ui/shadcn/button";
+import {
+  Sidebar as SidebarPrimitive,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/shadcn/sidebar";
+import { useGeneralSettings } from "@/lib/settings/use-general-settings";
+import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
+import { isSearchVisible, isTimeClockVisible } from "@/lib/shell/visibility";
 import type { TodayStatus } from "@/lib/types/redesign";
-import type { NavItemKey, NavModel } from "@/lib/ui/nav";
+import type { NavItem, NavItemKey, NavModel } from "@/lib/ui/nav";
 
 import type { AppShellProps } from "./AppShell";
 
 /**
- * Sidebar of the new shell (redesign FE §3.1, §4.1).
- *
- * Contract stub: renders nothing until its owning issue implements it.
+ * Sidebar of the new shell (redesign FE §3.1, §4.1; frame `Sidebar`): logo,
+ * search button, time clock slot, the nav items with their badges, the
+ * Tramos list, Ajustes and the user block. Built on the shadcn `sidebar`
+ * primitives; the active item uses the `sidebar-primary` tokens.
  */
 export type SidebarProps = {
   nav: NavModel;
@@ -16,9 +39,151 @@ export type SidebarProps = {
   session: AppShellProps["session"];
   today: TodayStatus | null;
   onOpenSearch(): void;
+  /** Server-rendered registry slots (`lib/shell/sidebar-slots/*`). */
+  slots?: SidebarSlotNodes;
 };
 
-export function Sidebar(props: SidebarProps) {
-  void props;
-  return null;
+function initialsOf(name: string): string {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0]?.toUpperCase() ?? "")
+      .join("") || "?"
+  );
+}
+
+function badgeText(count: number): string {
+  return count > 99 ? "99+" : String(count);
+}
+
+function NavEntry({ item, active, badge }: { item: NavItem; active: boolean; badge?: ReactNode }) {
+  const Icon = item.icon;
+  const count = item.badge;
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        className="h-9"
+        isActive={active}
+        render={<Link href={item.href} aria-current={active ? "page" : undefined} />}
+      >
+        <Icon aria-hidden="true" strokeWidth={1.8} />
+        <span>{item.label}</span>
+        {badge === undefined && count ? <span className="sr-only">{`, ${count} pendientes`}</span> : null}
+      </SidebarMenuButton>
+      {badge !== undefined ? (
+        <SidebarMenuBadge>{badge}</SidebarMenuBadge>
+      ) : count ? (
+        <SidebarMenuBadge aria-hidden="true">{badgeText(count)}</SidebarMenuBadge>
+      ) : null}
+    </SidebarMenuItem>
+  );
+}
+
+export function Sidebar({ nav, activeKey, session, today, onOpenSearch, slots = {} }: SidebarProps) {
+  const generalSettings = useGeneralSettings();
+  const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
+  const showSearch = isSearchVisible();
+  const showClock = isTimeClockVisible(today) && slots["time-clock"] !== undefined;
+  const profileHref = nav.footer.some((item) => item.key === "ajustes") ? "/ajustes/perfil" : null;
+
+  return (
+    <SidebarPrimitive collapsible="none" className="sticky top-0 hidden h-svh border-r border-sidebar-border md:flex">
+      <SidebarHeader className="gap-4 px-3.5 pt-5">
+        <div className="flex items-center gap-2.5 px-1.5">
+          <span
+            aria-hidden="true"
+            className="flex size-[30px] shrink-0 items-center justify-center rounded-[9px] bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground"
+          >
+            C
+          </span>
+          <span className="flex min-w-0 flex-col leading-tight">
+            <span className="text-sm font-semibold tracking-[0.14em]">CINCEL</span>
+            <span className="truncate text-xs text-sidebar-foreground/70">{systemName}</span>
+          </span>
+        </div>
+        {showSearch ? (
+          <Button type="button" variant="outline" className="h-9 w-full justify-start gap-2" onClick={onOpenSearch}>
+            <Search aria-hidden="true" />
+            <span className="flex-1 text-left">Buscar</span>
+            <kbd className="font-mono text-[11px]">⌘K</kbd>
+          </Button>
+        ) : null}
+        {showClock ? <div data-slot="sidebar-time-clock">{slots["time-clock"]}</div> : null}
+      </SidebarHeader>
+
+      <SidebarContent className="px-1.5">
+        <nav aria-label="Principal">
+          {nav.items.length > 0 ? (
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu className="gap-0.5">
+                  {nav.items.map((item) => (
+                    <NavEntry
+                      key={item.key}
+                      item={item}
+                      active={item.key === activeKey}
+                      badge={item.key === "mi-espacio" ? slots["bandeja-badge"] : undefined}
+                    />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
+
+          {nav.tramos.length > 0 ? (
+            <SidebarGroup>
+              <SidebarGroupLabel id="sidebar-tramos">Tramos</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu aria-labelledby="sidebar-tramos">
+                  {nav.tramos.map((tramo) => (
+                    <SidebarMenuItem key={tramo.key}>
+                      <SidebarMenuButton render={<Link href={tramo.href} />}>
+                        <span
+                          aria-hidden="true"
+                          className="size-[9px] shrink-0 rounded-[3px]"
+                          style={{ background: tramo.colorVar }}
+                        />
+                        <span>{tramo.name}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
+        </nav>
+      </SidebarContent>
+
+      <SidebarFooter className="gap-1 border-t border-sidebar-border px-3.5 pt-3 pb-5">
+        {nav.footer.length > 0 ? (
+          <nav aria-label="Ajustes">
+            <SidebarMenu className="gap-0.5">
+              {nav.footer.map((item) => (
+                <NavEntry key={item.key} item={item} active={item.key === activeKey} />
+              ))}
+            </SidebarMenu>
+          </nav>
+        ) : null}
+        <div className="flex items-center gap-2.5 px-2.5 py-2" data-slot="sidebar-user">
+          <Avatar className="size-[30px]">
+            {session.photoUrl ? <AvatarImage src={session.photoUrl} alt="" /> : null}
+            <AvatarFallback className="text-xs font-semibold">{initialsOf(session.name)}</AvatarFallback>
+          </Avatar>
+          <span className="flex min-w-0 flex-1 flex-col leading-tight">
+            {profileHref ? (
+              <Link href={profileHref} className="truncate text-[13px] font-medium hover:underline">
+                {session.name}
+              </Link>
+            ) : (
+              <span className="truncate text-[13px] font-medium">{session.name}</span>
+            )}
+            <span className="truncate text-xs text-sidebar-foreground/70">{session.role}</span>
+          </span>
+        </div>
+      </SidebarFooter>
+    </SidebarPrimitive>
+  );
 }
