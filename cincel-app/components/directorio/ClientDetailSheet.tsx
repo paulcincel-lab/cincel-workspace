@@ -19,6 +19,11 @@ interface ClientDetailSheetProps {
   onDelete: () => void;
   canEdit: boolean;
   canDelete: boolean;
+  /**
+   * Admins see the linked project list. Everyone else sees only the count:
+   * `fetchContactAction` returns `projects: []` for them (frontend spec §3.17).
+   */
+  isAdmin: boolean;
 }
 
 const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
@@ -37,9 +42,14 @@ function formatCurrency(value: string): string {
   }).format(Number.isFinite(num) ? num : 0);
 }
 
+function formatActiveProjectsCount(count: number): string {
+  return `${count} ${count === 1 ? "proyecto activo" : "proyectos activos"}`;
+}
+
 /**
  * Read-only ficha for a `cliente` contact — general data, `client_stats`
- * (only populated server-side for cliente contacts) and its linked projects.
+ * (only populated server-side for cliente contacts) and its linked projects
+ * (admins only; other users see the active-project count).
  * Editing/deleting delegates to the shared ContactEditorSheet/delete flow.
  */
 export function ClientDetailSheet({
@@ -49,6 +59,7 @@ export function ClientDetailSheet({
   onDelete,
   canEdit,
   canDelete,
+  isAdmin,
 }: ClientDetailSheetProps) {
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const importData = useImportData("contact", contact.id);
@@ -172,7 +183,11 @@ export function ClientDetailSheet({
 
           <section>
             <h3 className="mb-3 text-sm font-semibold">Proyectos</h3>
-            {contact.projects.length > 0 ? (
+            {!isAdmin ? (
+              <p className="text-sm text-muted-foreground">
+                {formatActiveProjectsCount(contact.stats?.activeProjects ?? 0)}
+              </p>
+            ) : contact.projects.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {contact.projects.map((project) => (
                   <div key={project.id} className="rounded-xl border border-border bg-muted p-3">
@@ -198,7 +213,7 @@ export function ClientDetailSheet({
               </div>
             ) : (
               <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                Este cliente no tiene proyectos registrados.
+                Sin proyectos.
               </p>
             )}
           </section>

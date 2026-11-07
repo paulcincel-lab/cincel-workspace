@@ -125,6 +125,14 @@ describe("invitePortalClientAction", () => {
     await expect(invite()).resolves.toEqual({ ok: false, error: "not_found" });
   });
 
+  it("returns no_client while the project has no client", async () => {
+    repo.findProject.mockResolvedValue({ id: PROJECT, name: "Casa Valle", clientId: null });
+    await expect(invite()).resolves.toEqual({ ok: false, error: "no_client" });
+    expect(repo.findContact).not.toHaveBeenCalled();
+    expect(repo.invitePortalUser).not.toHaveBeenCalled();
+    expect(mail.sendMail).not.toHaveBeenCalled();
+  });
+
   it("rejects a contact that isn't on the project", async () => {
     repo.isContactOnProject.mockResolvedValue(false);
     await expect(invite()).resolves.toEqual({ ok: false, error: "not_project_contact" });

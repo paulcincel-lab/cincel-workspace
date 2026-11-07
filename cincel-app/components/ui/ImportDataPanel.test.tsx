@@ -238,6 +238,7 @@ function renderContactSheet() {
       onDelete={noop}
       canEdit={false}
       canDelete={false}
+      isAdmin={false}
     />,
   );
 }

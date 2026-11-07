@@ -21,7 +21,7 @@ import {
   resolveTeamCapabilities,
   resolveActivitiesCapabilities,
   resolveProjectsCapabilities,
-  resolveAreasCapabilities,
+  resolvePositionsCapabilities,
   resolveWorkflowsCapabilities,
 } from "@/lib/auth/permissions";
 import type { TeamMember } from "@/lib/auth/auth-service";
@@ -248,19 +248,19 @@ describe("resolveProjectsCapabilities — canExportData gated by role", () => {
   });
 });
 
-// ── Areas / Workflows capabilities (company-structure admin surfaces) ───────
+// ── Puestos / Workflows capabilities (company-structure admin surfaces) ───────
 
-describe("resolveAreasCapabilities", () => {
-  it("everyone can view areas (staff pickers need it)", () => {
-    expect(resolveAreasCapabilities(makeUser("Colaborador")).canViewAreas).toBe(true);
-    expect(resolveAreasCapabilities(makeUser("Administrador")).canViewAreas).toBe(true);
+describe("resolvePositionsCapabilities", () => {
+  it("everyone can view puestos (staff pickers need it)", () => {
+    expect(resolvePositionsCapabilities(makeUser("Colaborador")).canViewPositions).toBe(true);
+    expect(resolvePositionsCapabilities(makeUser("Administrador")).canViewPositions).toBe(true);
   });
 
-  it("only Administrador / Dirección can manage areas", () => {
-    expect(resolveAreasCapabilities(makeUser("Administrador")).canManageAreas).toBe(true);
-    expect(resolveAreasCapabilities(makeUser("Dirección")).canManageAreas).toBe(true);
-    expect(resolveAreasCapabilities(makeUser("Jefe de Taller")).canManageAreas).toBe(false);
-    expect(resolveAreasCapabilities(makeUser("Colaborador")).canManageAreas).toBe(false);
+  it("only Administrador / Dirección can manage puestos", () => {
+    expect(resolvePositionsCapabilities(makeUser("Administrador")).canManagePositions).toBe(true);
+    expect(resolvePositionsCapabilities(makeUser("Dirección")).canManagePositions).toBe(true);
+    expect(resolvePositionsCapabilities(makeUser("Jefe de Taller")).canManagePositions).toBe(false);
+    expect(resolvePositionsCapabilities(makeUser("Colaborador")).canManagePositions).toBe(false);
   });
 });
 

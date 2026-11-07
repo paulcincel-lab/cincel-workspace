@@ -10,8 +10,12 @@ import { escapeQueryValue, FOLDER_MIME_TYPE, type DriveAdmin } from "./drive-adm
  *
  *   <code> · <name>/
  *     01 Interno/
- *     02 Cliente/
- *     03 Del cliente/
+ *     02 Cliente/        (only once the project has a client)
+ *     03 Del cliente/    (only once the project has a client)
+ *
+ * A project starts without a client (project flow), so "02 Cliente" and
+ * "03 Del cliente" are created together when the client is set; until then the
+ * tree is complete with the project folder and "01 Interno" alone.
  *
  * The folder ids are stored on the project (`drive_*` columns) and
  * `drive_folder_status` says whether the tree is complete. Running it again
@@ -36,9 +40,32 @@ export type ProjectFoldersDb = PgDatabase<PgQueryResultHKT, typeof schema>;
 export type ProjectFolderIds = {
   folderId: string;
   internalFolderId: string;
-  clientFolderId: string;
-  inboundFolderId: string;
+  /** Null while the project has no client (the folder isn't created yet). */
+  clientFolderId: string | null;
+  /** Null while the project has no client (the folder isn't created yet). */
+  inboundFolderId: string | null;
 };
+
+export type EnsureProjectFoldersOptions = {
+  /**
+   * Whether "02 Cliente" and "03 Del cliente" belong in the tree. Defaults to
+   * whether the project has a client (`client_id is not null`).
+   */
+  withClientFolder?: boolean;
+};
+
+/**
+ * Whether the stored tree is complete: the project folder and "01 Interno"
+ * always, the two client folders only `withClientFolder`.
+ */
+export function isProjectFolderTreeComplete(
+  stored: { folderId: string | null; internalFolderId: string | null; clientFolderId: string | null; inboundFolderId: string | null },
+  withClientFolder: boolean,
+): boolean {
+  if (!stored.folderId || !stored.internalFolderId) return false;
+  if (!withClientFolder) return true;
+  return Boolean(stored.clientFolderId && stored.inboundFolderId);
+}
 
 export type EnsureProjectFoldersResult =
   | { status: "ready"; folders: ProjectFolderIds; created: number }
@@ -78,8 +105,12 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Makes sure the project's folder and its three subfolders exist in the Shared
- * Drive and records their ids on the project.
+ * Makes sure the project's folder and its subfolders exist in the Shared Drive
+ * and records their ids on the project. "02 Cliente" and "03 Del cliente" are
+ * only created `withClientFolder` (by default: when the project has a client);
+ * without them the tree counts as complete, so a client-less project doesn't
+ * rebuild it on every sync. Setting the client later and running it again
+ * creates just the two client folders.
  *
  * - The project folder is created in `sharedDriveId` (the Shared Drive root)
  *   unless `drive_folder_id` is already set. Its id is saved as soon as it
@@ -97,12 +128,14 @@ export async function ensureProjectFolders(
   drive: DriveAdmin,
   projectId: string,
   sharedDriveId: string,
+  options: EnsureProjectFoldersOptions = {},
 ): Promise<EnsureProjectFoldersResult> {
   const [project] = await db
     .select({
       id: projects.id,
       code: projects.code,
       name: projects.name,
+      clientId: projects.clientId,
       driveFolderId: projects.driveFolderId,
       driveInternalFolderId: projects.driveInternalFolderId,
       driveClientFolderId: projects.driveClientFolderId,
@@ -113,6 +146,7 @@ export async function ensureProjectFolders(
     .where(eq(projects.id, projectId))
     .limit(1);
   if (!project) throw new ProjectNotFoundError(projectId);
+  const withClientFolder = options.withClientFolder ?? project.clientId !== null;
 
   const stored = {
     folderId: project.driveFolderId,
@@ -120,13 +154,7 @@ export async function ensureProjectFolders(
     clientFolderId: project.driveClientFolderId,
     inboundFolderId: project.driveInboundFolderId,
   };
-  if (
-    project.driveFolderStatus === "ready" &&
-    stored.folderId &&
-    stored.internalFolderId &&
-    stored.clientFolderId &&
-    stored.inboundFolderId
-  ) {
+  if (project.driveFolderStatus === "ready" && isProjectFolderTreeComplete(stored, withClientFolder)) {
     return { status: "ready", folders: stored as ProjectFolderIds, created: 0 };
   }
 
@@ -150,8 +178,12 @@ export async function ensureProjectFolders(
     const folders: ProjectFolderIds = {
       folderId,
       internalFolderId: await subfolder(stored.internalFolderId, INTERNAL_FOLDER_NAME),
-      clientFolderId: await subfolder(stored.clientFolderId, CLIENT_FOLDER_NAME),
-      inboundFolderId: await subfolder(stored.inboundFolderId, INBOUND_FOLDER_NAME),
+      clientFolderId: withClientFolder
+        ? await subfolder(stored.clientFolderId, CLIENT_FOLDER_NAME)
+        : stored.clientFolderId,
+      inboundFolderId: withClientFolder
+        ? await subfolder(stored.inboundFolderId, INBOUND_FOLDER_NAME)
+        : stored.inboundFolderId,
     };
 
     await db

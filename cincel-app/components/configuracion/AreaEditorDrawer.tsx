@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/shadcn/switch";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 import { AREA_COLOR_SLOTS, areaColorClass, areaColorLabel } from "@/lib/areas/area-color";
-import type { AreasCapabilities } from "@/lib/auth/permissions";
+import type { PositionsCapabilities } from "@/lib/auth/permissions";
 import { GOOGLE_MANAGED_TOOLTIP } from "@/lib/equipo/google-access";
 import { cn } from "@/lib/utils";
 import type { AreaDetail } from "@/lib/types/core";
@@ -61,7 +61,7 @@ interface AreaEditorDrawerProps {
   workflowNames: string[];
   onChangeWorkflowNames: (names: string[]) => void;
   onSaveWorkflows: () => void;
-  capabilities: AreasCapabilities;
+  capabilities: PositionsCapabilities;
   /** Names of Google-managed staff: their membership comes from Workspace and can't change here (FE §2.6). */
   lockedMemberNames?: string[];
 }
@@ -88,7 +88,7 @@ export function AreaEditorDrawer({
   capabilities,
   lockedMemberNames = [],
 }: AreaEditorDrawerProps) {
-  const canManage = capabilities.canManageAreas;
+  const canManage = capabilities.canManagePositions;
   const isCreating = editingArea === null;
 
   return (

@@ -81,7 +81,7 @@ describe("form fields have accessible names", () => {
         workflowNames={[]}
         onChangeWorkflowNames={() => undefined}
         onSaveWorkflows={() => undefined}
-        capabilities={{ canViewAreas: true, canManageAreas: true }}
+        capabilities={{ canViewPositions: true, canManagePositions: true }}
       />,
     );
     expect(screen.getByLabelText("Nombre").tagName).toBe("INPUT");

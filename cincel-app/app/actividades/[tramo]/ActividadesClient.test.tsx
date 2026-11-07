@@ -19,6 +19,7 @@ const capabilities = vi.hoisted(() => ({ current: {} as Record<string, boolean> 
 vi.mock("@/lib/auth/permissions", () => ({
   resolveActivitiesCapabilities: () => capabilities.current,
   canChangeActivityStatus: () => false,
+  canSeeAdminData: () => false,
 }));
 
 vi.mock("@/lib/repositories/browser-state-repository", () => ({

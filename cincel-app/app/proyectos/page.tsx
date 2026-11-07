@@ -15,6 +15,15 @@ export default async function ProyectosPage() {
     presaleAutoStart = workflowsResult.value.find((w) => w.key === "presale")?.autoStart === "on_create";
   }
 
+  // The create sheet says Presale starts on its own only while that setting is on.
+  let presaleAutoStart = false;
+  try {
+    const workflows = await fetchWorkflowsAction();
+    presaleAutoStart = workflows.some((w) => w.key === "presale" && w.active && w.autoStart === "on_create");
+  } catch {
+    // Without workflows the sheet just omits the auto-start sentence.
+  }
+
   return (
     <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />

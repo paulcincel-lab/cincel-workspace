@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import { fetchTasksAction } from "@/lib/actions/tasks-actions";
+import { fetchAdminTasksAction, fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
@@ -10,6 +10,9 @@ import { fetchTramoBoardAction } from "@/lib/actions/tramo-start-actions";
 import { GENERAL_SLUG } from "@/lib/actividades/tramo-page";
 import type { TramoBoard, WorkflowDetail } from "@/lib/types/core";
 import { ActividadesClient } from "./ActividadesClient";
+
+/** The Presale tramo, whose page hosts "Para administración". */
+const ADMIN_TASKS_SLUG = "presale";
 
 export default async function ActividadesPage({
   params,
@@ -34,6 +37,8 @@ export default async function ActividadesPage({
   let initialProjects: Awaited<ReturnType<typeof fetchProjectsAction>> = [];
   let initialStaff: Awaited<ReturnType<typeof fetchAssignableStaffAction>> = [];
   let initialBoard: TramoBoard | null = null;
+  // "Para administración" (FE §3.1): Presale only, admins only. Undefined lets the card fetch itself.
+  let initialAdminTasks: Awaited<ReturnType<typeof fetchAdminTasksAction>> | undefined;
 
   try {
     if (isGeneral) {
@@ -57,6 +62,13 @@ export default async function ActividadesPage({
 
   // The tabs and pages come from the workflows table: an unknown key is a 404.
   if (!isGeneral && workflowsLoaded && !workflow) notFound();
+  if (slug === ADMIN_TASKS_SLUG) {
+    try {
+      initialAdminTasks = await fetchAdminTasksAction();
+    } catch {
+      // FORBIDDEN for non-admins (the card renders nothing), or the card retries on the client.
+    }
+  }
 
   return (
     <main className="flex min-h-screen bg-background text-foreground">
@@ -71,6 +83,7 @@ export default async function ActividadesPage({
           initialProjects={initialProjects}
           initialStaff={initialStaff}
           initialBoard={initialBoard}
+          initialAdminTasks={initialAdminTasks}
         />
       </section>
     </main>

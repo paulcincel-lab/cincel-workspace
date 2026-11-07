@@ -26,6 +26,8 @@ export type MemberDraft = {
   role: string;
   /** `core.areas` ids this collaborator belongs to — a staff member can be in several. */
   areaIds: string[];
+  /** Puesto ids (`core.positions`), saved with setStaffPositionsAction. */
+  positionIds?: string[];
   capacity: number;
   availability: TeamAvailability;
 };

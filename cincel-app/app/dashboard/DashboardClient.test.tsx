@@ -18,6 +18,7 @@ vi.mock("@/lib/auth/auth-service", () => ({
 
 vi.mock("@/lib/auth/permissions", () => ({
   resolveDashboardCapabilities: () => ({ dataScope: "global" }),
+  canSeeAdminData: () => false,
   scopeDashboardProjects: ({ projects }: { projects: unknown[] }) => projects,
   scopeDashboardTasks: ({ tasks }: { tasks: unknown[] }) => tasks,
 }));

@@ -3,31 +3,31 @@
 import { revalidatePath } from "next/cache";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { resolveAreasCapabilities } from "@/lib/auth/permissions";
+import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
 import * as areasRepository from "@/lib/repositories/areas-repository";
 import { googleManagedStaffIds } from "@/lib/repositories/staff-repository";
 import type { Area, AreaDetail, AreaInput } from "@/lib/types/core";
 import { GOOGLE_MANAGED_REFUSAL, type GoogleManagedRefusal } from "@/lib/types/workspace-access";
 
-async function requireAreasCapabilities() {
-  return resolveAreasCapabilities(await requireCapabilityUser());
+async function requirePositionsCapabilities() {
+  return resolvePositionsCapabilities(await requireCapabilityUser());
 }
 
 export async function fetchAreasAction(options: { includeInactive?: boolean } = {}): Promise<AreaDetail[]> {
-  const caps = await requireAreasCapabilities();
-  if (!caps.canViewAreas) return [];
+  const caps = await requirePositionsCapabilities();
+  if (!caps.canViewPositions) return [];
   return areasRepository.listAreas(options);
 }
 
 export async function fetchAreaAction(id: string): Promise<AreaDetail | null> {
-  const caps = await requireAreasCapabilities();
-  if (!caps.canViewAreas) return null;
+  const caps = await requirePositionsCapabilities();
+  if (!caps.canViewPositions) return null;
   return areasRepository.getArea(id);
 }
 
 export async function createAreaAction(input: AreaInput): Promise<Area> {
   const user = await requireCapabilityUser();
-  if (!resolveAreasCapabilities(user).canManageAreas) {
+  if (!resolvePositionsCapabilities(user).canManagePositions) {
     throw new Error("FORBIDDEN: areas create");
   }
   const row = await areasRepository.createArea(input, user.member.id);
@@ -37,7 +37,7 @@ export async function createAreaAction(input: AreaInput): Promise<Area> {
 
 export async function updateAreaAction(id: string, patch: Partial<AreaInput>): Promise<Area> {
   const user = await requireCapabilityUser();
-  if (!resolveAreasCapabilities(user).canManageAreas) {
+  if (!resolvePositionsCapabilities(user).canManagePositions) {
     throw new Error("FORBIDDEN: areas edit");
   }
   const row = await areasRepository.updateArea(id, patch, user.member.id);
@@ -47,7 +47,7 @@ export async function updateAreaAction(id: string, patch: Partial<AreaInput>): P
 
 export async function deleteAreaAction(id: string): Promise<void> {
   const user = await requireCapabilityUser();
-  if (!resolveAreasCapabilities(user).canManageAreas) {
+  if (!resolvePositionsCapabilities(user).canManagePositions) {
     throw new Error("FORBIDDEN: areas delete");
   }
   await areasRepository.softDeleteArea(id, user.member.id);
@@ -59,7 +59,7 @@ export async function setAreaMembersAction(
   members: Array<{ staffId: string; role?: string | null }>
 ): Promise<GoogleManagedRefusal | void> {
   const user = await requireCapabilityUser();
-  if (!resolveAreasCapabilities(user).canManageAreas) {
+  if (!resolvePositionsCapabilities(user).canManagePositions) {
     throw new Error("FORBIDDEN: areas members edit");
   }
   // Google-managed staff get their áreas from Workspace (BE §A.7): adding or
@@ -78,7 +78,7 @@ export async function setAreaMembersAction(
 
 export async function setAreaWorkflowsAction(areaId: string, workflowIds: string[]): Promise<void> {
   const user = await requireCapabilityUser();
-  if (!resolveAreasCapabilities(user).canManageAreas) {
+  if (!resolvePositionsCapabilities(user).canManagePositions) {
     throw new Error("FORBIDDEN: areas workflows edit");
   }
   await areasRepository.setAreaWorkflows(areaId, workflowIds);

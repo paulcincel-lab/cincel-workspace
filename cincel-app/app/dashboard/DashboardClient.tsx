@@ -48,6 +48,7 @@ import {
   projectsByTramo,
   tasksByBaseStatus,
 } from "@/lib/dashboard/donut-groups";
+import { AdminTasksCard } from "@/components/tareas/AdminTasksCard";
 import { DonutCard } from "./DonutCard";
 import { TaskTrendCard } from "./TaskTrendCard";
 
@@ -423,6 +424,9 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
             )}
           </CardContent>
         </Card>
+
+        {/* Admins only; renders nothing for everyone else (FE §3.6). */}
+        <AdminTasksCard limit={5} />
 
         <TaskTrendCard />
 

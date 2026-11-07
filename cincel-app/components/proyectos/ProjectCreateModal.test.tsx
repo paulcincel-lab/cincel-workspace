@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
@@ -7,49 +8,63 @@ afterEach(() => {
   cleanup();
 });
 
+function renderModal(onConfirm = vi.fn().mockResolvedValue(undefined), presaleAutoStart = true) {
+  render(<ProjectCreateModal onClose={vi.fn()} onConfirm={onConfirm} presaleAutoStart={presaleAutoStart} />);
+  return onConfirm;
+}
+
 describe("ProjectCreateModal", () => {
-  it("asks only for the name, with no Etapa inicial or other fields", () => {
-    render(<ProjectCreateModal onClose={vi.fn()} onConfirm={vi.fn()} presaleAutoStart />);
-    expect(screen.getByLabelText("Nombre del proyecto")).toBeTruthy();
-    expect(screen.queryByText("Etapa inicial")).toBeNull();
-    expect(screen.queryByText("Cliente")).toBeNull();
-    expect(screen.queryByText("Encargado")).toBeNull();
-    expect(screen.queryByText("Fecha de inicio")).toBeNull();
+  it("has a single name field and submits the trimmed name only", async () => {
+    const onConfirm = renderModal();
+
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
     expect(screen.queryByRole("combobox")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Nombre del proyecto"), { target: { value: "  Casa Lomas  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear proyecto" }));
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ name: "Casa Lomas" }));
   });
 
-  it("mentions the Presale auto-start only when it is on", () => {
-    const { unmount } = render(<ProjectCreateModal onClose={vi.fn()} onConfirm={vi.fn()} presaleAutoStart />);
+  it("describes Presale auto-start only when it is on", () => {
+    renderModal(undefined, true);
     expect(screen.getByText("Solo necesitas el nombre. Presale se inicia automáticamente.")).toBeTruthy();
-    unmount();
-    render(<ProjectCreateModal onClose={vi.fn()} onConfirm={vi.fn()} presaleAutoStart={false} />);
+    cleanup();
+
+    renderModal(undefined, false);
     expect(screen.getByText("Solo necesitas el nombre.")).toBeTruthy();
     expect(screen.queryByText(/Presale se inicia/)).toBeNull();
   });
 
-  it("requires a name and describes the field with the error", () => {
-    const onConfirm = vi.fn();
-    render(<ProjectCreateModal onClose={vi.fn()} onConfirm={onConfirm} presaleAutoStart />);
+  it("shows the empty-name copy inline without calling onConfirm", async () => {
+    const onConfirm = renderModal();
+
     fireEvent.click(screen.getByRole("button", { name: "Crear proyecto" }));
-    expect(onConfirm).not.toHaveBeenCalled();
+
+    const message = await screen.findByText("El nombre del proyecto es obligatorio.");
     const input = screen.getByLabelText("Nombre del proyecto");
-    const error = screen.getByText("El nombre del proyecto es obligatorio.");
-    expect(input.getAttribute("aria-describedby")).toBe(error.id);
+    expect(input.getAttribute("aria-describedby")).toBe(message.id);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it("sends only the trimmed name", async () => {
-    const onConfirm = vi.fn().mockResolvedValue(undefined);
-    render(<ProjectCreateModal onClose={vi.fn()} onConfirm={onConfirm} presaleAutoStart />);
-    fireEvent.change(screen.getByLabelText("Nombre del proyecto"), { target: { value: "  Casa Lomas  " } });
-    fireEvent.click(screen.getByRole("button", { name: "Crear proyecto" }));
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ name: "Casa Lomas" }));
-  });
+  it("maps NAME_TAKEN to its copy under the field", async () => {
+    renderModal(vi.fn().mockRejectedValue(new Error("NAME_TAKEN")));
 
-  it("maps NAME_TAKEN to inline copy", async () => {
-    const onConfirm = vi.fn().mockRejectedValue(new Error("NAME_TAKEN"));
-    render(<ProjectCreateModal onClose={vi.fn()} onConfirm={onConfirm} presaleAutoStart />);
     fireEvent.change(screen.getByLabelText("Nombre del proyecto"), { target: { value: "Casa Lomas" } });
     fireEvent.click(screen.getByRole("button", { name: "Crear proyecto" }));
-    expect(await screen.findByText("Ya existe un proyecto con ese nombre.")).toBeTruthy();
+
+    const message = await screen.findByText("Ya existe un proyecto con ese nombre.");
+    expect(screen.getByLabelText("Nombre del proyecto").getAttribute("aria-describedby")).toBe(message.id);
+    expect(screen.getByRole("button", { name: "Crear proyecto" }).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("submits with Enter from the name field", async () => {
+    const onConfirm = renderModal();
+    const input = screen.getByLabelText("Nombre del proyecto");
+    fireEvent.change(input, { target: { value: "Depto Roma" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ name: "Depto Roma" }));
   });
 });

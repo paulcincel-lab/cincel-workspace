@@ -5,7 +5,8 @@ import { contactPeople, contacts, projectContacts, projects } from "@/lib/db/sch
 
 /**
  * Contacts the Clientes tab can invite (FE §2.4): the project's client plus its
- * `project_contacts` of type `cliente` or `socio`. Staff side only.
+ * `project_contacts` of type `cliente` or `socio`. Empty while the project has
+ * no client (BE §8.8). Staff side only.
  */
 
 export type PortalInvitableContact = {
@@ -24,7 +25,8 @@ export async function listInvitableContacts(projectId: string): Promise<PortalIn
     .from(projects)
     .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
     .limit(1);
-  if (!project) return [];
+  // No client yet (project flow): nobody can be invited until one is assigned.
+  if (!project || project.clientId === null) return [];
 
   const linked = await db
     .select({ contactId: projectContacts.contactId })

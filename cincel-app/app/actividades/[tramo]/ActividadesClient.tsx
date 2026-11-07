@@ -26,6 +26,7 @@ import ExportMenu from "@/components/ui/ExportMenu";
 import InlineEditable from "@/components/ui/InlineEditable";
 import TeamMultiSelect, { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
 import NewTaskModal, { type NewTaskFormValues } from "@/components/tareas/NewTaskModal";
+import { AdminTasksCard, adminStaffOptions } from "@/components/tareas/AdminTasksCard";
 import TaskDrawer from "@/components/tareas/TaskDrawer";
 import { PhaseStrip } from "@/components/tareas/PhaseStrip";
 import { UpcomingProjects } from "@/components/tareas/UpcomingProjects";
@@ -128,6 +129,8 @@ interface ActividadesClientProps {
   initialStaff: Array<Staff & { suggested: boolean }>;
   /** Listos para iniciar, Próximos and started projects of this tramo; null on General. */
   initialBoard?: TramoBoard | null;
+  /** Presale + admin only (FE §3.1); undefined elsewhere. */
+  initialAdminTasks?: TaskListItem[];
 }
 
 export function ActividadesClient({
@@ -138,6 +141,7 @@ export function ActividadesClient({
   initialProjects,
   initialStaff,
   initialBoard = null,
+  initialAdminTasks,
 }: ActividadesClientProps) {
   const generalSettings = useGeneralSettings();
   const router = useRouter();
@@ -195,6 +199,8 @@ export function ActividadesClient({
   const staffNames = useMemo(() => initialStaff.map((m) => m.name), [initialStaff]);
   const staffOptions = useMemo(() => initialStaff.map((m) => ({ id: m.id, name: m.name })), [initialStaff]);
   const nameToStaffId = useMemo(() => new Map(initialStaff.map((s) => [s.name, s.id])), [initialStaff]);
+  // Admin tasks are assigned to administrators only (RD-12).
+  const adminOptions = useMemo(() => adminStaffOptions(initialStaff), [initialStaff]);
 
   const refresh = useCallback(async () => {
     if (!workflow && !isGeneral) return;
@@ -1132,6 +1138,12 @@ export function ActividadesClient({
             </div>
           </div>
 
+          {slug === "presale" ? (
+            <div className="mb-4">
+              <AdminTasksCard initialTasks={initialAdminTasks} onOpenTask={setSelectedTaskId} />
+            </div>
+          ) : null}
+
           {isTramoPage && workflow ? (
             <div className="mb-4 flex flex-col gap-4">
               {/* Listos para iniciar (StartTramoSheet issue owns the card and the sheet). */}
@@ -1391,7 +1403,7 @@ export function ActividadesClient({
           <TaskDrawer
             open={selectedTaskId !== null}
             task={activeTaskDetail}
-            staffOptions={staffOptions}
+            staffOptions={activeTaskDetail?.kind === "admin" ? adminOptions : staffOptions}
             onClose={() => setSelectedTaskId(null)}
             onOpenTask={setSelectedTaskId}
             onDependenciesChange={() => void reloadAfterDependencyChange()}

@@ -21,13 +21,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
-import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
-import { isAdministratorRole } from "@/lib/data/roles";
+import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import type { ProjectCreateInput, ProjectStatus, WorkflowRef } from "@/lib/types/core";
 
 interface ProyectosClientProps {
   initialProjects: ProjectItem[];
-  /** Presale starts by itself when a project is created. */
+  /** Presale starts on its own when a project is created; drives the create sheet's copy. */
   presaleAutoStart?: boolean;
 }
 
@@ -50,7 +49,8 @@ export function ProyectosClient({ initialProjects, presaleAutoStart = false }: P
   const { projectsData, isLoadingData, authenticatedUser, updateProject, archiveProject, removeProject, addProject } =
     useProjectsData(initialProjects);
   const capabilities = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
-  const isAdmin = isAdministratorRole(authenticatedUser?.access);
+  // Client is admin-only data: non-admins get no Cliente column (not even hidden) and no Cliente in exports.
+  const isAdmin = canSeeAdminData(authenticatedUser);
   const [view, setView] = useState<"activos" | "archivados">("activos");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [showCreate, setShowCreate] = useState(false);
@@ -201,7 +201,11 @@ export function ProyectosClient({ initialProjects, presaleAutoStart = false }: P
               id: "client",
               header: "Cliente",
               cell: ({ row }) =>
-                row.original.client ? row.original.client.name : <Badge variant="destructive">Por asignar</Badge>,
+                row.original.client ? (
+                  <span>{row.original.client.name}</span>
+                ) : (
+                  <Badge variant="destructive">Por asignar</Badge>
+                ),
             } satisfies ColumnDef<ProjectItem, unknown>,
           ]
         : []),

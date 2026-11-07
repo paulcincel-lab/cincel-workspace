@@ -15,7 +15,7 @@ import {
   updateStaffAction,
   upsertStaffProfileAction,
   setStaffCredentialAction,
-  setStaffAreasAction,
+  setStaffPositionsAction,
 } from "@/lib/actions/staff-actions";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import type { GoogleAccessState } from "@/lib/equipo/google-access";
@@ -64,6 +64,7 @@ export const emptyMemberDraft: MemberDraft = {
   emergencyContactAddress: "",
   role: "",
   areaIds: [],
+  positionIds: [],
   capacity: 8,
   availability: "Disponible",
 };
@@ -203,6 +204,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
       emergencyContactAddress: detail.profile?.emergencyContactAddress ?? "",
       role: detail.role ?? "",
       areaIds: detail.areas.map((a) => a.id),
+      positionIds: (detail.positions ?? []).map((p) => p.id),
       capacity: detail.capacity,
       availability: detail.availability ?? "Disponible",
     });
@@ -326,9 +328,9 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
       });
 
       if (!editingGoogleManaged) {
-        const areasResult = await setStaffAreasAction(staffId, draft.areaIds);
-        if (isGoogleManagedRefusal(areasResult)) {
-          setFormError(areasResult.error);
+        const positionsResult = await setStaffPositionsAction(staffId, draft.positionIds ?? []);
+        if (isGoogleManagedRefusal(positionsResult)) {
+          setFormError(positionsResult.error);
           return;
         }
       }

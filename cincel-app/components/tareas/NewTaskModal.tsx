@@ -44,6 +44,8 @@ type Props = {
   onSave: (task: NewTaskFormValues) => void;
 };
 
+const NO_MANAGER = "__none__";
+
 export default function NewTaskModal({
   open,
   mode = "tramo",
@@ -59,7 +61,8 @@ export default function NewTaskModal({
   const [phaseId, setPhaseId] = useState<string | null>(phases[0]?.id ?? null);
   const [spaceId, setSpaceId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
-  const [managerId, setManagerId] = useState<string | null>(staff[0]?.id ?? null);
+  // Admin tasks may stay unassigned ("Sin responsable", RD-12).
+  const [managerId, setManagerId] = useState<string | null>(isAdminMode ? null : (staff[0]?.id ?? null));
   const [supportNames, setSupportNames] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [commitmentDate, setCommitmentDate] = useState("");
@@ -116,7 +119,9 @@ export default function NewTaskModal({
 
         <div className="p-6 space-y-6">
           <div className="rounded-2xl border border-border bg-muted p-4 text-sm text-foreground">
-            Se creará como tarea activa y aparecerá en el grupo del proyecto seleccionado.
+            {isAdminMode
+              ? "Se creará en «Para administración». Solo los administradores la ven y solo se asigna a administradores."
+              : "Se creará como tarea activa y aparecerá en el grupo del proyecto seleccionado."}
           </div>
 
           <div>
@@ -160,14 +165,21 @@ export default function NewTaskModal({
             <div>
               <Label className="mb-2 block text-foreground">Responsable</Label>
               <Select
-                items={Object.fromEntries(staff.map((s) => [s.id, s.name]))}
-                value={managerId ?? ""}
-                onValueChange={(v) => setManagerId((v as string) || null)}
+                items={{
+                  ...(isAdminMode ? { [NO_MANAGER]: "Sin responsable" } : {}),
+                  ...Object.fromEntries(staff.map((s) => [s.id, s.name])),
+                }}
+                value={managerId ?? (isAdminMode ? NO_MANAGER : "")}
+                onValueChange={(v) => {
+                  const next = v as string;
+                  setManagerId(next && next !== NO_MANAGER ? next : null);
+                }}
               >
-                <SelectTrigger className="w-full text-foreground">
+                <SelectTrigger aria-label="Responsable" className="w-full text-foreground">
                   <SelectValue placeholder="Sin responsable" />
                 </SelectTrigger>
                 <SelectContent>
+                  {isAdminMode ? <SelectItem value={NO_MANAGER}>Sin responsable</SelectItem> : null}
                   {staff.map((member) => (
                     <SelectItem key={member.id} value={member.id}>
                       {member.name}

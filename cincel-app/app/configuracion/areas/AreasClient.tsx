@@ -13,7 +13,7 @@ import {
   type AreaDraft,
 } from "@/components/configuracion/AreaEditorDrawer";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveAreasCapabilities } from "@/lib/auth/permissions";
+import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
 import {
   createAreaAction,
   deleteAreaAction,
@@ -55,7 +55,7 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
   const [workflows, setWorkflows] = useState<WorkflowDetail[]>([]);
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const capabilities = useMemo(
-    () => resolveAreasCapabilities(authenticatedUser),
+    () => resolvePositionsCapabilities(authenticatedUser),
     [authenticatedUser],
   );
 
@@ -320,7 +320,7 @@ export function AreasClient({ initialAreas }: AreasClientProps) {
               asignados.
             </p>
           </div>
-          {capabilities.canManageAreas ? (
+          {capabilities.canManagePositions ? (
             <Button onClick={openAddEditor}>+ Nueva área</Button>
           ) : null}
         </div>

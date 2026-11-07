@@ -39,6 +39,7 @@ export const PORTAL_ERROR_MESSAGES: Record<PortalActionError, string> = {
   rate_limited: "Ya reenviaste esta invitación varias veces; espera una hora.",
   forbidden: "No tienes permiso.",
   not_found: "No encontramos el proyecto o el contacto.",
+  no_client: "Asigna un cliente al proyecto antes de invitar.",
 };
 
 export const INVITE_SENT_MESSAGE = "Invitación enviada";

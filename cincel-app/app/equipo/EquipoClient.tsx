@@ -18,7 +18,7 @@ import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { Button } from "@/components/ui/shadcn/button";
 import ExportMenu from "@/components/ui/ExportMenu";
-import { resolveAreasCapabilities } from "@/lib/auth/permissions";
+import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { formatLastLogin, revokedReasonLabel } from "@/lib/equipo/google-access";
 import {
@@ -147,7 +147,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     closeEditor,
     saveMember,
   } = useMemberEditor({ authenticatedUser, onSaved: refresh });
-  const areasCapabilities = useMemo(() => resolveAreasCapabilities(authenticatedUser), [authenticatedUser]);
+  const positionsCapabilities = useMemo(() => resolvePositionsCapabilities(authenticatedUser), [authenticatedUser]);
   const isAdministrator = authenticatedUser?.access === SYSTEM_ADMIN_ROLE;
 
   function toggle(id: string | number) {
@@ -425,7 +425,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         data={visible}
         getRowId={(row) => row.id}
         onRowClick={(row) => setProfileMemberId(row.id)}
-        onReorderRows={areasCapabilities.canManageAreas && view === "activos" ? (ids) => void reorderTeam(ids) : undefined}
+        onReorderRows={positionsCapabilities.canManagePositions && view === "activos" ? (ids) => void reorderTeam(ids) : undefined}
         wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage={view === "activos" ? "No hay colaboradores activos." : "No hay colaboradores desactivados."}
       />

@@ -17,6 +17,18 @@ import { FormField } from "@/components/ui/shadcn/form-field";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
+import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/shadcn/alert-dialog";
+import { ProjectAdminFields, projectAdminPatch, type ProjectAdminValue } from "@/components/proyectos/ProjectAdminFields";
 import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard";
 import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
 import { ProjectTramosCard } from "@/components/proyectos/ProjectTramosCard";
@@ -54,6 +66,15 @@ import type {
 
 const NO_VALUE = "__none__";
 
+/** Spanish copy for a failed ficha save (FE §9). */
+function saveErrorText(err: unknown): string {
+  const code = err instanceof Error ? err.message.split(":")[0].trim() : "";
+  if (code === "FORBIDDEN") return "No tienes permiso para realizar esta acción.";
+  if (code === "NOT_FOUND") return "Ya no existe. Recarga la página.";
+  if (code === "NAME_TAKEN") return "Ya existe un proyecto con ese nombre.";
+  return "No se pudo completar la acción. Intenta de nuevo.";
+}
+
 const PROJECT_STATUS_LABEL: Record<ProjectDetail["status"], string> = {
   activo: "Activo",
   pausado: "Pausado",
@@ -78,6 +99,10 @@ export default function ProjectFichaPage() {
   const [notFound, setNotFound] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Partial<ProjectDetail>>({});
+  const [adminDraft, setAdminDraft] = useState<ProjectAdminValue>({ clientId: null, origin: null, originStaffId: null });
+  const [confirmClientChange, setConfirmClientChange] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const authenticatedUser = getCurrentAuthenticatedUser();
   const caps = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
   const isAdmin = canSeeAdminData(authenticatedUser);
@@ -102,7 +127,7 @@ export default function ProjectFichaPage() {
         fetchContactsAction(),
         fetchWorkflowsAction(),
         fetchProjectSpacesAction(projectId).catch(() => [] as ProjectSpace[]),
-        isAdmin ? fetchAdminTasksAction({ projectId }).catch(() => [] as TaskListItem[]) : Promise.resolve([] as TaskListItem[]),
+        isAdmin ? fetchAdminTasksAction({ projectId, includeClosed: true }).catch(() => [] as TaskListItem[]) : Promise.resolve([] as TaskListItem[]),
       ]);
       if (!row) {
         setNotFound(true);
@@ -165,7 +190,6 @@ export default function ProjectFichaPage() {
   function startEditing() {
     if (!project || !caps.canEditProjectGeneral) return;
     setDraft({
-      clientId: project.client?.id ?? null,
       projectType: project.projectType,
       addressStreet: project.addressStreet,
       addressCity: project.addressCity,
@@ -176,26 +200,51 @@ export default function ProjectFichaPage() {
       managerId: project.manager?.id ?? null,
       coordinatorId: project.coordinator?.id ?? null,
     });
+    setAdminDraft({
+      clientId: project.client?.id ?? null,
+      origin: project.origin,
+      originStaffId: project.originStaffId,
+    });
+    setSaveError(null);
     setIsEditing(true);
+  }
+
+  /** The admin draft picks a different client than the saved one. */
+  function clientChanged(): boolean {
+    if (!project || !isAdmin) return false;
+    return (adminDraft.clientId ?? null) !== (project.client?.id ?? null);
+  }
+
+  function requestSave() {
+    if (clientChanged()) {
+      setConfirmClientChange(true);
+      return;
+    }
+    void saveEditing();
   }
 
   async function saveEditing() {
     if (!project) return;
-    const newClient = draft.clientId && draft.clientId !== project.client?.id ? clients.find((c) => c.id === draft.clientId) : null;
-    if (
-      newClient &&
-      !window.confirm(`¿Cambiar el cliente de "${project.name}" de ${project.client?.name ?? "sin cliente"} a ${newClient.name}?`)
-    ) {
-      return;
-    }
+    setConfirmClientChange(false);
+    setSaveError(null);
+    setSaving(true);
     try {
-      await updateProjectAction(project.id, draft);
+      // Client and origin are admin-only: non-admins never send those keys (FORBIDDEN otherwise).
+      const patch = isAdmin ? { ...draft, ...projectAdminPatch(adminDraft) } : draft;
+      await updateProjectAction(project.id, patch);
       setIsEditing(false);
+      // Refetch the project and its admin tasks: the backend already closed
+      // "Asignar cliente y origen" when a client was set (RD-10).
       await reload();
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
+      setSaveError(saveErrorText(err));
+    } finally {
+      setSaving(false);
     }
   }
+
+  const draftClientName = adminDraft.clientId ? clients.find((c) => c.id === adminDraft.clientId)?.name ?? null : null;
 
   async function toggleMember(staffId: string) {
     if (!project) return;
@@ -264,23 +313,32 @@ export default function ProjectFichaPage() {
               <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
               <Badge variant="secondary">{PROJECT_STATUS_LABEL[project.status]}</Badge>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Cliente:{" "}
-              {project.client ? (
-                <Link href={`/directorio?contact=${project.client.id}`} className="underline">
-                  {project.client.name}
-                </Link>
-              ) : (
-                "Por asignar"
-              )}
-            </p>
+            {isAdmin ? (
+              <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Cliente:</span>
+                {project.client ? (
+                  <Link href={`/directorio?contact=${project.client.id}`} className="underline">
+                    {project.client.name}
+                  </Link>
+                ) : (
+                  <>
+                    <Badge variant="destructive">Por asignar</Badge>
+                    {caps.canEditProjectGeneral && !isEditing ? (
+                      <Button variant="link" size="sm" className="h-auto p-0" onClick={startEditing}>
+                        Asignar
+                      </Button>
+                    ) : null}
+                  </>
+                )}
+              </p>
+            ) : null}
           </div>
           <div className="flex gap-2">
             {caps.canEditProjectGeneral ? (
               isEditing ? (
                 <>
-                  <Button variant="outline" onClick={() => setIsEditing(false)}>Cancelar</Button>
-                  <Button onClick={() => void saveEditing()}>Guardar</Button>
+                  <Button variant="outline" disabled={saving} onClick={() => setIsEditing(false)}>Cancelar</Button>
+                  <Button disabled={saving} onClick={requestSave}>Guardar</Button>
                 </>
               ) : (
                 <Button variant="outline" onClick={startEditing}>Editar</Button>
@@ -298,25 +356,22 @@ export default function ProjectFichaPage() {
           <div className="space-y-6 lg:col-span-2">
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-foreground">Datos generales</h2>
+              {isEditing && saveError ? (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertDescription>{saveError}</AlertDescription>
+                </Alert>
+              ) : null}
               {isEditing ? (
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <FormField className="sm:col-span-2">
-                    <Label className="block text-sm font-normal text-muted-foreground">Cliente</Label>
-                    <Select
-                      items={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
-                      value={draft.clientId ?? project.client?.id ?? null}
-                      onValueChange={(v) => setDraft((d) => ({ ...d, clientId: v as string }))}
-                    >
-                      <SelectTrigger className="mt-1 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clients.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormField>
+                  {isAdmin ? (
+                    <ProjectAdminFields
+                      value={adminDraft}
+                      onChange={setAdminDraft}
+                      clients={clients}
+                      staff={staff}
+                      projectHasClient={project.client !== null}
+                    />
+                  ) : null}
                   <FormField>
                     <Label className="block text-sm font-normal text-muted-foreground">Tipo de proyecto</Label>
                     <Input
@@ -376,6 +431,12 @@ export default function ProjectFichaPage() {
                   <div><dt className="text-muted-foreground">Inicio</dt><dd>{project.startDate || "—"}</dd></div>
                   <div><dt className="text-muted-foreground">Encargado</dt><dd>{project.manager?.name ?? "Sin encargado"}</dd></div>
                   <div><dt className="text-muted-foreground">Coordinador</dt><dd>{project.coordinator?.name ?? "Sin encargado"}</dd></div>
+                  {isAdmin ? (
+                    <>
+                      <div><dt className="text-muted-foreground">Origen</dt><dd>{project.origin || "—"}</dd></div>
+                      <div><dt className="text-muted-foreground">Quién trajo el proyecto</dt><dd>{project.originStaff?.name ?? "Nadie del equipo"}</dd></div>
+                    </>
+                  ) : null}
                 </dl>
               )}
             </section>
@@ -500,6 +561,23 @@ export default function ProjectFichaPage() {
           </div>
         </div>
 
+        <AlertDialog open={confirmClientChange} onOpenChange={(next) => (next ? undefined : setConfirmClientChange(false))}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Cambiar el cliente del proyecto?</AlertDialogTitle>
+              <AlertDialogDescription>
+                El cliente de «{project.name}» pasará de {project.client?.name ?? "sin cliente"} a{" "}
+                {draftClientName ?? "sin cliente"}.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction disabled={saving} onClick={() => void saveEditing()}>
+                Cambiar cliente
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </section>
     </main>
   );

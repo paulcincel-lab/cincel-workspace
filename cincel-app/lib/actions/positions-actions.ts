@@ -2,35 +2,33 @@
 
 /**
  * Puestos (project flow BE §7.2). Reads: any staff session. Writes:
- * `positions.canManagePositions` (today `areas.canManageAreas`). Revalidates
+ * `positions.canManagePositions`. Revalidates
  * `/configuracion/puestos` and `/equipo` (+ `/configuracion/google` on delete).
  */
 import { revalidatePath } from "next/cache";
 
-import { resolveAreasCapabilities } from "@/lib/auth/permissions";
+import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
+import { flowError } from "@/lib/project-flow/errors";
 import * as positionsRepository from "@/lib/repositories/positions-repository";
 import type { Position, PositionInput } from "@/lib/types/core";
 import {
   OrderedIdsSchema,
+  parseInput,
   PositionInputSchema,
   UuidArraySchema,
   UuidSchema,
-  parseInput,
 } from "@/lib/validation/project-flow";
 
-/** The company-structure managers (Administrador / Dirección by default); FORBIDDEN otherwise. */
-async function requirePositionsManager() {
+/** The puestos write guard: `positions.canManagePositions`. */
+async function requirePositionsManager(): Promise<void> {
   const user = await requireCapabilityUser();
-  if (!resolveAreasCapabilities(user).canManageAreas) throw flowError(FLOW_ERROR.FORBIDDEN);
-  return user;
+  if (!resolvePositionsCapabilities(user).canManagePositions) throw flowError("FORBIDDEN");
 }
 
-function revalidatePositions(options: { google?: boolean } = {}) {
+function revalidatePositions(): void {
   revalidatePath("/configuracion/puestos");
   revalidatePath("/equipo");
-  if (options.google) revalidatePath("/configuracion/google");
 }
 
 /** Live puestos by `sortOrder` (active and inactive), with phases, staffCount and googleManaged. */
@@ -42,8 +40,8 @@ export async function fetchPositionsAction(): Promise<Position[]> {
 /** Errors: FORBIDDEN, NAME_TAKEN, EMPTY. */
 export async function createPositionAction(input: PositionInput): Promise<Position> {
   await requirePositionsManager();
-  const values = parseInput(PositionInputSchema, input);
-  const row = await positionsRepository.createPosition(values);
+  const parsed = parseInput(PositionInputSchema, input);
+  const row = await positionsRepository.createPosition(parsed);
   revalidatePositions();
   return row;
 }
@@ -52,8 +50,8 @@ export async function createPositionAction(input: PositionInput): Promise<Positi
 export async function updatePositionAction(id: string, patch: Partial<PositionInput>): Promise<Position> {
   await requirePositionsManager();
   const positionId = parseInput(UuidSchema, id);
-  const values = parseInput(PositionInputSchema.partial(), patch);
-  const row = await positionsRepository.updatePosition(positionId, values);
+  const parsed = parseInput(PositionInputSchema.partial(), patch);
+  const row = await positionsRepository.updatePosition(positionId, parsed);
   revalidatePositions();
   return row;
 }
@@ -61,9 +59,9 @@ export async function updatePositionAction(id: string, patch: Partial<PositionIn
 /** Errors: FORBIDDEN, NOT_FOUND, IN_USE (a Google group mapping references it). */
 export async function deletePositionAction(id: string): Promise<void> {
   await requirePositionsManager();
-  const positionId = parseInput(UuidSchema, id);
-  await positionsRepository.softDeletePosition(positionId);
-  revalidatePositions({ google: true });
+  await positionsRepository.softDeletePosition(parseInput(UuidSchema, id));
+  revalidatePositions();
+  revalidatePath("/configuracion/google");
 }
 
 /** Replaces the candidate fases (any tramo). Errors: FORBIDDEN, NOT_FOUND (unknown ids). */
@@ -79,7 +77,6 @@ export async function setPositionPhasesAction(id: string, phaseIds: string[]): P
 /** Errors: FORBIDDEN. */
 export async function reorderPositionsAction(orderedIds: string[]): Promise<void> {
   await requirePositionsManager();
-  const ids = parseInput(OrderedIdsSchema, orderedIds);
-  await positionsRepository.reorderPositions(ids);
+  await positionsRepository.reorderPositions(parseInput(OrderedIdsSchema, orderedIds));
   revalidatePositions();
 }

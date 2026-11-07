@@ -1,4 +1,5 @@
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
+import { mapLegacyModuleState } from "@/lib/auth/permissions";
 import { PERMISSIONS_MODULES_REGISTRY, type PermissionValue } from "@/lib/auth/permissionsRegistry";
 import { SYSTEM_ACCESS_ROLES, type SystemAccessRole } from "@/lib/data/roles";
 import { teamMembersPublic } from "@/lib/data/team-public";
@@ -71,7 +72,10 @@ export function sanitizePermissionsState(defaultState: PermissionsState, storedS
 
     for (const moduleDefinition of PERMISSIONS_MODULES_REGISTRY) {
       const moduleDefaults = roleDefaults[moduleDefinition.id] ?? {};
-      const moduleCandidate = roleCandidate[moduleDefinition.id] ?? {};
+      const moduleCandidate =
+        roleCandidate[moduleDefinition.id] ??
+        mapLegacyModuleState(roleCandidate as Record<string, unknown>, moduleDefinition.id) ??
+        {};
       const moduleNext: ModulePermissionsState = {};
 
       for (const action of moduleDefinition.actions) {

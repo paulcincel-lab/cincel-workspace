@@ -39,7 +39,7 @@ function renderDrawer(overrides: { editingArea?: AreaDetail | null; draft?: Part
       workflowNames={[]}
       onChangeWorkflowNames={vi.fn()}
       onSaveWorkflows={vi.fn()}
-      capabilities={{ canViewAreas: true, canManageAreas: true }}
+      capabilities={{ canViewPositions: true, canManagePositions: true }}
     />,
   );
 }

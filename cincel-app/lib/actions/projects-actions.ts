@@ -105,8 +105,8 @@ export async function updateProjectAction(
   }
   const row = await projectsRepository.updateProject(id, patch, user.member.id, viewer);
   if (patch.name !== undefined || patch.code !== undefined) after(() => syncProjectFolderName(id));
-  // A client creates the missing "02 Cliente" / "03 Del cliente" folders.
-  if (patch.clientId) after(() => syncProjectFolders(id));
+  // Setting a client adds "02 Cliente" and "03 Del cliente" to the Drive tree (BE §8.8).
+  if (typeof patch.clientId === "string" && patch.clientId) after(() => syncProjectFolders(id));
   revalidateProjectEdit(id);
   return row;
 }

@@ -11,11 +11,19 @@ import {
   staffPositions,
   staffProfiles,
   workflowPhases,
-  workspaceGroupMappings,
+  workflows,
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { recordChanges } from "@/lib/repositories/history-repository";
-import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
+import type {
+  EmergencyContact,
+  PositionRef,
+  Staff,
+  StaffDetail,
+  StaffInput,
+  StaffProfile,
+  WorkflowPhaseRef,
+} from "@/lib/types/core";
 
 type StaffRow = typeof staff.$inferSelect;
 
@@ -65,10 +73,63 @@ export async function getStaffRoleLock(id: string): Promise<{ role: string | nul
   return row ? { role: row.role, googleManaged: row.googleSub !== null } : null;
 }
 
-/** Ids of the áreas a staff member belongs to. */
-export async function listStaffAreaIds(staffId: string): Promise<string[]> {
-  const rows = await db.select({ areaId: areaMembers.areaId }).from(areaMembers).where(eq(areaMembers.staffId, staffId));
-  return rows.map((row) => row.areaId);
+type StaffPositionsDto = Required<Pick<Staff, "positions" | "candidatePhases">>;
+
+/**
+ * Puestos and candidate fases per staff id (BE §7.2): `positions` are the
+ * person's live puestos in catalog order; `candidatePhases` the distinct
+ * active fases of their live, active puestos, in tramo then catalog order.
+ */
+export async function loadStaffPositions(staffIds: string[]): Promise<Map<string, StaffPositionsDto>> {
+  const out = new Map<string, StaffPositionsDto>(staffIds.map((id) => [id, { positions: [], candidatePhases: [] }]));
+  if (staffIds.length === 0) return out;
+
+  const [positionRows, phaseRows] = await Promise.all([
+    db
+      .select({ staffId: staffPositions.staffId, id: positions.id, name: positions.name })
+      .from(staffPositions)
+      .innerJoin(positions, eq(positions.id, staffPositions.positionId))
+      .where(and(inArray(staffPositions.staffId, staffIds), isNull(positions.deletedAt)))
+      .orderBy(asc(positions.sortOrder), asc(positions.name)),
+    db
+      .select({
+        staffId: staffPositions.staffId,
+        id: workflowPhases.id,
+        name: workflowPhases.name,
+        sortOrder: workflowPhases.sortOrder,
+        workflowName: workflows.name,
+      })
+      .from(staffPositions)
+      .innerJoin(positions, eq(positions.id, staffPositions.positionId))
+      .innerJoin(positionPhases, eq(positionPhases.positionId, positions.id))
+      .innerJoin(workflowPhases, eq(workflowPhases.id, positionPhases.phaseId))
+      .innerJoin(workflows, eq(workflows.id, workflowPhases.workflowId))
+      .where(
+        and(
+          inArray(staffPositions.staffId, staffIds),
+          isNull(positions.deletedAt),
+          eq(positions.active, true),
+          eq(workflowPhases.active, true),
+          isNull(workflows.deletedAt)
+        )
+      )
+      .orderBy(asc(workflows.sortOrder), asc(workflowPhases.sortOrder), asc(workflowPhases.name)),
+  ]);
+
+  for (const { staffId, ...position } of positionRows) {
+    const list: PositionRef[] | undefined = out.get(staffId)?.positions;
+    if (list && !list.some((p) => p.id === position.id)) list.push(position);
+  }
+  for (const { staffId, ...phase } of phaseRows) {
+    const list: Array<WorkflowPhaseRef & { workflowName: string }> | undefined = out.get(staffId)?.candidatePhases;
+    if (list && !list.some((p) => p.id === phase.id)) list.push(phase);
+  }
+  return out;
+}
+
+async function withPositions<T extends Staff>(rows: T[]): Promise<T[]> {
+  const byStaff = await loadStaffPositions(rows.map((row) => row.id));
+  return rows.map((row) => ({ ...row, ...(byStaff.get(row.id) ?? { positions: [], candidatePhases: [] }) }));
 }
 
 const STAFF_TRACKED_FIELDS = [
@@ -94,7 +155,7 @@ export async function listStaff(options: { includeInactive?: boolean } = {}): Pr
       and(isNull(staff.deletedAt), options.includeInactive ? undefined : eq(staff.active, true))
     )
     .orderBy(...STAFF_ORDER);
-  return rows.map(toStaff);
+  return withPositions(rows.map(toStaff));
 }
 
 /** Emergency contact per staff id; only members who have one registered. */
@@ -126,8 +187,8 @@ export async function reorderStaff(orderedIds: string[]): Promise<void> {
 
 /**
  * Staff who can be assigned to a task. When `workflowId` is given, staff
- * holding a live, active puesto that lists a fase of that tramo come first
- * (`suggested = true`), then by name (BE §7.2, §8.7).
+ * holding a live, active puesto that lists an active fase of that tramo come
+ * first (`suggested = true`), then everyone by name.
  */
 export async function listAssignableStaff(
   options: { workflowId?: string | null } = {}
@@ -218,8 +279,9 @@ export async function getStaff(id: string): Promise<StaffDetail | null> {
     .where(eq(authCredentials.staffId, id))
     .limit(1);
 
+  const [withPositionsRow] = await withPositions([toStaff(row)]);
   return {
-    ...toStaff(row),
+    ...withPositionsRow,
     profile: row.profile ? toProfile(row.profile) : null,
     areas: row.areaMemberships
       .filter((m) => m.area.deletedAt === null)
@@ -365,28 +427,6 @@ export async function upsertStaffProfile(
   return toProfile(row);
 }
 
-/** Replace a staff member's area memberships. */
-export async function setStaffAreas(staffId: string, areaIds: string[]): Promise<void> {
-  const wanted = new Set(areaIds);
-  const current = await db
-    .select({ areaId: areaMembers.areaId })
-    .from(areaMembers)
-    .where(eq(areaMembers.staffId, staffId));
-  const currentIds = new Set(current.map((c) => c.areaId));
-
-  const toRemove = [...currentIds].filter((id) => !wanted.has(id));
-  const toAdd = [...wanted].filter((id) => !currentIds.has(id));
-
-  if (toRemove.length > 0) {
-    await db
-      .delete(areaMembers)
-      .where(and(eq(areaMembers.staffId, staffId), inArray(areaMembers.areaId, toRemove)));
-  }
-  if (toAdd.length > 0) {
-    await db.insert(areaMembers).values(toAdd.map((areaId) => ({ areaId, staffId })));
-  }
-}
-
 /**
  * Manage login for a staff member. With a temporary password the credential
  * is created or reset and the member must change it on first access; without
@@ -417,14 +457,14 @@ export async function setStaffCredential(
     .where(eq(authCredentials.staffId, staffId));
 }
 
-/** Name of the first area a staff member belongs to, for legacy role checks. */
-export async function primaryAreaName(staffId: string): Promise<string | null> {
+/** Name of the first live, active puesto a staff member holds (catalog order), for the session's `area` label. */
+export async function primaryPositionName(staffId: string): Promise<string | null> {
   const [row] = await db
-    .select({ name: areas.name })
-    .from(areaMembers)
-    .innerJoin(areas, eq(areas.id, areaMembers.areaId))
-    .where(and(eq(areaMembers.staffId, staffId), isNull(areas.deletedAt)))
-    .orderBy(asc(areas.sortOrder), asc(areas.name))
+    .select({ name: positions.name })
+    .from(staffPositions)
+    .innerJoin(positions, eq(positions.id, staffPositions.positionId))
+    .where(and(eq(staffPositions.staffId, staffId), isNull(positions.deletedAt), eq(positions.active, true)))
+    .orderBy(asc(positions.sortOrder), asc(positions.name))
     .limit(1);
   return row?.name ?? null;
 }
