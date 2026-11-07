@@ -122,6 +122,7 @@ describe("ActividadesClient rows", () => {
       <ActividadesClient
         slug="general"
         workflow={null}
+        workflows={[]}
         initialProjects={[]}
         initialStaff={[]}
         initialTasks={[
@@ -185,6 +186,7 @@ describe("ActividadesClient tramo pages", () => {
       <ActividadesClient
         slug={slug}
         workflow={{ ...presaleWorkflow, id: `wf-${slug}`, key: slug, name: label }}
+        workflows={[{ ...presaleWorkflow, id: `wf-${slug}`, key: slug, name: label }]}
         initialProjects={[]}
         initialStaff={[]}
         initialTasks={[]}
@@ -202,6 +204,7 @@ describe("ActividadesClient tramo pages", () => {
       <ActividadesClient
         slug="presale"
         workflow={presaleWorkflow}
+        workflows={[presaleWorkflow]}
         initialProjects={[]}
         initialStaff={[]}
         initialTasks={[]}
@@ -220,6 +223,7 @@ describe("ActividadesClient tramo pages", () => {
       <ActividadesClient
         slug="presale"
         workflow={presaleWorkflow}
+        workflows={[presaleWorkflow]}
         initialProjects={[]}
         initialStaff={[]}
         initialTasks={[makeTask({ id: "a", title: "Levantamiento", workflowId: "wf-presale" })]}
@@ -228,5 +232,78 @@ describe("ActividadesClient tramo pages", () => {
 
     expect(screen.getByText("Levantamiento")).toBeTruthy();
     expect(screen.queryByText("Sin tareas en Presale.")).toBeNull();
+  });
+});
+
+describe("ActividadesClient tabs and template flow", () => {
+  const disenoWorkflow: WorkflowDetail = {
+    ...presaleWorkflow,
+    id: "wf-diseno",
+    key: "diseno",
+    name: "Diseño",
+    sortOrder: 1,
+    autoStart: "on_ready",
+    phases: [
+      { id: "ph-2", name: "Ejecutivo", sortOrder: 1, workflowId: "wf-diseno", active: true, templateCount: 0 },
+      { id: "ph-1", name: "Anteproyecto", sortOrder: 0, workflowId: "wf-diseno", active: true, templateCount: 0 },
+    ],
+  };
+  const inactiveWorkflow: WorkflowDetail = {
+    ...presaleWorkflow,
+    id: "wf-old",
+    key: "decoracion",
+    name: "Decoración",
+    active: false,
+    sortOrder: 2,
+  };
+
+  it("builds the tabs from the active workflows in flow order", () => {
+    capabilities.current = {};
+    render(
+      <ActividadesClient
+        slug="presale"
+        workflow={presaleWorkflow}
+        workflows={[disenoWorkflow, inactiveWorkflow, presaleWorkflow]}
+        initialProjects={[]}
+        initialStaff={[]}
+        initialTasks={[]}
+      />,
+    );
+
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["General", "Presale", "Diseño"]);
+  });
+
+  it("shows the tramo's fases in catalog order", () => {
+    capabilities.current = {};
+    render(
+      <ActividadesClient
+        slug="diseno"
+        workflow={disenoWorkflow}
+        workflows={[presaleWorkflow, disenoWorkflow]}
+        initialProjects={[]}
+        initialStaff={[]}
+        initialTasks={[makeTask({ id: "a", title: "Planta", workflowId: "wf-diseno", phase: "Anteproyecto" })]}
+      />,
+    );
+
+    expect(screen.getByText("Anteproyecto · Ejecutivo")).toBeTruthy();
+  });
+
+  it("no longer offers Iniciar plantilla", () => {
+    capabilities.current = { canCreateActivity: true };
+    render(
+      <ActividadesClient
+        slug="presale"
+        workflow={presaleWorkflow}
+        workflows={[presaleWorkflow]}
+        initialProjects={[]}
+        initialStaff={[]}
+        initialTasks={[]}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Iniciar plantilla/ })).toBeNull();
+    expect(screen.queryByText(/Iniciar plantilla/)).toBeNull();
   });
 });

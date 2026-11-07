@@ -3,7 +3,8 @@ import Header from "@/components/layout/Header";
 import { fetchBoardAction } from "@/lib/actions/tasks-actions";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import type { TaskListItem, TaskStatus, TaskStatusOption, WorkflowDetail } from "@/lib/types/core";
+import { fetchProjectsAction } from "@/lib/actions/projects-actions";
+import type { TaskListItem, TaskStatus, TaskStatusOption, WorkflowDetail, WorkflowRef } from "@/lib/types/core";
 import { TableroClient } from "./TableroClient";
 
 const EMPTY_BOARD: Record<TaskStatus, TaskListItem[]> = {
@@ -17,6 +18,7 @@ export default async function TableroPage() {
   let initialBoard: Record<TaskStatus, TaskListItem[]> = EMPTY_BOARD;
   let workflows: WorkflowDetail[] = [];
   let customStatuses: TaskStatusOption[] = [];
+  let projectTramos: Record<string, WorkflowRef | null> = {};
 
   try {
     [initialBoard, workflows, customStatuses] = await Promise.all([
@@ -24,6 +26,8 @@ export default async function TableroPage() {
       fetchWorkflowsAction(),
       fetchTaskStatusesAction(),
     ]);
+    const projects = await fetchProjectsAction();
+    projectTramos = Object.fromEntries(projects.map((p) => [p.id, p.currentWorkflow]));
   } catch {
     // Not authorized / no session — the client falls back to hydrating itself.
   }
@@ -33,7 +37,7 @@ export default async function TableroPage() {
       <Sidebar />
       <section className="min-w-0 flex-1 overflow-y-auto p-10">
         <Header />
-        <TableroClient initialBoard={initialBoard} customStatuses={customStatuses} workflows={workflows} />
+        <TableroClient initialBoard={initialBoard} customStatuses={customStatuses} workflows={workflows} projectTramos={projectTramos} />
       </section>
     </main>
   );

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
@@ -21,6 +21,7 @@ import type {
   DriveFileInput,
   HistoryEvent,
   Project,
+  ProjectCreateInput,
   ProjectDetail,
   ProjectInput,
   ProjectLink,
@@ -28,13 +29,18 @@ import type {
   ProjectListItem,
   ProjectStatus,
   ProjectTramo,
+  ViewerScope,
   WorkflowPhaseRef,
   WorkflowRef,
 } from "@/lib/types/core";
-import { flowError } from "@/lib/project-flow/errors";
 import { startTramo } from "@/lib/project-flow/start-tramo";
-import type { FlowTx } from "@/lib/project-flow/db";
+import { UNSCOPED_VIEWER, scopeProjectDto } from "@/lib/auth/viewer-scope";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
+import { closeAssignClientTask, ensureAssignClientTask } from "@/lib/project-flow/admin-tasks";
+import { autoStartOnCreate } from "@/lib/project-flow/auto-start";
+import type { FlowExecutor } from "@/lib/project-flow/db";
+import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
+import { parseInput, ProjectCreateInputSchema } from "@/lib/validation/project-flow";
 
 type ProjectRow = typeof projects.$inferSelect;
 
@@ -43,13 +49,14 @@ const clean = (v: string | null | undefined): string | null => {
   return t ? t : null;
 };
 
-export function toProject(row: ProjectRow): Project {
-  return {
+/** Project DTO; `clientId`, `origin` and `originStaffId` are null unless the viewer is admin (BE §8.5). */
+export function toProject(row: ProjectRow, viewer: ViewerScope): Project {
+  return scopeProjectDto({
     id: row.id,
     code: row.code,
     name: row.name,
     clientId: row.clientId,
-    // Not written by any path yet; filtered by viewer once DTOs take a ViewerScope.
+    // Admin only: null for non-admins (scopeProjectDto).
     origin: row.origin,
     originStaffId: row.originStaffId,
     status: row.status,
@@ -66,13 +73,15 @@ export function toProject(row: ProjectRow): Project {
     contractAmountMxn: row.contractAmountMxn,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-  };
+  }, viewer);
 }
 
 const PROJECT_TRACKED_FIELDS = [
   "code",
   "name",
   "clientId",
+  "origin",
+  "originStaffId",
   "status",
   "currentWorkflowId",
   "projectType",
@@ -142,7 +151,12 @@ export type ProjectFilters = {
   search?: string;
 };
 
-export async function listProjects(filters: ProjectFilters = {}): Promise<ProjectListItem[]> {
+/**
+ * Project list for `viewer`. Non-admins get no client data, can't filter or
+ * search by client, and admin tasks don't count in their task counts (BE §12).
+ */
+export async function listProjects(filters: ProjectFilters, viewer: ViewerScope): Promise<ProjectListItem[]> {
+  const countedKinds = viewer.isAdmin ? sql`` : sql` and t.kind <> 'admin'`;
   const statuses = filters.status
     ? Array.isArray(filters.status)
       ? filters.status
@@ -162,9 +176,9 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
       managerName: manager.name,
       coordinatorId: coordinator.id,
       coordinatorName: coordinator.name,
-      totalTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false)::int`,
-      openTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status <> 'completado')::int`,
-      blockedTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status = 'bloqueado')::int`,
+      totalTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false${countedKinds})::int`,
+      openTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status <> 'completado'${countedKinds})::int`,
+      blockedTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status = 'bloqueado'${countedKinds})::int`,
       // First catalog fase of the current tramo with an open, live, unarchived task.
       activePhase: sql<WorkflowPhaseRef | null>`(select json_build_object('id', p.id, 'name', p.name, 'sortOrder', p.sort_order) from core.workflow_phases p where p.workflow_id = ${projects.currentWorkflowId} and exists (select 1 from core.tasks t where t.project_id = ${projects.id} and t.phase_id = p.id and t.deleted_at is null and t.archived = false and t.status <> 'completado') order by p.sort_order, p.name limit 1)`,
     })
@@ -178,7 +192,7 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
       and(
         isNull(projects.deletedAt),
         statuses && statuses.length > 0 ? inArray(projects.status, statuses) : undefined,
-        filters.clientId ? eq(projects.clientId, filters.clientId) : undefined,
+        filters.clientId && viewer.isAdmin ? eq(projects.clientId, filters.clientId) : undefined,
         filters.managerId ? eq(projects.managerId, filters.managerId) : undefined,
         // A project is "in" every one of its stages, not only its primary one.
         filters.currentWorkflowId
@@ -188,7 +202,9 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
           ? sql`(${projects.managerId} = ${filters.involvesStaffId} or ${projects.coordinatorId} = ${filters.involvesStaffId} or exists (select 1 from core.project_members pm where pm.project_id = ${projects.id} and pm.staff_id = ${filters.involvesStaffId}))`
           : undefined,
         filters.search
-          ? sql`(${projects.name} ilike ${"%" + filters.search.trim() + "%"} or ${contacts.name} ilike ${"%" + filters.search.trim() + "%"})`
+          ? viewer.isAdmin
+            ? sql`(${projects.name} ilike ${"%" + filters.search.trim() + "%"} or ${contacts.name} ilike ${"%" + filters.search.trim() + "%"})`
+            : sql`${projects.name} ilike ${"%" + filters.search.trim() + "%"}`
           : undefined
       )
     )
@@ -196,8 +212,8 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
 
   const stagesByProject = await loadStageRows(rows.map((r) => r.project.id));
   return rows.map((r) => ({
-    ...toProject(r.project),
-    client: toClient(r.project.clientId, r.clientName, r.clientType),
+    ...toProject(r.project, viewer),
+    client: viewer.isAdmin ? toClient(r.project.clientId, r.clientName, r.clientType) : null,
     currentWorkflow: r.workflowId
       ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName!, sortOrder: r.workflowSortOrder! }
       : null,
@@ -211,7 +227,8 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
   }));
 }
 
-export async function getProject(id: string): Promise<ProjectDetail | null> {
+/** Project detail for `viewer`: client, origin, origin staff and monday import are admin only (BE §8.5). */
+export async function getProject(id: string, viewer: ViewerScope): Promise<ProjectDetail | null> {
   const row = await db.query.projects.findFirst({
     where: and(eq(projects.id, id), isNull(projects.deletedAt)),
     with: {
@@ -228,8 +245,8 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
   if (!row) return null;
   const stageRows = (await loadStageRows([row.id])).get(row.id);
   return {
-    ...toProject(row),
-    client: row.client ? { id: row.client.id, name: row.client.name, type: row.client.type } : null,
+    ...toProject(row, viewer),
+    client: viewer.isAdmin && row.client ? { id: row.client.id, name: row.client.name, type: row.client.type } : null,
     currentWorkflow: row.currentWorkflow
       ? {
           id: row.currentWorkflow.id,
@@ -243,8 +260,8 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     stages: (stageRows ?? []).map(stageRef),
     manager: row.manager ? { id: row.manager.id, name: row.manager.name } : null,
     coordinator: row.coordinator ? { id: row.coordinator.id, name: row.coordinator.name } : null,
-    originStaff: row.originStaff ? { id: row.originStaff.id, name: row.originStaff.name } : null,
-    // Admins only; filled once getProject takes a ViewerScope (BE §8.5).
+    originStaff: viewer.isAdmin && row.originStaff ? { id: row.originStaff.id, name: row.originStaff.name } : null,
+    // Admins only (BE §8.5); null until the monday boards are read from import_refs.
     mondayImport: null,
     members: row.members
       .filter((m) => m.staff.deletedAt === null)
@@ -261,24 +278,63 @@ function toLink(row: typeof projectLinks.$inferSelect): ProjectLink {
   return { id: row.id, kind: row.kind as ProjectLink["kind"], title: row.title, url: row.url, driveFileId: row.driveFileId };
 }
 
-/** Column values of a project input; the current tramo is written only by `startTramo` / `setProjectCurrentTramo`. */
-function toValues(input: ProjectInput) {
-  return {
-    code: clean(input.code),
-    name: input.name.trim(),
-    clientId: input.clientId,
-    status: input.status ?? "activo",
-    projectType: clean(input.projectType),
-    addressStreet: clean(input.addressStreet),
-    addressCity: clean(input.addressCity),
-    addressState: clean(input.addressState),
-    managerId: input.managerId ?? null,
-    coordinatorId: input.coordinatorId ?? null,
-    progress: input.progress ?? 0,
-    startDate: clean(input.startDate),
-    endDate: clean(input.endDate),
-    contractAmountMxn: clean(input.contractAmountMxn),
-  };
+/** Patch keys `updateProject` writes; `phase`/`phases`/`currentWorkflowId` are no longer edited here. */
+const PROJECT_EDITABLE_FIELDS = [
+  "code",
+  "name",
+  "clientId",
+  "origin",
+  "originStaffId",
+  "status",
+  "projectType",
+  "addressStreet",
+  "addressCity",
+  "addressState",
+  "managerId",
+  "coordinatorId",
+  "progress",
+  "startDate",
+  "endDate",
+  "contractAmountMxn",
+] as const satisfies ReadonlyArray<keyof ProjectInput & keyof ProjectRow>;
+
+/** Patch keys only administrators may send (BE §7.3, RD-12). */
+export const PROJECT_ADMIN_FIELDS = ["clientId", "origin", "originStaffId"] as const;
+
+/** Free-text patch fields: trimmed, blank → null. */
+const PROJECT_TEXT_FIELDS = new Set<string>([
+  "code",
+  "origin",
+  "projectType",
+  "addressStreet",
+  "addressCity",
+  "addressState",
+  "startDate",
+  "endDate",
+  "contractAmountMxn",
+]);
+
+/** Live project statuses the firm-wide name rule covers (BE §9.9). */
+const NAME_UNIQUE_STATUSES: ProjectStatus[] = ["activo", "pausado"];
+
+/**
+ * NAME_TAKEN pre-check (BE §9.9): another live, active or paused project with
+ * the same name, case-insensitive. `projects_name_lower_uq` is the final guard.
+ */
+async function assertProjectNameFree(exec: FlowExecutor, name: string, exceptId?: string): Promise<void> {
+  const [clash] = await exec
+    .select({ id: projects.id })
+    .from(projects)
+    .where(
+      and(
+        isNull(projects.deletedAt),
+        inArray(projects.status, NAME_UNIQUE_STATUSES),
+        sql`lower(${projects.name}) = lower(${name})`,
+        exceptId ? ne(projects.id, exceptId) : undefined
+      )
+    )
+    .limit(1);
+  if (clash) throw flowError(FLOW_ERROR.NAME_TAKEN);
 }
 
 const UNIQUE_VIOLATION = "23505";
@@ -301,124 +357,115 @@ export function isProjectNameTaken(err: unknown): boolean {
   return false;
 }
 
-/** Rethrows a project name unique violation as NAME_TAKEN. */
-function rethrowNameTaken(err: unknown): never {
-  if (isProjectNameTaken(err)) throw flowError("NAME_TAKEN");
-  throw err;
-}
-
-/** The first active tramo by `sort_order` when it auto-starts on create, with its active fases in catalog order. */
-async function onCreateTramo(tx: FlowTx): Promise<{ id: string; phaseIds: string[] } | null> {
-  const [first] = await tx
-    .select({ id: workflows.id, autoStart: workflows.autoStart })
-    .from(workflows)
-    .where(and(eq(workflows.active, true), isNull(workflows.deletedAt)))
-    .orderBy(asc(workflows.sortOrder), asc(workflows.name))
-    .limit(1);
-  if (!first || first.autoStart !== "on_create") return null;
-  const phases = await tx
-    .select({ id: workflowPhases.id })
-    .from(workflowPhases)
-    .where(and(eq(workflowPhases.workflowId, first.id), eq(workflowPhases.active, true)))
-    .orderBy(asc(workflowPhases.sortOrder), asc(workflowPhases.name));
-  return { id: first.id, phaseIds: phases.map((p) => p.id) };
-}
-
 /**
- * Create a project (BE §9.4), in one transaction: insert it, then, when the
- * first active tramo auto-starts on create, start it with every active fase
- * and no assignee (`startTramo`, trigger `on_create`). The create form still
- * requires a client until the name-only sheet ships. Errors:
- * PROJECT_CLIENT_REQUIRED, EMPTY, NAME_TAKEN.
+ * Create a project with only a name (BE §9.4), in one transaction: the row
+ * (no client), the admin task "Asignar cliente y origen", the Presale start
+ * when its auto-start is on, and the history `created` change. Drive folders
+ * are the action's `after()` work. Errors: EMPTY, INVALID, NAME_TAKEN.
  */
-export async function createProject(input: ProjectInput, actorId: string): Promise<ProjectDetail> {
-  if (!input.clientId) throw new Error("PROJECT_CLIENT_REQUIRED");
-  const name = input.name?.trim() ?? "";
-  if (!name) throw flowError("EMPTY");
-  if (name.length > 120) throw flowError("INVALID", "name");
+export async function createProject(input: ProjectCreateInput, actorId: string): Promise<ProjectDetail> {
+  const { name } = parseInput(ProjectCreateInputSchema, input);
 
-  const id = await db
-    .transaction(async (tx) => {
+  let projectId: string;
+  try {
+    projectId = await db.transaction(async (tx) => {
+      await assertProjectNameFree(tx, name);
       const [row] = await tx
         .insert(projects)
-        .values({ ...toValues({ ...input, name }), currentWorkflowId: null })
-        .returning();
-      const tramo = await onCreateTramo(tx);
-      if (tramo && tramo.phaseIds.length > 0) {
-        await startTramo(tx, {
-          projectId: row.id,
-          workflowId: tramo.id,
-          phaseIds: tramo.phaseIds,
-          assignment: { mode: "none" },
-          actorId,
-          trigger: "on_create",
-        });
-      }
+        .values({ name, status: "activo", clientId: null })
+        .returning({ id: projects.id, name: projects.name });
+      await ensureAssignClientTask(tx, row.id, actorId);
+      await autoStartOnCreate(tx, row.id, actorId);
       await recordChanges(
         {
           entity: "project",
           entityId: row.id,
           actorId,
-          before: { name: null },
-          after: { name: row.name },
-          fields: ["name"],
+          before: { created: null },
+          after: { created: row.name },
+          fields: ["created"],
         },
         tx
       );
       return row.id;
-    })
-    .catch(rethrowNameTaken);
-  return (await getProject(id))!;
+    });
+  } catch (err) {
+    if (isProjectNameTaken(err)) throw flowError(FLOW_ERROR.NAME_TAKEN);
+    throw err;
+  }
+  return (await getProject(projectId, UNSCOPED_VIEWER))!;
 }
 
+/**
+ * Edits a project's general data (BE §8.5). `clientId`, `origin` and
+ * `originStaffId` are admin only (FORBIDDEN). Setting a client on a project
+ * without one closes its "Asignar cliente y origen" task (BE §9.5); the
+ * caller schedules the folder sync. Errors: FORBIDDEN, NOT_FOUND, EMPTY,
+ * NAME_TAKEN.
+ */
 export async function updateProject(
   id: string,
   patch: Partial<ProjectInput>,
-  actorId: string
+  actorId: string,
+  viewer: ViewerScope
 ): Promise<ProjectDetail> {
-  const [before] = await db
-    .select()
-    .from(projects)
-    .where(and(eq(projects.id, id), isNull(projects.deletedAt)))
-    .limit(1);
-  if (!before) throw new Error("PROJECT_NOT_FOUND");
+  if (!viewer.isAdmin && PROJECT_ADMIN_FIELDS.some((k) => patch[k] !== undefined)) {
+    throw flowError(FLOW_ERROR.FORBIDDEN, "admin only fields");
+  }
 
-  const pick = <K extends keyof ProjectInput & keyof ProjectRow>(k: K) =>
-    (patch[k] === undefined ? before[k] : patch[k]) as ProjectInput[K];
+  const values: Partial<Record<(typeof PROJECT_EDITABLE_FIELDS)[number], unknown>> = {};
+  for (const key of PROJECT_EDITABLE_FIELDS) {
+    const value = patch[key];
+    if (value === undefined) continue;
+    if (key === "name") {
+      const trimmed = String(value).trim();
+      if (!trimmed) throw flowError(FLOW_ERROR.EMPTY);
+      if (trimmed.length > 120) throw flowError(FLOW_ERROR.INVALID, "name");
+      values.name = trimmed;
+    } else if (PROJECT_TEXT_FIELDS.has(key)) {
+      values[key] = clean(value as string | null);
+    } else {
+      values[key] = value;
+    }
+  }
 
-  const merged = toValues({
-    code: pick("code"),
-    name: pick("name") ?? before.name,
-    clientId: pick("clientId") ?? before.clientId,
-    status: pick("status"),
-    projectType: pick("projectType"),
-    addressStreet: pick("addressStreet"),
-    addressCity: pick("addressCity"),
-    addressState: pick("addressState"),
-    managerId: pick("managerId"),
-    coordinatorId: pick("coordinatorId"),
-    progress: pick("progress"),
-    startDate: pick("startDate"),
-    endDate: pick("endDate"),
-    contractAmountMxn: pick("contractAmountMxn"),
-  });
-  // NAME_TAKEN also on un-archiving a project whose name is now taken (BE §7.3).
-  if (!merged.name) throw flowError("EMPTY");
-  const [after] = await db
-    .update(projects)
-    .set(merged)
-    .where(eq(projects.id, id))
-    .returning()
-    .catch(rethrowNameTaken);
-  await recordChanges({
-    entity: "project",
-    entityId: id,
-    actorId,
-    before,
-    after,
-    fields: PROJECT_TRACKED_FIELDS,
-  });
-  return (await getProject(id))!;
+  try {
+    await db.transaction(async (tx) => {
+      const [before] = await tx
+        .select()
+        .from(projects)
+        .where(and(eq(projects.id, id), isNull(projects.deletedAt)))
+        .limit(1)
+        .for("update");
+      if (!before) throw flowError(FLOW_ERROR.NOT_FOUND);
+
+      const nextName = (values.name as string | undefined) ?? before.name;
+      const nextStatus = (values.status as ProjectStatus | undefined) ?? before.status;
+      const nameChanged = nextName.toLowerCase() !== before.name.toLowerCase();
+      const reentersRule = !NAME_UNIQUE_STATUSES.includes(before.status) && NAME_UNIQUE_STATUSES.includes(nextStatus);
+      if (NAME_UNIQUE_STATUSES.includes(nextStatus) && (nameChanged || reentersRule)) {
+        await assertProjectNameFree(tx, nextName, id);
+      }
+
+      if (Object.keys(values).length === 0) return;
+      const [after] = await tx
+        .update(projects)
+        .set(values as Partial<typeof projects.$inferInsert>)
+        .where(eq(projects.id, id))
+        .returning();
+      await recordChanges(
+        { entity: "project", entityId: id, actorId, before, after, fields: PROJECT_TRACKED_FIELDS },
+        tx
+      );
+      if (before.clientId === null && after.clientId !== null) {
+        await closeAssignClientTask(tx, id, actorId);
+      }
+    });
+  } catch (err) {
+    if (isProjectNameTaken(err)) throw flowError(FLOW_ERROR.NAME_TAKEN);
+    throw err;
+  }
+  return (await getProject(id, viewer))!;
 }
 
 /** The live project's current tramo and whether `workflowId` has a stage row on it. */
@@ -462,7 +509,7 @@ export async function setProjectCurrentTramo(id: string, workflowId: string, act
       );
     });
   }
-  return (await getProject(id))!;
+  return (await getProject(id, UNSCOPED_VIEWER))!;
 }
 
 /**
@@ -486,7 +533,7 @@ export async function assignProjectTramo(id: string, workflowId: string, actorId
       stageOnly: true,
     })
   );
-  return (await getProject(id))!;
+  return (await getProject(id, UNSCOPED_VIEWER))!;
 }
 
 /** Soft delete. Tasks stay linked; they disappear with the project on read. */

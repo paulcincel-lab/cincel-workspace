@@ -700,7 +700,7 @@ export function ActividadesClient({
     () => [
       { key: "project", header: "Proyecto", getValue: (t) => t.project.name },
       { key: "phase", header: "Fase", getValue: (t) => phaseNameOf(t) },
-      { key: "title", header: "Actividad", getValue: (t) => t.title },
+      { key: "title", header: "Tarea", getValue: (t) => t.title },
       { key: "manager", header: "Responsable", getValue: (t) => t.manager?.name || "Sin responsable" },
       { key: "reviewDate", header: "Próxima revisión", isDate: true, getValue: (t) => t.reviewDate || "" },
       { key: "deliveryDate", header: "Fecha de entrega", isDate: true, getValue: (t) => t.deliveryDate || "" },

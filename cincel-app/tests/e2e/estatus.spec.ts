@@ -80,12 +80,14 @@ test.describe("Estatus propios de tareas", () => {
     await expect(column.getByText(TASK_TITLE)).toBeVisible({ timeout: 15_000 });
     await expect.poll(taskRow).toEqual({ status: "en_proceso", custom: STATUS_NAME });
 
-    // Marking the status as "Cuenta como terminado" closes the tasks in it.
+    // Marking the status as "Cierra la tarea" closes the tasks in it.
     await page.goto(`${BASE_URL}/configuracion/estatus`, { waitUntil: "domcontentloaded" });
     await page.getByRole("row").filter({ hasText: STATUS_NAME }).click();
-    await page.getByRole("checkbox", { name: /Cuenta como terminado/ }).click();
+    await page.getByRole("checkbox", { name: /Cierra la tarea/ }).click();
+    // Closing turns "Cuenta como completada" on by default.
+    await expect(page.getByRole("switch", { name: /Cuenta como completada/ })).toBeChecked();
     await page.getByRole("button", { name: "Guardar" }).click();
-    await expect(page.getByRole("row").filter({ hasText: STATUS_NAME }).getByText("Sí", { exact: true })).toBeVisible({
+    await expect(page.getByRole("row").filter({ hasText: STATUS_NAME }).getByText("Sí", { exact: true })).toHaveCount(2, {
       timeout: 15_000,
     });
     await expect.poll(taskRow).toEqual({ status: "completado", custom: STATUS_NAME });

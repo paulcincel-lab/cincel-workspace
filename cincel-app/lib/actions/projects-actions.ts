@@ -4,20 +4,24 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
+import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { retryProjectFolders, syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
 import { notImplemented } from "@/lib/project-flow/not-implemented";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import * as projectSpacesRepository from "@/lib/repositories/project-spaces-repository";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
+import { scopeProjectDto, viewerScopeOf } from "@/lib/auth/viewer-scope";
 import type {
   HistoryEvent,
+  ProjectCreateInput,
   ProjectDetail,
   ProjectInput,
   ProjectLink,
   ProjectLinkInput,
   ProjectListItem,
   ProjectSpace,
+  ViewerScope,
 } from "@/lib/types/core";
 import type { ProjectFilters } from "@/lib/repositories/projects-repository";
 import { OrderedIdsSchema, ProjectSpaceNameSchema, UuidSchema, parseInput } from "@/lib/validation/project-flow";
@@ -40,34 +44,53 @@ function revalidateProjectFlow(id: string) {
 }
 
 export async function fetchProjectsAction(filters: ProjectFilters = {}): Promise<ProjectListItem[]> {
-  const caps = await requireProjectsCapabilities();
-  if (!caps.canViewProjects) return [];
-  return projectsRepository.listProjects(filters);
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canViewProjects) return [];
+  return projectsRepository.listProjects(filters, viewerScopeOf(user));
 }
 
+/** Client, origin and monday import data are null for non-admins (BE §8.5). */
 export async function fetchProjectAction(id: string): Promise<ProjectDetail | null> {
-  const caps = await requireProjectsCapabilities();
-  if (!caps.canViewProjects) return null;
-  return projectsRepository.getProject(id);
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canViewProjects) return null;
+  return projectsRepository.getProject(id, viewerScopeOf(user));
 }
+
+/** Create/update revalidation (BE §7.3): Proyectos, the ficha, Actividades layout, Dashboard and Tablero. */
+function revalidateProjectEdit(id: string) {
+  revalidateProyectos(id);
+  revalidatePath("/actividades", "layout");
+  revalidatePath("/dashboard");
+  revalidatePath("/tablero");
+}
+
+/** Patch keys only administrators may send (BE §7.3). */
+const ADMIN_ONLY_PROJECT_KEYS = ["clientId", "origin", "originStaffId"] as const;
+
+const viewerOf = (user: AuthenticatedUser): ViewerScope => ({ staffId: user.member.id, isAdmin: canSeeAdminData(user) });
 
 /**
- * Creates the project and, when the first tramo auto-starts on create, starts
- * it with every fase and no assignee (BE §9.4). Errors: FORBIDDEN,
- * PROJECT_CLIENT_REQUIRED, EMPTY, INVALID, NAME_TAKEN.
+ * Creates a project with only a name (BE §9.4). Older callers may still pass
+ * a full `ProjectInput`; only `name` is read. `canCreateProject`. Errors:
+ * FORBIDDEN, EMPTY, NAME_TAKEN.
  */
-export async function createProjectAction(input: ProjectInput): Promise<ProjectDetail> {
+export async function createProjectAction(input: ProjectCreateInput | ProjectInput): Promise<ProjectDetail> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canCreateProject) {
     throw new Error("FORBIDDEN: project create");
   }
-  const row = await projectsRepository.createProject(input, user.member.id);
-  // Drive runs after the response; a failure leaves the project with drive_folder_status = failed.
+  const row = await projectsRepository.createProject({ name: input?.name }, user.member.id);
+  // Drive runs after the response; no client yet, so only the internal folders.
+  // A failure leaves the project with drive_folder_status = failed.
   after(() => syncProjectFolders(row.id));
-  revalidateProjectFlow(row.id);
+  revalidateProjectEdit(row.id);
   return row;
 }
 
+/**
+ * `canEditProjectGeneral`; `clientId`, `origin` and `originStaffId` also
+ * require an administrator. Errors: FORBIDDEN, NOT_FOUND, EMPTY, NAME_TAKEN.
+ */
 export async function updateProjectAction(
   id: string,
   patch: Partial<ProjectInput>
@@ -76,9 +99,15 @@ export async function updateProjectAction(
   if (!resolveProjectsCapabilities(user).canEditProjectGeneral) {
     throw new Error("FORBIDDEN: project edit");
   }
-  const row = await projectsRepository.updateProject(id, patch, user.member.id);
+  const viewer = viewerOf(user);
+  if (!viewer.isAdmin && ADMIN_ONLY_PROJECT_KEYS.some((k) => patch[k] !== undefined)) {
+    throw new Error("FORBIDDEN: admin only fields");
+  }
+  const row = await projectsRepository.updateProject(id, patch, user.member.id, viewer);
   if (patch.name !== undefined || patch.code !== undefined) after(() => syncProjectFolderName(id));
-  revalidateProjectFlow(id);
+  // A client creates the missing "02 Cliente" / "03 Del cliente" folders.
+  if (patch.clientId) after(() => syncProjectFolders(id));
+  revalidateProjectEdit(id);
   return row;
 }
 
@@ -109,7 +138,7 @@ export async function archiveProjectAction(id: string, status: "completado" | "c
   if (!resolveProjectsCapabilities(user).canArchiveProject) {
     throw new Error("FORBIDDEN: project archive");
   }
-  const row = await projectsRepository.updateProject(id, { status }, user.member.id);
+  const row = await projectsRepository.updateProject(id, { status }, user.member.id, viewerOf(user));
   revalidateProyectos(id);
   return row;
 }
@@ -179,11 +208,17 @@ export async function removeProjectLinkAction(projectId: string, linkId: string)
 
 /** Project bitácora (comments and changes), newest first; same shape as fetchTaskHistoryAction. */
 export async function fetchProjectHistoryAction(projectId: string): Promise<HistoryEvent[]> {
-  const caps = await requireProjectsCapabilities();
-  if (!caps.canViewProjects) return [];
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canViewProjects) return [];
   if (!(await projectsRepository.projectExists(projectId))) return [];
-  return projectsRepository.listProjectHistory(projectId);
+  const events = await projectsRepository.listProjectHistory(projectId);
+  if (canSeeAdminData(user)) return events;
+  // Client and origin changes are admin-only data (BE §12, B2).
+  return events.filter((event) => !event.field || !ADMIN_ONLY_HISTORY_FIELDS.has(event.field));
 }
+
+/** Project history fields non-administrators never see (BE §12, B2). */
+const ADMIN_ONLY_HISTORY_FIELDS = new Set(["clientId", "origin", "originStaffId"]);
 
 /** Adds a comment to the project bitácora. Throws FORBIDDEN, EMPTY or NOT_FOUND. */
 export async function addProjectCommentAction(projectId: string, text: string): Promise<void> {

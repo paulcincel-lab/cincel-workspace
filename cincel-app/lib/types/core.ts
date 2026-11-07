@@ -670,7 +670,11 @@ export type StartTramoResult = {
   workflow: WorkflowRef;
 };
 
-/** Who is reading: passed from actions to repositories and DTO builders (BE §6). */
+/**
+ * Who is reading: passed from actions to repositories and DTO builders (BE §6).
+ * `staffId` is the session staff id; `isAdmin` is `canSeeAdminData(user)`
+ * (lib/auth/permissions.ts), which gates admin tasks, client and origin data.
+ */
 export type ViewerScope = { staffId: string; isAdmin: boolean };
 
 // ── Shared ──────────────────────────────────────────────────────────────────

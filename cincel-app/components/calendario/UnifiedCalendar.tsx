@@ -19,7 +19,24 @@ import {
   startOfWeek,
   toDate,
 } from "@/lib/calendar/calendar-service";
-import type { CalendarEvent, CalendarFilters, CalendarView } from "@/lib/types/calendar";
+import type { CalendarEvent, CalendarView } from "@/lib/types/calendar";
+
+/** Project / responsable / tipo go through the calendar service; tramo and fase are filtered here. */
+type CalendarScreenFilters = {
+  project: string;
+  responsible: string;
+  type: string;
+  tramo: string;
+  phase: string;
+};
+
+const ALL_TRAMOS = "Todos";
+const ALL_PHASES = "Todas";
+const PHASE_DISABLED_HINT = "Elige un tramo para filtrar por fase";
+
+function sortedUnique(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
 
 type UnifiedCalendarProps = {
   events: CalendarEvent[];
@@ -137,16 +154,24 @@ export default function UnifiedCalendar({
   const [cursor, setCursor] = useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(today));
 
-  const [filters, setFilters] = useState<CalendarFilters>({
+  const [filters, setFilters] = useState<CalendarScreenFilters>({
     project: "Todos",
     responsible: "Todos",
     type: "Todos",
-    tramo: "Todos",
-    phase: "Todas",
+    tramo: ALL_TRAMOS,
+    phase: ALL_PHASES,
   });
 
   const options = useMemo(() => buildCalendarFilterOptions(events), [events]);
-  const phaseOptions = options.phasesByTramo[filters.tramo] ?? ["Todas"];
+  const tramoOptions = useMemo(() => [ALL_TRAMOS, ...sortedUnique(events.map((e) => e.tramoLabel))], [events]);
+  // The Fase filter lists only the selected tramo's fases.
+  const phaseOptions = useMemo(
+    () =>
+      filters.tramo === ALL_TRAMOS
+        ? [ALL_PHASES]
+        : [ALL_PHASES, ...sortedUnique(events.filter((e) => e.tramoLabel === filters.tramo).map((e) => e.phaseLabel))],
+    [events, filters.tramo]
+  );
   const responsibleOptions = useMemo(() => {
     if (!canViewTeamCalendar && normalizedViewerName) {
       return [normalizedViewerName];
@@ -159,10 +184,11 @@ export default function UnifiedCalendar({
     : filters.responsible;
   const effectiveFilters = useMemo(
     () => ({
-      ...filters,
+      project: filters.project,
+      type: filters.type,
       responsible: effectiveResponsibleFilter,
     }),
-    [effectiveResponsibleFilter, filters]
+    [effectiveResponsibleFilter, filters.project, filters.type]
   );
 
   const scopedEvents = useMemo(() => {
@@ -174,8 +200,12 @@ export default function UnifiedCalendar({
       return source;
     }
 
-    return applyCalendarFilters(source, effectiveFilters);
-  }, [canViewTeamCalendar, effectiveFilters, events, mode, normalizedViewerName]);
+    return applyCalendarFilters(source, effectiveFilters).filter(
+      (event) =>
+        (filters.tramo === ALL_TRAMOS || event.tramoLabel === filters.tramo) &&
+        (filters.phase === ALL_PHASES || event.phaseLabel === filters.phase)
+    );
+  }, [canViewTeamCalendar, effectiveFilters, events, filters.phase, filters.tramo, mode, normalizedViewerName]);
 
   const groupedByDate = useMemo(() => groupEventsByDate(scopedEvents), [scopedEvents]);
   const selectedDayEvents = groupedByDate.get(selectedDate) ?? [];
@@ -358,39 +388,41 @@ export default function UnifiedCalendar({
                 </SelectContent>
               </Select>
               <Select
-                items={Object.fromEntries(options.tramos.map((v) => [v, v === "Todos" ? "Tramo: Todos" : v]))}
+                items={Object.fromEntries(tramoOptions.map((v) => [v, v === ALL_TRAMOS ? "Tramo: Todos" : v]))}
                 value={filters.tramo}
-                onValueChange={(value) => setFilters((current) => ({ ...current, tramo: value as string, phase: "Todas" }))}
+                onValueChange={(value) =>
+                  setFilters((current) => ({ ...current, tramo: value as string, phase: ALL_PHASES }))
+                }
               >
-                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 w-full" aria-label="Tramo"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {options.tramos.map((value) => (
-                    <SelectItem key={`tramo-${value}`} value={value}>{value === "Todos" ? "Tramo: Todos" : value}</SelectItem>
+                  {tramoOptions.map((value) => (
+                    <SelectItem key={`tramo-${value}`} value={value}>{value === ALL_TRAMOS ? "Tramo: Todos" : value}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {filters.tramo === "Todos" ? (
+              {filters.tramo === ALL_TRAMOS ? (
                 <Tooltip>
-                  <TooltipTrigger render={<div />}>
-                    <Select items={{ Todas: "Fase: Todas" }} value="Todas" disabled>
-                      <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                  <TooltipTrigger render={<span className="block w-full" tabIndex={0} />}>
+                    <Select items={{ [ALL_PHASES]: "Fase: Todas" }} value={ALL_PHASES} disabled>
+                      <SelectTrigger className="h-10 w-full" aria-label="Fase"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Todas">Fase: Todas</SelectItem>
+                        <SelectItem value={ALL_PHASES}>Fase: Todas</SelectItem>
                       </SelectContent>
                     </Select>
                   </TooltipTrigger>
-                  <TooltipContent>Elige un tramo para filtrar por fase</TooltipContent>
+                  <TooltipContent>{PHASE_DISABLED_HINT}</TooltipContent>
                 </Tooltip>
               ) : (
                 <Select
-                  items={Object.fromEntries(phaseOptions.map((v) => [v, v === "Todas" ? "Fase: Todas" : v]))}
+                  items={Object.fromEntries(phaseOptions.map((v) => [v, v === ALL_PHASES ? "Fase: Todas" : v]))}
                   value={filters.phase}
                   onValueChange={(value) => setFilters((current) => ({ ...current, phase: value as string }))}
                 >
-                  <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-10 w-full" aria-label="Fase"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {phaseOptions.map((value) => (
-                      <SelectItem key={`phase-${value}`} value={value}>{value === "Todas" ? "Fase: Todas" : value}</SelectItem>
+                      <SelectItem key={`phase-${value}`} value={value}>{value === ALL_PHASES ? "Fase: Todas" : value}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

@@ -188,6 +188,52 @@ describe("DashboardClient widgets", () => {
     expect(screen.getByText("Sin proyectos activos.")).toBeTruthy();
   });
 
+  it("labels the tramo column Tramo, with Sin tramo and Administración", async () => {
+    currentTasks = [
+      { ...tasks[0], id: "n1", title: "Sin tramo asignado", workflowId: null, workflow: null },
+      {
+        ...tasks[0],
+        id: "a1",
+        title: "Asignar cliente",
+        kind: "admin",
+        workflowId: null,
+        workflow: null,
+      },
+    ];
+    render(<DashboardClient initialProjects={[]} />);
+
+    const card = (await screen.findByText("Requiere atención")).closest(
+      '[data-slot="card"]',
+    ) as HTMLElement;
+    await within(card).findByText("Sin tramo asignado");
+    expect(within(card).getByText("Tramo")).toBeTruthy();
+    expect(within(card).queryByText("Área")).toBeNull();
+    expect(
+      within(screen.getByText("Sin tramo asignado").closest("tr")!).getByText("Sin tramo"),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByText("Asignar cliente").closest("tr")!).getByText("Administración"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Sin área")).toBeNull();
+  });
+
+  it("groups active projects by current tramo in Proyectos por tramo", async () => {
+    const projects = [
+      { id: "p1", status: "activo", currentWorkflow: { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 } },
+      { id: "p2", status: "activo", currentWorkflow: { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 } },
+      { id: "p3", status: "activo", currentWorkflow: null },
+    ] as unknown as Parameters<typeof DashboardClient>[0]["initialProjects"];
+    currentTasks = [];
+    render(<DashboardClient initialProjects={projects} />);
+
+    expect(screen.queryByText("Proyectos por departamento")).toBeNull();
+    const card = (await screen.findByText("Proyectos por tramo")).closest(
+      '[data-slot="card"]',
+    ) as HTMLElement;
+    expect(within(card).getByText("Diseño").closest("li")).not.toBeNull();
+    expect(within(card).getByText("Sin tramo").closest("li")).not.toBeNull();
+  });
+
   it("loads the weekly task trend and shows the empty state when the range has no data", async () => {
     render(<DashboardClient initialProjects={[]} />);
 

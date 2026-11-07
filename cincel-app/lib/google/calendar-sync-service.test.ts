@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
-  listMyCalendarTasks: vi.fn(),
+  listMyTasks: vi.fn(),
   buildCalendarEvents: vi.fn(),
   getCalendarSync: vi.fn(),
   upsertCalendarSync: vi.fn(),
@@ -17,7 +17,10 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/google/staff-token", () => ({ getStaffAccessToken: m.getStaffAccessToken }));
-vi.mock("@/lib/repositories/tasks-repository", () => ({ listMyCalendarTasks: m.listMyCalendarTasks }));
+vi.mock("@/lib/repositories/tasks-repository", () => ({ listMyTasks: m.listMyTasks }));
+vi.mock("@/lib/repositories/viewer-scope-repository", () => ({
+  staffViewerScope: vi.fn(async (staffId: string) => ({ staffId, isAdmin: false })),
+}));
 vi.mock("@/lib/calendar/calendar-service", () => ({ buildCalendarEvents: m.buildCalendarEvents }));
 vi.mock("@/lib/repositories/google-calendar-sync-repository", () => ({
   getCalendarSync: m.getCalendarSync,
@@ -51,7 +54,7 @@ const ev = (id: string, title = "T") =>
 beforeEach(() => {
   Object.values(m).forEach((fn) => fn.mockReset());
   m.getStaffAccessToken.mockResolvedValue({ status: "ok", accessToken: "tok" });
-  m.listMyCalendarTasks.mockResolvedValue([]);
+  m.listMyTasks.mockResolvedValue([]);
   m.getCalendarSync.mockResolvedValue({ calendarId: "cal", enabled: true, lastSyncedAt: null, lastError: null });
   m.getCalendar.mockResolvedValue(undefined);
   m.listSyncedEvents.mockResolvedValue([]);

@@ -1,8 +1,8 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { staff, taskDependencies, tasks } from "@/lib/db/schema";
-import type { TaskRef } from "@/lib/types/core";
+import type { TaskRef, ViewerScope } from "@/lib/types/core";
 
 /** How far the cycle check follows `depends_on` edges from the new target. */
 export const DEPENDENCY_CYCLE_MAX_DEPTH = 50;
@@ -127,17 +127,22 @@ const taskRefColumns = {
   commitmentDate: tasks.commitmentDate,
 };
 
-/** Live tasks `taskId` waits on (`dependsOn`) and that wait on it (`blocks`). */
+/**
+ * Live tasks `taskId` waits on (`dependsOn`) and that wait on it (`blocks`).
+ * Admin tasks are left out for non-admins (BE §12).
+ */
 export async function listTaskDependencies(
   taskId: string,
+  viewer: ViewerScope,
 ): Promise<{ dependsOn: TaskRef[]; blocks: TaskRef[] }> {
+  const kindVisible = viewer.isAdmin ? undefined : ne(tasks.kind, "admin");
   const [dependsOn, blocks] = await Promise.all([
     db
       .select(taskRefColumns)
       .from(taskDependencies)
       .innerJoin(tasks, eq(tasks.id, taskDependencies.dependsOnTaskId))
       .leftJoin(staff, eq(staff.id, tasks.managerId))
-      .where(and(eq(taskDependencies.taskId, taskId), isNull(tasks.deletedAt)))
+      .where(and(eq(taskDependencies.taskId, taskId), isNull(tasks.deletedAt), kindVisible))
       .orderBy(asc(tasks.commitmentDate), asc(tasks.title)),
     db
       .select(taskRefColumns)
@@ -148,6 +153,7 @@ export async function listTaskDependencies(
         and(
           eq(taskDependencies.dependsOnTaskId, taskId),
           isNull(tasks.deletedAt),
+          kindVisible,
         ),
       )
       .orderBy(asc(tasks.commitmentDate), asc(tasks.title)),

@@ -55,6 +55,9 @@ export default async function ActividadesPage({
     // Not authorized / no session: the client falls back to hydrating itself.
   }
 
+  // The tabs and pages come from the workflows table: an unknown key is a 404.
+  if (!isGeneral && workflowsLoaded && !workflow) notFound();
+
   return (
     <main className="flex min-h-screen bg-background text-foreground">
       <Sidebar />

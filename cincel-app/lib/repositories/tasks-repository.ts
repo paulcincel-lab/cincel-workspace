@@ -19,14 +19,14 @@ import {
 } from "@/lib/db/schema";
 import { closedAtPatch } from "@/lib/project-flow/closing";
 import { flowError } from "@/lib/project-flow/errors";
-import { isStaffAdministrator } from "@/lib/auth/access-role";
 import { completionsFromStatusEvents } from "@/lib/dashboard/task-trend";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
+import { assertAdminAssignees } from "@/lib/project-flow/admin-tasks";
 import type { AdminTaskFilters } from "@/lib/validation/project-flow";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
 import { assertSpaceInProject } from "@/lib/repositories/project-spaces-repository";
 import { assertPhaseInWorkflow } from "@/lib/repositories/workflow-phases-repository";
 import { underlyingStatus } from "@/lib/repositories/task-statuses-repository";
+import { UNSCOPED_VIEWER, scopeTaskDto } from "@/lib/auth/viewer-scope";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import type {
   AdminTaskInput,
@@ -37,6 +37,7 @@ import type {
   TaskChecklistItem,
   TaskDetail,
   TaskFilters,
+  TaskKind,
   TaskLink,
   TaskLinkInput,
   TaskListItem,
@@ -286,9 +287,21 @@ async function loadSupport(taskIds: string[]): Promise<Map<string, StaffRef[]>> 
   return out;
 }
 
-function whereFilters(f: TaskFilters) {
+/**
+ * The kind condition (BE §8.6): admin tasks are left out unless asked for,
+ * and only an administrator viewer can ask. A non-admin asking only for admin
+ * tasks gets nothing.
+ */
+function kindCondition(kind: TaskFilters["kind"], viewer: ViewerScope) {
+  const asked = kind ? (Array.isArray(kind) ? kind : [kind]) : [];
+  const kinds = viewer.isAdmin ? asked : asked.filter((k) => k !== "admin");
+  if (kinds.length > 0) return inArray(tasks.kind, kinds);
+  if (asked.length > 0) return sql`false`;
+  return ne(tasks.kind, "admin");
+}
+
+function whereFilters(f: TaskFilters, viewer: ViewerScope) {
   const statuses = f.status ? (Array.isArray(f.status) ? f.status : [f.status]) : undefined;
-  const kinds = f.kind ? (Array.isArray(f.kind) ? f.kind : [f.kind]) : undefined;
   return and(
     isNull(tasks.deletedAt),
     isNull(projects.deletedAt),
@@ -297,8 +310,7 @@ function whereFilters(f: TaskFilters) {
     f.workflowId ? eq(tasks.workflowId, f.workflowId) : undefined,
     f.phaseId ? eq(tasks.phaseId, f.phaseId) : undefined,
     f.spaceId ? eq(tasks.spaceId, f.spaceId) : undefined,
-    // Admin tasks only when asked for; the actions also check the viewer is admin (FE §7.6).
-    kinds && kinds.length > 0 ? inArray(tasks.kind, kinds) : ne(tasks.kind, "admin"),
+    kindCondition(f.kind, viewer),
     statuses && statuses.length > 0 ? inArray(tasks.status, statuses) : undefined,
     f.managerId ? eq(tasks.managerId, f.managerId) : undefined,
     f.involvesStaffId
@@ -327,7 +339,8 @@ function searchMatch(search: string) {
   );
 }
 
-export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem[]> {
+/** Task list rows for `viewer`: admin tasks and client names only for administrators (BE §8.6, §12). */
+export async function listTasks(filters: TaskFilters, viewer: ViewerScope): Promise<TaskListItem[]> {
   const rows = await db
     .select({
       task: tasks,
@@ -364,7 +377,7 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
     .leftJoin(staff, eq(staff.id, tasks.managerId))
     .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
-    .where(whereFilters(filters))
+    .where(whereFilters(filters, viewer))
     // Tramo, then fase, then manual order (BE §8.6); tasks without one go last.
     .orderBy(
       sql`${workflows.sortOrder} asc nulls last`,
@@ -375,7 +388,7 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     );
 
   const support = await loadSupport(rows.map((r) => r.task.id));
-  return rows.map((r) => ({
+  return rows.map((r) => scopeTaskDto({
     ...toTask(r.task),
     customStatus:
       r.task.customStatusId && r.customStatusName
@@ -401,17 +414,111 @@ export async function listTasks(filters: TaskFilters = {}): Promise<TaskListItem
     subtaskCount: r.subtaskCount,
     subtaskDoneCount: r.subtaskDoneCount,
     waitingOn: r.waitingOn,
-  }));
+  }, viewer));
 }
 
 /** Open admin tasks (or all with `includeClosed`), by commitment date then project name (BE §8.6). */
 export async function listAdminTasks(filters: AdminTaskFilters = {}): Promise<TaskListItem[]> {
-  return notImplemented("listAdminTasks", filters);
+  // Administrators only: the action refuses everyone else before this runs.
+  const rows = await listTasks({ kind: "admin", projectId: filters.projectId, archived: false }, UNSCOPED_VIEWER);
+  const visible = filters.includeClosed ? rows : rows.filter((t) => !isClosedTask(t));
+  return visible.sort(compareAdminTasks);
+}
+
+/** Closed: completado, or a custom status that closes (closing statuses keep `completado` underneath). */
+function isClosedTask(t: TaskListItem): boolean {
+  return t.status === "completado" || Boolean(t.customStatus?.closes);
+}
+
+/** By commitment date (no date last), then project name, then title. */
+export function compareAdminTasks(
+  a: Pick<TaskListItem, "commitmentDate" | "title" | "project">,
+  b: Pick<TaskListItem, "commitmentDate" | "title" | "project">
+): number {
+  if (a.commitmentDate !== b.commitmentDate) {
+    if (!a.commitmentDate) return 1;
+    if (!b.commitmentDate) return -1;
+    return a.commitmentDate < b.commitmentDate ? -1 : 1;
+  }
+  const byProject = a.project.name.localeCompare(b.project.name, "es");
+  if (byProject !== 0) return byProject;
+  return a.title.localeCompare(b.title, "es");
+}
+
+/** Manager plus support ids, without nulls or repeats. */
+function assigneeIds(managerId: string | null | undefined, supportIds: readonly string[] | undefined): string[] {
+  return [...new Set([...(managerId ? [managerId] : []), ...(supportIds ?? [])])];
+}
+
+/** ASSIGNEE_NOT_ADMIN unless every id is an administrator (BE §9.5). No-op for an empty list. */
+async function requireAdminAssignees(staffIds: string[]): Promise<void> {
+  if (staffIds.length === 0) return;
+  await db.transaction((tx) => assertAdminAssignees(tx, staffIds));
 }
 
 /** A `kind = 'admin'` task; administrator assignees only (ASSIGNEE_NOT_ADMIN); NOT_FOUND (project). */
 export async function createAdminTask(input: AdminTaskInput, actorId: string): Promise<TaskDetail> {
-  return notImplemented("createAdminTask", input, actorId);
+  return insertAdminTask(input, actorId, null);
+}
+
+async function insertAdminTask(
+  input: AdminTaskInput,
+  actorId: string,
+  parentTaskId: string | null
+): Promise<TaskDetail> {
+  const title = input.title.trim();
+  if (!title) throw new Error("TASK_TITLE_REQUIRED");
+  const supportIds = [...new Set(input.supportIds ?? [])];
+
+  const id = await db.transaction(async (tx) => {
+    const [project] = await tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, input.projectId), isNull(projects.deletedAt)))
+      .limit(1);
+    if (!project) throw flowError("NOT_FOUND");
+
+    await assertAdminAssignees(tx, assigneeIds(input.managerId, supportIds));
+
+    const [row] = await tx
+      .insert(tasks)
+      .values({
+        projectId: input.projectId,
+        parentTaskId,
+        kind: "admin",
+        templateId: null,
+        workflowId: null,
+        phaseId: null,
+        spaceId: null,
+        title,
+        notes: clean(input.notes),
+        createdById: actorId,
+        managerId: input.managerId ?? null,
+        priority: input.priority ?? "media",
+        commitmentDate: clean(input.commitmentDate),
+        reviewDate: clean(input.reviewDate),
+        deliveryDate: clean(input.deliveryDate),
+      })
+      .returning({ id: tasks.id });
+
+    if (supportIds.length > 0) {
+      await tx.insert(taskSupport).values(supportIds.map((staffId) => ({ taskId: row.id, staffId })));
+    }
+    await recordChanges(
+      {
+        entity: "task",
+        entityId: row.id,
+        actorId,
+        before: { created: null },
+        after: { created: title },
+        fields: ["created"],
+      },
+      tx
+    );
+    return row.id;
+  });
+
+  return (await getTask(id))!;
 }
 
 /**
@@ -419,39 +526,65 @@ export async function createAdminTask(input: AdminTaskInput, actorId: string): P
  * to non-admins. Throws FORBIDDEN for them (reads map it to null / []).
  */
 export async function assertTaskVisible(taskId: string, viewer: ViewerScope): Promise<void> {
-  return notImplemented("assertTaskVisible", taskId, viewer);
+  if (viewer.isAdmin) return;
+  const [row] = await db.select({ kind: tasks.kind }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+  // A missing task is left to the caller's own NOT_FOUND handling.
+  if (row?.kind === "admin") throw flowError("FORBIDDEN");
 }
 
-/** Tasks where the staff member is manager or support. */
-export async function listMyTasks(staffId: string, filters: TaskFilters = {}): Promise<TaskListItem[]> {
-  return listTasks({ ...filters, involvesStaffId: staffId });
+/** False when the task is an admin task and the viewer isn't admin (reads return null / [] then). */
+export async function isTaskVisible(taskId: string, viewer: ViewerScope): Promise<boolean> {
+  try {
+    await assertTaskVisible(taskId, viewer);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The task a checklist item belongs to, or null; lets the actions guard item-scoped calls. */
+export async function checklistItemTaskId(itemId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ taskId: taskChecklistItems.taskId })
+    .from(taskChecklistItems)
+    .where(eq(taskChecklistItems.id, itemId))
+    .limit(1);
+  return row?.taskId ?? null;
+}
+
+/** The task a link belongs to, or null; lets the actions guard link-scoped calls. */
+export async function taskLinkTaskId(linkId: string): Promise<string | null> {
+  const [row] = await db.select({ taskId: taskLinks.taskId }).from(taskLinks).where(eq(taskLinks.id, linkId)).limit(1);
+  return row?.taskId ?? null;
 }
 
 /**
- * A staff member's own calendar (ICS feed, Google sync): their live,
- * unarchived tasks, with admin tasks only when they're an administrator
- * (BE §8.8).
+ * Tasks where the staff member is manager or support (Mis tareas, calendar
+ * feed, Google Calendar sync). An administrator also gets their own admin
+ * tasks; nobody else gets any (BE §7.5, §8.8).
  */
-export async function listMyCalendarTasks(staffId: string): Promise<TaskListItem[]> {
-  const [member] = await db
-    .select({ role: staff.role, email: staff.email })
-    .from(staff)
-    .where(eq(staff.id, staffId))
-    .limit(1);
-  const admin = !!member && isStaffAdministrator(member.role, member.email);
-  return listMyTasks(staffId, {
-    archived: false,
-    kind: admin ? ["workflow", "usuario", "admin"] : ["workflow", "usuario"],
-  });
+export async function listMyTasks(staffId: string, filters: TaskFilters, viewer: ViewerScope): Promise<TaskListItem[]> {
+  const kind = filters.kind ?? (viewer.isAdmin ? ALL_TASK_KINDS : undefined);
+  return listTasks({ ...filters, kind, involvesStaffId: staffId }, viewer);
 }
 
+/** Every kind: getTask finds admin tasks too; the actions decide who may see them (BE §12). */
+const ALL_TASK_KINDS: TaskKind[] = ["workflow", "usuario", "admin"];
+
+/**
+ * Unscoped detail (every kind, client name included), for mutation results:
+ * the action guards the task with `assertTaskVisible` and scopes the DTO with
+ * `scopeTaskDto`. Reads for a viewer go through `getTaskForViewer`.
+ */
 export async function getTask(id: string): Promise<TaskDetail | null> {
-  const [item] = await listTasks({ archived: undefined, search: undefined }).then((all) =>
-    all.filter((t) => t.id === id)
+  const [item] = await listTasks({ archived: undefined, search: undefined, kind: ALL_TASK_KINDS }, UNSCOPED_VIEWER).then(
+    (all) => all.filter((t) => t.id === id)
   );
   const base =
     item ??
-    (await listTasks({ archived: true }).then((all) => all.find((t) => t.id === id)));
+    (await listTasks({ archived: true, kind: ALL_TASK_KINDS }, UNSCOPED_VIEWER).then((all) =>
+      all.find((t) => t.id === id)
+    ));
   if (!base) return null;
 
   const [creator] = await db
@@ -475,6 +608,14 @@ export async function getTask(id: string): Promise<TaskDetail | null> {
     links,
     history,
   };
+}
+
+/** Task detail for `viewer`: null for an admin task unless the viewer is admin; client name scoped (BE §7.5). */
+export async function getTaskForViewer(id: string, viewer: ViewerScope): Promise<TaskDetail | null> {
+  const detail = await getTask(id);
+  if (!detail) return null;
+  if (detail.kind === "admin" && !viewer.isAdmin) return null;
+  return scopeTaskDto(detail, viewer);
 }
 
 async function loadLiveTask(id: string): Promise<TaskRow> {
@@ -595,6 +736,24 @@ export async function loadSubtaskParent(parentId: string): Promise<TaskRow> {
  */
 export async function createSubtask(parentId: string, input: SubtaskInput, actorId: string): Promise<TaskDetail> {
   const parent = await loadSubtaskParent(parentId);
+  // An admin parent makes an admin child: no tramo, fase or espacio; administrator assignees only.
+  if (parent.kind === "admin") {
+    return insertAdminTask(
+      {
+        projectId: parent.projectId,
+        title: input.title,
+        notes: input.notes,
+        managerId: input.managerId,
+        supportIds: input.supportIds,
+        priority: input.priority,
+        commitmentDate: input.commitmentDate,
+        reviewDate: input.reviewDate,
+        deliveryDate: input.deliveryDate,
+      },
+      actorId,
+      parent.id
+    );
+  }
   return insertUserTask(
     { ...input, projectId: parent.projectId, workflowId: parent.workflowId, phaseId: parent.phaseId },
     actorId,
@@ -603,7 +762,7 @@ export async function createSubtask(parentId: string, input: SubtaskInput, actor
 }
 
 /** Live (not deleted, not archived) child tasks of `parentId`, in list order. */
-export async function listSubtasks(parentId: string): Promise<TaskRef[]> {
+export async function listSubtasks(parentId: string, viewer: ViewerScope): Promise<TaskRef[]> {
   const rows = await db
     .select({
       id: tasks.id,
@@ -614,7 +773,14 @@ export async function listSubtasks(parentId: string): Promise<TaskRef[]> {
     })
     .from(tasks)
     .leftJoin(staff, eq(staff.id, tasks.managerId))
-    .where(and(eq(tasks.parentTaskId, parentId), isNull(tasks.deletedAt), eq(tasks.archived, false)))
+    .where(
+      and(
+        eq(tasks.parentTaskId, parentId),
+        isNull(tasks.deletedAt),
+        eq(tasks.archived, false),
+        viewer.isAdmin ? undefined : ne(tasks.kind, "admin")
+      )
+    )
     .orderBy(sql`${tasks.sortOrder} is null`, asc(tasks.sortOrder), asc(tasks.commitmentDate), asc(tasks.title));
   return rows.map((r) => ({
     id: r.id,
@@ -637,7 +803,7 @@ export async function listSubtasks(parentId: string): Promise<TaskRef[]> {
  */
 async function applyFlowPatch(before: TaskRow, patch: TaskPatch, set: Partial<TaskRow>): Promise<void> {
   const isAdmin = before.kind === "admin";
-  if (isAdmin && (patch.phaseId !== undefined || patch.spaceId !== undefined)) throw flowError("ADMIN_TASK");
+  if (isAdmin && (patch.phaseId || patch.spaceId)) throw flowError("ADMIN_TASK");
 
   let workflowId = before.workflowId;
   if (patch.workflowId !== undefined && patch.workflowId !== before.workflowId) {
@@ -663,8 +829,20 @@ async function applyFlowPatch(before: TaskRow, patch: TaskPatch, set: Partial<Ta
   }
 }
 
+/**
+ * Admin task rules on a patch (BE §7.5): no fase, espacio or tramo
+ * (`ADMIN_TASK`, `INVALID` for a tramo) and an administrator manager
+ * (`ASSIGNEE_NOT_ADMIN`). Clearing one of them (null) is a no-op.
+ */
+async function assertAdminTaskPatch(patch: TaskPatch): Promise<void> {
+  if (patch.phaseId || patch.spaceId) throw flowError("ADMIN_TASK");
+  if (patch.workflowId) throw flowError("INVALID", "workflowId");
+  if (patch.managerId) await requireAdminAssignees([patch.managerId]);
+}
+
 export async function updateTask(id: string, patch: TaskPatch, actorId: string): Promise<TaskDetail> {
   const before = await loadLiveTask(id);
+  if (before.kind === "admin") await assertAdminTaskPatch(patch);
   const set: Partial<TaskRow> = {};
   if (patch.title !== undefined) set.title = patch.title.trim() || before.title;
   if (patch.notes !== undefined) set.notes = clean(patch.notes);
@@ -772,6 +950,9 @@ export async function mergeTasks(
     .from(tasks)
     .where(and(inArray(tasks.id, ids), isNull(tasks.deletedAt)));
   if (dupRows.length !== ids.length) throw new Error("TASK_NOT_FOUND");
+  // An admin task only merges with admin tasks (BE §8.6): mixing would leak or strand it.
+  const keepIsAdmin = keep.kind === "admin";
+  if (dupRows.some((r) => (r.kind === "admin") !== keepIsAdmin)) throw flowError("INVALID", "kind");
 
   await db.transaction(async (tx) => {
     // task_support: drop collisions with support the keep task already has.
@@ -895,6 +1076,8 @@ export async function setTaskSupport(
   options: { silent?: boolean } = {}
 ): Promise<StaffRef[]> {
   const wanted = new Set(staffIds);
+  const [task] = await db.select({ kind: tasks.kind }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+  if (task?.kind === "admin") await requireAdminAssignees([...wanted]);
   const current = await db
     .select({ staffId: taskSupport.staffId })
     .from(taskSupport)
@@ -1006,8 +1189,11 @@ export async function listTaskHistory(taskId: string): Promise<HistoryEvent[]> {
 }
 
 /** Open tasks grouped for the board: by status, ordered by commitment date. */
-export async function listBoard(filters: TaskFilters = {}): Promise<Record<TaskStatus, TaskListItem[]>> {
-  const all = await listTasks({ ...filters, archived: false });
+export async function listBoard(
+  filters: TaskFilters,
+  viewer: ViewerScope
+): Promise<Record<TaskStatus, TaskListItem[]>> {
+  const all = await listTasks({ ...filters, archived: false }, viewer);
   const board: Record<TaskStatus, TaskListItem[]> = {
     pendiente: [],
     en_proceso: [],
@@ -1019,8 +1205,8 @@ export async function listBoard(filters: TaskFilters = {}): Promise<Record<TaskS
 }
 
 /** Tasks with any date inside the range, for the calendar. */
-export async function listCalendar(dateFrom: string, dateTo: string, filters: TaskFilters = {}) {
-  return listTasks({ ...filters, dateFrom, dateTo });
+export async function listCalendar(dateFrom: string, dateTo: string, filters: TaskFilters, viewer: ViewerScope) {
+  return listTasks({ ...filters, dateFrom, dateTo }, viewer);
 }
 
 export const newestFirst = desc(tasks.createdAt);
@@ -1106,6 +1292,7 @@ export async function listTaskTrendSource(
         isNull(tasks.deletedAt),
         isNull(projects.deletedAt),
         eq(tasks.archived, false),
+        // Admin tasks are left out of every dashboard widget (BE §8.8).
         ne(tasks.kind, "admin"),
         completedIds.length > 0 ? or(createdInWindow, inArray(tasks.id, completedIds)) : createdInWindow
       )

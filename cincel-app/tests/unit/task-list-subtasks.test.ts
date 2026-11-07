@@ -27,6 +27,9 @@ import {
 
 const url = process.env.TEST_DATABASE_URL;
 
+/** Administrator scope: these tests cover every kind. */
+const VIEWER = { staffId: "", isAdmin: true };
+
 class Rollback extends Error {}
 
 describe.skipIf(!url)(
@@ -119,7 +122,7 @@ describe.skipIf(!url)(
           status: "completado",
         });
 
-        const rows = await listTasks({ projectId: ctx.projectId });
+        const rows = await listTasks({ projectId: ctx.projectId }, VIEWER);
         const p = byTitle(rows, "Padre");
         expect(p).toMatchObject({
           parentTaskId: null,
@@ -138,7 +141,7 @@ describe.skipIf(!url)(
 
         const mine = await listMyTasks(ctx.staffId, {
           projectId: ctx.projectId,
-        });
+        }, VIEWER);
         expect(byTitle(mine, "Padre")).toMatchObject({
           subtaskCount: 3,
           subtaskDoneCount: 1,
@@ -154,7 +157,7 @@ describe.skipIf(!url)(
         });
         await addTask(tx, ctx, "Huérfana", { parentTaskId: parent.id });
 
-        const rows = await listTasks({ projectId: ctx.projectId });
+        const rows = await listTasks({ projectId: ctx.projectId }, VIEWER);
         expect(rows.map((r) => r.title)).toEqual(["Huérfana"]);
         expect(rows[0]).toMatchObject({
           parentTaskId: parent.id,
@@ -194,7 +197,7 @@ describe.skipIf(!url)(
           { taskId: onlyClosed.id, dependsOnTaskId: deleted.id },
         ]);
 
-        const rows = await listTasks({ projectId: ctx.projectId });
+        const rows = await listTasks({ projectId: ctx.projectId }, VIEWER);
         expect(byTitle(rows, "En espera").waitingOn).toBe(2);
         expect(byTitle(rows, "Solo cerradas").waitingOn).toBe(0);
         expect(byTitle(rows, "Libre").waitingOn).toBe(0);
@@ -205,7 +208,7 @@ describe.skipIf(!url)(
           .update(schema.tasks)
           .set({ status: "completado" })
           .where(eq(schema.tasks.id, open1.id));
-        const after = await listTasks({ projectId: ctx.projectId });
+        const after = await listTasks({ projectId: ctx.projectId }, VIEWER);
         expect(byTitle(after, "En espera").waitingOn).toBe(1);
         expect(free.id).toBeTruthy();
       });
@@ -228,10 +231,10 @@ describe.skipIf(!url)(
           .insert(schema.taskDependencies)
           .values({ taskId: parent.id, dependsOnTaskId: childB.id });
 
-        const rows = await listTasks({ projectId: ctx.projectId });
+        const rows = await listTasks({ projectId: ctx.projectId }, VIEWER);
         expect(rows).toHaveLength(3);
 
-        const board = await listBoard({ projectId: ctx.projectId });
+        const board = await listBoard({ projectId: ctx.projectId }, VIEWER);
         expect(board.pendiente).toHaveLength(2);
         expect(board.completado).toHaveLength(1);
       });

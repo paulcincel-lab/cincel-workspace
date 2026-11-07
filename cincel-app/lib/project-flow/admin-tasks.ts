@@ -1,5 +1,25 @@
-import type { FlowTx } from "./db";
-import { notImplemented } from "./not-implemented";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+
+import { isStaffAdministrator } from "@/lib/auth/access-role";
+import { TASK_TREND_TIME_ZONE } from "@/lib/dashboard/task-trend";
+import { historyEvents, staff, tasks } from "@/lib/db/schema";
+
+import type { FlowExecutor, FlowTx } from "./db";
+import { flowError, FLOW_ERROR } from "./errors";
+
+/** `tasks.system_key` of the "Asignar cliente y origen" admin task. */
+export const ASSIGN_CLIENT_SYSTEM_KEY = "assign_client";
+export const ASSIGN_CLIENT_TASK_TITLE = "Asignar cliente y origen";
+
+/** Today's calendar date (YYYY-MM-DD) in the app's time zone (America/Mexico_City). */
+export function todayInAppTimeZone(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: TASK_TREND_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
 
 /**
  * Inserts the admin task "Asignar cliente y origen" (`system_key
@@ -8,7 +28,22 @@ import { notImplemented } from "./not-implemented";
  * null when it already existed.
  */
 export async function ensureAssignClientTask(tx: FlowTx, projectId: string, actorId: string): Promise<string | null> {
-  return notImplemented("ensureAssignClientTask", tx, projectId, actorId);
+  // tasks_project_system_key_uq (live rows) is the guard: a second call inserts nothing.
+  const [row] = await tx
+    .insert(tasks)
+    .values({
+      projectId,
+      kind: "admin",
+      systemKey: ASSIGN_CLIENT_SYSTEM_KEY,
+      title: ASSIGN_CLIENT_TASK_TITLE,
+      priority: "alta",
+      commitmentDate: todayInAppTimeZone(),
+      createdById: actorId,
+      managerId: null,
+    })
+    .onConflictDoNothing()
+    .returning({ id: tasks.id });
+  return row?.id ?? null;
 }
 
 /**
@@ -16,7 +51,36 @@ export async function ensureAssignClientTask(tx: FlowTx, projectId: string, acto
  * from null to a value (BE §9.5). Origin isn't required. No-op when none.
  */
 export async function closeAssignClientTask(tx: FlowTx, projectId: string, actorId: string): Promise<void> {
-  return notImplemented("closeAssignClientTask", tx, projectId, actorId);
+  const [open] = await tx
+    .select({ id: tasks.id, status: tasks.status })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.projectId, projectId),
+        eq(tasks.systemKey, ASSIGN_CLIENT_SYSTEM_KEY),
+        isNull(tasks.deletedAt),
+        isNull(tasks.closedAt),
+        ne(tasks.status, "completado")
+      )
+    )
+    .limit(1)
+    .for("update");
+  if (!open) return;
+
+  await tx
+    .update(tasks)
+    .set({ status: "completado", customStatusId: null, closedAt: new Date() })
+    .where(eq(tasks.id, open.id));
+
+  await tx.insert(historyEvents).values({
+    entity: "task",
+    entityId: open.id,
+    kind: "cambio",
+    actorId,
+    field: "status",
+    beforeValue: open.status,
+    afterValue: "completado",
+  });
 }
 
 /**
@@ -24,6 +88,13 @@ export async function closeAssignClientTask(tx: FlowTx, projectId: string, actor
  * "Administrador" (`staffAccessRole`, lib/auth/access-role.ts), else
  * `ASSIGNEE_NOT_ADMIN` (BE §9.5, RD-12).
  */
-export async function assertAdminAssignees(tx: FlowTx, staffIds: string[]): Promise<void> {
-  return notImplemented("assertAdminAssignees", tx, staffIds);
+export async function assertAdminAssignees(tx: FlowExecutor, staffIds: string[]): Promise<void> {
+  const ids = Array.from(new Set(staffIds.filter(Boolean)));
+  if (ids.length === 0) return;
+  const rows = await tx
+    .select({ id: staff.id, role: staff.role, email: staff.email })
+    .from(staff)
+    .where(and(inArray(staff.id, ids), isNull(staff.deletedAt), eq(staff.active, true)));
+  const admins = new Set(rows.filter((r) => isStaffAdministrator(r.role, r.email)).map((r) => r.id));
+  if (ids.some((id) => !admins.has(id))) throw flowError(FLOW_ERROR.ASSIGNEE_NOT_ADMIN);
 }

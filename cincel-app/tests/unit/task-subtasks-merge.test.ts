@@ -29,6 +29,9 @@ import {
 
 const url = process.env.TEST_DATABASE_URL;
 
+/** Administrator scope: these tests cover every kind. */
+const VIEWER = { staffId: "", isAdmin: true };
+
 class Rollback extends Error {}
 
 type Ctx = { projectId: string; staffId: string; workflowId: string };
@@ -193,7 +196,7 @@ describe.skipIf(!url)("subtasks and mergeTasks (test DB)", () => {
         await softDeleteTask(parent.id, ctx.staffId);
 
         // The child stays live and keeps its row; it no longer reads as a subtask.
-        const rows = await listTasks({ projectId: ctx.projectId });
+        const rows = await listTasks({ projectId: ctx.projectId }, VIEWER);
         expect(rows.map((r) => r.title)).toEqual(["Hija"]);
         expect(rows[0].parentTitle).toBeNull();
 
@@ -232,7 +235,7 @@ describe.skipIf(!url)("subtasks and mergeTasks (test DB)", () => {
         });
         await addTask(tx, ctx, "Otra");
 
-        const refs = await listSubtasks(parent.id);
+        const refs = await listSubtasks(parent.id, VIEWER);
         expect(refs).toEqual([
           {
             id: a.id,
@@ -312,7 +315,7 @@ describe.skipIf(!url)("subtasks and mergeTasks (test DB)", () => {
         expect(await parentOf(tx, own.id)).toBe(keep.id);
         expect(await parentOf(tx, moved.id)).toBe(keep.id);
         expect(
-          (await listSubtasks(keep.id)).map((r) => r.title).sort(),
+          (await listSubtasks(keep.id, VIEWER)).map((r) => r.title).sort(),
         ).toEqual(["Hija movida", "Hija propia"]);
       });
     });
@@ -374,7 +377,7 @@ describe.skipIf(!url)("subtasks and mergeTasks (test DB)", () => {
             `${z.id}>${keep.id}`,
           ].sort(),
         );
-        const rows = await listTasks({ projectId: ctx.projectId });
+        const rows = await listTasks({ projectId: ctx.projectId }, VIEWER);
         expect(rows.find((r) => r.id === keep.id)?.waitingOn).toBe(2);
       });
     });

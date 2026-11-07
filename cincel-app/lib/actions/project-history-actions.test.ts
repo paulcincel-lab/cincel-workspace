@@ -5,10 +5,11 @@ import type { HistoryEvent } from "@/lib/types/core";
 const ACTOR = "33333333-3333-4333-8333-333333333333";
 const PROJECT = "44444444-4444-4444-8444-444444444444";
 
+const session = vi.hoisted(() => ({ access: "Colaborador" }));
 vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: vi.fn(async () => ({
     member: { id: ACTOR },
-    access: "Colaborador",
+    access: session.access,
   })),
 }));
 
@@ -63,6 +64,7 @@ const events: HistoryEvent[] = [
 beforeEach(() => {
   vi.clearAllMocks();
   canView.value = true;
+  session.access = "Colaborador";
   repo.projectExists.mockResolvedValue(true);
   repo.listProjectHistory.mockResolvedValue(events);
   repo.addProjectComment.mockResolvedValue(events[0]);
@@ -84,6 +86,41 @@ describe("fetchProjectHistoryAction", () => {
     repo.projectExists.mockResolvedValue(false);
     await expect(fetchProjectHistoryAction(PROJECT)).resolves.toEqual([]);
     expect(repo.listProjectHistory).not.toHaveBeenCalled();
+  });
+
+  describe("client and origin changes", () => {
+    const change = (id: string, field: string): HistoryEvent => ({
+      ...events[1],
+      id,
+      field,
+      beforeValue: null,
+      afterValue: "x",
+    });
+    const withAdminData: HistoryEvent[] = [
+      events[0],
+      change("c1", "clientId"),
+      change("c2", "origin"),
+      change("c3", "originStaffId"),
+      events[1],
+    ];
+
+    beforeEach(() => {
+      repo.listProjectHistory.mockResolvedValue(withAdminData);
+    });
+
+    it("are dropped for non-administrators", async () => {
+      await expect(fetchProjectHistoryAction(PROJECT)).resolves.toEqual(events);
+    });
+
+    it("are dropped for Dirección", async () => {
+      session.access = "Dirección";
+      await expect(fetchProjectHistoryAction(PROJECT)).resolves.toEqual(events);
+    });
+
+    it("are kept for administrators", async () => {
+      session.access = "Administrador";
+      await expect(fetchProjectHistoryAction(PROJECT)).resolves.toEqual(withAdminData);
+    });
   });
 });
 

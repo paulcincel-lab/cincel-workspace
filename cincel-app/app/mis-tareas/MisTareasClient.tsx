@@ -13,7 +13,6 @@ import { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
 import { createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { Badge } from "@/components/ui/shadcn/badge";
-import { AreaBadge } from "@/components/v2/status/AreaBadge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
@@ -38,6 +37,7 @@ import {
 } from "@/lib/actions/tasks-actions";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
+import { tramoPhaseLabel } from "@/lib/tasks/labels";
 import { SubtaskCountBadge, SubtaskOfLine, WaitingBadge } from "@/components/tareas/TaskRowMeta";
 import { isDueDateLate, isTaskClosed, parseStatusValue, statusSelectItems, statusSelectValue, taskStatusLabel } from "@/lib/tasks/status-options";
 import { cn } from "@/lib/utils";
@@ -270,7 +270,8 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         !query ||
         t.project.name.toLowerCase().includes(query) ||
         t.title.toLowerCase().includes(query) ||
-        (t.phase?.name ?? "").toLowerCase().includes(query) ||
+        (t.phaseRef?.name ?? "").toLowerCase().includes(query) ||
+        (t.space?.name ?? "").toLowerCase().includes(query) ||
         taskStatusLabel(t).toLowerCase().includes(query);
       const matchesStatus = !statusFilter || statusSelectValue(t) === statusFilter;
       // An explicit status filter wins, so picking Completado still shows those tasks.
@@ -335,13 +336,10 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
       },
       {
         id: "workflow",
-        header: "Departamento",
-        cell: ({ row }: CellContext<TaskListItem, unknown>) =>
-          row.original.workflow ? (
-            <AreaBadge name={row.original.workflow.name} colorSlot={row.original.areaColorSlot} />
-          ) : (
-            <span className="text-sm text-muted-foreground">Sin departamento</span>
-          ),
+        header: "Tramo · Fase",
+        cell: ({ row }: CellContext<TaskListItem, unknown>) => (
+          <span className="text-sm">{tramoPhaseLabel(row.original)}</span>
+        ),
       },
       {
         id: "role",

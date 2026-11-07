@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { resolveClientsCapabilities } from "@/lib/auth/permissions";
+import { canSeeAdminData, resolveClientsCapabilities } from "@/lib/auth/permissions";
 import * as contactsRepository from "@/lib/repositories/contacts-repository";
 import type {
   ContactDetail,
@@ -36,10 +36,17 @@ export async function fetchContactsAction(
   return contactsRepository.listContacts(options);
 }
 
+/**
+ * A contact's Directorio sheet. Which projects a client has is admin-only
+ * data (project flow BE §12, B2): non-administrators get `projects: []`;
+ * `stats` keeps its counts, which name no project.
+ */
 export async function fetchContactAction(id: string): Promise<ContactDetail | null> {
-  const caps = await requireContactsCapabilities();
-  if (!caps.canViewClients) return null;
-  return contactsRepository.getContact(id);
+  const user = await requireCapabilityUser();
+  if (!resolveClientsCapabilities(user).canViewClients) return null;
+  const contact = await contactsRepository.getContact(id);
+  if (!contact || canSeeAdminData(user)) return contact;
+  return { ...contact, projects: [] };
 }
 
 export async function fetchContactHistoryAction(contactId: string): Promise<HistoryEvent[]> {

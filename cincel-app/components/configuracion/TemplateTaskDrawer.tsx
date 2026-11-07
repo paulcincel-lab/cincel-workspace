@@ -1,5 +1,6 @@
 "use client";
 
+import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Input } from "@/components/ui/shadcn/input";
@@ -10,6 +11,7 @@ import type { TaskPriority, WorkflowPhaseRef } from "@/lib/types/core";
 
 export interface TemplateDraft {
   title: string;
+  /** Required: a template always has a fase of its tramo. */
   phaseId: string;
   notes: string;
   defaultPriority: TaskPriority;
@@ -36,22 +38,23 @@ const PRIORITY_OPTIONS: Array<{ value: TaskPriority; label: string }> = [
   { value: "baja", label: "Baja" },
 ];
 
-interface WorkflowTemplateDrawerProps {
+interface TemplateTaskDrawerProps {
   show: boolean;
   onClose: () => void;
   editingId: string | null;
   workflowName: string;
-  /** The tramo's fases, in catalog order. */
+  /** The tramo's active fases, in catalog order. */
   phases: WorkflowPhaseRef[];
   draft: TemplateDraft;
   onChangeDraft: React.Dispatch<React.SetStateAction<TemplateDraft>>;
   formError: string;
   onSave: () => void;
   canSave: boolean;
+  isSaving?: boolean;
 }
 
-/** Slide-in form for adding or editing a workflow task template. */
-export function WorkflowTemplateDrawer({
+/** Slide-in form for adding or editing a tramo's template task. */
+export function TemplateTaskDrawer({
   show,
   onClose,
   editingId,
@@ -62,25 +65,25 @@ export function WorkflowTemplateDrawer({
   formError,
   onSave,
   canSave,
-}: WorkflowTemplateDrawerProps) {
+  isSaving = false,
+}: TemplateTaskDrawerProps) {
+  const phaseItems = Object.fromEntries(phases.map((p) => [p.id, p.name]));
+  const hasPhases = phases.length > 0;
+  const canSubmit = canSave && hasPhases && Boolean(draft.phaseId) && !isSaving;
+
   return (
     <Sheet open={show} onOpenChange={(next) => { if (!next) onClose(); }}>
       <SheetContent className="w-[560px] max-w-[560px] overflow-y-auto text-foreground">
         <SheetHeader>
-          <SheetTitle>{editingId === null ? "Nueva plantilla" : "Editar plantilla"}</SheetTitle>
-          <p className="text-xs text-muted-foreground">Workflow: {workflowName}</p>
+          <SheetTitle>{editingId === null ? "Nueva tarea de plantilla" : "Editar tarea de plantilla"}</SheetTitle>
+          <p className="text-xs text-muted-foreground">Tramo: {workflowName}</p>
         </SheetHeader>
 
         <div className="space-y-4 px-6 py-4">
-          {formError ? (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {formError}
-            </div>
-          ) : null}
-
           <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">Título</label>
+            <label htmlFor="template-title" className="mb-2 block text-sm font-medium text-foreground">Tarea</label>
             <Input
+              id="template-title"
               type="text"
               value={draft.title}
               onChange={(event) => onChangeDraft((current) => ({ ...current, title: event.target.value }))}
@@ -89,13 +92,16 @@ export function WorkflowTemplateDrawer({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">Fase</label>
+            <label id="template-phase-label" className="mb-2 block text-sm font-medium text-foreground">Fase</label>
             <Select
-              items={Object.fromEntries(phases.map((p) => [p.id, p.name]))}
+              items={phaseItems}
               value={draft.phaseId || null}
               onValueChange={(value) => onChangeDraft((current) => ({ ...current, phaseId: (value as string | null) ?? "" }))}
+              disabled={!hasPhases}
             >
-              <SelectTrigger className="w-full"><SelectValue placeholder="Elige una fase" /></SelectTrigger>
+              <SelectTrigger className="w-full" aria-labelledby="template-phase-label" aria-describedby="template-phase-help">
+                <SelectValue placeholder="Elige una fase" />
+              </SelectTrigger>
               <SelectContent>
                 {phases.map((phase) => (
                   <SelectItem key={phase.id} value={phase.id}>
@@ -104,6 +110,9 @@ export function WorkflowTemplateDrawer({
                 ))}
               </SelectContent>
             </Select>
+            <p id="template-phase-help" className="mt-1 text-xs text-muted-foreground">
+              {hasPhases ? "Obligatoria. La tarea se crea cuando se inicia esta fase." : "Este tramo aún no tiene fases."}
+            </p>
           </div>
 
           <div>
@@ -154,7 +163,7 @@ export function WorkflowTemplateDrawer({
             </div>
           </div>
           <p className="-mt-2 text-xs text-muted-foreground">
-            Días relativos al arranque de la etapa, usados al estampar las tareas del proyecto.
+            Días relativos al inicio del tramo, usados al crear las tareas del proyecto.
           </p>
 
           <div>
@@ -162,7 +171,7 @@ export function WorkflowTemplateDrawer({
             <Textarea
               value={draft.notes}
               onChange={(event) => onChangeDraft((current) => ({ ...current, notes: event.target.value }))}
-              placeholder="Instrucciones u observaciones para esta plantilla"
+              placeholder="Instrucciones u observaciones para esta tarea"
             />
           </div>
 
@@ -172,8 +181,14 @@ export function WorkflowTemplateDrawer({
                 checked={draft.active}
                 onCheckedChange={(checked) => onChangeDraft((current) => ({ ...current, active: checked === true }))}
               />
-              <span className="text-sm text-foreground">Plantilla activa</span>
+              <span className="text-sm text-foreground">Tarea de plantilla activa</span>
             </label>
+          ) : null}
+
+          {formError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{formError}</AlertDescription>
+            </Alert>
           ) : null}
         </div>
 
@@ -184,7 +199,7 @@ export function WorkflowTemplateDrawer({
           <Button
             type="button"
             onClick={onSave}
-            disabled={!canSave}
+            disabled={!canSubmit}
             title={canSave ? "" : "No tienes permiso para guardar cambios"}
           >
             Guardar

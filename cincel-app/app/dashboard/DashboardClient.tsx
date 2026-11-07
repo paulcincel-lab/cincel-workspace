@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/shadcn/table";
 
 import { PageHeader } from "@/components/v2/layout/PageHeader";
-import { AreaBadge } from "@/components/v2/status/AreaBadge";
+import { TramoBadge } from "@/components/v2/status/TramoBadge";
 import {
   useProjectsData,
   type ProjectItem,
@@ -115,7 +115,7 @@ function TaskTable({ rows, todayIso, dateOf, showReasons }: TaskTableProps) {
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           <TableHead className={cn(SECTION_LABEL, "pl-4")}>Tarea</TableHead>
-          <TableHead className={SECTION_LABEL}>Área</TableHead>
+          <TableHead className={SECTION_LABEL}>Tramo</TableHead>
           {showReasons ? (
             <TableHead className={SECTION_LABEL}>Motivo</TableHead>
           ) : null}
@@ -144,13 +144,10 @@ function TaskTable({ rows, todayIso, dateOf, showReasons }: TaskTableProps) {
                 </div>
               </TableCell>
               <TableCell>
-                {t.workflow ? (
-                  <AreaBadge
-                    name={t.workflow.name}
-                    colorSlot={t.areaColorSlot}
-                  />
+                {t.kind === "admin" ? (
+                  <span>Administración</span>
                 ) : (
-                  <span className="text-muted-foreground">Sin área</span>
+                  <TramoBadge tramo={t.workflow} />
                 )}
               </TableCell>
               {showReasons ? (
