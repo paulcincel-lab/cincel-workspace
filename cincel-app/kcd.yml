@@ -10,6 +10,7 @@ env:
   BOOTSTRAP_ADMIN_NAME: { default: "Administrador", description: "Display name of the bootstrap admin. Set on create, and on an existing row only while its name is still the email." }
   BOOTSTRAP_ADMIN_PASSWORD: { secret: true, description: "Password for BOOTSTRAP_ADMIN_EMAIL. The env value wins: change it here and redeploy to reset the password." }
   CINCEL_ADMIN_EMAILS: {}
+  CRON_SECRET: { secret: true, generate: hex32, description: "Bearer secret for POST /api/cron/tick, called every minute by the host cron on the Docker network (http://app:3000/api/cron/tick). Unset = the route answers 503 and no background job runs. See docs/deployment.md." }
   GITHUB_PAT: { description: "── GitHub RFCs (assistant `create_rfc` tool, optional) ───────────────────── Fine-grained personal access token scoped to Issues: write on GITHUB_REPO only (no other repo/org scope). Used to file RFCs the assistant drafts as GitHub Issues labeled \"rfc\". Leave unset to disable the tool — it tells the user GitHub isn't configured instead of failing silently." }
   GITHUB_REPO: {}
   GOOGLE_DRIVE_ROOT_FOLDER_ID: {}

@@ -16,6 +16,8 @@ import { fetchContactsAction, createContactAction, mergeContactsAction } from "@
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { createGithubIssue, isGithubConfigured } from "@/lib/github/client";
+import { buildDefinedTools } from "@/lib/assistant/tools/index";
+import type { AssistantContext } from "@/lib/types/redesign";
 import type {
   ContactKind,
   ProjectListItem,
@@ -787,7 +789,10 @@ export const ASSISTANT_TOOLS = {
  * - merge_duplicate_activities → canDeleteActivity
  * - discard_project          → canDeleteProject
  */
-export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
+export function buildAssistantTools(
+  user: AuthenticatedUser | null,
+  run?: { context: AssistantContext; threadId: string },
+): ToolSet {
   const activitiesCaps = resolveActivitiesCapabilities(user);
   const clientsCaps = resolveClientsCapabilities(user);
   const projectsCaps = resolveProjectsCapabilities(user);
@@ -820,5 +825,8 @@ export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
   if (projectsCaps.canDeleteProject) {
     tools.discard_project = discard_project;
   }
+  // Registered tools (BE §10.1): capability ∧ available(ctx); a registered
+  // tool replaces a legacy one of the same name.
+  if (user && run) Object.assign(tools, buildDefinedTools({ user, ...run }));
   return tools;
 }

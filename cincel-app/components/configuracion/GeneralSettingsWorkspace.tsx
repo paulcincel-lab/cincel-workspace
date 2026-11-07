@@ -62,7 +62,7 @@ interface GeneralSettingsWorkspaceProps {
 export default function GeneralSettingsWorkspace({ appearance, general }: GeneralSettingsWorkspaceProps) {
   const router = useRouter();
   const defaultSettings = useMemo(() => buildDefaultGeneralSettings(), []);
-  const canManage = appearance.canManage;
+  const canManage = appearance.canManageGeneral;
 
   const [settings, setSettings] = useState<GeneralSettings>(general.settings);
   const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(general.hasCustom);

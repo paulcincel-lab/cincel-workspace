@@ -7,7 +7,7 @@ import {
 import { buildDefaultLoadedGeneralSettings, type LoadedGeneralSettings } from "@/lib/settings/general-settings";
 
 export default async function ConfiguracionGeneralPage() {
-  let appearance: AppearanceState = { primaryColor: null, canManage: false };
+  let appearance: AppearanceState = { primaryColor: null, canManage: false, canManageGeneral: false };
   let general: LoadedGeneralSettings = buildDefaultLoadedGeneralSettings();
   try {
     [appearance, general] = await Promise.all([fetchAppearanceAction(), fetchGeneralSettingsAction()]);

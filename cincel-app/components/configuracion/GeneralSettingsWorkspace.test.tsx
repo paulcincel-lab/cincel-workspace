@@ -24,7 +24,7 @@ import {
 
 import GeneralSettingsWorkspace from "./GeneralSettingsWorkspace";
 
-const admin = { primaryColor: null, canManage: true };
+const admin = { primaryColor: null, canManage: true, canManageGeneral: true };
 const SAVED_AT = "2026-11-04T16:30:00.000Z";
 
 describe("GeneralSettingsWorkspace", () => {
@@ -77,7 +77,7 @@ describe("GeneralSettingsWorkspace", () => {
 
   it("keeps saving and restoring off for non-admins", () => {
     const general = { settings: buildDefaultGeneralSettings(), hasCustom: true, savedAt: SAVED_AT };
-    render(<GeneralSettingsWorkspace appearance={{ primaryColor: null, canManage: false }} general={general} />);
+    render(<GeneralSettingsWorkspace appearance={{ primaryColor: null, canManage: false, canManageGeneral: false }} general={general} />);
 
     fireEvent.change(screen.getAllByDisplayValue("Cincel Workspace")[0], { target: { value: "Cincel Studio" } });
     expect(screen.getByRole("button", { name: "Guardar cambios" }).hasAttribute("disabled")).toBe(true);

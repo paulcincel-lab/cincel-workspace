@@ -1,6 +1,4 @@
-import { notImplemented } from "@/lib/stubs";
-
-import type { MailContent } from "./layout";
+import { button, formatDateRange, formatDays, htmlDocument, paragraph, type MailContent } from "./layout";
 
 export type VacacionesSolicitudParams = {
   requesterName: string;
@@ -17,5 +15,11 @@ export type VacacionesSolicitudParams = {
  * never the kind (privacy, redesign BE §8.8, §11.3).
  */
 export function vacacionesSolicitudEmail(params: VacacionesSolicitudParams): MailContent {
-  return notImplemented("vacacionesSolicitudEmail", params);
+  const { requesterName, from, to, days, url } = params;
+  const body = `${requesterName} pidió una ausencia ${formatDateRange(from, to)} (${formatDays(days)}).`;
+  return {
+    subject: `Nueva solicitud de ausencia de ${requesterName}`,
+    text: `${body}\n\nRevisar solicitudes: ${url}\n`,
+    html: htmlDocument([paragraph(body), button("Revisar solicitudes", url)]),
+  };
 }

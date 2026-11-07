@@ -1,6 +1,4 @@
-import { notImplemented } from "@/lib/stubs";
-
-import type { MailContent } from "./layout";
+import { button, formatMailDateTime, htmlDocument, paragraph, type MailContent } from "./layout";
 
 export type RecordatorioParams = {
   /** The reminder text. */
@@ -12,6 +10,12 @@ export type RecordatorioParams = {
 };
 
 /** "Recordatorio: <texto>" with the due time and a button "Abrir en Cincel" (redesign BE §11.3). */
-export function recordatorioEmail(params: RecordatorioParams): MailContent {
-  return notImplemented("recordatorioEmail", params);
+export function recordatorioEmail({ text, dueAt, url }: RecordatorioParams): MailContent {
+  const reminder = text.trim();
+  const when = `Para el ${formatMailDateTime(dueAt)}.`;
+  return {
+    subject: `Recordatorio: ${reminder.replace(/\s+/g, " ")}`,
+    text: `${reminder}\n\n${when}\n\nAbrir en Cincel: ${url}\n`,
+    html: htmlDocument([paragraph(reminder), paragraph(when), button("Abrir en Cincel", url)]),
+  };
 }

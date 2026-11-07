@@ -5,6 +5,25 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Cutto boundary (redesign BE §11.2): client code links to Cutto through lib/integrations/cutto-links.ts
+  // and never imports the server-only adapter (also checked by tests/guards/cutto-server-only.test.ts).
+  // Listed before the portal block so the portal patterns win on components/portal/**.
+  {
+    files: ["components/**", "hooks/**", "lib/integrations/cutto-links.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/lib/integrations/cutto-api.server", "**/cutto-api.server"],
+              message: "Client code must not import the Cutto API adapter. Use lib/integrations/cutto-links.ts.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Portal boundary: client-portal code reaches data only through lib/portal (requirePortalUser,
   // requireProjectAccess, lib/portal/queries), never through staff actions, repositories or the staff session.
   {

@@ -1,6 +1,6 @@
 "use server";
 
-import { NOTIFICATION_DEFAULTS } from "@/lib/notifications/notify";
+import { NOTIFICATION_DEFAULTS } from "@/lib/notifications/defaults";
 import { notImplementedAction, stubDefault } from "@/lib/stubs";
 import type {
   NotificationKind,
