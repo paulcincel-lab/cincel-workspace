@@ -75,7 +75,9 @@ export function ProjectTramosCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Tramos</CardTitle>
+        <CardTitle>
+          <h2>Tramos</h2>
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {error ? (
@@ -91,7 +93,7 @@ export function ProjectTramosCard({
             {started.map((tramo) => (
               <li key={tramo.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex items-center gap-2 font-medium text-foreground">
-                  {tramo.name}
+                  <span>{tramo.name}</span>
                   {tramo.id === currentId ? <Badge variant="outline">Tramo actual</Badge> : null}
                 </span>
                 <span className="text-muted-foreground">

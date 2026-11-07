@@ -414,8 +414,8 @@ test.describe("Proyectos — create and edit", () => {
     // First field of "Datos generales" in edit mode.
     await page.getByRole("combobox", { name: "Cliente" }).first().click();
     await page.getByRole("option", { name: newClient }).click();
-    page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "Guardar", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cambiar cliente" }).click();
 
     await expect(page.getByRole("link", { name: newClient })).toBeVisible({ timeout: 15_000 });
     await page.reload({ waitUntil: "domcontentloaded" });

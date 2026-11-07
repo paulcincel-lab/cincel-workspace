@@ -154,7 +154,7 @@ test.describe("Equipo — add team member", () => {
     const row = page.getByRole("row").filter({ hasText: withPosition });
     await expect(row.getByText(POSITION_NAME, { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(row.getByText("Arquitecto Senior", { exact: true })).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: withoutPosition }).getByText("Sin puesto")).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: withoutPosition }).getByText("Sin puesto", { exact: true })).toBeVisible();
 
     // Puestos, Fases candidatas and Acceso are separate columns; "Área" is gone.
     await expect(page.getByRole("columnheader", { name: "Puestos", exact: true })).toBeVisible();

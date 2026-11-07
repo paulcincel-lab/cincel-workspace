@@ -7,6 +7,7 @@ import { requireCapabilityUser } from "@/lib/auth/session";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { retryProjectFolders, syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
+import { actionErrorCode } from "@/lib/errors";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import * as projectSpacesRepository from "@/lib/repositories/project-spaces-repository";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
@@ -84,6 +85,26 @@ export async function createProjectAction(input: ProjectCreateInput | ProjectInp
   after(() => syncProjectFolders(row.id));
   revalidateProjectEdit(row.id);
   return row;
+}
+
+/** Codes the create sheet shows as copy instead of the generic error. */
+const CREATE_PROJECT_CODES = new Set(["FORBIDDEN", "EMPTY", "NAME_TAKEN"]);
+
+/**
+ * `createProjectAction` for the create sheet. Production builds hide the
+ * message of an error thrown by a Server Action, so the known codes come back
+ * as a value the sheet can turn into copy. Other errors still throw.
+ */
+export async function submitProjectCreateAction(
+  input: ProjectCreateInput
+): Promise<{ ok: true; project: ProjectDetail } | { ok: false; error: string }> {
+  try {
+    return { ok: true, project: await createProjectAction(input) };
+  } catch (err) {
+    const code = actionErrorCode(err);
+    if (CREATE_PROJECT_CODES.has(code)) return { ok: false, error: code };
+    throw err;
+  }
 }
 
 /**

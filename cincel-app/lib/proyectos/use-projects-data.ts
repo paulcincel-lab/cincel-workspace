@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import {
   fetchProjectsAction,
-  createProjectAction,
+  submitProjectCreateAction,
   updateProjectAction,
   archiveProjectAction,
   deleteProjectAction,
@@ -85,7 +85,10 @@ export function useProjectsData(
   const addProject = useCallback(
     async (input: ProjectCreateInput): Promise<ProjectItem | null> => {
       try {
-        const created = await createProjectAction(input);
+        const result = await submitProjectCreateAction(input);
+        // Rethrown on the client so callers read the code from the message.
+        if (!result.ok) throw new Error(result.error);
+        const created = result.project;
         const rows = await refresh();
         // Use the freshly fetched list (not the stale `projectsData` closure)
         // so the caller reliably gets the row it just created.
