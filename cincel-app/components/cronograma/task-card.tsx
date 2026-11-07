@@ -91,6 +91,7 @@ export function TaskCard({ task, className, readOnly = false, onCycleStatus, onT
             "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
             statusClass(task.status)
           )}
+          role="img"
           aria-label={`Estado: ${STATUS_LABEL[task.status]}`}
           title={STATUS_LABEL[task.status]}
         >

@@ -49,7 +49,8 @@ export async function loginAsAdmin(page: Page, baseUrl: string): Promise<void> {
   await page.locator('input[type="password"]').first().fill(e2eAdminPassword());
   await page.getByRole("button", { name: "Entrar" }).click();
   await page.waitForURL(
-    /\/dashboard|\/directorio|\/proyectos|\/tareas|\/equipo|\/change-password/,
+    // `/inicio` is where sign-in lands with the redesign flag on (FE §2.2).
+    /\/dashboard|\/inicio|\/directorio|\/proyectos|\/tareas|\/equipo|\/change-password/,
     { timeout: 20_000 }
   );
 }

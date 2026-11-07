@@ -1,12 +1,15 @@
 /**
  * E2E: Tareas — create a task and verify commitmentDate/reviewDate fields
- * and persistence in the list.
+ * and persistence in the list. Flag off: `/actividades/presale` and
+ * `/mis-tareas`. Flag on: "Mis tareas" is the Lista view of `/tareas` with
+ * "Responsable: Yo" (redesign FE §2.2, §3.4).
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
+import { setRedesignFlag } from "./helpers/redesign-flag";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
@@ -52,6 +55,14 @@ async function ensurePresaleProject(): Promise<void> {
 }
 
 test.describe("Tareas — create task with commitmentDate and reviewDate", () => {
+  test.beforeAll(async () => {
+    await setRedesignFlag(false);
+  });
+
+  test.afterAll(async () => {
+    await setRedesignFlag(null);
+  });
+
   test.beforeEach(async ({ page }) => {
     await ensurePresaleProject();
     await seedAuth(page);
@@ -259,5 +270,69 @@ test.describe("Tareas — create task with commitmentDate and reviewDate", () =>
     await expect(rowAfter.getByTitle(photoName)).toBeVisible({ timeout: 15_000 });
     await expect(rowAfter.getByRole("checkbox")).toBeChecked();
     await expect(drawer.getByTitle(photoName)).toHaveCount(1);
+  });
+});
+
+test.describe("Mis tareas — flag on (/tareas?vista=lista&responsable=yo)", () => {
+  test.beforeAll(async () => {
+    await setRedesignFlag(true);
+  });
+
+  test.afterAll(async () => {
+    await setRedesignFlag(null);
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await ensurePresaleProject();
+    await seedAuth(page);
+    await loginAsAdmin(page, BASE_URL);
+  });
+
+  test("/mis-tareas redirects to the Lista view with Responsable: Yo", async ({ page }) => {
+    await page.goto(`${BASE_URL}/mis-tareas`, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/tareas\?/, { timeout: 30_000 });
+    const url = new URL(page.url());
+    expect(url.searchParams.get("vista")).toBe("lista");
+    expect(url.searchParams.get("responsable")).toBe("yo");
+    await expect(page.getByRole("heading", { name: "Tareas", exact: true })).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("my open tasks are listed and completed ones stay collapsed under Completado", async ({ page }) => {
+    const openTitle = `Mi tarea abierta flag E2E ${RUN_ID}`;
+    const doneTitle = `Mi tarea cerrada flag E2E ${RUN_ID}`;
+    const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "paul@cincel.mx";
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      for (const [title, status] of [
+        [openTitle, "pendiente"],
+        [doneTitle, "completado"],
+      ] as const) {
+        await sql`
+          insert into core.tasks (project_id, workflow_id, kind, title, status, created_by_id, manager_id)
+          select p.id, p.current_workflow_id, 'usuario', ${title}, ${status}, s.id, s.id
+          from core.projects p, core.staff s
+          where p.name = ${`Proyecto E2E ${RUN_ID}`} and lower(s.email) = lower(${adminEmail}) and s.deleted_at is null`;
+      }
+    } finally {
+      await sql.end();
+    }
+
+    await page.goto(`${BASE_URL}/tareas?vista=lista&responsable=yo&q=${encodeURIComponent(`flag E2E ${RUN_ID}`)}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.getByRole("link", { name: openTitle })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(doneTitle)).toBeHidden();
+
+    // Completado is collapsed with its count; opening it shows the closed task.
+    const completadoToggle = page
+      .getByRole("button", { name: /^Completado/ })
+      .or(page.locator("summary").filter({ hasText: /^Completado/ }))
+      .first();
+    await completadoToggle.click();
+    await expect(page.getByRole("link", { name: doneTitle })).toBeVisible({ timeout: 15_000 });
+
+    // The filters live in the URL (FE §3.4): a reload keeps the same rows.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("link", { name: openTitle })).toBeVisible({ timeout: 30_000 });
   });
 });

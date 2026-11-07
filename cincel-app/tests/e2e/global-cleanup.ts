@@ -8,9 +8,11 @@
  * from a crashed/interrupted run) and after it, so repeated local runs stay
  * deterministic.
  *
- * Only touches rows whose name/title contains "E2E" — never seed data.
+ * Only touches rows whose name/title contains "E2E" — never seed data —
+ * plus the admin's redesign flag, reset to the org default before the run.
  */
 import postgres from "postgres";
+import { resetRedesignFlag } from "./helpers/redesign-flag";
 
 const connectionString =
   process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
@@ -76,6 +78,8 @@ async function purgeE2ERows(): Promise<void> {
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
   await purgeE2ERows();
+  // Flag-on specs pin the admin's redesign flag; a crashed run must not leave it on.
+  await resetRedesignFlag();
   // E2E_KEEP_ROWS leaves rows in place after the run for manual DB inspection.
   return process.env.E2E_KEEP_ROWS ? async () => {} : purgeE2ERows;
 }

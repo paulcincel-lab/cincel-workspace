@@ -1,19 +1,30 @@
 /**
  * E2E: Calendario — subscribable ICS feed for Google Calendar (#434).
  *
+ * Flag off: the legacy `/calendario` page. Flag on (redesign FE §3.4): the
+ * same `CalendarFeedDialog` from the aside of `/tareas?vista=calendario`.
+ *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
-import { test, expect, request as playwrightRequest } from "@playwright/test";
+import { test, expect, request as playwrightRequest, type Page } from "@playwright/test";
 import postgres from "postgres";
 import { loginAsAdmin } from "./helpers/seed-auth";
+import { setRedesignFlag } from "./helpers/redesign-flag";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
 const TASK_TITLE = `Tarea calendario E2E ${RUN_ID}`;
 const connectionString = process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
 
-/** Seeds a task managed by the admin with a commitment date (tagged E2E for global-cleanup). */
-async function seedAdminTask(): Promise<void> {
+let adminTaskReady: Promise<void> | null = null;
+
+/** Seeds (once per run) a task managed by the admin with a commitment date (tagged E2E for global-cleanup). */
+function seedAdminTask(): Promise<void> {
+  adminTaskReady ??= insertAdminTask();
+  return adminTaskReady;
+}
+
+async function insertAdminTask(): Promise<void> {
   const sql = postgres(connectionString, { max: 1 });
   try {
     const [admin] = await sql`select id from core.staff where lower(email) = 'paul@cincel.mx' limit 1`;
@@ -30,45 +41,76 @@ async function seedAdminTask(): Promise<void> {
   }
 }
 
-test.describe("Calendario — Google Calendar feed", () => {
+/** Create → read anonymously → regenerate → disable, from whichever page is open. */
+async function exerciseFeed(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Sincronizar con Google Calendar" }).click({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Crear enlace" }).click();
+  const urlInput = page.getByLabel("Enlace del calendario");
+  await expect(urlInput).toBeVisible({ timeout: 15_000 });
+  const firstUrl = await urlInput.inputValue();
+  expect(firstUrl).toMatch(/\/api\/calendario\/feed\/[a-f0-9]{48}\.ics$/);
+
+  // A fresh request context has no cookies: the token in the URL is the only credential.
+  const anon = await playwrightRequest.newContext();
+  const res = await anon.get(firstUrl);
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toContain("text/calendar");
+  const body = await res.text();
+  expect(body).toContain("BEGIN:VCALENDAR");
+  expect(body).toContain(`SUMMARY:${TASK_TITLE}`);
+  expect(body).toContain("DTSTART;VALUE=DATE:20270315");
+
+  // A wrong token gets the same 404 as no feed at all.
+  expect((await anon.get(firstUrl.replace(/[a-f0-9]{48}\.ics$/, `${"0".repeat(48)}.ics`))).status()).toBe(404);
+
+  // Regenerating replaces the link: the old URL stops working, the new one works.
+  await page.getByRole("button", { name: "Regenerar enlace" }).click();
+  await expect(urlInput).not.toHaveValue(firstUrl, { timeout: 15_000 });
+  const secondUrl = await urlInput.inputValue();
+  expect((await anon.get(firstUrl)).status()).toBe(404);
+  expect((await anon.get(secondUrl)).status()).toBe(200);
+
+  // Disabling kills it.
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Desactivar" }).click();
+  await expect(page.getByRole("button", { name: "Crear enlace" })).toBeVisible({ timeout: 15_000 });
+  expect((await anon.get(secondUrl)).status()).toBe(404);
+
+  await anon.dispose();
+}
+
+test.describe("Calendario — Google Calendar feed (flag off)", () => {
+  test.beforeAll(async () => {
+    await setRedesignFlag(false);
+  });
+
+  test.afterAll(async () => {
+    await setRedesignFlag(null);
+  });
+
   test("create a private ICS link, read it without a session, regenerate and disable it", async ({ page }) => {
     await seedAdminTask();
     await loginAsAdmin(page, BASE_URL);
     await page.goto(`${BASE_URL}/calendario`, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/calendario/);
+    await exerciseFeed(page);
+  });
+});
 
-    await page.getByRole("button", { name: "Sincronizar con Google Calendar" }).click();
-    await page.getByRole("button", { name: "Crear enlace" }).click();
-    const urlInput = page.getByLabel("Enlace del calendario");
-    await expect(urlInput).toBeVisible({ timeout: 15_000 });
-    const firstUrl = await urlInput.inputValue();
-    expect(firstUrl).toMatch(/\/api\/calendario\/feed\/[a-f0-9]{48}\.ics$/);
+test.describe("Calendario — Google Calendar feed (flag on, /tareas?vista=calendario)", () => {
+  test.beforeAll(async () => {
+    await setRedesignFlag(true);
+  });
 
-    // A fresh request context has no cookies: the token in the URL is the only credential.
-    const anon = await playwrightRequest.newContext();
-    const res = await anon.get(firstUrl);
-    expect(res.status()).toBe(200);
-    expect(res.headers()["content-type"]).toContain("text/calendar");
-    const body = await res.text();
-    expect(body).toContain("BEGIN:VCALENDAR");
-    expect(body).toContain(`SUMMARY:${TASK_TITLE}`);
-    expect(body).toContain("DTSTART;VALUE=DATE:20270315");
+  test.afterAll(async () => {
+    await setRedesignFlag(null);
+  });
 
-    // A wrong token gets the same 404 as no feed at all.
-    expect((await anon.get(firstUrl.replace(/[a-f0-9]{48}\.ics$/, `${"0".repeat(48)}.ics`))).status()).toBe(404);
-
-    // Regenerating replaces the link: the old URL stops working, the new one works.
-    await page.getByRole("button", { name: "Regenerar enlace" }).click();
-    await expect(urlInput).not.toHaveValue(firstUrl, { timeout: 15_000 });
-    const secondUrl = await urlInput.inputValue();
-    expect((await anon.get(firstUrl)).status()).toBe(404);
-    expect((await anon.get(secondUrl)).status()).toBe(200);
-
-    // Disabling kills it.
-    page.once("dialog", (dialog) => void dialog.accept());
-    await page.getByRole("button", { name: "Desactivar" }).click();
-    await expect(page.getByRole("button", { name: "Crear enlace" })).toBeVisible({ timeout: 15_000 });
-    expect((await anon.get(secondUrl)).status()).toBe(404);
-
-    await anon.dispose();
+  test("the calendar view's aside creates, regenerates and disables the same ICS link", async ({ page }) => {
+    await seedAdminTask();
+    await loginAsAdmin(page, BASE_URL);
+    await page.goto(`${BASE_URL}/tareas?vista=calendario`, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/tareas\?(.*&)?vista=calendario/);
+    await exerciseFeed(page);
   });
 });

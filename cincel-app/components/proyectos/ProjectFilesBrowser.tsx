@@ -227,7 +227,7 @@ function FolderListing({ projectId, result }: { projectId: string; result: OkRes
   );
 }
 
-function FolderBreadcrumbs({
+export function FolderBreadcrumbs({
   projectId,
   breadcrumbs,
   rootId,

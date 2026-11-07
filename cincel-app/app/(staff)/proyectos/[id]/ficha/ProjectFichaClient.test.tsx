@@ -24,9 +24,11 @@ const taskActions = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "p1" }) }));
-vi.mock("@/components/layout/Sidebar", () => ({ default: () => null }));
+vi.mock("@/components/layout/Sidebar", () => ({ default: () => <div data-testid="legacy-sidebar" /> }));
 vi.mock("@/components/layout/Header", () => ({ default: () => null }));
-vi.mock("@/components/proyectos/ProjectSectionNav", () => ({ ProjectSectionNav: () => null }));
+vi.mock("@/components/proyectos/ProjectSectionNav", () => ({
+  ProjectSectionNav: () => <div data-testid="legacy-section-nav" />,
+}));
 vi.mock("@/components/proyectos/ProjectBitacoraCard", () => ({ ProjectBitacoraCard: () => null }));
 vi.mock("@/components/ui/DriveLinksEditor", () => ({ DriveLinksEditor: () => null }));
 vi.mock("@/components/ui/ImportDataPanel", () => ({
@@ -67,7 +69,7 @@ vi.mock("@/components/proyectos/ProjectAdminFields", () => ({
   projectAdminPatch: (v: unknown) => v,
 }));
 
-import ProjectFichaPage from "./page";
+import { ProjectFichaClient as ProjectFichaPage } from "./ProjectFichaClient";
 
 function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
   return {
@@ -212,7 +214,36 @@ describe("ficha admin data", () => {
   });
 
   it("no longer uses window.confirm", () => {
-    const source = readFileSync(resolve(__dirname, "page.tsx"), "utf8");
+    const source = readFileSync(resolve(__dirname, "ProjectFichaClient.tsx"), "utf8");
     expect(source).not.toContain("window.confirm");
+  });
+});
+
+describe("ficha in the redesigned project shell", () => {
+  it("renders the legacy shell without tabs", async () => {
+    render(<ProjectFichaPage />);
+    await screen.findByRole("heading", { name: "Casa Lomas" });
+    expect(screen.getByTestId("legacy-sidebar")).toBeTruthy();
+    expect(screen.getByTestId("legacy-section-nav")).toBeTruthy();
+  });
+
+  it("renders the same form under ProjectTabs, without the legacy shell", async () => {
+    render(<ProjectFichaPage tabs={<nav aria-label="Secciones del proyecto" data-testid="project-tabs" />} />);
+    await screen.findByRole("heading", { name: "Ficha" });
+    expect(screen.getByTestId("project-tabs")).toBeTruthy();
+    expect(screen.queryByTestId("legacy-sidebar")).toBeNull();
+    expect(screen.queryByTestId("legacy-section-nav")).toBeNull();
+    // Same behavior: edit and save go through the same action.
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(actions.updateProjectAction).toHaveBeenCalledWith("p1", expect.any(Object)));
+  });
+
+  it("keeps admin client data behind canSeeAdminData under the new shell", async () => {
+    render(<ProjectFichaPage tabs={<nav aria-label="Secciones del proyecto" />} />);
+    await screen.findByRole("heading", { name: "Ficha" });
+    expect(screen.queryByText("Cliente:")).toBeNull();
+    expect(screen.queryByText("Administración")).toBeNull();
+    expect(taskActions.fetchAdminTasksAction).not.toHaveBeenCalled();
   });
 });
