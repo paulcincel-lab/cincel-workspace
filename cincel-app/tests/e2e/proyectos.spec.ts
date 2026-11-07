@@ -188,8 +188,8 @@ test.describe("Proyectos — create and edit", () => {
     await expect(page.getByText("Al asignar el cliente se cierra la tarea «Asignar cliente y origen».")).toBeVisible();
     await page.getByRole("combobox", { name: "Cliente" }).first().click();
     await page.getByRole("option", { name: CLIENT_NAME }).click();
-    page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "Guardar", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cambiar cliente" }).click();
 
     await expect(page.getByRole("link", { name: CLIENT_NAME })).toBeVisible({ timeout: 15_000 });
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -265,8 +265,9 @@ test.describe("Proyectos — create and edit", () => {
     // Espacios: empty state, then add one.
     await expect(page.getByText(/^Sin espacios\./)).toBeVisible();
     await page.getByRole("button", { name: "+ Agregar espacio" }).click();
-    await page.getByRole("textbox", { name: "Nombre del espacio" }).fill("Depto 201");
-    await page.getByRole("button", { name: "Agregar", exact: true }).click();
+    const spaceName = page.getByRole("textbox", { name: "Nombre del espacio" });
+    await spaceName.fill("Depto 201");
+    await page.locator("form").filter({ has: spaceName }).getByRole("button", { name: "Agregar", exact: true }).click();
     await expect(page.getByRole("button", { name: "Renombrar Depto 201" })).toBeVisible({ timeout: 15_000 });
   });
 
