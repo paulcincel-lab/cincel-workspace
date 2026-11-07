@@ -41,5 +41,14 @@
   "Project Flow Phase 2: Tramos, Fases + Iniciar Tramo": "project-flow:2",
   "Project Flow Phase 3: Name-only Projects, Admin Tasks + Puestos": "project-flow:3",
   "Project Flow Phase 4: monday Importer + Reacomodar Importación": "project-flow:4",
-  "Project Flow Phase 5: Cleanup Release (Drops)": "project-flow:5"
+  "Project Flow Phase 5: Cleanup Release (Drops)": "project-flow:5",
+  "Redesign Phase 1: Contracts and Foundation": "redesign:1",
+  "Redesign Phase 2: Shell, Navigation and States": "redesign:2",
+  "Redesign Phase 3: Inicio, Tareas y Calendario": "redesign:3",
+  "Redesign Phase 4: Proyectos, Personas, Biblioteca y Vacaciones": "redesign:4",
+  "Redesign Phase 5: Mi espacio, Bandeja y Gmail": "redesign:5",
+  "Redesign Phase 6: Ajustes, tema y Control de horario": "redesign:6",
+  "Redesign Phase 7: Asistente en todas partes": "redesign:7",
+  "Redesign Phase 8: Acceso y portal": "redesign:8",
+  "Redesign Phase 9: Cleanup": "redesign:9"
 }
