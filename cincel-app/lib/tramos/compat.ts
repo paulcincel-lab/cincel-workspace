@@ -9,9 +9,11 @@
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import * as permissions from "@/lib/auth/permissions";
 import { isAdministratorRole } from "@/lib/data/roles";
+import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
+import { fetchTramoBoardAction } from "@/lib/actions/tramo-start-actions";
 import { fetchTramosNavAction } from "@/lib/actions/workflows-actions";
 import { tramoColorSlot as projectFlowColorSlot, tramoColorVar as projectFlowColorVar } from "@/lib/tramos/tramo-color";
-import type { WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
+import type { Staff, TramoBoard, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 
 type AdminGate = (user: AuthenticatedUser | null | undefined) => boolean;
 
@@ -88,3 +90,20 @@ export function phaseLabel(phaseId: string, catalog?: readonly WorkflowPhaseRef[
   const name = catalog.find((phase) => phase.id === phaseId)?.name.trim();
   return name ? name : null;
 }
+
+/**
+ * Project Flow's tramo start contract, as the Tareas · Lista start slot reads
+ * it (FE §3.4, §21.2): the tramo board ("Listos para iniciar" / "Próximos")
+ * and the staff the Iniciar tramo sheet offers (with puesto suggestions).
+ * `null` while Project Flow is absent: the slot renders nothing and
+ * `?iniciar=1` is ignored.
+ */
+export type TramoStartContract = {
+  fetchBoard(workflowId: string): Promise<TramoBoard>;
+  fetchCandidates(workflowId: string): Promise<Array<Staff & { suggested: boolean }>>;
+};
+
+export const tramoStart: TramoStartContract | null = {
+  fetchBoard: (workflowId) => fetchTramoBoardAction(workflowId),
+  fetchCandidates: (workflowId) => fetchAssignableStaffAction(workflowId),
+};

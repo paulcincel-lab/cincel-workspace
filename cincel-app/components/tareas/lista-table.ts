@@ -1,0 +1,187 @@
+/**
+ * The record table of the Tareas · Lista view (redesign FE §3.4, §4.10.2):
+ * one row per task, grouped by estatus (Pendiente, En proceso, Completado,
+ * Bloqueado), sorted by delay. The by-project summary (Abiertas, Vencidas,
+ * % vencidas with heat, Retraso promedio) and the Días de retraso column are
+ * `hideOn` Visual / Esencial; the Plazo column (Vencida / Esta semana / Más
+ * adelante) is Esencial only. The same data feeds the three styles; the
+ * widget decides what each style shows. Pure and client-safe.
+ */
+import { BASE_STATUSES, BASE_STATUS_LABEL, isTaskClosed } from "@/lib/tasks/status-options";
+import type { TaskListItem } from "@/lib/types/core";
+import type { RecordColumn, RecordTableData } from "@/lib/types/widgets";
+
+import { PRIORITY_LABEL, daysLate, localIsoDate, taskDueDate } from "./tablero-table";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Heat thresholds of "% vencidas" (FE §15.2: > 45 % warning tint, > 60 % destructive tint). */
+export const OVERDUE_SHARE_HEAT = { key: "pctVencidas", warnAt: 45, critAt: 60 } as const;
+
+/** Esencial grouping labels (FE §3.4 "Vencidas / Esta semana / Más adelante"). */
+export type ListaPlazo = "Vencida" | "Esta semana" | "Más adelante" | "Completada";
+
+const VISUAL_AND_ESENCIAL: RecordColumn["hideOn"] = ["visual", "esencial"];
+
+export const LISTA_COLUMNS: RecordColumn[] = [
+  { key: "tarea", label: "Tarea" },
+  { key: "proyecto", label: "Proyecto" },
+  { key: "tramo", label: "Tramo" },
+  { key: "responsable", label: "Responsable" },
+  { key: "plazo", label: "Plazo", hideOn: ["visual", "analitico"] },
+  { key: "vence", label: "Vence", format: "date", mono: true },
+  { key: "prioridad", label: "Prioridad", hideOn: ["esencial"] },
+  { key: "subtareas", label: "Subtareas", align: "right", mono: true, hideOn: ["esencial"] },
+  { key: "diasRetraso", label: "Días de retraso", format: "days", align: "right", mono: true, hideOn: VISUAL_AND_ESENCIAL },
+  { key: "abiertas", label: "Abiertas del proyecto", format: "count", align: "right", mono: true, hideOn: VISUAL_AND_ESENCIAL },
+  { key: "vencidas", label: "Vencidas del proyecto", format: "count", align: "right", mono: true, hideOn: VISUAL_AND_ESENCIAL },
+  { key: "pctVencidas", label: "% vencidas", format: "percent", align: "right", mono: true, hideOn: VISUAL_AND_ESENCIAL },
+  { key: "retrasoPromedio", label: "Retraso promedio", format: "days", align: "right", mono: true, hideOn: VISUAL_AND_ESENCIAL },
+];
+
+function dayNumber(iso: string): number {
+  const [y, m, d] = iso.split("-").map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
+}
+
+/** Days from `today` to the Sunday that closes its week (0 on Sunday). */
+function daysToEndOfWeek(today: string): number {
+  const [y, m, d] = today.split("-").map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0 = domingo
+  return weekday === 0 ? 0 : 7 - weekday;
+}
+
+/** Esencial group of a task: closed → Completada; overdue → Vencida; due by Sunday → Esta semana; else Más adelante. */
+export function listaPlazo(task: TaskListItem, today: string): ListaPlazo {
+  if (isTaskClosed(task)) return "Completada";
+  if (daysLate(task, today) > 0) return "Vencida";
+  const due = taskDueDate(task);
+  if (due && dayNumber(due) - dayNumber(today) <= daysToEndOfWeek(today)) return "Esta semana";
+  return "Más adelante";
+}
+
+/** One decimal, no trailing ".0". */
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+export type ProjectSummary = {
+  /** Open (not closed) tasks of the project in the list. */
+  abiertas: number;
+  /** Open tasks past their due date. */
+  vencidas: number;
+  /** vencidas / abiertas, 0–100, rounded. */
+  pctVencidas: number;
+  /** Average days late of the overdue tasks; 0 when none. */
+  retrasoPromedio: number;
+};
+
+function summarize(tasks: TaskListItem[], today: string): ProjectSummary {
+  const open = tasks.filter((t) => !isTaskClosed(t));
+  const late = open.map((t) => daysLate(t, today)).filter((d) => d > 0);
+  const totalLate = late.reduce((acc, d) => acc + d, 0);
+  return {
+    abiertas: open.length,
+    vencidas: late.length,
+    pctVencidas: open.length > 0 ? Math.round((late.length / open.length) * 100) : 0,
+    retrasoPromedio: late.length > 0 ? round1(totalLate / late.length) : 0,
+  };
+}
+
+/** The by-project summary (Analítico), keyed by project id. */
+export function projectSummaries(tasks: TaskListItem[], today: string): Map<string, ProjectSummary> {
+  const byProject = new Map<string, TaskListItem[]>();
+  for (const task of tasks) {
+    const list = byProject.get(task.project.id) ?? [];
+    list.push(task);
+    byProject.set(task.project.id, list);
+  }
+  return new Map([...byProject].map(([id, list]) => [id, summarize(list, today)]));
+}
+
+const STATUS_ORDER = new Map(BASE_STATUSES.map((s, i) => [s, i]));
+
+/** Estatus order first (groups), then most days late, then nearest due date, then title. */
+export function sortListaTasks(tasks: TaskListItem[], today: string): TaskListItem[] {
+  return [...tasks].sort((a, b) => {
+    const byStatus = (STATUS_ORDER.get(a.status) ?? 99) - (STATUS_ORDER.get(b.status) ?? 99);
+    if (byStatus !== 0) return byStatus;
+    const byDelay = daysLate(b, today) - daysLate(a, today);
+    if (byDelay !== 0) return byDelay;
+    const dueA = taskDueDate(a);
+    const dueB = taskDueDate(b);
+    if (dueA !== dueB) {
+      if (!dueA) return 1;
+      if (!dueB) return -1;
+      return dueA < dueB ? -1 : 1;
+    }
+    return a.title.localeCompare(b.title, "es");
+  });
+}
+
+export function listaRow(task: TaskListItem, today: string, summary: ProjectSummary): Record<string, unknown> {
+  return {
+    id: task.id,
+    // Group label: the base status, so a custom status falls in its base group.
+    estatus: BASE_STATUS_LABEL[task.status],
+    tarea: task.title,
+    proyecto: task.project.name,
+    tramo: task.workflow?.name ?? null,
+    responsable: task.manager?.name ?? null,
+    plazo: listaPlazo(task, today),
+    vence: taskDueDate(task),
+    prioridad: PRIORITY_LABEL[task.priority],
+    subtareas: task.subtaskCount > 0 ? `${task.subtaskDoneCount}/${task.subtaskCount}` : null,
+    diasRetraso: daysLate(task, today),
+    abiertas: summary.abiertas,
+    vencidas: summary.vencidas,
+    pctVencidas: summary.pctVencidas,
+    retrasoPromedio: summary.retrasoPromedio,
+  };
+}
+
+/**
+ * The Lista `RecordTableData`: grouped by estatus, sorted by delay, with the
+ * by-project summary columns and a totals row over the whole list.
+ */
+export function listaTable(tasks: TaskListItem[], today: string = localIsoDate()): RecordTableData {
+  const summaries = projectSummaries(tasks, today);
+  const sorted = sortListaTasks(tasks, today);
+  const rows = sorted.map((t) => listaRow(t, today, summaries.get(t.project.id) ?? summarize([t], today)));
+  const overall = summarize(tasks, today);
+  return {
+    columns: LISTA_COLUMNS,
+    rows,
+    groupBy: "estatus",
+    totals: {
+      tarea: tasks.length === 1 ? "Total · 1 tarea" : `Total · ${tasks.length} tareas`,
+      diasRetraso: rows.reduce((acc, r) => acc + (r.diasRetraso as number), 0),
+      abiertas: overall.abiertas,
+      vencidas: overall.vencidas,
+      pctVencidas: overall.pctVencidas,
+      retrasoPromedio: overall.retrasoPromedio,
+    },
+    heat: [{ ...OVERDUE_SHARE_HEAT }],
+  };
+}
+
+/**
+ * The tasks the Lista view shows: the page loads them without the tramo and
+ * proyecto filters (they feed the chip counts and the Proyecto options), so
+ * the view narrows them here. `tramo` is a key or a comma list of keys.
+ */
+export function listaTasks(tasks: TaskListItem[], filters: { tramo: string | null; proyecto: string | null }): TaskListItem[] {
+  const keys = filters.tramo
+    ? new Set(
+        filters.tramo
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean),
+      )
+    : null;
+  return tasks.filter(
+    (t) =>
+      (!keys || (t.workflow !== null && keys.has(t.workflow.key))) &&
+      (!filters.proyecto || t.project.id === filters.proyecto),
+  );
+}

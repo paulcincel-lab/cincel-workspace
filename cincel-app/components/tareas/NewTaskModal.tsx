@@ -46,6 +46,15 @@ type Props = {
 
 const NO_MANAGER = "__none__";
 
+/**
+ * The fase to save: the picked one while it's still in the tramo's catalog,
+ * else the first catalog fase (the catalog can change under an open form);
+ * null when the tramo has no fases. Shared with `NewTaskDialog`.
+ */
+export function resolvePhaseId(phaseId: string | null, phases: readonly WorkflowPhaseRef[]): string | null {
+  return phaseId && phases.some((p) => p.id === phaseId) ? phaseId : (phases[0]?.id ?? null);
+}
+
 export default function NewTaskModal({
   open,
   mode = "tramo",
@@ -77,7 +86,7 @@ export default function NewTaskModal({
   const nameToId = new Map(staff.map((s) => [s.name, s.id]));
   const projectSpaces = spacesByProject[projectId] ?? [];
   // Fall back to the first fase when the catalog changes under the open modal.
-  const selectedPhaseId = phaseId && phases.some((p) => p.id === phaseId) ? phaseId : (phases[0]?.id ?? null);
+  const selectedPhaseId = resolvePhaseId(phaseId, phases);
   const selectedSpaceId = spaceId && projectSpaces.some((s) => s.id === spaceId) ? spaceId : null;
   const missingPhase = !isAdminMode && !selectedPhaseId;
 

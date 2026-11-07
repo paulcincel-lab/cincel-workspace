@@ -1,7 +1,15 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import type { CalendarEvent } from "@/lib/types/calendar";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/tareas",
+  useSearchParams: () => new URLSearchParams("vista=calendario"),
+}));
+vi.mock("@/lib/actions/tasks-actions", () => ({ deleteTaskAction: vi.fn(() => Promise.resolve()) }));
+
 import UnifiedCalendar from "./UnifiedCalendar";
 
 function isoInDays(days: number): string {
@@ -50,5 +58,21 @@ describe("UnifiedCalendar tramo labels", () => {
     expect(tramo.disabled).toBe(false);
 
     expect(screen.getAllByText("Diseño").length).toBeGreaterThan(0);
+  });
+});
+
+describe("UnifiedCalendar event detail popover", () => {
+  it("keeps the event links when eventDetails is off (legacy)", () => {
+    render(<UnifiedCalendar mode="full" events={[event({ date: isoInDays(0) })]} />);
+    const links = screen.getAllByRole("link", { name: /Planos ejecutivos/ });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) expect(link.getAttribute("href")).toBe("/actividades/diseno");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens EventDetailPopover on event click when eventDetails is on", async () => {
+    render(<UnifiedCalendar mode="full" eventDetails events={[event({ date: isoInDays(0) })]} />);
+    fireEvent.click(screen.getAllByRole("link", { name: /Planos ejecutivos/ })[0]);
+    expect(await screen.findByRole("dialog", { name: "Planos ejecutivos" })).toBeTruthy();
   });
 });
