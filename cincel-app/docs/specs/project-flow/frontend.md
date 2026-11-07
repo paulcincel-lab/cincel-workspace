@@ -1257,3 +1257,15 @@ From `docs/review/project-flow-review.md` (frontend parts).
 | NB-7: remap with missing export files | Whole-sheet error when every board's export is gone; per-board copy kept | §4.6 item 10 |
 | NB-17: orphaned table row | `| other | issue text |` moved into the warnings table | §4.6 item 9 |
 | NB-18: CI claim | No self-hosted lint → test → build claim. The feature adds Vitest tests to the existing CI. `tests/e2e/proyectos.spec.ts` and `tests/e2e/equipo.spec.ts` must be updated. CI workflow cleanup is out of scope | §15 |
+
+---
+
+## Coordination with the UI/UX redesign (2026-11-07)
+
+The redesign (`docs/specs/redesign/`, brief `docs/specs/source/redesign-spec.md`) runs alongside this feature without blocking it. Rules that bind both:
+
+1. **Migrations are never renumbered by hand.** Whichever feature merges its migration second regenerates it with `drizzle-kit generate` on top of the current `main` right before merging.
+2. **One Toaster.** Sonner's `<Toaster />` is mounted once in `app/layout.tsx` by whichever feature lands first; the other reuses it.
+3. **`actionErrorText`** in `lib/errors.ts` has one signature; the second feature only adds codes.
+4. **Deep link kept.** The redesign redirects `/actividades/[tramo]?project=<id>` to `/tareas?tramo=<key>&project=<id>&iniciar=1`, which opens the same Iniciar tramo sheet.
+5. **Compat layer.** The redesign reads tramos, fases and `canSeeAdminData` through `lib/tramos/compat.ts`; when this feature lands, the compat layer re-exports its real implementations (`TramoBadge`, `tramoColorVar`, `fetchTramosNavAction`, `canSeeAdminData`).

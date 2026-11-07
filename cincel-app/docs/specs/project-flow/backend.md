@@ -1254,3 +1254,15 @@ From `docs/review/project-flow-review.md` (CHANGES NEEDED, 2026-11-06).
 | N17 Housekeeping | §19 marked applied; `plan.ts` line numbers refreshed | §0.1, §10.4, §19 |
 | CI wording | The feature adds vitest tests to the existing CI only; e2e specs to update listed; CI workflow cleanup out of scope | §16 |
 | Round 2 items 1, 2, 4, 5 | Step 3 guard `(x.phase_id = <seed> or x.phase_id is null)`; fresh-install puesto candidates; `EXPORT_MISSING` copy aligned with frontend §9; `status_reused`/`status_created` report kinds with reopened-task count | §4.2 steps 3, 7, 14; §5.4; §11.1; §4.4 |
+
+---
+
+## Coordination with the UI/UX redesign (2026-11-07)
+
+The redesign (`docs/specs/redesign/`, brief `docs/specs/source/redesign-spec.md`) runs alongside this feature without blocking it. Rules that bind both:
+
+1. **Migrations are never renumbered by hand.** Whichever feature merges its migration second regenerates it with `drizzle-kit generate` on top of the current `main` right before merging.
+2. **One Toaster.** Sonner's `<Toaster />` is mounted once in `app/layout.tsx` by whichever feature lands first; the other reuses it.
+3. **`actionErrorText`** in `lib/errors.ts` has one signature; the second feature only adds codes.
+4. **Deep link kept.** The redesign redirects `/actividades/[tramo]?project=<id>` to `/tareas?tramo=<key>&project=<id>&iniciar=1`, which opens the same Iniciar tramo sheet.
+5. **Compat layer.** The redesign reads tramos, fases and `canSeeAdminData` through `lib/tramos/compat.ts`; when this feature lands, the compat layer re-exports its real implementations (`TramoBadge`, `tramoColorVar`, `fetchTramosNavAction`, `canSeeAdminData`).
