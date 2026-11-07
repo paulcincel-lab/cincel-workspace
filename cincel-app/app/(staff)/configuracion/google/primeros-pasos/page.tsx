@@ -8,6 +8,7 @@ import { getGoogleHealthAction, listGroupMappingsAction } from "@/lib/actions/wo
 import { getSessionAccess } from "@/lib/auth/session";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
+import { getResolvedAppearance } from "@/lib/ui/preferences-server";
 import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
 import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
 import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
@@ -34,6 +35,7 @@ export default async function GoogleSetupWizardPage({ searchParams }: LegacyPage
   } catch {
     // Lost the session mid-request: the guard redirects and nothing is loaded.
   }
+  const { redesignEnabled } = await getResolvedAppearance();
   try {
     health = await getGoogleHealthAction();
   } catch {
@@ -45,7 +47,7 @@ export default async function GoogleSetupWizardPage({ searchParams }: LegacyPage
       <Sidebar />
       <section className="min-w-0 flex-1 overflow-y-auto px-4 py-14 md:p-10">
         <Header />
-        <GoogleSetupWizard health={health} mappings={mappings} positions={positions} />
+        <GoogleSetupWizard health={health} mappings={mappings} positions={positions} redesign={redesignEnabled} />
       </section>
     </main>
   );

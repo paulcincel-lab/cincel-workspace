@@ -21,6 +21,8 @@ const BOOTSTRAP_EMAIL = process.env.E2E_BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCas
 const BOOTSTRAP_PASSWORD = process.env.E2E_BOOTSTRAP_ADMIN_PASSWORD ?? "";
 const ADMIN_GROUP = process.env.E2E_GOOGLE_ADMIN_GROUP ?? "e2e-admins@example.test";
 const WIZARD_PATH = "/configuracion/google/primeros-pasos";
+/** The stepper's active step: `aria-current="step"` in both the legacy chips and the restyled stepper. */
+const currentStep = (page: Page) => page.getByRole("list", { name: "Pasos" }).locator('[aria-current="step"]');
 
 async function resetWizard(): Promise<void> {
   const sql = postgres(connectionString, { max: 1 });
@@ -53,10 +55,12 @@ test.describe("Primeros pasos — grupos de Google", () => {
     await page.waitForURL(new RegExp(`${WIZARD_PATH}$`), { timeout: 30_000 });
 
     // Revisión: the required settings are set by the server env, so Next is enabled.
+    await expect(currentStep(page)).toContainText("Revisión");
     await expect(page.getByText("Dominio de Workspace")).toBeVisible();
     await page.getByRole("button", { name: "Siguiente" }).click();
 
     // Grupo de administradores: a group the Directory doesn't know shows its error inline.
+    await expect(currentStep(page)).toContainText("Grupo de administradores");
     const groupInput = page.getByLabel("Correo del grupo");
     await groupInput.fill("e2e-nadie@example.test");
     await page.getByRole("button", { name: "Guardar grupo" }).click();
@@ -69,9 +73,11 @@ test.describe("Primeros pasos — grupos de Google", () => {
     await page.getByRole("button", { name: "Siguiente" }).click();
 
     // Más grupos (opcional): the same table as Grupos de Google lists the new mapping.
+    await expect(currentStep(page)).toContainText("Más grupos (opcional)");
     await expect(page.getByRole("cell", { name: ADMIN_GROUP })).toBeVisible();
     await page.getByRole("button", { name: "Siguiente" }).click();
 
+    await expect(currentStep(page)).toContainText("Listo");
     await expect(page.getByText("Ahora entra con Google con tu cuenta de example.test.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Cerrar sesión y entrar con Google" })).toBeVisible();
     await page.getByRole("button", { name: "Cerrar sesión y entrar con Google" }).click();

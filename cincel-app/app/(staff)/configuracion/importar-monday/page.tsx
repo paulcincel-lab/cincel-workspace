@@ -9,6 +9,7 @@ import {
 import { getSessionAccess } from "@/lib/auth/session";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
+import { getResolvedAppearance } from "@/lib/ui/preferences-server";
 import type { MondayImportChoices, MondayImportRunState } from "@/lib/types/monday-import";
 import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
 import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
@@ -44,6 +45,8 @@ export default async function ImportarMondayPage({ searchParams }: LegacyPagePro
     loadError = "No se pudo cargar la importación. Recarga la página.";
   }
 
+  const { redesignEnabled } = await getResolvedAppearance();
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <MondayImportWizard
@@ -51,6 +54,7 @@ export default async function ImportarMondayPage({ searchParams }: LegacyPagePro
         initialChoices={choices}
         hasServerToken={hasServerToken}
         loadError={loadError}
+        redesign={redesignEnabled}
       />
     </main>
   );

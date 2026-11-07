@@ -15,6 +15,7 @@ import { ImportStep } from "@/components/configuracion/monday-import/ImportStep"
 import { OptionsStep } from "@/components/configuracion/monday-import/OptionsStep";
 import { PeopleStep } from "@/components/configuracion/monday-import/PeopleStep";
 import { PreviewStep } from "@/components/configuracion/monday-import/PreviewStep";
+import { WizardStepper } from "@/components/configuracion/WizardStepper";
 import {
   checkMondayRollbackAction,
   downloadMondayMappingAction,
@@ -97,6 +98,11 @@ export type MondayImportWizardProps = {
   hasServerToken: boolean;
   /** Load error of the page (no run could be opened). */
   loadError: string | null;
+  /**
+   * The caller's resolved redesign flag (`getResolvedAppearance().redesignEnabled`, redesign FE §2.3). Off (the
+   * default) renders today's wizard unchanged; on renders the restyled stepper and chrome (FE §3.10).
+   */
+  redesign?: boolean;
 };
 
 /** The step chips; a finished step opens on click when going back is allowed (#679). */
@@ -163,7 +169,13 @@ function IssueList({ issues }: { issues: string[] }) {
  * Importar de monday (#672): the CLI's export → init → plan → apply → rollback as a resumable wizard. The draft
  * mapping.json lives on the server; the monday token only in this component's state.
  */
-export function MondayImportWizard({ initialRun, initialChoices, hasServerToken, loadError }: MondayImportWizardProps) {
+export function MondayImportWizard({
+  initialRun,
+  initialChoices,
+  hasServerToken,
+  loadError,
+  redesign = false,
+}: MondayImportWizardProps) {
   const router = useRouter();
   const [run, setRun] = useState<MondayImportRunState | null>(initialRun);
   const [step, setStep] = useState<MondayImportStep>(() => initialStep(initialRun));
@@ -578,7 +590,39 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
     else goTo(nextStep("tableros"));
   }
 
-  const topBar = (
+  const closeButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label="Cerrar"
+      title="Cerrar (la importación se guarda)"
+      disabled={isPending}
+      onClick={close}
+    >
+      <X aria-hidden="true" />
+    </Button>
+  );
+
+  // Redesign (FE §3.10, frame `BienvenidaMonday`): the title row on the card surface and the full-width stepper
+  // under it; the step chips' "go back" rule is the same as today's.
+  const topBar = redesign ? (
+    <header className="sticky top-0 z-20 border-b bg-card">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 md:px-6">
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="min-w-0 truncate text-lg font-semibold text-foreground">Importar de monday</h1>
+          {closeButton}
+        </div>
+        {run ? (
+          <WizardStepper
+            steps={MONDAY_IMPORT_STEPS}
+            current={step}
+            canJump={(target) => !isPending && canJumpTo(target, step, state)}
+            onJump={(target) => goTo(target)}
+          />
+        ) : null}
+      </div>
+    </header>
+  ) : (
     <header className="sticky top-0 z-20 border-b bg-background">
       <div className="mx-auto flex w-full max-w-6xl items-start justify-between gap-4 px-4 py-3 md:px-6">
         <div className="min-w-0 space-y-2">
@@ -591,16 +635,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
             />
           ) : null}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Cerrar"
-          title="Cerrar (la importación se guarda)"
-          disabled={isPending}
-          onClick={close}
-        >
-          <X aria-hidden="true" />
-        </Button>
+        {closeButton}
       </div>
     </header>
   );
@@ -624,7 +659,9 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
 
       <div className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-4 py-6 md:px-6">
         <div className="space-y-1">
-          <h2 className="text-base font-medium text-foreground">{current.label}</h2>
+          <h2 className={redesign ? "text-xl font-semibold text-foreground" : "text-base font-medium text-foreground"}>
+            {current.label}
+          </h2>
           <p className="text-sm text-muted-foreground">{current.description}</p>
         </div>
         {mapping && !finished ? (
@@ -763,7 +800,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
         ) : null}
       </div>
 
-      <footer className="sticky bottom-0 z-20 border-t bg-background">
+      <footer className={redesign ? "sticky bottom-0 z-20 border-t bg-card" : "sticky bottom-0 z-20 border-t bg-background"}>
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3 md:px-6">
           <div className="flex flex-wrap items-center gap-2">
             {finished ? null : (

@@ -13,6 +13,13 @@ export const PORTAL_SIGN_OUT_URL = `/api/portal/auth/logout?next=${encodeURIComp
 type PortalShellProps = {
   /** Signed-in client's name; `null` on the public portal pages (sign-in, magic-link landing). */
   clientName: string | null;
+  /** Redesign on (FE §3.11): weights stay at 600 or below. Omitted, the shell renders exactly as before. */
+  redesign?: boolean;
+  /**
+   * Row under the top bar for `EstiloSwitch scope="portal"` (redesign on, signed in), so the header never scrolls
+   * sideways at 390 px.
+   */
+  styleSwitch?: ReactNode;
   children: ReactNode;
 };
 
@@ -20,14 +27,16 @@ type PortalShellProps = {
  * Minimal portal frame (FE §3): logo, client name and **Salir**. Mobile-first, one column, `max-w-3xl`.
  * It never reads staff data, so it is safe for every `/portal` page.
  */
-export default function PortalShell({ clientName, children }: PortalShellProps) {
+export default function PortalShell({ clientName, redesign = false, styleSwitch, children }: PortalShellProps) {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <Link href={PORTAL_ROUTE} className="flex min-h-11 min-w-0 flex-col justify-center" aria-label="Cincel, inicio del portal">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Cincel</span>
-            <span className="text-lg leading-none font-extrabold tracking-tight">Portal de clientes</span>
+            <span className={cn("text-lg leading-none tracking-tight", redesign ? "font-semibold" : "font-extrabold")}>
+              Portal de clientes
+            </span>
           </Link>
           {clientName ? (
             <div className="flex min-w-0 items-center gap-2">
@@ -43,6 +52,7 @@ export default function PortalShell({ clientName, children }: PortalShellProps) 
             </div>
           ) : null}
         </div>
+        {styleSwitch ?? null}
       </header>
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6">{children}</main>
     </div>
