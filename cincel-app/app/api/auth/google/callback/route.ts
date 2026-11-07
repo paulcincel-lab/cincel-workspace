@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { type NextRequest, NextResponse } from "next/server";
+import { after, type NextRequest, NextResponse } from "next/server";
 
 import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
 import { grantGoogleScope } from "@/lib/auth/google-consent";
@@ -7,6 +7,9 @@ import { recordGoogleSignInDenied, signInWithGoogle } from "@/lib/auth/google-si
 import { clientIp } from "@/lib/auth/rate-limit";
 import { getAppOrigin } from "@/lib/auth/safe-return-to";
 import { createSession, getSession } from "@/lib/auth/session";
+import { db } from "@/lib/db/client";
+import { connectGmailAccount } from "@/lib/gmail/accounts";
+import { syncGmailInBackground } from "@/lib/gmail/sync";
 import {
   clearStaffOauthCookie,
   exchangeStaffCode,
@@ -27,6 +30,8 @@ import {
  * The state cookie is cleared on every outcome. Only enabled with AUTH_GOOGLE_ENABLED.
  *
  * State with a `scope` is an incremental grant (§A.6.2), handled by `consentCallback`.
+ * A granted `gmail` scope also (re)connects `gmail_accounts` and queues the
+ * first Gmail sync with `after()` (redesign BE §11.1).
  */
 export async function GET(request: NextRequest): Promise<Response> {
   if (!isGoogleAuthEnabled()) return new NextResponse("Not Found", { status: 404 });
@@ -118,7 +123,15 @@ async function consentCallback(
       return fail(check.reason);
     }
     const result = await grantGoogleScope(session.user.id, scope, check.identity, tokens, meta);
-    if (result.status === "granted") return consentRedirect(origin, stored.returnTo, null);
+    if (result.status === "granted") {
+      if (scope === "gmail") {
+        // Clears `disconnected_at` and resets `history_id`: the first sync is a full one.
+        const staffId = session.user.id;
+        await connectGmailAccount(db, staffId);
+        after(() => syncGmailInBackground(db, staffId));
+      }
+      return consentRedirect(origin, stored.returnTo, null);
+    }
     if (result.status === "denied") return fail(result.reason);
     return fail(result.status);
   } catch (error) {

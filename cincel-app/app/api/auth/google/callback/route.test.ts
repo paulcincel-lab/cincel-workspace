@@ -10,6 +10,9 @@ const {
   createSessionMock,
   getSessionMock,
   grantMock,
+  afterMock,
+  connectGmailMock,
+  syncGmailMock,
 } = vi.hoisted(() => ({
   cookieGetMock: vi.fn(),
   cookieSetMock: vi.fn(),
@@ -19,7 +22,21 @@ const {
   createSessionMock: vi.fn(),
   getSessionMock: vi.fn(),
   grantMock: vi.fn(),
+  afterMock: vi.fn(),
+  connectGmailMock: vi.fn(),
+  syncGmailMock: vi.fn(),
 }));
+
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: afterMock,
+}));
+
+vi.mock("@/lib/db/client", () => ({ db: { fake: "db" } }));
+
+vi.mock("@/lib/gmail/accounts", () => ({ connectGmailAccount: connectGmailMock }));
+
+vi.mock("@/lib/gmail/sync", () => ({ syncGmailInBackground: syncGmailMock }));
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: cookieGetMock, set: cookieSetMock }),
@@ -247,5 +264,78 @@ describe("GET /api/auth/google/callback with an incremental grant (scope)", () =
   it("still checks the state", async () => {
     expect(location(await GET(req("code=fake-code&state=other")))).toBe(`${ORIGIN}/login?error=state`);
     expect(grantMock).not.toHaveBeenCalled();
+  });
+
+  it("a Drive or Calendar grant never touches Gmail", async () => {
+    grantMock.mockResolvedValue({ status: "granted", staffId: "staff-1", linked: false });
+    await GET(req());
+    expect(connectGmailMock).not.toHaveBeenCalled();
+    expect(afterMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/auth/google/callback with the gmail grant", () => {
+  const session = {
+    id: "session-1",
+    user: { id: "staff-1", email: identity.email },
+    staffAccess: { accessRevokedAt: null },
+  };
+  const gmailScope =
+    "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose";
+
+  beforeEach(() => {
+    const value = stateCookie({ scope: "gmail", returnTo: "/mi-espacio/gmail" });
+    cookieGetMock.mockImplementation((name: string) => (name === STAFF_OAUTH_COOKIE ? { value } : undefined));
+    getSessionMock.mockResolvedValue(session);
+    exchangeMock.mockResolvedValue({ check: { ok: true, identity }, tokens: { ...tokens, scope: gmailScope } });
+  });
+
+  it("stores the merged scope, (re)connects gmail_accounts and queues the first sync with after()", async () => {
+    grantMock.mockResolvedValue({ status: "granted", staffId: "staff-1", linked: false });
+    const res = await GET(req());
+    expect(grantMock).toHaveBeenCalledWith(
+      "staff-1",
+      "gmail",
+      identity,
+      expect.objectContaining({ scope: gmailScope }),
+      expect.anything(),
+    );
+    expect(connectGmailMock).toHaveBeenCalledWith({ fake: "db" }, "staff-1");
+    expect(afterMock).toHaveBeenCalledTimes(1);
+    expect(syncGmailMock).not.toHaveBeenCalled();
+
+    // The queued callback runs the sync for the signed-in staff member only.
+    await afterMock.mock.calls[0][0]();
+    expect(syncGmailMock).toHaveBeenCalledWith({ fake: "db" }, "staff-1");
+    expect(location(res)).toBe(`${ORIGIN}/mi-espacio/gmail?google_connected=1`);
+  });
+
+  it("connects nothing when Google left a Gmail box unchecked", async () => {
+    grantMock.mockResolvedValue({ status: "scope_missing", staffId: "staff-1" });
+    const res = await GET(req());
+    expect(location(res)).toBe(`${ORIGIN}/mi-espacio/gmail?google_connected=error&motivo=scope_missing`);
+    expect(connectGmailMock).not.toHaveBeenCalled();
+    expect(afterMock).not.toHaveBeenCalled();
+  });
+
+  it("connects nothing on a denial", async () => {
+    grantMock.mockResolvedValue({ status: "denied", reason: "sub_mismatch" });
+    await GET(req());
+    expect(connectGmailMock).not.toHaveBeenCalled();
+    expect(afterMock).not.toHaveBeenCalled();
+  });
+
+  it("returns with motivo=retry when the account row can't be written", async () => {
+    grantMock.mockResolvedValue({ status: "granted", staffId: "staff-1", linked: false });
+    connectGmailMock.mockRejectedValueOnce(new Error("db down"));
+    const res = await GET(req());
+    expect(location(res)).toBe(`${ORIGIN}/mi-espacio/gmail?google_connected=error&motivo=retry`);
+    expect(afterMock).not.toHaveBeenCalled();
+  });
+
+  it("without a session goes to /login and connects nothing", async () => {
+    getSessionMock.mockResolvedValue(null);
+    expect(location(await GET(req()))).toBe(`${ORIGIN}/login`);
+    expect(connectGmailMock).not.toHaveBeenCalled();
   });
 });

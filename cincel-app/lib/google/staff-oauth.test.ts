@@ -72,9 +72,10 @@ describe("staffOauthConfig", () => {
 });
 
 describe("parseStaffOauthScope", () => {
-  it("accepts drive and calendar only", () => {
+  it("accepts drive, calendar and gmail only", () => {
     expect(parseStaffOauthScope("drive")).toBe("drive");
     expect(parseStaffOauthScope("calendar")).toBe("calendar");
+    expect(parseStaffOauthScope("gmail")).toBe("gmail");
     expect(parseStaffOauthScope("admin")).toBeNull();
     expect(parseStaffOauthScope(null)).toBeNull();
   });
@@ -87,6 +88,14 @@ describe("hasGrantedScope", () => {
     expect(hasGrantedScope(`openid email ${drive}`, "calendar")).toBe(false);
     expect(hasGrantedScope("", "drive")).toBe(false);
     expect(hasGrantedScope(null, "drive")).toBe(false);
+  });
+
+  it("gmail needs both gmail.readonly and gmail.compose", () => {
+    const read = "https://www.googleapis.com/auth/gmail.readonly";
+    const compose = "https://www.googleapis.com/auth/gmail.compose";
+    expect(hasGrantedScope(`openid email ${read} ${compose}`, "gmail")).toBe(true);
+    expect(hasGrantedScope(`openid email ${read}`, "gmail")).toBe(false);
+    expect(hasGrantedScope(`openid email ${compose}`, "gmail")).toBe(false);
   });
 });
 
@@ -157,6 +166,15 @@ describe("startStaffOauth", () => {
   it("incremental Calendar grant adds calendar.app.created", () => {
     const { url } = startStaffOauth({ scope: "calendar" }, env);
     expect(params(url).get("scope")).toBe(`openid email profile ${CALENDAR_SCOPE}`);
+  });
+
+  it("incremental Gmail grant adds gmail.readonly and gmail.compose", () => {
+    const { url, cookie } = startStaffOauth({ scope: "gmail" }, env);
+    expect(params(url).get("scope")).toBe(
+      "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose",
+    );
+    expect(params(url).get("prompt")).toBe("consent");
+    expect(stateFromCookie(cookie.value).scope).toBe("gmail");
   });
 
   it("stores a safe return target and falls back for unsafe ones", () => {

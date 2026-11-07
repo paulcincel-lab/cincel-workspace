@@ -2,7 +2,8 @@
 
 **Para:** el administrador de Google Workspace de Cincel (lado cliente).
 **Objetivo:** dejar listo Google Workspace y Google Cloud para que el equipo entre a Cincel con **Entrar con Google**.
-**Referencia técnica:** `docs/specs/backend.md` §A.2, §A.9 (fase: `docs/phases/staff-sso-phase-1-google-sign-in-gate.md`).
+**Referencia técnica:** `docs/specs/backend.md` §A.2, §A.9 (fase: `docs/phases/staff-sso-phase-1-google-sign-in-gate.md`);
+Gmail: `docs/specs/redesign/backend.md` §11.1, §14 (fase: `docs/phases/redesign-phase-5-mi-espacio-bandeja-gmail.md`).
 
 Esta configuración se hace **una sola vez**, en la consola de Google Cloud y en la consola de administración de Google
 Workspace. Sin ella no se puede verificar el inicio de sesión con Google, ni en staging ni en producción.
@@ -22,6 +23,8 @@ Cómo funciona, en corto:
 - [ ] Habilitar **Admin SDK API**.
 - [ ] Habilitar **Google Drive API**.
 - [ ] Habilitar **Google Calendar API** (para la sincronización de calendario).
+- [ ] Habilitar **Gmail API** (para la Bandeja de Mi espacio: leer correos y crear borradores). Ruta:
+      **APIs y servicios → Biblioteca → Gmail API → Habilitar**. Anotar en el issue que aparece como **Habilitada**.
 
 ## 2. Pantalla de consentimiento OAuth
 
@@ -30,6 +33,15 @@ Cómo funciona, en corto:
   - Inicio de sesión: `openid`, `email`, `profile`.
   - Drive (se pide aparte, la primera vez que alguien abre archivos): `https://www.googleapis.com/auth/drive.readonly`.
   - Calendario (se pide aparte, al activar la sincronización): `https://www.googleapis.com/auth/calendar.app.created`.
+  - Gmail (se pide aparte, al conectar Gmail en Mi espacio, `?grant=gmail`):
+    - `https://www.googleapis.com/auth/gmail.readonly`
+    - `https://www.googleapis.com/auth/gmail.compose`
+- [ ] Agregar los dos permisos de Gmail en **APIs y servicios → Pantalla de consentimiento OAuth → Acceso a los datos →
+      Agregar o quitar permisos** del cliente "Cincel Staff" (paso 3), y guardar.
+- [ ] Confirmar que el **público** de la app sigue en **Interno**. `gmail.readonly` es un permiso **restringido**: con
+      una app **Externa**, Google exige verificación y una evaluación de seguridad antes de dejar usarlo. Con una app
+      **Interna** no hay verificación; la consola puede mostrar un aviso de "permiso restringido" o "sensible" junto a
+      los permisos de Gmail. Si aparece, copiar el texto del aviso en el issue. No cambiar el público a Externo.
 
 ## 3. Cliente OAuth "Cincel Staff"
 
@@ -100,6 +112,28 @@ Por un canal seguro (gestor de contraseñas compartido o similar):
 - [ ] Correos de los grupos (rol, área y `cincel-todos`).
 - [ ] ID de la unidad compartida.
 
+## 10. Sincronización de Gmail (`GMAIL_SYNC_MAX_PER_TICK`)
+
+Lo configura quien despliega Cincel, no el administrador de Workspace; se deja aquí porque depende de la cuota de la
+Gmail API del proyecto "Cincel".
+
+- **Qué hace:** el trabajo `gmail-sync` de `/api/cron/tick` (cada minuto) sincroniza como máximo
+  `GMAIL_SYNC_MAX_PER_TICK` cuentas de Gmail conectadas por tick, empezando por la que lleva más tiempo sin sincronizar
+  y saltando las desconectadas o en espera por error (backoff).
+- **Valor por defecto:** `10`. Vacío o no definido = `10`.
+- **Efecto en la cuota:** cada cuenta sincronizada usa unidades de la cuota de la Gmail API. La primera sincronización
+  de una cuenta lista los últimos 100 hilos de la bandeja (`threads.list` + `threads.get` en formato `metadata`, del
+  orden de 1,000 unidades); las siguientes usan `history.list` (2 unidades) más un `threads.get` (10 unidades) por hilo
+  que cambió. Los límites de Google son por usuario y por proyecto, por minuto (ver **APIs y servicios → Gmail API →
+  Cuotas**). Si Gmail responde `429` o `5xx`, esa cuenta espera `min(2^n min, 60 min)` antes de volver a intentarse.
+- **Cómo ajustarlo:** con `N` cuentas conectadas, cada una se sincroniza más o menos cada `ceil(N / GMAIL_SYNC_MAX_PER_TICK)`
+  minutos.
+  - Subirlo (por ejemplo `20`) si hay muchas personas conectadas y la Bandeja se ve atrasada.
+  - Bajarlo (por ejemplo `5`) si la consola muestra errores de cuota, o si los registros muestran `gmail.sync_failed`
+    con `RATE_LIMITED` o ticks que no terminan dentro de su presupuesto de 50 s.
+  - Se cambia en la variable de entorno del ambiente y se aplica al reiniciar la app.
+- El botón "Sincronizar" de Mi espacio no depende de este valor (tiene su propio límite: una vez cada 30 s por persona).
+
 ---
 
 ## Staging
@@ -122,3 +156,16 @@ Con `AUTH_GOOGLE_ENABLED=true` en staging:
 - [ ] **Negado, suspendida:** una cuenta suspendida en Workspace no puede entrar.
 
 Los resultados se registran como comentario en el issue #532.
+
+### Verificación manual de Gmail
+
+Con los pasos 1 y 2 de Gmail hechos y la app desplegada (o local) con el flujo `?grant=gmail`:
+
+- [ ] Con una cuenta del dominio ya dentro de Cincel, abrir `<APP_ORIGIN>/api/auth/google/start?grant=gmail`. Google
+      pide los permisos de Gmail (leer y crear borradores), se aceptan y se vuelve a Cincel sin error.
+- [ ] En Mi espacio, Gmail aparece como conectado y la Bandeja muestra los correos tras la primera sincronización.
+- [ ] Una cuenta personal de Gmail no puede completar el consentimiento.
+
+Los resultados (API habilitada, permisos en la pantalla de consentimiento, público Interno, avisos de permiso
+restringido y resultado del consentimiento) se registran como comentario en el issue #854. No pegar IDs de cliente,
+secretos ni claves en el issue.

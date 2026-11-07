@@ -39,7 +39,7 @@ export type ErrorContextName = "search" | "cutto" | "photo" | "gmail" | "vacatio
 /** The one context argument of `actionErrorText`: a redesign context name or Project Flow's keys. */
 export type ErrorContext = ErrorContextName | ActionErrorContext;
 
-/** What the failing action was about, to pick the right copy for shared codes. */
+/** What the failing project-flow action was about, to pick the right copy for shared codes. */
 export type ActionErrorContext = {
   /** Redesign context (same as passing the name directly). */
   area?: ErrorContextName;
@@ -141,10 +141,6 @@ function codeText(code: string, context: ActionErrorContext): string {
       return "Este proyecto no viene de una importación de monday.";
     case "EXPORT_MISSING":
       return "Ya no están los archivos de la exportación de monday de este proyecto. Vuelve a exportar el tablero para reacomodarlo.";
-    case "OVERLAP":
-      return "Ya tienes una solicitud en esas fechas.";
-    case "STARTED":
-      return "Esa solicitud ya empezó; ya no se puede cancelar. Habla con quien la aprobó.";
     case "ASSIGNEE_NOT_ADMIN":
       return "Las tareas de administración solo se asignan a administradores.";
     case "OVERRIDE_DISABLED":

@@ -1,18 +1,17 @@
 /**
  * Settings section "Horas de silencio y resumen diario a las 07:30" of /ajustes/notificaciones (redesign FE §3.8, §21.1; Phase 5).
  *
- * Contract stub: hidden until Phase 5 implements it.
+ * Visible once the notification preference actions are implemented; renders
+ * inside `NotificacionesClient`, which holds the form state.
  */
+import { NotificacionesHorasSilencio } from "@/components/ajustes/NotificacionesClient";
+import { IMPLEMENTED } from "@/lib/actions/notifications-actions.flags";
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
-
-function NotificacionesHorasSilencioSection() {
-  return null;
-}
 
 export const notificacionesHorasSilencioSection: SettingsSectionEntry = {
   page: "notificaciones",
   name: "horas-silencio",
   order: 20,
-  visible: () => false,
-  Component: NotificacionesHorasSilencioSection,
+  visible: () => IMPLEMENTED.fetchNotificationPreferencesAction && IMPLEMENTED.updateNotificationPreferencesAction,
+  Component: NotificacionesHorasSilencio,
 };

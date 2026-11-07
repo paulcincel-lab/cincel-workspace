@@ -120,9 +120,35 @@ describe("GET /api/auth/google/start?scope= (incremental grant)", () => {
   });
 
   it("answers 400 for an unknown scope", async () => {
-    const res = await GET(req("/api/auth/google/start?scope=gmail"));
+    const res = await GET(req("/api/auth/google/start?scope=contacts"));
     expect(res.status).toBe(400);
     expect(cookieSetMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["scope", "grant"])("asks for Gmail read + compose with ?%s=gmail", async (param) => {
+    const res = await GET(req(`/api/auth/google/start?${param}=gmail&return_to=%2Fmi-espacio%2Fgmail`));
+    expect(res.status).toBe(307);
+    const location = new URL(res.headers.get("location") ?? "");
+    const scopes = location.searchParams.get("scope")?.split(" ");
+    expect(scopes).toContain("https://www.googleapis.com/auth/gmail.readonly");
+    expect(scopes).toContain("https://www.googleapis.com/auth/gmail.compose");
+    expect(location.searchParams.get("prompt")).toBe("consent");
+    expect(location.searchParams.get("login_hint")).toBe("ana@cincel.example");
+    expect(storedState()).toMatchObject({ scope: "gmail", returnTo: "/mi-espacio/gmail" });
+  });
+
+  it("?grant= follows the same validation and session rules as ?scope=", async () => {
+    expect((await GET(req("/api/auth/google/start?grant=contacts"))).status).toBe(400);
+    expect(cookieSetMock).not.toHaveBeenCalled();
+    getSessionMock.mockResolvedValue(null);
+    const res = await GET(req("/api/auth/google/start?grant=gmail"));
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/login`);
+    expect(cookieSetMock).not.toHaveBeenCalled();
+  });
+
+  it("scope wins over grant when both are sent", async () => {
+    await GET(req("/api/auth/google/start?scope=drive&grant=gmail"));
+    expect(storedState().scope).toBe("drive");
   });
 
   it("plain sign-in never reads the session", async () => {

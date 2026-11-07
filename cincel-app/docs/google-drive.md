@@ -23,10 +23,15 @@ For Drive:
 ### 1. Google Cloud Console
 
 - In the company's Cloud project, enable the **Google Drive API**, the
-  **Admin SDK API** and, for Calendar sync, the **Google Calendar API**.
+  **Admin SDK API**, for Calendar sync the **Google Calendar API** and, for
+  the Mi espacio Bandeja, the **Gmail API**.
 - OAuth consent screen: user type **Internal**; add the
-  `https://www.googleapis.com/auth/drive.readonly` and
-  `https://www.googleapis.com/auth/calendar.app.created` scopes.
+  `https://www.googleapis.com/auth/drive.readonly`,
+  `https://www.googleapis.com/auth/calendar.app.created`,
+  `https://www.googleapis.com/auth/gmail.readonly` and
+  `https://www.googleapis.com/auth/gmail.compose` scopes. `gmail.readonly` is
+  a restricted scope: an Internal app needs no Google verification; never
+  switch the audience to External.
 - OAuth client (Web application) with the redirect URI
   `<APP_ORIGIN>/api/auth/google/callback` for every environment (prod and
   staging).

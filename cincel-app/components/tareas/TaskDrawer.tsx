@@ -20,8 +20,7 @@ import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
 import { formatDateDMY } from "@/lib/utils/date";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
-import { Input } from "@/components/ui/shadcn/input";
-import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { ChecklistAddItemInput, ChecklistItemRow } from "@/components/tareas/ChecklistItemRow";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
@@ -298,12 +297,7 @@ export function TaskChecklistEditor({
                     </Button>
                   </div>
                 ) : null}
-                <label className="flex flex-1 items-center gap-3">
-                  <Checkbox checked={item.completed} onCheckedChange={() => onToggle(item)} />
-                  <span className={`flex-1 text-sm ${item.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                    {item.title}
-                  </span>
-                </label>
+                <ChecklistItemRow label={item.title} checked={item.completed} onToggle={() => onToggle(item)} />
                 {onAddPhoto ? (
                   <label
                     className="inline-flex h-6 cursor-pointer items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-background hover:text-foreground"
@@ -348,24 +342,7 @@ export function TaskChecklistEditor({
         <p className="text-sm text-muted-foreground">Sin puntos de checklist.</p>
       )}
 
-      <div className="flex gap-2 pt-2">
-        <Input
-          value={newChecklistItem}
-          onChange={(event) => setNewChecklistItem(event.target.value)}
-          placeholder="Nuevo punto..."
-          aria-label="Nuevo punto del checklist"
-          className="h-8 text-sm"
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              handleAdd();
-            }
-          }}
-        />
-        <Button variant="outline" size="sm" className="h-8" onClick={handleAdd}>
-          Agregar
-        </Button>
-      </div>
+      <ChecklistAddItemInput value={newChecklistItem} onValueChange={setNewChecklistItem} onSubmit={handleAdd} />
     </>
   );
 }

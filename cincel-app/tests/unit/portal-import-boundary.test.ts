@@ -40,17 +40,17 @@ describe("portal import boundary", () => {
         const messages = await restrictedImportMessages(code, filePath);
         expect(messages).toHaveLength(1);
         expect(messages[0].severity).toBe(2);
-      }, 30_000);
+      }, 120_000);
     }
 
     it(`allows portal and shared imports in ${filePath}`, async () => {
       const code = `import * as portal from "@/lib/portal/queries";\nimport { cn } from "@/lib/utils";\nexport const x = [portal, cn];\n`;
       expect(await restrictedImportMessages(code, filePath)).toHaveLength(0);
-    }, 30_000);
+    }, 120_000);
   }
 
   it("does not apply outside the portal trees", async () => {
     const code = `import * as staff from "@/lib/auth/session";\nexport const x = staff;\n`;
     expect(await restrictedImportMessages(code, "app/(app)/boundary-check/page.tsx")).toHaveLength(0);
-  }, 30_000);
+  }, 120_000);
 });

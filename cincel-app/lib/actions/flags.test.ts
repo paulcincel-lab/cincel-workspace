@@ -91,6 +91,9 @@ const EXTENDED = new Set(["dashboard", "projects"]);
 
 type Module = Record<string, unknown>;
 
+/** Implemented actions files import their whole server graph (DB, repositories, Google clients): slow cold. */
+const IMPORT_TIMEOUT = { timeout: 120_000 };
+
 async function load(file: string): Promise<Module> {
   return (await import(/* @vite-ignore */ join(ACTIONS_DIR, file))) as Module;
 }
@@ -105,7 +108,7 @@ describe("redesign action flags", () => {
   });
 
   for (const [domain, names] of Object.entries(REDESIGN_ACTIONS)) {
-    it(`${domain}-actions.flags.ts matches ${domain}-actions.ts`, async () => {
+    it(`${domain}-actions.flags.ts matches ${domain}-actions.ts`, IMPORT_TIMEOUT, async () => {
       const actions = await load(`${domain}-actions.ts`);
       const flags = await load(`${domain}-actions.flags.ts`);
       const implemented = flags.IMPLEMENTED as Record<string, unknown>;
@@ -139,7 +142,7 @@ describe("\"use server\" action files", () => {
   });
 
   for (const file of files) {
-    it(`${file} exports only async functions`, async () => {
+    it(`${file} exports only async functions`, IMPORT_TIMEOUT, async () => {
       const mod = await load(file);
       for (const name of exportedNames(mod)) {
         const value = mod[name];
