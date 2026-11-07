@@ -72,7 +72,7 @@ export async function fireDueReminders(db: OwnerDb, now: Date): Promise<{ count:
         dedupeKey: reminderDedupeKey(row.id, row.dueAt),
         // The reminder's own channels decide; quiet hours still defer the email (BE §8.3).
         force: { inApp: row.channels.includes("app"), email: row.channels.includes("email") },
-      });
+      }, { now });
       const patch =
         row.repeat === "none"
           ? { firedAt: now, updatedAt: now }

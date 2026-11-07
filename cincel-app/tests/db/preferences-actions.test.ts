@@ -85,12 +85,12 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
     await db.delete(schema.userPreferences).where(eq(schema.userPreferences.staffId, state.staffId));
   });
 
-  it("flips the IMPLEMENTED flags of the three actions only", () => {
+  it("flips the IMPLEMENTED flags of the preferences and org appearance actions", () => {
     expect(PREFERENCES_FLAGS).toEqual({ fetchMyPreferencesAction: true, updateMyPreferencesAction: true });
     expect(ORG_FLAGS).toEqual({
       fetchOrgAppearanceAction: true,
-      saveOrgAppearanceAction: false,
-      resetOrgAppearanceAction: false,
+      saveOrgAppearanceAction: true,
+      resetOrgAppearanceAction: true,
     });
   });
 
