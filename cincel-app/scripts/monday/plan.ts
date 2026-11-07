@@ -57,6 +57,13 @@ import {
   type ImportEntity,
 } from "../../lib/import/refs";
 import { createMondayDb, type MondayDbHandle } from "./db";
+import type { MappingUpgradeExport } from "./mapping.schema";
+import {
+  formatUpgradeNote,
+  saveUpgradedStatusLabels,
+  upgradeDbLookups,
+  upgradeStoredMapping,
+} from "./mapping-upgrade";
 import type { FileIndex, UpdateLine } from "./export";
 import { DONE_FILE, FILES_DIR, FILES_INDEX } from "./export";
 import {
@@ -1346,6 +1353,41 @@ export function readMappingFile(
   return readMapping(join(exportDir, MAPPING_FILE));
 }
 
+/**
+ * A v1 `mapping.json` as v2 (BE §10 intro): upgraded, written back over the
+ * file and its status labels added to the saved firm-wide map (only labels
+ * the map doesn't have yet). Anything else is returned as it is, for
+ * `buildPlan` to validate.
+ */
+export async function upgradeMappingFile(
+  exportDir: string,
+  raw: unknown,
+  data: MappingUpgradeExport,
+  db: ImportDb,
+  io: CliIo,
+  command: string,
+): Promise<unknown> {
+  const result = await upgradeStoredMapping(raw, {
+    lookups: () => upgradeDbLookups(db),
+    exportData: async () => data,
+  });
+  if (!result) return raw;
+  await writeFile(
+    join(exportDir, MAPPING_FILE),
+    `${JSON.stringify(result.mapping, null, 2)}\n`,
+  );
+  const saved = await saveUpgradedStatusLabels(db, result.added);
+  io.stderr(
+    `monday ${command}: ${MAPPING_FILE} was version 1; upgraded to version 2` +
+      (saved.length > 0
+        ? `, ${saved.length} status label${saved.length === 1 ? "" : "s"} added to the saved status map`
+        : "") +
+      ".\n" +
+      result.notes.map((n) => `  ${formatUpgradeNote(n)}\n`).join(""),
+  );
+  return result.mapping;
+}
+
 export interface PlanDeps {
   openDb: () => MondayDbHandle;
   /** The lookups over the opened database; `createPlanDbLookups` by default. */
@@ -1385,7 +1427,7 @@ export function createPlanCommand(
       try {
         plan = await buildPlan(
           data,
-          mapping.raw,
+          await upgradeMappingFile(dir, mapping.raw, data, handle.db, io, "plan"),
           (deps.lookups ?? createPlanDbLookups)(handle.db),
           {
             fileExists: (localPath) => existsSync(join(dir, localPath)),
