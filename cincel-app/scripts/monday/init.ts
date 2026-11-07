@@ -15,20 +15,28 @@
  *             dominate, item_as_project when most items have subitems,
  *             else board_as_project. group_as_project and skip are only
  *             ever chosen by the admin.
- *   Columns   by type (§5.2), board and subitem columns.
- *   Statuses  by label id (§5.2): a label named like an existing
- *             task_statuses row → that custom status; is_done → completado;
- *             named like a base status, /stuck|bloquead|detenid/i → bloqueado,
- *             /working|proceso|curso/i → en_proceso; else pendiente flagged
- *             `defaulted` for review. Never completado unless monday says done.
+ *   Columns   by type (§5.2), board and subitem columns; a date column
+ *             titled like "Fecha que finalizó" / "Fecha de finalización" /
+ *             "Finalizado" → closed_date (project flow BE §10.6).
+ *   Statuses  firm-wide, by label text (`statusLabelKey`): the saved map
+ *             (app_settings `monday.status_map`) first; labels it doesn't
+ *             have get the defaults table (lib/monday-import/status-map.ts):
+ *             custom status by name, the built-in table, is_done →
+ *             completado, base names and patterns, else pendiente flagged
+ *             `defaulted` for review. Never completado unless monday says
+ *             done or the table says so.
  *   Client    a connect-boards column to a crm_contacts board →
  *             relation_column; else the board name vs cliente contacts by
  *             trigram (≥ 0.8) → contact; else null.
  *   Contacts  crm_contacts items named like an existing contact of the same
  *             type (lower-case equal) → contactMatches.
- *   Area      the workspace name vs areas by trigram (≥ 0.8); an area with
- *             exactly one workflow → workflowId; then the task items' names
- *             vs that workflow's templates (≥ 0.85) → templateMatches.
+ *   Tramo     the tramo whose name the board name contains → workflowId
+ *             ("Tramo del tablero"), else null.
+ *   Groups    `resolveGroupTarget` defaults (tramo / fase / admin by name,
+ *             else the board's tramo); a group that resolves no tramo is
+ *             left unset (plan reports TRAMO_MISSING).
+ *   Templates the task items' names vs the active templates of the tramo
+ *             their group places them in (≥ 0.85) → templateMatches.
  *   Schedule  enabled for board_as_project boards with a timeline column.
  *
  * Trigram similarity runs in Postgres (pg_trgm, migration 0000). The
@@ -42,16 +50,33 @@ import { sql } from "drizzle-orm";
 
 import type { ImportDb } from "../../lib/import/refs";
 import { isRetiredMondayUser } from "../../lib/monday-import/people";
+import {
+  customStatusIndex,
+  defaultStatusEntry,
+  fillStatusMap,
+  parseStoredStatusMap,
+  STATUS_MAP_SETTING_KEY,
+} from "../../lib/monday-import/status-map";
 import { createMondayDb, type MondayDbHandle } from "./db";
 import type { BoardFile, ColumnDef, Manifest } from "./export";
 import { DONE_FILE } from "./export";
 import {
+  GROUP_TARGET_STRATEGIES,
+  groupPlacement,
+  nameKey,
+  resolveGroupTarget,
+  type GroupTargetCatalog,
+} from "./group-targets";
+import {
   Mapping,
+  statusLabelKey,
   type BoardMapping,
   type BoardStrategy,
   type ClientRef,
   type ColumnTarget,
+  type GroupTarget,
   type MappingInput,
+  type MondayStatusMap,
   type PersonTarget,
   type StatusTarget,
 } from "./mapping.schema";
@@ -62,8 +87,6 @@ export const MAPPING_FILE = "mapping.json";
 
 /** Board or group name vs `contacts.name` of cliente contacts. */
 export const CLIENT_SIMILARITY = 0.8;
-/** Workspace name vs `areas.name` (the spec gives no own threshold; the client one is used). */
-export const AREA_SIMILARITY = 0.8;
 /** Item name vs `workflow_task_templates.title`. */
 export const TEMPLATE_SIMILARITY = 0.85;
 
@@ -174,6 +197,15 @@ export interface TemplateCandidate {
   name: string;
   templateId: string;
   score: number;
+  /** The template's fase. */
+  phaseId?: string | null;
+}
+
+/** A tramo of the catalog with its fases (catalog order), as init reads it. */
+export interface InitWorkflow {
+  id: string;
+  name: string;
+  phases: { id: string; name: string; sortOrder: number; active: boolean }[];
 }
 
 /** What `init` asks the Cincel DB. Tests pass a fake. */
@@ -191,11 +223,11 @@ export interface InitLookups {
     type: ContactType,
     names: string[],
   ): Promise<Map<string, string>>;
-  /** The most similar area with similarity ≥ `AREA_SIMILARITY`. */
-  matchArea(name: string): Promise<string | null>;
-  /** Workflow ids of the area. */
-  areaWorkflows(areaId: string): Promise<string[]>;
-  /** Every (name, active template of the workflow) pair with similarity ≥ `TEMPLATE_SIMILARITY`. */
+  /** Active tramos (not deleted) with their fases, in catalog order. */
+  workflows(): Promise<InitWorkflow[]>;
+  /** The saved firm-wide status map (app_settings `monday.status_map`); empty when none is saved. */
+  savedStatusMap(): Promise<MondayStatusMap>;
+  /** Every (name, active template of the workflow) pair with similarity ≥ `TEMPLATE_SIMILARITY`, with its fase. */
   templateCandidates(
     workflowId: string,
     names: string[],
@@ -270,31 +302,44 @@ export function createDbLookups(db: ImportDb): InitLookups {
       );
       return new Map(found.map((r) => [String(r.name), String(r.id)]));
     },
-    async matchArea(name) {
-      const [best] = await rows(
-        db,
-        sql`select id::text as id from core.areas
-          where deleted_at is null and similarity(name, ${name}) >= ${AREA_SIMILARITY}
-          order by similarity(name, ${name}) desc, name, id limit 1`,
-      );
-      return best ? String(best.id) : null;
-    },
-    async areaWorkflows(areaId) {
+    async workflows() {
       const found = await rows(
         db,
-        sql`select w.id::text as id from core.area_workflows aw
-          join core.workflows w on w.id = aw.workflow_id
-          where aw.area_id = ${areaId} and w.deleted_at is null
-          order by w.sort_order, w.id`,
+        sql`select w.id::text as id, w.name as name,
+            p.id::text as phase_id, p.name as phase_name, p.sort_order as phase_order, p.active as phase_active
+          from core.workflows w
+          left join core.workflow_phases p on p.workflow_id = w.id
+          where w.deleted_at is null and w.active = true
+          order by w.sort_order, w.name, w.id, p.sort_order, p.name`,
       );
-      return found.map((r) => String(r.id));
+      const out = new Map<string, InitWorkflow>();
+      for (const r of found) {
+        const id = String(r.id);
+        const workflow = out.get(id) ?? { id, name: String(r.name), phases: [] };
+        out.set(id, workflow);
+        if (r.phase_id != null)
+          workflow.phases.push({
+            id: String(r.phase_id),
+            name: String(r.phase_name),
+            sortOrder: Number(r.phase_order),
+            active: r.phase_active === true,
+          });
+      }
+      return [...out.values()];
+    },
+    async savedStatusMap() {
+      const [row] = await rows(
+        db,
+        sql`select value from core.app_settings where key = ${STATUS_MAP_SETTING_KEY}`,
+      );
+      return parseStoredStatusMap(row ? String(row.value) : null);
     },
     async templateCandidates(workflowId, names) {
       const unique = [...new Set(names)];
       if (unique.length === 0) return [];
       const found = await rows(
         db,
-        sql`select n.name as name, t.id::text as id, similarity(t.title, n.name) as score
+        sql`select n.name as name, t.id::text as id, t.phase_id::text as phase_id, similarity(t.title, n.name) as score
           from unnest(${textArray(unique)}) as n(name)
           join core.workflow_task_templates t
             on t.workflow_id = ${workflowId} and t.active = true
@@ -304,6 +349,7 @@ export function createDbLookups(db: ImportDb): InitLookups {
         name: String(r.name),
         templateId: String(r.id),
         score: Number(r.score),
+        phaseId: r.phase_id == null ? null : String(r.phase_id),
       }));
     },
   };
@@ -377,6 +423,14 @@ export function detectStrategy(
 
 const PRIORITY_TITLE = /prior/i;
 
+/** Titles (by `nameKey`) of the date column that says when monday's item was finished (project flow BE §10.6). */
+const CLOSED_DATE_TITLES = new Set(["fecha que finalizo", "fecha de finalizacion", "finalizado"]);
+
+/** Whether a column's title reads like "Fecha que finalizó": its date becomes the task's `closed_at`. */
+export function isClosedDateTitle(title: string): boolean {
+  return CLOSED_DATE_TITLES.has(nameKey(title));
+}
+
 /**
  * Column targets by type (§5.2). The first column of a kind gets the Cincel
  * field; later ones of the same kind go to import data.
@@ -420,7 +474,7 @@ export function columnTargets(
         target = first("timeline");
         break;
       case "date":
-        target = first("delivery_date");
+        target = first(isClosedDateTitle(c.title) ? "closed_date" : "delivery_date");
         break;
       case "long_text":
       case "long-text":
@@ -507,48 +561,22 @@ export function statusLabels(column: ColumnDef): StatusLabel[] {
   return [];
 }
 
-const BLOCKED = /stuck|bloquead|detenid/i;
-const IN_PROGRESS = /working|proceso|curso/i;
-
 /**
- * Base statuses by their Cincel name, accents and case ignored. Completado is
- * left out: only monday's done marker drafts it.
- */
-const BASE_BY_NAME: Record<
-  string,
-  "pendiente" | "en_proceso" | "bloqueado"
-> = {
-  pendiente: "pendiente",
-  "en proceso": "en_proceso",
-  bloqueado: "bloqueado",
-};
-
-const normalizeName = (name: string) =>
-  name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-
-/**
- * One label's target (§5.2): a label named like an existing custom status
- * (case-insensitive) → that status; is_done → completado; named like a base
- * status or matching the blocked and in-progress patterns → that status; else
- * pendiente, flagged `defaulted` so the admin reviews it. A label monday
- * doesn't mark done never defaults to completado.
+ * One label's default target, from the defaults table (lib/monday-import/status-map.ts `defaultStatusEntry`): a
+ * label named like an existing custom status (accents and case ignored) → that status; the built-in table
+ * (En Proceso, Entregado, Confirmado, Cancelado, No se Requiere, En espera, Importante, Siguiente Paso, "-");
+ * is_done → completado; named like a base status or matching the blocked and in-progress patterns → that status;
+ * else pendiente, flagged `defaulted` so the admin reviews it. Translate uses the same table for labels the saved
+ * map doesn't have. `customStatuses` is lower(name) → id, as `InitLookups.customStatuses` answers.
  */
 export function statusTarget(
   label: StatusLabel,
   customStatuses: ReadonlyMap<string, string>,
 ): StatusTarget {
-  const custom = customStatuses.get(label.label.trim().toLowerCase());
-  if (custom) return { customStatusId: custom };
-  if (label.isDone) return { status: "completado" };
-  const base = BASE_BY_NAME[normalizeName(label.label)];
-  if (base) return { status: base };
-  if (BLOCKED.test(label.label)) return { status: "bloqueado" };
-  if (IN_PROGRESS.test(label.label)) return { status: "en_proceso" };
-  return { status: "pendiente", defaulted: true };
+  return defaultStatusEntry(
+    { name: label.label, isDone: label.isDone },
+    customStatusIndex(customStatuses),
+  ).target;
 }
 
 type ItemNode =
@@ -590,35 +618,47 @@ function doneFromItems(
 }
 
 /**
- * Status maps by label id for every column drafted as `status`, board
- * columns first, then subitem columns (a subitem column with the same id
- * only adds the label ids the board column doesn't have). A label counts as
- * done when its settings say so or an item reports it done.
+ * The labels of every column drafted as `status` (board columns, then subitem columns), by label text, with
+ * whether monday marks them done: by their settings or because an item reports them done.
  */
-export function statusMaps(
+export function draftStatusLabels(
   columns: { defs: ColumnDef[]; targets: Record<string, ColumnTarget> }[],
   items: MondayItem[],
-  customStatuses: ReadonlyMap<string, string>,
-): Record<string, Record<string, StatusTarget>> {
+): { name: string; isDone: boolean }[] {
   const done = doneFromItems(items);
-  const out: Record<string, Record<string, StatusTarget>> = {};
+  const out = new Map<string, { name: string; isDone: boolean }>();
   for (const { defs, targets } of columns) {
     for (const c of defs) {
       if (targets[c.id] !== "status") continue;
-      const map = (out[c.id] ??= {});
       const seen = done.get(c.id);
       for (const label of statusLabels(c)) {
-        if (map[label.id]) continue;
+        const key = statusLabelKey(label.label);
+        if (!key) continue;
         const isDone =
           label.isDone ||
           (seen != null &&
             (seen.labels.has(label.label) ||
               (label.index != null && seen.indexes.has(label.index))));
-        map[label.id] = statusTarget({ ...label, isDone }, customStatuses);
+        const current = out.get(key);
+        if (current) current.isDone ||= isDone;
+        else out.set(key, { name: label.label, isDone });
       }
     }
   }
-  return out;
+  return [...out.values()];
+}
+
+/**
+ * The firm-wide status map for an export (project flow BE §10.6): the saved map, plus the default of every label of
+ * the export's status columns the saved map doesn't have yet. Keyed by `statusLabelKey(label)`.
+ */
+export function draftStatusMap(
+  boards: { columns: { defs: ColumnDef[]; targets: Record<string, ColumnTarget> }[]; items: MondayItem[] }[],
+  customStatuses: ReadonlyMap<string, string>,
+  saved: MondayStatusMap = {},
+): MondayStatusMap {
+  const labels = boards.flatMap((b) => draftStatusLabels(b.columns, b.items));
+  return fillStatusMap(saved, labels, customStatusIndex(customStatuses));
 }
 
 /**
@@ -686,25 +726,76 @@ export function pickTemplates(
   return out;
 }
 
-/** The items that become tasks, grouped per project: top-level items, or for item_as_project each item's subitems. */
+/**
+ * The items that become tasks, grouped per project, with the group that places them: top-level items, or for
+ * item_as_project each item's subitems (placed by their item's group).
+ */
 function taskItemsPerProject(
   strategy: BoardStrategy,
   items: MondayItem[],
-): { id: string; name: string }[][] {
+): { id: string; name: string; groupId: string | null }[][] {
   const active = items.filter(isActive);
+  const groupOf = (i: MondayItem) => i.group?.id ?? null;
   if (strategy === "board_as_project")
-    return [active.map((i) => ({ id: i.id, name: i.name }))];
+    return [active.map((i) => ({ id: i.id, name: i.name, groupId: groupOf(i) }))];
   if (strategy === "item_as_project") {
     return active.map((i) =>
       (i.subitems ?? [])
         .filter((s) => s != null && isActive(s))
-        .map((s) => ({ id: s!.id, name: s!.name })),
+        .map((s) => ({ id: s!.id, name: s!.name, groupId: groupOf(i) })),
     );
   }
   return [];
 }
 
-/** Drafts the mapping for an export (§5.3); validated with the Zod `Mapping`. */
+/** The catalog shape `resolveGroupTarget` reads. */
+function catalogOf(workflows: InitWorkflow[]): GroupTargetCatalog {
+  return {
+    workflows: workflows.map((w) => ({
+      id: w.id,
+      name: w.name,
+      phases: w.phases.map((p) => ({ id: p.id, name: p.name, sortOrder: p.sortOrder, active: p.active })),
+    })),
+  };
+}
+
+/**
+ * "Tramo del tablero": the tramo whose name the board name contains as a whole word (accents and case ignored);
+ * the longest name wins, so "Diseño ejecutivo" beats "Diseño". Null when none does.
+ */
+export function boardWorkflowId(
+  boardName: string,
+  workflows: readonly { id: string; name: string }[],
+): string | null {
+  const board = ` ${nameKey(boardName).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+  let best: { id: string; length: number } | null = null;
+  for (const w of workflows) {
+    const name = nameKey(w.name).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    if (!name || !board.includes(` ${name} `)) continue;
+    if (!best || name.length > best.length) best = { id: w.id, length: name.length };
+  }
+  return best?.id ?? null;
+}
+
+/**
+ * Default group targets (project flow BE §10.2, §10.6): `resolveGroupTarget` for each group of a board whose
+ * strategy maps groups; a group that resolves no tramo is left out, so the plan reports it (TRAMO_MISSING).
+ */
+export function draftGroupTargets(
+  board: { strategy: BoardStrategy; workflowId: string | null; groups: { id: string; title: string }[] },
+  catalog: GroupTargetCatalog,
+): Record<string, GroupTarget> {
+  if (!GROUP_TARGET_STRATEGIES.has(board.strategy)) return {};
+  const out: Record<string, GroupTarget> = {};
+  for (const group of board.groups) {
+    const target = resolveGroupTarget({ strategy: board.strategy, workflowId: board.workflowId }, group, catalog);
+    if (target.kind === "tramo" && !target.workflowId) continue;
+    out[group.id] = target as GroupTarget;
+  }
+  return out;
+}
+
+/** Drafts the mapping (v2) for an export (§5.3, project flow BE §10.6); validated with the Zod `Mapping`. */
 export async function draftMapping(
   data: ExportData,
   lookups: InitLookups,
@@ -715,9 +806,9 @@ export async function draftMapping(
   );
   const staffByName =
     (await lookups.staffByName?.(data.users.map((u) => u.name))) ?? new Map<string, string>();
-  const workspaceName = new Map(
-    data.workspaces.map((w) => [String(w.id), w.name]),
-  );
+  const workflows = await lookups.workflows();
+  const catalog = catalogOf(workflows);
+  const savedStatusMap = await lookups.savedStatusMap();
 
   const strategies = new Map(
     data.boards.map((b) => [b.board.id, detectStrategy(b.board, b.items)]),
@@ -727,6 +818,7 @@ export async function draftMapping(
   );
 
   const boards: BoardMapping[] = [];
+  const statusSources: Parameters<typeof draftStatusMap>[0] = [];
   for (const { board, items } of data.boards) {
     const strategy = strategies.get(board.id)!;
     const isCrm = strategy === "crm_contacts";
@@ -737,6 +829,15 @@ export async function draftMapping(
     const subitemColumns = isCrm
       ? {}
       : columnTargets(board.subitem_columns ?? [], {});
+    // Task statuses only: a CRM board's status column describes contacts.
+    if (!isCrm)
+      statusSources.push({
+        columns: [
+          { defs: board.columns, targets: columns },
+          { defs: board.subitem_columns ?? [], targets: subitemColumns },
+        ],
+        items,
+      });
 
     const draft: MappingInput["boards"][number] = {
       mondayBoardId: board.id,
@@ -744,14 +845,6 @@ export async function draftMapping(
       strategy,
       columns,
       subitemColumns,
-      statusMaps: statusMaps(
-        [
-          { defs: board.columns, targets: columns },
-          { defs: board.subitem_columns ?? [], targets: subitemColumns },
-        ],
-        items,
-        customStatuses,
-      ),
     };
 
     if (isCrm) {
@@ -769,7 +862,7 @@ export async function draftMapping(
       }
       draft.contactMatches = matches;
     } else {
-      // Client: a connect-boards column to a CRM board, else the board name by trigram.
+      // Client (optional): a connect-boards column to a CRM board, else the board name by trigram.
       const relation = Object.entries(columns).find(([, t]) => t === "client");
       let client: ClientRef | null = null;
       if (relation) client = { kind: "relation_column", columnId: relation[0] };
@@ -779,24 +872,33 @@ export async function draftMapping(
       }
       draft.client = client;
 
-      // Area and workflow by workspace name; templates by item name.
-      const wsName = board.workspace_id
-        ? workspaceName.get(String(board.workspace_id))
-        : undefined;
-      const areaId = wsName ? await lookups.matchArea(wsName) : null;
-      draft.areaId = areaId;
-      let workflowId: string | null = null;
-      if (areaId) {
-        const workflows = await lookups.areaWorkflows(areaId);
-        if (workflows.length === 1) workflowId = workflows[0];
-      }
+      // Tramo by board name; groups by the defaults; templates by item name within the tramo the group places them.
+      const workflowId = boardWorkflowId(board.name, workflows);
       draft.workflowId = workflowId;
-      if (workflowId) {
-        const perProject = taskItemsPerProject(strategy, items);
-        const names = perProject.flat().map((t) => t.name);
-        const candidates = await lookups.templateCandidates(workflowId, names);
-        draft.templateMatches = pickTemplates(perProject, candidates);
+      const groupTargets = draftGroupTargets({ strategy, workflowId, groups: board.groups ?? [] }, catalog);
+      draft.groupTargets = groupTargets;
+      const groupTitles = new Map((board.groups ?? []).map((g) => [g.id, g.title]));
+      const tramoOf = (groupId: string | null): string | null => {
+        const target = groupId ? groupTargets[groupId] : undefined;
+        if (!target) return workflowId;
+        const placement = groupPlacement(target, { title: groupTitles.get(groupId!) ?? "" }, catalog);
+        if (placement.admin) return null;
+        return placement.workflowId ?? workflowId;
+      };
+
+      const perProject = taskItemsPerProject(strategy, items).map((tasks) =>
+        tasks.filter((t) => !t.groupId || groupTargets[t.groupId]?.kind !== "ignore"),
+      );
+      const tramos = new Set(perProject.flat().map((t) => tramoOf(t.groupId)).filter((id): id is string => !!id));
+      const templateMatches: Record<string, string> = {};
+      for (const tramo of tramos) {
+        const inTramo = perProject.map((tasks) => tasks.filter((t) => tramoOf(t.groupId) === tramo));
+        const names = inTramo.flat().map((t) => t.name);
+        if (names.length === 0) continue;
+        const candidates = await lookups.templateCandidates(tramo, names);
+        Object.assign(templateMatches, pickTemplates(inTramo, candidates));
       }
+      draft.templateMatches = templateMatches;
 
       const hasTimeline = Object.values(columns).includes("timeline");
       draft.schedule = {
@@ -807,10 +909,11 @@ export async function draftMapping(
   }
 
   return Mapping.parse({
-    version: 1,
+    version: 2,
     boards,
     people: peopleTargets(data.users, staffByEmail, staffByName),
     options: { includeUpdates: true, includeFiles: true },
+    statusMap: draftStatusMap(statusSources, customStatuses, savedStatusMap),
   } satisfies MappingInput);
 }
 

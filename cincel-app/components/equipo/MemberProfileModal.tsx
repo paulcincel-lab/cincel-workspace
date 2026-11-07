@@ -51,8 +51,13 @@ export function MemberProfileModal({ member, onClose }: MemberProfileModalProps)
           <div className="grid grid-cols-2 gap-3 text-sm text-foreground">
             <p><span className="font-medium">Celular:</span> {member.phone || "-"}</p>
             <p><span className="font-medium">Correo institucional:</span> {member.institutionalEmail || "-"}</p>
-            <p><span className="font-medium">Puesto:</span> {member.role}</p>
-            <p><span className="font-medium">Área:</span> {member.areas.length > 0 ? member.areas.join(", ") : "-"}</p>
+            <p>
+              <span className="font-medium">Puestos:</span>{" "}
+              {member.positions && member.positions.length > 0
+                ? member.positions.map((p) => p.name).join(", ")
+                : "Sin puesto"}
+            </p>
+            <p><span className="font-medium">Acceso:</span> {member.role || "-"}</p>
             {sensitive ? (
               <>
                 <p><span className="font-medium">Fecha nacimiento:</span> {sensitive.birth_date || "-"}</p>

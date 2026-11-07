@@ -20,19 +20,16 @@ function exportData(): ExportData {
   return structuredClone(fixture) as unknown as ExportData;
 }
 
-const STATUS = {
-  "0": { status: "pendiente" },
-  "1": { status: "completado" },
-  "2": { status: "en_proceso" },
-} as const;
-const SUB_STATUS = {
-  "0": { status: "pendiente" },
-  "1": { status: "completado" },
+// The firm-wide status map snapshot (keyed by statusLabelKey), shared by items and subitems.
+const STATUS_MAP = {
+  pendiente: { target: { status: "pendiente" } },
+  listo: { target: { status: "completado" } },
+  "en curso": { target: { status: "en_proceso" } },
 } as const;
 
 function mappingInput(): MappingInput {
   return {
-    version: 1,
+    version: 2,
     boards: [
       {
         mondayBoardId: "901",
@@ -55,7 +52,6 @@ function mappingInput(): MappingInput {
           metros: "import_data",
           metros2: "import_data",
         },
-        statusMaps: { status: STATUS, sstatus: SUB_STATUS },
         subitems: "checklist",
         schedule: { enabled: true, planta: { columnId: "planta" } },
       },
@@ -70,7 +66,6 @@ function mappingInput(): MappingInput {
           sstatus: "status",
           metros: "import_data",
         },
-        statusMaps: { status: STATUS, sstatus: SUB_STATUS },
         subitems: "child_tasks",
       },
       {
@@ -80,7 +75,6 @@ function mappingInput(): MappingInput {
         client: { kind: "contact", contactId: CLIENT },
         columns: { name: "title", presupuesto: "import_data" },
         subitemColumns: { name: "title" },
-        statusMaps: {},
       },
       {
         mondayBoardId: "904",
@@ -88,7 +82,6 @@ function mappingInput(): MappingInput {
         strategy: "crm_contacts",
         contactType: "cliente",
         columns: { name: "title", rfc: "import_data" },
-        statusMaps: {},
       },
     ],
     people: {
@@ -96,11 +89,13 @@ function mappingInput(): MappingInput {
       "14": null,
     },
     options: { includeUpdates: true, includeFiles: true },
+    statusMap: STATUS_MAP,
   };
 }
 
 const lookups: CincelLookups = {
   customStatuses: {},
+  phases: {},
   templates: {},
   staff: { [ANA]: { name: "Ana Arquitecta" } },
 };
@@ -201,7 +196,8 @@ describe("translate: subitems", () => {
         externalId: "3001",
       });
       expect(t.project.externalId).toBe("902");
-      expect(t.phase).toBe("Instalaciones");
+      // Child tasks share their parent's group place (no tramo on this board).
+      expect(t).toMatchObject({ kind: "usuario", workflowId: null, phaseId: null, space: null });
     }
     expect(task(r, "3101")).toMatchObject({
       status: "completado",

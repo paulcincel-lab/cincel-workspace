@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * scripts/monday/init.ts (BE §5.3): drafting mapping.json from an export.
+ * scripts/monday/init.ts (BE §5.3, project flow BE §10.6): drafting mapping.json (v2) from an export.
  *
  * The heuristics run against the fixture export in
  * scripts/monday/__fixtures__/export-init with fake Cincel lookups. The
@@ -28,19 +28,23 @@ import type { ImportDb } from "@/lib/import/refs";
 import type { MondayDbHandle } from "@/scripts/monday/db";
 import type { ColumnDef } from "@/scripts/monday/export";
 import {
+  boardWorkflowId,
   columnTargets,
   createDbLookups,
   createInitCommand,
   detectStrategy,
+  draftGroupTargets,
   draftMapping,
+  draftStatusLabels,
+  isClosedDateTitle,
   MAPPING_FILE,
   parseInitArgs,
   pickTemplates,
   readExport,
   statusLabels,
-  statusMaps,
   statusTarget,
   type InitLookups,
+  type InitWorkflow,
   type TemplateCandidate,
 } from "@/scripts/monday/init";
 import { Mapping } from "@/scripts/monday/mapping.schema";
@@ -58,15 +62,20 @@ const ID = {
   revision: "00000000-0000-4000-8000-0000000000c3",
   perez: "00000000-0000-4000-8000-0000000000d4",
   acme: "00000000-0000-4000-8000-0000000000e5",
-  construccion: "00000000-0000-4000-8000-0000000000f6",
-  diseno: "00000000-0000-4000-8000-0000000000f7",
+  faseObra: "00000000-0000-4000-8000-0000000000f6",
+  faseEjecutivo: "00000000-0000-4000-8000-0000000000f7",
   wfObra: "00000000-0000-4000-8000-000000000101",
-  wfA: "00000000-0000-4000-8000-000000000102",
-  wfB: "00000000-0000-4000-8000-000000000103",
+  wfDisenoEjecutivo: "00000000-0000-4000-8000-000000000102",
   wfDiseno: "00000000-0000-4000-8000-000000000104",
   tplLevantamiento: "00000000-0000-4000-8000-000000000201",
   tplEjecutivo: "00000000-0000-4000-8000-000000000202",
 };
+
+/** The catalog: tramo "Construcción" with the fase "Obra", tramo "Diseño" with the fase "Ejecutivo". */
+const WORKFLOWS: InitWorkflow[] = [
+  { id: ID.wfObra, name: "Construcción", phases: [{ id: ID.faseObra, name: "Obra", sortOrder: 1, active: true }] },
+  { id: ID.wfDiseno, name: "Diseño", phases: [{ id: ID.faseEjecutivo, name: "Ejecutivo", sortOrder: 1, active: true }] },
+];
 
 /** Exact-name fake of the Cincel DB; template scores come from a table. */
 function fakeLookups(overrides: Partial<InitLookups> = {}): InitLookups {
@@ -99,18 +108,8 @@ function fakeLookups(overrides: Partial<InitLookups> = {}): InitLookups {
           ? [["acme", ID.acme]]
           : [],
       ),
-    matchArea: async (name) =>
-      name === "Construcción"
-        ? ID.construccion
-        : name === "Diseño"
-          ? ID.diseno
-          : null,
-    areaWorkflows: async (areaId) =>
-      areaId === ID.construccion
-        ? [ID.wfObra]
-        : areaId === ID.diseno
-          ? [ID.wfDiseno]
-          : [],
+    workflows: async () => WORKFLOWS,
+    savedStatusMap: async () => ({}),
     templateCandidates: async (workflowId, names) =>
       names.flatMap((name) =>
         (scores[workflowId]?.[name] ?? []).map(([templateId, score]) => ({
@@ -218,27 +217,48 @@ describe("init: the fixture draft", () => {
     });
   });
 
-  it("maps statuses by label id with the defaults and custom-status names", async () => {
-    const [casa, desarrollos] = (await draft()).boards;
-    expect(casa.statusMaps.status).toEqual({
-      "0": { status: "en_proceso" },
-      "1": { status: "completado" },
-      "2": { status: "bloqueado" },
-      "3": { customStatusId: ID.revision },
+  it("drafts version 2 without per-board status maps", async () => {
+    const mapping = await draft();
+    expect(mapping.version).toBe(2);
+    for (const board of mapping.boards) expect("statusMaps" in board).toBe(false);
+  });
+
+  it("drafts the firm-wide status map by label text with the defaults table and custom-status names", async () => {
+    const { statusMap } = await draft();
+    expect(statusMap).toEqual({
+      "en proceso": { target: { status: "en_proceso" }, priority: null },
+      listo: { target: { status: "completado" }, priority: null },
+      detenido: { target: { status: "bloqueado" }, priority: null },
+      "revisión cliente": { target: { customStatusId: ID.revision }, priority: null },
       // No equivalent: an open status flagged for review, never completado.
-      "7": { status: "pendiente", defaulted: true },
-      "9": { status: "pendiente", defaulted: true },
-      // From the subitem column of the same id.
-      "4": { status: "en_proceso" },
+      "por iniciar": { target: { status: "pendiente", defaulted: true }, priority: null },
+      // The defaults table: Entregado closes the task even though monday doesn't mark it done.
+      entregado: { target: { status: "completado" }, priority: null },
+      // From the subitem column.
+      "en curso": { target: { status: "en_proceso" }, priority: null },
+      // Old object-form labels with done_colors (Desarrollos).
+      pendiente: { target: { status: "pendiente" }, priority: null },
+      hecho: { target: { status: "completado" }, priority: null },
+      stuck: { target: { status: "bloqueado" }, priority: null },
     });
-    // The second status column is import data and gets no map; priority needs none.
-    expect(Object.keys(casa.statusMaps)).toEqual(["status"]);
-    // Old object-form labels with done_colors.
-    expect(desarrollos.statusMaps.estado).toEqual({
-      "0": { status: "pendiente" },
-      "1": { status: "completado" },
-      "2": { status: "bloqueado" },
-    });
+    // A CRM board's status column describes contacts, not tasks.
+    expect(statusMap).not.toHaveProperty("activo");
+  });
+
+  it("keeps the saved firm-wide status map, so a second import doesn't ask again", async () => {
+    const saved = {
+      "por iniciar": { target: { status: "en_proceso" as const }, priority: "alta" as const },
+      "de otro tablero": { target: { status: "bloqueado" as const }, priority: null },
+    };
+    const { statusMap } = await draftMapping(
+      await readExport(FIXTURE),
+      fakeLookups({ savedStatusMap: async () => saved }),
+    );
+    expect(statusMap["por iniciar"]).toEqual(saved["por iniciar"]);
+    expect(statusMap["de otro tablero"]).toEqual(saved["de otro tablero"]);
+    expect(
+      Object.values(statusMap).filter((e) => "status" in e.target && e.target.defaulted),
+    ).toEqual([]);
   });
 
   it("resolves the client by relation column or name", async () => {
@@ -271,34 +291,38 @@ describe("init: the fixture draft", () => {
       status: "status",
       text: "notes",
     });
-    expect(clientes.areaId).toBeUndefined();
   });
 
-  it("matches area and workflow by workspace name, and templates per project", async () => {
-    const [casa, desarrollos] = (await draft()).boards;
-    expect(casa.areaId).toBe(ID.construccion);
-    expect(casa.workflowId).toBe(ID.wfObra);
-    // Both items match the template; only the best one in the project gets it.
-    expect(casa.templateMatches).toEqual({ "1001": ID.tplLevantamiento });
+  it("maps groups with the defaults: a tramo's name, else a fase of one tramo; unresolved groups stay unset", async () => {
+    const [casa, desarrollos, clientes] = (await draft()).boards;
+    // "Casa Pérez" names no tramo.
+    expect(casa.workflowId).toBeNull();
+    expect(casa.groupTargets).toEqual({
+      topics: { kind: "tramo", workflowId: ID.wfDiseno },
+      g_obra: { kind: "phase", phaseId: ID.faseObra },
+    });
+    // "Activos" resolves no tramo and the board has none: left for the plan (TRAMO_MISSING).
+    expect(desarrollos.groupTargets).toEqual({});
+    expect(clientes.groupTargets).toEqual({});
+  });
 
-    expect(desarrollos.areaId).toBe(ID.diseno);
+  it("matches templates within the tramo each group places its items in, one per template per project", async () => {
+    const [casa] = (await draft()).boards;
+    // Levantamiento (group Diseño) is in the Diseño tramo: no match there; Levantamiento previo (fase Obra) matches.
+    expect(casa.templateMatches).toEqual({ "1003": ID.tplLevantamiento });
+  });
+
+  it("takes the board's tramo from its name, and its templates per project", async () => {
+    const data = await readExport(FIXTURE);
+    data.boards[1].board.name = "Desarrollos · Diseño";
+    const [, desarrollos] = (await draftMapping(data, fakeLookups())).boards;
     expect(desarrollos.workflowId).toBe(ID.wfDiseno);
+    expect(desarrollos.groupTargets).toEqual({ g1: { kind: "tramo", workflowId: ID.wfDiseno } });
     // item_as_project: subitems are the tasks; each item is its own project.
     expect(desarrollos.templateMatches).toEqual({
       "2101": ID.tplEjecutivo,
       "2201": ID.tplEjecutivo,
     });
-  });
-
-  it("leaves the workflow empty when the area has several", async () => {
-    const lookups = fakeLookups({
-      areaWorkflows: async () => [ID.wfA, ID.wfB],
-    });
-    const [casa] = (await draftMapping(await readExport(FIXTURE), lookups))
-      .boards;
-    expect(casa.areaId).toBe(ID.construccion);
-    expect(casa.workflowId).toBeNull();
-    expect(casa.templateMatches).toEqual({});
   });
 
   it("enables the cronograma only for board_as_project with a timeline", async () => {
@@ -374,6 +398,41 @@ describe("init: heuristics", () => {
     });
   });
 
+  it("targets a date column titled like «Fecha que finalizó» as closed_date", () => {
+    expect(isClosedDateTitle("Fecha que finalizó")).toBe(true);
+    expect(isClosedDateTitle("  FECHA DE FINALIZACIÓN ")).toBe(true);
+    expect(isClosedDateTitle("Finalizado")).toBe(true);
+    expect(isClosedDateTitle("Fecha")).toBe(false);
+    expect(
+      columnTargets([col("d1", "date", "Fecha que finalizó"), col("d2", "date", "Entrega"), col("s", "status", "Finalizado")]),
+    ).toEqual({ d1: "closed_date", d2: "delivery_date", s: "status" });
+  });
+
+  it("picks the board's tramo by the longest tramo name the board name contains", () => {
+    const workflows = [
+      { id: ID.wfDiseno, name: "Diseño" },
+      { id: ID.wfDisenoEjecutivo, name: "Diseño ejecutivo" },
+      { id: ID.wfObra, name: "Construcción" },
+    ];
+    expect(boardWorkflowId("Casa Ruiz - DISEÑO EJECUTIVO", workflows)).toBe(ID.wfDisenoEjecutivo);
+    expect(boardWorkflowId("Diseno Casa Ruiz", workflows)).toBe(ID.wfDiseno);
+    expect(boardWorkflowId("Reconstrucción", workflows)).toBeNull();
+    expect(boardWorkflowId("Casa Ruiz", workflows)).toBeNull();
+  });
+
+  it("drafts no group targets for strategies that don't map groups, and admin groups by name", () => {
+    const catalog = { workflows: WORKFLOWS };
+    const groups = [
+      { id: "a", title: "Administrativo" },
+      { id: "b", title: "Varios" },
+    ];
+    expect(draftGroupTargets({ strategy: "board_as_project", workflowId: ID.wfObra, groups }, catalog)).toEqual({
+      a: { kind: "admin" },
+      b: { kind: "tramo", workflowId: ID.wfObra },
+    });
+    expect(draftGroupTargets({ strategy: "group_as_project", workflowId: ID.wfObra, groups }, catalog)).toEqual({});
+  });
+
   it("prefers long text over text for notes, and targets other types as import data", () => {
     expect(
       columnTargets([
@@ -407,7 +466,7 @@ describe("init: heuristics", () => {
     ]);
   });
 
-  it("applies the default status rules", () => {
+  it("applies the default status rules and the firm-wide table", () => {
     const t = (label: string, isDone = false) =>
       statusTarget({ id: "1", label, index: "1", isDone }, new Map());
     expect(t("Done", true)).toEqual({ status: "completado" });
@@ -420,6 +479,12 @@ describe("init: heuristics", () => {
     expect(t("")).toEqual({ status: "pendiente", defaulted: true });
     expect(t("Pendiente")).toEqual({ status: "pendiente" });
     expect(t("EN PROCESO")).toEqual({ status: "en_proceso" });
+    expect(t("Confirmado")).toEqual({ status: "completado" });
+    expect(t("Importante")).toEqual({ status: "pendiente" });
+    expect(t("-")).toEqual({ status: "pendiente" });
+    expect(
+      statusTarget({ id: "1", label: "No se requiere", index: null, isDone: false }, new Map([["cancelado", ID.revision]])),
+    ).toEqual({ customStatusId: ID.revision });
     expect(
       statusTarget(
         { id: "1", label: " REVISIÓN cliente", index: null, isDone: true },
@@ -430,7 +495,7 @@ describe("init: heuristics", () => {
     });
   });
 
-  it("never drafts a label monday doesn't mark done as completado", () => {
+  it("never drafts a label monday doesn't mark done as completado, unless the table says so", () => {
     const t = (label: string) =>
       statusTarget({ id: "3", label, index: "1", isDone: false }, new Map());
     for (const label of ["Urgente", "Completado", "Listo", "Hecho", "Done"])
@@ -471,17 +536,11 @@ describe("init: heuristics", () => {
       subitems: [],
     } as unknown as MondayItem;
     expect(
-      statusMaps(
-        [{ defs: [column], targets: { s: "status" } }],
-        [doneItem],
-        new Map(),
-      ),
-    ).toEqual({
-      s: {
-        "1": { status: "completado" },
-        "5": { status: "pendiente", defaulted: true },
-      },
-    });
+      draftStatusLabels([{ defs: [column], targets: { s: "status" } }], [doneItem]),
+    ).toEqual([
+      { name: "Listo", isDone: true },
+      { name: "Urgente", isDone: false },
+    ]);
   });
 
   it("gives labels the same targets whatever their order in the settings", async () => {
@@ -493,7 +552,7 @@ describe("init: heuristics", () => {
     (status.settings as { labels: unknown[] }).labels.reverse();
     const a = await draftMapping(data, fakeLookups());
     const b = await draftMapping(reordered, fakeLookups());
-    expect(b.boards[0].statusMaps).toEqual(a.boards[0].statusMaps);
+    expect(b.statusMap).toEqual(a.statusMap);
   });
 
   it("picks one item per template per project, best score first", () => {
@@ -576,7 +635,7 @@ describe("init command", () => {
     expect(await command(["--export", dir, "--force"], captureIo().io)).toBe(0);
     expect(
       JSON.parse(readFileSync(join(dir, MAPPING_FILE), "utf8")).version,
-    ).toBe(1);
+    ).toBe(2);
   });
 
   it("warns about boards without .done", async () => {
@@ -670,39 +729,52 @@ describe.skipIf(!url)("init lookups (test DB)", () => {
     });
   });
 
-  it("matches areas, their workflows and templates ≥ 0.85", async () => {
+  it("reads tramos with their fases, templates ≥ 0.85 with their fase, and the saved status map", async () => {
     await inTx(async (tx) => {
-      const [area] = await tx
-        .insert(schema.areas)
-        .values({ name: "Construcción Init" })
-        .returning();
       const [wf] = await tx
         .insert(schema.workflows)
         .values({ key: "init-obra", name: "Obra Init" })
         .returning();
-      await tx
-        .insert(schema.areaWorkflows)
-        .values({ areaId: area.id, workflowId: wf.id });
+      const [fase] = await tx
+        .insert(schema.workflowPhases)
+        .values({ workflowId: wf.id, name: "Levantamiento Init", sortOrder: 1 })
+        .returning();
       const [tpl] = await tx
         .insert(schema.workflowTaskTemplates)
-        .values({ workflowId: wf.id, title: "Levantamiento topográfico" })
+        .values({ workflowId: wf.id, phaseId: fase.id, title: "Levantamiento topográfico" })
         .returning();
       await tx
         .insert(schema.workflowTaskTemplates)
-        .values({ workflowId: wf.id, title: "Retirado", active: false });
+        .values({ workflowId: wf.id, phaseId: fase.id, title: "Retirado", active: false });
+      await tx
+        .insert(schema.appSettings)
+        .values({
+          key: "monday.status_map",
+          value: JSON.stringify({ "en proceso": { target: { status: "en_proceso" } } }),
+        })
+        .onConflictDoUpdate({
+          target: schema.appSettings.key,
+          set: { value: JSON.stringify({ "en proceso": { target: { status: "en_proceso" } } }) },
+        });
       const lookups = createDbLookups(tx);
-      expect(await lookups.matchArea("construcción init")).toBe(area.id);
-      expect(await lookups.matchArea("Jardinería Init")).toBeNull();
-      expect(await lookups.areaWorkflows(area.id)).toEqual([wf.id]);
+      const obra = (await lookups.workflows()).find((w) => w.id === wf.id);
+      expect(obra).toEqual({
+        id: wf.id,
+        name: "Obra Init",
+        phases: [{ id: fase.id, name: "Levantamiento Init", sortOrder: 1, active: true }],
+      });
       const found = await lookups.templateCandidates(wf.id, [
         "Levantamiento Topográfico",
         "Planos",
         "Retirado",
       ]);
-      expect(found.map((f) => [f.name, f.templateId])).toEqual([
-        ["Levantamiento Topográfico", tpl.id],
+      expect(found.map((f) => [f.name, f.templateId, f.phaseId])).toEqual([
+        ["Levantamiento Topográfico", tpl.id, fase.id],
       ]);
       expect(found[0].score).toBeGreaterThanOrEqual(0.85);
+      expect(await lookups.savedStatusMap()).toEqual({
+        "en proceso": { target: { status: "en_proceso" }, priority: null },
+      });
     });
   });
 });

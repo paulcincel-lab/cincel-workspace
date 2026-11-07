@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { GoogleAccessState } from "@/lib/equipo/google-access";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
-import type { Area } from "@/lib/types/core";
+import type { Position } from "@/lib/types/core";
 
 const actions = vi.hoisted(() => ({ recheckStaffAccessAction: vi.fn() }));
 vi.mock("@/lib/actions/workspace-access-actions", () => actions);
@@ -13,9 +14,28 @@ vi.mock("@/lib/actions/workspace-access-actions", () => actions);
 import { MemberEditorDrawer } from "./MemberEditorDrawer";
 
 const STAFF_ID = "00000000-0000-4000-8000-000000000010";
-const areas: Area[] = [
-  { id: "a1", name: "Diseño", description: null, leadId: null, active: true, sortOrder: 0, colorSlot: 1 },
-  { id: "a2", name: "Construcción", description: null, leadId: null, active: true, sortOrder: 1, colorSlot: 2 },
+const positions: Position[] = [
+  {
+    id: "p1",
+    name: "Arquitecto proyectista",
+    sortOrder: 0,
+    active: true,
+    staffCount: 1,
+    googleManaged: false,
+    phases: [
+      { id: "f1", name: "Ejecutivo", sortOrder: 0, workflowId: "w1", workflowName: "Diseño" },
+      { id: "f2", name: "Proyecto Estructural", sortOrder: 1, workflowId: "w1", workflowName: "Diseño" },
+    ],
+  },
+  {
+    id: "p2",
+    name: "Residente de obra",
+    sortOrder: 1,
+    active: true,
+    staffCount: 0,
+    googleManaged: false,
+    phases: [{ id: "f3", name: "Obra", sortOrder: 0, workflowId: "w2", workflowName: "Construcción" }],
+  },
 ];
 const capabilities: TeamCapabilities = {
   canViewTeam: true,
@@ -56,8 +76,7 @@ const draft: MemberDraft = {
   emergencyContactRelation: "",
   emergencyContactPhone: "",
   emergencyContactAddress: "",
-  role: "Diseño",
-  areaIds: ["a1"],
+  positionIds: ["p1"],
   capacity: 8,
   availability: "Disponible",
 } as MemberDraft;
@@ -68,6 +87,10 @@ function renderDrawer(
     canRecheckAccess?: boolean;
     googleAccess?: GoogleAccessState | null;
     accessPreviewState?: AccessPreviewState;
+    draft?: MemberDraft;
+    onChangeDraft?: React.Dispatch<React.SetStateAction<MemberDraft>>;
+    positionOptions?: Position[];
+    canManagePositions?: boolean;
   } = {},
 ) {
   return render(
@@ -83,7 +106,7 @@ function renderDrawer(
       isEditingSelfProtectedAdmin={false}
       teamCapabilities={capabilities}
       availabilityOptions={["Disponible"]}
-      areaOptions={areas}
+      positionOptions={positions}
       {...props}
     />,
   );
@@ -98,14 +121,13 @@ describe("MemberEditorDrawer — Google-managed staff", () => {
   beforeEach(() => actions.recheckStaffAccessAction.mockReset());
   afterEach(cleanup);
 
-  it("shows role, access and áreas read-only with the Google Workspace badge", () => {
+  it("shows puestos and access read-only with the Google Workspace badge", () => {
     renderDrawer({ googleManaged: true });
-    expect(screen.getAllByText("Google Workspace")).toHaveLength(3);
-    expect(isDisabled(screen.getByLabelText("Puesto"))).toBe(true);
+    expect(screen.getAllByText("Google Workspace")).toHaveLength(2);
     expect(isDisabled(screen.getByRole("combobox", { name: "Acceso" }))).toBe(true);
-    expect(screen.queryByPlaceholderText("Buscar área...")).toBeNull();
-    expect(screen.getByTestId("member-areas-readonly").textContent).toContain("Diseño");
-    expect(screen.getByTestId("member-areas-readonly").textContent).not.toContain("Construcción");
+    expect(screen.queryByPlaceholderText("Buscar puesto...")).toBeNull();
+    expect(screen.getByTestId("member-positions-readonly").textContent).toContain("Arquitecto proyectista");
+    expect(screen.getByTestId("member-positions-readonly").textContent).not.toContain("Residente de obra");
   });
 
   it("keeps the other fields editable", () => {
@@ -114,13 +136,12 @@ describe("MemberEditorDrawer — Google-managed staff", () => {
     expect(isDisabled(screen.getByDisplayValue("López"))).toBe(false);
   });
 
-  it("leaves role, access and áreas editable for staff not managed by Google", () => {
+  it("leaves puestos and access editable for staff not managed by Google", () => {
     renderDrawer();
     expect(screen.queryByText("Google Workspace")).toBeNull();
-    expect(isDisabled(screen.getByLabelText("Puesto"))).toBe(false);
     expect(isDisabled(screen.getByRole("combobox", { name: "Acceso" }))).toBe(false);
-    expect(screen.getByPlaceholderText("Buscar área...")).toBeTruthy();
-    expect(screen.queryByTestId("member-areas-readonly")).toBeNull();
+    expect(screen.getByPlaceholderText("Buscar puesto...")).toBeTruthy();
+    expect(screen.queryByTestId("member-positions-readonly")).toBeNull();
   });
 
   it("shows Revisar acceso ahora only to an Administrador on a Google-managed member", () => {
@@ -217,5 +238,60 @@ describe("MemberEditorDrawer — Acceso al sistema panel (#657)", () => {
   it("renders a single Sin acceso al sistema badge for a password-only member without access", () => {
     renderDrawer({ accessPreviewState: noPassword });
     expect(screen.getAllByText("Sin acceso al sistema")).toHaveLength(1);
+  });
+});
+
+describe("MemberEditorDrawer — Puestos", () => {
+  afterEach(cleanup);
+
+  it("has no free-text Puesto field", () => {
+    renderDrawer();
+    expect(screen.queryByLabelText("Puesto")).toBeNull();
+  });
+
+  it("shows the candidate fases of the selected puestos", () => {
+    renderDrawer();
+    expect(screen.getByTestId("member-candidate-phases").textContent).toBe(
+      "Fases candidatas: Diseño · Ejecutivo, Diseño · Proyecto Estructural"
+    );
+  });
+
+  it("updates the candidate fases live when puestos change", () => {
+    function Harness() {
+      const [current, setCurrent] = useState<MemberDraft>(draft);
+      return (
+        <MemberEditorDrawer
+          show
+          onClose={() => undefined}
+          editingId={STAFF_ID}
+          draft={current}
+          onChangeDraft={setCurrent}
+          formError=""
+          onSave={() => undefined}
+          accessPreviewState={accessState}
+          isEditingSelfProtectedAdmin={false}
+          teamCapabilities={capabilities}
+          availabilityOptions={["Disponible"]}
+          positionOptions={positions}
+        />
+      );
+    }
+    render(<Harness />);
+    fireEvent.change(screen.getByPlaceholderText("Buscar puesto..."), { target: { value: "Residente" } });
+    fireEvent.click(screen.getByText("Residente de obra"));
+    expect(screen.getByTestId("member-candidate-phases").textContent).toContain("Construcción · Obra");
+  });
+
+  it("points admins to Configuración → Puestos when the catalog is empty", () => {
+    renderDrawer({ positionOptions: [], canManagePositions: true, draft: { ...draft, positionIds: [] } });
+    expect(screen.getByTestId("member-positions-empty").textContent).toBe(
+      "Aún no hay puestos. Créalos en Configuración → Puestos."
+    );
+    expect(screen.getByRole("link", { name: "Configuración → Puestos" }).getAttribute("href")).toBe(
+      "/configuracion/puestos"
+    );
+    cleanup();
+    renderDrawer({ positionOptions: [], draft: { ...draft, positionIds: [] } });
+    expect(screen.queryByRole("link", { name: "Configuración → Puestos" })).toBeNull();
   });
 });

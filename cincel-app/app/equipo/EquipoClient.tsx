@@ -13,12 +13,12 @@ import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Progress } from "@/components/ui/shadcn/progress";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/shadcn/tooltip";
 import { MemberProfileModal } from "@/components/equipo/MemberProfileModal";
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { CoordinatorProjectsModal } from "@/components/equipo/CoordinatorProjectsModal";
 import { Button } from "@/components/ui/shadcn/button";
 import ExportMenu from "@/components/ui/ExportMenu";
-import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { formatLastLogin, revokedReasonLabel } from "@/lib/equipo/google-access";
 import {
@@ -28,15 +28,16 @@ import {
   setStaffActiveAction,
 } from "@/lib/actions/staff-actions";
 import type { EmergencyContact } from "@/lib/types/core";
-import { fetchAreasAction } from "@/lib/actions/areas-actions";
+import { fetchPositionsAction } from "@/lib/actions/positions-actions";
 import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { useMemberEditor } from "@/lib/equipo/use-member-editor";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { canExportStaff, exportStaffAction } from "@/lib/equipo/staff-export";
+import { formatCandidatePhases, summarizeCandidatePhases } from "@/lib/equipo/candidate-phases";
 import type { TeamMemberWithWorkload } from "@/lib/equipo/types";
-import type { Area, Staff } from "@/lib/types/core";
+import type { Position, Staff } from "@/lib/types/core";
 
 const AVAILABILITY_OPTIONS = [
   "Disponible",
@@ -68,8 +69,7 @@ const AVAILABILITY_VARIANT: Record<string, "success" | "secondary" | "outline"> 
 export function EquipoClient({ initialTeam }: EquipoClientProps) {
   const generalSettings = useGeneralSettings();
   const [staff, setStaff] = useState<Staff[]>(initialTeam);
-  const [areaOptions, setAreaOptions] = useState<Area[]>([]);
-  const [areaNamesByStaffId, setAreaNamesByStaffId] = useState<Record<string, string[]>>({});
+  const [positionOptions, setPositionOptions] = useState<Position[]>([]);
   const [taskLoad, setTaskLoad] = useState<
     Record<string, { assigned: number; support: number; projects: Set<string> }>
   >({});
@@ -83,20 +83,14 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
   const [emergencyContacts, setEmergencyContacts] = useState<Record<string, EmergencyContact> | null>(null);
 
   async function refresh() {
-    const [staffRows, areaRows, taskRows, projectRows] = await Promise.all([
+    const [staffRows, positionRows, taskRows, projectRows] = await Promise.all([
       fetchStaffAction({ includeInactive: true }),
-      fetchAreasAction(),
+      fetchPositionsAction(),
       fetchTasksAction({ archived: false }),
       fetchProjectsAction(),
     ]);
     setStaff(staffRows);
-    setAreaOptions(areaRows);
-
-    const areaMap: Record<string, string[]> = {};
-    for (const area of areaRows) {
-      for (const member of area.members) (areaMap[member.staffId] ??= []).push(area.name);
-    }
-    setAreaNamesByStaffId(areaMap);
+    setPositionOptions(positionRows);
 
     const load: Record<string, { assigned: number; support: number; projects: Set<string> }> = {};
     const ensure = (id: string) => (load[id] ??= { assigned: 0, support: 0, projects: new Set() });
@@ -147,7 +141,6 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
     closeEditor,
     saveMember,
   } = useMemberEditor({ authenticatedUser, onSaved: refresh });
-  const positionsCapabilities = useMemo(() => resolvePositionsCapabilities(authenticatedUser), [authenticatedUser]);
   const isAdministrator = authenticatedUser?.access === SYSTEM_ADMIN_ROLE;
 
   function toggle(id: string | number) {
@@ -177,7 +170,6 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         return {
           ...member,
           institutionalEmail: member.email ?? "",
-          areas: areaNamesByStaffId[member.id] ?? [],
           assigned: load.assigned,
           support: load.support,
           total,
@@ -188,7 +180,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
           loadLabel: loadLabel(occupancy, member.active),
         };
       }),
-    [staff, taskLoad, coordinatorProjectsByStaffId, areaNamesByStaffId]
+    [staff, taskLoad, coordinatorProjectsByStaffId]
   );
 
   const profileMember = withWorkload.find((m) => m.id === profileMemberId) ?? null;
@@ -226,16 +218,45 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
           />
         ),
       },
-      { accessorKey: "role", header: "Puesto" },
       {
-        id: "areas",
-        header: "Área",
-        cell: ({ row }) =>
-          row.original.areas.length > 0 ? (
-            <span className="text-sm text-foreground">{row.original.areas.join(", ")}</span>
-          ) : (
-            <span className="text-sm text-muted-foreground">Sin área</span>
-          ),
+        id: "positions",
+        header: "Puestos",
+        cell: ({ row }) => {
+          const positions = row.original.positions ?? [];
+          if (positions.length === 0) return <span className="text-sm text-muted-foreground">Sin puesto</span>;
+          return (
+            <div className="flex flex-wrap gap-1">
+              {positions.map((position) => (
+                <Badge key={position.id} variant="secondary">
+                  {position.name}
+                </Badge>
+              ))}
+            </div>
+          );
+        },
+      },
+      {
+        id: "candidatePhases",
+        header: "Fases candidatas",
+        cell: ({ row }) => {
+          const phases = row.original.candidatePhases ?? [];
+          if (phases.length === 0) return <span className="text-sm text-muted-foreground">Sin fases</span>;
+          const { text, extra } = summarizeCandidatePhases(phases);
+          return (
+            <Tooltip>
+              <TooltipTrigger render={<span className="text-sm text-foreground" />}>
+                {text}
+                {extra > 0 ? <span className="text-muted-foreground"> +{extra}</span> : null}
+              </TooltipTrigger>
+              <TooltipContent>{formatCandidatePhases(phases)}</TooltipContent>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        id: "access",
+        header: "Acceso",
+        cell: ({ row }) => <span className="text-sm text-foreground">{row.original.role || "Sin definir"}</span>,
       },
       {
         id: "load",
@@ -425,7 +446,7 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         data={visible}
         getRowId={(row) => row.id}
         onRowClick={(row) => setProfileMemberId(row.id)}
-        onReorderRows={positionsCapabilities.canManagePositions && view === "activos" ? (ids) => void reorderTeam(ids) : undefined}
+        onReorderRows={teamCapabilities.canEditCollaborator && view === "activos" ? (ids) => void reorderTeam(ids) : undefined}
         wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
         emptyMessage={view === "activos" ? "No hay colaboradores activos." : "No hay colaboradores desactivados."}
       />
@@ -453,7 +474,8 @@ export function EquipoClient({ initialTeam }: EquipoClientProps) {
         isEditingSelfProtectedAdmin={isEditingSelfProtectedAdmin}
         teamCapabilities={teamCapabilities}
         availabilityOptions={AVAILABILITY_OPTIONS}
-        areaOptions={areaOptions}
+        positionOptions={positionOptions}
+        canManagePositions={isAdministrator}
         googleManaged={editingGoogleManaged}
         googleAccess={editingGoogleAccess}
         canRecheckAccess={isAdministrator}

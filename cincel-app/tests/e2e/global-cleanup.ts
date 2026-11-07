@@ -61,6 +61,8 @@ async function purgeE2ERows(): Promise<void> {
     `;
     await sql`delete from core.auth_credentials where staff_id in (select id from core.staff where name like '%E2E%')`;
     await sql`delete from core.staff where name like '%E2E%'`;
+    // staff_positions and position_phases cascade with the puesto.
+    await sql`delete from core.positions where name like '%E2E%'`;
     await sql`delete from core.resource_links where title like '%E2E%'`;
   } catch (err) {
     // A missing DB in a pure-mock run is not fatal for the suite.

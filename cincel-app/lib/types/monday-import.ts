@@ -99,21 +99,20 @@ export interface MondayImportRunState {
 
 // --- Paso 3: Equivalencias choices -------------------------------------------
 
-/** The Cincel side of every Equivalencias select. */
+/** The Cincel side of every Equivalencias select (project flow FE §7.8). */
 export interface MondayImportChoices {
-  /** `countsAsCompleted` is filled once the importer switches (Phase 4). */
-  statuses: { id: string; name: string; closes: boolean; countsAsCompleted?: boolean }[];
-  areas: { id: string; name: string; workflowIds: string[] }[];
-  /** `phases` (catalog order) is filled once the importer switches (Phase 4). */
-  workflows: { id: string; name: string; phases?: { id: string; name: string; sortOrder: number }[] }[];
-  /** Active templates; `phase` names their workflow's phases for the groups table (#687). */
-  templates: { id: string; workflowId: string; name: string; phase?: string | null; phaseId?: string }[];
+  statuses: { id: string; name: string; closes: boolean; countsAsCompleted: boolean }[];
+  /** Active tramos with their active fases, in catalog order. */
+  workflows: { id: string; name: string; phases: { id: string; name: string; sortOrder: number }[] }[];
+  /** Active templates with their fase. */
+  templates: { id: string; workflowId: string; phaseId: string; name: string }[];
+  /** Live, active puestos with their candidate fases. */
+  positions: { id: string; name: string; phaseIds: string[] }[];
   clients: { id: string; name: string }[];
   staff: { id: string; name: string; email: string | null }[];
   providerSubtypes: string[];
-  /** Project flow (FE §7.8), filled by getImportChoices in Phase 4: puestos and the saved status map. */
-  positions?: { id: string; name: string; phaseIds: string[] }[];
-  statusMap?: MondayStatusMap;
+  /** The saved firm-wide status map (RD-5). */
+  statusMap: MondayStatusMap;
 }
 
 /** Per board: what init found in the export, so every monday thing has a row in the table. */
@@ -128,11 +127,6 @@ export interface MondayBoardSource {
   itemCount: number;
   /** Active top-level items, for template matches and project names by item. */
   items: { id: string; name: string; groupId: string | null }[];
-  /**
-   * Distinct values of the dropdown, status and text columns that can give tasks their área and workflow (#686):
-   * columnId → values, as translate reads them. Subitem columns on item_as_project boards, item columns otherwise.
-   */
-  taskAreaValues?: Record<string, string[]>;
   /** monday people in the people columns of the board's items and subitems, for the card avatars (#685). */
   userIds?: string[];
 }
@@ -199,16 +193,19 @@ export interface MondayPreviewSample {
     customStatus: string | null;
     priority: string | null;
     manager: string | null;
+    /** A task's tramo; a project's tramos, joined. */
+    tramo: string | null;
+    /** A task's fase. */
     phase: string | null;
-    /** A project sample's workflow and any stages its groups add (#687), joined; null otherwise. */
-    workflow: string | null;
-    /** A task sample's área, from its monday value or the board (#686); null when it has none. */
-    area?: string | null;
-    /** A task sample whose monday área value has no equivalent yet (#686): it keeps the board's workflow. */
-    areaUnmapped?: boolean;
+    /** A task with no template and no fase-name match: "Sin fase · revisar". */
+    phaseReview: boolean;
+    /** The espacio a task goes to (a `space` group). */
+    space: string | null;
+    /** A task of a "Tareas de administración" group. */
+    admin: boolean;
     commitmentDate: string | null;
     deliveryDate: string | null;
-    kind: "workflow" | "usuario" | null;
+    kind: "workflow" | "usuario" | "admin" | null;
     template: boolean;
     checklistItems: number;
     /** Top-level tasks of a project sample. */

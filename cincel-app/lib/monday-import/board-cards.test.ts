@@ -16,11 +16,22 @@ import {
   toggleBoard,
   workspaceLabel,
 } from "@/lib/monday-import/board-cards";
-import { setStatusTarget, updateBoard, type BoardDraft } from "@/lib/monday-import/wizard-steps";
+import { updateBoard, type BoardDraft } from "@/lib/monday-import/wizard-steps";
 import type { MappingInput } from "@/scripts/monday/mapping.schema";
 import type { MondayBoardSource, MondayConnection, MondayExportSource, MondayPreview } from "@/lib/types/monday-import";
 
 const CLIENT = "33333333-3333-4333-8333-333333333333";
+const DISENO = "44444444-4444-4444-8444-444444444441";
+const OBRA = "44444444-4444-4444-8444-444444444442";
+const FASE_OBRA = "55555555-5555-4555-8555-555555555551";
+
+/** The catalog: tramo "Diseño", and "Construcción" with the fase "Obra". */
+const choices = {
+  workflows: [
+    { id: DISENO, name: "Diseño", phases: [] },
+    { id: OBRA, name: "Construcción", phases: [{ id: FASE_OBRA, name: "Obra", sortOrder: 1 }] },
+  ],
+};
 
 const connection: MondayConnection = {
   account: { id: "1", slug: "acme", name: "Acme" },
@@ -73,49 +84,83 @@ function ruiz(overrides: Partial<BoardDraft> = {}): BoardDraft {
     name: "Casa Ruiz",
     strategy: "board_as_project",
     client: { kind: "contact", contactId: CLIENT },
+    workflowId: DISENO,
     columns: { status: "status" },
-    statusMaps: { status: { "0": { status: "en_proceso" } } },
     ...overrides,
   };
 }
 
 function mappingOf(...boards: BoardDraft[]): MappingInput {
-  return { version: 1, boards, people: {}, options: { includeUpdates: true, includeFiles: false } };
+  return { version: 2, boards, people: {}, options: { includeUpdates: true, includeFiles: false } };
 }
+
+const issueOf = (code: string, boardId: string, message: string, blocking = true) => ({
+  code,
+  blocking,
+  boardId,
+  itemId: null,
+  boardName: null,
+  itemName: null,
+  message,
+  fixStep: "equivalencias",
+});
+
+const previewWith = (...issues: ReturnType<typeof issueOf>[]) =>
+  ({ canApply: false, totals: {} as MondayPreview["totals"], boards: [], issues }) as unknown as MondayPreview;
 
 describe("board card problems and chips (#685)", () => {
   it("is «mapear» until exported and opened, «listo» once opened without problems", () => {
     expect(boardChip([], false, true)).toEqual({ kind: "mapear" });
     expect(boardChip([], true, false)).toEqual({ kind: "mapear" });
     expect(boardChip([], true, true)).toEqual({ kind: "listo" });
-    expect(boardChip(["Sin cliente."], true, false)).toEqual({ kind: "problemas", count: 1 });
+    expect(boardChip(["Elige un tramo."], true, false)).toEqual({ kind: "problemas", count: 1 });
     expect(chipLabel({ kind: "problemas", count: 3 })).toBe("⚠ 3");
   });
 
-  it("counts a missing client and labels that defaulted to Pendiente", () => {
-    const mapping = mappingOf(ruiz({ client: null, statusMaps: { status: { "0": { status: "pendiente", defaulted: true } } } }));
-    expect(boardProblems(mapping, "b1", ruizSource)).toEqual(["Sin cliente.", "1 estatus sin equivalente."]);
+  it("no longer counts a missing client", () => {
+    expect(boardProblems(mappingOf(ruiz({ client: null })), "b1", ruizSource)).toEqual([]);
   });
 
-  it("clears a problem as soon as the draft fixes it", () => {
-    const broken = mappingOf(ruiz({ statusMaps: { status: { "0": { status: "pendiente", defaulted: true } } } }));
-    expect(boardProblems(broken, "b1", ruizSource)).toHaveLength(1);
-    const fixed = updateBoard(broken, "b1", (board) => setStatusTarget(board, "status", "0", { status: "pendiente" }));
+  it("asks for a tramo when some tasks resolve none, and clears it as soon as the draft fixes it", () => {
+    const broken = mappingOf(ruiz({ workflowId: null }));
+    expect(boardProblems(broken, "b1", ruizSource)).toEqual(["Elige un tramo."]);
+    const fixed = updateBoard(broken, "b1", (board) => ({ ...board, workflowId: OBRA }));
     expect(boardProblems(fixed, "b1", ruizSource)).toEqual([]);
+    // Every group with items placed in a tramo or fase needs no board tramo; an espacio does.
+    const placed = mappingOf(
+      ruiz({ workflowId: null, groupTargets: { g1: { kind: "tramo", workflowId: DISENO }, g2: { kind: "admin" } } }),
+    );
+    expect(boardProblems(placed, "b1", ruizSource)).toEqual([]);
+    const space = mappingOf(
+      ruiz({ workflowId: null, groupTargets: { g1: { kind: "tramo", workflowId: DISENO }, g2: { kind: "space" } } }),
+    );
+    expect(boardProblems(space, "b1", ruizSource)).toEqual(["Elige un tramo."]);
   });
 
-  it("flags área values without an equivalent and the preview's blocking issues of the board", () => {
-    const mapping = mappingOf(ruiz({ taskAreaSource: { kind: "group" } }));
-    const preview = {
-      canApply: false,
-      totals: {} as MondayPreview["totals"],
-      boards: [],
-      issues: [
-        { code: "X", blocking: true, boardId: "b1", itemId: null, boardName: null, itemName: null, message: "Falta algo.", fixStep: "equivalencias" },
-        { code: "X", blocking: true, boardId: "b2", itemId: null, boardName: null, itemName: null, message: "Otro tablero.", fixStep: "equivalencias" },
-      ],
-    } as unknown as MondayPreview;
-    expect(boardProblems(mapping, "b1", ruizSource, preview)).toEqual(["2 valores de área sin equivalente.", "Falta algo."]);
+  it("counts groups named like a tramo or fase as placed when the catalog is given", () => {
+    const mapping = mappingOf(ruiz({ workflowId: null }));
+    // "Diseño" is a tramo and "Obra" a fase of Construcción.
+    expect(boardProblems(mapping, "b1", ruizSource, null, choices)).toEqual([]);
+    const other = { ...ruizSource, groups: [{ id: "g1", title: "Diseño" }, { id: "g2", title: "Varios" }] };
+    expect(boardProblems(mapping, "b1", other, null, choices)).toEqual(["Elige un tramo."]);
+  });
+
+  it("warns about tasks without a fase and lists the preview's blocking issues of the board", () => {
+    const preview = previewWith(
+      issueOf("PHASE_UNRESOLVED", "b1", "«Planos» no coincide con ninguna fase.", false),
+      issueOf("PHASE_UNRESOLVED", "b1", "«Renders» no coincide con ninguna fase.", false),
+      issueOf("PHASE_UNRESOLVED", "b2", "Otro tablero.", false),
+      issueOf("X", "b1", "Falta algo."),
+      issueOf("X", "b2", "Otro tablero."),
+    );
+    expect(boardProblems(mappingOf(ruiz()), "b1", ruizSource, preview)).toEqual(["2 tareas sin fase.", "Falta algo."]);
+    const one = previewWith(issueOf("PHASE_UNRESOLVED", "b1", "«Planos».", false));
+    expect(boardProblems(mappingOf(ruiz()), "b1", ruizSource, one)).toEqual(["1 tarea sin fase."]);
+  });
+
+  it("doesn't repeat the preview's TRAMO_MISSING next to «Elige un tramo.»", () => {
+    const preview = previewWith(issueOf("TRAMO_MISSING", "b1", "Elige un tramo: hay tareas sin tramo."));
+    expect(boardProblems(mappingOf(ruiz({ workflowId: null })), "b1", ruizSource, preview)).toEqual(["Elige un tramo."]);
   });
 
   it("asks to export again when the board is in the draft but not in the export", () => {

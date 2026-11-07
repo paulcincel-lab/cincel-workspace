@@ -42,9 +42,11 @@ import {
   recordCreatedStaff,
   resolveWizardToken,
   saveDraft,
+  saveStatusMap,
   startApply,
   startExport,
   startRollback,
+  suggestPosition,
   uploadDraft,
   WizardError,
   type WizardDeps,
@@ -52,7 +54,7 @@ import {
 import { FIRST_LOGIN_WIZARD_ROUTES } from "@/lib/onboarding/first-login";
 import accountFixture from "@/scripts/monday/__fixtures__/export-account.json";
 import { createMondayClient, type FetchLike } from "@/scripts/monday/client";
-import type { InitLookups } from "@/scripts/monday/init";
+import { createDbLookups, draftStatusMap, type InitLookups } from "@/scripts/monday/init";
 import type { MappingInput } from "@/scripts/monday/mapping.schema";
 import type { PlanLookups } from "@/scripts/monday/plan";
 
@@ -117,8 +119,8 @@ const noInitMatches: InitLookups = {
   customStatuses: async () => new Map(),
   matchClient: async () => null,
   contactsByName: async () => new Map(),
-  matchArea: async () => null,
-  areaWorkflows: async () => [],
+  workflows: async () => [],
+  savedStatusMap: async () => ({}),
   templateCandidates: async () => [],
 };
 
@@ -132,7 +134,6 @@ const planLookups: PlanLookups = {
   projectNamesTaken: async () => new Set(),
   projectCodesTaken: async () => new Set(),
   workflowIds: async () => new Set(),
-  areaWorkflowIds: async () => new Map(),
   projectTemplatesTaken: async () => new Set(),
   foreignSchedules: async () => new Set(),
 };
@@ -326,7 +327,13 @@ describe("monday wizard draft and preview", () => {
 
   it("previews the plan as counts per Cincel entity and 5 sample items per board", async () => {
     const run = await nestedRun(nestedMapping(ANA, CLIENT));
-    const deps = { db: {} as ImportDb, env, openDrive: okDrive, planLookups: () => planLookups } satisfies WizardDeps;
+    const deps = {
+      db: {} as ImportDb,
+      env,
+      openDrive: okDrive,
+      planLookups: () => planLookups,
+      savedStatusMap: async () => ({}),
+    } satisfies WizardDeps;
     const preview = await previewImport(run.runId, ADMIN, deps);
 
     expect(preview.canApply).toBe(true);
@@ -340,12 +347,10 @@ describe("monday wizard draft and preview", () => {
     const casaNido = preview.boards[0];
     expect(casaNido.samples.filter((s) => s.entity === "tarea").length).toBeLessThanOrEqual(5);
     expect(casaNido.samples.map((s) => s.mondayName)).toEqual(["Casa Nido", "Muros", "Planos", "Limpieza"]);
-    // A board-as-project shows the project it makes, with its phases, ahead of its tasks (#678).
-    expect(casaNido.samples[0]).toMatchObject({ entity: "proyecto", cincel: { title: "Casa Nido", workflow: null } });
-    expect(casaNido.samples[0].cincel.phase).not.toBeNull();
-    expect(casaNido.samples[1]).toMatchObject({ entity: "tarea", cincel: { project: "Casa Nido" } });
-    // An item-as-project shows its group as its phase, as apply writes it (#678).
-    expect(preview.boards[2].samples[0]).toMatchObject({ entity: "proyecto", mondayName: "Casa Mar", cincel: { phase: "2026" } });
+    // A board-as-project shows the project it makes ahead of its tasks (#678); a project has tramos, not fases.
+    expect(casaNido.samples[0]).toMatchObject({ entity: "proyecto", cincel: { title: "Casa Nido", phase: null } });
+    expect(casaNido.samples[1]).toMatchObject({ entity: "tarea", cincel: { project: "Casa Nido", admin: false } });
+    expect(preview.boards[2].samples[0]).toMatchObject({ entity: "proyecto", mondayName: "Casa Mar" });
     // a project sample counts its tasks as tareas, not subtareas
     expect(preview.boards[2].samples[0].cincel.childTasks).toBe(0);
     expect(preview.boards[3].samples[0]).toMatchObject({ entity: "contacto", mondayName: "Familia Mar" });
@@ -362,10 +367,83 @@ describe("monday wizard draft and preview", () => {
       env,
       openDrive: okDrive,
       planLookups: () => planLookups,
+      savedStatusMap: async () => ({}),
     });
     expect(preview.issues.map((i) => i.code)).not.toContain("DRIVE_NOT_CONFIGURED");
     const stored = JSON.parse(readFileSync(join(runDir(run.runId, env), "mapping.json"), "utf8")) as MappingInput;
     expect(stored.options).toMatchObject({ includeFiles: false });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Puesto suggestion (project flow BE §10.8)
+// ---------------------------------------------------------------------------
+
+describe("monday wizard puesto suggestion", () => {
+  const TRAMO = "66666666-6666-4666-8666-666666666661";
+  const FASE_OBRA = "66666666-6666-4666-8666-666666666662";
+  const FASE_DISENO = "66666666-6666-4666-8666-666666666663";
+
+  /** nestedMapping as a v2 draft: every task board in one tramo, Casa Nido's groups on its two fases. */
+  function flowMapping(): MappingInput {
+    const raw = JSON.parse(JSON.stringify(nestedMapping(ANA, CLIENT))) as MappingInput;
+    const boards = raw.boards.map((board) => {
+      const out = { ...board } as Record<string, unknown>;
+      for (const key of ["statusMaps", "areaId", "taskAreaSource", "taskAreas"]) delete out[key];
+      return (board.strategy === "crm_contacts" ? out : { ...out, workflowId: TRAMO }) as MappingInput["boards"][number];
+    });
+    boards[0] = {
+      ...boards[0],
+      groupTargets: { g_obra: { kind: "phase", phaseId: FASE_OBRA }, g_diseno: { kind: "phase", phaseId: FASE_DISENO } },
+    };
+    return { ...raw, version: 2, boards };
+  }
+
+  const flowPlanLookups: PlanLookups = {
+    ...planLookups,
+    workflowIds: async (ids) => new Set(ids),
+    translateLookups: async () => ({
+      ...(await planLookups.translateLookups()),
+      phases: {
+        [FASE_DISENO]: { workflowId: TRAMO, name: "Diseño", sortOrder: 1 },
+        [FASE_OBRA]: { workflowId: TRAMO, name: "Obra", sortOrder: 2 },
+      },
+      workflows: { [TRAMO]: { name: "Proyecto", sortOrder: 1 } },
+    }),
+  };
+
+  const deps = (): WizardDeps => ({
+    db: {} as ImportDb,
+    env,
+    openDrive: okDrive,
+    planLookups: () => flowPlanLookups,
+    savedStatusMap: async () => ({}),
+    positionCatalog: async () => ({
+      positions: [
+        { id: "p-arq", name: "Arquitecto", sortOrder: 1, phaseIds: [FASE_DISENO] },
+        { id: "p-res", name: "Residente de obra", sortOrder: 2, phaseIds: [FASE_OBRA] },
+      ],
+      phases: {
+        [FASE_DISENO]: { workflowId: TRAMO, name: "Diseño", sortOrder: 1 },
+        [FASE_OBRA]: { workflowId: TRAMO, name: "Obra", sortOrder: 2 },
+      },
+      workflows: { [TRAMO]: { name: "Proyecto", sortOrder: 1 } },
+    }),
+  });
+
+  it("suggests the puesto whose candidate fases hold the person's tasks", async () => {
+    const run = await nestedRun(flowMapping());
+    // Dario is on Muros only (group Obra).
+    expect(await suggestPosition(run.runId, "14", deps())).toEqual({
+      position: { id: "p-res", name: "Residente de obra" },
+      tasks: 1,
+      topPhases: [{ workflowName: "Proyecto", phaseName: "Obra", tasks: 1 }],
+    });
+  });
+
+  it("suggests nothing for a person without tasks in the import", async () => {
+    const run = await nestedRun(flowMapping());
+    expect(await suggestPosition(run.runId, "999", deps())).toEqual({ position: null, tasks: 0, topPhases: [] });
   });
 });
 
@@ -398,6 +476,35 @@ describe.skipIf(!url)("monday wizard apply and rollback (test DB)", { timeout: 6
         if (!(err instanceof Rollback)) throw err;
       });
   }
+
+  it("saves the firm-wide status map, refuses a deleted custom status, and a second import reuses it", async () => {
+    await inTx(async (tx) => {
+      const [status] = await tx.insert(schema.taskStatuses).values({ name: "En espera wizard" }).returning();
+      const saved = await saveStatusMap(tx, {
+        "  En   Proceso ": { target: { status: "en_proceso" } },
+        "siguiente paso": { target: { customStatusId: status.id }, priority: "alta" },
+      });
+      expect(saved).toEqual({
+        "en proceso": { target: { status: "en_proceso" }, priority: null },
+        "siguiente paso": { target: { customStatusId: status.id }, priority: "alta" },
+      });
+      const [row] = await tx
+        .select({ value: schema.appSettings.value })
+        .from(schema.appSettings)
+        .where(eq(schema.appSettings.key, "monday.status_map"));
+      expect(JSON.parse(row.value)).toEqual(saved);
+
+      // The next import's draft starts from the saved map: its labels aren't asked again.
+      expect(await createDbLookups(tx).savedStatusMap()).toEqual(saved);
+      expect(draftStatusMap([], new Map(), await createDbLookups(tx).savedStatusMap())).toEqual(saved);
+
+      await tx.update(schema.taskStatuses).set({ deletedAt: new Date() }).where(eq(schema.taskStatuses.id, status.id));
+      await expect(
+        saveStatusMap(tx, { "siguiente paso": { target: { customStatusId: status.id } } }),
+      ).rejects.toThrow("STATUS_NOT_FOUND");
+      await expect(saveStatusMap(tx, { x: { target: { status: "otro" } } })).rejects.toBeInstanceOf(WizardError);
+    });
+  });
 
   it("applies with files excluded and no Drive, matches the preview, lists the projects and rolls back", async () => {
     await inTx(async (tx) => {

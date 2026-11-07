@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * scripts/monday/plan.ts (BE §6, §11, §12 #2): the dry run.
+ * scripts/monday/plan.ts (BE §6, §11, §12 #2; project flow BE §10.4, §16): the dry run.
  *
  * Runs against the translate fixtures with fake Cincel lookups and a fake
  * Drive. The command tests write the nested fixture out as an export folder.
@@ -54,7 +54,9 @@ const WORKFLOW = "77777777-7777-4777-8777-777777777777";
 const BOARD_WORKFLOW = "88888888-8888-4888-8888-888888888888";
 const SOL = "99999999-9999-4999-8999-999999999999";
 const CLIENT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const AREA = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const PHASE_A = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const PHASE_B = "b0000000-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const GONE_STATUS = "f0000000-0000-4000-8000-0000000000aa";
 const OTHER_WORKFLOW = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const ROW = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const PROVEEDOR = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
@@ -69,9 +71,12 @@ interface FakeDb {
   contacts: Record<string, "cliente" | "socio" | "proveedor">;
   /** existing contacts by type: lower(name) */
   contactNames: { type: "cliente" | "socio" | "proveedor"; name: string }[];
-  projects: { clientId: string; name: string; code: string | null }[];
+  projects: {
+    name: string;
+    code: string | null;
+    status?: "activo" | "pausado" | "completado" | "cancelado";
+  }[];
   workflows: string[];
-  areas: Record<string, string[]>;
   /** entity → externalId → row id */
   refs: Partial<Record<ImportEntity, Record<string, string>>>;
   assets: string[];
@@ -80,16 +85,39 @@ interface FakeDb {
   foreignSchedules: string[];
 }
 
+/** The project flow lookups (BE §10.3): tramos with fases, templates by fase, the saved status map. */
+function translateLookups(): CincelLookups {
+  return {
+    customStatuses: {
+      [CUSTOM_OPEN]: { name: "Revisión cliente", closes: false },
+      [CUSTOM_CLOSES]: { name: "Hecho", closes: true },
+    },
+    statuses: { "revision cliente": CUSTOM_OPEN, hecho: CUSTOM_CLOSES },
+    templates: { [TEMPLATE]: { workflowId: BOARD_WORKFLOW, phaseId: PHASE_A } },
+    templateTitles: { [TEMPLATE]: "Cimentación" },
+    phases: {
+      [PHASE_A]: { workflowId: BOARD_WORKFLOW, name: "Estructura", key: null, sortOrder: 1 },
+      [PHASE_B]: { workflowId: BOARD_WORKFLOW, name: "Albañilería", key: null, sortOrder: 2 },
+    },
+    staff: { [ANA]: { name: "Ana", admin: false }, [BETO]: { name: "Beto", admin: false } },
+    workflows: {
+      [WORKFLOW]: { name: "Presale", sortOrder: 1 },
+      [BOARD_WORKFLOW]: { name: "Construcción", sortOrder: 3 },
+      [OTHER_WORKFLOW]: { name: "Decoración", sortOrder: 4 },
+    },
+    statusMap: {
+      pendiente: { target: { status: "pendiente" }, priority: null },
+      listo: { target: { status: "completado" }, priority: null },
+      detenido: { target: { status: "bloqueado" }, priority: null },
+      "revisión cliente": { target: { customStatusId: CUSTOM_OPEN }, priority: null },
+      "en curso": { target: { status: "en_proceso" }, priority: null },
+    },
+  };
+}
+
 function fakeDb(overrides: Partial<FakeDb> = {}): FakeDb {
   return {
-    translate: {
-      customStatuses: {
-        [CUSTOM_OPEN]: { name: "Revisión cliente", closes: false },
-        [CUSTOM_CLOSES]: { name: "Hecho", closes: true },
-      },
-      templates: { [TEMPLATE]: { workflowId: WORKFLOW } },
-      staff: { [ANA]: { name: "Ana" }, [BETO]: { name: "Beto" } },
-    },
+    translate: translateLookups(),
     contacts: {
       [CLIENT]: "cliente",
       [SOL]: "cliente",
@@ -98,7 +126,6 @@ function fakeDb(overrides: Partial<FakeDb> = {}): FakeDb {
     contactNames: [],
     projects: [],
     workflows: [WORKFLOW, BOARD_WORKFLOW, OTHER_WORKFLOW],
-    areas: { [AREA]: [WORKFLOW] },
     refs: {},
     assets: [],
     tasks: [],
@@ -132,24 +159,20 @@ function lookupsOf(db: FakeDb): PlanLookups {
           ),
         ),
       ),
-    projectNamesTaken: async (pairs) =>
+    projectNamesTaken: async (names) =>
       new Set(
-        pairs
-          .filter((p) =>
-            db.projects.some(
-              (x) =>
-                x.clientId === p.clientId &&
-                x.name.toLowerCase() === p.lowerName,
-            ),
-          )
-          .map((p) => `${p.clientId}|${p.lowerName}`),
+        names.filter((n) =>
+          db.projects.some(
+            (x) =>
+              ["activo", "pausado"].includes(x.status ?? "activo") &&
+              x.name.toLowerCase() === n,
+          ),
+        ),
       ),
     projectCodesTaken: async (codes) =>
       new Set(codes.filter((c) => db.projects.some((p) => p.code === c))),
     workflowIds: async (ids) =>
       new Set(ids.filter((id) => db.workflows.includes(id))),
-    areaWorkflowIds: async (ids) =>
-      new Map(ids.filter((id) => db.areas[id]).map((id) => [id, db.areas[id]])),
     projectTemplatesTaken: async (pairs) =>
       new Set(
         pairs
@@ -183,7 +206,7 @@ const nestedData = () =>
 /** A clean mapping of translate-export.json. */
 function mappingInput(): MappingInput {
   return {
-    version: 1,
+    version: 2,
     boards: [
       {
         mondayBoardId: "301",
@@ -191,7 +214,6 @@ function mappingInput(): MappingInput {
         strategy: "board_as_project",
         client: { kind: "contact", contactId: CLIENT },
         projectCode: "CL-01",
-        areaId: AREA,
         workflowId: BOARD_WORKFLOW,
         columns: {
           name: "title",
@@ -202,14 +224,6 @@ function mappingInput(): MappingInput {
           entrega: "delivery_date",
           notas: "notes",
           deps: "dependencies",
-        },
-        statusMaps: {
-          status: {
-            "0": { status: "pendiente" },
-            "1": { status: "completado" },
-            "2": { status: "bloqueado" },
-            "3": { customStatusId: CUSTOM_OPEN },
-          },
         },
         templateMatches: { "1003": TEMPLATE },
       },
@@ -224,23 +238,17 @@ function mappingInput(): MappingInput {
           email: "contact_email",
           phone: "contact_phone",
         },
-        statusMaps: {},
       },
       {
         mondayBoardId: "501",
         name: "Obras 2026",
         strategy: "item_as_project",
         client: { kind: "relation_column", columnId: "rel" },
+        workflowId: BOARD_WORKFLOW,
         projectNames: { "6002": "Casa Sol (Polanco)" },
         projectCodes: { "6001": "OB-RUIZ" },
         columns: { name: "title", rel: "client" },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: {
-          sstatus: {
-            "5": { customStatusId: CUSTOM_CLOSES },
-            "6": { status: "en_proceso" },
-          },
-        },
       },
       {
         mondayBoardId: "601",
@@ -249,7 +257,6 @@ function mappingInput(): MappingInput {
         contactType: "proveedor",
         providerSubtype: "contratista",
         columns: { name: "title" },
-        statusMaps: {},
       },
       {
         mondayBoardId: "701",
@@ -257,8 +264,8 @@ function mappingInput(): MappingInput {
         strategy: "group_as_project",
         groupClients: { ga: { kind: "new", name: "Familia Pérez" } },
         client: { kind: "new", name: "Familia López" },
+        workflowId: BOARD_WORKFLOW,
         columns: { name: "title" },
-        statusMaps: {},
       },
     ],
     people: {
@@ -273,23 +280,15 @@ function mappingInput(): MappingInput {
 
 /** The mapping of translate-nested-export.json (checklist, child tasks, item_as_project, crm). */
 function nestedMapping(): MappingInput {
-  const STATUS = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
-    "2": { status: "en_proceso" },
-  } as const;
-  const SUB = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
-  } as const;
   return {
-    version: 1,
+    version: 2,
     boards: [
       {
         mondayBoardId: "901",
         name: "Casa Nido",
         strategy: "board_as_project",
         client: { kind: "contact", contactId: CLIENT },
+        workflowId: BOARD_WORKFLOW,
         columns: {
           name: "title",
           status: "status",
@@ -299,7 +298,6 @@ function nestedMapping(): MappingInput {
           planta: "ignore",
         },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
         subitems: "checklist",
         schedule: { enabled: true, planta: { columnId: "planta" } },
       },
@@ -308,9 +306,9 @@ function nestedMapping(): MappingInput {
         name: "Casa Faro",
         strategy: "board_as_project",
         client: { kind: "contact", contactId: CLIENT },
+        workflowId: BOARD_WORKFLOW,
         columns: { name: "title", status: "status" },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
         subitems: "child_tasks",
       },
       {
@@ -318,9 +316,9 @@ function nestedMapping(): MappingInput {
         name: "Obras",
         strategy: "item_as_project",
         client: { kind: "contact", contactId: CLIENT },
+        workflowId: BOARD_WORKFLOW,
         columns: { name: "title", presupuesto: "import_data" },
         subitemColumns: { name: "title" },
-        statusMaps: {},
       },
       {
         mondayBoardId: "904",
@@ -328,7 +326,6 @@ function nestedMapping(): MappingInput {
         strategy: "crm_contacts",
         contactType: "cliente",
         columns: { name: "title", rfc: "import_data" },
-        statusMaps: {},
       },
     ],
     people: {
@@ -366,7 +363,7 @@ function board(input: MappingInput, id: string) {
 // ---------------------------------------------------------------------------
 
 describe("plan: codes", () => {
-  it("blocking and warning codes are the spec's (BE §6)", () => {
+  it("blocking and warning codes are the spec's (BE §6, project flow BE §10.4)", () => {
     expect([...BLOCKING_CODES]).toEqual([
       "MAPPING_INVALID",
       "CLIENT_UNRESOLVED",
@@ -379,7 +376,7 @@ describe("plan: codes", () => {
       "PROVIDER_SUBTYPE_MISSING",
       "SCHEDULE_EXISTS",
       "DRIVE_NOT_CONFIGURED",
-      "AREA_NAME_TAKEN",
+      "TRAMO_MISSING",
     ]);
     expect([...WARNING_CODES]).toEqual([
       "PERSON_UNMATCHED",
@@ -387,8 +384,21 @@ describe("plan: codes", () => {
       "DATES_MISSING",
       "FILE_MISSING",
       "STATUS_DEFAULTED",
-      "AREA_UNMAPPED",
+      "PHASE_UNRESOLVED",
+      "CLIENT_MISSING",
+      "ADMIN_ASSIGNEE_CLEARED",
     ]);
+  });
+
+  it("has no área codes left, so no área warning is possible", () => {
+    const all: string[] = [...BLOCKING_CODES, ...WARNING_CODES];
+    expect(all.filter((c) => c.startsWith("AREA_"))).toEqual([]);
+  });
+
+  it("every issue carries its code as its group", async () => {
+    const p = await plan();
+    expect(p.issues.length).toBeGreaterThan(0);
+    for (const i of p.issues) expect(i.group).toBe(i.code);
   });
 });
 
@@ -492,8 +502,10 @@ describe("plan: counts", () => {
       "| 901 | Casa Nido | board_as_project | 0 | 1 | 3 | 0 | 3 | 0 | 4 | 2 | 4 | 0 |",
     );
     expect(md).toContain("**Clean:**");
-    expect(md).toMatch(/\| DATES_MISSING \| 901 \| 2003 \|/);
-    expect(md).toMatch(/\| FILE_MISSING \| 901 \| 2002 \|/);
+    expect(md).toMatch(/### DATES_MISSING \(\d+\)/);
+    expect(md).toMatch(/### FILE_MISSING \(\d+\)/);
+    expect(md).toContain("| 901 | 2003 |");
+    expect(md).toContain("| 901 | 2002 |");
   });
 });
 
@@ -501,7 +513,8 @@ describe("plan: the clean fixture", () => {
   it("has no blocking issues and only translate's warnings", async () => {
     const p = await plan();
     expect(blocking(p)).toEqual([]);
-    expect(codes(p)).toEqual(["RELATION_MISSING"]);
+    expect(codes(p)).toContain("RELATION_MISSING");
+    for (const code of codes(p)) expect(WARNING_CODES).toContain(code);
   });
 });
 
@@ -540,11 +553,11 @@ describe("plan: blocking issues (each cleared by editing the mapping)", () => {
     ]);
   });
 
-  it("MAPPING_INVALID: a group mapped to a stage whose workflow doesn't exist (#687)", async () => {
+  it("MAPPING_INVALID: a group mapped to a tramo that doesn't exist", async () => {
     const input = mappingInput();
     board(input, "301").groupTargets = {
-      g_obra: { kind: "stage", workflowId: "f0000000-0000-4000-8000-000000000002" },
-      g_diseno: { kind: "stage", workflowId: OTHER_WORKFLOW },
+      g_obra: { kind: "tramo", workflowId: "f0000000-0000-4000-8000-000000000002" },
+      g_diseno: { kind: "tramo", workflowId: OTHER_WORKFLOW },
     };
     const p = await plan(input);
     expect(ofCode(p, "MAPPING_INVALID")).toEqual([
@@ -555,21 +568,21 @@ describe("plan: blocking issues (each cleared by editing the mapping)", () => {
     ]);
   });
 
-  it("CLIENT_UNRESOLVED: no client, or a client that isn't a live cliente", async () => {
+  it("CLIENT_UNRESOLVED: a chosen client that isn't a live cliente", async () => {
     const p = await plan();
     expect(ofCode(p, "CLIENT_UNRESOLVED")).toEqual([]);
     const input = mappingInput();
     board(input, "301").client = { kind: "contact", contactId: PROVEEDOR };
-    const bad = await plan(input, fakeDb(), withoutClient());
+    const bad = await plan(input);
     expect(
       ofCode(bad, "CLIENT_UNRESOLVED").map((i) => [
         i.boardId,
         i.itemId ?? null,
       ]),
-    ).toEqual([
-      ["301", null],
-      ["501", "6003"],
-    ]);
+    ).toEqual([["301", null]]);
+    // The project was imported before: apply leaves its client alone.
+    const again = await plan(input, fakeDb({ refs: { project: { "301": ROW } } }));
+    expect(ofCode(again, "CLIENT_UNRESOLVED")).toEqual([]);
   });
 
   it("CONTACT_NAME_TAKEN: an existing contact, or twice in the import", async () => {
@@ -599,37 +612,65 @@ describe("plan: blocking issues (each cleared by editing the mapping)", () => {
     ]);
   });
 
-  it("PROJECT_NAME_TAKEN: an existing project of the client, or twice in the import", async () => {
+  it("PROJECT_NAME_TAKEN: a live active or paused project, or twice in the import", async () => {
     const db = fakeDb({
-      projects: [{ clientId: CLIENT, name: "casa lomas", code: null }],
+      projects: [{ name: "casa lomas", code: null, status: "activo" }],
     });
     const taken = await plan(mappingInput(), db);
     expect(ofCode(taken, "PROJECT_NAME_TAKEN")).toEqual([
       expect.objectContaining({
         boardId: "301",
+        blocking: true,
         message: expect.stringContaining('"Casa Lomas"'),
       }),
     ]);
+    // Firm-wide: the existing project needn't share the client.
+    const paused = fakeDb({
+      projects: [{ name: "CASA LOMAS", code: null, status: "pausado" }],
+    });
+    expect(ofCode(await plan(mappingInput(), paused), "PROJECT_NAME_TAKEN")).toHaveLength(1);
+    // Archived projects free their name.
+    const archived = fakeDb({
+      projects: [
+        { name: "Casa Lomas", code: null, status: "completado" },
+        { name: "Casa Lomas", code: null, status: "cancelado" },
+      ],
+    });
+    expect(ofCode(await plan(mappingInput(), archived), "PROJECT_NAME_TAKEN")).toEqual([]);
+    // Cleared by renaming it.
     const fixed = mappingInput();
     board(fixed, "301").projectNames = { "301": "Casa Lomas (monday)" };
     expect(ofCode(await plan(fixed, db), "PROJECT_NAME_TAKEN")).toEqual([]);
+    // The project is the one imported before: no issue.
+    const reimported = fakeDb({
+      projects: db.projects,
+      refs: { project: { "301": ROW } },
+    });
+    expect(ofCode(await plan(mappingInput(), reimported), "PROJECT_NAME_TAKEN")).toEqual([]);
+  });
 
-    // Both groups of 701 under one new client, with the same name.
+  it("PROJECT_NAME_TAKEN: two planned projects with one name, even of different clients", async () => {
     const twice = mappingInput();
-    board(twice, "701").groupClients = {};
     board(twice, "701").projectNames = { ga: "Depto", gb: "depto" };
     const dup = await plan(twice);
     expect(ofCode(dup, "PROJECT_NAME_TAKEN")).toEqual([
       expect.objectContaining({
         boardId: "701",
+        blocking: true,
         message: expect.stringContaining("2 new projects"),
       }),
+    ]);
+    // Across boards too: 701's group named like board 301's project.
+    const across = mappingInput();
+    board(across, "701").projectNames = { ga: "Casa Lomas" };
+    expect(ofCode(await plan(across), "PROJECT_NAME_TAKEN")).toEqual([
+      expect.objectContaining({ message: expect.stringContaining("2 new projects") }),
     ]);
   });
 
   it("PROJECT_CODE_TAKEN: an existing code, or twice in the import", async () => {
     const db = fakeDb({
-      projects: [{ clientId: SOL, name: "Otro", code: "OB-RUIZ" }],
+      projects: [{ name: "Otro", code: "OB-RUIZ" }],
     });
     expect(
       ofCode(await plan(mappingInput(), db), "PROJECT_CODE_TAKEN"),
@@ -644,11 +685,14 @@ describe("plan: blocking issues (each cleared by editing the mapping)", () => {
     expect(ofCode(await plan(), "PROJECT_CODE_TAKEN")).toEqual([]);
   });
 
-  it("STATUS_UNMAPPED: a used label id without a target", async () => {
-    const input = mappingInput();
-    delete board(input, "301").statusMaps.status["2"];
-    expect(ofCode(await plan(input), "STATUS_UNMAPPED")).toEqual([
-      expect.objectContaining({ boardId: "301", itemId: "1003" }),
+  it("STATUS_UNMAPPED: a saved status map entry whose custom status is gone", async () => {
+    const db = fakeDb();
+    db.translate.statusMap!["revisión cliente"] = {
+      target: { customStatusId: GONE_STATUS },
+      priority: null,
+    };
+    expect(ofCode(await plan(mappingInput(), db), "STATUS_UNMAPPED")).toEqual([
+      expect.objectContaining({ boardId: "301", itemId: "1002" }),
     ]);
   });
 
@@ -671,26 +715,12 @@ describe("plan: blocking issues (each cleared by editing the mapping)", () => {
     ).toEqual([expect.objectContaining({ boardId: "301", itemId: "1003" })]);
   });
 
-  it("TEMPLATE_INVALID: unknown template, outside the area, or no area", async () => {
+  it("TEMPLATE_INVALID: a template that doesn't exist", async () => {
     const unknown = mappingInput();
     board(unknown, "301").templateMatches = {
       "1003": "f0000000-0000-4000-8000-000000000002",
     };
-    const outside = mappingInput();
-    board(outside, "301").areaId = undefined;
-    const db = fakeDb({ areas: { [AREA]: [OTHER_WORKFLOW] } });
     expect(ofCode(await plan(unknown), "TEMPLATE_INVALID")).toHaveLength(1);
-    expect(ofCode(await plan(mappingInput(), db), "TEMPLATE_INVALID")).toEqual([
-      expect.objectContaining({
-        itemId: "1003",
-        message: expect.stringContaining(`area ${AREA}`),
-      }),
-    ]);
-    expect(ofCode(await plan(outside), "TEMPLATE_INVALID")).toEqual([
-      expect.objectContaining({
-        message: expect.stringContaining("no areaId"),
-      }),
-    ]);
     expect(ofCode(await plan(), "TEMPLATE_INVALID")).toEqual([]);
   });
 
@@ -762,11 +792,9 @@ describe("plan: warnings", () => {
       fileExists: (path) => path !== "files/a4/tablero.pdf",
     });
     expect(blocking(p)).toEqual([]);
-    expect(codes(p)).toEqual([
-      "DATES_MISSING",
-      "FILE_MISSING",
-      "PERSON_UNMATCHED",
-    ]);
+    expect(codes(p)).toEqual(
+      expect.arrayContaining(["DATES_MISSING", "FILE_MISSING", "PERSON_UNMATCHED"]),
+    );
     // Not in the index (translate) and not on disk (plan).
     expect(ofCode(p, "FILE_MISSING").map((i) => i.message)).toEqual([
       expect.stringContaining("a9"),
@@ -783,10 +811,229 @@ describe("plan: warnings", () => {
   });
 });
 
-/** translate-export.json as is: item 6003's relation column links no client. */
-function withoutClient(): ExportData {
-  return structuredClone(fixture) as unknown as ExportData;
+// ---------------------------------------------------------------------------
+// Project flow (BE §10.4, §16): re-runs, tramos, grouped report
+// ---------------------------------------------------------------------------
+
+/** Every row a plan would create, as import refs: what the database has after its apply. */
+function appliedRefs(p: Plan): Pick<FakeDb, "refs" | "assets"> {
+  const r = p.translation!.result;
+  const ids = (rows: readonly { externalId: string }[]) =>
+    Object.fromEntries(rows.map((row) => [row.externalId, ROW]));
+  return {
+    refs: {
+      contact: ids(r.contacts),
+      contact_person: ids(r.contactPeople),
+      provider_profile: ids(r.providerProfiles),
+      project: ids(r.projects),
+      project_schedule: ids(r.projectSchedules),
+      task: ids(r.tasks),
+      checklist_item: ids(r.checklistItems),
+      task_support: ids(r.taskSupport),
+      task_dependency: ids(r.taskDependencies),
+      history_event: ids(r.historyEvents),
+      schedule_task: ids(r.scheduleTasks),
+    },
+    assets: r.files.map((f) => f.assetId),
+  };
 }
+
+describe("plan: already imported items (brief §4.9)", () => {
+  /** The nested fixture with an unmatched person and a project without a client. */
+  function noisyMapping(): MappingInput {
+    const input = nestedMapping();
+    input.people["14"] = null;
+    board(input, "903").client = null;
+    return input;
+  }
+
+  it("re-planning the same export after its apply raises no issues", async () => {
+    const options = {
+      checkDrive: driveOk,
+      fileExists: (path: string) => path !== "files/a4/tablero.pdf",
+    };
+    const first = await plan(noisyMapping(), fakeDb(), nestedData(), options);
+    expect(first.issues.length).toBeGreaterThan(0);
+    expect(codes(first)).toEqual(
+      expect.arrayContaining(["CLIENT_MISSING", "DATES_MISSING", "PERSON_UNMATCHED"]),
+    );
+
+    // What the database holds after the apply: its refs, files, contacts and projects.
+    const r = first.translation!.result;
+    const db = fakeDb({
+      ...appliedRefs(first),
+      contactNames: r.contacts.map((c) => ({ type: c.type, name: c.name })),
+      projects: r.projects.map((p) => ({ name: p.name, code: p.code })),
+    });
+    const again = await plan(noisyMapping(), db, nestedData(), options);
+    expect(again.issues).toEqual([]);
+    expect(again.totals).toMatchObject({ projects: 0, tasks: 0, childTasks: 0, contacts: 0 });
+    expect(again.totals.skipped).toBeGreaterThan(0);
+  });
+
+  it("drops the issues of imported tasks and projects, keeps the new ones", async () => {
+    const first = await plan(noisyMapping(), fakeDb(), nestedData());
+    const missing = ofCode(first, "DATES_MISSING");
+    expect(missing.map((i) => i.itemId)).toContain("2003");
+    expect(ofCode(first, "CLIENT_MISSING").length).toBeGreaterThan(0);
+    // Only task 2003 and the project of board 903 (item 4001) were imported before.
+    const db = fakeDb({ refs: { task: { "2003": ROW }, project: { "4001": ROW } } });
+    const again = await plan(noisyMapping(), db, nestedData());
+    expect(ofCode(again, "DATES_MISSING").map((i) => i.itemId)).not.toContain("2003");
+    expect(ofCode(again, "CLIENT_MISSING")).toEqual([]);
+    expect(ofCode(again, "PERSON_UNMATCHED")).toEqual(
+      ofCode(first, "PERSON_UNMATCHED").filter((i) => i.itemId !== "2003"),
+    );
+  });
+});
+
+describe("plan: TRAMO_MISSING", () => {
+  it("blocks while a board's groups and items resolve no tramo", async () => {
+    const input = mappingInput();
+    board(input, "301").workflowId = null;
+    const p = await plan(input);
+    const missing = ofCode(p, "TRAMO_MISSING");
+    expect(missing.length).toBeGreaterThan(0);
+    for (const i of missing) {
+      expect(i).toMatchObject({ boardId: "301", blocking: true });
+      expect(i.message).toMatch(/resolves? no tramo/);
+    }
+    expect(blocking(p).map((i) => i.code)).toContain("TRAMO_MISSING");
+  });
+
+  it("clears with a tramo for each group, or the board's tramo", async () => {
+    const perGroup = mappingInput();
+    board(perGroup, "301").workflowId = null;
+    board(perGroup, "301").groupTargets = Object.fromEntries(
+      ["g_obra", "g_diseno", "g_extra", "g_final"].map((g) => [
+        g,
+        { kind: "tramo" as const, workflowId: BOARD_WORKFLOW },
+      ]),
+    );
+    expect(ofCode(await plan(perGroup), "TRAMO_MISSING")).toEqual([]);
+    expect(ofCode(await plan(mappingInput()), "TRAMO_MISSING")).toEqual([]);
+  });
+
+  it("doesn't count admin groups nor already imported tasks", async () => {
+    const admin = mappingInput();
+    board(admin, "301").workflowId = null;
+    board(admin, "301").templateMatches = {};
+    board(admin, "301").groupTargets = Object.fromEntries(
+      ["g_obra", "g_diseno", "g_extra", "g_final"].map((g) => [g, { kind: "admin" as const }]),
+    );
+    expect(ofCode(await plan(admin), "TRAMO_MISSING")).toEqual([]);
+
+    const input = mappingInput();
+    board(input, "301").workflowId = null;
+    const tasks = Object.fromEntries(
+      ["1001", "1002", "1003", "1004", "1005"].map((id) => [id, ROW]),
+    );
+    const db = fakeDb({ refs: { project: { "301": ROW }, task: tasks } });
+    expect(ofCode(await plan(input, db), "TRAMO_MISSING")).toEqual([]);
+  });
+});
+
+describe("plan: grouped plan.md", () => {
+  const issue = (
+    code: PlanIssueCode,
+    blocking: boolean,
+    message: string,
+    boardId?: string,
+    itemId?: string,
+  ): Plan["issues"][number] => ({
+    code,
+    group: code,
+    blocking,
+    message,
+    ...(boardId ? { boardId } : {}),
+    ...(itemId ? { itemId } : {}),
+  });
+  const counts = {
+    contacts: 0,
+    projects: 1,
+    tasks: 5,
+    childTasks: 0,
+    checklistItems: 0,
+    dependencies: 0,
+    comments: 0,
+    cronogramaRows: 0,
+    files: 0,
+    skipped: 2,
+  };
+  const grouped: Plan = {
+    issues: [
+      issue("PROJECT_NAME_TAKEN", true, 'An active project named "Casa Lomas" exists already; set another name in projectNames', "301"),
+      issue("PHASE_UNRESOLVED", false, '"Muros" matches no fase of its tramo', "301", "1004"),
+      issue("TRAMO_MISSING", true, '2 tasks of group "Depto Roma" resolve no tramo; choose the board\'s tramo or a tramo for the group', "701"),
+      issue("PHASE_UNRESOLVED", false, '"Acabados | final" matches no fase of its tramo', "301", "1005"),
+      issue("CLIENT_MISSING", false, '"Casa sin cliente" has no client', "501", "6003"),
+    ],
+    boards: [{ boardId: "301", name: "Casa Lomas", strategy: "board_as_project", ...counts }],
+    totals: { ...counts, contactPeople: 0, providerProfiles: 0, taskSupport: 0, projectSchedules: 0 },
+  };
+
+  it("prints blocking issues and warnings grouped by code with counts (snapshot)", () => {
+    const md = formatPlanMarkdown(grouped, "/exports/acme", new Date("2026-10-30T12:00:00Z"));
+    expect(md).toBe(
+      [
+        "# monday import plan",
+        "",
+        "Export: `/exports/acme` · generated 2026-10-30T12:00:00.000Z",
+        "",
+        "**2 blocking issues**, 3 warnings. Edit mapping.json and run plan again.",
+        "",
+        "## Rows to create",
+        "",
+        "| Board | Name | Strategy | Contacts | Projects | Tasks | Child tasks | Checklist items | Dependencies | Comments | Cronograma rows | Files | Already imported |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| 301 | Casa Lomas | board_as_project | 0 | 1 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 2 |",
+        "| **Total** | | | **0** | **1** | **5** | **0** | **0** | **0** | **0** | **0** | **0** | **2** |",
+        "",
+        "Also: 0 contact people, 0 provider profiles, 0 task support rows, 0 cronogramas.",
+        "",
+        "## Blocking issues",
+        "",
+        "### PROJECT_NAME_TAKEN (1)",
+        "",
+        "| Board | Item | Message |",
+        "|---|---|---|",
+        '| 301 | - | An active project named "Casa Lomas" exists already; set another name in projectNames |',
+        "",
+        "### TRAMO_MISSING (1)",
+        "",
+        "| Board | Item | Message |",
+        "|---|---|---|",
+        '| 701 | - | 2 tasks of group "Depto Roma" resolve no tramo; choose the board\'s tramo or a tramo for the group |',
+        "",
+        "## Warnings",
+        "",
+        "### PHASE_UNRESOLVED (2)",
+        "",
+        "| Board | Item | Message |",
+        "|---|---|---|",
+        '| 301 | 1004 | "Muros" matches no fase of its tramo |',
+        '| 301 | 1005 | "Acabados \\| final" matches no fase of its tramo |',
+        "",
+        "### CLIENT_MISSING (1)",
+        "",
+        "| Board | Item | Message |",
+        "|---|---|---|",
+        '| 501 | 6003 | "Casa sin cliente" has no client |',
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("prints None. for an empty group", () => {
+    const md = formatPlanMarkdown(
+      { ...grouped, issues: grouped.issues.filter((i) => i.blocking) },
+      "/exports/acme",
+      new Date("2026-10-30T12:00:00Z"),
+    );
+    expect(md).toContain("**2 blocking issues**, 0 warnings.");
+    expect(md.endsWith("## Warnings\n\nNone.\n")).toBe(true);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Drive check
@@ -932,7 +1179,7 @@ describe("plan command", () => {
   it("writes only plan.md; exits 1 on blocking issues and 0 once mapping.json is fixed", async () => {
     const dir = exportFolder();
     const input = nestedMapping();
-    delete board(input, "901").statusMaps.status["2"];
+    board(input, "901").client = { kind: "contact", contactId: PROVEEDOR };
     writeFileSync(join(dir, "mapping.json"), JSON.stringify(input));
     const before = readFileSync(join(dir, "mapping.json"), "utf8");
 
@@ -940,10 +1187,10 @@ describe("plan command", () => {
     const c = io();
     expect(await handler(["--export", dir], c.cli)).toBe(1);
     expect(close).toHaveBeenCalled();
-    expect(c.err()).toContain("STATUS_UNMAPPED board 901 item 2002");
+    expect(c.err()).toContain("CLIENT_UNRESOLVED board 901: client: contact");
     const md = readFileSync(join(dir, PLAN_FILE), "utf8");
     expect(md).toContain("**1 blocking issue**");
-    expect(md).toMatch(/\| STATUS_UNMAPPED \| 901 \| 2002 \|/);
+    expect(md).toContain("### CLIENT_UNRESOLVED (1)");
     expect(readFileSync(join(dir, "mapping.json"), "utf8")).toBe(before);
 
     writeFileSync(join(dir, "mapping.json"), JSON.stringify(nestedMapping()));
@@ -1051,14 +1298,6 @@ describe.skipIf(!url)("plan lookups (test DB)", () => {
           { key: "plan-gone", name: "Plan Gone", deletedAt: new Date() },
         ])
         .returning();
-      const [area] = await tx
-        .insert(schema.areas)
-        .values({ name: "Plan Área" })
-        .returning();
-      await tx.insert(schema.areaWorkflows).values([
-        { areaId: area.id, workflowId: wf.id },
-        { areaId: area.id, workflowId: gone.id },
-      ]);
       const [template] = await tx
         .insert(schema.workflowTaskTemplates)
         .values({ workflowId: wf.id, title: "Plan plantilla" })
@@ -1070,6 +1309,11 @@ describe.skipIf(!url)("plan lookups (test DB)", () => {
           { name: "Plan Otra", clientId: cliente.id },
         ])
         .returning();
+      await tx.insert(schema.projects).values([
+        { name: "Plan Pausada", status: "pausado" },
+        { name: "Plan Archivada", status: "completado" },
+        { name: "Plan Borrada", deletedAt: new Date() },
+      ]);
       await tx.insert(schema.tasks).values({
         projectId: project.id,
         kind: "workflow",
@@ -1119,8 +1363,8 @@ describe.skipIf(!url)("plan lookups (test DB)", () => {
 
       const l = createPlanDbLookups(tx);
       const t = await l.translateLookups();
-      expect(t.templates[template.id]).toEqual({ workflowId: wf.id, phase: null });
-      expect(t.staff[admin.id]).toEqual({ name: "Plan Admin" });
+      expect(t.templates[template.id]).toEqual({ workflowId: wf.id, phaseId: null });
+      expect(t.staff[admin.id]).toMatchObject({ name: "Plan Admin" });
       expect(await l.importedRefs("project", ["plan-901", "plan-902"])).toEqual(
         new Map([["plan-901", other.id]]),
       );
@@ -1142,17 +1386,17 @@ describe.skipIf(!url)("plan lookups (test DB)", () => {
       ).toEqual(new Set(["plan cliente"]));
       expect(
         await l.projectNamesTaken([
-          { clientId: cliente.id, lowerName: "plan casa" },
-          { clientId: cliente.id, lowerName: "plan nueva" },
+          "plan casa",
+          "plan nueva",
+          "plan pausada",
+          "plan archivada",
+          "plan borrada",
         ]),
-      ).toEqual(new Set([`${cliente.id}|plan casa`]));
+      ).toEqual(new Set(["plan casa", "plan pausada"]));
       expect(await l.projectCodesTaken(["PLAN-01", "PLAN-02"])).toEqual(
         new Set(["PLAN-01"]),
       );
       expect(await l.workflowIds([wf.id, gone.id])).toEqual(new Set([wf.id]));
-      expect(await l.areaWorkflowIds([area.id, ROW])).toEqual(
-        new Map([[area.id, [wf.id]]]),
-      );
       expect(
         await l.projectTemplatesTaken([
           { projectId: project.id, templateId: template.id },

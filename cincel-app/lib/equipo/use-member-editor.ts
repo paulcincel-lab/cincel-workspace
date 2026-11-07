@@ -28,13 +28,9 @@ import { isGoogleManagedRefusal } from "@/lib/types/workspace-access";
  * assignment (temporary password + system access toggle) — used by
  * app/equipo/EquipoClient.tsx.
  *
- * `staff.role` is the one field that carries both the person's job title and
- * their system access role (see lib/data/roles.ts: OFFICIAL_CINCEL_ROLES ===
- * SYSTEM_ACCESS_ROLES) — the drawer's separate "role" text input and "access"
- * dropdown both write to it. There is no client-only role override anymore:
- * the old `systemRoleByMemberId` localStorage map never actually persisted,
- * it only shadowed the UI, so it's dropped — `access` now reflects and sets
- * the same value that's saved to `staff.role`.
+ * `staff.role` holds the system access role only, edited through the
+ * drawer's "Acceso" dropdown (`draft.access`). Job positions are puestos,
+ * saved separately with setStaffPositionsAction (project flow RD-9).
  *
  * The actual privileged write (setStaffCredentialAction) re-checks
  * capabilities server-side regardless of what a caller sends — this hook is
@@ -62,8 +58,6 @@ export const emptyMemberDraft: MemberDraft = {
   emergencyContactRelation: "",
   emergencyContactPhone: "",
   emergencyContactAddress: "",
-  role: "",
-  areaIds: [],
   positionIds: [],
   capacity: 8,
   availability: "Disponible",
@@ -102,7 +96,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
       hasDefaultSystemAdministratorAccess(editingStaff.email)
   );
 
-  // Role and áreas of Google-managed staff come from Workspace (FE §2.6): the
+  // Acceso and puestos of Google-managed staff come from Workspace (FE §2.6): the
   // drawer shows them read-only and a save leaves them out.
   const editingGoogleManaged = Boolean(editingId !== null && editingStaff?.googleManaged);
   // Google-linked staff sign in with Google, not a password (#657): the drawer
@@ -202,9 +196,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
       emergencyContactRelation: detail.profile?.emergencyContactRelation ?? "",
       emergencyContactPhone: detail.profile?.emergencyContactPhone ?? "",
       emergencyContactAddress: detail.profile?.emergencyContactAddress ?? "",
-      role: detail.role ?? "",
-      areaIds: detail.areas.map((a) => a.id),
-      positionIds: (detail.positions ?? []).map((p) => p.id),
+      positionIds: detail.positions?.map((p) => p.id) ?? [],
       capacity: detail.capacity,
       availability: detail.availability ?? "Disponible",
     });
@@ -224,13 +216,12 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     const name = draft.name.trim();
     const lastName = draft.lastName.trim();
     const institutionalEmail = draft.institutionalEmail.trim();
-    const role = draft.role.trim();
     const normalizedEmail = normalizeEmail(institutionalEmail);
     const tempPassword = draft.temporaryPassword.trim();
     const tempPasswordConfirmation = draft.temporaryPasswordConfirmation.trim();
 
-    if (!name || (!editingGoogleManaged && (!role || draft.areaIds.length === 0)) || draft.capacity < 1) {
-      setFormError("Completa nombre, puesto, al menos un área y una capacidad válida.");
+    if (!name || draft.capacity < 1) {
+      setFormError("Completa nombre y una capacidad válida.");
       return;
     }
     if (editingId === null && !lastName) {
@@ -275,7 +266,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
       const staffInput = {
         name,
         lastName: lastName || null,
-        role: draft.access, // access and role share the same value — see module comment
+        role: draft.access, // staff.role is the access role — see module comment
         email: normalizedEmail,
         phone: draft.phone.trim() || null,
         capacity: draft.capacity,
@@ -328,7 +319,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
       });
 
       if (!editingGoogleManaged) {
-        const positionsResult = await setStaffPositionsAction(staffId, draft.positionIds ?? []);
+        const positionsResult = await setStaffPositionsAction(staffId, draft.positionIds);
         if (isGoogleManagedRefusal(positionsResult)) {
           setFormError(positionsResult.error);
           return;

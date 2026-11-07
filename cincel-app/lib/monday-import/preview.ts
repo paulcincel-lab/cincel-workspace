@@ -3,8 +3,9 @@
  * dry run (scripts/monday/plan.ts `buildPlan`): counts per Cincel entity per
  * board, the plan's issues and up to 5 items per board shown as the Cincel
  * row apply creates for them. Boards whose items become tasks also get up to 5
- * rows for the projects the board makes, with their workflow and phases (#678). Issues are in Spanish with the step that fixes
- * them (#679). Pure: no DB, no files.
+ * rows for the projects the board makes, with their tramos (#678). Task rows show
+ * "Tramo · Fase", espacio and admin tasks (project flow FE §7.8). Issues are in
+ * Spanish with the step that fixes them (#679). Pure: no DB, no files.
  */
 import { ISSUE_FIX_STEP, issuePersonId, issuePersonName, issueText } from "@/lib/monday-import/preview-issues";
 import type { CountKey, Plan } from "@/scripts/monday/plan";
@@ -31,10 +32,10 @@ const PRIORITY_LABELS: Record<string, string> = { alta: "Alta", media: "Media", 
 export interface PreviewNames {
   customStatuses: Record<string, { name: string }>;
   staff: Record<string, { name: string }>;
-  /** Workflow names for the project rows; a missing name shows as no workflow. */
+  /** Tramo names; a missing name shows as no tramo. */
   workflows?: Record<string, { name: string }>;
-  /** Área names for the task rows (#686). */
-  areas?: Record<string, { name: string }>;
+  /** Fase names of the task rows. */
+  phases?: Record<string, { name: string }>;
 }
 
 export function toPreviewCounts(c: Record<CountKey, number>): MondayPreviewCounts {
@@ -108,8 +109,11 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     customStatus: null,
     priority: null,
     manager: null,
+    tramo: null,
     phase: null,
-    workflow: null,
+    phaseReview: false,
+    space: null,
+    admin: false,
     commitmentDate: null,
     deliveryDate: null,
     kind: null,
@@ -122,16 +126,8 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     contactType: null,
   } satisfies Omit<MondayPreviewSample["cincel"], "title">;
 
-  const boardAreaOf = new Map(plan.translation?.mapping.boards.map((b) => [b.mondayBoardId, b.areaId ?? null]) ?? []);
-  /** The task's área (#686): its own value's, else the board's; a new one by name. */
-  const taskArea = (t: PlannedTask): string | null => {
-    if (t.area?.status === "mapped") {
-      if (t.area.newArea) return `${t.area.newArea} (nueva)`;
-      return t.area.areaId ? (names.areas?.[t.area.areaId]?.name ?? null) : null;
-    }
-    const boardArea = boardAreaOf.get(t.source.boardId);
-    return boardArea ? (names.areas?.[boardArea]?.name ?? null) : null;
-  };
+  const tramoName = (id: string | null | undefined): string | null =>
+    id ? (names.workflows?.[id]?.name ?? null) : null;
 
   const taskSample = (t: PlannedTask): MondayPreviewSample => ({
     mondayItemId: t.externalId,
@@ -146,11 +142,12 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
       customStatus: t.customStatusId ? (names.customStatuses[t.customStatusId]?.name ?? null) : null,
       priority: PRIORITY_LABELS[t.priority] ?? t.priority,
       manager: t.managerId ? (names.staff[t.managerId]?.name ?? null) : null,
-      phase: t.phase,
-      // The task's área and workflow as apply writes them (#686).
-      workflow: t.workflowId ? (names.workflows?.[t.workflowId]?.name ?? null) : null,
-      area: taskArea(t),
-      areaUnmapped: t.area?.status === "unmapped",
+      // "Tramo · Fase" as apply writes them; a task without a fase shows "Sin fase · revisar".
+      tramo: tramoName(t.workflowId),
+      phase: t.phaseId ? (names.phases?.[t.phaseId]?.name ?? null) : null,
+      phaseReview: t.kind !== "admin" && (t.phaseReview || !t.phaseId),
+      space: t.space,
+      admin: t.kind === "admin",
       commitmentDate: t.commitmentDate,
       deliveryDate: t.deliveryDate,
       kind: t.kind,
@@ -171,12 +168,10 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
       ...empty,
       title: p.name,
       status: p.status === "completado" ? "Completado" : "Activo",
-      // The project's phases and workflow, as apply writes them (#678).
-      phase: p.phases.length > 0 ? p.phases.join(", ") : null,
-      // Its stages: the board workflow, then the stages groups were mapped to (#687).
-      workflow:
-        [...(p.workflowId ? [p.workflowId] : []), ...(p.extraStages ?? [])]
-          .map((id) => names.workflows?.[id]?.name)
+      // The project's tramos (one stage each), as apply writes them.
+      tramo:
+        (p.tramos.length > 0 ? p.tramos : p.currentWorkflowId ? [p.currentWorkflowId] : [])
+          .map((id) => tramoName(id))
           .filter((name): name is string => Boolean(name))
           .join(", ") || null,
       tasks: projectTasks.get(p.externalId) ?? 0,

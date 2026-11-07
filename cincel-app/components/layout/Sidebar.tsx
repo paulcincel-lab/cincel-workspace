@@ -256,7 +256,7 @@ export default function Sidebar() {
             submenu: [
               { label: "General", href: "/configuracion/general", icon: SettingsIcon },
               { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
-              { label: "Áreas", href: "/configuracion/areas", icon: SettingsIcon },
+              { label: "Puestos", href: "/configuracion/puestos", icon: SettingsIcon },
               { label: "Estatus", href: "/configuracion/estatus", icon: SettingsIcon },
               ...(canManageWorkflows
                 ? [{ label: "Tramos y fases", href: "/configuracion/tramos", icon: SettingsIcon }]

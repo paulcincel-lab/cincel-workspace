@@ -97,6 +97,8 @@ export const ENTITY_TABLES: Record<
   project_link: { table: "project_links", key: "id", hasUpdatedAt: true },
   drive_file: { table: "drive_files", key: "id", hasUpdatedAt: true },
   area: { table: "areas", key: "id", hasUpdatedAt: true },
+  // Espacios of `space` groups (project flow BE §10.9).
+  project_space: { table: "project_spaces", key: "id", hasUpdatedAt: true },
 };
 
 /** How a pointing row is recognized as the batch's own. */
@@ -109,6 +111,13 @@ type Owner =
   | "project_stage"
   /** An `area_workflows` link apply wrote: its workflow is in the batch área's `workflowIds` (#686). */
   | "area_workflow"
+  /**
+   * It goes with the batch row it points at (an `on delete cascade` child
+   * that is no history of its own), so it never blocks. `tramo_start_batches`
+   * of a later "Iniciar tramo" on an imported project: the tasks such a start
+   * created block through their own checks (project flow BE §10.9).
+   */
+  | "cascade"
   /** It can't belong to a batch: every such row blocks. */
   | null;
 
@@ -238,21 +247,21 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     idSql: "c.id",
     owner: own("project_schedule"),
   },
-  // Project flow (#695): an import doesn't create spaces or tramo starts yet,
-  // so any such row on a batch project was made after the import and blocks.
+  // Project flow (BE §10.9): the espacios the import created are the batch's
+  // own; one made in Cincel afterwards blocks. Start batches go with the project.
   {
     table: "project_spaces",
     column: "project_id",
     target: "project",
     idSql: "c.id",
-    owner: null,
+    owner: own("project_space"),
   },
   {
     table: "tramo_start_batches",
     column: "project_id",
     target: "project",
     idSql: "c.id",
-    owner: null,
+    owner: "cascade",
   },
   {
     table: "import_files",
@@ -370,6 +379,14 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     idSql: "c.id",
     owner: null,
   },
+  // Into espacios the import created: a task outside the batch in one blocks.
+  {
+    table: "tasks",
+    column: "space_id",
+    target: "project_space",
+    idSql: "c.id",
+    owner: own("task"),
+  },
   // Into task_checklist_items is task_attachments.checklist_item_id, above.
   // Into áreas created for tasks' monday values (#686)
   {
@@ -406,6 +423,7 @@ function batchRef(
 
 function ownedBy(batchId: string, owner: Owner): SQL | null {
   if (owner === null) return null;
+  if (owner === "cascade") return sql`true`;
   if (owner === "import_files") return sql`c.batch_id = ${batchId}`;
   if (owner === "area_workflow") {
     return sql`exists (select 1 from core.import_refs s where s.batch_id = ${batchId} and s.entity = 'area' and s.row_id = c.area_id and s.data->'workflowIds' @> to_jsonb(c.workflow_id::text))`;
@@ -683,6 +701,9 @@ export const DELETE_STEPS: readonly DeleteStep[] = [
   },
   deleteRefs("task", "t.parent_task_id is not null", "child tasks"),
   deleteRefs("task"),
+  // After the tasks (tasks_space_fk is restrict), before the projects; only
+  // espacios no task uses any more (the change check refused any other user).
+  deleteRefs("project_space", "not exists (select 1 from core.tasks k where k.space_id = t.id)"),
   {
     label: "project_stages",
     query: (batchId) =>

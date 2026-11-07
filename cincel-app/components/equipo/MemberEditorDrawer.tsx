@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 
 import { GoogleManagedBadge } from "@/components/equipo/GoogleManagedBadge";
@@ -18,7 +19,8 @@ import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { TeamAvailability } from "@/lib/data/team";
 import { revokedReasonLabel, type GoogleAccessState } from "@/lib/equipo/google-access";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
-import type { Area } from "@/lib/types/core";
+import { candidatePhasesFor, formatCandidatePhases } from "@/lib/equipo/candidate-phases";
+import type { Position } from "@/lib/types/core";
 
 const OTHER_AVAILABILITY_VALUE = "Otros...";
 
@@ -45,8 +47,11 @@ interface MemberEditorDrawerProps {
   isEditingSelfProtectedAdmin: boolean;
   teamCapabilities: TeamCapabilities;
   availabilityOptions: readonly string[];
-  areaOptions: Area[];
-  /** Role and áreas come from Google Workspace: those fields are read-only (FE §2.6). */
+  /** The puestos catalog; candidate fases come from each puesto's `phases`. */
+  positionOptions: Position[];
+  /** Shows the link to Configuración → Puestos when the catalog is empty (admins only). */
+  canManagePositions?: boolean;
+  /** Acceso and puestos come from Google Workspace: those fields are read-only (FE §2.6). */
   googleManaged?: boolean;
   /** Administrador viewing a Google-managed member: shows **Revisar acceso ahora**. */
   canRecheckAccess?: boolean;
@@ -68,7 +73,8 @@ export function MemberEditorDrawer({
   isEditingSelfProtectedAdmin,
   teamCapabilities,
   availabilityOptions,
-  areaOptions,
+  positionOptions,
+  canManagePositions = false,
   googleManaged = false,
   canRecheckAccess = false,
   onAccessChecked,
@@ -76,12 +82,20 @@ export function MemberEditorDrawer({
 }: MemberEditorDrawerProps) {
   const canSave = editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator;
 
-  const areaNames = useMemo(() => areaOptions.map((a) => a.name), [areaOptions]);
-  const areaIdByName = useMemo(() => new Map(areaOptions.map((a) => [a.name, a.id])), [areaOptions]);
-  const areaNameById = useMemo(() => new Map(areaOptions.map((a) => [a.id, a.name])), [areaOptions]);
-  const selectedAreaNames = draft.areaIds
-    .map((id) => areaNameById.get(id))
+  // Inactive puestos stay listed only while the person still holds them, so a save doesn't drop them.
+  const positionNames = useMemo(
+    () => positionOptions.filter((p) => p.active || draft.positionIds.includes(p.id)).map((p) => p.name),
+    [positionOptions, draft.positionIds]
+  );
+  const positionIdByName = useMemo(() => new Map(positionOptions.map((p) => [p.name, p.id])), [positionOptions]);
+  const positionNameById = useMemo(() => new Map(positionOptions.map((p) => [p.id, p.name])), [positionOptions]);
+  const selectedPositionNames = draft.positionIds
+    .map((id) => positionNameById.get(id))
     .filter((name): name is string => Boolean(name));
+  const candidatePhases = useMemo(
+    () => candidatePhasesFor(positionOptions, draft.positionIds),
+    [positionOptions, draft.positionIds]
+  );
 
   return (
     <Sheet open={show} onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -119,53 +133,55 @@ export function MemberEditorDrawer({
                 />
               </FormField>
 
-              <div>
-                <div className="mb-2 flex items-center gap-2">
-                  <label htmlFor="member-role" className="block text-sm font-medium text-foreground">Puesto</label>
-                  {googleManaged ? <GoogleManagedBadge /> : null}
-                </div>
-                <Input
-                  id="member-role"
-                  type="text"
-                  value={draft.role}
-                  readOnly={googleManaged}
-                  disabled={googleManaged}
-                  onChange={(event) => onChangeDraft((current) => ({ ...current, role: event.target.value }))}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">Cargo que desempeña dentro de la empresa.</p>
-              </div>
-
               <div className="md:col-span-2">
                 <div className="mb-2 flex items-center gap-2">
-                  <label className="block text-sm font-medium text-foreground">Áreas</label>
+                  <label className="block text-sm font-medium text-foreground">Puestos</label>
                   {googleManaged ? <GoogleManagedBadge /> : null}
                 </div>
                 {googleManaged ? (
-                  <div className="flex flex-wrap gap-1" data-testid="member-areas-readonly">
-                    {selectedAreaNames.length > 0 ? (
-                      selectedAreaNames.map((name) => (
+                  <div className="flex flex-wrap gap-1" data-testid="member-positions-readonly">
+                    {selectedPositionNames.length > 0 ? (
+                      selectedPositionNames.map((name) => (
                         <Badge key={name} variant="secondary">
                           {name}
                         </Badge>
                       ))
                     ) : (
-                      <span className="text-sm text-muted-foreground">Sin área</span>
+                      <span className="text-sm text-muted-foreground">Sin puesto</span>
                     )}
                   </div>
+                ) : positionOptions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground" data-testid="member-positions-empty">
+                    Aún no hay puestos.{" "}
+                    {canManagePositions ? (
+                      <>
+                        Créalos en{" "}
+                        <Link href="/configuracion/puestos" className="text-foreground underline">
+                          Configuración → Puestos
+                        </Link>
+                        .
+                      </>
+                    ) : (
+                      "Créalos en Configuración → Puestos."
+                    )}
+                  </p>
                 ) : (
                   <TeamMultiSelect
-                    options={areaNames}
-                    selected={selectedAreaNames}
+                    options={positionNames}
+                    selected={selectedPositionNames}
                     onChange={(names) => {
                       const ids = names
-                        .map((name) => areaIdByName.get(name))
+                        .map((name) => positionIdByName.get(name))
                         .filter((id): id is string => Boolean(id));
-                      onChangeDraft((current) => ({ ...current, areaIds: ids }));
+                      onChangeDraft((current) => ({ ...current, positionIds: ids }));
                     }}
-                    placeholder="Buscar área..."
+                    placeholder="Buscar puesto..."
+                    emptyText="Sin puesto"
                   />
                 )}
-                <p className="mt-1 text-xs text-muted-foreground">Departamentos a los que pertenece. Puede tener varias.</p>
+                <p className="mt-1 text-xs text-muted-foreground" data-testid="member-candidate-phases">
+                  Fases candidatas: {candidatePhases.length > 0 ? formatCandidatePhases(candidatePhases) : "ninguna"}
+                </p>
               </div>
 
               <div>

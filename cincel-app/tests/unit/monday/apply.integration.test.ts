@@ -51,10 +51,6 @@ import {
 const STAFF = "56656656-0000-4000-8000-000000000001";
 const CLIENT = "56656656-0000-4000-8000-0000000000c1";
 const WORKFLOW = "56656656-0000-4000-8000-0000000000f1";
-const AREA_WORKFLOW = "56656656-0000-4000-8000-0000000000f2";
-const NEW_AREA_WORKFLOW = "56656656-0000-4000-8000-0000000000f3";
-const AREA = "56656656-0000-4000-8000-0000000000a1";
-const NEW_AREA = "Integración Construcción 686";
 const STAFF_EMAIL = "integracion.apply@example.com";
 const ACCOUNT = "apply-integration-566";
 const SHARED_DRIVE = "sd-566";
@@ -141,8 +137,10 @@ function expectedRefs(
     history_event: t.comments,
     schedule_task: t.cronogramaRows,
     drive_file: t.files,
-    // The fixture mapping takes every task's área from its board, so no área is created (#686).
+    // Áreas are no longer created (project flow BE §10.5); only past batches have área refs.
     area: 0,
+    // The fixture maps no group to an espacio.
+    project_space: 0,
   };
 }
 
@@ -416,7 +414,7 @@ describe.skipIf(!url)(
       });
     });
 
-    it("a board workflow becomes the project's workflow, stage and phases, as planned; rollback removes them (#678)", async () => {
+    it("a board tramo becomes the project's current tramo and stage, origin monday; rollback removes them (#678, project flow BE §10.5)", async () => {
       await inTx(async (tx) => {
         await seed(tx);
         await tx
@@ -436,7 +434,6 @@ describe.skipIf(!url)(
         const projects = plan.translation!.result.projects;
         expect(projects.length).toBeGreaterThan(0);
         expect(projects.every((p) => p.workflowId === WORKFLOW)).toBe(true);
-        expect(projects.some((p) => p.phases.length > 1)).toBe(true);
 
         const before = await tableCounts(tx);
         const applied = await cmd.apply(dir);
@@ -457,8 +454,7 @@ describe.skipIf(!url)(
             .where(eq(schema.projects.id, id));
           expect(row, p.externalId).toMatchObject({
             currentWorkflowId: WORKFLOW,
-            phases: p.phases,
-            phase: p.phases.length > 0 ? p.phases.join(", ") : null,
+            origin: "monday",
           });
           const stages = await tx
             .select()
@@ -478,7 +474,7 @@ describe.skipIf(!url)(
       });
     });
 
-    it("groups mapped to a stage, their own project or ignored import as planned; rollback removes it all (#687)", async () => {
+    it("groups mapped to a tramo, their own project or ignored import as planned; rollback removes it all (#687, project flow BE §10.5)", async () => {
       await inTx(async (tx) => {
         await seed(tx);
         const STAGE = "56656656-0000-4000-8000-0000000000f2";
@@ -489,7 +485,7 @@ describe.skipIf(!url)(
         const mapping = nestedMapping(STAFF, CLIENT);
         mapping.boards[0].workflowId = WORKFLOW;
         mapping.boards[0].groupTargets = {
-          g_obra: { kind: "stage", workflowId: STAGE },
+          g_obra: { kind: "tramo", workflowId: STAGE },
           g_diseno: { kind: "project" },
         };
         mapping.boards[0].projectNames = { g_diseno: "Casa Nido · Diseño" };
@@ -503,8 +499,7 @@ describe.skipIf(!url)(
         const plan = await buildPlan(data, mapping, createPlanDbLookups(tx));
         const result = plan.translation!.result;
         const board = result.projects.find((p) => p.externalId === "901")!;
-        expect(board.phases).toEqual([]);
-        expect(board.extraStages).toEqual([STAGE]);
+        expect(board).toBeDefined();
         expect(result.projects.find((p) => p.externalId === "901:g_diseno")?.name).toBe("Casa Nido · Diseño");
         expect(result.projects.some((p) => p.externalId === "902")).toBe(false);
         expect(result.tasks.find((t) => t.externalId === "2002")?.project.externalId).toBe("901:g_diseno");
@@ -526,76 +521,6 @@ describe.skipIf(!url)(
         expect(diff(before, await tableCounts(tx))).toEqual({
           import_batches: 1,
         });
-      });
-    });
-
-    it("tasks take the área and workflow of their monday group, as planned; rollback removes the new área (#686)", async () => {
-      await inTx(async (tx) => {
-        await seed(tx);
-        await tx.insert(schema.workflows).values([
-          { id: AREA_WORKFLOW, key: `wf-${AREA_WORKFLOW}`, name: "Diseño Integración" },
-          { id: NEW_AREA_WORKFLOW, key: `wf-${NEW_AREA_WORKFLOW}`, name: "Obra Integración" },
-        ]);
-        await tx.insert(schema.areas).values({ id: AREA, name: "Diseño Integración 686" });
-        await tx.insert(schema.areaWorkflows).values({ areaId: AREA, workflowId: AREA_WORKFLOW });
-        const mapping = nestedMapping(STAFF, CLIENT);
-        const nido = mapping.boards.find((b) => b.mondayBoardId === "901")!;
-        nido.taskAreaSource = { kind: "group" };
-        nido.taskAreas = {
-          g_diseno: { action: "area", areaId: AREA, workflowId: AREA_WORKFLOW },
-          g_obra: { action: "create_area", name: NEW_AREA, workflowId: NEW_AREA_WORKFLOW },
-        };
-        const dir = exportFolder(mapping);
-        const cmd = commands(tx);
-        const planned = await cmd.plan(dir);
-        expect(planned.code, planned.err).toBe(0);
-
-        // What the preview shows: the same plan the wizard builds.
-        const { data } = await readPlanExport(dir);
-        const plan = await buildPlan(data, mapping, createPlanDbLookups(tx));
-        expect(plan.issues.filter((i) => i.code === "AREA_UNMAPPED")).toEqual([]);
-        const result = plan.translation!.result;
-        const nidoTasks = result.tasks.filter((t) => t.source.boardId === "901");
-        expect(nidoTasks.length).toBeGreaterThan(1);
-        const expected = new Map(nidoTasks.map((t) => [t.externalId, t.workflowId]));
-        expect(new Set(expected.values())).toEqual(new Set([AREA_WORKFLOW, NEW_AREA_WORKFLOW]));
-        expect(result.areas.map((a) => a.name)).toEqual([NEW_AREA]);
-
-        const before = await tableCounts(tx);
-        const applied = await cmd.apply(dir);
-        expect(applied.code, applied.err).toBe(0);
-        const [batch] = await batchesOf(tx);
-        const { refs, counts } = await refsByEntity(tx, batch.id);
-        expect(counts.area).toBe(1);
-        const rowOf = (entity: string, externalId: string) =>
-          refs.find((r) => r.entity === entity && r.externalId === externalId)!.rowId;
-
-        // Each task has the workflow the plan gave it.
-        for (const [externalId, workflowId] of expected) {
-          const [row] = await tx.select().from(schema.tasks).where(eq(schema.tasks.id, rowOf("task", externalId)));
-          expect(row.workflowId, externalId).toBe(workflowId);
-        }
-        // The new área exists, linked to its workflow; the project's stages include every task workflow.
-        const areaId = rowOf("area", result.areas[0].externalId);
-        const [area] = await tx.select().from(schema.areas).where(eq(schema.areas.id, areaId));
-        expect(area.name).toBe(NEW_AREA);
-        const links = await tx.select().from(schema.areaWorkflows).where(eq(schema.areaWorkflows.areaId, areaId));
-        expect(links.map((l) => l.workflowId)).toEqual([NEW_AREA_WORKFLOW]);
-        const stages = await tx
-          .select()
-          .from(schema.projectStages)
-          .where(eq(schema.projectStages.projectId, rowOf("project", "901")));
-        expect(new Set(stages.map((s) => s.workflowId))).toEqual(new Set([AREA_WORKFLOW, NEW_AREA_WORKFLOW]));
-        const added = diff(before, await tableCounts(tx));
-        expect(added.areas).toBe(1);
-        expect(added.area_workflows).toBe(1);
-
-        // Rollback removes the área, its link and the stages, and nothing else.
-        expect(await findRollbackBlockers(tx, batch.id)).toEqual([]);
-        await deleteBatchRows(tx, batch.id);
-        expect(diff(before, await tableCounts(tx))).toEqual({ import_batches: 1 });
-        const [kept] = await tx.select().from(schema.areas).where(eq(schema.areas.id, AREA));
-        expect(kept.name).toBe("Diseño Integración 686");
       });
     });
 

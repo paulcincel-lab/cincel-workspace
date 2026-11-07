@@ -10,17 +10,65 @@ import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
 const MEMBER_NAME = `Colaborador E2E ${RUN_ID}`;
+const POSITION_NAME = `Puesto E2E ${RUN_ID}`;
 const connectionString = process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
+
+interface SeededPosition {
+  id: string;
+  /** Name of the candidate fase linked to the puesto, or null when the catalog has no fases. */
+  phaseName: string | null;
+}
+
+/**
+ * Seeds one puesto (tagged E2E so global-cleanup purges it) with the first
+ * active fase of the catalog as its candidate. Memoized: every test's
+ * beforeEach calls it with the same per-run name.
+ */
+let positionSeeded: Promise<SeededPosition> | null = null;
+async function seedPosition(): Promise<SeededPosition> {
+  positionSeeded ??= (async () => {
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      const [position] = await sql`
+        insert into core.positions (name, sort_order) values (${POSITION_NAME}, 9999) returning id`;
+      const [phase] = await sql`
+        select p.id, p.name
+        from core.workflow_phases p
+        join core.workflows w on w.id = p.workflow_id
+        where p.active
+        order by w.sort_order, p.sort_order
+        limit 1`;
+      if (phase) {
+        await sql`insert into core.position_phases (position_id, phase_id) values (${position.id}, ${phase.id})`;
+      }
+      return { id: position.id as string, phaseName: phase ? (phase.name as string) : null };
+    } finally {
+      await sql.end();
+    }
+  })();
+  return positionSeeded;
+}
 
 test.describe("Equipo — add team member", () => {
   test.beforeEach(async ({ page }) => {
+    await seedPosition();
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
     await page.goto(`${BASE_URL}/equipo`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("button", { name: /Agregar colaborador/i })).toBeVisible({ timeout: 30_000 });
   });
 
-  test("create a collaborator and verify it persists in the list", async ({ page }) => {
+  test("the team table shows Puestos, Fases candidatas and Acceso, and no Área column", async ({ page }) => {
+    await expect(page.getByRole("columnheader", { name: "Puestos", exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("columnheader", { name: "Fases candidatas", exact: true })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Acceso", exact: true })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Área", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "Áreas", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "Puesto", exact: true })).toHaveCount(0);
+  });
+
+  test("create a collaborator with a puesto and verify it persists in the list", async ({ page }) => {
+    const position = await seedPosition();
     await page.getByRole("button", { name: /Agregar colaborador/i }).click();
     await page.getByRole("heading", { name: "Agregar colaborador" }).waitFor({ state: "visible", timeout: 15_000 });
 
@@ -32,11 +80,23 @@ test.describe("Equipo — add team member", () => {
     await drawer.locator("label:has-text('Nombre') + input").first().fill(MEMBER_NAME);
     await drawer.locator("label:has-text('Apellidos') + input").fill("E2E");
 
-    // Fill other required fields: Puesto (free text, its label sits next to the Google badge), Áreas (multi-select
-    // against real core.areas — search then click the matching option).
-    await drawer.locator("#member-role").fill("Arquitecto");
-    await drawer.getByPlaceholder("Buscar área...").fill("Diseño");
-    await drawer.getByRole("button", { name: /Diseño/ }).click();
+    // The free-text Puesto and the Áreas multi-select are gone: Puestos is a
+    // multi-select over the catalog (search, then click the matching option).
+    await expect(drawer.locator("#member-role")).toHaveCount(0);
+    await expect(drawer.getByPlaceholder("Buscar área...")).toHaveCount(0);
+    await drawer.getByPlaceholder("Buscar puesto...").fill(POSITION_NAME);
+    await drawer.getByRole("button", { name: new RegExp(POSITION_NAME) }).first().click();
+
+    // Candidate fases are derived live from the selected puestos.
+    const candidates = drawer.getByTestId("member-candidate-phases");
+    if (position.phaseName) {
+      await expect(candidates).toContainText(position.phaseName);
+    } else {
+      await expect(candidates).toContainText("ninguna");
+    }
+
+    // Acceso stays as its own field, separate from Puestos.
+    await expect(drawer.getByRole("combobox", { name: "Acceso" })).toBeVisible();
 
     // Correo institucional is type=email and mandatory for system access validation
     const emailInput = drawer.locator("input[type=email]").first();
@@ -50,8 +110,51 @@ test.describe("Equipo — add team member", () => {
     // The editor panel should close
     await page.getByRole("heading", { name: "Agregar colaborador" }).waitFor({ state: "hidden", timeout: 15_000 });
 
-    // The new member should appear in the list (name can appear in multiple elements — first is enough)
+    // The new member should appear in the list with its puesto badge.
     await expect(page.getByText(MEMBER_NAME).first()).toBeVisible({ timeout: 15_000 });
+    const row = page.getByRole("row").filter({ hasText: MEMBER_NAME });
+    await expect(row.getByText(POSITION_NAME, { exact: true })).toBeVisible({ timeout: 15_000 });
+    if (position.phaseName) {
+      await expect(row.getByText(position.phaseName)).toBeVisible();
+    }
+
+    // Saved in staff_positions, not in staff.role.
+    await expect
+      .poll(async () => {
+        const db = postgres(connectionString, { max: 1 });
+        try {
+          const rows = await db`
+            select sp.position_id
+            from core.staff_positions sp
+            join core.staff s on s.id = sp.staff_id
+            where s.name = ${MEMBER_NAME}`;
+          return rows.map((r) => r.position_id);
+        } finally {
+          await db.end();
+        }
+      })
+      .toEqual([position.id]);
+  });
+
+  test("a seeded collaborator shows its puestos and access level in separate columns", async ({ page }) => {
+    const position = await seedPosition();
+    const withPosition = `Con puesto E2E ${RUN_ID}`;
+    const withoutPosition = `Sin puesto E2E ${RUN_ID}`;
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      const [member] = await sql`
+        insert into core.staff (name, kind, capacity, role) values (${withPosition}, 'empleado', 5, 'Arquitecto Senior') returning id`;
+      await sql`insert into core.staff_positions (staff_id, position_id) values (${member.id}, ${position.id})`;
+      await sql`insert into core.staff (name, kind, capacity) values (${withoutPosition}, 'empleado', 5)`;
+    } finally {
+      await sql.end();
+    }
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const row = page.getByRole("row").filter({ hasText: withPosition });
+    await expect(row.getByText(POSITION_NAME, { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(row.getByText("Arquitecto Senior", { exact: true })).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: withoutPosition }).getByText("Sin puesto")).toBeVisible();
   });
 
   test("deactivate a collaborator, find them under Desactivados, and reactivate them", async ({ page }) => {

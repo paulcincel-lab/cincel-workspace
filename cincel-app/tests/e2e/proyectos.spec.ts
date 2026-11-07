@@ -1,6 +1,7 @@
 /**
- * E2E: Proyectos — name-only create, the Tramo column (no "Etapas"), the ficha's
- * Tramos card, and the Presale → Diseño hand-off once Presale·Cobro is done.
+ * E2E: Proyectos — name-only create, assigning the client from the ficha, the
+ * Tramo column (no "Etapas"), the ficha's Tramos card, and the Presale → Diseño
+ * hand-off once Presale·Cobro is done.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -11,12 +12,34 @@ import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
 const PROJECT_NAME = `Proyecto E2E ${RUN_ID}`;
+const CLIENT_NAME = `Cliente E2E ${RUN_ID}`;
 
 const connectionString =
   process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
 
 /** Presale has 10 template tasks in the default catalog (BE §5.2). */
 const PRESALE_TEMPLATE_COUNT = 10;
+
+/**
+ * Seeds a client contact directly (skips the directorio UI, out of scope here).
+ * Memoized: every test's beforeEach calls it with the same per-run name, and a
+ * second insert would hit contacts_type_name_lower_uq.
+ */
+let clientSeeded: Promise<void> | null = null;
+async function seedClient(): Promise<void> {
+  clientSeeded ??= (async () => {
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      await sql`
+        insert into core.contacts (type, kind, name)
+        values ('cliente', 'empresa', ${CLIENT_NAME})
+      `;
+    } finally {
+      await sql.end();
+    }
+  })();
+  return clientSeeded;
+}
 
 /**
  * The seeded auto-start defaults (BE §4.3 step 1): Presale starts on create,
@@ -67,9 +90,33 @@ async function seedProjectInPresale(name: string): Promise<string> {
   }
 }
 
+/** The project's "Asignar cliente y origen" admin task, or null when it has none. */
+async function assignClientTask(projectName: string): Promise<{ status: string; closedAt: Date | null } | null> {
+  const sql = postgres(connectionString, { max: 1 });
+  try {
+    const [task] = await sql`
+      select t.status, t.closed_at
+      from core.tasks t
+      join core.projects p on p.id = t.project_id
+      where p.name = ${projectName} and t.system_key = 'assign_client' and t.deleted_at is null`;
+    return task ? { status: task.status as string, closedAt: (task.closed_at as Date | null) ?? null } : null;
+  } finally {
+    await sql.end();
+  }
+}
+
+/** Opens "Nuevo proyecto", fills the only field and submits. */
+async function createProjectByName(page: import("@playwright/test").Page, name: string): Promise<void> {
+  await page.getByRole("button", { name: /Nuevo proyecto/i }).click();
+  await page.getByRole("heading", { name: "Nuevo proyecto" }).waitFor({ state: "visible" });
+  await page.getByLabel("Nombre del proyecto").fill(name);
+  await page.getByRole("button", { name: "Crear proyecto" }).click();
+}
+
 test.describe("Proyectos — create and edit", () => {
   test.beforeEach(async ({ page }) => {
     await restoreAutoStartDefaults();
+    await seedClient();
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
     await page.goto(`${BASE_URL}/proyectos`, { waitUntil: "domcontentloaded" });
@@ -130,6 +177,32 @@ test.describe("Proyectos — create and edit", () => {
       await sql.end();
     }
 
+    // No client yet: admins see "Por asignar", and the project carries the
+    // open "Asignar cliente y origen" admin task.
+    await expect(page.getByText("Por asignar", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    await expect.poll(async () => (await assignClientTask(PROJECT_NAME))?.status ?? null).not.toBeNull();
+    expect((await assignClientTask(PROJECT_NAME))?.closedAt).toBeNull();
+
+    // Set the client from the ficha's edit form.
+    await page.getByRole("button", { name: "Editar" }).click();
+    await expect(page.getByText("Al asignar el cliente se cierra la tarea «Asignar cliente y origen».")).toBeVisible();
+    await page.getByRole("combobox", { name: "Cliente" }).first().click();
+    await page.getByRole("option", { name: CLIENT_NAME }).click();
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Guardar", exact: true }).click();
+
+    await expect(page.getByRole("link", { name: CLIENT_NAME })).toBeVisible({ timeout: 15_000 });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("link", { name: CLIENT_NAME })).toBeVisible({ timeout: 30_000 });
+
+    // Setting the client closed the admin task.
+    await expect
+      .poll(async () => {
+        const task = await assignClientTask(PROJECT_NAME);
+        return task ? task.status === "completado" && task.closedAt !== null : false;
+      })
+      .toBe(true);
+
     // The ficha's Cerrar button returns to the project list.
     await page.getByRole("link", { name: "Cerrar" }).click();
     await expect(page).toHaveURL(/\/proyectos$/, { timeout: 15_000 });
@@ -140,12 +213,12 @@ test.describe("Proyectos — create and edit", () => {
     await expect(page.getByRole("columnheader", { name: "Fase activa", exact: true })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: /^Etapas?$/ })).toHaveCount(0);
 
-    // Verify the project persists in the list, in Presale, with its client still to assign.
+    // Verify the project persists in the list, in Presale, now with its client.
     await page.getByPlaceholder(/filtrar/i).fill(PROJECT_NAME);
     const row = page.getByRole("row").filter({ hasText: PROJECT_NAME });
     await expect(row).toBeVisible({ timeout: 15_000 });
     await expect(row.getByText("Presale", { exact: true })).toBeVisible();
-    await expect(row.getByText("Por asignar", { exact: true })).toBeVisible();
+    await expect(row.getByText(CLIENT_NAME)).toBeVisible();
   });
 
   test("the ficha shows its tramos, switches the current one and manages espacios (#733)", async ({ page }) => {
@@ -233,6 +306,55 @@ test.describe("Proyectos — create and edit", () => {
     await page.getByPlaceholder(/filtrar/i).fill(name);
     const row = page.getByRole("row").filter({ hasText: name });
     await expect(row.getByText("Presale", { exact: true })).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("a second project with the same name in other casing is refused", async ({ page }) => {
+    const name = `Proyecto duplicado E2E ${RUN_ID}`;
+    const sql = postgres(connectionString, { max: 1 });
+    try {
+      await sql`insert into core.projects (name, status) values (${name}, 'activo')`;
+    } finally {
+      await sql.end();
+    }
+
+    await createProjectByName(page, name.toUpperCase());
+    await expect(page.getByText("Ya existe un proyecto con ese nombre.")).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/proyectos$/);
+  });
+
+  test("the list shows Tramo, Fase activa and Cliente columns, with no Etapas", async ({ page }) => {
+    const name = `Proyecto tramo E2E ${RUN_ID}`;
+    const sql = postgres(connectionString, { max: 1 });
+    let projectId = "";
+    try {
+      const [presale] = await sql`select id from core.workflows where key = 'presale' limit 1`;
+      const [project] = await sql`
+        insert into core.projects (name, current_workflow_id, status)
+        values (${name}, ${presale.id}, 'activo') returning id`;
+      await sql`insert into core.project_stages (project_id, workflow_id) values (${project.id}, ${presale.id})`;
+      projectId = project.id;
+    } finally {
+      await sql.end();
+    }
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("columnheader", { name: "Tramo", exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("columnheader", { name: "Fase activa", exact: true })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Cliente", exact: true })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Etapas", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "Etapa", exact: true })).toHaveCount(0);
+
+    await page.getByPlaceholder(/filtrar/i).fill(name);
+    const row = page.getByRole("row").filter({ hasText: name });
+    await expect(row.getByText("Presale", { exact: true })).toBeVisible({ timeout: 15_000 });
+    // No client yet: admins see the destructive "Por asignar" badge.
+    await expect(row.getByText("Por asignar", { exact: true })).toBeVisible();
+
+    // The ficha's stage card is now "Tramos".
+    await page.goto(`${BASE_URL}/proyectos/${projectId}/ficha`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Tramos", { exact: true }).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("group", { name: "Etapas del proyecto" })).toHaveCount(0);
   });
 
   test("completing Presale·Cobro moves the project to Diseño's «Listos para iniciar»", async ({ page }) => {
