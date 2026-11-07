@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
 import type { TaskListItem } from "@/lib/types/core";
 import { isDueDateLate } from "@/lib/tasks/status-options";
 import {
-  projectsByArea,
+  projectsByTramo,
   tasksByBaseStatus,
 } from "@/lib/dashboard/donut-groups";
 import { DonutCard } from "./DonutCard";
@@ -274,18 +274,9 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     [activeTasks],
   );
 
-  const projectsByDepartment = useMemo(
+  const projectsByCurrentTramo = useMemo(
     () =>
-      // Projects no longer carry an área: group by the current tramo until projectsByTramo replaces this.
-      projectsByArea(
-        scopedProjectsData
-          .filter((p) => p.status === "activo")
-          .map((p) => ({
-            area: p.currentWorkflow
-              ? { id: p.currentWorkflow.id, name: p.currentWorkflow.name, colorSlot: p.currentWorkflow.sortOrder + 1 }
-              : null,
-          })),
-      ),
+      projectsByTramo(scopedProjectsData.filter((p) => p.status === "activo")),
     [scopedProjectsData],
   );
 
@@ -454,7 +445,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         />
 
         <DonutCard
-          title="Proyectos por departamento"
+          title="Proyectos por tramo"
           icon={
             <span
               aria-hidden
@@ -463,7 +454,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
               <FolderKanbanIcon className="size-4" />
             </span>
           }
-          slices={projectsByDepartment}
+          slices={projectsByCurrentTramo}
           unit="proyectos"
           emptyText="Sin proyectos activos."
         />

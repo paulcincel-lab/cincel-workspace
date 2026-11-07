@@ -109,7 +109,8 @@ export function taskTrendQueryWindow(buckets: TaskTrendBucket[]): {
 
 /**
  * Counts per bucket: `created` from each task's creation date, `completed`
- * from status → completado events, a task counting once per bucket.
+ * from completion events (see `completionsFromStatusEvents`), a task counting
+ * once per bucket.
  */
 export function bucketTaskTrend({
   buckets,
@@ -144,4 +145,58 @@ export function bucketTaskTrend({
     created,
     completed: completedIds.map((ids) => ids.size),
   };
+}
+
+/** A task history `cambio` on `status` or `customStatusId`. */
+export interface TaskTrendStatusEvent {
+  taskId: string;
+  at: Date;
+  field: "status" | "customStatusId";
+  before: string | null;
+  after: string | null;
+}
+
+export type TaskTrendStatusFlags = { closes: boolean; countsAsCompleted: boolean };
+
+/**
+ * Completions out of status history (BE §8.8): only moves into a status that
+ * counts as completed. One status change writes its `status` and
+ * `customStatusId` rows in one insert, so they share `at`.
+ *
+ * - `status` → completado counts when the custom status set with it is none
+ *   (built-in Completado) or one that counts as completed. Cancelado closes
+ *   the task but isn't completed work.
+ * - A `customStatusId` change with no `status` change beside it (the task was
+ *   already closed) counts when it leaves a closing status that doesn't count
+ *   for built-in Completado or a status that counts.
+ *
+ * Unknown custom status ids don't count.
+ */
+export function completionsFromStatusEvents(
+  events: TaskTrendStatusEvent[],
+  statuses: Map<string, TaskTrendStatusFlags>
+): TaskTrendCompletion[] {
+  const key = (e: TaskTrendStatusEvent) => `${e.taskId}|${e.at.getTime()}`;
+  const statusAt = new Map<string, TaskTrendStatusEvent>();
+  const customAt = new Map<string, TaskTrendStatusEvent>();
+  for (const e of events) (e.field === "status" ? statusAt : customAt).set(key(e), e);
+
+  const counts = (customStatusId: string | null) =>
+    customStatusId === null || statuses.get(customStatusId)?.countsAsCompleted === true;
+
+  const completions: TaskTrendCompletion[] = [];
+  for (const e of events) {
+    if (e.field === "status") {
+      if (e.after !== "completado") continue;
+      const custom = customAt.get(key(e));
+      if (!custom || counts(custom.after)) completions.push({ taskId: e.taskId, at: e.at });
+      continue;
+    }
+    if (statusAt.has(key(e)) || e.before === null) continue;
+    const before = statuses.get(e.before);
+    if (before?.closes && !before.countsAsCompleted && counts(e.after)) {
+      completions.push({ taskId: e.taskId, at: e.at });
+    }
+  }
+  return completions;
 }

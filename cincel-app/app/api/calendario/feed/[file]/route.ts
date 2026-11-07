@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { findStaffByCalendarFeedToken } from "@/lib/repositories/calendar-feed-repository";
-import { listMyTasks } from "@/lib/repositories/tasks-repository";
+import { listMyCalendarTasks } from "@/lib/repositories/tasks-repository";
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import { buildIcs } from "@/lib/calendar/ics";
 
@@ -25,7 +25,7 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const tasks = await listMyTasks(staff.id, { archived: false });
+  const tasks = await listMyCalendarTasks(staff.id);
   const ics = buildIcs(buildCalendarEvents(tasks), {
     baseUrl: request.nextUrl.origin,
     calendarName: `Cincel — ${staff.name}`,

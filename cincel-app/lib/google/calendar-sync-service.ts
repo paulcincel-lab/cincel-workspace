@@ -13,7 +13,7 @@ import {
 import { planSync, toDesiredEvents, type DesiredEvent } from "@/lib/google/calendar-sync";
 import { getStaffAccessToken } from "@/lib/google/staff-token";
 import * as syncRepository from "@/lib/repositories/google-calendar-sync-repository";
-import { listMyTasks } from "@/lib/repositories/tasks-repository";
+import { listMyCalendarTasks } from "@/lib/repositories/tasks-repository";
 
 /**
  * Pushes a staff member's tasks into a dedicated "Cincel" calendar in their
@@ -88,7 +88,7 @@ export async function syncGoogleCalendar(staffId: string, baseUrl: string): Prom
     const token = await calendarToken(staffId);
     const calendarId = await ensureCalendar(token, staffId);
 
-    const tasks = await listMyTasks(staffId, { archived: false });
+    const tasks = await listMyCalendarTasks(staffId);
     const desired = toDesiredEvents(buildCalendarEvents(tasks), baseUrl);
     const plan = planSync(desired, await syncRepository.listSyncedEvents(staffId));
 

@@ -160,14 +160,9 @@ describe("form fields have accessible names", () => {
   });
 
   it("Proyectos: Nuevo proyecto", async () => {
-    render(<ProjectCreateModal onClose={() => undefined} onConfirm={async () => undefined} />);
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Cliente" })).toBeTruthy());
-    expect(screen.getByLabelText("Nombre del proyecto").tagName).toBe("INPUT");
-    expect(screen.getByLabelText("Fecha de inicio").tagName).toBe("INPUT");
-    expect(screen.queryByRole("combobox", { name: "Etapa inicial" })).toBeNull();
-    for (const name of ["Tipo de proyecto", "Encargado"]) {
-      expect(screen.getByRole("combobox", { name })).toBeTruthy();
-    }
+    render(<ProjectCreateModal onClose={() => undefined} onConfirm={async () => undefined} presaleAutoStart />);
+    await waitFor(() => expect(screen.getByLabelText("Nombre del proyecto").tagName).toBe("INPUT"));
+    expect(screen.queryByRole("combobox")).toBeNull();
     expect(await nameViolations()).toEqual([]);
   });
 });

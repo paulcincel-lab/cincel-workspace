@@ -19,6 +19,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
 import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard";
 import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
+import { ProjectTramosCard } from "@/components/proyectos/ProjectTramosCard";
+import { ProjectSpacesCard } from "@/components/proyectos/ProjectSpacesCard";
+import { groupFichaTasks, hasTasksWithoutTramo, NO_PHASE_LABEL } from "@/lib/proyectos/task-groups";
 import { hasImportData, ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 
@@ -27,23 +30,25 @@ import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permiss
 import {
   fetchProjectAction,
   updateProjectAction,
-  setProjectCurrentTramoAction,
   setProjectMembersAction,
   setProjectContactsAction,
   addProjectLinkAction,
   removeProjectLinkAction,
+  fetchProjectSpacesAction,
 } from "@/lib/actions/projects-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { fetchContactsAction } from "@/lib/actions/contacts-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import { fetchTasksAction } from "@/lib/actions/tasks-actions";
+import { fetchAdminTasksAction, fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 import type {
   ContactListItem,
   ProjectDetail,
+  ProjectSpace,
   Staff,
   TaskListItem,
   Workflow,
+  WorkflowRef,
   TaskLinkInput,
 } from "@/lib/types/core";
 
@@ -64,18 +69,7 @@ export default function ProjectFichaPage() {
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
-
-  // Group by Fase in order of first appearance; tasks without one go last.
-  const phaseGroups = useMemo(() => {
-    const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
-    for (const task of tasks) {
-      const name = task.phase?.name.trim() || "Sin fase";
-      const group = groups.get(name) ?? { id: name, name, tasks: [] };
-      group.tasks.push(task);
-      groups.set(name, group);
-    }
-    return [...groups.values()].sort((a, b) => Number(a.name === "Sin fase") - Number(b.name === "Sin fase"));
-  }, [tasks]);
+  const [spaces, setSpaces] = useState<ProjectSpace[] | null>(null);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [contacts, setContacts] = useState<ContactListItem[]>([]);
   const [clients, setClients] = useState<ContactListItem[]>([]);
@@ -84,26 +78,40 @@ export default function ProjectFichaPage() {
   const [notFound, setNotFound] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Partial<ProjectDetail>>({});
-  const [tramoError, setTramoError] = useState("");
   const authenticatedUser = getCurrentAuthenticatedUser();
   const caps = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
   const isAdmin = canSeeAdminData(authenticatedUser);
 
+  // Tramo → Fase (FE §3.5); admins also get the project's admin tasks.
+  const taskGroups = useMemo(() => groupFichaTasks(tasks, { includeAdmin: isAdmin }), [tasks, isAdmin]);
+  const tramoOptions = useMemo<WorkflowRef[]>(
+    () =>
+      [...workflows]
+        .filter((w) => w.active)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((w) => ({ id: w.id, key: w.key, name: w.name, sortOrder: w.sortOrder })),
+    [workflows]
+  );
+
   async function reload() {
     try {
-      const [row, taskRows, staffRows, contactRows, workflowRows] = await Promise.all([
+      const [row, taskRows, staffRows, contactRows, workflowRows, spaceRows, adminTaskRows] = await Promise.all([
         fetchProjectAction(projectId),
         fetchTasksAction({ projectId }),
         fetchStaffAction(),
         fetchContactsAction(),
         fetchWorkflowsAction(),
+        fetchProjectSpacesAction(projectId).catch(() => [] as ProjectSpace[]),
+        isAdmin ? fetchAdminTasksAction({ projectId }).catch(() => [] as TaskListItem[]) : Promise.resolve([] as TaskListItem[]),
       ]);
       if (!row) {
         setNotFound(true);
         return;
       }
       setProject(row);
-      setTasks(taskRows);
+      const taskIds = new Set(taskRows.map((t) => t.id));
+      setTasks([...taskRows, ...adminTaskRows.filter((t) => !taskIds.has(t.id))]);
+      setSpaces(spaceRows);
       setStaff(staffRows);
       setContacts(contactRows.filter((c) => c.type !== "cliente"));
       setClients(contactRows.filter((c) => c.type === "cliente"));
@@ -186,22 +194,6 @@ export default function ProjectFichaPage() {
       await reload();
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
-    }
-  }
-
-  async function changeCurrentTramo(workflowId: string) {
-    if (!project || workflowId === project.currentWorkflowId) return;
-    setTramoError("");
-    try {
-      await setProjectCurrentTramoAction(project.id, workflowId);
-      await reload();
-    } catch (err) {
-      if (err instanceof RepositoryError) reportRepositoryError(err);
-      setTramoError(
-        err instanceof Error && err.message.startsWith("NOT_STARTED")
-          ? "Ese tramo aún no se ha iniciado en este proyecto."
-          : "No se pudo cambiar el tramo actual."
-      );
     }
   }
 
@@ -388,44 +380,18 @@ export default function ProjectFichaPage() {
               )}
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-foreground">Tramos</h2>
-                <div className="flex flex-wrap gap-1">
-                  {project.tramos.length > 0
-                    ? project.tramos.map((tramo) => (
-                        <Badge key={tramo.id} variant={tramo.current ? "secondary" : "outline"}>{tramo.name}</Badge>
-                      ))
-                    : <Badge variant="outline">Sin tramo</Badge>}
-                </div>
-              </div>
-              {caps.canChangeProjectStage && (project.tramos.length > 0 || (isAdmin && project.needsTramo)) ? (
-                <FormField className="mt-4 max-w-xs">
-                  <Label className="block text-sm font-normal text-muted-foreground">
-                    {project.needsTramo ? "Asignar tramo" : "Tramo actual"}
-                  </Label>
-                  {(() => {
-                    const options: Array<{ id: string; name: string }> =
-                      project.needsTramo && isAdmin ? workflows : project.tramos;
-                    return (
-                      <Select
-                        items={Object.fromEntries(options.map((w) => [w.id, w.name]))}
-                        value={project.currentWorkflowId ?? null}
-                        onValueChange={(v) => void changeCurrentTramo(v as string)}
-                      >
-                        <SelectTrigger className="mt-1 w-full"><SelectValue placeholder="Sin tramo" /></SelectTrigger>
-                        <SelectContent>
-                          {options.map((w) => (
-                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    );
-                  })()}
-                </FormField>
-              ) : null}
-              {tramoError ? <p className="mt-2 text-sm text-destructive">{tramoError}</p> : null}
-            </section>
+            <ProjectTramosCard
+              project={project}
+              workflows={tramoOptions}
+              canChangeTramo={caps.canChangeProjectStage}
+              isAdmin={isAdmin}
+              hasTasksWithoutTramo={hasTasksWithoutTramo(tasks)}
+              onChanged={() => void reload()}
+            />
+
+            {spaces ? (
+              <ProjectSpacesCard projectId={project.id} initialSpaces={spaces} canEdit={caps.canEditProjectGeneral} />
+            ) : null}
 
             <section className="space-y-4">
               <h2 className="text-lg font-semibold text-foreground">Tareas ({tasks.length})</h2>
@@ -433,22 +399,36 @@ export default function ProjectFichaPage() {
                 <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">Sin tareas todavía.</p>
               ) : (
                 <AccordionPanels
-                  groups={phaseGroups.map((group) => ({
+                  groups={taskGroups.map((group) => ({
                     id: group.id,
                     title: group.name,
-                    count: group.tasks.length,
+                    count: group.count,
                     content: (
-                      <ul className="divide-y divide-border border-t border-border text-sm">
-                        {group.tasks.map((t) => (
-                          <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-2">
-                            <span>{t.title}</span>
-                            <div className="flex shrink-0 items-center gap-3">
-                              <ChecklistProgressCell total={t.checklist.total} completed={t.checklist.completed} />
-                              <StatusBadge label={taskStatusLabel(t)} token={statusColorToken(t)} />
-                            </div>
-                          </li>
+                      <div className="border-t border-border">
+                        {group.phases.map((phaseGroup) => (
+                          <div key={phaseGroup.id}>
+                            {group.kind === "tramo" ? (
+                              <div className="bg-muted/40 px-4 py-1.5 text-xs font-medium text-muted-foreground">
+                                {phaseGroup.phase ? phaseGroup.name : <Badge variant="outline">{NO_PHASE_LABEL}</Badge>}
+                              </div>
+                            ) : null}
+                            <ul className="divide-y divide-border text-sm">
+                              {phaseGroup.tasks.map((t) => (
+                                <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                                  <span>
+                                    {t.title}
+                                    {t.space ? <span className="ml-2 text-xs text-muted-foreground">{t.space.name}</span> : null}
+                                  </span>
+                                  <div className="flex shrink-0 items-center gap-3">
+                                    <ChecklistProgressCell total={t.checklist.total} completed={t.checklist.completed} />
+                                    <StatusBadge label={taskStatusLabel(t)} token={statusColorToken(t)} />
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     ),
                   }))}
                 />

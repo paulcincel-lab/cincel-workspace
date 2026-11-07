@@ -24,6 +24,18 @@ vi.mock("@/lib/auth/permissions", () => ({
 vi.mock("@/lib/repositories/browser-state-repository", () => ({
   readStorage: () => null,
   writeStorage: vi.fn(),
+  removeStorage: vi.fn(),
+}));
+
+vi.mock("@/lib/actions/tramo-start-actions", () => ({
+  fetchTramoBoardAction: () => new Promise(() => {}),
+  previewStartTramoAction: () => new Promise(() => {}),
+  startTramoAction: vi.fn(),
+  undoStartTramoAction: vi.fn(),
+}));
+
+vi.mock("@/lib/actions/projects-actions", () => ({
+  fetchProjectSpacesAction: () => Promise.resolve([]),
 }));
 
 vi.mock("@/lib/actions/task-statuses-actions", () => ({
@@ -64,7 +76,6 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     kind: "usuario",
     templateId: null,
     workflowId: null,
-    phase: null,
     phaseId: null,
     spaceId: null,
     closedAt: null,
@@ -85,7 +96,7 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     customStatus: null,
     project: { id: "p1", name: "Residencia Valle Alto", clientName: "Cliente" },
     workflow: null,
-    areaColorSlot: null,
+    phase: null,
     space: null,
     manager: { id: "u1", name: "Ana Ruiz" },
     support: [],
@@ -96,7 +107,7 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     subtaskDoneCount: 0,
     waitingOn: 0,
     ...overrides,
-  };
+  } as unknown as TaskListItem;
 }
 
 function rowOf(title: string): HTMLElement {
@@ -150,7 +161,7 @@ describe("ActividadesClient rows", () => {
   });
 });
 
-const presaleWorkflow: WorkflowDetail = {
+const presaleWorkflow = {
   id: "wf-presale",
   key: "presale",
   name: "Presale",
@@ -161,13 +172,12 @@ const presaleWorkflow: WorkflowDetail = {
   phases: [],
   readiness: null,
   templates: [],
-  areas: [],
-};
+} as unknown as WorkflowDetail;
 
-describe("ActividadesClient department pages", () => {
+describe("ActividadesClient tramo pages", () => {
   it.each([
     ["presale", "Presale"],
-    ["diseno", "Taller de Diseño"],
+    ["diseno", "Diseño"],
     ["construccion", "Construcción"],
   ])("renders the table with an empty state on %s", (slug, label) => {
     capabilities.current = { canCreateActivity: true };
@@ -186,7 +196,7 @@ describe("ActividadesClient department pages", () => {
     expect(screen.getByRole("columnheader", { name: /Fase/ })).toBeTruthy();
   });
 
-  it("opens Nueva tarea from a department page", () => {
+  it("opens Nueva tarea from a tramo page", () => {
     capabilities.current = { canCreateActivity: true };
     render(
       <ActividadesClient
@@ -204,7 +214,7 @@ describe("ActividadesClient department pages", () => {
     expect(screen.getAllByText("Nueva tarea").length).toBeGreaterThan(0);
   });
 
-  it("lists the department's tasks grouped by project", () => {
+  it("lists the tramo's tasks grouped by project", () => {
     capabilities.current = {};
     render(
       <ActividadesClient
@@ -218,17 +228,5 @@ describe("ActividadesClient department pages", () => {
 
     expect(screen.getByText("Levantamiento")).toBeTruthy();
     expect(screen.queryByText("Sin tareas en Presale.")).toBeNull();
-  });
-
-  it("still renders the table but blocks creation when the workflow is missing", () => {
-    capabilities.current = { canCreateActivity: true };
-    render(
-      <ActividadesClient slug="presale" workflow={null} initialProjects={[]} initialStaff={[]} initialTasks={[]} />,
-    );
-
-    expect(screen.getByText("Sin tareas en Presale.")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("Configuración → Workflows");
-    const button = screen.getByRole("button", { name: "+ Nueva tarea" });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 });

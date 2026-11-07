@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
+import { fetchTramosNavAction } from "@/lib/actions/workflows-actions";
+import type { WorkflowRef } from "@/lib/types/core";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { APP_VERSION } from "@/lib/version";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -24,6 +27,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/shadcn/sidebar";
+import { Skeleton } from "@/components/ui/shadcn/skeleton";
 
 type IconProps = {
   className?: string;
@@ -41,6 +45,8 @@ type MenuGroupItem = {
   label: string;
   icon: (props: IconProps) => React.JSX.Element;
   submenu: MenuLinkItem[];
+  /** Shows placeholder rows after the listed entries while more load. */
+  loading?: boolean;
 };
 
 type MenuItem = MenuLinkItem | MenuGroupItem;
@@ -172,6 +178,24 @@ export default function Sidebar() {
         : null,
   );
 
+  // Active tramos for the Actividades submenu: null while loading; on error
+  // the submenu keeps only "General".
+  const [tramos, setTramos] = useState<WorkflowRef[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTramosNavAction()
+      .then((rows) => {
+        if (!cancelled) setTramos([...rows].sort((a, b) => a.sortOrder - b.sortOrder));
+      })
+      .catch(() => {
+        if (!cancelled) setTramos([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     const refreshUser = () => {
       setAuthenticatedUser(getCurrentAuthenticatedUser());
@@ -188,17 +212,21 @@ export default function Sidebar() {
   }, []);
 
   const canViewConfiguration = authenticatedUser?.access === "Administrador";
+  const canManageWorkflows = resolveWorkflowsCapabilities(authenticatedUser).canManageWorkflows;
 
   const menu: MenuItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
     {
       label: "Actividades",
       icon: ActivityIcon,
+      loading: tramos === null,
       submenu: [
         { label: "General", href: "/actividades/general", icon: ActivityIcon },
-        { label: "Presale", href: "/actividades/presale", icon: ActivityIcon },
-        { label: "Taller de diseño", href: "/actividades/diseno", icon: ActivityIcon },
-        { label: "Construcción", href: "/actividades/construccion", icon: ActivityIcon },
+        ...(tramos ?? []).map((tramo) => ({
+          label: tramo.name,
+          href: `/actividades/${tramo.key}`,
+          icon: ActivityIcon,
+        })),
       ],
     },
     { label: "Tablero", href: "/tablero", icon: BoardIcon },
@@ -230,7 +258,9 @@ export default function Sidebar() {
               { label: "Permisos", href: "/configuracion/permisos", icon: SettingsIcon },
               { label: "Áreas", href: "/configuracion/areas", icon: SettingsIcon },
               { label: "Estatus", href: "/configuracion/estatus", icon: SettingsIcon },
-              { label: "Workflows", href: "/configuracion/workflows", icon: SettingsIcon },
+              ...(canManageWorkflows
+                ? [{ label: "Tramos y fases", href: "/configuracion/tramos", icon: SettingsIcon }]
+                : []),
               { label: "Google", href: "/configuracion/google", icon: SettingsIcon },
               { label: "Importar de monday", href: "/configuracion/importar-monday", icon: SettingsIcon },
             ],
@@ -330,7 +360,7 @@ export default function Sidebar() {
                         {isExpanded ? (
                           <SidebarMenuSub>
                             {item.submenu.map((subitem) => (
-                              <SidebarMenuSubItem key={subitem.label}>
+                              <SidebarMenuSubItem key={subitem.href}>
                                 <SidebarMenuSubButton
                                   render={<Link href={subitem.href} />}
                                   isActive={isActivePath(subitem.href, subitem.exact)}
@@ -339,6 +369,13 @@ export default function Sidebar() {
                                 </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
                             ))}
+                            {item.loading
+                              ? [0, 1, 2].map((row) => (
+                                  <SidebarMenuSubItem key={`skeleton-${row}`} data-testid="sidebar-submenu-skeleton">
+                                    <Skeleton className="h-7 w-full" />
+                                  </SidebarMenuSubItem>
+                                ))
+                              : null}
                           </SidebarMenuSub>
                         ) : null}
                       </SidebarMenuItem>

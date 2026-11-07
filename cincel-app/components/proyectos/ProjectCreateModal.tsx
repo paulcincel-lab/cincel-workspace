@@ -1,73 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useId, useState } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { FormField } from "@/components/ui/shadcn/form-field";
 import { Label } from "@/components/ui/shadcn/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
-import { fetchContactsAction } from "@/lib/actions/contacts-actions";
-import { fetchStaffAction } from "@/lib/actions/staff-actions";
-import type { ContactListItem, ProjectInput, Staff } from "@/lib/types/core";
-
-const PROJECT_TYPE_OPTIONS = ["Habitacional", "Oficinas", "Comercial", "Mobiliario", "Mantenimiento", "Otro"];
-const NO_VALUE = "__none__";
+import type { ProjectCreateInput } from "@/lib/types/core";
 
 interface ProjectCreateModalProps {
   onClose: () => void;
-  onConfirm: (input: ProjectInput) => Promise<void>;
+  onConfirm: (input: ProjectCreateInput) => Promise<void>;
+  /** Presale starts by itself on create (its auto-start is `on_create`). */
+  presaleAutoStart: boolean;
 }
 
-/** Friendly copy for the defensive checks projects-repository.ts also runs server-side. */
-function friendlyCreateError(err: unknown): string {
+const NAME_REQUIRED = "El nombre del proyecto es obligatorio.";
+
+/** Friendly copy for the codes `createProjectAction` throws. */
+export function friendlyCreateError(err: unknown): string {
   if (err instanceof Error) {
-    if (err.message === "PROJECT_CLIENT_REQUIRED") return "Selecciona un cliente.";
-    if (err.message === "NAME_TAKEN") return "Ya existe un proyecto con ese nombre.";
+    if (err.message.startsWith("NAME_TAKEN")) return "Ya existe un proyecto con ese nombre.";
+    if (err.message.startsWith("EMPTY")) return NAME_REQUIRED;
   }
   return "No se pudo crear el proyecto. Intenta de nuevo.";
 }
 
 /**
- * Modal for creating a new project. The client is still required here; the
- * first tramo (Presale) starts on its own when it is set to auto-start.
+ * Sheet for creating a new project. A project starts with only its name;
+ * client, tipo, encargado and fechas are edited later in the ficha, and the
+ * first tramo is started from Actividades (or automatically for Presale).
  */
-export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalProps) {
-  const [clients, setClients] = useState<ContactListItem[]>([]);
-  const [staff, setStaff] = useState<Staff[]>([]);
+export function ProjectCreateModal({ onClose, onConfirm, presaleAutoStart }: ProjectCreateModalProps) {
+  const errorId = useId();
   const [name, setName] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [type, setType] = useState(PROJECT_TYPE_OPTIONS[0]);
-  const [managerId, setManagerId] = useState("");
-  const [startDate, setStartDate] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    void fetchContactsAction({ type: "cliente" }).then(setClients);
-    void fetchStaffAction().then(setStaff);
-  }, []);
 
   async function handleCreate() {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      setError("El nombre del proyecto es obligatorio.");
-      return;
-    }
-    if (!clientId) {
-      setError("Selecciona un cliente.");
+      setError(NAME_REQUIRED);
       return;
     }
     setError("");
     setSaving(true);
     try {
-      await onConfirm({
-        name: trimmedName,
-        clientId,
-        projectType: type,
-        managerId: managerId || null,
-        startDate: startDate || null,
-      });
+      await onConfirm({ name: trimmedName });
     } catch (err) {
       setError(friendlyCreateError(err));
       setSaving(false);
@@ -79,106 +58,45 @@ export function ProjectCreateModal({ onClose, onConfirm }: ProjectCreateModalPro
       <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="text-lg">Nuevo proyecto</SheetTitle>
-          <SheetDescription>Crea un proyecto operativo y abre su ficha.</SheetDescription>
+          <SheetDescription>
+            {presaleAutoStart
+              ? "Solo necesitas el nombre. Presale se inicia automáticamente."
+              : "Solo necesitas el nombre."}
+          </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-4 px-6 py-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField className="sm:col-span-2">
-              <Label className="block text-sm font-normal text-muted-foreground">Nombre del proyecto</Label>
-              <Input value={name} onChange={(event) => setName(event.target.value)} className="mt-1" />
-            </FormField>
-
-            <FormField>
-              <Label className="block text-sm font-normal text-muted-foreground">Cliente</Label>
-              <Select
-                items={{
-                  [NO_VALUE]: clients.length === 0 ? "No hay clientes" : "Selecciona un cliente",
-                  ...Object.fromEntries(
-                    clients.map((client) => [
-                      client.id,
-                      `${client.name} (${client.kind === "empresa" ? "Empresa" : "Particular"})`,
-                    ])
-                  ),
-                }}
-                value={clientId || NO_VALUE}
-                onValueChange={(value) => setClientId(value === NO_VALUE ? "" : (value as string))}
-              >
-                <SelectTrigger className="mt-1 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_VALUE} disabled>
-                    {clients.length === 0 ? "No hay clientes" : "Selecciona un cliente"}
-                  </SelectItem>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name} ({client.kind === "empresa" ? "Empresa" : "Particular"})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormField>
-
-            <FormField>
-              <Label className="block text-sm font-normal text-muted-foreground">Tipo de proyecto</Label>
-              <Select
-                items={Object.fromEntries(PROJECT_TYPE_OPTIONS.map((t) => [t, t]))}
-                value={type}
-                onValueChange={(value) => setType(value as string)}
-              >
-                <SelectTrigger className="mt-1 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROJECT_TYPE_OPTIONS.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormField>
-
-            <FormField>
-              <Label className="block text-sm font-normal text-muted-foreground">Encargado</Label>
-              <Select
-                items={{ [NO_VALUE]: "Sin encargado", ...Object.fromEntries(staff.map((s) => [s.id, s.name])) }}
-                value={managerId || NO_VALUE}
-                onValueChange={(value) => setManagerId(value === NO_VALUE ? "" : (value as string))}
-              >
-                <SelectTrigger className="mt-1 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_VALUE}>Sin encargado</SelectItem>
-                  {staff.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormField>
-
-            <FormField className="sm:col-span-2">
-              <Label className="block text-sm font-normal text-muted-foreground">Fecha de inicio</Label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                className="mt-1"
-              />
-            </FormField>
-          </div>
-
-          {error ? (
-            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
-          ) : null}
-        </div>
+        <form
+          className="space-y-4 px-6 py-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleCreate();
+          }}
+        >
+          <FormField>
+            <Label className="block text-sm font-normal text-muted-foreground">
+              Nombre del proyecto
+            </Label>
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="mt-1"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? errorId : undefined}
+            />
+            {error ? (
+              <p id={errorId} className="mt-1 text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+          </FormField>
+        </form>
 
         <SheetFooter>
           <Button variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={handleCreate} disabled={saving}>
-            {saving ? "Creando..." : "Crear proyecto"}
+          <Button onClick={() => void handleCreate()} disabled={saving}>
+            {saving ? "Creando…" : "Crear proyecto"}
           </Button>
         </SheetFooter>
       </SheetContent>

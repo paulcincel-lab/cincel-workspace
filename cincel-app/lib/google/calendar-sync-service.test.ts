@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
-  listMyTasks: vi.fn(),
+  listMyCalendarTasks: vi.fn(),
   buildCalendarEvents: vi.fn(),
   getCalendarSync: vi.fn(),
   upsertCalendarSync: vi.fn(),
@@ -17,7 +17,7 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/google/staff-token", () => ({ getStaffAccessToken: m.getStaffAccessToken }));
-vi.mock("@/lib/repositories/tasks-repository", () => ({ listMyTasks: m.listMyTasks }));
+vi.mock("@/lib/repositories/tasks-repository", () => ({ listMyCalendarTasks: m.listMyCalendarTasks }));
 vi.mock("@/lib/calendar/calendar-service", () => ({ buildCalendarEvents: m.buildCalendarEvents }));
 vi.mock("@/lib/repositories/google-calendar-sync-repository", () => ({
   getCalendarSync: m.getCalendarSync,
@@ -46,12 +46,12 @@ import type { CalendarEvent } from "@/lib/types/calendar";
 
 const BASE = "https://app";
 const ev = (id: string, title = "T") =>
-  ({ id, taskId: id, date: "2026-12-01", time: "09:00", title, project: "P", responsible: "R", stage: "s", stageLabel: "S", phase: "", type: "Compromiso", href: "/x" }) as CalendarEvent;
+  ({ id, taskId: id, date: "2026-12-01", time: "09:00", title, project: "P", responsible: "R", tramo: "s", tramoLabel: "S", phaseId: null, phaseLabel: "", type: "Compromiso", href: "/x" }) as CalendarEvent;
 
 beforeEach(() => {
   Object.values(m).forEach((fn) => fn.mockReset());
   m.getStaffAccessToken.mockResolvedValue({ status: "ok", accessToken: "tok" });
-  m.listMyTasks.mockResolvedValue([]);
+  m.listMyCalendarTasks.mockResolvedValue([]);
   m.getCalendarSync.mockResolvedValue({ calendarId: "cal", enabled: true, lastSyncedAt: null, lastError: null });
   m.getCalendar.mockResolvedValue(undefined);
   m.listSyncedEvents.mockResolvedValue([]);

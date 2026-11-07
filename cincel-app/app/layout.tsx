@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import AppRouteGuard from "@/components/auth/AppRouteGuard";
 import SessionHydrator from "@/components/auth/SessionHydrator";
+import { Toaster } from "@/components/ui/shadcn/sonner";
 import QueryProvider from "@/components/providers/QueryProvider";
 import { SessionAccessProvider } from "@/lib/auth/session-context";
 import { getSessionAccess } from "@/lib/auth/session";
@@ -52,6 +53,7 @@ export default async function RootLayout({
             </GeneralSettingsProvider>
           </SessionAccessProvider>
         </QueryProvider>
+        <Toaster position="bottom-right" />
       </body>
     </html>
   );

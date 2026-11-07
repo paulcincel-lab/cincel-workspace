@@ -19,6 +19,8 @@ import {
 } from "@/lib/db/schema";
 import { closedAtPatch } from "@/lib/project-flow/closing";
 import { flowError } from "@/lib/project-flow/errors";
+import { isStaffAdministrator } from "@/lib/auth/access-role";
+import { completionsFromStatusEvents } from "@/lib/dashboard/task-trend";
 import { notImplemented } from "@/lib/project-flow/not-implemented";
 import type { AdminTaskFilters } from "@/lib/validation/project-flow";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
@@ -423,6 +425,24 @@ export async function assertTaskVisible(taskId: string, viewer: ViewerScope): Pr
 /** Tasks where the staff member is manager or support. */
 export async function listMyTasks(staffId: string, filters: TaskFilters = {}): Promise<TaskListItem[]> {
   return listTasks({ ...filters, involvesStaffId: staffId });
+}
+
+/**
+ * A staff member's own calendar (ICS feed, Google sync): their live,
+ * unarchived tasks, with admin tasks only when they're an administrator
+ * (BE §8.8).
+ */
+export async function listMyCalendarTasks(staffId: string): Promise<TaskListItem[]> {
+  const [member] = await db
+    .select({ role: staff.role, email: staff.email })
+    .from(staff)
+    .where(eq(staff.id, staffId))
+    .limit(1);
+  const admin = !!member && isStaffAdministrator(member.role, member.email);
+  return listMyTasks(staffId, {
+    archived: false,
+    kind: admin ? ["workflow", "usuario", "admin"] : ["workflow", "usuario"],
+  });
 }
 
 export async function getTask(id: string): Promise<TaskDetail | null> {
@@ -1015,26 +1035,58 @@ export interface TaskTrendSourceTask {
 
 /**
  * Dashboard "Avance de tareas" source (#601): live tasks created in the window
- * or moved to completado in it, plus those completion events. Archived and
- * deleted tasks (and tasks of deleted projects) are left out.
+ * or completed in it, plus those completion events. Only moves into a status
+ * that counts as completed are completions (BE §8.8; Cancelado isn't).
+ * Archived, deleted and admin tasks (and tasks of deleted projects) are left out.
  */
 export async function listTaskTrendSource(
   from: Date,
   to: Date
 ): Promise<{ tasks: TaskTrendSourceTask[]; completions: Array<{ taskId: string; at: Date }> }> {
-  const events = await db
-    .select({ taskId: historyEvents.entityId, at: historyEvents.eventAt })
+  const statusEvents = await db
+    .select({
+      taskId: historyEvents.entityId,
+      at: historyEvents.eventAt,
+      field: historyEvents.field,
+      before: historyEvents.beforeValue,
+      after: historyEvents.afterValue,
+    })
     .from(historyEvents)
     .where(
       and(
         eq(historyEvents.entity, "task"),
         eq(historyEvents.kind, "cambio"),
-        eq(historyEvents.field, "status"),
-        eq(historyEvents.afterValue, "completado"),
+        inArray(historyEvents.field, ["status", "customStatusId"]),
         gte(historyEvents.eventAt, from),
         lt(historyEvents.eventAt, to)
       )
     );
+  const statusIds = [
+    ...new Set(
+      statusEvents
+        .filter((e) => e.field === "customStatusId")
+        .flatMap((e) => [e.before, e.after])
+        .filter((id): id is string => id !== null)
+    ),
+  ];
+  // Deleted statuses included: the event happened while they existed.
+  const statusRows =
+    statusIds.length > 0
+      ? await db
+          .select({ id: taskStatuses.id, closes: taskStatuses.closes, countsAsCompleted: taskStatuses.countsAsCompleted })
+          .from(taskStatuses)
+          .where(inArray(sql`${taskStatuses.id}::text`, statusIds))
+      : [];
+  const events = completionsFromStatusEvents(
+    statusEvents.map((e) => ({
+      taskId: e.taskId,
+      at: e.at,
+      field: e.field as "status" | "customStatusId",
+      before: e.before,
+      after: e.after,
+    })),
+    new Map(statusRows.map((r) => [r.id, { closes: r.closes, countsAsCompleted: r.countsAsCompleted }]))
+  );
 
   const completedIds = [...new Set(events.map((e) => e.taskId))];
   const createdInWindow = and(gte(tasks.createdAt, from), lt(tasks.createdAt, to));
@@ -1054,6 +1106,7 @@ export async function listTaskTrendSource(
         isNull(tasks.deletedAt),
         isNull(projects.deletedAt),
         eq(tasks.archived, false),
+        ne(tasks.kind, "admin"),
         completedIds.length > 0 ? or(createdInWindow, inArray(tasks.id, completedIds)) : createdInWindow
       )
     );

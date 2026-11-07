@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { TASK_TREND_TIME_ZONE, bucketTaskTrend, taskTrendBuckets, taskTrendQueryWindow } from "./task-trend";
+import {
+  TASK_TREND_TIME_ZONE,
+  bucketTaskTrend,
+  completionsFromStatusEvents,
+  taskTrendBuckets,
+  taskTrendQueryWindow,
+  type TaskTrendStatusEvent,
+} from "./task-trend";
 
 const TZ = TASK_TREND_TIME_ZONE; // America/Mexico_City, UTC-6
 // Thursday 29 Oct 2026, 12:00 local.
@@ -119,5 +126,79 @@ describe("bucketTaskTrend", () => {
     const result = trend("semana", [at("2026-10-26T15:00:00Z")], [{ taskId: "a", at: at("2026-10-26T18:00:00Z") }]);
     expect(result.created).toEqual([1, 0, 0, 0, 0, 0, 0]);
     expect(result.completed).toEqual([1, 0, 0, 0, 0, 0, 0]);
+  });
+});
+
+describe("completionsFromStatusEvents", () => {
+  const APROBADO = "s-aprobado"; // closes, counts
+  const CANCELADO = "s-cancelado"; // closes, doesn't count
+  const REVISION = "s-revision"; // open
+  const statuses = new Map([
+    [APROBADO, { closes: true, countsAsCompleted: true }],
+    [CANCELADO, { closes: true, countsAsCompleted: false }],
+    [REVISION, { closes: false, countsAsCompleted: false }],
+  ]);
+  const t1 = at("2026-10-27T15:00:00Z");
+  const t2 = at("2026-10-28T15:00:00Z");
+  const ev = (
+    taskId: string,
+    when: Date,
+    field: TaskTrendStatusEvent["field"],
+    before: string | null,
+    after: string | null
+  ): TaskTrendStatusEvent => ({ taskId, at: when, field, before, after });
+
+  it("counts a move to built-in Completado", () => {
+    expect(completionsFromStatusEvents([ev("a", t1, "status", "pendiente", "completado")], statuses)).toEqual([
+      { taskId: "a", at: t1 },
+    ]);
+  });
+
+  it("counts a closing custom status that counts as completed", () => {
+    const events = [ev("a", t1, "status", "en_proceso", "completado"), ev("a", t1, "customStatusId", null, APROBADO)];
+    expect(completionsFromStatusEvents(events, statuses)).toEqual([{ taskId: "a", at: t1 }]);
+  });
+
+  it("ignores a closing status that doesn't count as completed (Cancelado)", () => {
+    const events = [ev("a", t1, "status", "pendiente", "completado"), ev("a", t1, "customStatusId", null, CANCELADO)];
+    expect(completionsFromStatusEvents(events, statuses)).toEqual([]);
+  });
+
+  it("ignores moves to other statuses", () => {
+    const events = [ev("a", t1, "status", "pendiente", "en_proceso"), ev("a", t1, "customStatusId", null, REVISION)];
+    expect(completionsFromStatusEvents(events, statuses)).toEqual([]);
+  });
+
+  it("counts leaving Cancelado for a status that counts, with no status change beside it", () => {
+    const events = [
+      ev("a", t1, "status", "pendiente", "completado"),
+      ev("a", t1, "customStatusId", null, CANCELADO),
+      ev("a", t2, "customStatusId", CANCELADO, APROBADO),
+      ev("b", t2, "customStatusId", CANCELADO, null),
+    ];
+    expect(completionsFromStatusEvents(events, statuses)).toEqual([
+      { taskId: "a", at: t2 },
+      { taskId: "b", at: t2 },
+    ]);
+  });
+
+  it("doesn't count moving between statuses that count, or into Cancelado", () => {
+    const events = [ev("a", t2, "customStatusId", APROBADO, null), ev("b", t2, "customStatusId", APROBADO, CANCELADO)];
+    expect(completionsFromStatusEvents(events, statuses)).toEqual([]);
+  });
+
+  it("doesn't count unknown custom statuses", () => {
+    const events = [ev("a", t1, "status", "pendiente", "completado"), ev("a", t1, "customStatusId", null, "gone")];
+    expect(completionsFromStatusEvents(events, statuses)).toEqual([]);
+  });
+
+  it("feeds bucketTaskTrend so cancelled tasks don't show as completed", () => {
+    const events = [
+      ev("a", t1, "status", "pendiente", "completado"),
+      ev("b", t1, "status", "pendiente", "completado"),
+      ev("b", t1, "customStatusId", null, CANCELADO),
+    ];
+    const result = trend("semana", [], completionsFromStatusEvents(events, statuses));
+    expect(result.completed.reduce((a, b) => a + b, 0)).toBe(1);
   });
 });

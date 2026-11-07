@@ -6,43 +6,53 @@ import { fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import { GENERAL_SLUG, getDepartamento } from "@/lib/actividades/departamento";
-import type { WorkflowDetail } from "@/lib/types/core";
+import { fetchTramoBoardAction } from "@/lib/actions/tramo-start-actions";
+import { GENERAL_SLUG } from "@/lib/actividades/tramo-page";
+import type { TramoBoard, WorkflowDetail } from "@/lib/types/core";
 import { ActividadesClient } from "./ActividadesClient";
 
 export default async function ActividadesPage({
   params,
 }: {
-  params: Promise<{ departamento: string }>;
+  params: Promise<{ tramo: string }>;
 }) {
-  const { departamento: slug } = await params;
+  const { tramo: slug } = await params;
   const isGeneral = slug === GENERAL_SLUG;
-  if (!isGeneral && !getDepartamento(slug)) notFound();
 
-  let workflow: WorkflowDetail | null = null;
+  // `[tramo]` is a `workflows.key`. Resolve it first, outside the try below:
+  // notFound() throws, and an unknown key has to render the 404.
+  let workflows: WorkflowDetail[] | null = null;
+  try {
+    workflows = (await fetchWorkflowsAction()).filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder);
+  } catch {
+    // Not authorized / no session: the client falls back to hydrating itself.
+  }
+  const workflow = isGeneral ? null : (workflows?.find((w) => w.key === slug) ?? null);
+  if (!isGeneral && workflows && !workflow) notFound();
+
   let initialTasks: Awaited<ReturnType<typeof fetchTasksAction>> = [];
   let initialProjects: Awaited<ReturnType<typeof fetchProjectsAction>> = [];
   let initialStaff: Awaited<ReturnType<typeof fetchAssignableStaffAction>> = [];
+  let initialBoard: TramoBoard | null = null;
 
   try {
-    const workflows = await fetchWorkflowsAction();
-    workflow = workflows.find((w) => w.key === slug) ?? null;
     if (isGeneral) {
-      // Every área's tasks plus the ones with no área at all.
+      // Every tramo's tasks.
       [initialTasks, initialProjects, initialStaff] = await Promise.all([
         fetchTasksAction(),
         fetchProjectsAction(),
         fetchAssignableStaffAction(null),
       ]);
     } else if (workflow) {
-      [initialTasks, initialProjects, initialStaff] = await Promise.all([
+      [initialTasks, initialBoard, initialProjects, initialStaff] = await Promise.all([
         fetchTasksAction({ workflowId: workflow.id }),
+        fetchTramoBoardAction(workflow.id).catch(() => null),
         fetchProjectsAction(),
         fetchAssignableStaffAction(workflow.id),
       ]);
     }
   } catch {
-    // Not authorized / no session — the client falls back to hydrating itself.
+    // Not authorized / no session: the client falls back to hydrating itself.
   }
 
   return (
@@ -53,9 +63,11 @@ export default async function ActividadesPage({
         <ActividadesClient
           slug={slug}
           workflow={workflow}
+          workflows={workflows ?? []}
           initialTasks={initialTasks}
           initialProjects={initialProjects}
           initialStaff={initialStaff}
+          initialBoard={initialBoard}
         />
       </section>
     </main>

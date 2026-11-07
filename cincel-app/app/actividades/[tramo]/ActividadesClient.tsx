@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 
@@ -9,13 +9,15 @@ import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell
 import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { CapacityRing } from "@/components/v2/status/CapacityRing";
-import { LoadBar } from "@/components/v2/status/LoadBar";
-import { AreaBadge } from "@/components/v2/status/AreaBadge";
+import { TramoBadge } from "@/components/v2/status/TramoBadge";
+import { TramoChips } from "@/components/tareas/TramoChips";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
 import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
+import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
@@ -23,10 +25,28 @@ import { Switch } from "@/components/ui/shadcn/switch";
 import ExportMenu from "@/components/ui/ExportMenu";
 import InlineEditable from "@/components/ui/InlineEditable";
 import TeamMultiSelect, { TeamMembersCompact } from "@/components/ui/TeamMultiSelect";
-import NewProjectTemplateModal from "@/components/tareas/NewProjectTemplateModal";
 import NewTaskModal, { type NewTaskFormValues } from "@/components/tareas/NewTaskModal";
 import TaskDrawer from "@/components/tareas/TaskDrawer";
-import { DEPARTMENTOS, GENERAL_SLUG, phasesFor } from "@/lib/actividades/departamento";
+import { PhaseStrip } from "@/components/tareas/PhaseStrip";
+import { UpcomingProjects } from "@/components/tareas/UpcomingProjects";
+import { ReadyToStartCard } from "@/components/tareas/ReadyToStartCard";
+import { StartTramoSheet } from "@/components/tareas/StartTramoSheet";
+import { UndoStartTramoButton } from "@/components/tareas/UndoStartTramoButton";
+import { notifyTramoStarted } from "@/components/tareas/start-tramo-toast";
+import {
+  GENERAL_SLUG,
+  NO_PHASE_LABEL,
+  defaultQuickAddPhaseId,
+  isWithinPhaseReorder,
+  openTasksByPhase,
+  projectBlockDomId,
+  sortTramoTasks,
+  spaceFilterOptions,
+  spacesByProjectOf,
+} from "@/lib/actividades/tramo-page";
+import { actionErrorText } from "@/lib/errors";
+import { fetchProjectSpacesAction } from "@/lib/actions/projects-actions";
+import { fetchTramoBoardAction } from "@/lib/actions/tramo-start-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { TaskStatusCell } from "@/components/tareas/TaskStatusCell";
@@ -43,7 +63,7 @@ import { cn } from "@/lib/utils";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
-import { readStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
+import { buildGeneralProjectBlocks, clearLegacyGroupByStorage } from "@/lib/actividades/general-blocks";
 import {
   fetchTasksAction,
   fetchTaskAction,
@@ -60,7 +80,6 @@ import {
   removeChecklistItemAction,
   reorderChecklistAction,
   reorderProjectTasksAction,
-  reorderTasksAction,
   addTaskCommentAction,
   addTaskAttachmentAction,
   addTaskLinkAction,
@@ -69,6 +88,7 @@ import {
 import type {
   ProjectListItem,
   Staff,
+  StartTramoResult,
   TaskChecklistItem,
   TaskDetail,
   TaskListItem,
@@ -76,42 +96,48 @@ import type {
   TaskPriority,
   TaskStatusOption,
   TaskLinkInput,
+  TramoBoard,
   WorkflowDetail,
+  WorkflowPhaseRef,
 } from "@/lib/types/core";
 
 
 const DEFAULT_PRIORITY: TaskPriority = "media";
 
 const GENERAL_LABEL = "General";
-const GENERAL_DESCRIPTION = "Todas las tareas de todas las áreas, incluidas las que no tienen área.";
-const SIN_AREA_GROUP_ID = "sin-area";
-const GROUP_BY_STORAGE_KEY = "cincel.actividades.general.groupBy.v1";
+const GENERAL_DESCRIPTION = "Todas las tareas de todos los tramos, agrupadas por proyecto.";
 
-type GeneralGroupBy = "actividad" | "proyecto";
-
-function isGeneralGroupBy(value: string | null): value is GeneralGroupBy {
-  return value === "actividad" || value === "proyecto";
-}
-
-/** Label of a task's área: its department's name, else its workflow's, else "Sin área". */
-function areaLabel(task: TaskListItem): string {
-  return DEPARTMENTOS.find((d) => d.slug === task.workflow?.key)?.label ?? task.workflow?.name ?? "Sin área";
+/** Active fases of a tramo, in catalog order. */
+function activePhasesOf(workflow: WorkflowDetail | null | undefined): WorkflowPhaseRef[] {
+  if (!workflow) return [];
+  return workflow.phases
+    .filter((p) => p.active)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map(({ id, name, sortOrder }) => ({ id, name, sortOrder }));
 }
 
 interface ActividadesClientProps {
+  /** "general" or the tramo's `workflows.key`. */
   slug: string;
+  /** The page's tramo; null on General. */
   workflow: WorkflowDetail | null;
+  /** Every active tramo, by `sortOrder` (tabs and each task's own fase catalog). */
+  workflows?: WorkflowDetail[];
   initialTasks: TaskListItem[];
   initialProjects: ProjectListItem[];
   initialStaff: Array<Staff & { suggested: boolean }>;
+  /** Listos para iniciar, Próximos and started projects of this tramo; null on General. */
+  initialBoard?: TramoBoard | null;
 }
 
 export function ActividadesClient({
   slug,
   workflow,
+  workflows = [],
   initialTasks,
   initialProjects,
   initialStaff,
+  initialBoard = null,
 }: ActividadesClientProps) {
   const generalSettings = useGeneralSettings();
   const router = useRouter();
@@ -119,43 +145,32 @@ export function ActividadesClient({
   const searchParams = useSearchParams();
   const projectFromQuery = searchParams.get("project") || "";
 
-  // The General view isn't a department: it lists every área's tasks plus
-  // the ones with no área, grouped by área instead of by project.
+  // The General view isn't a tramo: it lists every tramo's tasks, one block
+  // per project.
   const isGeneral = slug === GENERAL_SLUG;
-  const departamento = DEPARTMENTOS.find((d) => d.slug === slug);
-  const pageLabel = departamento?.label ?? GENERAL_LABEL;
-  // General can group its panels by área ("Actividad") or by project.
-  // Remembered per browser, so a refresh keeps the last grouping.
-  const [groupBy, setGroupBy] = useState<GeneralGroupBy>("actividad");
+  const pageLabel = isGeneral ? GENERAL_LABEL : (workflow?.name ?? slug);
+  // A tramo page with its workflow loaded (the RSC 404s unknown keys; null
+  // only when the initial load failed).
+  const isTramoPage = !isGeneral && Boolean(workflow);
+  // General is always one block per project (FE §3.2). The old
+  // "Proyecto / Actividad" selector is gone: drop its remembered choice.
   useEffect(() => {
-    // Read after mount: localStorage isn't available during SSR, and reading
-    // it in the initializer would mismatch the server-rendered grouping.
-    try {
-      const stored = readStorage(GROUP_BY_STORAGE_KEY);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (isGeneralGroupBy(stored)) setGroupBy(stored);
-    } catch {
-      // Storage blocked (private mode, etc.) — keep the default.
-    }
-  }, []);
-
-  function changeGroupBy(value: GeneralGroupBy) {
-    setGroupBy(value);
-    try {
-      writeStorage(GROUP_BY_STORAGE_KEY, value);
-    } catch {
-      // Storage blocked — the choice just won't survive a refresh.
-    }
-  }
-  const groupByArea = isGeneral && groupBy === "actividad";
-  const pageDescription = departamento?.description ?? GENERAL_DESCRIPTION;
-  // A department page whose workflow row doesn't exist yet (fresh install
-  // before #656's defaults) still renders its table and empty state, but
-  // can't create tasks: they'd land in "Sin área" instead of this department.
-  const missingWorkflow = !isGeneral && !workflow;
+    if (isGeneral) clearLegacyGroupByStorage();
+  }, [isGeneral]);
+  const pageDescription = isGeneral ? GENERAL_DESCRIPTION : (workflow?.description ?? undefined);
+  const workflowsById = useMemo(() => new Map(workflows.map((w) => [w.id, w])), [workflows]);
+  // Tabs: General plus one per active tramo, by sortOrder.
+  const tramoTabs = useMemo(
+    () => [...workflows].filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder),
+    [workflows]
+  );
   const [tasks, setTasks] = useState<TaskListItem[]>(initialTasks);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [templateOpen, setTemplateOpen] = useState(false);
+  // Action errors show here, at the top of the page (FE §9).
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [board, setBoard] = useState<TramoBoard | null>(initialBoard);
+  // The project the Iniciar tramo sheet is open for (Iniciar, Agregar fases, `?project=`).
+  const [startProjectId, setStartProjectId] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
@@ -165,6 +180,8 @@ export function ActividadesClient({
   // A built-in status or a custom one, as a status select value (see status-options.ts).
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [deliveryDateFilter, setDeliveryDateFilter] = useState("");
+  const [phaseFilter, setPhaseFilter] = useState("");
+  const [spaceFilter, setSpaceFilter] = useState("");
   // Finished tasks are hidden by default so the list stays short to read.
   const [showCompleted, setShowCompleted] = useState(false);
   const [view, setView] = useState<"activas" | "archivadas">("activas");
@@ -173,7 +190,8 @@ export function ActividadesClient({
   const capabilities = useMemo(() => resolveActivitiesCapabilities(authenticatedUser), [authenticatedUser]);
   const viewerId = authenticatedUser?.member.id || "";
 
-  const phases = useMemo(() => (departamento ? phasesFor(departamento.template) : []), [departamento]);
+  // The tramo's active fase catalog: strip, Fase filter, quick-add and Nueva tarea.
+  const phases = useMemo(() => activePhasesOf(workflow), [workflow]);
   const staffNames = useMemo(() => initialStaff.map((m) => m.name), [initialStaff]);
   const staffOptions = useMemo(() => initialStaff.map((m) => ({ id: m.id, name: m.name })), [initialStaff]);
   const nameToStaffId = useMemo(() => new Map(initialStaff.map((s) => [s.name, s.id])), [initialStaff]);
@@ -190,6 +208,36 @@ export function ActividadesClient({
       console.error(err);
     }
   }, [workflow, isGeneral, view]);
+
+  const refreshBoard = useCallback(async () => {
+    if (isGeneral || !workflow) return;
+    try {
+      setBoard(await fetchTramoBoardAction(workflow.id));
+    } catch (err) {
+      console.error(err);
+    }
+  }, [workflow, isGeneral]);
+
+  useEffect(() => {
+    // Same as the task list: hydrate the board when the RSC couldn't.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!initialBoard) void refreshBoard();
+  }, [initialBoard, refreshBoard]);
+
+  // `?project={id}` (ficha "Iniciar {tramo}" / "Asignar tramo"): open the
+  // Iniciar tramo sheet for that project once, ready or not, and scroll to
+  // its block when it has one.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || isGeneral || !workflow || !projectFromQuery) return;
+    deepLinkHandled.current = true;
+    if (capabilities.canCreateActivity) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStartProjectId(projectFromQuery);
+    }
+    const block = typeof document !== "undefined" ? document.getElementById(projectBlockDomId(projectFromQuery)) : null;
+    block?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [isGeneral, workflow, projectFromQuery, capabilities.canCreateActivity]);
 
   useEffect(() => {
     // Sync the task list with the server on mount and whenever workflow/view
@@ -227,8 +275,7 @@ export function ActividadesClient({
       onSuccess?.(result);
     } catch (err) {
       console.error(err);
-      const message = err instanceof Error ? err.message : "No se pudo completar la acción.";
-      window.alert(message.startsWith("FORBIDDEN:") ? "No tienes permiso para realizar esta acción." : message);
+      setPageError(actionErrorText(err, { tramoName: workflow?.name }));
       await refresh();
     }
   }
@@ -251,23 +298,15 @@ export function ActividadesClient({
     });
   }, [tasks, initialStaff, view]);
 
-  const phaseMix = useMemo(
-    () =>
-      view !== "activas" || isGeneral
-        ? []
-        : phases.map((phase) => ({
-            phase,
-            percent: tasks.length === 0 ? 0 : (tasks.filter((t) => t.phase?.name === phase).length / tasks.length) * 100,
-          })),
-    [tasks, phases, view, isGeneral]
+  // Fase strip: open tasks per fase of this tramo (active view only).
+  const openByPhase = useMemo(
+    () => (view !== "activas" || isGeneral ? {} : openTasksByPhase(tasks)),
+    [tasks, view, isGeneral]
   );
 
   // "Nueva tarea" and the quick-add row list every active project, not only
-  // ones whose currentWorkflow is this department — a project already
-  // advanced to a later stage (e.g. one now in Construcción) can still need
-  // a Presale/Diseño task logged retroactively (#420 narrowed this to
-  // Diseño/Construcción only; the same problem showed up on Presale too, so
-  // it now applies to every department).
+  // the ones whose current tramo is this one: a project already in a later
+  // tramo can still need a task of this one logged retroactively (#420).
   const projectOptions = useMemo(
     () => initialProjects.filter((p) => p.status === "activo").map((p) => ({ id: p.id, name: p.name })),
     [initialProjects]
@@ -286,6 +325,49 @@ export function ActividadesClient({
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [tasks]);
+
+  const spaceOptions = useMemo(() => spaceFilterOptions(tasks), [tasks]);
+  const spacesByProject = useMemo(() => spacesByProjectOf(tasks), [tasks]);
+  // Each project's full espacio list (also espacios with no tasks yet), loaded
+  // on demand for the Espacio selects of the New task modal and the drawer.
+  const [loadedSpaces, setLoadedSpaces] = useState<Record<string, Array<{ id: string; name: string }>>>({});
+  const loadProjectSpaces = useCallback(async (projectIds: string[]) => {
+    const ids = Array.from(new Set(projectIds.filter(Boolean)));
+    if (ids.length === 0) return;
+    const rows = await Promise.all(
+      ids.map((id) =>
+        fetchProjectSpacesAction(id)
+          .then((spaces) => [id, spaces.map((sp) => ({ id: sp.id, name: sp.name }))] as const)
+          .catch((err) => {
+            console.error(err);
+            return null;
+          })
+      )
+    );
+    setLoadedSpaces((cur) => {
+      const next = { ...cur };
+      for (const row of rows) if (row) next[row[0]] = row[1];
+      return next;
+    });
+  }, []);
+  const projectSpaces = useMemo(() => ({ ...spacesByProject, ...loadedSpaces }), [spacesByProject, loadedSpaces]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (newTaskOpen) void loadProjectSpaces(projectOptions.map((p) => p.id));
+  }, [newTaskOpen, projectOptions, loadProjectSpaces]);
+  const drawerProjectId = activeTaskDetail?.projectId ?? "";
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (drawerProjectId) void loadProjectSpaces([drawerProjectId]);
+  }, [drawerProjectId, loadProjectSpaces]);
+  // Fase name for a task: its tramo's catalog first, else the name on the row.
+  const phaseNameOf = useCallback(
+    (task: TaskListItem): string => {
+      const catalog = task.workflowId ? workflowsById.get(task.workflowId)?.phases ?? workflow?.phases : workflow?.phases;
+      return catalog?.find((p) => p.id === task.phaseId)?.name ?? task.phase?.name ?? "";
+    },
+    [workflowsById, workflow]
+  );
 
   const teamOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -308,7 +390,7 @@ export function ActividadesClient({
         !query ||
         t.project.name.toLowerCase().includes(query) ||
         t.title.toLowerCase().includes(query) ||
-        (t.phase?.name ?? "").toLowerCase().includes(query) ||
+        phaseNameOf(t).toLowerCase().includes(query) ||
         (t.manager?.name ?? "").toLowerCase().includes(query) ||
         t.status.toLowerCase().includes(query);
       const matchesProject = !projectFromQuery || t.project.id === projectFromQuery;
@@ -318,7 +400,11 @@ export function ActividadesClient({
       // An explicit status filter wins, so picking Completado still shows those tasks.
       const matchesCompletion = showCompleted || !!statusFilter || !isTaskClosed(t);
       const matchesDeliveryDate = !deliveryDateFilter || (t.deliveryDate || "") === deliveryDateFilter;
+      const matchesPhase = !phaseFilter || t.phaseId === phaseFilter;
+      const matchesSpace = !spaceFilter || t.spaceId === spaceFilter;
       return (
+        matchesPhase &&
+        matchesSpace &&
         matchesSearch &&
         matchesProject &&
         matchesManager &&
@@ -328,7 +414,30 @@ export function ActividadesClient({
         matchesDeliveryDate
       );
     });
-  }, [tasks, search, projectFromQuery, managerFilter, teamFilter, statusFilter, showCompleted, deliveryDateFilter]);
+  }, [
+    tasks,
+    search,
+    projectFromQuery,
+    managerFilter,
+    teamFilter,
+    statusFilter,
+    showCompleted,
+    deliveryDateFilter,
+    phaseFilter,
+    spaceFilter,
+    phaseNameOf,
+  ]);
+
+  // Filters other than Proyecto (which also carries the `?project=` deep link).
+  const hasActiveFilters = Boolean(
+    search ||
+      managerFilter ||
+      teamFilter ||
+      statusFilter ||
+      deliveryDateFilter ||
+      phaseFilter ||
+      spaceFilter
+  );
 
   function clearFilters() {
     setSearch("");
@@ -337,6 +446,8 @@ export function ActividadesClient({
     setTeamFilter("");
     setStatusFilter("");
     setDeliveryDateFilter("");
+    setPhaseFilter("");
+    setSpaceFilter("");
     setShowCompleted(false);
     setView("activas");
   }
@@ -424,34 +535,18 @@ export function ActividadesClient({
     setSelected(new Set());
   }
 
-  async function applyTemplate({ projectId, items }: { projectId: string; items: { phase: string; description: string }[] }) {
-    await runAction(
-      () =>
-        Promise.all(
-          items.map((item) =>
-            createUserTaskAction({
-              projectId,
-              title: item.description,
-              workflowId: workflow?.id ?? null,
-              priority: DEFAULT_PRIORITY,
-            })
-          )
-        ),
-      () => {
-        setTemplateOpen(false);
-        void refresh();
-      }
-    );
-  }
-
   async function addTask(values: NewTaskFormValues) {
+    // A task always belongs to this page's tramo; creating one never starts it.
+    if (!workflow) return;
     await runAction(
       () =>
         createUserTaskAction({
           projectId: values.projectId,
           title: values.title,
           notes: values.notes || null,
-          workflowId: workflow?.id ?? null,
+          workflowId: workflow.id,
+          phaseId: values.phaseId,
+          spaceId: values.spaceId,
           managerId: values.managerId,
           supportIds: values.supportIds,
           priority: DEFAULT_PRIORITY,
@@ -462,14 +557,15 @@ export function ActividadesClient({
     );
   }
 
-  async function addQuickTask(projectId: string) {
+  async function addQuickTask(projectId: string, blockTasks: TaskListItem[]) {
     const title = (quickTitles[projectId] ?? "").trim();
     if (!title) return;
     setQuickTitles((prev) => ({ ...prev, [projectId]: "" }));
     await addTask({
       projectId,
       title,
-      phase: phases[0] ?? "",
+      phaseId: quickPhases[projectId] ?? defaultQuickAddPhaseId(blockTasks, phases),
+      spaceId: null,
       managerId: null,
       supportIds: [],
       notes: "",
@@ -478,18 +574,12 @@ export function ActividadesClient({
     });
   }
 
-  async function reorderProjectTasks(projectId: string, orderedTaskIds: string[]) {
+  async function reorderProjectTasks(projectId: string, blockTasks: TaskListItem[], orderedTaskIds: string[]) {
+    // Drag only within a fase: a drop into another fase is refused and the
+    // row snaps back (the rows were never changed locally).
+    if (isTramoPage && !isWithinPhaseReorder(blockTasks, orderedTaskIds)) return;
     try {
       await reorderProjectTasksAction(projectId, orderedTaskIds);
-      await refresh();
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function reorderTasks(orderedTaskIds: string[]) {
-    try {
-      await reorderTasksAction(orderedTaskIds);
       await refresh();
     } catch (err) {
       console.error(err);
@@ -525,7 +615,8 @@ export function ActividadesClient({
       const detail = await fetchTaskAction(selectedTaskId);
       setSelectedTaskDetail(detail);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "No se pudo agregar el enlace.");
+      console.error(err);
+      setPageError(actionErrorText(err));
     }
   }
 
@@ -550,7 +641,8 @@ export function ActividadesClient({
       const detail = await fetchTaskAction(selectedTaskId);
       setSelectedTaskDetail(detail);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "No se pudo adjuntar el archivo.");
+      console.error(err);
+      setPageError(actionErrorText(err));
     }
   }
 
@@ -607,14 +699,14 @@ export function ActividadesClient({
   const exportColumns = useMemo<ExportColumn<TaskListItem>[]>(
     () => [
       { key: "project", header: "Proyecto", getValue: (t) => t.project.name },
-      { key: "phase", header: "Fase", getValue: (t) => t.phase?.name || "" },
+      { key: "phase", header: "Fase", getValue: (t) => phaseNameOf(t) },
       { key: "title", header: "Actividad", getValue: (t) => t.title },
       { key: "manager", header: "Responsable", getValue: (t) => t.manager?.name || "Sin responsable" },
       { key: "reviewDate", header: "Próxima revisión", isDate: true, getValue: (t) => t.reviewDate || "" },
       { key: "deliveryDate", header: "Fecha de entrega", isDate: true, getValue: (t) => t.deliveryDate || "" },
       { key: "status", header: "Estatus", getValue: (t) => taskStatusLabel(t) },
     ],
-    []
+    [phaseNameOf]
   );
 
   async function exportActivities(format: "xlsx" | "pdf") {
@@ -630,45 +722,49 @@ export function ActividadesClient({
   }
 
   const [quickTitles, setQuickTitles] = useState<Record<string, string>>({});
+  // Quick-add fase per project block; unset = defaultQuickAddPhaseId.
+  const [quickPhases, setQuickPhases] = useState<Record<string, string | null>>({});
 
   const projectGroups = useMemo(() => {
-    if (groupByArea) return [];
-    const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
+    // General: one block per project with its tramo chips, rows sorted by
+    // tramo order, then fase order.
+    if (isGeneral) return buildGeneralProjectBlocks(filteredTasks, initialProjects);
+    // Tramo page: one block per project with this tramo started or with
+    // tasks in it, by project name; rows by fase, then manual order.
+    type TramoBlock = {
+      id: string;
+      name: string;
+      tramos: ProjectListItem["tramos"];
+      /** This tramo is the project's current one ("Tramo actual"). */
+      current: boolean;
+      tasks: TaskListItem[];
+    };
+    const projectsById = new Map(initialProjects.map((p) => [p.id, p]));
+    const isCurrent = (projectId: string) =>
+      Boolean(workflow) && projectsById.get(projectId)?.currentWorkflowId === workflow?.id;
+    const groups = new Map<string, TramoBlock>();
     for (const task of filteredTasks) {
-      const group = groups.get(task.project.id) ?? { id: task.project.id, name: task.project.name, tasks: [] };
+      const group =
+        groups.get(task.project.id) ??
+        { id: task.project.id, name: task.project.name, tramos: [], current: isCurrent(task.project.id), tasks: [] };
       group.tasks.push(task);
       groups.set(task.project.id, group);
     }
-    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
-  }, [filteredTasks, groupByArea]);
-
-  // General view: one panel per department (always shown, in business-flow
-  // order), then any other workflow a task belongs to, then "Sin área".
-  const areaGroups = useMemo(() => {
-    if (!groupByArea) return [];
-    const groups = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>(
-      DEPARTMENTOS.map((d) => [d.slug, { id: d.slug, name: d.label, tasks: [] }])
-    );
-    const others = new Map<string, { id: string; name: string; tasks: TaskListItem[] }>();
-    const sinArea = { id: SIN_AREA_GROUP_ID, name: "Sin área", tasks: [] as TaskListItem[] };
-    for (const task of filteredTasks) {
-      if (!task.workflow) {
-        sinArea.tasks.push(task);
-        continue;
+    // Started projects with no tasks yet still get a block, unless filters
+    // narrow the list (then only matching tasks show).
+    if (!hasActiveFilters && view === "activas") {
+      for (const started of board?.started ?? []) {
+        if (groups.has(started.projectId)) continue;
+        if (projectFromQuery && started.projectId !== projectFromQuery) continue;
+        const project = projectsById.get(started.projectId);
+        if (!project) continue;
+        groups.set(project.id, { id: project.id, name: project.name, tramos: [], current: isCurrent(project.id), tasks: [] });
       }
-      const group =
-        groups.get(task.workflow.key) ??
-        others.get(task.workflow.key) ??
-        { id: task.workflow.key, name: task.workflow.name, tasks: [] };
-      group.tasks.push(task);
-      if (!groups.has(task.workflow.key)) others.set(task.workflow.key, group);
     }
-    return [
-      ...groups.values(),
-      ...[...others.values()].sort((a, b) => a.name.localeCompare(b.name, "es")),
-      sinArea,
-    ];
-  }, [filteredTasks, groupByArea]);
+    return [...groups.values()]
+      .map((group) => ({ ...group, tasks: sortTramoTasks(group.tasks, phases) }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [filteredTasks, isGeneral, initialProjects, workflow, board, phases, hasActiveFilters, view]);
 
   // Local calendar day (YYYY-MM-DD), to flag late dates in the table.
   const today = useMemo(() => {
@@ -684,41 +780,58 @@ export function ActividadesClient({
         onToggle: toggle,
         onToggleAll: toggleAll,
       }),
+      // Only General mixes tramos in one block.
+      ...(isGeneral
+        ? [
+            {
+              id: "tramo",
+              header: "Tramo",
+              accessorFn: (t: TaskListItem) => t.workflow?.name ?? "",
+              cell: ({ row }: CellContext<TaskListItem, unknown>) => <TramoBadge tramo={row.original.workflow} />,
+            },
+          ]
+        : []),
       {
         id: "phase",
         header: "Fase",
-        accessorFn: (t) => t.phase?.name ?? "",
+        accessorFn: (t) => phaseNameOf(t),
         cell: ({ row }: CellContext<TaskListItem, unknown>) => {
           const task = row.original;
-          const currentPhase = task.phase?.name ?? "";
+          const currentName = phaseNameOf(task);
           const display = (
-            <span className="block max-w-24 truncate text-sm" title={currentPhase || undefined}>
-              {currentPhase || <span className="text-muted-foreground">Sin fase</span>}
+            <span className="block max-w-24 truncate text-sm" title={currentName || undefined}>
+              {currentName || <span className="text-muted-foreground">{NO_PHASE_LABEL}</span>}
             </span>
           );
-          // Fases of the task's own tramo; General mixes tramos, so it's display only there.
-          const taskPhases =
-            !isGeneral && workflow && task.workflowId === workflow.id ? workflow.phases.filter((p) => p.active) : [];
+          // The task's own tramo catalog (General mixes tramos), active fases
+          // only, plus the task's current fase when it was deactivated.
+          const taskWorkflow = task.workflowId ? (workflowsById.get(task.workflowId) ?? (workflow?.id === task.workflowId ? workflow : null)) : null;
+          const taskPhases = activePhasesOf(taskWorkflow);
           if (!capabilities.canReorderPhases || taskPhases.length === 0) return display;
+          const items: Array<{ id: string; label: string }> = taskPhases.map((p) => ({ id: p.id, label: p.name }));
+          if (task.phaseId && !taskPhases.some((p) => p.id === task.phaseId)) {
+            items.push({ id: task.phaseId, label: `${currentName || "Fase"} (inactiva)` });
+          }
           return (
             <InlineEditable
-              value={currentPhase}
-              onCommit={(value) => updateField(task, { phaseId: taskPhases.find((p) => p.name === value)?.id ?? null })}
+              value={task.phaseId ?? ""}
+              onCommit={(value) => value && value !== task.phaseId && updateField(task, { phaseId: value })}
               commitOnChange
               renderDisplay={() => display}
               renderEditor={({ onChange, onBlur }) => (
                 <Select
                   defaultOpen
-                  value={currentPhase}
+                  items={Object.fromEntries(items.map((i) => [i.id, i.label]))}
+                  value={task.phaseId ?? ""}
                   onValueChange={(next) => {
                     onChange(next as string);
                     onBlur();
                   }}
                 >
-                  <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full text-sm" aria-label="Fase"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {taskPhases.map((p) => (
-                      <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                    {items.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -737,22 +850,6 @@ export function ActividadesClient({
           <span className="font-medium">{row.original.project.name}</span>
         ),
       },
-      // Only General mixes áreas in one table (when grouped by project).
-      ...(isGeneral
-        ? [
-            {
-              id: "area",
-              header: "Área",
-              accessorFn: (t: TaskListItem) => areaLabel(t),
-              cell: ({ row }: CellContext<TaskListItem, unknown>) =>
-                row.original.workflow ? (
-                  <AreaBadge name={areaLabel(row.original)} colorSlot={row.original.areaColorSlot} />
-                ) : (
-                  <span className="text-sm text-muted-foreground">{areaLabel(row.original)}</span>
-                ),
-            },
-          ]
-        : []),
       {
         id: "title",
         header: "Tarea",
@@ -964,15 +1061,27 @@ export function ActividadesClient({
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflow, isGeneral, phases, selected, capabilities, viewerId, staffNames, nameToStaffId, today]);
+  }, [workflow, workflowsById, phaseNameOf, isGeneral, phases, selected, capabilities, viewerId, staffNames, nameToStaffId, today]);
 
-  // The panel already names its project (or área), so that column is
-  // redundant; the other one stays since the panel mixes them.
-  const groupedColumns = useMemo(
-    () => columns.filter((c) => c.id !== (groupByArea ? "area" : "project")),
-    [columns, groupByArea]
-  );
+  // The block already names its project, so that column is redundant.
+  const groupedColumns = useMemo(() => columns.filter((c) => c.id !== "project"), [columns]);
   const canReorder = capabilities.canReorderPhases && view === "activas";
+  const isAdmin = authenticatedUser?.access === "Administrador";
+
+  function openStartSheet(projectId: string) {
+    setPageError(null);
+    setStartProjectId(projectId);
+  }
+
+  async function refreshAfterStart() {
+    await Promise.all([refresh(), refreshBoard()]);
+  }
+
+  async function handleTramoStarted(result: StartTramoResult) {
+    setStartProjectId(null);
+    notifyTramoStarted(result, { refresh: refreshAfterStart });
+    await refreshAfterStart();
+  }
 
   return (
     <div>
@@ -983,9 +1092,9 @@ export function ActividadesClient({
           <Tabs value={slug} onValueChange={(v) => router.push(`/actividades/${v}`)}>
             <TabsList>
               <TabsTrigger value={GENERAL_SLUG}>{GENERAL_LABEL}</TabsTrigger>
-              {DEPARTMENTOS.map((d) => (
-                <TabsTrigger key={d.slug} value={d.slug}>
-                  {d.label}
+              {tramoTabs.map((w) => (
+                <TabsTrigger key={w.id} value={w.key}>
+                  {w.name}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -993,12 +1102,19 @@ export function ActividadesClient({
         }
       />
 
-      {missingWorkflow ? (
-        <p role="alert" className="mb-4 text-sm text-muted-foreground">
-          {`No hay un workflow de ${pageLabel}. Créalo en Configuración → Workflows para añadir tareas aquí.`}
-        </p>
+      {pageError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>{pageError}</span>
+            <Button variant="ghost" size="sm" onClick={() => setPageError(null)}>
+              Cerrar
+            </Button>
+          </AlertDescription>
+        </Alert>
       ) : null}
       <>
+          {isTramoPage ? <PhaseStrip phases={phases} openByPhase={openByPhase} /> : null}
+
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-5 rounded-lg border border-border bg-card p-4">
               {capacityByPerson.length === 0 ? (
@@ -1010,30 +1126,25 @@ export function ActividadesClient({
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {capabilities.canCreateActivity ? (
-                <>
-                  {departamento ? (
-                    <Button variant="outline" disabled={missingWorkflow} onClick={() => setTemplateOpen(true)}>
-                      Iniciar plantilla de {departamento.label}
-                    </Button>
-                  ) : null}
-                  <Button disabled={missingWorkflow} onClick={() => setNewTaskOpen(true)}>
-                    + Nueva tarea
-                  </Button>
-                </>
+              {capabilities.canCreateActivity && isTramoPage ? (
+                <Button onClick={() => setNewTaskOpen(true)}>+ Nueva tarea</Button>
               ) : null}
             </div>
           </div>
 
-          {phaseMix.length > 0 ? (
-            <div className="mb-4 rounded-lg border border-border bg-card p-4">
-              <div className="mb-2 flex justify-between text-[11px] text-muted-foreground">
-                <span>Mezcla por fase</span>
-                <span>{phases.join(" · ")}</span>
-              </div>
-              <LoadBar segments={phaseMix.map((p, i) => ({ percent: p.percent, opacity: 0.4 + (0.6 * (i + 1)) / phases.length }))} />
+          {isTramoPage && workflow ? (
+            <div className="mb-4 flex flex-col gap-4">
+              {/* Listos para iniciar (StartTramoSheet issue owns the card and the sheet). */}
+              <ReadyToStartCard
+                workflow={workflow}
+                ready={board?.ready ?? []}
+                canStart={capabilities.canCreateActivity}
+                onStart={openStartSheet}
+              />
             </div>
           ) : null}
+
+          {isTramoPage ? <UpcomingProjects upcoming={board?.upcoming ?? []} /> : null}
 
           <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
             <Input type="text" placeholder="Buscar tarea..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 w-56" />
@@ -1099,19 +1210,42 @@ export function ActividadesClient({
 
             <Input type="date" value={deliveryDateFilter} onChange={(e) => setDeliveryDateFilter(e.target.value)} aria-label="Filtrar por fecha de entrega" className="h-9 w-auto" />
 
+            {isTramoPage && phases.length > 0 ? (
+              <Select
+                items={{ __all__: "Fase", ...Object.fromEntries(phases.map((p) => [p.id, p.name])) }}
+                value={phaseFilter || "__all__"}
+                onValueChange={(v) => setPhaseFilter(v === "__all__" ? "" : (v as string))}
+              >
+                <SelectTrigger className="h-9 w-auto" aria-label="Filtrar por fase"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Fase</SelectItem>
+                  {phases.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+
+            {spaceOptions.length > 0 ? (
+              <Select
+                items={{ __all__: "Espacio", ...Object.fromEntries(spaceOptions.map((o) => [o.id, o.label])) }}
+                value={spaceFilter || "__all__"}
+                onValueChange={(v) => setSpaceFilter(v === "__all__" ? "" : (v as string))}
+              >
+                <SelectTrigger className="h-9 w-auto" aria-label="Filtrar por espacio"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Espacio</SelectItem>
+                  {spaceOptions.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <Switch checked={showCompleted} onCheckedChange={setShowCompleted} />
               Mostrar completadas
             </label>
-
-            {isGeneral ? (
-              <Tabs value={groupBy} onValueChange={(v) => changeGroupBy(v as GeneralGroupBy)} aria-label="Agrupar por">
-                <TabsList>
-                  <TabsTrigger value="proyecto">Proyecto</TabsTrigger>
-                  <TabsTrigger value="actividad">Actividad</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            ) : null}
 
             <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
               <TabsList>
@@ -1132,31 +1266,15 @@ export function ActividadesClient({
               { label: "Archivar", onClick: bulkArchive, variant: "destructive" },
             ]}
           />
-          {groupByArea ? (
-            <AccordionPanels
-              groups={areaGroups.map((group) => ({
-                id: group.id,
-                title: group.name,
-                count: group.tasks.length,
-                content: (
-                  <DataTable
-                    columns={groupedColumns}
-                    data={group.tasks}
-                    getRowId={(row) => row.id}
-                    emptyMessage="Sin tareas en esta área."
-                    wrapperClassName="rounded-none! border-x-0! border-b-0! shadow-none!"
-                    onReorderRows={canReorder ? (ids) => void reorderTasks(ids) : undefined}
-                  />
-                ),
-              }))}
-            />
-          ) : projectGroups.length === 0 ? (
+          {projectGroups.length === 0 ? (
             <DataTable
               columns={groupedColumns}
               data={[]}
               emptyMessage={
-                !isGeneral && tasks.length === 0
-                  ? `Sin tareas en ${pageLabel}.`
+                tasks.length === 0
+                  ? isGeneral
+                    ? "No hay tareas."
+                    : `Sin tareas en ${pageLabel}.`
                   : "No hay tareas que coincidan con los filtros actuales."
               }
               wrapperClassName={selected.size > 0 ? "rounded-t-none border-t-0" : undefined}
@@ -1167,6 +1285,30 @@ export function ActividadesClient({
                 id: group.id,
                 title: group.name,
                 count: group.tasks.length,
+                anchorId: projectBlockDomId(group.id),
+                badges:
+                  isGeneral && group.tramos.length > 0 ? (
+                    <TramoChips tramos={group.tramos} />
+                  ) : "current" in group && group.current ? (
+                    <Badge variant="outline">Tramo actual</Badge>
+                  ) : undefined,
+                actions:
+                  isTramoPage && capabilities.canCreateActivity && view === "activas" ? (
+                    <>
+                      {workflow ? (
+                        <UndoStartTramoButton
+                          workflow={workflow}
+                          projectName={group.name}
+                          started={board?.started.find((s) => s.projectId === group.id)}
+                          onUndone={refreshAfterStart}
+                          onError={setPageError}
+                        />
+                      ) : null}
+                      <Button variant="ghost" size="sm" onClick={() => openStartSheet(group.id)}>
+                        Agregar fases
+                      </Button>
+                    </>
+                  ) : undefined,
                 content: (
                   <>
                     <DataTable
@@ -1174,22 +1316,45 @@ export function ActividadesClient({
                       data={group.tasks}
                       getRowId={(row) => row.id}
                       wrapperClassName="rounded-none! border-x-0! border-b-0! shadow-none!"
-                      onReorderRows={canReorder ? (ids) => void reorderProjectTasks(group.id, ids) : undefined}
+                      onReorderRows={
+                        canReorder ? (ids) => void reorderProjectTasks(group.id, group.tasks, ids) : undefined
+                      }
                     />
-                    {capabilities.canCreateActivity && view === "activas" ? (
-                      <Input
-                        value={quickTitles[group.id] ?? ""}
-                        onChange={(e) => setQuickTitles((prev) => ({ ...prev, [group.id]: e.target.value }))}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            void addQuickTask(group.id);
-                          }
-                        }}
-                        placeholder="+ Nueva tarea (Enter para añadir)"
-                        aria-label={`Nueva tarea en ${group.name}`}
-                        className="h-10 rounded-none border-0 border-t border-border text-sm shadow-none"
-                      />
+                    {capabilities.canCreateActivity && view === "activas" && isTramoPage ? (
+                      <div className="flex items-center border-t border-border">
+                        {phases.length > 0 ? (
+                          <Select
+                            items={Object.fromEntries(phases.map((p) => [p.id, p.name]))}
+                            value={quickPhases[group.id] ?? defaultQuickAddPhaseId(group.tasks, phases) ?? ""}
+                            onValueChange={(v) => setQuickPhases((prev) => ({ ...prev, [group.id]: v as string }))}
+                          >
+                            <SelectTrigger
+                              className="h-10 w-44 shrink-0 rounded-none border-0 border-r border-border text-sm shadow-none"
+                              aria-label={`Fase de la nueva tarea en ${group.name}`}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {phases.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : null}
+                        <Input
+                          value={quickTitles[group.id] ?? ""}
+                          onChange={(e) => setQuickTitles((prev) => ({ ...prev, [group.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void addQuickTask(group.id, group.tasks);
+                            }
+                          }}
+                          placeholder="+ Nueva tarea (Enter para añadir)"
+                          aria-label={`Nueva tarea en ${group.name}`}
+                          className="h-10 flex-1 rounded-none border-0 text-sm shadow-none"
+                        />
+                      </div>
                     ) : null}
                   </>
                 ),
@@ -1197,25 +1362,31 @@ export function ActividadesClient({
             />
           )}
 
-          <NewProjectTemplateModal
-            open={templateOpen}
-            templateItems={[...(departamento?.template ?? [])]}
-            projectOptions={projectOptions}
-            onClose={() => setTemplateOpen(false)}
-            onCreate={applyTemplate}
-          />
-
           <NewTaskModal
             open={newTaskOpen}
             projects={projectOptions}
             staff={staffOptions}
-            phaseOptions={phases}
+            phases={phases}
+            spacesByProject={projectSpaces}
             onClose={() => setNewTaskOpen(false)}
             onSave={(values) => {
               void addTask(values);
               setNewTaskOpen(false);
             }}
           />
+
+          {isTramoPage && workflow ? (
+            <StartTramoSheet
+              open={startProjectId !== null}
+              projectId={startProjectId}
+              workflow={workflow}
+              viewerId={viewerId}
+              isAdmin={isAdmin}
+              staff={initialStaff}
+              onClose={() => setStartProjectId(null)}
+              onStarted={(result) => void handleTramoStarted(result)}
+            />
+          ) : null}
 
           <TaskDrawer
             open={selectedTaskId !== null}
@@ -1236,6 +1407,33 @@ export function ActividadesClient({
               if (!activeTaskDetail) return;
               void changeSupport(activeTaskDetail, staffIds);
             }}
+            phases={
+              activeTaskDetail?.workflowId
+                ? activePhasesOf(
+                    workflowsById.get(activeTaskDetail.workflowId) ??
+                      (workflow?.id === activeTaskDetail.workflowId ? workflow : null)
+                  )
+                : undefined
+            }
+            spaces={activeTaskDetail ? projectSpaces[activeTaskDetail.projectId] : undefined}
+            tramos={workflows.filter((w) => w.active)}
+            onChangePhase={
+              capabilities.canReorderPhases
+                ? (phaseId) => {
+                    if (activeTaskDetail) void updateField(activeTaskDetail, { phaseId });
+                  }
+                : undefined
+            }
+            onChangeSpace={(spaceId) => {
+              if (activeTaskDetail) void updateField(activeTaskDetail, { spaceId });
+            }}
+            onChangeTramo={
+              capabilities.canReorderPhases
+                ? (workflowId) => {
+                    if (activeTaskDetail) void updateField(activeTaskDetail, { workflowId });
+                  }
+                : undefined
+            }
           />
       </>
     </div>

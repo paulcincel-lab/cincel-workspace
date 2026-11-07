@@ -1,4 +1,3 @@
-import { areaColorVar } from "@/lib/areas/area-color";
 import {
   BASE_STATUSES,
   BASE_STATUS_COLOR,
@@ -6,7 +5,8 @@ import {
   isTaskClosed,
   statusColorVar,
 } from "@/lib/tasks/status-options";
-import type { TaskStatus } from "@/lib/types/core";
+import { tramoColorSlot } from "@/lib/tramos/tramo-color";
+import type { TaskStatus, WorkflowRef } from "@/lib/types/core";
 
 /** One donut segment: legend label, count and CSS fill color. */
 export type DonutSlice = {
@@ -39,37 +39,45 @@ export function tasksByBaseStatus(
   }));
 }
 
-export const NO_AREA_LABEL = "Sin área";
+export const NO_TRAMO_LABEL = "Sin tramo";
 
-/** Projects by the área of their primary stage; projects without one go to "Sin área". */
-export function projectsByArea(
-  projects: Array<{
-    area: { id: string; name: string; colorSlot: number | null } | null;
-  }>,
-): DonutSlice[] {
-  const slices = new Map<string, DonutSlice>();
-  let noArea = 0;
-  projects.forEach(({ area }) => {
-    if (!area) {
-      noArea += 1;
+/** Chart fill for a tramo: its fixed chart token, or the neutral gray. */
+function tramoChartColor(tramo: WorkflowRef | null): string {
+  const slot = tramo ? tramoColorSlot(tramo) : null;
+  return slot ? `var(--chart-${slot})` : "var(--muted-foreground)";
+}
+
+/**
+ * Projects by their current tramo, in tramo order; projects without one go to
+ * "Sin tramo" (last). BE §8.8.
+ */
+export function projectsByTramo(projects: Array<{ currentWorkflow: WorkflowRef | null }>): DonutSlice[] {
+  const slices = new Map<string, DonutSlice & { sortOrder: number }>();
+  let noTramo = 0;
+  projects.forEach(({ currentWorkflow: tramo }) => {
+    if (!tramo) {
+      noTramo += 1;
       return;
     }
-    const slice = slices.get(area.id) ?? {
-      key: area.id,
-      label: area.name,
+    const slice = slices.get(tramo.id) ?? {
+      key: tramo.id,
+      label: tramo.name,
       count: 0,
-      color: areaColorVar(area.colorSlot),
+      color: tramoChartColor(tramo),
+      sortOrder: tramo.sortOrder,
     };
     slice.count += 1;
-    slices.set(area.id, slice);
+    slices.set(tramo.id, slice);
   });
-  const rows = [...slices.values()];
-  if (noArea > 0)
+  const rows: DonutSlice[] = [...slices.values()]
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))
+    .map(({ sortOrder: _sortOrder, ...slice }) => slice);
+  if (noTramo > 0)
     rows.push({
-      key: "sin-area",
-      label: NO_AREA_LABEL,
-      count: noArea,
-      color: areaColorVar(null),
+      key: "sin-tramo",
+      label: NO_TRAMO_LABEL,
+      count: noTramo,
+      color: tramoChartColor(null),
     });
   return rows;
 }

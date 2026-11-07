@@ -12,7 +12,7 @@ import {
 } from "@/lib/actions/projects-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import type { ProjectFilters } from "@/lib/repositories/projects-repository";
-import type { ProjectInput, ProjectListItem, Staff } from "@/lib/types/core";
+import type { ProjectCreateInput, ProjectInput, ProjectListItem, Staff } from "@/lib/types/core";
 import { RepositoryError, reportRepositoryError } from "@/lib/errors";
 
 export type ProjectItem = ProjectListItem;
@@ -24,7 +24,7 @@ export interface UseProjectsDataReturn {
   activeStaff: Staff[];
   authenticatedUser: ReturnType<typeof getCurrentAuthenticatedUser>;
   refresh: () => Promise<ProjectItem[]>;
-  addProject: (input: ProjectInput) => Promise<ProjectItem | null>;
+  addProject: (input: ProjectCreateInput) => Promise<ProjectItem | null>;
   updateProject: (id: string, patch: Partial<ProjectInput>) => Promise<void>;
   archiveProject: (id: string, status: "completado" | "cancelado") => Promise<void>;
   removeProject: (id: string) => Promise<void>;
@@ -83,7 +83,7 @@ export function useProjectsData(
   }, []);
 
   const addProject = useCallback(
-    async (input: ProjectInput): Promise<ProjectItem | null> => {
+    async (input: ProjectCreateInput): Promise<ProjectItem | null> => {
       try {
         const created = await createProjectAction(input);
         const rows = await refresh();
