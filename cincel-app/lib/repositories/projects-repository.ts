@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import {
   contacts,
   driveFiles,
+  importRefs,
   projectContacts,
   projectLinks,
   projectMembers,
@@ -227,6 +228,26 @@ export async function listProjects(filters: ProjectFilters, viewer: ViewerScope)
   }));
 }
 
+/**
+ * The monday boards a project was imported from (import refs of entity `project`), or null when it wasn't
+ * imported. Admin-only data (BE §8.5): "Reacomodar importación" uses it.
+ */
+async function mondayImportOf(projectId: string): Promise<ProjectDetail["mondayImport"]> {
+  const refs = await db
+    .select({ data: importRefs.data })
+    .from(importRefs)
+    .where(and(eq(importRefs.source, "monday"), eq(importRefs.entity, "project"), eq(importRefs.rowId, projectId)));
+  if (refs.length === 0) return null;
+  const boards = new Map<string, string>();
+  for (const ref of refs) {
+    const source = (ref.data as { source?: { boardId?: unknown; boardName?: unknown } } | null)?.source;
+    if (source?.boardId == null) continue;
+    const boardId = String(source.boardId);
+    if (!boards.has(boardId)) boards.set(boardId, typeof source.boardName === "string" ? source.boardName : boardId);
+  }
+  return { boards: [...boards].map(([boardId, name]) => ({ id: boardId, name })) };
+}
+
 /** Project detail for `viewer`: client, origin, origin staff and monday import are admin only (BE §8.5). */
 export async function getProject(id: string, viewer: ViewerScope): Promise<ProjectDetail | null> {
   const row = await db.query.projects.findFirst({
@@ -261,8 +282,8 @@ export async function getProject(id: string, viewer: ViewerScope): Promise<Proje
     manager: row.manager ? { id: row.manager.id, name: row.manager.name } : null,
     coordinator: row.coordinator ? { id: row.coordinator.id, name: row.coordinator.name } : null,
     originStaff: viewer.isAdmin && row.originStaff ? { id: row.originStaff.id, name: row.originStaff.name } : null,
-    // Admins only (BE §8.5); null until the monday boards are read from import_refs.
-    mondayImport: null,
+    // Admins only (BE §8.5).
+    mondayImport: viewer.isAdmin ? await mondayImportOf(row.id) : null,
     members: row.members
       .filter((m) => m.staff.deletedAt === null)
       .map((m) => ({ id: m.staff.id, name: m.staff.name, role: m.role, active: m.staff.active }))

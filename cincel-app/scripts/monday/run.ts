@@ -7,6 +7,7 @@
  *   plan     --export exports/<client>
  *   apply    --export exports/<client> --by <staff email>
  *   rollback --batch <import_batch_id> [--drive-only]
+ *   remap    --projects "<name>,<name>" [--target "<group>=<target>"] [--apply --by <admin email>]
  *
  * Each command is a handler in COMMANDS.
  */
@@ -15,6 +16,7 @@ import { applyCommand } from "./apply";
 import { exportCommand } from "./export";
 import { initCommand } from "./init";
 import { planCommand } from "./plan";
+import { remapCommand } from "./remap";
 import { rollbackCommand } from "./rollback";
 
 export const USAGE = `Usage: npm run monday -- <command> [options]
@@ -25,6 +27,8 @@ Commands:
   plan      --export exports/<client>
   apply     --export exports/<client> --by <staff email>
   rollback  --batch <import_batch_id> [--drive-only]
+  remap     --projects "<name>,<name>" [--target "<group title>=<target>"]
+            [--apply --by <admin email>]   (dry run without --apply)
 
 The monday API token is read from MONDAY_TOKEN (environment or the
 git-ignored .env.monday), otherwise it is asked for with hidden input.
@@ -38,7 +42,7 @@ export interface CliIo {
 
 export type CommandHandler = (args: string[], io: CliIo) => Promise<number>;
 
-export const COMMAND_NAMES = ["export", "init", "plan", "apply", "rollback"] as const;
+export const COMMAND_NAMES = ["export", "init", "plan", "apply", "rollback", "remap"] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
 export const COMMANDS: Record<CommandName, CommandHandler> = {
@@ -47,6 +51,7 @@ export const COMMANDS: Record<CommandName, CommandHandler> = {
   plan: planCommand,
   apply: applyCommand,
   rollback: rollbackCommand,
+  remap: remapCommand,
 };
 
 const defaultIo: CliIo = {

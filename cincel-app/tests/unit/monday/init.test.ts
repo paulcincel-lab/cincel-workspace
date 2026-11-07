@@ -433,6 +433,17 @@ describe("init: heuristics", () => {
     expect(draftGroupTargets({ strategy: "group_as_project", workflowId: ID.wfObra, groups }, catalog)).toEqual({});
   });
 
+  it("maps date columns titled like «Fecha que finalizó» to the closed date", () => {
+    expect(
+      columnTargets([
+        col("d1", "date", "Fecha de entrega"),
+        col("d2", "date", "Fecha que finalizó"),
+        col("d3", "date", " fecha de  finalización "),
+      ]),
+    ).toEqual({ d1: "delivery_date", d2: "closed_date", d3: "import_data" });
+    expect(columnTargets([col("d", "date", "Finalizado")])).toEqual({ d: "closed_date" });
+  });
+
   it("prefers long text over text for notes, and targets other types as import data", () => {
     expect(
       columnTargets([

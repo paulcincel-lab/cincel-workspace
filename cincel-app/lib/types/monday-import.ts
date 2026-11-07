@@ -122,8 +122,8 @@ export interface MondayBoardSource {
   columns: { id: string; title: string; type: string }[];
   subitemColumns: { id: string; title: string; type: string }[];
   groups: { id: string; title: string }[];
-  /** Status columns' labels: columnId → labels. */
-  statusLabels: Record<string, { id: string; name: string; isDone: boolean }[]>;
+  /** Status columns' labels: columnId → labels. `items`: active items and subitems with the label (the status map's «Elementos»). */
+  statusLabels: Record<string, { id: string; name: string; isDone: boolean; items?: number }[]>;
   itemCount: number;
   /** Active top-level items, for template matches and project names by item. */
   items: { id: string; name: string; groupId: string | null }[];

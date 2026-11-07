@@ -39,6 +39,7 @@ import {
   deleteBatchRows,
   ENTITY_TABLES,
   findRollbackBlockers,
+  type TableEntity,
 } from "@/scripts/monday/rollback";
 
 import {
@@ -325,7 +326,7 @@ describe.skipIf(!url)(
         // growth of each entity table equals the refs pointing at it.
         const added = diff(before, await tableCounts(tx));
         const refsPerTable: Record<string, number> = {};
-        for (const e of IMPORT_ENTITIES) {
+        for (const e of Object.keys(ENTITY_TABLES) as TableEntity[]) {
           const { table } = ENTITY_TABLES[e];
           refsPerTable[table] = (refsPerTable[table] ?? 0) + counts[e];
         }
@@ -343,7 +344,7 @@ describe.skipIf(!url)(
 
         // Each ref points at a live row.
         for (const ref of refs) {
-          const { table, key } = ENTITY_TABLES[ref.entity as ImportEntity];
+          const { table, key } = ENTITY_TABLES[ref.entity as TableEntity];
           const found = (await tx.execute(
             sql.raw(
               `select 1 from core.${table} where ${key} = '${ref.rowId}' limit 1`,

@@ -40,6 +40,7 @@ import type { MappingInput } from "@/scripts/monday/mapping.schema";
 import {
   createRollbackCommand,
   ENTITY_TABLES,
+  type TableEntity,
 } from "@/scripts/monday/rollback";
 import type { CliIo } from "@/scripts/monday/run";
 import type { ExportData } from "@/scripts/monday/translate";
@@ -379,7 +380,7 @@ describe.skipIf(!url)("rollback after apply (test DB, fake Drive)", { timeout: 6
     tx: ImportDb,
     ref: Applied["refs"][number],
   ): Promise<boolean> {
-    const { table, key } = ENTITY_TABLES[ref.entity as ImportEntity];
+    const { table, key } = ENTITY_TABLES[ref.entity as TableEntity];
     const extra =
       ref.entity === "task_support"
         ? sql` and staff_id::text = ${(ref.data as { staffId: string }).staffId}`

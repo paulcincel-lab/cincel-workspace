@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/shadcn/alert-dialog";
 import { ProjectAdminFields, projectAdminPatch, type ProjectAdminValue } from "@/components/proyectos/ProjectAdminFields";
 import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard";
+import { canRemapImport, RemapImportSheet } from "@/components/proyectos/RemapImportSheet";
 import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
 import { ProjectTramosCard } from "@/components/proyectos/ProjectTramosCard";
 import { ProjectSpacesCard } from "@/components/proyectos/ProjectSpacesCard";
@@ -117,6 +118,8 @@ export default function ProjectFichaPage() {
         .map((w) => ({ id: w.id, key: w.key, name: w.name, sortOrder: w.sortOrder })),
     [workflows]
   );
+  const [remapOpen, setRemapOpen] = useState(false);
+  const [remapNotice, setRemapNotice] = useState<string | null>(null);
 
   async function reload() {
     try {
@@ -301,6 +304,12 @@ export default function ProjectFichaPage() {
         <Header />
         <ProjectSectionNav projectId={project.id} />
 
+        {remapNotice ? (
+          <Alert className="mb-3">
+            <AlertDescription>{remapNotice}</AlertDescription>
+          </Alert>
+        ) : null}
+
         {googleConnectResult ? (
           <p className={`mb-3 text-sm ${googleConnectResult.success ? "text-muted-foreground" : "text-destructive"}`}>
             {googleConnectResult.message}
@@ -334,6 +343,11 @@ export default function ProjectFichaPage() {
             ) : null}
           </div>
           <div className="flex gap-2">
+            {canRemapImport(authenticatedUser, project) && !isEditing ? (
+              <Button variant="outline" onClick={() => setRemapOpen(true)}>
+                Reacomodar importación
+              </Button>
+            ) : null}
             {caps.canEditProjectGeneral ? (
               isEditing ? (
                 <>
@@ -578,6 +592,17 @@ export default function ProjectFichaPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        {canRemapImport(authenticatedUser, project) ? (
+          <RemapImportSheet
+            projectId={project.id}
+            open={remapOpen}
+            onOpenChange={setRemapOpen}
+            onApplied={(updated) => {
+              setRemapNotice(`Se reacomodaron ${updated} tareas.`);
+              void reload();
+            }}
+          />
+        ) : null}
       </section>
     </main>
   );

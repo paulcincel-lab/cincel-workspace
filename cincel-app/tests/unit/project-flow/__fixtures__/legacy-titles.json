@@ -1,0 +1,212 @@
+{
+  "presale": [
+    {
+      "phase": "Inicial",
+      "legacyTitle": "Presentación \"Quienes somos\""
+    },
+    {
+      "phase": "Presentación",
+      "legacyTitle": "Resporte Estado Actual"
+    },
+    {
+      "phase": "Presentación",
+      "legacyTitle": "Imagenes de Referencia"
+    },
+    {
+      "phase": "Presentación",
+      "legacyTitle": "Plano preliminar"
+    },
+    {
+      "phase": "Presentación",
+      "legacyTitle": "Primeras Visualizaciones"
+    },
+    {
+      "phase": "Presentación",
+      "legacyTitle": "Rango de Precios"
+    },
+    {
+      "phase": "Presentación",
+      "legacyTitle": "Presupuesto Diseño"
+    },
+    {
+      "phase": "Con Cliente",
+      "legacyTitle": "Presentar a cliente"
+    },
+    {
+      "phase": "Minutas",
+      "legacyTitle": "Minuta"
+    },
+    {
+      "phase": "Cobro",
+      "legacyTitle": "Cobrar Inicio de proyecto"
+    }
+  ],
+  "diseno": [
+    {
+      "phase": "Anteproyecto",
+      "legacyTitle": "Levantamiento"
+    },
+    {
+      "phase": "Anteproyecto",
+      "legacyTitle": "Concepto"
+    },
+    {
+      "phase": "Anteproyecto",
+      "legacyTitle": "Plano de distribicion"
+    },
+    {
+      "phase": "Anteproyecto",
+      "legacyTitle": "Volumetria"
+    },
+    {
+      "phase": "Proyecto Arquitectonico",
+      "legacyTitle": "Planos Arquitectonicos"
+    },
+    {
+      "phase": "Proyecto Arquitectonico",
+      "legacyTitle": "Fachadas y alzados"
+    },
+    {
+      "phase": "Proyecto Arquitectonico",
+      "legacyTitle": "Mood Board"
+    },
+    {
+      "phase": "Proyecto Arquitectonico",
+      "legacyTitle": "Renders"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Fachadas y alzados"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Planos de Demolicion Desmantelamiento"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Planos de Albanilerias"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Planos Electricos"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Planos Iluminacion"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Planos Hidraulicos"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Planos Sanitarios"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Planos Acabados"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Planos de Carpinteria"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Plano de Mobiliario"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Plano de Cancelerias"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Planos de Herrerias"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Memoria Descriptiva"
+    },
+    {
+      "phase": "Ejecutivo",
+      "legacyTitle": "Detalles y Especificaciones Tecnicas"
+    },
+    {
+      "phase": "Proyecto Estructural",
+      "legacyTitle": "Memoria de Calculo"
+    },
+    {
+      "phase": "Proyecto Estructural",
+      "legacyTitle": "Calculos Simulaciones"
+    },
+    {
+      "phase": "Proyecto Sustentable",
+      "legacyTitle": "Captacion Agua Pluvial"
+    },
+    {
+      "phase": "Proyecto Sustentable",
+      "legacyTitle": "Tratamiento aguas"
+    },
+    {
+      "phase": "Proyecto Sustentable",
+      "legacyTitle": "Fotovoltaico"
+    },
+    {
+      "phase": "Paisajismo",
+      "legacyTitle": "Paleta Vegetal"
+    },
+    {
+      "phase": "Minutas",
+      "legacyTitle": "Minutas"
+    }
+  ],
+  "construccion": [
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Bitacoras y Minutas"
+    },
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Reporte de Avance"
+    },
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Revision de planos"
+    },
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Supervicion de trabajos"
+    },
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Cumplimiento Seguridad"
+    },
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Cumplimiento Orden y Limpieza"
+    },
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Atencion a calidad y detalles finos"
+    },
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Garantias"
+    },
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Manual de Mantenimiento"
+    },
+    {
+      "phase": "Residencia",
+      "legacyTitle": "Cierre de obra (Firma de actas)"
+    },
+    {
+      "phase": "Postventa",
+      "legacyTitle": "Mantenimientos"
+    },
+    {
+      "phase": "Postventa",
+      "legacyTitle": "Garantias"
+    }
+  ]
+}

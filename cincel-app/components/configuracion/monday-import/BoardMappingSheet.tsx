@@ -6,10 +6,12 @@ import { BoardChipBadge, countsText } from "@/components/configuracion/monday-im
 import { ChoiceSelect } from "@/components/configuracion/monday-import/ChoiceSelect";
 import { BoardEquivalences } from "@/components/configuracion/monday-import/EquivalenciasStep";
 import { PeopleStep } from "@/components/configuracion/monday-import/PeopleStep";
+import { StatusMapTable, type CreatedStatus } from "@/components/configuracion/monday-import/StatusMapTable";
+import { statusMapLabels } from "@/lib/monday-import/status-map";
 import type { BoardCard } from "@/lib/monday-import/board-cards";
 import { STRATEGY_OPTIONS, findBoard, strategyDescription, updateBoard } from "@/lib/monday-import/wizard-steps";
 import type { BoardStrategy, MappingInput } from "@/scripts/monday/mapping.schema";
-import type { MondayExportSource, MondayImportChoices } from "@/lib/types/monday-import";
+import type { MondayExportSource, MondayImportChoices, MondayStatusMap } from "@/lib/types/monday-import";
 
 const STRATEGY_CHOICES = STRATEGY_OPTIONS.map((option) => ({ value: option.value, label: option.label }));
 
@@ -28,6 +30,7 @@ export function BoardMappingSheet({
   onOpenChange,
   onMappingChange,
   onStatusCreated,
+  onStatusMapSaved,
   onStaffCreated,
 }: {
   /** null when closed. */
@@ -40,7 +43,9 @@ export function BoardMappingSheet({
   disabled: boolean;
   onOpenChange: (open: boolean) => void;
   onMappingChange: (mapping: MappingInput) => void;
-  onStatusCreated: (status: { id: string; name: string; closes: boolean }) => void;
+  onStatusCreated: (status: CreatedStatus) => void;
+  /** The firm-wide status map the server saved (FE §4.6 item 5). */
+  onStatusMapSaved?: (statusMap: MondayStatusMap) => void;
   onStaffCreated: (member: MondayImportChoices["staff"][number]) => void;
 }) {
   const board = card ? findBoard(mapping, card.id) : undefined;
@@ -110,12 +115,25 @@ export function BoardMappingSheet({
                   </section>
                   {/* Read-only while applied or running: the controls stay visible but don't take clicks. */}
                   <fieldset disabled={disabled} className="min-w-0 space-y-8">
+                    {board.strategy !== "skip" && board.strategy !== "crm_contacts" && source ? (
+                      <section className="space-y-3" aria-labelledby={`status-map-${card.id}`}>
+                        <h3 id={`status-map-${card.id}`} className="text-sm font-medium text-foreground">
+                          Estatus de monday
+                        </h3>
+                        <StatusMapTable
+                          labels={statusMapLabels(mapping, source, board.mondayBoardId)}
+                          choices={choices}
+                          note="Cambiarlo aquí lo cambia para todos los tableros y para las próximas importaciones."
+                          onStatusCreated={onStatusCreated}
+                          onSaved={onStatusMapSaved}
+                        />
+                      </section>
+                    ) : null}
                     <BoardEquivalences
                       key={board.mondayBoardId}
                       board={board}
                       source={boardSource}
                       choices={choices}
-                      onStatusCreated={onStatusCreated}
                       onBoardChange={(update) => onMappingChange(updateBoard(mapping, board.mondayBoardId, update))}
                     />
                     {board.strategy !== "skip" && peopleSource ? (

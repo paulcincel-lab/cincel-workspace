@@ -17,6 +17,7 @@ import type {
   MondayExportSource,
   MondayImportChoices,
   MondayImportRunState,
+  MondayStatusMap,
 } from "@/lib/types/monday-import";
 
 export type ExportChoice = { updates: boolean; files: boolean };
@@ -42,6 +43,7 @@ export function BoardsStep({
   choices = null,
   onBoardOpened,
   onStatusCreated = () => {},
+  onStatusMapSaved,
   onStaffCreated = () => {},
 }: {
   connection: MondayConnection | null;
@@ -60,7 +62,9 @@ export function BoardsStep({
   choices?: MondayImportChoices | null;
   /** A card's mapping was opened: it counts as reviewed («listo» once it has no problems). */
   onBoardOpened?: (boardId: string) => void;
-  onStatusCreated?: (status: { id: string; name: string; closes: boolean }) => void;
+  onStatusCreated?: (status: { id: string; name: string; closes: boolean; countsAsCompleted: boolean }) => void;
+  /** The firm-wide status map the server saved from a board sheet. */
+  onStatusMapSaved?: (statusMap: MondayStatusMap) => void;
   onStaffCreated?: (member: MondayImportChoices["staff"][number]) => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -148,6 +152,7 @@ export function BoardsStep({
           }}
           onMappingChange={onMappingChange}
           onStatusCreated={onStatusCreated}
+          onStatusMapSaved={onStatusMapSaved}
           onStaffCreated={onStaffCreated}
         />
       ) : null}

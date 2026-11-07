@@ -24,6 +24,8 @@ import { DriveAdminError, type DriveAdmin } from "@/lib/google/drive-admin";
 import type { MondayDbHandle } from "@/scripts/monday/db";
 import {
   createRollbackCommand,
+  deleteBatchRows,
+  DELETE_STEPS,
   ENTITY_TABLES,
   findRollbackBlockers,
   formatBlockers,
@@ -38,13 +40,26 @@ const tables = (Object.values(schema) as unknown[]).filter((v): v is PgTable =>
 );
 
 describe("rollback blocker coverage", () => {
-  it("maps every import entity to a table in the schema", () => {
+  it("maps import entities to tables in the schema", () => {
     const names = new Set(tables.map((t) => getTableConfig(t).name));
-    expect(Object.keys(ENTITY_TABLES).sort()).toEqual(
-      [...IMPORT_ENTITIES].sort(),
-    );
+    const entities = new Set<string>(IMPORT_ENTITIES);
+    for (const entity of Object.keys(ENTITY_TABLES))
+      expect(entities, entity).toContain(entity);
     for (const { table } of Object.values(ENTITY_TABLES))
       expect(names).toContain(table);
+  });
+
+  it("never reads or deletes áreas: old área refs are ref-only (BE §4.3)", () => {
+    const areaTables = ["areas", "area_members", "area_workflows"];
+    expect(Object.keys(ENTITY_TABLES)).not.toContain("area");
+    for (const { table } of Object.values(ENTITY_TABLES))
+      expect(areaTables).not.toContain(table);
+    for (const check of POINTER_CHECKS) {
+      expect(areaTables, check.table).not.toContain(check.table);
+      expect(check.column, check.table).not.toBe("area_id");
+    }
+    for (const step of DELETE_STEPS)
+      expect(areaTables).not.toContain(step.label);
   });
 
   it("checks every foreign key into a batch table, and only those", () => {
@@ -359,6 +374,25 @@ describe.skipIf(!url)("rollback blocker detection (test DB)", () => {
   it("reports no blockers on a clean, untouched batch", async () => {
     await inBatch(async (tx, f) => {
       expect(await findRollbackBlockers(tx, f.batch.id)).toEqual([]);
+    });
+  });
+
+  it("deletes an old área ref as a ref only, without touching any área table", async () => {
+    await inBatch(async (tx, f) => {
+      // An import ref written before áreas were removed; its row is gone.
+      await tx.execute(
+        sql`insert into core.import_refs (source, entity, external_id, row_id, batch_id, data, row_updated_at)
+          values ('monday', 'area', ${`area-${crypto.randomUUID()}`}, ${crypto.randomUUID()}, ${f.batch.id},
+            ${JSON.stringify({ workflowIds: [crypto.randomUUID()] })}::jsonb, now())`,
+      );
+      expect(await findRollbackBlockers(tx, f.batch.id)).toEqual([]);
+      const { counts } = await deleteBatchRows(tx, f.batch.id);
+      expect(counts.map((c) => c.label)).not.toContain("areas");
+      expect(counts.map((c) => c.label)).not.toContain("area_workflows");
+      const left = (await tx.execute(
+        sql`select count(*)::int as n from core.import_refs where batch_id = ${f.batch.id}`,
+      )) as unknown as { n: number }[];
+      expect(left[0].n).toBe(0);
     });
   });
 

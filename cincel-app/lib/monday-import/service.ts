@@ -54,6 +54,7 @@ import {
   writeDraftMapping,
   type StoredRun,
 } from "@/lib/monday-import/runs";
+import { notImplemented } from "@/lib/project-flow/not-implemented";
 import type {
   MappingInput,
   MondayConnection,
@@ -470,6 +471,29 @@ async function readManifestAccount(dir: string): Promise<StoredRun["account"]> {
 // Equivalencias
 // ---------------------------------------------------------------------------
 
+/** Active items and subitems per status column and label: `${columnId}\0${statusLabelKey(label)}` → count. */
+function statusLabelCounts(items: readonly unknown[]): Map<string, number> {
+  const out = new Map<string, number>();
+  const active = (row: unknown) => {
+    const state = (row as { state?: unknown } | null)?.state;
+    return row != null && (state == null || state === "active");
+  };
+  const visit = (row: unknown) => {
+    for (const value of (row as { column_values?: unknown[] } | null)?.column_values ?? []) {
+      const v = value as { __typename?: string; id?: string; label?: string | null } | null;
+      if (v?.__typename !== "StatusValue" || !v.id || !v.label) continue;
+      const key = `${v.id}\u0000${statusLabelKey(v.label)}`;
+      out.set(key, (out.get(key) ?? 0) + 1);
+    }
+  };
+  for (const item of items) {
+    if (!active(item)) continue;
+    visit(item);
+    for (const sub of (item as { subitems?: unknown[] | null }).subitems ?? []) if (active(sub)) visit(sub);
+  }
+  return out;
+}
+
 /** monday people in the people columns of the active items and subitems, in first-seen order (#685). */
 function boardPeople(items: Awaited<ReturnType<typeof readExport>>["boards"][number]["items"]): string[] {
   const out = new Set<string>();
@@ -501,13 +525,15 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
   const data = await readExport(dir);
   const picked = new Set(run.boardIds);
   // An item and a subitem column can share an id; init maps the union of their labels, so the source lists it too.
-  const labelsOf = (cols: { id: string; type: string; title: string; settings: unknown }[]) => {
-    const out: Record<string, { id: string; name: string; isDone: boolean }[]> = {};
+  const labelsOf = (cols: { id: string; type: string; title: string; settings: unknown }[], items: readonly unknown[]) => {
+    const counts = statusLabelCounts(items);
+    const out: Record<string, { id: string; name: string; isDone: boolean; items: number }[]> = {};
     for (const c of cols) {
       if (c.type !== "status") continue;
       const list = (out[c.id] ??= []);
       for (const l of statusLabels(c)) {
-        if (!list.some((x) => x.id === l.id)) list.push({ id: l.id, name: l.label, isDone: l.isDone });
+        if (list.some((x) => x.id === l.id)) continue;
+        list.push({ id: l.id, name: l.label, isDone: l.isDone, items: counts.get(`${c.id}\u0000${statusLabelKey(l.label)}`) ?? 0 });
       }
     }
     return out;
@@ -523,7 +549,7 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
         columns: plain(board.columns),
         subitemColumns: plain(board.subitem_columns ?? []),
         groups: board.groups.map((g) => ({ id: g.id, title: g.title })),
-        statusLabels: labelsOf([...board.columns, ...(board.subitem_columns ?? [])]),
+        statusLabels: labelsOf([...board.columns, ...(board.subitem_columns ?? [])], items),
         itemCount: items.length,
         items: items
           .filter((i) => i.state == null || i.state === "active")
@@ -962,4 +988,23 @@ export async function startRollback(runId: string, deps: WizardDeps): Promise<Mo
     if (err instanceof Error && err.message === "JOB_RUNNING") throw new WizardError("Ya hay un proceso en curso en esta importación.");
     throw err;
   }
+}
+
+// --- Project flow (BE §7.8, §10.8): contracts implemented with the wizard choices and suggestion work ---
+
+/**
+ * Stores the whole firm-wide status map in app_settings `monday.status_map` (JSON). The caller has parsed the map
+ * and checked that every `customStatusId` is a live status (`STATUS_NOT_FOUND` otherwise).
+ */
+export async function saveStatusMap(db: ImportDb, map: import("@/lib/types/monday-import").MondayStatusMap): Promise<void> {
+  return notImplemented("saveStatusMap", db, map);
+}
+
+/** "Crear integrante": the puesto suggested by the fases of the person's tasks in the run's translation (BE §10.8). */
+export async function suggestPosition(
+  runId: string,
+  mondayUserId: string,
+  deps: WizardDeps,
+): Promise<import("@/lib/types/monday-import").MondayPositionSuggestion> {
+  return notImplemented("suggestPosition", runId, mondayUserId, deps);
 }

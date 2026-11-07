@@ -40,7 +40,7 @@ import {
   createPlanDbLookups,
   readPlanExport,
 } from "@/scripts/monday/plan";
-import { ENTITY_TABLES } from "@/scripts/monday/rollback";
+import { ENTITY_TABLES, type TableEntity } from "@/scripts/monday/rollback";
 
 import {
   fakeDrive,
@@ -289,7 +289,7 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
       // Every ref points at a live row, with that row's updated_at.
       for (const ref of refs) {
         const { table, key, hasUpdatedAt } =
-          ENTITY_TABLES[ref.entity as ImportEntity];
+          ENTITY_TABLES[ref.entity as TableEntity];
         const found = (await tx.execute(
           sql.raw(
             `select ${hasUpdatedAt ? "updated_at" : "null as updated_at"} from core.${table} where ${key} = '${ref.rowId}' limit 1`,

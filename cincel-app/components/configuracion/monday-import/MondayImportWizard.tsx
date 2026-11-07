@@ -682,6 +682,9 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
               onStatusCreated={(status) =>
                 setChoices((previous) => (previous ? { ...previous, statuses: [...previous.statuses, status] } : previous))
               }
+              onStatusMapSaved={(statusMap) =>
+                setChoices((previous) => (previous ? { ...previous, statusMap } : previous))
+              }
               onStaffCreated={(member) =>
                 setChoices((previous) => (previous ? { ...previous, staff: [...previous.staff, member] } : previous))
               }
@@ -697,6 +700,9 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
               onMappingChange={editMapping}
               onStatusCreated={(status) =>
                 setChoices((previous) => (previous ? { ...previous, statuses: [...previous.statuses, status] } : previous))
+              }
+              onStatusMapSaved={(statusMap) =>
+                setChoices((previous) => (previous ? { ...previous, statusMap } : previous))
               }
             />
           ) : null}
@@ -724,6 +730,7 @@ export function MondayImportWizard({ initialRun, initialChoices, hasServerToken,
               onRefresh={refreshPreview}
               onFix={(target, boardId, personId) => goTo(target, boardId, personId ?? null)}
               runId={runId}
+              positions={choices?.positions ?? []}
               onStaffCreated={staffCreatedInPreview}
             />
           ) : null}

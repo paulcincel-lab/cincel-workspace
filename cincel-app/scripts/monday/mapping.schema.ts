@@ -21,7 +21,7 @@ export const ColumnTarget = z.enum([
   "commitment_date",
   "delivery_date",
   "timeline",
-  // "Fecha que finalizó": the task's closed_at when its status closes it
+  // "Fecha que finalizó": the task's closed_at (end of that day), kept only when the mapped status closes it.
   "closed_date",
   "dependencies",
   "files",
