@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -39,6 +40,15 @@ vi.mock("@/lib/auth/session", () => ({
 const run = randomUUID().slice(0, 8);
 
 describe.skipIf(!url)("puestos (test DB)", async () => {
+  // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
+  let unlockCatalog: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    unlockCatalog = await lockTramoCatalog(url!);
+  }, 300_000);
+  afterAll(async () => {
+    await unlockCatalog?.();
+  });
+
   const { and, eq, inArray, sql } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");

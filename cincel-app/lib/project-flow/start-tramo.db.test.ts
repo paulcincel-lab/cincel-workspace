@@ -12,6 +12,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
 
 import * as schema from "@/lib/db/schema";
 
@@ -33,6 +34,15 @@ vi.mock("@/lib/repositories/positions-repository", () => ({
 }));
 
 describe.skipIf(!url)("startTramo / undoStartTramo / onTaskClosingChanged (test DB)", async () => {
+  // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
+  let unlockCatalog: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    unlockCatalog = await lockTramoCatalog(url!);
+  }, 300_000);
+  afterAll(async () => {
+    await unlockCatalog?.();
+  });
+
   const client = postgres(url ?? "", { max: 4 });
   const db = drizzle(client, { schema });
   const flow = await import("./start-tramo");

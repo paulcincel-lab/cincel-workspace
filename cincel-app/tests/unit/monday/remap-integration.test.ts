@@ -20,7 +20,8 @@ import { join } from "node:path";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
 
 import * as schema from "@/lib/db/schema";
 import type { ImportDb } from "@/lib/import/refs";
@@ -58,6 +59,15 @@ function io() {
 }
 
 describe.skipIf(!url)("remap on the Madrid 22 fixture (test DB)", { timeout: 60_000 }, () => {
+  // It finds or creates the default tramos by key: one catalog-changing file at a time (tests/setup/catalog-lock.ts).
+  let unlockCatalog: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    unlockCatalog = await lockTramoCatalog(url!);
+  }, 300_000);
+  afterAll(async () => {
+    await unlockCatalog?.();
+  });
+
   const client = postgres(url ?? "", { max: 1, onnotice: () => {} });
   const db = drizzle(client, { schema });
   const dirs: string[] = [];
