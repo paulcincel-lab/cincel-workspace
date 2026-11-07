@@ -1,4 +1,4 @@
-import { PuestosClient } from "@/app/configuracion/puestos/PuestosClient";
+import { PuestosClient } from "@/app/(staff)/configuracion/puestos/PuestosClient";
 import { fetchPositionsAction } from "@/lib/actions/positions-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { requireSettingsAdminPage } from "@/lib/auth/settings-admin-page";

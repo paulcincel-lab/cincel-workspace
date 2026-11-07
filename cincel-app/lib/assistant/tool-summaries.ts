@@ -338,6 +338,7 @@ Object.assign(toolSummaries, {
   update_event: summarizeUpdateEvent,
   cancel_event: summarizeCancelEvent,
   schedule_site_visit: summarizeScheduleSiteVisit,
+} satisfies Record<string, ToolSummary>);
 
 // ── Mi espacio y jornada (BE §10.3) ─────────────────────────────────────────
 

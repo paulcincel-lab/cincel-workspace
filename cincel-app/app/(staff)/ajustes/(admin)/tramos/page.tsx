@@ -1,4 +1,4 @@
-import { TramosClient } from "@/app/configuracion/tramos/TramosClient";
+import { TramosClient } from "@/app/(staff)/configuracion/tramos/TramosClient";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { requireSettingsAdminPage } from "@/lib/auth/settings-admin-page";
 import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";

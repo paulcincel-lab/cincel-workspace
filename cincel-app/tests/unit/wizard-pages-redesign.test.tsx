@@ -38,14 +38,16 @@ vi.mock("@/lib/auth/session", () => ({
   })),
 }));
 vi.mock("@/lib/onboarding/first-login", () => ({ isBootstrapAdminEmail: () => mocks.bootstrap }));
+// The legacy→Ajustes redirect has its own tests; this file checks the `redesign` prop only.
+vi.mock("@/lib/ui/legacy-redirects-server", () => ({ redirectLegacyIfRedesignOn: vi.fn(async () => {}) }));
 vi.mock("@/lib/ui/preferences-server", () => ({
   getResolvedAppearance: vi.fn(async () => ({ redesignEnabled: mocks.redesignEnabled })),
 }));
 
 import { GoogleSetupWizard } from "@/components/configuracion/GoogleSetupWizard";
 import { MondayImportWizard } from "@/components/configuracion/monday-import/MondayImportWizard";
-import GoogleSetupWizardPage from "@/app/configuracion/google/primeros-pasos/page";
-import ImportarMondayPage from "@/app/configuracion/importar-monday/page";
+import GoogleSetupWizardPage from "@/app/(staff)/configuracion/google/primeros-pasos/page";
+import ImportarMondayPage from "@/app/(staff)/configuracion/importar-monday/page";
 
 /** The first element of `type` in a server component's returned tree. */
 function findElement(node: ReactNode, type: unknown): ReactElement<Record<string, unknown>> | null {
@@ -70,14 +72,14 @@ describe("first-login wizard pages follow the resolved redesign flag", () => {
     it(`Google primeros pasos passes redesign=${enabled}`, async () => {
       mocks.redesignEnabled = enabled;
       mocks.bootstrap = true;
-      const tree = await GoogleSetupWizardPage();
+      const tree = await GoogleSetupWizardPage({ searchParams: Promise.resolve({}) });
       expect(findElement(tree, GoogleSetupWizard)?.props.redesign).toBe(enabled);
     });
 
     it(`Importar de monday passes redesign=${enabled}`, async () => {
       mocks.redesignEnabled = enabled;
       mocks.bootstrap = false;
-      const tree = await ImportarMondayPage();
+      const tree = await ImportarMondayPage({ searchParams: Promise.resolve({}) });
       expect(findElement(tree, MondayImportWizard)?.props.redesign).toBe(enabled);
     });
   }

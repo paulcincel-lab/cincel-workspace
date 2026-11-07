@@ -70,8 +70,8 @@ vi.mock("@/components/ajustes/MondayImportSections", () => ({
 }));
 vi.mock("@/components/ajustes/GoogleSettings", () => ({ GoogleSettings: stand("GoogleSettings") }));
 vi.mock("@/components/configuracion/GoogleSetupWizard", () => ({ GoogleSetupWizard: stand("GoogleSetupWizard") }));
-vi.mock("@/app/configuracion/tramos/TramosClient", () => ({ TramosClient: stand("TramosClient") }));
-vi.mock("@/app/configuracion/puestos/PuestosClient", () => ({ PuestosClient: stand("PuestosClient") }));
+vi.mock("@/app/(staff)/configuracion/tramos/TramosClient", () => ({ TramosClient: stand("TramosClient") }));
+vi.mock("@/app/(staff)/configuracion/puestos/PuestosClient", () => ({ PuestosClient: stand("PuestosClient") }));
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
 import MondayLayout from "../monday/layout";
