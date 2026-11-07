@@ -118,11 +118,15 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
   });
 
   async function inTx(fn: (tx: ImportDb) => Promise<void>) {
+    // Repeatable read keeps rows other test files commit meanwhile out of the table counts.
     await db
-      .transaction(async (tx) => {
-        await fn(tx);
-        throw new Rollback();
-      })
+      .transaction(
+        async (tx) => {
+          await fn(tx);
+          throw new Rollback();
+        },
+        { isolationLevel: "repeatable read" },
+      )
       .catch((err) => {
         if (!(err instanceof Rollback)) throw err;
       });

@@ -8,6 +8,7 @@
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -17,6 +18,15 @@ if (url) process.env.DATABASE_URL = url;
 const run = randomUUID().slice(0, 8);
 
 describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
+  // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
+  let unlockCatalog: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    unlockCatalog = await lockTramoCatalog(url!);
+  }, 300_000);
+  afterAll(async () => {
+    await unlockCatalog?.();
+  });
+
   const { and, asc, eq, inArray, isNull } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");

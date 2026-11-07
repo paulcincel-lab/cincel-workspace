@@ -5,7 +5,8 @@
  * each inside a transaction that is rolled back.
  */
 import postgres from "postgres";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
 
 import {
   DEFAULT_CATALOG,
@@ -112,6 +113,15 @@ describe("DEFAULT_POSITIONS", () => {
 });
 
 describe.skipIf(!url)("ensureDefaultCatalog (test DB)", () => {
+  // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
+  let unlockCatalog: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    unlockCatalog = await lockTramoCatalog(url!);
+  }, 300_000);
+  afterAll(async () => {
+    await unlockCatalog?.();
+  });
+
   const sql = postgres(url ?? "", { max: 1, onnotice: () => {} });
   afterAll(() => sql.end());
 

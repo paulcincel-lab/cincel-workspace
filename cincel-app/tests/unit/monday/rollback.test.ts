@@ -375,11 +375,15 @@ describe.skipIf(!url)("rollback blocker detection (test DB)", () => {
   }
 
   async function inBatch(fn: (tx: ImportDb, f: Fixture) => Promise<void>) {
+    // Repeatable read keeps rows other test files commit meanwhile out of the table counts.
     await db
-      .transaction(async (tx) => {
-        await fn(tx, await seedBatch(tx));
-        throw new Rollback();
-      })
+      .transaction(
+        async (tx) => {
+          await fn(tx, await seedBatch(tx));
+          throw new Rollback();
+        },
+        { isolationLevel: "repeatable read" },
+      )
       .catch((err) => {
         if (!(err instanceof Rollback)) throw err;
       });

@@ -5,7 +5,8 @@
  * inside a transaction that is rolled back.
  */
 import postgres from "postgres";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
 
 import { DEFAULT_WORKFLOWS, ensureDefaultWorkflows } from "@/scripts/default-workflows.mjs";
 
@@ -69,6 +70,15 @@ describe("ensureDefaultWorkflows", () => {
 });
 
 describe.skipIf(!url)("ensureDefaultWorkflows (test DB)", () => {
+  // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
+  let unlockCatalog: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    unlockCatalog = await lockTramoCatalog(url!);
+  }, 300_000);
+  afterAll(async () => {
+    await unlockCatalog?.();
+  });
+
   const sql = postgres(url ?? "", { max: 1, onnotice: () => {} });
   afterAll(() => sql.end());
 
