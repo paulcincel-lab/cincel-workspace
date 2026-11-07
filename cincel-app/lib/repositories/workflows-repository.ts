@@ -1,7 +1,7 @@
 import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { areaWorkflows, areas, workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
+import { workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
 import { READINESS } from "@/lib/project-flow/catalog";
 import type { FlowExecutor } from "@/lib/project-flow/db";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
@@ -112,7 +112,7 @@ export async function listWorkflows(
     },
   });
   const ids = rows.map((r) => r.id);
-  const [phases, gateRows, areaRows] = await Promise.all([
+  const [phases, gateRows] = await Promise.all([
     listPhasesByWorkflow(ids, { includeInactive: options.includeInactivePhases }),
     // Every fase with a key of every live workflow: readiness gates may sit in a tramo filtered out above.
     db
@@ -124,14 +124,6 @@ export async function listWorkflows(
         sortOrder: workflowPhases.sortOrder,
       })
       .from(workflowPhases),
-    // Deprecated `areas` field, kept until the UI stops reading it.
-    ids.length
-      ? db
-          .select({ workflowId: areaWorkflows.workflowId, id: areas.id, name: areas.name })
-          .from(areaWorkflows)
-          .innerJoin(areas, eq(areas.id, areaWorkflows.areaId))
-          .where(and(inArray(areaWorkflows.workflowId, ids), isNull(areas.deletedAt)))
-      : Promise.resolve([] as Array<{ workflowId: string; id: string; name: string }>),
   ]);
   const allWorkflows = await db
     .select({ id: workflows.id, key: workflows.key, name: workflows.name, sortOrder: workflows.sortOrder })
@@ -145,7 +137,6 @@ export async function listWorkflows(
     phases: phases.get(r.id) ?? ([] as WorkflowPhase[]),
     templates: r.templates.map((t) => toTemplate(t, phaseNames)),
     readiness: resolveReadiness(r, byKey, phasesOf),
-    areas: areaRows.filter((a) => a.workflowId === r.id).map((a) => ({ id: a.id, name: a.name })),
   }));
 }
 
@@ -479,16 +470,6 @@ export async function setWorkflowAutoStart(
     executor
   );
   return toWorkflow(after);
-}
-
-/** @deprecated Áreas are removed (ADR 0003). */
-export async function listAreasForWorkflow(workflowId: string) {
-  return db
-    .select({ id: areas.id, name: areas.name })
-    .from(areaWorkflows)
-    .innerJoin(areas, eq(areas.id, areaWorkflows.areaId))
-    .where(and(eq(areaWorkflows.workflowId, workflowId), isNull(areas.deletedAt)))
-    .orderBy(asc(areas.name));
 }
 
 async function recordChange(

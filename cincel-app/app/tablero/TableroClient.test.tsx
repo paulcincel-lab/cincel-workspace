@@ -76,7 +76,7 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     project: { id: "p1", name: "Residencia Valle Alto", clientName: null },
     workflow: DISENO,
     areaColorSlot: null,
-    phaseRef: null,
+    phase: null,
     space: null,
     manager: null,
     support: [],
@@ -106,7 +106,7 @@ describe("TableroClient tramo labels", () => {
       id: "a",
       title: "Planos ejecutivos",
       phaseId: "f1",
-      phaseRef: { id: "f1", name: "Ejecutivo", sortOrder: 1 },
+      phase: { id: "f1", name: "Ejecutivo", sortOrder: 1 },
     }),
     makeTask({ id: "b", title: "Cimbra", workflowId: CONSTRUCCION.id, workflow: CONSTRUCCION }),
   ];

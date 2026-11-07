@@ -50,10 +50,6 @@ export const projects = core.table(
     currentWorkflowId: uuid("current_workflow_id").references(() => workflows.id, {
       onDelete: "set null",
     }),
-    /** @deprecated Legacy single phase. Dropped in release B (0025); fases derive from tasks. */
-    phase: text("phase"),
-    /** @deprecated Free-text project phases (#435). Reported by 0024 and dropped in release B (0025). */
-    phases: text("phases").array().notNull().default(sql`'{}'::text[]`),
     projectType: text("project_type"),
     addressStreet: text("address_street"),
     addressCity: text("address_city"),

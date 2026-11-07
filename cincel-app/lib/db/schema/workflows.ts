@@ -71,10 +71,8 @@ export const workflowTaskTemplates = core.table(
     workflowId: uuid("workflow_id")
       .notNull()
       .references(() => workflows.id, { onDelete: "cascade" }),
-    /** @deprecated Free-text fase; replaced by `phaseId`. Dropped in release B (0025). */
-    phase: text("phase"),
-    /** Nullable until release B (0025) sets it NOT NULL. */
-    phaseId: uuid("phase_id"),
+    /** Fase of the template's tramo (`workflow_task_templates_phase_fk`). */
+    phaseId: uuid("phase_id").notNull(),
     title: text("title").notNull(),
     notes: text("notes"),
     defaultPriority: taskPriority("default_priority").notNull().default("media"),

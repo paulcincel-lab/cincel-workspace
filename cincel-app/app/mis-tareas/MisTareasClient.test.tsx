@@ -61,7 +61,7 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     customStatus: null,
     project: { id: "p1", name: "Residencia Valle Alto", clientName: "Cliente" },
     workflow: null,
-    areaColorSlot: null,
+    phase: null,
     space: null,
     manager: { id: "u1", name: "Ana Ruiz" },
     support: [],
@@ -134,7 +134,7 @@ describe("MisTareasClient Tramo · Fase column", () => {
             workflowId: "w2",
             workflow: { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
             phaseId: "f1",
-            phaseRef: { id: "f1", name: "Ejecutivo", sortOrder: 1 },
+            phase: { id: "f1", name: "Ejecutivo", sortOrder: 1 },
           }),
           makeTask({
             id: "b",

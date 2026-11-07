@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * Role, puesto and área changes for Google-managed staff are refused by the server
+ * Role and puesto changes for Google-managed staff are refused by the server
  * actions themselves (BE §A.7, §A.11 #12), not only hidden in the UI.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,12 +28,8 @@ const positionsRepo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/positions-repository", () => positionsRepo);
 
-const areasRepo = vi.hoisted(() => ({ listAreaMemberIds: vi.fn(), setAreaMembers: vi.fn() }));
-vi.mock("@/lib/repositories/areas-repository", () => areasRepo);
-
 import { GOOGLE_MANAGED_ERROR, GOOGLE_MANAGED_REFUSAL } from "@/lib/types/workspace-access";
 
-import { setAreaMembersAction } from "./areas-actions";
 import { setStaffPositionsAction, updateStaffAction } from "./staff-actions";
 
 const GOOGLE = "00000000-0000-4000-8000-000000000001";
@@ -51,7 +47,6 @@ beforeEach(() => {
   positionsRepo.hasPositionMappings.mockResolvedValue(true);
   positionsRepo.listStaffPositionIds.mockResolvedValue([POSITION_1]);
   staffRepo.updateStaff.mockResolvedValue({ id: "x" });
-  areasRepo.listAreaMemberIds.mockResolvedValue([GOOGLE, PASSWORD]);
 });
 
 describe("updateStaffAction", () => {
@@ -94,22 +89,3 @@ describe("setStaffPositionsAction", () => {
   });
 });
 
-describe("setAreaMembersAction", () => {
-  it("refuses removing a Google-managed member", async () => {
-    await expect(setAreaMembersAction("area-1", [{ staffId: PASSWORD }])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
-    expect(areasRepo.setAreaMembers).not.toHaveBeenCalled();
-  });
-
-  it("refuses adding a Google-managed member", async () => {
-    areasRepo.listAreaMemberIds.mockResolvedValue([PASSWORD]);
-    await expect(
-      setAreaMembersAction("area-1", [{ staffId: PASSWORD }, { staffId: GOOGLE }]),
-    ).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
-  });
-
-  it("allows changes that only touch non-Google staff", async () => {
-    await setAreaMembersAction("area-1", [{ staffId: GOOGLE }, { staffId: "other" }]);
-    await setAreaMembersAction("area-1", [{ staffId: GOOGLE, role: "Líder" }]);
-    expect(areasRepo.setAreaMembers).toHaveBeenCalledTimes(2);
-  });
-});

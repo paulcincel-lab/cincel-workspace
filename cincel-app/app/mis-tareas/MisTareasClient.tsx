@@ -270,7 +270,7 @@ export function MisTareasClient({ initialTasks }: MisTareasClientProps) {
         !query ||
         t.project.name.toLowerCase().includes(query) ||
         t.title.toLowerCase().includes(query) ||
-        (t.phaseRef?.name ?? "").toLowerCase().includes(query) ||
+        (t.phase?.name ?? "").toLowerCase().includes(query) ||
         (t.space?.name ?? "").toLowerCase().includes(query) ||
         taskStatusLabel(t).toLowerCase().includes(query);
       const matchesStatus = !statusFilter || statusSelectValue(t) === statusFilter;

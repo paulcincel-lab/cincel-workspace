@@ -94,7 +94,7 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     project: { id: "p1", name: "Casa Norte", clientName: null },
     workflow: null,
     areaColorSlot: null,
-    phaseRef: null,
+    phase: null,
     space: null,
     manager: { id: "u1", name: "Ana Ruiz" },
     support: [],
@@ -149,8 +149,8 @@ describe("ActividadesClient General mode", () => {
 
   it("orders rows by tramo, then fase, with a Tramo column", () => {
     renderGeneral([
-      makeTask({ id: "d2", title: "Ejecutivo", workflow: diseno, phaseRef: { id: "f2", name: "Ejecutivo", sortOrder: 2 } }),
-      makeTask({ id: "d1", title: "Concepto", workflow: diseno, phaseRef: { id: "f1", name: "Concepto", sortOrder: 1 } }),
+      makeTask({ id: "d2", title: "Ejecutivo", workflow: diseno, phase: { id: "f2", name: "Ejecutivo", sortOrder: 2 } }),
+      makeTask({ id: "d1", title: "Concepto", workflow: diseno, phase: { id: "f1", name: "Concepto", sortOrder: 1 } }),
       makeTask({ id: "p", title: "Levantamiento", workflow: presale }),
     ]);
 

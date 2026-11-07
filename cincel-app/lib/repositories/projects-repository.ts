@@ -45,6 +45,19 @@ import { parseInput, ProjectCreateInputSchema } from "@/lib/validation/project-f
 
 type ProjectRow = typeof projects.$inferSelect;
 
+/** Deprecated free-text project phases: trim, drop blanks and case-insensitive duplicates. */
+function normalizePhases(list: ReadonlyArray<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of list) {
+    const value = raw?.trim();
+    if (!value || seen.has(value.toLowerCase())) continue;
+    seen.add(value.toLowerCase());
+    out.push(value);
+  }
+  return out;
+}
+
 const clean = (v: string | null | undefined): string | null => {
   const t = v?.trim();
   return t ? t : null;

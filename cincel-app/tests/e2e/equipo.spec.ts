@@ -155,6 +155,12 @@ test.describe("Equipo — add team member", () => {
     await expect(row.getByText(POSITION_NAME, { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(row.getByText("Arquitecto Senior", { exact: true })).toBeVisible();
     await expect(page.getByRole("row").filter({ hasText: withoutPosition }).getByText("Sin puesto")).toBeVisible();
+
+    // Puestos, Fases candidatas and Acceso are separate columns; "Área" is gone.
+    await expect(page.getByRole("columnheader", { name: "Puestos", exact: true })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Fases candidatas", exact: true })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Acceso", exact: true })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: /^Áreas?$/ })).toHaveCount(0);
   });
 
   test("deactivate a collaborator, find them under Desactivados, and reactivate them", async ({ page }) => {
@@ -169,7 +175,7 @@ test.describe("Equipo — add team member", () => {
     }
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByText(name).first()).toBeVisible({ timeout: 30_000 });
-    // The page's own refresh() (areas, tasks, projects) re-renders the table
+    // The page's own refresh() (puestos, tasks, projects) re-renders the table
     // as each fetch lands, which would detach an already-open row menu.
     await page.waitForLoadState("networkidle");
 

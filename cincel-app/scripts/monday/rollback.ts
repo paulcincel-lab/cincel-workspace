@@ -109,6 +109,17 @@ export const ENTITY_TABLES = {
 /** An import ref entity backed by a table rollback checks and deletes. */
 export type TableEntity = keyof typeof ENTITY_TABLES;
 
+/**
+ * Import ref entities whose table no longer exists: the áreas tables were
+ * dropped (0025), so old `area` refs are only deleted with the batch's
+ * `import_refs`.
+ */
+export const REF_ONLY_ENTITIES = ["area"] as const satisfies readonly ImportEntity[];
+
+export function isTableEntity(entity: ImportEntity): entity is TableEntity {
+  return Object.hasOwn(ENTITY_TABLES, entity);
+}
+
 /** How a pointing row is recognized as the batch's own. */
 type Owner =
   /** It is an import ref of this entity in the batch. */

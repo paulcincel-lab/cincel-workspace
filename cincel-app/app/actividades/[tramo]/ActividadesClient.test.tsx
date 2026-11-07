@@ -308,3 +308,46 @@ describe("ActividadesClient tabs and template flow", () => {
     expect(screen.queryByText(/Iniciar plantilla/)).toBeNull();
   });
 });
+
+describe("ActividadesClient tramos from the database", () => {
+  it("builds the tabs from the tramos it receives, in tramo order", () => {
+    capabilities.current = {};
+    const diseno: WorkflowDetail = { ...presaleWorkflow, id: "wf-diseno", key: "diseno", name: "Diseño", sortOrder: 1 };
+    render(
+      <ActividadesClient
+        slug="diseno"
+        workflow={diseno}
+        workflows={[diseno, presaleWorkflow]}
+        initialProjects={[]}
+        initialStaff={[]}
+        initialTasks={[]}
+      />,
+    );
+
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs.slice(0, 3)).toEqual(["General", "Presale", "Diseño"]);
+  });
+
+  it("offers the tramo's active fases from its catalog and no template button", () => {
+    capabilities.current = { canCreateActivity: true };
+    render(
+      <ActividadesClient
+        slug="presale"
+        workflow={{
+          ...presaleWorkflow,
+          phases: [
+            { id: "f2", name: "Presentación", sortOrder: 1, workflowId: "wf-presale", active: true, templateCount: 0 },
+            { id: "f1", name: "Inicial", sortOrder: 0, workflowId: "wf-presale", active: true, templateCount: 0 },
+            { id: "f3", name: "Vieja", sortOrder: 2, workflowId: "wf-presale", active: false, templateCount: 0 },
+          ],
+        }}
+        initialProjects={[]}
+        initialStaff={[]}
+        initialTasks={[makeTask({ id: "a", title: "Levantamiento", workflowId: "wf-presale" })]}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Iniciar plantilla/ })).toBeNull();
+    expect(screen.getByText("Inicial · Presentación")).toBeTruthy();
+  });
+});

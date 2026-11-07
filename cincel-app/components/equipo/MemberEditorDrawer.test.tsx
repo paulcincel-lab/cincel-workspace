@@ -130,6 +130,27 @@ describe("MemberEditorDrawer — Google-managed staff", () => {
     expect(screen.getByTestId("member-positions-readonly").textContent).not.toContain("Residente de obra");
   });
 
+  it("shows Sin puesto when a Google-managed member has no puestos", () => {
+    render(
+      <MemberEditorDrawer
+        show
+        onClose={() => undefined}
+        editingId={STAFF_ID}
+        draft={{ ...draft, positionIds: [] }}
+        onChangeDraft={() => undefined}
+        formError=""
+        onSave={() => undefined}
+        accessPreviewState={accessState}
+        isEditingSelfProtectedAdmin={false}
+        teamCapabilities={capabilities}
+        availabilityOptions={["Disponible"]}
+        positionOptions={positions}
+        googleManaged
+      />,
+    );
+    expect(screen.getByTestId("member-positions-readonly").textContent).toBe("Sin puesto");
+  });
+
   it("keeps the other fields editable", () => {
     renderDrawer({ googleManaged: true });
     expect(isDisabled(screen.getByDisplayValue("Ana"))).toBe(false);

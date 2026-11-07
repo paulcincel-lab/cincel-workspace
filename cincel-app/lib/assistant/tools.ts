@@ -37,7 +37,7 @@ import type {
 const RISK_NOTE =
   "riesgo derivado del avance y de tareas vencidas/bloqueadas (Alto/Medio/Bajo)";
 
-// Firm departments / workflow slugs, matching lib/actividades/departamento.ts.
+// Default tramo keys (core.workflows.key) seeded on a fresh install.
 const WORKFLOW_ENUM = z.enum(["presale", "diseno", "construccion"]);
 const ONBOARD_WORKFLOW_ENUM = WORKFLOW_ENUM;
 const WORKFLOW_LABELS: Record<string, string> = {

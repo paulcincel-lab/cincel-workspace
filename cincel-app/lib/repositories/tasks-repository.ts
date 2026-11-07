@@ -353,8 +353,6 @@ export async function listTasks(filters: TaskFilters, viewer: ViewerScope): Prom
       phaseName: workflowPhases.name,
       phaseSortOrder: workflowPhases.sortOrder,
       spaceName: projectSpaces.name,
-      // Color of the área that owns the workflow (first by sort order).
-      areaColorSlot: sql<number | null>`(select a.color_slot from core.area_workflows aw join core.areas a on a.id = aw.area_id where aw.workflow_id = ${tasks.workflowId} and a.deleted_at is null order by a.sort_order, a.name limit 1)`,
       managerName: staff.name,
       customStatusName: taskStatuses.name,
       customStatusCloses: taskStatuses.closes,
@@ -405,7 +403,6 @@ export async function listTasks(filters: TaskFilters, viewer: ViewerScope): Prom
       : null,
     phase: r.task.phaseId && r.phaseName ? { id: r.task.phaseId, name: r.phaseName, sortOrder: r.phaseSortOrder! } : null,
     space: r.task.spaceId && r.spaceName ? { id: r.task.spaceId, name: r.spaceName } : null,
-    areaColorSlot: r.areaColorSlot ?? null,
     manager: r.task.managerId ? { id: r.task.managerId, name: r.managerName! } : null,
     support: support.get(r.task.id) ?? [],
     checklist: { total: r.checklistTotal, completed: r.checklistDone },

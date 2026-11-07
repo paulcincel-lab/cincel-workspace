@@ -73,7 +73,7 @@ function defaultTimeFor(task: TaskListItem, type: CalendarEventType): string {
 }
 
 function inferAdditionalType(task: TaskListItem): CalendarEventType | null {
-  const phase = (task.phaseRef?.name ?? "").toLowerCase();
+  const phase = (task.phase?.name ?? "").toLowerCase();
 
   if (phase.includes("reuni")) {
     return "Reunion";
@@ -128,8 +128,8 @@ export function buildCalendarEvents(tasks: TaskListItem[]): CalendarEvent[] {
         responsible: task.manager?.name || "Sin responsable",
         tramo,
         tramoLabel,
-        phaseId: task.phaseRef?.id ?? null,
-        phaseLabel: task.phaseRef?.name ?? "",
+        phaseId: task.phase?.id ?? null,
+        phaseLabel: task.phase?.name ?? "",
         type,
         href: baseHref,
       });

@@ -20,7 +20,7 @@ const NO_PHASE_ID = "__sin_fase__";
 function groupByPhase(tasks: TaskListItem[]): FichaPhaseGroup[] {
   const groups = new Map<string, FichaPhaseGroup>();
   for (const task of tasks) {
-    const phase = task.phaseRef;
+    const phase = task.phase;
     const id = phase?.id ?? NO_PHASE_ID;
     const group = groups.get(id) ?? { id, name: phase?.name ?? NO_PHASE_LABEL, phase: phase ?? null, tasks: [] };
     group.tasks.push(task);

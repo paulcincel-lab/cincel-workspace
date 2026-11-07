@@ -26,7 +26,7 @@ const LAST = Number.MAX_SAFE_INTEGER;
 export function compareByTramoThenFase(a: TaskListItem, b: TaskListItem): number {
   const tramo = (a.workflow?.sortOrder ?? LAST) - (b.workflow?.sortOrder ?? LAST);
   if (tramo !== 0) return tramo;
-  return (a.phaseRef?.sortOrder ?? LAST) - (b.phaseRef?.sortOrder ?? LAST);
+  return (a.phase?.sortOrder ?? LAST) - (b.phase?.sortOrder ?? LAST);
 }
 
 /**

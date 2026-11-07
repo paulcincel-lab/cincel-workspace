@@ -82,12 +82,9 @@ export type StaffAccess = {
   lastLoginAt: string | null;
 };
 
-/** @deprecated Áreas are replaced by puestos (ADR 0003). */
-export type StaffAreaRef = { id: string; name: string; role: string | null };
-
 export type StaffDetail = Staff & {
   profile: StaffProfile | null;
-  areas: StaffAreaRef[];
+  positions: PositionRef[];
   access: StaffAccess | null;
 };
 
@@ -101,36 +98,6 @@ export type StaffInput = {
   capacity?: number;
   availability?: string | null;
   active?: boolean;
-};
-
-/** @deprecated Áreas are replaced by puestos (ADR 0003). */
-export type Area = {
-  id: string;
-  name: string;
-  description: string | null;
-  leadId: string | null;
-  active: boolean;
-  sortOrder: number;
-  /** Chart token slot 1–5 (see lib/areas/area-color.ts); null = neutral. */
-  colorSlot: number | null;
-};
-
-/** @deprecated Áreas are replaced by puestos (ADR 0003). */
-export type AreaDetail = Area & {
-  lead: { id: string; name: string } | null;
-  members: Array<{ staffId: string; name: string; role: string | null; active: boolean }>;
-  workflows: Array<{ id: string; key: string; name: string }>;
-};
-
-/** @deprecated Áreas are replaced by puestos (ADR 0003). */
-export type AreaInput = {
-  name: string;
-  description?: string | null;
-  leadId?: string | null;
-  active?: boolean;
-  sortOrder?: number;
-  /** Omitted on create = the área's default slot; null = neutral. */
-  colorSlot?: number | null;
 };
 
 // ── Puestos (project flow, FE §7.1) ─────────────────────────────────────────
@@ -275,8 +242,6 @@ export type WorkflowDetail = Workflow & {
   phases: WorkflowPhase[];
   templates: WorkflowTaskTemplate[];
   readiness: TramoReadiness;
-  /** @deprecated Áreas are removed (ADR 0003); always read from area_workflows, empty on dev. */
-  areas: Array<{ id: string; name: string }>;
 };
 
 export type WorkflowInput = {
@@ -467,8 +432,6 @@ export type TaskListItem = Task & {
   /** The task's fase (FE §7.1); null = "Sin fase · revisar". */
   phase: WorkflowPhaseRef | null;
   space: ProjectSpaceRef | null;
-  /** @deprecated Color slot of the área that owns the task's workflow; null = neutral. */
-  areaColorSlot: number | null;
   manager: StaffRef | null;
   support: StaffRef[];
   checklist: { total: number; completed: number };

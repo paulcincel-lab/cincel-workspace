@@ -30,7 +30,7 @@ function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
     updatedAt: "2026-05-20T00:00:00.000Z",
     project: { id: "p1", name: "Proyecto", clientName: "Cliente" },
     workflow: null,
-    areaColorSlot: null,
+    phase: null,
     space: null,
     manager: null,
     support: [],
@@ -83,7 +83,7 @@ describe("buildCalendarEvents — tramo and fase", () => {
   const ejecutivo = { id: "f1", name: "Ejecutivo", sortOrder: 1 };
 
   it("carries the task's tramo and fase", () => {
-    const [event] = buildCalendarEvents([makeTask({ kind: "workflow", workflow: diseno, phaseRef: ejecutivo })]);
+    const [event] = buildCalendarEvents([makeTask({ kind: "workflow", workflow: diseno, phase: ejecutivo })]);
     expect(event).toMatchObject({ tramo: "diseno", tramoLabel: "Diseño", phaseId: "f1", phaseLabel: "Ejecutivo" });
     expect(event.href).toBe("/actividades/diseno?project=Proyecto");
   });
@@ -100,9 +100,9 @@ describe("calendar filters — tramo and fase", () => {
   const diseno = { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 };
   const presale = { id: "w1", key: "presale", name: "Presale", sortOrder: 1 };
   const events = buildCalendarEvents([
-    makeTask({ id: "a", workflow: diseno, phaseRef: { id: "f1", name: "Ejecutivo", sortOrder: 1 } }),
-    makeTask({ id: "b", workflow: diseno, phaseRef: { id: "f2", name: "Anteproyecto", sortOrder: 0 } }),
-    makeTask({ id: "c", workflow: presale, phaseRef: null }),
+    makeTask({ id: "a", workflow: diseno, phase: { id: "f1", name: "Ejecutivo", sortOrder: 1 } }),
+    makeTask({ id: "b", workflow: diseno, phase: { id: "f2", name: "Anteproyecto", sortOrder: 0 } }),
+    makeTask({ id: "c", workflow: presale, phase: null }),
   ]);
 
   it("lists tramos and each tramo's fases", () => {

@@ -9,15 +9,15 @@ const ANTEPROYECTO: WorkflowPhaseRef = { id: "f1", name: "Anteproyecto", sortOrd
 const EJECUTIVO: WorkflowPhaseRef = { id: "f2", name: "Ejecutivo", sortOrder: 2 };
 
 function task(id: string, overrides: Partial<TaskListItem> = {}): TaskListItem {
-  return { id, title: id, kind: "workflow", workflow: null, phaseRef: null, ...overrides } as TaskListItem;
+  return { id, title: id, kind: "workflow", workflow: null, phase: null, ...overrides } as TaskListItem;
 }
 
 describe("groupFichaTasks", () => {
   const tasks = [
-    task("t1", { workflow: DISENO, phaseRef: EJECUTIVO }),
+    task("t1", { workflow: DISENO, phase: EJECUTIVO }),
     task("t2", { workflow: DISENO }),
-    task("t3", { workflow: DISENO, phaseRef: ANTEPROYECTO }),
-    task("t4", { workflow: PRESALE, phaseRef: ANTEPROYECTO }),
+    task("t3", { workflow: DISENO, phase: ANTEPROYECTO }),
+    task("t4", { workflow: PRESALE, phase: ANTEPROYECTO }),
     task("t5", { kind: "usuario" }),
     task("t6", { kind: "admin" }),
   ];

@@ -29,8 +29,10 @@ import {
   ENTITY_TABLES,
   findRollbackBlockers,
   formatBlockers,
+  isTableEntity,
   parseRollbackArgs,
   POINTER_CHECKS,
+  REF_ONLY_ENTITIES,
   type RollbackBlocker,
 } from "@/scripts/monday/rollback";
 import type { CliIo } from "@/scripts/monday/run";
@@ -121,6 +123,21 @@ describe("rollback blocker coverage", () => {
     ]) {
       expect(covered, name).toContain(name);
     }
+  });
+});
+
+describe("ref-only import entities", () => {
+  it("keeps old área refs readable but maps them to no table, check or delete step", () => {
+    expect(REF_ONLY_ENTITIES).toEqual(["area"]);
+    expect(IMPORT_ENTITIES).toContain("area");
+    expect(Object.keys(ENTITY_TABLES)).not.toContain("area");
+    expect(POINTER_CHECKS.some((c) => (c.target as string) === "area")).toBe(false);
+    expect(POINTER_CHECKS.some((c) => ["areas", "area_members", "area_workflows"].includes(c.table))).toBe(false);
+    const labels = DELETE_STEPS.map((step) => step.label);
+    expect(labels).not.toContain("areas");
+    expect(labels).not.toContain("area_workflows");
+    expect(isTableEntity("area")).toBe(false);
+    expect(isTableEntity("task")).toBe(true);
   });
 });
 

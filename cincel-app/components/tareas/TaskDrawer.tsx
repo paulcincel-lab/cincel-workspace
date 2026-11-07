@@ -298,8 +298,8 @@ export default function TaskDrawer({
                         items={{
                           [NO_PHASE]: "Sin fase · revisar",
                           ...Object.fromEntries((phases ?? []).map((p) => [p.id, p.name])),
-                          ...(task.phaseId && !currentPhaseInList && task.phaseRef
-                            ? { [task.phaseId]: `${task.phaseRef.name} (inactiva)` }
+                          ...(task.phaseId && !currentPhaseInList && task.phase
+                            ? { [task.phaseId]: `${task.phase.name} (inactiva)` }
                             : {}),
                         }}
                         value={task.phaseId ?? NO_PHASE}
@@ -317,9 +317,9 @@ export default function TaskDrawer({
                               Sin fase · revisar
                             </SelectItem>
                           )}
-                          {task.phaseId && !currentPhaseInList && task.phaseRef ? (
+                          {task.phaseId && !currentPhaseInList && task.phase ? (
                             <SelectItem value={task.phaseId} disabled>
-                              {task.phaseRef.name} (inactiva)
+                              {task.phase.name} (inactiva)
                             </SelectItem>
                           ) : null}
                           {(phases ?? []).map((p) => (

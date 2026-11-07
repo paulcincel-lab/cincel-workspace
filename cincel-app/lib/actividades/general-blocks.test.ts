@@ -20,7 +20,7 @@ function task(id: string, overrides: Partial<TaskListItem> = {}): TaskListItem {
     kind: "workflow",
     project: { id: "p1", name: "Casa Norte", clientName: null },
     workflow: null,
-    phaseRef: null,
+    phase: null,
     ...overrides,
   } as TaskListItem;
 }
@@ -50,9 +50,9 @@ describe("buildGeneralProjectBlocks", () => {
     const blocks = buildGeneralProjectBlocks(
       [
         task("none"),
-        task("d2", { workflow: diseno, phaseRef: { id: "f2", name: "Ejecutivo", sortOrder: 2 } }),
+        task("d2", { workflow: diseno, phase: { id: "f2", name: "Ejecutivo", sortOrder: 2 } }),
         task("p", { workflow: presale }),
-        task("d1", { workflow: diseno, phaseRef: { id: "f1", name: "Anteproyecto", sortOrder: 1 } }),
+        task("d1", { workflow: diseno, phase: { id: "f1", name: "Anteproyecto", sortOrder: 1 } }),
       ],
       [],
     );

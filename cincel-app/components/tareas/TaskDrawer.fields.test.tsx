@@ -53,7 +53,7 @@ function makeTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
     project: { id: "p-1", name: "Casa Lomas", clientName: null },
     workflow: DISENO,
     areaColorSlot: null,
-    phaseRef: PHASES[0],
+    phase: PHASES[0],
     space: null,
     manager: null,
     support: [],
@@ -128,7 +128,7 @@ describe("TaskDrawer fase, espacio and tramo", () => {
     expect(screen.queryByRole("combobox", { name: "Tramo" })).toBeNull();
     unmount();
 
-    renderDrawer(makeTask({ workflowId: null, workflow: null, phaseId: null, phaseRef: null }), {
+    renderDrawer(makeTask({ workflowId: null, workflow: null, phaseId: null, phase: null }), {
       tramos: [PRESALE, DISENO],
       onChangeTramo,
       phases: PHASES,
@@ -141,7 +141,7 @@ describe("TaskDrawer fase, espacio and tramo", () => {
   });
 
   it("shows no fase or espacio selects for an admin task", () => {
-    renderDrawer(makeTask({ kind: "admin", workflowId: null, workflow: null, phaseId: null, phaseRef: null }), {
+    renderDrawer(makeTask({ kind: "admin", workflowId: null, workflow: null, phaseId: null, phase: null }), {
       phases: PHASES,
       onChangePhase: vi.fn(),
       spaces: SPACES,

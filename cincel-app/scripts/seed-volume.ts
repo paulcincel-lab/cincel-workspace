@@ -2,7 +2,7 @@
  * Volume fixture (rebuild Phase 8 hardening — issue #320).
  *
  * Loads a realistic volume of synthetic projects/tasks on top of whatever
- * `scripts/seed.ts` already seeded (workflows, areas, staff), so the board
+ * `scripts/seed.ts` already seeded (workflows, puestos, staff), so the board
  * and calendar queries can be profiled under real load.
  *
  * Defaults: 50 projects x 40 tasks/project = 2,000 tasks. That's roughly the
@@ -157,7 +157,6 @@ async function seedProjects(clientIds: string[], workflowIds: string[], staffIds
       clientId: pick(clientIds),
       status: weightedPick(PROJECT_STATUS_WEIGHTS),
       currentWorkflowId: Math.random() < 0.85 ? pick(workflowIds) : null,
-      phase: pick(["inicio", "desarrollo", "cierre", null]),
       projectType: pick(["residencial", "comercial", "remodelacion", "obra_nueva"]),
       addressStreet: null,
       addressCity: pick(["CDMX", "Guadalajara", "Monterrey", "Querétaro", "Puebla"]),
@@ -193,7 +192,6 @@ async function seedTasks(projectIds: string[], workflowIds: string[], staffIds: 
         kind: "usuario",
         templateId: null,
         workflowId: Math.random() < 0.9 ? pick(workflowIds) : null,
-        phase: null,
         title: `VOLUME Tarea ${RUN_TAG}-${projectId.slice(0, 8)}-${i + 1}`,
         notes: null,
         createdById: pick(staffIds),

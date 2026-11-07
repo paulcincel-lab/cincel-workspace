@@ -2,8 +2,6 @@ import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
-  areaMembers,
-  areas,
   authCredentials,
   positionPhases,
   positions,
@@ -205,8 +203,9 @@ export async function listAssignableStaff(
     .where(
       and(
         eq(workflowPhases.workflowId, options.workflowId),
-        eq(positions.active, true),
-        isNull(positions.deletedAt)
+        eq(workflowPhases.active, true),
+        isNull(positions.deletedAt),
+        eq(positions.active, true)
       )
     );
   const suggested = new Set(suggestedRows.map((r) => r.staffId));
@@ -268,7 +267,6 @@ export async function getStaff(id: string): Promise<StaffDetail | null> {
     where: and(eq(staff.id, id), isNull(staff.deletedAt)),
     with: {
       profile: true,
-      areaMemberships: { with: { area: true } },
     },
   });
   if (!row) return null;
@@ -283,9 +281,6 @@ export async function getStaff(id: string): Promise<StaffDetail | null> {
   return {
     ...withPositionsRow,
     profile: row.profile ? toProfile(row.profile) : null,
-    areas: row.areaMemberships
-      .filter((m) => m.area.deletedAt === null)
-      .map((m) => ({ id: m.area.id, name: m.area.name, role: m.role })),
     access: cred
       ? {
           hasPassword: Boolean(cred.passwordHash),

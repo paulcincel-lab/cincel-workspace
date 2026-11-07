@@ -14,7 +14,6 @@ vi.mock("@/lib/actions/workflows-actions", () => ({
 }));
 vi.mock("@/lib/actions/workspace-access-actions", () => ({ recheckStaffAccessAction: vi.fn() }));
 
-import { AreaEditorDrawer, type AreaDraft } from "@/components/configuracion/AreaEditorDrawer";
 import { ContactEditorSheet, emptyContactDraft } from "@/components/directorio/ContactEditorSheet";
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { ProjectCreateModal } from "@/components/proyectos/ProjectCreateModal";
@@ -61,36 +60,6 @@ describe("form fields have accessible names", () => {
     expect(await nameViolations()).toEqual([]);
   });
 
-  it("Áreas: Nueva área", async () => {
-    const draft: AreaDraft = { name: "", description: "", leadId: null, active: true };
-    render(
-      <AreaEditorDrawer
-        show
-        onClose={() => undefined}
-        editingArea={null}
-        draft={draft}
-        onChangeDraft={() => undefined}
-        formError=""
-        onSaveBasic={() => undefined}
-        isSaving={false}
-        staffOptions={[{ id: "s1", name: "Ana López" }]}
-        workflowOptions={[]}
-        memberNames={[]}
-        onChangeMemberNames={() => undefined}
-        onSaveMembers={() => undefined}
-        workflowNames={[]}
-        onChangeWorkflowNames={() => undefined}
-        onSaveWorkflows={() => undefined}
-        capabilities={{ canViewPositions: true, canManagePositions: true }}
-      />,
-    );
-    expect(screen.getByLabelText("Nombre").tagName).toBe("INPUT");
-    expect(screen.getByLabelText("Descripción").tagName).toBe("TEXTAREA");
-    expect(screen.getByRole("combobox", { name: "Responsable" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Color" })).toBeTruthy();
-    expect(await nameViolations()).toEqual([]);
-  });
-
   it("Equipo: editor de colaborador", async () => {
     const capabilities: TeamCapabilities = {
       canViewTeam: true,
@@ -132,7 +101,7 @@ describe("form fields have accessible names", () => {
       emergencyContactPhone: "",
       emergencyContactAddress: "",
       role: "",
-      areaIds: [],
+      positionIds: [],
       capacity: 8,
       availability: "Disponible",
     } as unknown as MemberDraft;
@@ -149,7 +118,7 @@ describe("form fields have accessible names", () => {
         isEditingSelfProtectedAdmin={false}
         teamCapabilities={capabilities}
         availabilityOptions={["Disponible"]}
-        areaOptions={[]}
+        positionOptions={[]}
       />,
     );
     for (const name of ["Apellidos", "Puesto", "Capacidad", "CURP", "RFC", "Celular", "Correo institucional"]) {

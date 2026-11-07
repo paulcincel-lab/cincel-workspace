@@ -27,6 +27,12 @@ async function purgeE2ERows(): Promise<void> {
       where task_id in (select id from core.tasks where title like '%E2E%')
     `;
     await sql`delete from core.tasks where title like '%E2E%'`;
+    // Tasks the app made on E2E projects (Presale auto-start, "Asignar cliente
+    // y origen", a started tramo) don't carry the tag in their title.
+    await sql`
+      delete from core.tasks
+      where project_id in (select id from core.projects where name like '%E2E%')
+    `;
     // Tasks pointing at them are gone above; FK is ON DELETE SET NULL anyway.
     await sql`delete from core.task_statuses where name like '%E2E%'`;
     await sql`
@@ -55,10 +61,6 @@ async function purgeE2ERows(): Promise<void> {
       where contact_id in (select id from core.contacts where name like '%E2E%')
     `;
     await sql`delete from core.contacts where name like '%E2E%'`;
-    await sql`
-      delete from core.area_members
-      where staff_id in (select id from core.staff where name like '%E2E%')
-    `;
     await sql`delete from core.auth_credentials where staff_id in (select id from core.staff where name like '%E2E%')`;
     await sql`delete from core.staff where name like '%E2E%'`;
     // staff_positions and position_phases cascade with the puesto.
