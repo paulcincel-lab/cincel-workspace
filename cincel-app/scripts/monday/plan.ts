@@ -375,7 +375,7 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
             inArray(lower, [...new Set(pairs.map((p) => p.lowerName))]),
           ),
         );
-      return new Set(found.map((r) => pairKey(r.clientId, r.name)));
+      return new Set(found.map((r) => pairKey(r.clientId ?? "", r.name)));
     },
     async projectCodesTaken(codes) {
       if (codes.length === 0) return new Set();

@@ -3,19 +3,11 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { staffAccessRole } from "@/lib/auth/access-role";
 import { accessRecheckHours, isAccessCheckDue, recheckStaffAccess } from "@/lib/auth/access-recheck";
 import * as authRepository from "@/lib/repositories/auth-repository";
 import type { SessionStaffAccess, SessionUser as RepoSessionUser } from "@/lib/repositories/auth-repository";
-import {
-  DEFAULT_SYSTEM_ACCESS_ROLE,
-  hasDefaultSystemAdministratorAccess,
-  isAdministratorRole,
-  isLegacyBlockedAccessRole,
-  normalizeSystemAccessRole,
-  SYSTEM_ACCESS_ROLES,
-  SYSTEM_ADMIN_ROLE,
-  type SystemAccessRole,
-} from "@/lib/data/roles";
+import type { SystemAccessRole } from "@/lib/data/roles";
 
 import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
 
@@ -52,18 +44,7 @@ export type SessionAccess = {
     | null;
 };
 
-function resolveAccessRole(
-  role: string | null,
-  email: string | null
-): SystemAccessRole | null {
-  if (isLegacyBlockedAccessRole(role)) return null;
-  const normalized = normalizeSystemAccessRole(role);
-  if (normalized && SYSTEM_ACCESS_ROLES.includes(normalized)) return normalized;
-  if (isAdministratorRole(role) || hasDefaultSystemAdministratorAccess(email)) {
-    return SYSTEM_ADMIN_ROLE;
-  }
-  return DEFAULT_SYSTEM_ACCESS_ROLE;
-}
+const resolveAccessRole = staffAccessRole;
 
 /**
  * Server-side equivalent of the legacy `resolveCurrentSessionAccess()` — maps

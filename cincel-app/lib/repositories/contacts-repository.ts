@@ -581,7 +581,9 @@ export async function listContactHistory(contactId: string): Promise<HistoryEven
 }
 
 export async function listClientStats(): Promise<Map<string, ClientStats>> {
-  const rows = await db.select().from(clientStats);
+  const rows = (await db.select().from(clientStats)).filter(
+    (s): s is typeof s & { clientId: string } => s.clientId !== null
+  );
   return new Map(
     rows.map((s) => [
       s.clientId,

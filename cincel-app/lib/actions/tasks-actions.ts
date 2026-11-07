@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { notImplemented } from "@/lib/project-flow/not-implemented";
 import * as taskDependenciesRepository from "@/lib/repositories/task-dependencies-repository";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import type {
+  AdminTaskInput,
   HistoryEvent,
   TaskAttachment,
   TaskChecklistItem,
@@ -353,4 +355,21 @@ export async function listTaskDependenciesAction(
   const caps = await requireTasksCapabilities();
   if (!caps.canViewActivities) return { dependsOn: [], blocks: [] };
   return taskDependenciesRepository.listTaskDependencies(taskId);
+}
+
+// ── Admin tasks (project flow BE §7.5) ──────────────────────────────────────
+
+/**
+ * Open admin tasks (all with `includeClosed`), by commitment date then
+ * project name. Administrators only: FORBIDDEN otherwise.
+ */
+export async function fetchAdminTasksAction(
+  filters: { projectId?: string; includeClosed?: boolean } = {}
+): Promise<TaskListItem[]> {
+  return notImplemented("fetchAdminTasksAction", filters);
+}
+
+/** `kind = 'admin'`. Errors: FORBIDDEN (non-admin), NOT_FOUND, ASSIGNEE_NOT_ADMIN. */
+export async function createAdminTaskAction(input: AdminTaskInput): Promise<TaskDetail> {
+  return notImplemented("createAdminTaskAction", input);
 }

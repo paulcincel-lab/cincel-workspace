@@ -68,6 +68,7 @@ import {
   type WizardDeps,
 } from "@/lib/monday-import/service";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
+import { notImplemented } from "@/lib/project-flow/not-implemented";
 import { createStaffFromMonday, CreateStaffRefused, type CreatedStaff } from "@/scripts/monday/created-staff";
 import * as onboardingRepository from "@/lib/repositories/onboarding-repository";
 import type {
@@ -80,8 +81,13 @@ import type {
   MondayImportResult,
   MondayImportRunState,
   MondayImportStep,
+  MondayPositionSuggestion,
   MondayPreview,
+  MondayRemapInput,
+  MondayRemapPreview,
+  MondayRemapState,
   MondayRollbackCheck,
+  MondayStatusMap,
 } from "@/lib/types/monday-import";
 
 type Admin = { id: string; email: string };
@@ -210,7 +216,10 @@ export async function getMondayImportChoicesAction(): Promise<MondayImportResult
 export async function createMondayStaffAction(
   runId: string,
   mondayUserId: string,
+  // Project flow (FE §7.8): the puestos to give the new person; saved once the importer switches (Phase 4).
+  options: { positionIds?: string[] } = {},
 ): Promise<MondayImportResult<{ staff: CreatedStaff }>> {
+  void options;
   return guarded("create-staff", async () => {
     checkRunId(runId);
     const source = await getExportSource(runId, deps());
@@ -306,4 +315,46 @@ export async function startMondayRollbackAction(runId: string): Promise<MondayIm
     checkRunId(runId);
     return { job: await startRollback(runId, deps()) };
   });
+}
+
+// --- Project flow (FE §7.8): puesto suggestion, firm-wide status map, "Reacomodar importación" ---
+// Wizard admin guard (Administrador, not the bootstrap admin), like the rest of the wizard.
+
+/** "Crear integrante": the puesto suggested by the fases where the person's tasks land (BE §10.8). */
+export async function suggestMondayPositionAction(
+  runId: string,
+  mondayUserId: string,
+): Promise<MondayImportResult<{ suggestion: MondayPositionSuggestion }>> {
+  return notImplemented("suggestMondayPositionAction", runId, mondayUserId);
+}
+
+/**
+ * Saves the whole firm-wide status map (app_settings `monday.status_map`).
+ * `{ ok: false, error: "STATUS_NOT_FOUND" }` when an entry points at a custom status that no longer exists.
+ */
+export async function saveMondayStatusMapAction(
+  entries: MondayStatusMap,
+): Promise<MondayImportResult<{ statusMap: MondayStatusMap }>> {
+  return notImplemented("saveMondayStatusMapAction", entries);
+}
+
+/** The project's boards with their groups and current targets. Errors: NOT_IMPORTED, EXPORT_MISSING. */
+export async function getMondayRemapAction(projectId: string): Promise<MondayImportResult<{ remap: MondayRemapState }>> {
+  return notImplemented("getMondayRemapAction", projectId);
+}
+
+/** Pure: counts, up to 10 samples and grouped issues; no writes. */
+export async function previewMondayRemapAction(
+  projectId: string,
+  input: MondayRemapInput,
+): Promise<MondayImportResult<{ preview: MondayRemapPreview }>> {
+  return notImplemented("previewMondayRemapAction", projectId, input);
+}
+
+/** One transaction; re-applying the same input changes nothing. */
+export async function applyMondayRemapAction(
+  projectId: string,
+  input: MondayRemapInput,
+): Promise<MondayImportResult<{ updated: number }>> {
+  return notImplemented("applyMondayRemapAction", projectId, input);
 }

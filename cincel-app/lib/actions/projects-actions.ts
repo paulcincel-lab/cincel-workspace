@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { retryProjectFolders, syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
+import { notImplemented } from "@/lib/project-flow/not-implemented";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
 import type {
   ApplyWorkflowPreview,
@@ -15,6 +16,7 @@ import type {
   ProjectLink,
   ProjectLinkInput,
   ProjectListItem,
+  ProjectSpace,
 } from "@/lib/types/core";
 import type { ProjectFilters } from "@/lib/repositories/projects-repository";
 
@@ -222,4 +224,39 @@ export async function applyWorkflowAction(
   revalidateProyectos(projectId);
   revalidatePath("/tareas");
   return created;
+}
+
+// ── Current tramo and espacios (project flow BE §7.3) ───────────────────────
+
+/**
+ * Replaces setProjectStageAction / setProjectStagesAction.
+ * `canChangeProjectStage`. Errors: FORBIDDEN, NOT_FOUND, NOT_STARTED.
+ */
+export async function setProjectCurrentTramoAction(id: string, workflowId: string): Promise<ProjectDetail> {
+  return notImplemented("setProjectCurrentTramoAction", id, workflowId);
+}
+
+/** By `sortOrder`, with live task counts. `canViewProjects`. */
+export async function fetchProjectSpacesAction(projectId: string): Promise<ProjectSpace[]> {
+  return notImplemented("fetchProjectSpacesAction", projectId);
+}
+
+/** Appended last. `canEditProjectGeneral`. Errors: FORBIDDEN, NAME_TAKEN, EMPTY, NOT_FOUND. */
+export async function createProjectSpaceAction(projectId: string, name: string): Promise<ProjectSpace> {
+  return notImplemented("createProjectSpaceAction", projectId, name);
+}
+
+/** Errors: FORBIDDEN, NAME_TAKEN, EMPTY, NOT_FOUND. */
+export async function renameProjectSpaceAction(id: string, name: string): Promise<ProjectSpace> {
+  return notImplemented("renameProjectSpaceAction", id, name);
+}
+
+/** Errors: FORBIDDEN, NOT_FOUND. */
+export async function reorderProjectSpacesAction(projectId: string, orderedIds: string[]): Promise<void> {
+  return notImplemented("reorderProjectSpacesAction", projectId, orderedIds);
+}
+
+/** Its tasks keep their fase and lose the espacio. Errors: FORBIDDEN, NOT_FOUND. */
+export async function deleteProjectSpaceAction(id: string): Promise<void> {
+  return notImplemented("deleteProjectSpaceAction", id);
 }

@@ -132,6 +132,19 @@ export function isTaskClosed(task: { status: TaskStatus; customStatus?: { closes
 }
 
 /**
+ * Completed work (metrics, readiness, trend, progress): closed as completado
+ * by a built-in status, or by a custom status that counts as completed.
+ * Cancelado closes a task (`isTaskClosed`) but isn't completed (BE §3.6).
+ */
+export function isTaskCompleted(task: {
+  status: TaskStatus;
+  customStatus?: { countsAsCompleted: boolean } | null;
+}): boolean {
+  if (task.status !== "completado") return false;
+  return !task.customStatus || task.customStatus.countsAsCompleted;
+}
+
+/**
  * Whether a due date (YYYY-MM-DD) is late: before today while the task is
  * still open. Late dates render with `text-destructive`.
  */

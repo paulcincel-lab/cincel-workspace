@@ -43,8 +43,10 @@ async function writeAudit(
   await tx.insert(portalAuditEvents).values(event);
 }
 
-/** A live (not soft-deleted) project. */
-export async function findProject(projectId: string): Promise<{ id: string; name: string; clientId: string } | null> {
+/** A live (not soft-deleted) project. `clientId` is null until a client is assigned (project flow). */
+export async function findProject(
+  projectId: string
+): Promise<{ id: string; name: string; clientId: string | null } | null> {
   const [row] = await db
     .select({ id: projects.id, name: projects.name, clientId: projects.clientId })
     .from(projects)
@@ -76,7 +78,10 @@ export async function findContact(
 }
 
 /** Whether the contact is the project's client or has a `project_contacts` row on it. */
-export async function isContactOnProject(project: { id: string; clientId: string }, contactId: string): Promise<boolean> {
+export async function isContactOnProject(
+  project: { id: string; clientId: string | null },
+  contactId: string
+): Promise<boolean> {
   if (project.clientId === contactId) return true;
   const [row] = await db
     .select({ contactId: projectContacts.contactId })

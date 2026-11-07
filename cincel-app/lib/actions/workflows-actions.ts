@@ -5,10 +5,14 @@ import { revalidatePath } from "next/cache";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
+import { notImplemented } from "@/lib/project-flow/not-implemented";
 import type {
   Workflow,
   WorkflowDetail,
   WorkflowInput,
+  WorkflowPhase,
+  WorkflowPhaseInput,
+  WorkflowRef,
   WorkflowTaskTemplate,
   WorkflowTaskTemplateInput,
 } from "@/lib/types/core";
@@ -18,7 +22,7 @@ async function requireWorkflowsCapabilities() {
 }
 
 export async function fetchWorkflowsAction(
-  options: { includeInactive?: boolean; includeInactiveTemplates?: boolean } = {}
+  options: { includeInactive?: boolean; includeInactiveTemplates?: boolean; includeInactivePhases?: boolean } = {}
 ): Promise<WorkflowDetail[]> {
   const caps = await requireWorkflowsCapabilities();
   if (!caps.canViewWorkflows) return [];
@@ -103,4 +107,34 @@ export async function reorderTemplatesAction(workflowId: string, orderedIds: str
   }
   await workflowsRepository.reorderTemplates(workflowId, orderedIds);
   revalidatePath("/configuracion/workflows");
+}
+
+// ── Tramos y fases (project flow BE §7.1) ───────────────────────────────────
+
+/** Active tramos for the sidebar and tabs (staff session). */
+export async function fetchTramosNavAction(): Promise<WorkflowRef[]> {
+  return notImplemented("fetchTramosNavAction");
+}
+
+/** `canManageWorkflows`. Errors: FORBIDDEN, NOT_FOUND, NAME_TAKEN, EMPTY. */
+export async function createWorkflowPhaseAction(workflowId: string, input: WorkflowPhaseInput): Promise<WorkflowPhase> {
+  return notImplemented("createWorkflowPhaseAction", workflowId, input);
+}
+
+/** Rename, activate/deactivate. Errors: FORBIDDEN, NOT_FOUND, NAME_TAKEN, EMPTY. */
+export async function updateWorkflowPhaseAction(
+  id: string,
+  patch: Partial<WorkflowPhaseInput>
+): Promise<WorkflowPhase> {
+  return notImplemented("updateWorkflowPhaseAction", id, patch);
+}
+
+/** `orderedIds` must be exactly the tramo's fase ids. Errors: FORBIDDEN, NOT_FOUND. */
+export async function reorderWorkflowPhasesAction(workflowId: string, orderedIds: string[]): Promise<void> {
+  return notImplemented("reorderWorkflowPhasesAction", workflowId, orderedIds);
+}
+
+/** The "Iniciar automáticamente" switch. Errors: FORBIDDEN, NOT_FOUND. */
+export async function setWorkflowAutoStartAction(workflowId: string, autoStart: boolean): Promise<Workflow> {
+  return notImplemented("setWorkflowAutoStartAction", workflowId, autoStart);
 }

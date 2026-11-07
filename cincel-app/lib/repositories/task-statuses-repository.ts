@@ -7,7 +7,13 @@ import type { TaskStatus, TaskStatusInput, TaskStatusOption } from "@/lib/types/
 type TaskStatusRow = typeof taskStatuses.$inferSelect;
 
 function toOption(row: TaskStatusRow): TaskStatusOption {
-  return { id: row.id, name: row.name, closes: row.closes, sortOrder: row.sortOrder };
+  return {
+    id: row.id,
+    name: row.name,
+    closes: row.closes,
+    countsAsCompleted: row.countsAsCompleted,
+    sortOrder: row.sortOrder,
+  };
 }
 
 /**
@@ -19,11 +25,23 @@ export function underlyingStatus(customStatus: { closes: boolean }): TaskStatus 
   return customStatus.closes ? "completado" : "en_proceso";
 }
 
-/** Validate and normalize a status draft; throws a coded error. */
+/**
+ * Validate and normalize a status draft; throws a coded error. Only a closing
+ * status can count as completed (`INVALID` otherwise); when not given, a
+ * closing status counts as completed, as every closing status did before
+ * project flow (BE §3.6).
+ */
 export function normalizeTaskStatusInput(input: TaskStatusInput): Required<TaskStatusInput> {
   const name = input.name.trim();
   if (!name) throw new Error("TASK_STATUS_NAME_REQUIRED");
-  return { name, closes: Boolean(input.closes), sortOrder: input.sortOrder ?? 0 };
+  const closes = Boolean(input.closes);
+  if (input.countsAsCompleted && !closes) throw new Error("INVALID: countsAsCompleted");
+  return {
+    name,
+    closes,
+    countsAsCompleted: closes ? (input.countsAsCompleted ?? true) : false,
+    sortOrder: input.sortOrder ?? 0,
+  };
 }
 
 async function assertNameFree(name: string, exceptId?: string) {
@@ -68,6 +86,8 @@ export async function updateTaskStatus(
   const values = normalizeTaskStatusInput({
     name: patch.name ?? before.name,
     closes: patch.closes ?? before.closes,
+    // Kept unless sent; a `closes` change without it takes the default for the new `closes`.
+    countsAsCompleted: patch.countsAsCompleted ?? (patch.closes === undefined ? before.countsAsCompleted : undefined),
     sortOrder: patch.sortOrder ?? before.sortOrder,
   });
   await assertNameFree(values.name, id);

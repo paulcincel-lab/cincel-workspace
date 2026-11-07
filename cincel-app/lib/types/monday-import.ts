@@ -3,11 +3,17 @@
  * (lib/actions/monday-import-actions.ts) and the screens. Type-only: safe to
  * import from client components.
  */
-import type { BoardStrategy, MappingInput } from "@/scripts/monday/mapping.schema";
+import type {
+  BoardStrategy,
+  MappingInput,
+  MondayStatusMap,
+  ProjectFlowGroupTarget,
+  StatusMapEntry,
+} from "@/scripts/monday/mapping.schema";
 import type { PlanIssueCode } from "@/scripts/monday/plan";
 import type { RollbackBlocker } from "@/scripts/monday/rollback";
 
-export type { BoardStrategy, MappingInput };
+export type { BoardStrategy, MappingInput, MondayStatusMap, ProjectFlowGroupTarget, StatusMapEntry };
 
 /** Every action answers `{ ok: true, ... }` or an inline Spanish error. */
 export type MondayImportFail = { ok: false; error: string };
@@ -95,14 +101,19 @@ export interface MondayImportRunState {
 
 /** The Cincel side of every Equivalencias select. */
 export interface MondayImportChoices {
-  statuses: { id: string; name: string; closes: boolean }[];
+  /** `countsAsCompleted` is filled once the importer switches (Phase 4). */
+  statuses: { id: string; name: string; closes: boolean; countsAsCompleted?: boolean }[];
   areas: { id: string; name: string; workflowIds: string[] }[];
-  workflows: { id: string; name: string }[];
+  /** `phases` (catalog order) is filled once the importer switches (Phase 4). */
+  workflows: { id: string; name: string; phases?: { id: string; name: string; sortOrder: number }[] }[];
   /** Active templates; `phase` names their workflow's phases for the groups table (#687). */
-  templates: { id: string; workflowId: string; name: string; phase?: string | null }[];
+  templates: { id: string; workflowId: string; name: string; phase?: string | null; phaseId?: string }[];
   clients: { id: string; name: string }[];
   staff: { id: string; name: string; email: string | null }[];
   providerSubtypes: string[];
+  /** Project flow (FE §7.8), filled by getImportChoices in Phase 4: puestos and the saved status map. */
+  positions?: { id: string; name: string; phaseIds: string[] }[];
+  statusMap?: MondayStatusMap;
 }
 
 /** Per board: what init found in the export, so every monday thing has a row in the table. */
@@ -241,4 +252,54 @@ export interface MondayRollbackCheck {
   batchId: string;
   canRollback: boolean;
   blockers: RollbackBlocker[];
+}
+
+// --- Project flow (FE §7.8): puesto suggestion and "Reacomodar importación" ---
+
+/** "Crear integrante": the puesto suggested by where the person's tasks land. */
+export interface MondayPositionSuggestion {
+  position: { id: string; name: string } | null;
+  /** The person's tasks in this import. */
+  tasks: number;
+  /** Up to 3. */
+  topPhases: { workflowName: string; phaseName: string; tasks: number }[];
+}
+
+export interface MondayRemapBoard {
+  boardId: string;
+  name: string;
+  /** null: board missing from the stored export. */
+  source: MondayBoardSource | null;
+  /** "Tramo del tablero". */
+  workflowId: string | null;
+  /** Current targets, prefilled from the import refs (groupId → target). */
+  groupTargets: Record<string, ProjectFlowGroupTarget>;
+}
+
+export interface MondayRemapState {
+  project: { id: string; name: string };
+  boards: MondayRemapBoard[];
+  choices: MondayImportChoices;
+}
+
+export type MondayRemapInput = Array<{
+  boardId: string;
+  workflowId: string | null;
+  groupTargets: Record<string, ProjectFlowGroupTarget>;
+}>;
+
+export interface MondayRemapPreview {
+  tasks: number;
+  changes: {
+    tramo: number;
+    phase: number;
+    space: number;
+    admin: number;
+    otherProject: number;
+    unchanged: number;
+    phaseUnresolved: number;
+  };
+  /** "Tramo · Fase · Espacio" before/after, up to 10. */
+  samples: Array<{ taskId: string; title: string; before: string; after: string }>;
+  issues: MondayPreviewIssue[];
 }

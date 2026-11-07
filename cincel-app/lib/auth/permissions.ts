@@ -1382,3 +1382,12 @@ export function canViewSensitiveStaffData(user: AuthenticatedUser | null): boole
 export function canManageAppearance(user: AuthenticatedUser | null): boolean {
   return canViewSensitiveStaffData(user);
 }
+
+/**
+ * Admin-only project flow data (client, origin, admin tasks, "Asignar tramo",
+ * the auto-start checkbox): access "Administrador" only; "Dirección" doesn't
+ * count (FE §8, RD-3). Server actions and DTOs enforce the same rule.
+ */
+export function canSeeAdminData(user: AuthenticatedUser | null | undefined): boolean {
+  return user?.access === "Administrador";
+}
