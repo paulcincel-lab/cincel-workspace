@@ -1,18 +1,17 @@
 /**
- * Settings section "Enlaces del menú de usuario (Instagram, Sitio web, Correo)" of /ajustes/general (redesign FE §3.8, §21.1; Phase 6).
- *
- * Contract stub: hidden until Phase 6 implements it.
+ * Settings section "Enlaces del despacho" (Instagram, Sitio web, Correo) of
+ * /ajustes/general (redesign FE §3.8, §21.1; Phase 6). The fields live in
+ * `general_settings.company` and feed the avatar-menu links; the section edits
+ * the page's shared General editor, so it renders inside `AjustesGeneralClient`.
  */
+import { GeneralLinksSection } from "@/components/ajustes/GeneralLinksSection";
+import { canManageGeneralSettings } from "@/lib/auth/permissions";
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
-
-function GeneralEnlacesSection() {
-  return null;
-}
 
 export const generalEnlacesSection: SettingsSectionEntry = {
   page: "general",
   name: "enlaces",
   order: 10,
-  visible: () => false,
-  Component: GeneralEnlacesSection,
+  visible: (user) => canManageGeneralSettings(user),
+  Component: GeneralLinksSection,
 };

@@ -27,6 +27,9 @@ async function resetWizard(): Promise<void> {
   try {
     await sql`delete from core.workspace_group_mappings where group_email like 'e2e-%'`;
     await sql`update core.staff set onboarding_completed_at = null where lower(email) = ${BOOTSTRAP_EMAIL}`;
+    // The legacy wizard route; with the redesign flag on it lives at /ajustes/google/primeros-pasos.
+    await sql`update core.user_preferences set redesign_enabled = false
+      where staff_id in (select id from core.staff where lower(email) = ${BOOTSTRAP_EMAIL})`;
   } finally {
     await sql.end();
   }

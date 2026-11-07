@@ -54,17 +54,40 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 export type GoogleHealthStatusProps = {
   /** Null when `getGoogleHealthAction()` failed. */
   health: GoogleHealth | null;
+  /**
+   * Only the body (alerts and rows), without the card and its "Estado"
+   * heading: Ajustes › Google renders it inside a `SettingsSection`.
+   */
+  bare?: boolean;
 };
 
+export const GOOGLE_HEALTH_TITLE = "Estado";
+export const GOOGLE_HEALTH_DESCRIPTION = "Configuración de Google y avance del acceso con Google.";
+
 /** Configuración → Google, section 1 "Estado" (FE §2.5, §5). */
-export function GoogleHealthStatus({ health }: GoogleHealthStatusProps) {
+export function GoogleHealthStatus({ health, bare = false }: GoogleHealthStatusProps) {
+  if (bare) {
+    return (
+      <div className="space-y-4">
+        <GoogleHealthBody health={health} />
+      </div>
+    );
+  }
   return (
     <section className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
       <div>
-        <h2 className="text-xl font-semibold text-foreground">Estado</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Configuración de Google y avance del acceso con Google.</p>
+        <h2 className="text-xl font-semibold text-foreground">{GOOGLE_HEALTH_TITLE}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{GOOGLE_HEALTH_DESCRIPTION}</p>
       </div>
 
+      <GoogleHealthBody health={health} />
+    </section>
+  );
+}
+
+function GoogleHealthBody({ health }: { health: GoogleHealth | null }) {
+  return (
+    <>
       {!health ? (
         <Alert variant="destructive">
           <AlertDescription>No se pudo cargar el estado de Google.</AlertDescription>
@@ -132,6 +155,6 @@ export function GoogleHealthStatus({ health }: GoogleHealthStatusProps) {
           </dl>
         </>
       )}
-    </section>
+    </>
   );
 }

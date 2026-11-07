@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
@@ -17,101 +17,34 @@ import {
   DialogTitle,
 } from "@/components/ui/shadcn/dialog";
 import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveTaskStatusesCapabilities } from "@/lib/auth/permissions";
-import {
-  createTaskStatusAction,
-  deleteTaskStatusAction,
-  fetchTaskStatusesAction,
-  updateTaskStatusAction,
-} from "@/lib/actions/task-statuses-actions";
+import { useTaskStatusesEditor } from "@/components/configuracion/useTaskStatusesEditor";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import { BASE_STATUS_COLOR, customStatusBase } from "@/lib/tasks/status-options";
 import type { TaskStatusOption } from "@/lib/types/core";
-
-const ERROR_MESSAGES: Record<string, string> = {
-  TASK_STATUS_NAME_REQUIRED: "El nombre del estatus es obligatorio.",
-  TASK_STATUS_NAME_TAKEN: "Ya existe un estatus con ese nombre.",
-};
-
-function errorMessage(error: unknown, fallback: string) {
-  if (!(error instanceof Error)) return fallback;
-  return ERROR_MESSAGES[error.message] ?? fallback;
-}
 
 interface EstatusClientProps {
   initialStatuses: TaskStatusOption[];
 }
 
 export function EstatusClient({ initialStatuses }: EstatusClientProps) {
-  const [statuses, setStatuses] = useState<TaskStatusOption[]>(initialStatuses);
-  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
-  const capabilities = useMemo(
-    () => resolveTaskStatusesCapabilities(authenticatedUser),
-    [authenticatedUser],
-  );
-
-  const [showEditor, setShowEditor] = useState(false);
-  const [editing, setEditing] = useState<TaskStatusOption | null>(null);
-  const [name, setName] = useState("");
-  const [closes, setCloses] = useState(false);
-  const [countsAsCompleted, setCountsAsCompleted] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-
-  async function refresh() {
-    setStatuses(await fetchTaskStatusesAction());
-  }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh();
-  }, []);
-
-  function openEditor(status: TaskStatusOption | null) {
-    setEditing(status);
-    setName(status?.name ?? "");
-    setCloses(status?.closes ?? false);
-    setCountsAsCompleted(status?.countsAsCompleted ?? false);
-    setFormError("");
-    setShowEditor(true);
-  }
-
-  function changeCloses(next: boolean) {
-    setCloses(next);
-    // A status that stays open never counts as finished work.
-    setCountsAsCompleted(next);
-  }
-
-  async function save() {
-    if (!name.trim()) {
-      setFormError(ERROR_MESSAGES.TASK_STATUS_NAME_REQUIRED);
-      return;
-    }
-    setIsSaving(true);
-    setFormError("");
-    try {
-      if (editing)
-        await updateTaskStatusAction(editing.id, {
-          name,
-          closes,
-          countsAsCompleted: closes && countsAsCompleted,
-        });
-      else
-        await createTaskStatusAction({
-          name,
-          closes,
-          countsAsCompleted: closes && countsAsCompleted,
-          sortOrder: statuses.length,
-        });
-      await refresh();
-      setShowEditor(false);
-    } catch (error) {
-      setFormError(errorMessage(error, "No se pudo guardar el estatus."));
-    } finally {
-      setIsSaving(false);
-    }
-  }
+  const {
+    statuses,
+    capabilities,
+    showEditor,
+    setShowEditor,
+    editing,
+    name,
+    setName,
+    closes,
+    changeCloses,
+    countsAsCompleted,
+    setCountsAsCompleted,
+    formError,
+    isSaving,
+    openEditor,
+    save,
+    remove: removeStatus,
+  } = useTaskStatusesEditor(initialStatuses);
 
   async function remove(status: TaskStatusOption) {
     if (
@@ -121,8 +54,7 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
     ) {
       return;
     }
-    await deleteTaskStatusAction(status.id);
-    await refresh();
+    await removeStatus(status);
   }
 
   const columns = useMemo<ColumnDef<TaskStatusOption, unknown>[]>(

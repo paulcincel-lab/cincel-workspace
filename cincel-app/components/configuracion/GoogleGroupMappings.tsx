@@ -72,10 +72,18 @@ function draftFromMapping(mapping: GroupMapping): MappingDraft {
 export type GoogleGroupMappingsProps = {
   mappings: GroupMapping[];
   positions: PositionOption[];
+  /**
+   * Without the card and its "Grupos de Google" heading ("Agregar grupo" stays
+   * on top): Ajustes › Google renders it inside a `SettingsSection`.
+   */
+  bare?: boolean;
 };
 
+export const GOOGLE_GROUPS_TITLE = "Grupos de Google";
+export const GOOGLE_GROUPS_DESCRIPTION = "Qué grupo de Google Workspace da cada rol o puesto.";
+
 /** Configuración → Google, section 2 "Grupos de Google" (FE §2.5). */
-export function GoogleGroupMappings({ mappings, positions }: GoogleGroupMappingsProps) {
+export function GoogleGroupMappings({ mappings, positions, bare = false }: GoogleGroupMappingsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -180,15 +188,23 @@ export function GoogleGroupMappings({ mappings, positions }: GoogleGroupMappings
   const roleItems = Object.fromEntries(OFFICIAL_CINCEL_ROLES.map((role) => [role, role]));
   const positionItems = Object.fromEntries(positions.map((position) => [position.id, position.name]));
 
+  const Wrapper = bare ? "div" : "section";
+
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Grupos de Google</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Qué grupo de Google Workspace da cada rol o puesto.</p>
+    <Wrapper className={bare ? "space-y-4" : "space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm"}>
+      {bare ? (
+        <div className="flex justify-end">
+          <Button onClick={openCreate}>Agregar grupo</Button>
         </div>
-        <Button onClick={openCreate}>Agregar grupo</Button>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">{GOOGLE_GROUPS_TITLE}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{GOOGLE_GROUPS_DESCRIPTION}</p>
+          </div>
+          <Button onClick={openCreate}>Agregar grupo</Button>
+        </div>
+      )}
 
       {listError ? (
         <Alert variant="destructive">
@@ -334,6 +350,6 @@ export function GoogleGroupMappings({ mappings, positions }: GoogleGroupMappings
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </Wrapper>
   );
 }

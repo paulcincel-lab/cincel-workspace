@@ -2,15 +2,22 @@
  * E2E: the company primary color (#459) — picked from the Tailwind palette in
  * Configuración → General, stored in Postgres and applied app-wide.
  *
+ * This is the legacy (flag-off) page; with the redesign flag on the organization colors are edited in
+ * Ajustes › Tema y estilo, covered by `tema-publicar.spec.ts`.
+ *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { test, expect } from "@playwright/test";
 import colors from "tailwindcss/colors";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
+import { ADMIN_EMAIL, setRedesignFor } from "./helpers/redesign";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 
 test.describe("Apariencia — color principal", () => {
+  // Legacy pipeline (`primary-color` block): the admin's redesign flag stays off.
+  test.beforeAll(() => setRedesignFor(ADMIN_EMAIL, false));
+
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
