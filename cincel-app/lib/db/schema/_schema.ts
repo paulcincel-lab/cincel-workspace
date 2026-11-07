@@ -53,8 +53,43 @@ export const historyEntity = core.enum("history_entity", [
   "staff",
   "area",
   "workflow",
+  // Redesign (BE §3.2): assistant actions on these are logged (§9.9).
+  "note",
+  "reminder",
+  "time_entry",
+  "vacation_request",
 ]);
 export const historyEventKind = core.enum("history_event_kind", ["comentario", "cambio"]);
+
+// ── Redesign enums (BE §3.2) ────────────────────────────────────────────────
+export const themeId = core.enum("theme_id", ["azul", "calido", "grafito"]);
+export const colorMode = core.enum("color_mode", ["light", "dark", "system"]);
+export const presentationStyle = core.enum("presentation_style", ["visual", "esencial", "analitico"]);
+export const density = core.enum("density", ["comoda", "compacta"]);
+export const notificationKind = core.enum("notification_kind", [
+  "asignacion",
+  "mencion",
+  "vencimiento",
+  "comentario",
+  "aprobacion_cliente",
+  "recordatorio",
+  "sistema",
+]);
+export const noteColor = core.enum("note_color", ["neutral", "blue", "amber", "violet", "cyan"]);
+export const reminderRepeat = core.enum("reminder_repeat", ["none", "daily", "weekly", "monthly"]);
+export const timeEntrySource = core.enum("time_entry_source", ["sidebar", "login", "assistant", "auto_close"]);
+export const vacationKind = core.enum("vacation_kind", ["vacaciones", "personal", "enfermedad"]);
+export const vacationStatus = core.enum("vacation_status", ["pendiente", "aprobada", "rechazada", "cancelada"]);
+export const assistantRole = core.enum("assistant_role", ["user", "assistant", "system", "tool"]);
+export const assistantActionStatus = core.enum("assistant_action_status", [
+  "proposed",
+  "confirmed",
+  "cancelled",
+  "done",
+  "failed",
+]);
+/** Email delivery state of a notification row (BE §3.5, review B10). */
+export const notificationEmailStatus = core.enum("notification_email_status", ["none", "pending", "sent", "failed"]);
 
 // ── Shared column fragments ─────────────────────────────────────────────────
 /** `stamps` in the model: one created_at / updated_at timestamptz per row. */

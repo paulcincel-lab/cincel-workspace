@@ -405,6 +405,50 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     owner: own("task"),
   },
   // Into task_checklist_items is task_attachments.checklist_item_id, above.
+  // Mi espacio and Gmail (redesign BE §3.6, §3.7): rows people made in Cincel
+  // on a batch project or task, so every one blocks.
+  {
+    table: "notes",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "checklists",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "reminders",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "reminders",
+    column: "task_id",
+    target: "task",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "gmail_threads",
+    column: "project_id",
+    target: "project",
+    idSql: "c.staff_id || ':' || c.id",
+    owner: null,
+  },
+  {
+    table: "gmail_threads",
+    column: "suggested_project_id",
+    target: "project",
+    idSql: "c.staff_id || ':' || c.id",
+    owner: null,
+  },
 ];
 
 /** The batch rows of one entity, as a subquery over `import_refs` for `exists`. */

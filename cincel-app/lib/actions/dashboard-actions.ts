@@ -11,6 +11,8 @@ import {
   type TaskTrendRange,
 } from "@/lib/dashboard/task-trend";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
+import { stubDefault } from "@/lib/stubs";
+import type { InicioData } from "@/lib/types/redesign";
 
 /**
  * "Avance de tareas" (#601): tasks created vs completed per day of the current
@@ -56,5 +58,23 @@ export async function fetchDashboardTaskTrendAction(range: TaskTrendRange): Prom
     timeZone: TASK_TREND_TIME_ZONE,
     createdAt: scoped.map((t) => t.createdAt),
     completions: source.completions.filter((c) => scopedIds.has(c.taskId)),
+  });
+}
+
+/**
+ * Inicio (redesign BE §7.10): every widget of the page from one call, built
+ * with the shared shapes of `lib/types/widgets.ts`. Scoped by
+ * `scopeDashboardProjects` / `scopeDashboardTasks`; admin tasks only with
+ * `canSeeAdminData`. Phase 1 stub returns empty data.
+ */
+export async function fetchInicioAction(): Promise<InicioData> {
+  return stubDefault<InicioData>({
+    kpis: [],
+    tasksByTramo: [],
+    weeklyPace: [],
+    attention: [],
+    myDay: [],
+    projectsProgress: [],
+    workload: [],
   });
 }
