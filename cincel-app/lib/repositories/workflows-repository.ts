@@ -1,11 +1,12 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { areaWorkflows, areas, workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
+import { workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
 import { READINESS } from "@/lib/project-flow/catalog";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
+import type { FlowExecutor } from "@/lib/project-flow/db";
+import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import { recordChanges } from "@/lib/repositories/history-repository";
-import { listPhasesByWorkflow } from "@/lib/repositories/workflow-phases-repository";
+import { assertPhaseInWorkflow, listPhasesByWorkflow } from "@/lib/repositories/workflow-phases-repository";
 import type {
   TramoReadiness,
   Workflow,
@@ -47,7 +48,6 @@ export function toTemplate(
     workflowId: row.workflowId,
     phaseId: row.phaseId ?? "",
     phaseName: (row.phaseId && phaseNames?.get(row.phaseId)) || "",
-    phase: row.phase,
     title: row.title,
     notes: row.notes,
     defaultPriority: row.defaultPriority,
@@ -112,7 +112,7 @@ export async function listWorkflows(
     },
   });
   const ids = rows.map((r) => r.id);
-  const [phases, gateRows, areaRows] = await Promise.all([
+  const [phases, gateRows] = await Promise.all([
     listPhasesByWorkflow(ids, { includeInactive: options.includeInactivePhases }),
     // Every fase with a key of every live workflow: readiness gates may sit in a tramo filtered out above.
     db
@@ -124,14 +124,6 @@ export async function listWorkflows(
         sortOrder: workflowPhases.sortOrder,
       })
       .from(workflowPhases),
-    // Deprecated `areas` field, kept until the UI stops reading it.
-    ids.length
-      ? db
-          .select({ workflowId: areaWorkflows.workflowId, id: areas.id, name: areas.name })
-          .from(areaWorkflows)
-          .innerJoin(areas, eq(areas.id, areaWorkflows.areaId))
-          .where(and(inArray(areaWorkflows.workflowId, ids), isNull(areas.deletedAt)))
-      : Promise.resolve([] as Array<{ workflowId: string; id: string; name: string }>),
   ]);
   const allWorkflows = await db
     .select({ id: workflows.id, key: workflows.key, name: workflows.name, sortOrder: workflows.sortOrder })
@@ -145,7 +137,6 @@ export async function listWorkflows(
     phases: phases.get(r.id) ?? ([] as WorkflowPhase[]),
     templates: r.templates.map((t) => toTemplate(t, phaseNames)),
     readiness: resolveReadiness(r, byKey, phasesOf),
-    areas: areaRows.filter((a) => a.workflowId === r.id).map((a) => ({ id: a.id, name: a.name })),
   }));
 }
 
@@ -230,11 +221,28 @@ export async function softDeleteWorkflow(id: string, actorId: string): Promise<v
 }
 
 // ── Templates ───────────────────────────────────────────────────────────────
+const UNIQUE_VIOLATION = "23505";
+const TITLE_UNIQUE_INDEX = "workflow_task_templates_title_lower_uq";
+
+/** Whether an error (or its `cause`, as drizzle wraps driver errors) is the per-fase title unique violation. */
+function isTitleTaken(err: unknown): boolean {
+  let current: unknown = err;
+  for (let depth = 0; current && depth < 5; depth++) {
+    if (typeof current === "object") {
+      const e = current as { code?: unknown; constraint_name?: unknown; constraint?: unknown };
+      if (e.code === UNIQUE_VIOLATION) {
+        const constraint = e.constraint_name ?? e.constraint;
+        return constraint === undefined || constraint === TITLE_UNIQUE_INDEX;
+      }
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 function toTemplateValues(input: WorkflowTaskTemplateInput) {
   return {
-    phase: clean(input.phase),
-    // Old-UI fallback (phaseId from the old `phase` text, else the first fase) lands in #739.
-    ...(input.phaseId ? { phaseId: input.phaseId } : {}),
+    phaseId: input.phaseId,
     title: input.title.trim(),
     notes: clean(input.notes),
     defaultPriority: input.defaultPriority ?? "media",
@@ -244,6 +252,33 @@ function toTemplateValues(input: WorkflowTaskTemplateInput) {
     sortOrder: input.sortOrder ?? 0,
     active: input.active ?? true,
   };
+}
+
+/**
+ * NAME_TAKEN when another active template of the same fase has the same title
+ * (case-insensitive), mirroring `workflow_task_templates_title_lower_uq`.
+ */
+async function assertTitleFree(
+  executor: FlowExecutor,
+  workflowId: string,
+  phaseId: string,
+  title: string,
+  exceptId?: string
+): Promise<void> {
+  const [clash] = await executor
+    .select({ id: workflowTaskTemplates.id })
+    .from(workflowTaskTemplates)
+    .where(
+      and(
+        eq(workflowTaskTemplates.workflowId, workflowId),
+        eq(workflowTaskTemplates.phaseId, phaseId),
+        eq(workflowTaskTemplates.active, true),
+        sql`lower(${workflowTaskTemplates.title}) = lower(${title})`,
+        exceptId ? ne(workflowTaskTemplates.id, exceptId) : undefined
+      )
+    )
+    .limit(1);
+  if (clash) throw flowError(FLOW_ERROR.NAME_TAKEN, "template title");
 }
 
 export async function listTemplates(
@@ -264,56 +299,111 @@ export async function listTemplates(
   return rows.map((r) => toTemplate(r, names));
 }
 
+/** `phaseId` is required. Errors: NOT_FOUND (tramo), INVALID (no fase), PHASE_MISMATCH, NAME_TAKEN. */
 export async function createTemplate(
   workflowId: string,
   input: WorkflowTaskTemplateInput,
   actorId: string
 ): Promise<WorkflowTaskTemplate> {
+  if (!input.phaseId) throw flowError(FLOW_ERROR.INVALID, "phaseId");
   const values = toTemplateValues(input);
-  if (input.sortOrder === undefined) {
-    const existing = await listTemplates(workflowId, { includeInactive: true });
-    values.sortOrder = existing.length;
+  let row: typeof workflowTaskTemplates.$inferSelect;
+  try {
+    row = await db.transaction(async (tx) => {
+      const [workflow] = await tx
+        .select({ id: workflows.id })
+        .from(workflows)
+        .where(and(eq(workflows.id, workflowId), isNull(workflows.deletedAt)))
+        .limit(1);
+      if (!workflow) throw flowError(FLOW_ERROR.NOT_FOUND, "workflow");
+      await assertPhaseInWorkflow(tx, values.phaseId, workflowId);
+      if (values.active) await assertTitleFree(tx, workflowId, values.phaseId, values.title);
+      if (input.sortOrder === undefined) {
+        const [{ n }] = await tx
+          .select({ n: count() })
+          .from(workflowTaskTemplates)
+          .where(eq(workflowTaskTemplates.workflowId, workflowId));
+        values.sortOrder = Number(n);
+      }
+      const [inserted] = await tx
+        .insert(workflowTaskTemplates)
+        .values({ workflowId, ...values })
+        .returning();
+      return inserted;
+    });
+  } catch (err) {
+    if (isTitleTaken(err)) throw flowError(FLOW_ERROR.NAME_TAKEN, "template title");
+    throw err;
   }
-  const [row] = await db
-    .insert(workflowTaskTemplates)
-    .values({ workflowId, ...values })
-    .returning();
   await recordChange(workflowId, actorId, "template_added", null, row.title);
   return toTemplate(row, await phaseNamesOf([row.phaseId]));
 }
 
+/**
+ * Partial patch. The result must have a fase: a patch without `phaseId` keeps
+ * the current one, and a template with none needs one. Errors: NOT_FOUND,
+ * INVALID (no fase), PHASE_MISMATCH, NAME_TAKEN.
+ */
 export async function updateTemplate(
   id: string,
   patch: Partial<WorkflowTaskTemplateInput>,
   actorId: string
 ): Promise<WorkflowTaskTemplate> {
-  const [before] = await db
-    .select()
-    .from(workflowTaskTemplates)
-    .where(eq(workflowTaskTemplates.id, id))
-    .limit(1);
-  if (!before) throw new Error("TEMPLATE_NOT_FOUND");
-  const merged = toTemplateValues({
-    phase: patch.phase === undefined ? before.phase : patch.phase,
-    phaseId: patch.phaseId ?? before.phaseId ?? undefined,
-    title: patch.title ?? before.title,
-    notes: patch.notes === undefined ? before.notes : patch.notes,
-    defaultPriority: patch.defaultPriority ?? before.defaultPriority,
-    commitmentOffsetDays:
-      patch.commitmentOffsetDays === undefined ? before.commitmentOffsetDays : patch.commitmentOffsetDays,
-    reviewOffsetDays: patch.reviewOffsetDays === undefined ? before.reviewOffsetDays : patch.reviewOffsetDays,
-    deliveryOffsetDays:
-      patch.deliveryOffsetDays === undefined ? before.deliveryOffsetDays : patch.deliveryOffsetDays,
-    sortOrder: patch.sortOrder ?? before.sortOrder,
-    active: patch.active ?? before.active,
-  });
-  const [after] = await db
-    .update(workflowTaskTemplates)
-    .set(merged)
-    .where(eq(workflowTaskTemplates.id, id))
-    .returning();
+  let before: typeof workflowTaskTemplates.$inferSelect;
+  let after: typeof workflowTaskTemplates.$inferSelect;
+  try {
+    [before, after] = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(workflowTaskTemplates)
+        .where(eq(workflowTaskTemplates.id, id))
+        .limit(1);
+      if (!current) throw flowError(FLOW_ERROR.NOT_FOUND, "template");
+      const phaseId = patch.phaseId === undefined ? current.phaseId : patch.phaseId;
+      if (!phaseId) throw flowError(FLOW_ERROR.INVALID, "phaseId");
+      const merged = toTemplateValues({
+        phaseId,
+        title: patch.title ?? current.title,
+        notes: patch.notes === undefined ? current.notes : patch.notes,
+        defaultPriority: patch.defaultPriority ?? current.defaultPriority,
+        commitmentOffsetDays:
+          patch.commitmentOffsetDays === undefined ? current.commitmentOffsetDays : patch.commitmentOffsetDays,
+        reviewOffsetDays: patch.reviewOffsetDays === undefined ? current.reviewOffsetDays : patch.reviewOffsetDays,
+        deliveryOffsetDays:
+          patch.deliveryOffsetDays === undefined ? current.deliveryOffsetDays : patch.deliveryOffsetDays,
+        sortOrder: patch.sortOrder ?? current.sortOrder,
+        active: patch.active ?? current.active,
+      });
+      if (phaseId !== current.phaseId) await assertPhaseInWorkflow(tx, phaseId, current.workflowId);
+      const competes =
+        merged.active &&
+        (phaseId !== current.phaseId ||
+          !current.active ||
+          merged.title.toLowerCase() !== current.title.toLowerCase());
+      if (competes) await assertTitleFree(tx, current.workflowId, phaseId, merged.title, id);
+      const [updated] = await tx
+        .update(workflowTaskTemplates)
+        .set(merged)
+        .where(eq(workflowTaskTemplates.id, id))
+        .returning();
+      return [current, updated] as const;
+    });
+  } catch (err) {
+    if (isTitleTaken(err)) throw flowError(FLOW_ERROR.NAME_TAKEN, "template title");
+    throw err;
+  }
   if (before.title !== after.title) {
     await recordChange(before.workflowId, actorId, "template_title", before.title, after.title);
+  }
+  if (before.phaseId !== after.phaseId) {
+    const names = await phaseNamesOf([before.phaseId, after.phaseId]);
+    await recordChange(
+      before.workflowId,
+      actorId,
+      "template_phase",
+      `${before.title}: ${(before.phaseId && names.get(before.phaseId)) || "—"}`,
+      `${after.title}: ${(after.phaseId && names.get(after.phaseId)) || "—"}`
+    );
   }
   if (before.active !== after.active) {
     await recordChange(before.workflowId, actorId, "template_active", `${before.title}: ${before.active}`, `${after.title}: ${after.active}`);
@@ -339,25 +429,47 @@ export async function reorderTemplates(workflowId: string, orderedIds: string[])
 
 /** Active tramos for the sidebar and tabs, by `sortOrder` (BE §8.2). */
 export async function listTramosNav(): Promise<WorkflowRef[]> {
-  return notImplemented("listTramosNav");
+  const rows = await db
+    .select({ id: workflows.id, key: workflows.key, name: workflows.name, sortOrder: workflows.sortOrder })
+    .from(workflows)
+    .where(and(eq(workflows.active, true), isNull(workflows.deletedAt)))
+    .orderBy(asc(workflows.sortOrder), asc(workflows.name));
+  return rows.map(toRef);
 }
 
 /**
  * The UI switch (BE §7.1): `true` stores `on_create` for the first active
  * tramo and `on_ready` for the others; `false` stores `manual`. NOT_FOUND.
  */
-export async function setWorkflowAutoStart(id: string, enabled: boolean, actorId: string): Promise<Workflow> {
-  return notImplemented("setWorkflowAutoStart", id, enabled, actorId);
-}
-
-/** @deprecated Áreas are removed (ADR 0003). */
-export async function listAreasForWorkflow(workflowId: string) {
-  return db
-    .select({ id: areas.id, name: areas.name })
-    .from(areaWorkflows)
-    .innerJoin(areas, eq(areas.id, areaWorkflows.areaId))
-    .where(and(eq(areaWorkflows.workflowId, workflowId), isNull(areas.deletedAt)))
-    .orderBy(asc(areas.name));
+export async function setWorkflowAutoStart(
+  id: string,
+  enabled: boolean,
+  actorId: string,
+  executor: FlowExecutor = db
+): Promise<Workflow> {
+  const [before] = await executor
+    .select()
+    .from(workflows)
+    .where(and(eq(workflows.id, id), isNull(workflows.deletedAt)))
+    .limit(1);
+  if (!before) throw flowError(FLOW_ERROR.NOT_FOUND, "workflow");
+  let next: Workflow["autoStart"] = "manual";
+  if (enabled) {
+    const [first] = await executor
+      .select({ id: workflows.id })
+      .from(workflows)
+      .where(and(eq(workflows.active, true), isNull(workflows.deletedAt)))
+      .orderBy(asc(workflows.sortOrder), asc(workflows.name))
+      .limit(1);
+    next = first?.id === id ? "on_create" : "on_ready";
+  }
+  if (before.autoStart === next) return toWorkflow(before);
+  const [after] = await executor.update(workflows).set({ autoStart: next }).where(eq(workflows.id, id)).returning();
+  await recordChanges(
+    { entity: "workflow", entityId: id, actorId, before, after, fields: ["autoStart"] },
+    executor
+  );
+  return toWorkflow(after);
 }
 
 async function recordChange(

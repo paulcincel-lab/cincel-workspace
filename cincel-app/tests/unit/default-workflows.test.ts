@@ -5,7 +5,8 @@
  * inside a transaction that is rolled back.
  */
 import postgres from "postgres";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
 
 import { DEFAULT_WORKFLOWS, ensureDefaultWorkflows } from "@/scripts/default-workflows.mjs";
 
@@ -38,6 +39,10 @@ describe("DEFAULT_WORKFLOWS", () => {
     expect(DEFAULT_WORKFLOWS.map((w) => w.key)).toEqual(["presale", "diseno", "construccion"]);
     expect(DEFAULT_WORKFLOWS.map((w) => w.name)).toEqual(["Presale", "Diseño", "Construcción"]);
   });
+
+  it("starts Presale on project create and the others by hand", () => {
+    expect(DEFAULT_WORKFLOWS.map((w) => w.autoStart)).toEqual(["on_create", "manual", "manual"]);
+  });
 });
 
 describe("ensureDefaultWorkflows", () => {
@@ -65,6 +70,15 @@ describe("ensureDefaultWorkflows", () => {
 });
 
 describe.skipIf(!url)("ensureDefaultWorkflows (test DB)", () => {
+  // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
+  let unlockCatalog: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    unlockCatalog = await lockTramoCatalog(url!);
+  }, 300_000);
+  afterAll(async () => {
+    await unlockCatalog?.();
+  });
+
   const sql = postgres(url ?? "", { max: 1, onnotice: () => {} });
   afterAll(() => sql.end());
 
@@ -82,6 +96,12 @@ describe.skipIf(!url)("ensureDefaultWorkflows (test DB)", () => {
   async function clearWorkflows(tx: postgres.TransactionSql) {
     // Rolled back with the transaction. Workflow tasks restrict the delete, so they go first.
     await tx`delete from core.tasks where workflow_id is not null`;
+    await tx`delete from core.tramo_start_batches`;
+    await tx`delete from core.workflow_task_templates`;
+    await tx`delete from core.position_phases`;
+    await tx`delete from core.workflow_phases`;
+    await tx`delete from core.project_stages`;
+    await tx`update core.projects set current_workflow_id = null where current_workflow_id is not null`;
     await tx`delete from core.workflows`;
   }
 

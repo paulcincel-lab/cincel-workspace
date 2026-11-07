@@ -7,6 +7,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/shadcn/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/shadcn/tooltip";
 import {
   addDays,
   applyCalendarFilters,
@@ -18,7 +19,24 @@ import {
   startOfWeek,
   toDate,
 } from "@/lib/calendar/calendar-service";
-import type { CalendarEvent, CalendarFilters, CalendarView } from "@/lib/types/calendar";
+import type { CalendarEvent, CalendarView } from "@/lib/types/calendar";
+
+/** Project / responsable / tipo go through the calendar service; tramo and fase are filtered here. */
+type CalendarScreenFilters = {
+  project: string;
+  responsible: string;
+  type: string;
+  tramo: string;
+  phase: string;
+};
+
+const ALL_TRAMOS = "Todos";
+const ALL_PHASES = "Todas";
+const PHASE_DISABLED_HINT = "Elige un tramo para filtrar por fase";
+
+function sortedUnique(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
 
 type UnifiedCalendarProps = {
   events: CalendarEvent[];
@@ -85,7 +103,7 @@ const UPCOMING_EVENTS_COLUMNS: ColumnDef<CalendarEvent, unknown>[] = [
   },
   {
     accessorKey: "title",
-    header: "Actividad",
+    header: "Tarea",
     cell: ({ row }) => (
       <Link href={row.original.href} className="font-semibold hover:text-foreground hover:underline">
         {row.original.title}
@@ -93,7 +111,7 @@ const UPCOMING_EVENTS_COLUMNS: ColumnDef<CalendarEvent, unknown>[] = [
     ),
   },
   { accessorKey: "project", header: "Proyecto" },
-  { accessorKey: "stageLabel", header: "Etapa" },
+  { accessorKey: "tramoLabel", header: "Tramo" },
   { accessorKey: "responsible", header: "Responsable" },
   {
     accessorKey: "type",
@@ -136,14 +154,24 @@ export default function UnifiedCalendar({
   const [cursor, setCursor] = useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(today));
 
-  const [filters, setFilters] = useState<CalendarFilters>({
+  const [filters, setFilters] = useState<CalendarScreenFilters>({
     project: "Todos",
     responsible: "Todos",
     type: "Todos",
-    stage: "Todas",
+    tramo: ALL_TRAMOS,
+    phase: ALL_PHASES,
   });
 
   const options = useMemo(() => buildCalendarFilterOptions(events), [events]);
+  const tramoOptions = useMemo(() => [ALL_TRAMOS, ...sortedUnique(events.map((e) => e.tramoLabel))], [events]);
+  // The Fase filter lists only the selected tramo's fases.
+  const phaseOptions = useMemo(
+    () =>
+      filters.tramo === ALL_TRAMOS
+        ? [ALL_PHASES]
+        : [ALL_PHASES, ...sortedUnique(events.filter((e) => e.tramoLabel === filters.tramo).map((e) => e.phaseLabel))],
+    [events, filters.tramo]
+  );
   const responsibleOptions = useMemo(() => {
     if (!canViewTeamCalendar && normalizedViewerName) {
       return [normalizedViewerName];
@@ -156,10 +184,11 @@ export default function UnifiedCalendar({
     : filters.responsible;
   const effectiveFilters = useMemo(
     () => ({
-      ...filters,
+      project: filters.project,
+      type: filters.type,
       responsible: effectiveResponsibleFilter,
     }),
-    [effectiveResponsibleFilter, filters]
+    [effectiveResponsibleFilter, filters.project, filters.type]
   );
 
   const scopedEvents = useMemo(() => {
@@ -171,8 +200,12 @@ export default function UnifiedCalendar({
       return source;
     }
 
-    return applyCalendarFilters(source, effectiveFilters);
-  }, [canViewTeamCalendar, effectiveFilters, events, mode, normalizedViewerName]);
+    return applyCalendarFilters(source, effectiveFilters).filter(
+      (event) =>
+        (filters.tramo === ALL_TRAMOS || event.tramoLabel === filters.tramo) &&
+        (filters.phase === ALL_PHASES || event.phaseLabel === filters.phase)
+    );
+  }, [canViewTeamCalendar, effectiveFilters, events, filters.phase, filters.tramo, mode, normalizedViewerName]);
 
   const groupedByDate = useMemo(() => groupEventsByDate(scopedEvents), [scopedEvents]);
   const selectedDayEvents = groupedByDate.get(selectedDate) ?? [];
@@ -316,7 +349,7 @@ export default function UnifiedCalendar({
       {mode === "full" ? (
         <div className="grid gap-0 xl:grid-cols-[1fr_320px]">
           <div>
-            <div className="grid grid-cols-2 gap-2 border-b border-border px-4 py-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 border-b border-border px-4 py-3 md:grid-cols-3 xl:grid-cols-5">
               <Select
                 items={Object.fromEntries(options.projects.map((v) => [v, v === "Todos" ? "Proyecto: Todos" : v]))}
                 value={filters.project}
@@ -355,17 +388,45 @@ export default function UnifiedCalendar({
                 </SelectContent>
               </Select>
               <Select
-                items={Object.fromEntries(options.stages.map((v) => [v, v === "Todas" ? "Etapa: Todas" : v]))}
-                value={filters.stage}
-                onValueChange={(value) => setFilters((current) => ({ ...current, stage: value as string }))}
+                items={Object.fromEntries(tramoOptions.map((v) => [v, v === ALL_TRAMOS ? "Tramo: Todos" : v]))}
+                value={filters.tramo}
+                onValueChange={(value) =>
+                  setFilters((current) => ({ ...current, tramo: value as string, phase: ALL_PHASES }))
+                }
               >
-                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 w-full" aria-label="Tramo"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {options.stages.map((value) => (
-                    <SelectItem key={`stage-${value}`} value={value}>{value === "Todas" ? "Etapa: Todas" : value}</SelectItem>
+                  {tramoOptions.map((value) => (
+                    <SelectItem key={`tramo-${value}`} value={value}>{value === ALL_TRAMOS ? "Tramo: Todos" : value}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {filters.tramo === ALL_TRAMOS ? (
+                <Tooltip>
+                  <TooltipTrigger render={<span className="block w-full" tabIndex={0} />}>
+                    <Select items={{ [ALL_PHASES]: "Fase: Todas" }} value={ALL_PHASES} disabled>
+                      <SelectTrigger className="h-10 w-full" aria-label="Fase"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_PHASES}>Fase: Todas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TooltipTrigger>
+                  <TooltipContent>{PHASE_DISABLED_HINT}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Select
+                  items={Object.fromEntries(phaseOptions.map((v) => [v, v === ALL_PHASES ? "Fase: Todas" : v]))}
+                  value={filters.phase}
+                  onValueChange={(value) => setFilters((current) => ({ ...current, phase: value as string }))}
+                >
+                  <SelectTrigger className="h-10 w-full" aria-label="Fase"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {phaseOptions.map((value) => (
+                      <SelectItem key={`phase-${value}`} value={value}>{value === ALL_PHASES ? "Fase: Todas" : value}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {view === "month" ? (

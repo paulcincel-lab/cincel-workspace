@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/shadcn/table";
 
 import { PageHeader } from "@/components/v2/layout/PageHeader";
-import { AreaBadge } from "@/components/v2/status/AreaBadge";
+import { TramoBadge } from "@/components/v2/status/TramoBadge";
 import {
   useProjectsData,
   type ProjectItem,
@@ -45,9 +45,10 @@ import { cn } from "@/lib/utils";
 import type { TaskListItem } from "@/lib/types/core";
 import { isDueDateLate } from "@/lib/tasks/status-options";
 import {
-  projectsByArea,
+  projectsByTramo,
   tasksByBaseStatus,
 } from "@/lib/dashboard/donut-groups";
+import { AdminTasksCard } from "@/components/tareas/AdminTasksCard";
 import { DonutCard } from "./DonutCard";
 import { TaskTrendCard } from "./TaskTrendCard";
 
@@ -115,7 +116,7 @@ function TaskTable({ rows, todayIso, dateOf, showReasons }: TaskTableProps) {
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           <TableHead className={cn(SECTION_LABEL, "pl-4")}>Tarea</TableHead>
-          <TableHead className={SECTION_LABEL}>Área</TableHead>
+          <TableHead className={SECTION_LABEL}>Tramo</TableHead>
           {showReasons ? (
             <TableHead className={SECTION_LABEL}>Motivo</TableHead>
           ) : null}
@@ -144,13 +145,10 @@ function TaskTable({ rows, todayIso, dateOf, showReasons }: TaskTableProps) {
                 </div>
               </TableCell>
               <TableCell>
-                {t.workflow ? (
-                  <AreaBadge
-                    name={t.workflow.name}
-                    colorSlot={t.areaColorSlot}
-                  />
+                {t.kind === "admin" ? (
+                  <span>Administración</span>
                 ) : (
-                  <span className="text-muted-foreground">Sin área</span>
+                  <TramoBadge tramo={t.workflow} />
                 )}
               </TableCell>
               {showReasons ? (
@@ -274,9 +272,9 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
     [activeTasks],
   );
 
-  const projectsByDepartment = useMemo(
+  const projectsByCurrentTramo = useMemo(
     () =>
-      projectsByArea(scopedProjectsData.filter((p) => p.status === "activo")),
+      projectsByTramo(scopedProjectsData.filter((p) => p.status === "activo")),
     [scopedProjectsData],
   );
 
@@ -427,6 +425,9 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
           </CardContent>
         </Card>
 
+        {/* Admins only; renders nothing for everyone else (FE §3.6). */}
+        <AdminTasksCard limit={5} />
+
         <TaskTrendCard />
 
         <DonutCard
@@ -445,7 +446,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
         />
 
         <DonutCard
-          title="Proyectos por departamento"
+          title="Proyectos por tramo"
           icon={
             <span
               aria-hidden
@@ -454,7 +455,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
               <FolderKanbanIcon className="size-4" />
             </span>
           }
-          slices={projectsByDepartment}
+          slices={projectsByCurrentTramo}
           unit="proyectos"
           emptyText="Sin proyectos activos."
         />

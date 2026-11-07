@@ -17,7 +17,7 @@ if (url) process.env.DATABASE_URL = url;
 const DOMAIN = "cincel.example";
 const run = randomUUID().slice(0, 8);
 const groupId = (name: string) => `test-${run}-${name}`;
-const GROUPS = { senior: groupId("senior"), direccion: groupId("direccion"), area: groupId("area") };
+const GROUPS = { senior: groupId("senior"), direccion: groupId("direccion"), position: groupId("position") };
 
 describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
   const { eq, inArray, sql } = await import("drizzle-orm");
@@ -29,7 +29,7 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
 
   const staffIds: string[] = [];
   const subs: string[] = [];
-  let areaId = "";
+  let positionId = "";
   let n = 0;
 
   const meta = { ip: "203.0.113.7", userAgent: "vitest" };
@@ -89,11 +89,11 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
     process.env.GOOGLE_FAKE = "1";
     process.env.GOOGLE_WORKSPACE_DOMAIN = DOMAIN;
     process.env.TOKEN_ENCRYPTION_KEY = "0".repeat(64);
-    const [area] = await db
-      .insert(schema.areas)
-      .values({ name: `Área ${run}` })
-      .returning({ id: schema.areas.id });
-    areaId = area.id;
+    const [position] = await db
+      .insert(schema.positions)
+      .values({ name: `Puesto ${run}` })
+      .returning({ id: schema.positions.id });
+    positionId = position.id;
     await db.insert(schema.workspaceGroupMappings).values([
       {
         groupEmail: `${GROUPS.senior}@${DOMAIN}`,
@@ -109,7 +109,7 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
         role: "Dirección",
         rank: 70,
       },
-      { groupEmail: `${GROUPS.area}@${DOMAIN}`, groupId: GROUPS.area, kind: "area", areaId },
+      { groupEmail: `${GROUPS.position}@${DOMAIN}`, groupId: GROUPS.position, kind: "position", positionId },
     ]);
   });
 
@@ -126,7 +126,7 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
       .delete(schema.workspaceGroupMappings)
       .where(sql`${schema.workspaceGroupMappings.groupId} like ${`test-${run}-%`}`);
     if (ids.length) await db.delete(schema.staff).where(inArray(schema.staff.id, ids));
-    await db.delete(schema.areas).where(eq(schema.areas.id, areaId));
+    await db.delete(schema.positions).where(eq(schema.positions.id, positionId));
     delete process.env.GOOGLE_FAKE;
   });
 
@@ -134,7 +134,7 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
     const who = person();
     const staffId = await insertStaff({ name: `${who.name} (password)`, email: who.email.toUpperCase() });
     await db.insert(schema.authCredentials).values({ staffId, passwordHash: "x", salt: "y", mustChangePassword: true });
-    directory([{ ...who, groups: [GROUPS.senior, GROUPS.area] }]);
+    directory([{ ...who, groups: [GROUPS.senior, GROUPS.position] }]);
 
     const first = await signInWithGoogle(who, tokens(), meta);
     expect(first).toEqual({ status: "allowed", staffId });
@@ -151,8 +151,11 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
       .where(eq(schema.authCredentials.staffId, staffId));
     expect(credential.mustChangePassword).toBe(false);
 
-    const areaRows = await db.select().from(schema.areaMembers).where(eq(schema.areaMembers.staffId, staffId));
-    expect(areaRows).toEqual([expect.objectContaining({ areaId, source: "workspace" })]);
+    const positionRows = await db
+      .select()
+      .from(schema.staffPositions)
+      .where(eq(schema.staffPositions.staffId, staffId));
+    expect(positionRows).toEqual([expect.objectContaining({ positionId, source: "workspace" })]);
 
     const [account] = await db
       .select()
@@ -194,7 +197,7 @@ describe.skipIf(!url)("signInWithGoogle (test DB)", async () => {
 
   it("refuses with no_role_group, records it and creates nothing", async () => {
     const who = person();
-    directory([{ ...who, groups: [GROUPS.area] }]);
+    directory([{ ...who, groups: [GROUPS.position] }]);
 
     await expect(signInWithGoogle(who, tokens(), meta)).resolves.toEqual({
       status: "denied",

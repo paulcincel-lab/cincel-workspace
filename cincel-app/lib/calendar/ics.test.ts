@@ -11,9 +11,10 @@ const event: CalendarEvent = {
   title: "Entrega: planos, fase 1; revisar",
   project: "Casa Lomas",
   responsible: "Ana",
-  stage: "diseno",
-  stageLabel: "Taller de Diseño",
-  phase: "Anteproyecto",
+  tramo: "diseno",
+  tramoLabel: "Diseño",
+  phaseId: "f1",
+  phaseLabel: "Anteproyecto",
   type: "Fecha de entrega",
   href: "/actividades/diseno?project=Casa%20Lomas",
 };
@@ -72,6 +73,15 @@ describe("buildIcs", () => {
     expect(ics).toContain("URL:https://app.example/actividades/diseno?project=Casa%20Lomas");
     expect(ics).toContain("UID:c-diseno-t1-2026-12-31@cincel-workspace");
     expect(ics).toContain("DTSTAMP:20260923T120000Z");
+  });
+
+  it("describes the tramo and fase of the task", () => {
+    const unfold = (ics: string) => ics.replace(/\r\n /g, "");
+    expect(unfold(build([event]))).toContain("Tramo: Diseño · Fase: Anteproyecto");
+    expect(unfold(build([event]))).not.toContain("Etapa:");
+    const noPhase = unfold(build([{ ...event, phaseId: null, phaseLabel: "" }]));
+    expect(noPhase).toContain("Tramo: Diseño\\nResponsable: Ana");
+    expect(noPhase).not.toContain("Fase:");
   });
 
   it("produces a valid empty calendar when there are no events", () => {

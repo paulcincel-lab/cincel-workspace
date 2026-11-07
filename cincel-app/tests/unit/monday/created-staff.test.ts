@@ -55,7 +55,7 @@ describe("init people (#689)", () => {
 
   it("keeps the created mark through the mapping schema and reads it back", () => {
     const mapping = Mapping.parse({
-      version: 1,
+      version: 2,
       boards: [],
       people: {
         "1": { action: "staff", staffId: ANA, created: true },

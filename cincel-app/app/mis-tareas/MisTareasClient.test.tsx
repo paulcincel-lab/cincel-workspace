@@ -40,7 +40,6 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     kind: "usuario",
     templateId: null,
     workflowId: null,
-    phase: null,
     phaseId: null,
     spaceId: null,
     closedAt: null,
@@ -61,8 +60,7 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     customStatus: null,
     project: { id: "p1", name: "Residencia Valle Alto", clientName: "Cliente" },
     workflow: null,
-    areaColorSlot: null,
-    phaseRef: null,
+    phase: null,
     space: null,
     manager: { id: "u1", name: "Ana Ruiz" },
     support: [],
@@ -120,5 +118,40 @@ describe("MisTareasClient rows", () => {
     expect(
       within(plain).queryByText(/Subtarea de|subtareas|En espera/),
     ).toBeNull();
+  });
+});
+
+describe("MisTareasClient Tramo · Fase column", () => {
+  it("labels the column Tramo · Fase and shows tramo and fase as text", () => {
+    render(
+      <MisTareasClient
+        initialTasks={[
+          makeTask({
+            id: "a",
+            title: "Planos ejecutivos",
+            kind: "workflow",
+            workflowId: "w2",
+            workflow: { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
+            phaseId: "f1",
+            phase: { id: "f1", name: "Ejecutivo", sortOrder: 1 },
+          }),
+          makeTask({
+            id: "b",
+            title: "Render de fachada",
+            kind: "workflow",
+            workflowId: "w2",
+            workflow: { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
+          }),
+          makeTask({ id: "c", title: "Llamar al proveedor" }),
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText("Tramo · Fase").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Departamento")).toBeNull();
+    expect(screen.queryByText("Sin departamento")).toBeNull();
+    expect(within(rowOf("Planos ejecutivos")).getByText("Diseño · Ejecutivo")).toBeTruthy();
+    expect(within(rowOf("Render de fachada")).getByText("Diseño")).toBeTruthy();
+    expect(within(rowOf("Llamar al proveedor")).getByText("—")).toBeTruthy();
   });
 });

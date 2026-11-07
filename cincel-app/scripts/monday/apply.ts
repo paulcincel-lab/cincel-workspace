@@ -9,11 +9,14 @@
  * 3. Otherwise the plan runs (scripts/monday/plan.ts) and any blocking issue
  *    aborts before anything is written.
  * 4. Phase A, one transaction: `import_batches (applying)` → contacts
- *    (+ `contact_people`, `provider_profiles`) → áreas for tasks' monday
- *    values (+ `area_workflows`, #686) → projects (+ the board
- *    workflow's `project_stages` row) → `project_schedules` → tasks →
- *    child tasks → checklist → `task_support` → `task_dependencies` →
- *    `history_events` → `schedule_tasks`; `import_files (pending)`; an `import_refs` row for
+ *    (+ `contact_people`, `provider_profiles`) → projects (`origin
+ *    'monday'`, client optional, a `project_stages` row per tramo with
+ *    tasks) → `project_schedules` → espacios (`findOrCreateSpace`, ref
+ *    `project_space`) → tasks → child tasks → the "Asignar cliente y
+ *    origen" admin task of projects without a client → checklist →
+ *    `task_support` → `task_dependencies` → `history_events` →
+ *    `schedule_tasks`; `import_files (pending)`; `refreshStageClosed` per
+ *    (project, tramo) written (project flow BE §10.5); an `import_refs` row for
  *    every created row, with `row_updated_at` = the row's `updated_at`
  *    after insert (null for rows without one). Rows already in
  *    `import_refs` are skipped, so a second apply of the same export
@@ -29,12 +32,11 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 
 import {
-  areas,
-  areaWorkflows,
+  appSettings,
   contactPeople,
   contacts,
   historyEvents,
@@ -42,6 +44,7 @@ import {
   importFiles,
   projects,
   projectSchedules,
+  projectSpaces,
   projectStages,
   providerProfiles,
   scheduleTasks,
@@ -50,9 +53,19 @@ import {
   taskDependencies,
   tasks,
   taskSupport,
+  workflows,
 } from "../../lib/db/schema";
 import type { DriveAdmin } from "../../lib/google/drive-admin";
+import { ensureAssignClientTask } from "../../lib/project-flow/admin-tasks";
 import {
+  ASSIGN_CLIENT_SYSTEM_KEY,
+  MONDAY_STATUS_MAP_SETTING,
+} from "../../lib/project-flow/catalog";
+import { refreshStageClosed } from "../../lib/project-flow/closing";
+import type { FlowTx } from "../../lib/project-flow/db";
+import { findOrCreateSpace } from "../../lib/repositories/project-spaces-repository";
+import {
+  findImportRefs,
   insertImportRefs,
   type ImportDb,
   type ImportEntity,
@@ -62,6 +75,10 @@ import { createPhaseB } from "./apply-phase-b";
 import { createMondayDb, type MondayDbHandle } from "./db";
 import { readJson } from "./init";
 import type { Manifest } from "./export";
+import {
+  MondayStatusMap,
+  type Mapping,
+} from "./mapping.schema";
 import {
   buildPlan,
   checkDriveConfigured,
@@ -74,7 +91,7 @@ import {
 } from "./plan";
 import { openServiceAccountDrive } from "./rollback";
 import type { CliIo, CommandHandler } from "./run";
-import type { RowRef } from "./translate";
+import type { PlannedProject, PlannedTask, RowRef } from "./translate";
 
 export const NOTHING_NEW = "Nada nuevo que importar";
 
@@ -169,8 +186,12 @@ export interface PhaseACounts {
   comments: number;
   cronogramaRows: number;
   files: number;
-  /** Áreas created for tasks' monday values (#686). */
-  areas: number;
+  /** Espacios created for `space` groups (project flow BE §10.5). */
+  spaces: number;
+  /** `project_stages` rows: one per tramo with tasks of each new project. */
+  stages: number;
+  /** "Asignar cliente y origen" admin tasks of projects without a client. */
+  assignClientTasks: number;
 }
 
 function emptyCounts(): PhaseACounts {
@@ -188,7 +209,9 @@ function emptyCounts(): PhaseACounts {
     comments: 0,
     cronogramaRows: 0,
     files: 0,
-    areas: 0,
+    spaces: 0,
+    stages: 0,
+    assignClientTasks: 0,
   };
 }
 
@@ -225,6 +248,137 @@ async function insertAll<R>(
 const toDate = (iso: string | null) => (iso ? new Date(iso) : undefined);
 
 /**
+ * The project flow fields of a planned task (BE §10.3): fase, espacio (the
+ * group title of a `space` group), closing date, system key and the admin
+ * kind. Optional here so apply reads whatever translate sets.
+ */
+type FlowTask = Omit<PlannedTask, "kind"> & {
+  kind: "workflow" | "usuario" | "admin";
+  phaseId?: string | null;
+  space?: string | null;
+  closedAt?: string | null;
+  systemKey?: string | null;
+};
+
+/** The project flow fields of a planned project (BE §10.3). */
+type FlowProject = PlannedProject & {
+  tramos?: string[];
+  currentWorkflowId?: string | null;
+};
+
+/** `import_refs.external_id` suffix of a project's "Asignar cliente y origen" task. */
+export const ASSIGN_CLIENT_REF_SUFFIX = `:${ASSIGN_CLIENT_SYSTEM_KEY}`;
+
+/**
+ * The import ref key of the espacio a `space` group makes (BE §10.3):
+ * `<boardId>:<groupId>` when the project is the board (`board_as_project`);
+ * prefixed with the project's external id otherwise, since one board's group
+ * then lands in several projects.
+ */
+export function spaceExternalId(
+  projectExternalId: string,
+  source: { boardId: string; groupId: string | null },
+): string {
+  const group = `${source.boardId}:${source.groupId ?? ""}`;
+  return projectExternalId === source.boardId
+    ? group
+    : `${projectExternalId}/${group}`;
+}
+
+/**
+ * The task columns of a planned task under the project flow rules: an admin
+ * task has no tramo, fase, espacio or template; a fase needs a tramo;
+ * `closed_at` only on a `completado` task (the table's checks).
+ */
+export function flowTaskColumns(
+  t: FlowTask,
+  spaceId: string | null,
+): {
+  kind: FlowTask["kind"];
+  templateId: string | null;
+  workflowId: string | null;
+  phaseId: string | null;
+  spaceId: string | null;
+  closedAt: Date | null;
+  systemKey: string | null;
+} {
+  const admin = t.kind === "admin";
+  const workflowId = admin ? null : t.workflowId;
+  const closed = t.status === "completado" && t.closedAt ? new Date(t.closedAt) : null;
+  return {
+    kind: t.kind,
+    templateId: admin ? null : t.templateId,
+    workflowId,
+    phaseId: workflowId ? (t.phaseId ?? null) : null,
+    spaceId: admin ? null : spaceId,
+    closedAt: closed && !Number.isNaN(closed.getTime()) ? closed : null,
+    systemKey:
+      t.systemKey ??
+      (t.externalId.endsWith(ASSIGN_CLIENT_REF_SUFFIX) ? ASSIGN_CLIENT_SYSTEM_KEY : null),
+  };
+}
+
+/**
+ * The tramos a new project gets a `project_stages` row for and its current
+ * tramo (BE §10.3, §10.5): every tramo its tasks carry (`tramos` when
+ * translate sets it), and the current one = translate's `currentWorkflowId`,
+ * else the highest `sort_order` tramo with tasks, else the board's tramo.
+ * The current tramo always has a stage row (BE §3.7).
+ */
+export function projectTramos(
+  project: FlowProject,
+  taskWorkflowIds: readonly (string | null)[],
+  sortOrder: ReadonlyMap<string, number>,
+): { tramos: string[]; currentWorkflowId: string | null } {
+  const withTasks = [
+    ...new Set([
+      ...(project.tramos ?? []),
+      ...taskWorkflowIds.filter((w): w is string => !!w),
+    ]),
+  ];
+  const highest = [...withTasks].sort(
+    (a, b) => (sortOrder.get(b) ?? 0) - (sortOrder.get(a) ?? 0),
+  )[0];
+  const currentWorkflowId =
+    project.currentWorkflowId !== undefined
+      ? project.currentWorkflowId
+      : (highest ?? project.workflowId ?? null);
+  const tramos = currentWorkflowId && !withTasks.includes(currentWorkflowId)
+    ? [...withTasks, currentWorkflowId]
+    : withTasks;
+  return {
+    tramos: [...tramos].sort((a, b) => (sortOrder.get(a) ?? 0) - (sortOrder.get(b) ?? 0)),
+    currentWorkflowId,
+  };
+}
+
+/**
+ * The mapping `import_batches.mapping` keeps: v2 with the saved firm-wide
+ * status map as of this apply (BE §10.5). The saved setting wins over the
+ * mapping's own snapshot; a setting that doesn't parse leaves it as is.
+ */
+export async function snapshotMapping(
+  tx: ImportDb,
+  mapping: Mapping,
+): Promise<Mapping> {
+  const [row] = await tx
+    .select({ value: appSettings.value })
+    .from(appSettings)
+    .where(eq(appSettings.key, MONDAY_STATUS_MAP_SETTING))
+    .limit(1);
+  let saved: MondayStatusMap | null = null;
+  if (row) {
+    try {
+      const parsed = MondayStatusMap.safeParse(JSON.parse(row.value));
+      if (parsed.success) saved = parsed.data as MondayStatusMap;
+    } catch {
+      saved = null;
+    }
+  }
+  return { ...mapping, version: 2, statusMap: saved ?? mapping.statusMap ?? {} };
+}
+
+/**
  * Writes a clean plan's new rows in the transaction `tx`: the batch, every
  * planned row not yet in `import_refs`, the pending `import_files` and an
  * import ref per created row. An empty batch is marked `applied`.
@@ -235,8 +389,10 @@ export async function writePhaseA(
   batch: BatchInfo,
   importedById: string,
 ): Promise<{ batchId: string; counts: PhaseACounts }> {
-  const { result, mapping, imported } = translation;
+  const { result, imported } = translation;
+  const mapping = await snapshotMapping(tx, translation.mapping);
   const counts = emptyCounts();
+  const flowTx = tx as unknown as FlowTx;
 
   const [batchRow] = await tx
     .insert(importBatches)
@@ -369,61 +525,81 @@ export async function writePhaseA(
     )
   ).length;
 
-  // --- áreas for tasks' monday values (+ their area_workflows), #686 -----------
-  // The área's import ref names its workflows (`workflowIds`), so rollback owns those links.
-  const newAreas = await step(
-    "area",
-    result.areas,
-    areas,
-    (a) => ({ name: a.name }),
-    byId,
-    (a) => ({ workflowIds: a.workflowIds }),
+  // --- projects (+ a stage per tramo with tasks), project_schedules --------
+  const plannedTasks = result.tasks as FlowTask[];
+  const tasksOf = new Map<string, FlowTask[]>();
+  for (const t of plannedTasks) {
+    const list = tasksOf.get(t.project.externalId) ?? [];
+    list.push(t);
+    tasksOf.set(t.project.externalId, list);
+  }
+  const workflowOrder = new Map<string, number>(
+    (
+      await tx
+        .select({ id: workflows.id, sortOrder: workflows.sortOrder })
+        .from(workflows)
+    ).map((w) => [w.id, w.sortOrder]),
   );
-  counts.areas = newAreas.length;
-  const areaLinks = newAreas.flatMap((a) => {
-    const areaId = idsOf("area").get(a.externalId)!;
-    return a.workflowIds.map((workflowId) => ({ areaId, workflowId }));
-  });
-  await insertAll(areaLinks, (chunk) =>
-    tx.insert(areaWorkflows).values(chunk as (typeof areaLinks)[number][]).returning(),
-  );
-
-  // --- projects (+ their stage), project_schedules -------------------------
+  const tramosOf = new Map<string, ReturnType<typeof projectTramos>>();
+  for (const p of result.projects as FlowProject[]) {
+    tramosOf.set(
+      p.externalId,
+      projectTramos(
+        p,
+        (tasksOf.get(p.externalId) ?? []).map((t) =>
+          t.kind === "admin" ? null : t.workflowId,
+        ),
+        workflowOrder,
+      ),
+    );
+  }
   const newProjects = await step(
     "project",
-    result.projects,
+    result.projects as FlowProject[],
     projects,
-    (p) => {
-      if (!p.client)
-        throw new Error(`apply: project ${p.externalId} has no client`);
-      return {
-        name: p.name,
-        code: p.code,
-        clientId: idOf(p.client),
-        status: p.status,
-        progress: p.progress,
-        startDate: p.startDate,
-        endDate: p.endDate,
-        currentWorkflowId: p.workflowId,
-        phases: p.phases,
-        phase: p.phases.length > 0 ? p.phases.join(", ") : null,
-      };
-    },
+    (p) => ({
+      name: p.name,
+      code: p.code,
+      // Optional (BE §10.3): a project without a client gets "Asignar cliente y origen".
+      clientId: p.client ? idOf(p.client) : null,
+      origin: SOURCE,
+      status: p.status,
+      progress: p.progress,
+      startDate: p.startDate,
+      endDate: p.endDate,
+      currentWorkflowId: tramosOf.get(p.externalId)?.currentWorkflowId ?? null,
+    }),
     byId,
-    (p) => p.data,
+    // The project's import ref names the stages apply wrote (`stageWorkflowIds`), so rollback owns them.
+    (p) => ({
+      ...p.data,
+      stageWorkflowId: undefined,
+      stageWorkflowIds: tramosOf.get(p.externalId)?.tramos ?? [],
+    }),
   );
   counts.projects = newProjects.length;
-  // The board's workflow is the project's stage, as the Ficha sets it, plus the
-  // stages groups were mapped to (#687). The project's import ref names them
-  // (`stageWorkflowId`, `stageWorkflowIds`), so rollback owns the rows.
+  const earliest = (list: FlowTask[]) =>
+    list
+      .map((t) => t.createdAt)
+      .filter((d): d is string => !!d)
+      .sort()[0];
   const stages = newProjects.flatMap((p) => {
     const projectId = idOf({ kind: "planned", entity: "project", externalId: p.externalId });
-    const ids = [...new Set([...(p.workflowId ? [p.workflowId] : []), ...(p.extraStages ?? [])])];
-    return ids.map((workflowId) => ({ projectId, workflowId }));
+    const list = tasksOf.get(p.externalId) ?? [];
+    return (tramosOf.get(p.externalId)?.tramos ?? []).map((workflowId) => {
+      const first = earliest(list.filter((t) => t.kind !== "admin" && t.workflowId === workflowId));
+      return {
+        projectId,
+        workflowId,
+        startedById: importedById,
+        ...(first ? { startedAt: new Date(first) } : {}),
+      };
+    });
   });
   await insertAll(stages, (chunk) =>
     tx.insert(projectStages).values(chunk as (typeof stages)[number][]).returning(),
   );
+  counts.stages = stages.length;
   counts.projectSchedules = (
     await step(
       "project_schedule",
@@ -434,30 +610,74 @@ export async function writePhaseA(
     )
   ).length;
 
+  // --- espacios of `space` groups (ref `project_space`) ---------------------
+  // Created through findOrCreateSpace (deduped by name per project); a ref is
+  // recorded only for the espacios this batch created, so rollback owns those.
+  const spaceIdOf = new Map<string, string>();
+  const freshTasks = plannedTasks.filter((t) => isNew("task", t.externalId));
+  const spaceKeys = new Map<string, { projectExternalId: string; name: string }>();
+  for (const t of freshTasks) {
+    const name = t.kind === "admin" ? null : t.space?.trim();
+    if (!name) continue;
+    const key = spaceExternalId(t.project.externalId, t.source);
+    if (!spaceKeys.has(key)) spaceKeys.set(key, { projectExternalId: t.project.externalId, name });
+  }
+  if (spaceKeys.size > 0) {
+    const known = await findImportRefs(tx, SOURCE, "project_space", [...spaceKeys.keys()]);
+    for (const [key, ref] of known) spaceIdOf.set(key, ref.rowId);
+    const before = new Map<string, Set<string>>();
+    for (const [key, { projectExternalId, name }] of spaceKeys) {
+      if (spaceIdOf.has(key)) continue;
+      const projectId = idOf({ kind: "planned", entity: "project", externalId: projectExternalId });
+      let existing = before.get(projectId);
+      if (!existing) {
+        existing = new Set(
+          (
+            await tx
+              .select({ id: projectSpaces.id })
+              .from(projectSpaces)
+              .where(eq(projectSpaces.projectId, projectId))
+          ).map((r) => r.id),
+        );
+        before.set(projectId, existing);
+      }
+      const spaceId = await findOrCreateSpace(flowTx, projectId, name);
+      spaceIdOf.set(key, spaceId);
+      if (existing.has(spaceId)) continue;
+      existing.add(spaceId);
+      const [row] = await tx
+        .select({ updatedAt: projectSpaces.updatedAt })
+        .from(projectSpaces)
+        .where(eq(projectSpaces.id, spaceId));
+      record("project_space", key, spaceId, row?.updatedAt ?? null, { name });
+      counts.spaces++;
+    }
+  }
+
   // --- tasks, then child tasks --------------------------------------------
-  const taskValues = (t: (typeof result.tasks)[number]) => ({
-    projectId: idOf(t.project),
-    parentTaskId: t.parentTask ? idOf(t.parentTask) : null,
-    kind: t.kind,
-    templateId: t.templateId,
-    workflowId: t.workflowId,
-    phase: t.phase,
-    title: t.title,
-    notes: t.notes,
-    createdById: t.createdById,
-    managerId: t.managerId,
-    status: t.status,
-    customStatusId: t.customStatusId,
-    priority: t.priority,
-    sortOrder: t.sortOrder,
-    commitmentDate: t.commitmentDate,
-    deliveryDate: t.deliveryDate,
-    ...(t.createdAt ? { createdAt: new Date(t.createdAt) } : {}),
-  });
+  const taskValues = (t: FlowTask) => {
+    const spaceKey = t.space?.trim() ? spaceExternalId(t.project.externalId, t.source) : null;
+    return {
+      projectId: idOf(t.project),
+      parentTaskId: t.parentTask ? idOf(t.parentTask) : null,
+      ...flowTaskColumns(t, spaceKey ? (spaceIdOf.get(spaceKey) ?? null) : null),
+      title: t.title,
+      notes: t.notes,
+      createdById: t.createdById,
+      managerId: t.managerId,
+      status: t.status,
+      customStatusId: t.customStatusId,
+      priority: t.priority,
+      sortOrder: t.sortOrder,
+      commitmentDate: t.commitmentDate,
+      deliveryDate: t.deliveryDate,
+      ...(t.createdAt ? { createdAt: new Date(t.createdAt) } : {}),
+    };
+  };
   counts.tasks = (
     await step(
       "task",
-      result.tasks.filter((t) => t.parentTask == null),
+      plannedTasks.filter((t) => t.parentTask == null),
       tasks,
       taskValues,
       byId,
@@ -467,13 +687,38 @@ export async function writePhaseA(
   counts.childTasks = (
     await step(
       "task",
-      result.tasks.filter((t) => t.parentTask != null),
+      plannedTasks.filter((t) => t.parentTask != null),
       tasks,
       taskValues,
       byId,
       (t) => t.data,
     )
   ).length;
+
+  // --- "Asignar cliente y origen" of new projects without a client ---------
+  // translate plans it as task `<project>:assign_client` (BE §10.3); when it
+  // didn't, the project flow rule writes it here, with its ref.
+  for (const p of newProjects) {
+    if (p.client) continue;
+    const externalId = `${p.externalId}${ASSIGN_CLIENT_REF_SUFFIX}`;
+    if (!isNew("task", externalId)) continue;
+    const projectId = idOf({ kind: "planned", entity: "project", externalId: p.externalId });
+    await ensureAssignClientTask(flowTx, projectId, importedById);
+    const [row] = await tx
+      .select({ id: tasks.id, updatedAt: tasks.updatedAt })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.projectId, projectId),
+          eq(tasks.systemKey, ASSIGN_CLIENT_SYSTEM_KEY),
+          isNull(tasks.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!row) continue;
+    record("task", externalId, row.id, row.updatedAt ?? null, { source: p.source });
+    counts.assignClientTasks++;
+  }
 
   // --- checklist, task_support, task_dependencies ---------------------------
   counts.checklistItems = (
@@ -597,6 +842,28 @@ export async function writePhaseA(
     counts.files = translation.files.length;
   }
 
+  // --- project_stages.closed_at of every (project, tramo) written ----------
+  const written = new Map<string, { projectId: string; workflowId: string }>();
+  for (const s of stages) written.set(`${s.projectId}:${s.workflowId}`, s);
+  for (const t of freshTasks) {
+    if (t.kind === "admin" || !t.workflowId) continue;
+    const projectId = idOf(t.project);
+    written.set(`${projectId}:${t.workflowId}`, { projectId, workflowId: t.workflowId });
+  }
+  if (written.size > 0) {
+    // Only pairs with a stage row: a refresh never creates one.
+    const pairs = [...written.values()];
+    const existing = await tx
+      .select({ projectId: projectStages.projectId, workflowId: projectStages.workflowId })
+      .from(projectStages)
+      .where(inArray(projectStages.projectId, [...new Set(pairs.map((p) => p.projectId))]));
+    const has = new Set(existing.map((r) => `${r.projectId}:${r.workflowId}`));
+    for (const pair of pairs) {
+      if (has.has(`${pair.projectId}:${pair.workflowId}`))
+        await refreshStageClosed(flowTx, pair.projectId, pair.workflowId);
+    }
+  }
+
   // --- import_refs, stats ---------------------------------------------------
   await insertImportRefs(tx, refs);
   const empty = countTotal(counts) === 0;
@@ -646,7 +913,7 @@ class Blocked extends Error {
 }
 
 function formatCounts(c: PhaseACounts): string {
-  return `${c.contacts} contacts, ${c.contactPeople} contact people, ${c.providerProfiles} provider profiles, ${c.projects} projects, ${c.projectSchedules} cronogramas, ${c.tasks} tasks, ${c.childTasks} child tasks, ${c.checklistItems} checklist items, ${c.taskSupport} task support rows, ${c.dependencies} dependencies, ${c.comments} comments, ${c.cronogramaRows} cronograma rows, ${c.files} files pending upload${c.areas ? `, ${c.areas} áreas` : ""}`;
+  return `${c.contacts} contacts, ${c.contactPeople} contact people, ${c.providerProfiles} provider profiles, ${c.projects} projects, ${c.projectSchedules} cronogramas, ${c.tasks} tasks, ${c.childTasks} child tasks, ${c.checklistItems} checklist items, ${c.taskSupport} task support rows, ${c.dependencies} dependencies, ${c.comments} comments, ${c.cronogramaRows} cronograma rows, ${c.files} files pending upload, ${c.stages} tramo stages${c.spaces ? `, ${c.spaces} espacios` : ""}${c.assignClientTasks ? `, ${c.assignClientTasks} "Asignar cliente y origen" tasks` : ""}`;
 }
 
 /** Builds the `apply` handler; tests pass their own database, Drive and phase B. */

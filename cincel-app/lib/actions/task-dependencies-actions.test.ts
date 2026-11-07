@@ -26,7 +26,11 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
 const revalidatePath = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ revalidatePath }));
 
-vi.mock("@/lib/repositories/tasks-repository", () => ({}));
+const tasksRepo = vi.hoisted(() => ({
+  assertTaskVisible: vi.fn(async (_id: string, _viewer?: unknown) => undefined),
+  isTaskVisible: vi.fn(async () => true),
+}));
+vi.mock("@/lib/repositories/tasks-repository", () => tasksRepo);
 
 const repo = vi.hoisted(() => ({
   addTaskDependency: vi.fn(),
@@ -118,7 +122,7 @@ describe("listTaskDependenciesAction", () => {
       dependsOn: [ref],
       blocks: [],
     });
-    expect(repo.listTaskDependencies).toHaveBeenCalledWith(TASK);
+    expect(repo.listTaskDependencies).toHaveBeenCalledWith(TASK, { staffId: ACTOR, isAdmin: false });
   });
 
   it("returns empty lists without activities view access", async () => {
@@ -127,6 +131,25 @@ describe("listTaskDependenciesAction", () => {
       dependsOn: [],
       blocks: [],
     });
+    expect(repo.listTaskDependencies).not.toHaveBeenCalled();
+  });
+});
+
+describe("admin task visibility", () => {
+  it("checks both tasks and refuses an admin task with FORBIDDEN", async () => {
+    tasksRepo.assertTaskVisible.mockImplementation(async (id: string) => {
+      if (id === OTHER) throw new Error("FORBIDDEN");
+    });
+    await expect(addTaskDependencyAction(TASK, OTHER)).rejects.toThrow(/^FORBIDDEN$/);
+    expect(tasksRepo.assertTaskVisible).toHaveBeenCalledWith(TASK, { staffId: ACTOR, isAdmin: false });
+    expect(tasksRepo.assertTaskVisible).toHaveBeenCalledWith(OTHER, { staffId: ACTOR, isAdmin: false });
+    tasksRepo.assertTaskVisible.mockImplementation(async () => undefined);
+    expect(repo.addTaskDependency).not.toHaveBeenCalled();
+  });
+
+  it("returns empty lists for an admin task the viewer can't see", async () => {
+    tasksRepo.isTaskVisible.mockResolvedValueOnce(false);
+    await expect(listTaskDependenciesAction(TASK)).resolves.toEqual({ dependsOn: [], blocks: [] });
     expect(repo.listTaskDependencies).not.toHaveBeenCalled();
   });
 });

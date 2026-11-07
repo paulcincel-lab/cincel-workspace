@@ -48,12 +48,9 @@ export type Staff = {
   /** Set when the access re-check revoked access (ISO); cleared by the next allowed sign-in. */
   accessRevokedAt: string | null;
   accessRevokedReason: string | null;
-  /**
-   * Project flow (FE §7.1): the person's puestos and the candidate fases they
-   * suggest. Optional until the staff DTOs fill them (Equipo, Phase 3).
-   */
-  positions?: PositionRef[];
-  candidatePhases?: Array<WorkflowPhaseRef & { workflowName: string }>;
+  /** Project flow (FE §7.1): the person's puestos and the candidate fases they suggest. */
+  positions: PositionRef[];
+  candidatePhases: Array<WorkflowPhaseRef & { workflowName: string }>;
 };
 
 /** A collaborator's emergency contact, for quick access in Equipo (#451). */
@@ -82,12 +79,9 @@ export type StaffAccess = {
   lastLoginAt: string | null;
 };
 
-/** @deprecated Áreas are replaced by puestos (ADR 0003). */
-export type StaffAreaRef = { id: string; name: string; role: string | null };
-
 export type StaffDetail = Staff & {
   profile: StaffProfile | null;
-  areas: StaffAreaRef[];
+  positions: PositionRef[];
   access: StaffAccess | null;
 };
 
@@ -101,36 +95,6 @@ export type StaffInput = {
   capacity?: number;
   availability?: string | null;
   active?: boolean;
-};
-
-/** @deprecated Áreas are replaced by puestos (ADR 0003). */
-export type Area = {
-  id: string;
-  name: string;
-  description: string | null;
-  leadId: string | null;
-  active: boolean;
-  sortOrder: number;
-  /** Chart token slot 1–5 (see lib/areas/area-color.ts); null = neutral. */
-  colorSlot: number | null;
-};
-
-/** @deprecated Áreas are replaced by puestos (ADR 0003). */
-export type AreaDetail = Area & {
-  lead: { id: string; name: string } | null;
-  members: Array<{ staffId: string; name: string; role: string | null; active: boolean }>;
-  workflows: Array<{ id: string; key: string; name: string }>;
-};
-
-/** @deprecated Áreas are replaced by puestos (ADR 0003). */
-export type AreaInput = {
-  name: string;
-  description?: string | null;
-  leadId?: string | null;
-  active?: boolean;
-  sortOrder?: number;
-  /** Omitted on create = the área's default slot; null = neutral. */
-  colorSlot?: number | null;
 };
 
 // ── Puestos (project flow, FE §7.1) ─────────────────────────────────────────
@@ -260,8 +224,6 @@ export type WorkflowTaskTemplate = {
    */
   phaseId: string;
   phaseName: string;
-  /** @deprecated Free-text fase; removed when the UI switches to `phaseId` (Phase 2). */
-  phase: string | null;
   title: string;
   notes: string | null;
   defaultPriority: TaskPriority;
@@ -277,8 +239,6 @@ export type WorkflowDetail = Workflow & {
   phases: WorkflowPhase[];
   templates: WorkflowTaskTemplate[];
   readiness: TramoReadiness;
-  /** @deprecated Áreas are removed (ADR 0003); always read from area_workflows, empty on dev. */
-  areas: Array<{ id: string; name: string }>;
 };
 
 export type WorkflowInput = {
@@ -290,13 +250,8 @@ export type WorkflowInput = {
 };
 
 export type WorkflowTaskTemplateInput = {
-  /**
-   * Required once the UI sends it (Phase 2, FE §7.1). Until then the backend
-   * falls back to the `phase` text by nameKey, else the tramo's first fase.
-   */
-  phaseId?: string;
-  /** @deprecated Free-text fase; removed in Phase 2. */
-  phase?: string | null;
+  /** Required: a fase of the template's tramo (else PHASE_MISMATCH). */
+  phaseId: string;
   title: string;
   notes?: string | null;
   defaultPriority?: TaskPriority;
@@ -320,10 +275,6 @@ export type Project = {
   originStaffId: string | null;
   status: ProjectStatus;
   currentWorkflowId: string | null;
-  /** @deprecated Removed in Phase 2; fases derive from tasks. */
-  phase: string | null;
-  /** @deprecated Several phases can be active at once (#435). Removed in Phase 2. */
-  phases: string[];
   projectType: string | null;
   addressStreet: string | null;
   addressCity: string | null;
@@ -364,8 +315,6 @@ export type ProjectListItem = Project & {
   manager: StaffRef | null;
   coordinator: StaffRef | null;
   taskCounts: { total: number; open: number; blocked: number };
-  /** @deprecated Área that owns the primary stage (`currentWorkflowId`); null when none. */
-  area: { id: string; name: string; colorSlot: number | null } | null;
 };
 
 /** Same audiences as task links: for the internal team or for the client. */
@@ -410,11 +359,6 @@ export type ProjectInput = {
   /** Admin only. */
   originStaffId?: string | null;
   status?: ProjectStatus;
-  currentWorkflowId: string | null;
-  /** @deprecated Removed in Phase 2. */
-  phase?: string | null;
-  /** @deprecated Removed in Phase 2. */
-  phases?: string[];
   projectType?: string | null;
   addressStreet?: string | null;
   addressCity?: string | null;
@@ -427,21 +371,12 @@ export type ProjectInput = {
   contractAmountMxn?: string | null;
 };
 
-/** @deprecated Removed with applyWorkflow (Phase 2); startTramo replaces it. */
-export type ApplyWorkflowPreview = {
-  workflow: WorkflowRef;
-  create: WorkflowTaskTemplate[];
-  skip: WorkflowTaskTemplate[];
-};
-
 export type Task = {
   id: string;
   projectId: string;
   kind: TaskKind;
   templateId: string | null;
   workflowId: string | null;
-  /** @deprecated Free-text fase; `phaseId` replaces it (removed in Phase 2, #706). */
-  phase: string | null;
   /** A fase of the task's tramo; null = "Sin fase · revisar". */
   phaseId: string | null;
   /** An espacio of the task's project. */
@@ -491,15 +426,9 @@ export type TaskListItem = Task & {
   /** `clientName` is null when the project has no client, or the viewer isn't admin. */
   project: { id: string; name: string; clientName: string | null };
   workflow: WorkflowRef | null;
-  /**
-   * The task's fase (FE §7.1 `phase`). Named `phaseRef` while the deprecated
-   * `phase` string is still on `Task`; #706 removes that string and renames
-   * this to `phase: WorkflowPhaseRef | null`.
-   */
-  phaseRef: WorkflowPhaseRef | null;
+  /** The task's fase (FE §7.1); null = "Sin fase · revisar". */
+  phase: WorkflowPhaseRef | null;
   space: ProjectSpaceRef | null;
-  /** @deprecated Color slot of the área that owns the task's workflow; null = neutral. */
-  areaColorSlot: number | null;
   manager: StaffRef | null;
   support: StaffRef[];
   checklist: { total: number; completed: number };
@@ -576,10 +505,8 @@ export type UserTaskInput = {
   projectId: string;
   title: string;
   notes?: string | null;
-  /** Required for usuario tasks from Phase 2 (#706). */
-  workflowId?: string | null;
-  /** @deprecated Free-text fase; removed in Phase 2 (#706). */
-  phase?: string | null;
+  /** The task's tramo. Required: null (or an unknown tramo) → INVALID. */
+  workflowId: string | null;
   /** Must belong to `workflowId` (PHASE_MISMATCH). */
   phaseId?: string | null;
   /** Must belong to `projectId` (SPACE_MISMATCH). */
@@ -593,17 +520,16 @@ export type UserTaskInput = {
 };
 
 /** Input for a child task: project, fase and tramo come from the parent; `spaceId` allowed. */
-export type SubtaskInput = Omit<UserTaskInput, "projectId" | "phase" | "phaseId" | "workflowId">;
+export type SubtaskInput = Omit<UserTaskInput, "projectId" | "phaseId" | "workflowId">;
 
 /** "+ Tarea de administración": no tramo, fase or espacio; administrator assignees only. */
-export type AdminTaskInput = Omit<UserTaskInput, "workflowId" | "phase" | "phaseId" | "spaceId">;
+export type AdminTaskInput = Omit<UserTaskInput, "workflowId" | "phaseId" | "spaceId">;
 
 export type TaskPatch = Partial<
   Pick<
     Task,
     | "title"
     | "notes"
-    | "phase"
     | "phaseId"
     | "spaceId"
     | "priority"
@@ -614,7 +540,7 @@ export type TaskPatch = Partial<
     | "deliveryDate"
     | "workflowId"
   >
->; // `phase` is deprecated (removed in #706); `workflowId` only when the task has none (else INVALID)
+>; // `workflowId` only when the task has none and isn't an admin task (else INVALID)
 
 export type TaskFilters = {
   projectId?: string;
@@ -704,7 +630,11 @@ export type StartTramoResult = {
   workflow: WorkflowRef;
 };
 
-/** Who is reading: passed from actions to repositories and DTO builders (BE §6). */
+/**
+ * Who is reading: passed from actions to repositories and DTO builders (BE §6).
+ * `staffId` is the session staff id; `isAdmin` is `canSeeAdminData(user)`
+ * (lib/auth/permissions.ts), which gates admin tasks, client and origin data.
+ */
 export type ViewerScope = { staffId: string; isAdmin: boolean };
 
 // ── Shared ──────────────────────────────────────────────────────────────────

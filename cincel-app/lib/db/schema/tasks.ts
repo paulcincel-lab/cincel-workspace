@@ -61,8 +61,6 @@ export const tasks = core.table(
     // `restrict`, not `set null`: nulling it would violate tasks_kind_check on
     // workflow tasks. Workflows are soft-deleted anyway.
     workflowId: uuid("workflow_id").references(() => workflows.id, { onDelete: "restrict" }),
-    /** @deprecated Free-text fase; replaced by `phaseId`. Dropped in release B (0025). */
-    phase: text("phase"),
     /** Fase of the task's tramo (`tasks_phase_fk`); null = "Sin fase · revisar". */
     phaseId: uuid("phase_id"),
     /** Optional espacio of the task's project (`tasks_space_fk`). */

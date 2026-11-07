@@ -4,7 +4,7 @@ import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { authCredentials, sessions, staff } from "@/lib/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { primaryAreaName } from "@/lib/repositories/staff-repository";
+import { primaryPositionName } from "@/lib/repositories/staff-repository";
 
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
@@ -123,7 +123,7 @@ export async function findSessionByToken(token: string): Promise<SessionRecord |
       name: row.name,
       email: row.email,
       role: row.role,
-      area: await primaryAreaName(row.staffId),
+      area: await primaryPositionName(row.staffId),
       active: row.active,
       mustChangePassword: row.mustChangePassword ?? false,
       googleLinked: row.googleSub !== null,

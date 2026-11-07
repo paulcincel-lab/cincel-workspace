@@ -18,6 +18,9 @@ const m = vi.hoisted(() => ({
 
 vi.mock("@/lib/google/staff-token", () => ({ getStaffAccessToken: m.getStaffAccessToken }));
 vi.mock("@/lib/repositories/tasks-repository", () => ({ listMyTasks: m.listMyTasks }));
+vi.mock("@/lib/repositories/viewer-scope-repository", () => ({
+  staffViewerScope: vi.fn(async (staffId: string) => ({ staffId, isAdmin: false })),
+}));
 vi.mock("@/lib/calendar/calendar-service", () => ({ buildCalendarEvents: m.buildCalendarEvents }));
 vi.mock("@/lib/repositories/google-calendar-sync-repository", () => ({
   getCalendarSync: m.getCalendarSync,
@@ -46,7 +49,7 @@ import type { CalendarEvent } from "@/lib/types/calendar";
 
 const BASE = "https://app";
 const ev = (id: string, title = "T") =>
-  ({ id, taskId: id, date: "2026-12-01", time: "09:00", title, project: "P", responsible: "R", stage: "s", stageLabel: "S", phase: "", type: "Compromiso", href: "/x" }) as CalendarEvent;
+  ({ id, taskId: id, date: "2026-12-01", time: "09:00", title, project: "P", responsible: "R", tramo: "s", tramoLabel: "S", phaseId: null, phaseLabel: "", type: "Compromiso", href: "/x" }) as CalendarEvent;
 
 beforeEach(() => {
   Object.values(m).forEach((fn) => fn.mockReset());

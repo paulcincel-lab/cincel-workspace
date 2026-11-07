@@ -9,16 +9,21 @@
  * blocking issue is left.
  *
  *   Blocking  MAPPING_INVALID, CLIENT_UNRESOLVED, CONTACT_NAME_TAKEN,
- *             PROJECT_NAME_TAKEN, PROJECT_CODE_TAKEN, STATUS_UNMAPPED,
- *             TEMPLATE_COLLISION, TEMPLATE_INVALID, PROVIDER_SUBTYPE_MISSING,
- *             SCHEDULE_EXISTS, DRIVE_NOT_CONFIGURED (only with files on),
- *             AREA_NAME_TAKEN (an área to create exists already, #686).
+ *             PROJECT_NAME_TAKEN (a new project named like a live active or
+ *             paused project, or like another planned one), PROJECT_CODE_TAKEN,
+ *             STATUS_UNMAPPED, TEMPLATE_COLLISION, TEMPLATE_INVALID,
+ *             PROVIDER_SUBTYPE_MISSING, SCHEDULE_EXISTS, DRIVE_NOT_CONFIGURED
+ *             (only with files on), TRAMO_MISSING (groups or items that
+ *             resolve no tramo).
  *   Warnings  PERSON_UNMATCHED, RELATION_MISSING, DATES_MISSING, FILE_MISSING,
- *             STATUS_DEFAULTED (a status label init drafted as pendiente).
+ *             STATUS_DEFAULTED (a status label with no saved or default
+ *             target), PHASE_UNRESOLVED, CLIENT_MISSING,
+ *             ADMIN_ASSIGNEE_CLEARED (project flow BE §10.4).
  *
  * Rows already in `core.import_refs` (files: already in `core.import_files`)
  * are skipped: `apply` doesn't create them again, so they are counted apart
- * and left out of the checks.
+ * and left out of the checks. Issues about them are dropped too (brief §4.9),
+ * so re-planning an export only reports what is new.
  */
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -26,9 +31,9 @@ import { join, resolve } from "node:path";
 
 import { and, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 
+import { isStaffAdministrator } from "../../lib/auth/access-role";
 import {
-  areas,
-  areaWorkflows,
+  appSettings,
   contacts,
   importFiles,
   importRefs,
@@ -38,10 +43,14 @@ import {
   staff,
   tasks,
   taskStatuses,
+  workflowPhases,
   workflows,
   workflowTaskTemplates,
 } from "../../lib/db/schema";
 import type { DriveAdmin } from "../../lib/google/drive-admin";
+import { parseStoredStatusMap } from "../../lib/monday-import/status-map";
+import { MONDAY_STATUS_MAP_SETTING } from "../../lib/project-flow/catalog";
+import { nameKey } from "../../lib/project-flow/names";
 import {
   findImportRefs,
   type ImportDb,
@@ -57,7 +66,11 @@ import {
   readNdjson,
   type ContactType,
 } from "./init";
-import { Mapping, type BoardMapping } from "./mapping.schema";
+import {
+  Mapping,
+  MondayStatusMap,
+  type BoardMapping,
+} from "./mapping.schema";
 import { openServiceAccountDrive } from "./rollback";
 import type { CliIo, CommandHandler } from "./run";
 import {
@@ -94,7 +107,7 @@ export const BLOCKING_CODES = [
   "PROVIDER_SUBTYPE_MISSING",
   "SCHEDULE_EXISTS",
   "DRIVE_NOT_CONFIGURED",
-  "AREA_NAME_TAKEN",
+  "TRAMO_MISSING",
 ] as const;
 
 export const WARNING_CODES = [
@@ -103,7 +116,9 @@ export const WARNING_CODES = [
   "DATES_MISSING",
   "FILE_MISSING",
   "STATUS_DEFAULTED",
-  "AREA_UNMAPPED",
+  "PHASE_UNRESOLVED",
+  "CLIENT_MISSING",
+  "ADMIN_ASSIGNEE_CLEARED",
 ] as const;
 
 export type PlanIssueCode =
@@ -111,6 +126,8 @@ export type PlanIssueCode =
 
 export interface PlanIssue {
   code: PlanIssueCode;
+  /** What the report and the wizard group the issue under: its code (BE §10.4). */
+  group: PlanIssueCode;
   blocking: boolean;
   boardId?: string;
   itemId?: string;
@@ -125,7 +142,12 @@ function makeIssue(
   boardId?: string,
   itemId?: string,
 ): PlanIssue {
-  const out: PlanIssue = { code, blocking: BLOCKING.has(code), message };
+  const out: PlanIssue = {
+    code,
+    group: code,
+    blocking: BLOCKING.has(code),
+    message,
+  };
   if (boardId) out.boardId = boardId;
   if (itemId) out.itemId = itemId;
   return out;
@@ -224,100 +246,122 @@ export interface PlanLookups {
     type: ContactType,
     lowerNames: string[],
   ): Promise<Set<string>>;
-  /** `${clientId}|${lower(name)}` of live projects among the pairs. */
-  projectNamesTaken(
-    pairs: { clientId: string; lowerName: string }[],
-  ): Promise<Set<string>>;
+  /**
+   * lower(name) of live active or paused projects among `lowerNames`: the
+   * names `projects_name_lower_uq` (firm-wide) keeps unique.
+   */
+  projectNamesTaken(lowerNames: string[]): Promise<Set<string>>;
   /** Codes used by live projects among `codes`. */
   projectCodesTaken(codes: string[]): Promise<Set<string>>;
   /** Live workflow ids among `ids`. */
   workflowIds(ids: string[]): Promise<Set<string>>;
-  /** Live area id → its live workflow ids, for the areas among `ids`. */
-  areaWorkflowIds(ids: string[]): Promise<Map<string, string[]>>;
   /** `${projectId}|${templateId}` of live tasks among the pairs. */
   projectTemplatesTaken(
     pairs: { projectId: string; templateId: string }[],
   ): Promise<Set<string>>;
   /** Projects among `projectIds` with a `project_schedules` row this import didn't create. */
   foreignSchedules(projectIds: string[]): Promise<Set<string>>;
-  /** lower(name) of live áreas among `lowerNames` (#686); absent in fakes that create no áreas. */
-  areaNamesTaken?(lowerNames: string[]): Promise<Set<string>>;
 }
 
 const pairKey = (a: string, b: string) => `${a}|${b}`;
 
-/** Área names and active template titles for tasks mapped to their own área and workflow (#686). */
-async function taskAreaLookups(
-  db: ImportDb,
-): Promise<Pick<CincelLookups, "areas" | "templateTitles">> {
-  const [areaRows, titleRows] = await Promise.all([
-    db.select({ id: areas.id, name: areas.name }).from(areas).where(isNull(areas.deletedAt)),
-    db
-      .select({ id: workflowTaskTemplates.id, title: workflowTaskTemplates.title })
-      .from(workflowTaskTemplates)
-      .where(eq(workflowTaskTemplates.active, true)),
-  ]);
-  return {
-    areas: Object.fromEntries(areaRows.map((r) => [r.id, { name: r.name }])),
-    templateTitles: Object.fromEntries(titleRows.map((r) => [r.id, r.title])),
-  };
+/** The saved firm-wide status map (app_settings `monday.status_map`); empty when unset or unreadable. */
+export async function savedStatusMap(db: ImportDb): Promise<MondayStatusMap> {
+  const [row] = await db
+    .select({ value: appSettings.value })
+    .from(appSettings)
+    .where(eq(appSettings.key, MONDAY_STATUS_MAP_SETTING))
+    .limit(1);
+  return parseStoredStatusMap(row?.value ?? null);
 }
 
 /** `PlanLookups` over the Cincel DB. */
 export function createPlanDbLookups(db: ImportDb): PlanLookups {
   return {
     async translateLookups() {
-      const [statusRows, templateRows, staffRows, workflowRows] = await Promise.all([
-        db
-          .select({
-            id: taskStatuses.id,
-            name: taskStatuses.name,
-            closes: taskStatuses.closes,
-          })
-          .from(taskStatuses)
-          .where(isNull(taskStatuses.deletedAt)),
-        db
-          .select({
-            id: workflowTaskTemplates.id,
-            workflowId: workflowTaskTemplates.workflowId,
-            phase: workflowTaskTemplates.phase,
-            active: workflowTaskTemplates.active,
-          })
-          .from(workflowTaskTemplates),
-        db
-          .select({ id: staff.id, name: staff.name })
-          .from(staff)
-          .where(isNull(staff.deletedAt)),
-        db
-          .select({ id: workflows.id, name: workflows.name })
-          .from(workflows)
-          .where(isNull(workflows.deletedAt)),
-      ]);
+      const [statusRows, templateRows, phaseRows, staffRows, workflowRows, statusMap] =
+        await Promise.all([
+          db
+            .select({
+              id: taskStatuses.id,
+              name: taskStatuses.name,
+              closes: taskStatuses.closes,
+            })
+            .from(taskStatuses)
+            .where(isNull(taskStatuses.deletedAt)),
+          db
+            .select({
+              id: workflowTaskTemplates.id,
+              workflowId: workflowTaskTemplates.workflowId,
+              phaseId: workflowTaskTemplates.phaseId,
+              title: workflowTaskTemplates.title,
+              active: workflowTaskTemplates.active,
+            })
+            .from(workflowTaskTemplates),
+          db
+            .select({
+              id: workflowPhases.id,
+              workflowId: workflowPhases.workflowId,
+              name: workflowPhases.name,
+              key: workflowPhases.key,
+              sortOrder: workflowPhases.sortOrder,
+              active: workflowPhases.active,
+            })
+            .from(workflowPhases),
+          db
+            .select({
+              id: staff.id,
+              name: staff.name,
+              role: staff.role,
+              email: staff.email,
+            })
+            .from(staff)
+            .where(isNull(staff.deletedAt)),
+          db
+            .select({
+              id: workflows.id,
+              name: workflows.name,
+              sortOrder: workflows.sortOrder,
+            })
+            .from(workflows)
+            .where(isNull(workflows.deletedAt)),
+          savedStatusMap(db),
+        ]);
+      const activeTemplates = templateRows.filter((r) => r.active);
       return {
         customStatuses: Object.fromEntries(
           statusRows.map((r) => [r.id, { name: r.name, closes: r.closes }]),
         ),
+        // The seeded custom statuses ("Cancelado", "En espera") by name, for the default status table.
+        statuses: Object.fromEntries(statusRows.map((r) => [nameKey(r.name), r.id])),
+        // Only active templates are matched, as the wizard lists them.
         templates: Object.fromEntries(
-          // Only active templates name the workflow's phases, as the wizard lists them (#687).
-          templateRows.map((r) => [r.id, { workflowId: r.workflowId, phase: r.active ? r.phase : null }]),
+          activeTemplates.map((r) => [r.id, { workflowId: r.workflowId, phaseId: r.phaseId }]),
+        ),
+        templateTitles: Object.fromEntries(activeTemplates.map((r) => [r.id, r.title])),
+        phases: Object.fromEntries(
+          phaseRows.map((r) => [
+            r.id,
+            {
+              workflowId: r.workflowId,
+              name: r.name,
+              key: r.key,
+              sortOrder: r.sortOrder,
+              active: r.active,
+            },
+          ]),
         ),
         staff: Object.fromEntries(
-          staffRows.map((r) => [r.id, { name: r.name }]),
+          staffRows.map((r) => [
+            r.id,
+            { name: r.name, admin: isStaffAdministrator(r.role, r.email) },
+          ]),
         ),
         workflows: Object.fromEntries(
-          workflowRows.map((r) => [r.id, { name: r.name }]),
+          workflowRows.map((r) => [r.id, { name: r.name, sortOrder: r.sortOrder }]),
         ),
-        ...(await taskAreaLookups(db)),
+        statusMap,
       };
-    },
-    async areaNamesTaken(lowerNames) {
-      if (lowerNames.length === 0) return new Set();
-      const lower = sql<string>`lower(${areas.name})`;
-      const found = await db
-        .selectDistinct({ name: lower })
-        .from(areas)
-        .where(and(isNull(areas.deletedAt), inArray(lower, [...new Set(lowerNames)])));
-      return new Set(found.map((r) => r.name));
     },
     async importedRefs(entity, externalIds) {
       if (externalIds.length === 0) return new Map();
@@ -360,22 +404,20 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
         );
       return new Set(found.map((r) => r.name));
     },
-    async projectNamesTaken(pairs) {
-      if (pairs.length === 0) return new Set();
+    async projectNamesTaken(lowerNames) {
+      if (lowerNames.length === 0) return new Set();
       const lower = sql<string>`lower(${projects.name})`;
       const found = await db
-        .select({ clientId: projects.clientId, name: lower })
+        .selectDistinct({ name: lower })
         .from(projects)
         .where(
           and(
             isNull(projects.deletedAt),
-            inArray(projects.clientId, [
-              ...new Set(pairs.map((p) => p.clientId)),
-            ]),
-            inArray(lower, [...new Set(pairs.map((p) => p.lowerName))]),
+            inArray(projects.status, ["activo", "pausado"]),
+            inArray(lower, [...new Set(lowerNames)]),
           ),
         );
-      return new Set(found.map((r) => pairKey(r.clientId ?? "", r.name)));
+      return new Set(found.map((r) => r.name));
     },
     async projectCodesTaken(codes) {
       if (codes.length === 0) return new Set();
@@ -404,31 +446,6 @@ export function createPlanDbLookups(db: ImportDb): PlanLookups {
           ),
         );
       return new Set(found.map((r) => r.id));
-    },
-    async areaWorkflowIds(ids) {
-      if (ids.length === 0) return new Map();
-      const unique = [...new Set(ids)];
-      const live = await db
-        .select({ id: areas.id })
-        .from(areas)
-        .where(and(inArray(areas.id, unique), isNull(areas.deletedAt)));
-      const out = new Map<string, string[]>(live.map((r) => [r.id, []]));
-      if (out.size === 0) return out;
-      const links = await db
-        .select({
-          areaId: areaWorkflows.areaId,
-          workflowId: areaWorkflows.workflowId,
-        })
-        .from(areaWorkflows)
-        .innerJoin(workflows, eq(workflows.id, areaWorkflows.workflowId))
-        .where(
-          and(
-            inArray(areaWorkflows.areaId, [...out.keys()]),
-            isNull(workflows.deletedAt),
-          ),
-        );
-      for (const l of links) out.get(l.areaId)?.push(l.workflowId);
-      return out;
     },
     async projectTemplatesTaken(pairs) {
       if (pairs.length === 0) return new Set();
@@ -534,50 +551,21 @@ const PROJECT_STRATEGIES = new Set<BoardMapping["strategy"]>([
   "item_as_project",
 ]);
 
-/** [groupId, workflowId] of the board's groups mapped to a workflow stage (#687). */
-function stageWorkflowIds(bm: BoardMapping): [string, string][] {
+/** [groupId, workflowId] of the board's groups mapped to a tramo. */
+function tramoTargetIds(bm: BoardMapping): [string, string][] {
   return Object.entries(bm.groupTargets).flatMap(([groupId, t]) =>
-    t.kind === "stage" ? [[groupId, t.workflowId] as [string, string]] : [],
+    t.kind === "tramo" ? [[groupId, t.workflowId] as [string, string]] : [],
   );
 }
 
-/** The workflows the board's task área values map to (#686). */
-function taskAreaWorkflowIds(bm: BoardMapping): string[] {
-  if (bm.taskAreaSource.kind === "board") return [];
-  return Object.values(bm.taskAreas).flatMap((t) => (t.action !== "ignore" && t.workflowId ? [t.workflowId] : []));
-}
-
-/**
- * MAPPING_INVALID for task área targets (#686): an área or workflow that doesn't exist, or a workflow that isn't
- * one of the área's (when it has any), which the wizard never offers.
- */
-async function taskAreaIssues(
-  boards: readonly BoardMapping[],
-  lookups: PlanLookups,
-): Promise<PlanIssue[]> {
-  const mapped = boards.filter((b) => PROJECT_STRATEGIES.has(b.strategy) && b.taskAreaSource.kind !== "board");
-  const targets = mapped.flatMap((b) => Object.entries(b.taskAreas).map(([key, t]) => ({ b, key, t })));
-  const areaIds = targets.flatMap(({ t }) => (t.action === "area" ? [t.areaId] : []));
-  const workflowIds = targets.flatMap(({ t }) => (t.action !== "ignore" && t.workflowId ? [t.workflowId] : []));
-  if (areaIds.length === 0 && workflowIds.length === 0) return [];
-  const [flows, live] = await Promise.all([lookups.areaWorkflowIds(areaIds), lookups.workflowIds(workflowIds)]);
-  const out: PlanIssue[] = [];
-  for (const { b, key, t } of targets) {
-    if (t.action === "ignore") continue;
-    const where = `taskAreas.${key}`;
-    if (t.workflowId && !live.has(t.workflowId))
-      out.push(makeIssue("MAPPING_INVALID", `${where}: workflow ${t.workflowId} does not exist`, b.mondayBoardId));
-    if (t.action !== "area") continue;
-    const areaFlows = flows.get(t.areaId);
-    if (!areaFlows)
-      out.push(makeIssue("MAPPING_INVALID", `${where}: area ${t.areaId} does not exist`, b.mondayBoardId));
-    else if (t.workflowId && areaFlows.length > 0 && !areaFlows.includes(t.workflowId))
-      out.push(
-        makeIssue("MAPPING_INVALID", `${where}: workflow ${t.workflowId} is not a workflow of area ${t.areaId}`, b.mondayBoardId),
-      );
-  }
-  return out;
-}
+/** Board-level issue codes about its projects; dropped once they are all imported (brief §4.9). */
+const PROJECT_LEVEL_CODES = new Set<PlanIssueCode>([
+  "CLIENT_MISSING",
+  "CLIENT_UNRESOLVED",
+  "DATES_MISSING",
+]);
+/** Board-level issue codes about its tasks; dropped once its projects and tasks are all imported. */
+const TASK_LEVEL_CODES = new Set<PlanIssueCode>(["STATUS_DEFAULTED"]);
 
 /** MAPPING_INVALID for each Zod issue, with its path and the board it is under. */
 function zodIssues(
@@ -636,6 +624,53 @@ export async function buildPlan(
   const active = mapping.boards.filter((b) => b.strategy !== "skip");
   const translateLookups = await lookups.translateLookups();
 
+  // --- translate and already imported --------------------------------------
+  // Before any check, so issues about rows apply won't touch are dropped (brief §4.9).
+  const result = translate(data, mapping, translateLookups, {
+    importedById: options.importedById ?? PLAN_IMPORTER_ID,
+  });
+  const imported = await importedSets(result, lookups);
+  const isNew = (entity: ImportEntity, externalId: string) =>
+    !imported.refs.get(entity)?.has(externalId);
+  /** The Cincel id a row ref points at, when it exists already (null: created by this apply). */
+  const rowIdOf = (ref: RowRef): string | null =>
+    ref.kind === "existing"
+      ? ref.id
+      : (imported.refs.get(ref.entity)?.get(ref.externalId) ?? null);
+
+  const existingItems = alreadyImportedItems(result, isNew);
+  /** boardId → whether every project (and every task) planned from it exists already. */
+  const projectsImported = new Map<string, boolean>();
+  const tasksImported = new Map<string, boolean>();
+  for (const p of result.projects) {
+    const prev = projectsImported.get(p.source.boardId) ?? true;
+    projectsImported.set(p.source.boardId, prev && !isNew("project", p.externalId));
+  }
+  for (const t of result.tasks) {
+    const prev = tasksImported.get(t.source.boardId) ?? true;
+    tasksImported.set(t.source.boardId, prev && !isNew("task", t.externalId));
+  }
+  /**
+   * Whether an issue is about rows the import created already: an imported
+   * task, checklist parent, project or contact item, or a board-level issue
+   * of a board whose projects (and, for task issues, tasks) are all imported.
+   */
+  const aboutImported = (
+    code: PlanIssueCode,
+    boardId?: string,
+    itemId?: string,
+  ): boolean => {
+    if (itemId) return existingItems.has(itemId);
+    if (boardId == null || projectsImported.get(boardId) !== true) return false;
+    if (PROJECT_LEVEL_CODES.has(code)) return true;
+    return TASK_LEVEL_CODES.has(code) && tasksImported.get(boardId) !== false;
+  };
+
+  for (const i of result.issues) {
+    if (aboutImported(i.code, i.boardId, i.itemId)) continue;
+    add(i.code, i.message, i.boardId, i.itemId);
+  }
+
   // --- references in the mapping (FKs apply would hit) ----------------------
   const clientIds = active
     .filter((b) => PROJECT_STRATEGIES.has(b.strategy))
@@ -644,16 +679,13 @@ export async function buildPlan(
   const matchIds = active
     .filter((b) => b.strategy === "crm_contacts")
     .flatMap((b) => Object.values(b.contactMatches));
-  const [contactTypes, liveWorkflows, areaWorkflowMap] = await Promise.all([
+  const [contactTypes, liveWorkflows] = await Promise.all([
     lookups.contactTypes([...clientIds, ...matchIds]),
     lookups.workflowIds(
       active.flatMap((b) => [
         ...(b.workflowId ? [b.workflowId] : []),
-        ...stageWorkflowIds(b).map(([, id]) => id),
+        ...tramoTargetIds(b).map(([, id]) => id),
       ]),
-    ),
-    lookups.areaWorkflowIds(
-      active.flatMap((b) => (b.areaId ? [b.areaId] : [])),
     ),
   ]);
   const providerSubtypes = new Set<string>(providerSubtype.enumValues);
@@ -662,13 +694,16 @@ export async function buildPlan(
     const boardId = bm.mondayBoardId;
     if (PROJECT_STRATEGIES.has(bm.strategy)) {
       const refs = [
-        ["client", bm.client] as const,
+        ["client", bm.client, null] as const,
         ...Object.entries(bm.groupClients ?? {}).map(
-          ([g, c]) => [`groupClients.${g}`, c] as const,
+          ([g, c]) => [`groupClients.${g}`, c, `${boardId}:${g}`] as const,
         ),
       ];
-      for (const [where, ref] of refs) {
+      for (const [where, ref, projectId] of refs) {
         if (ref?.kind !== "contact") continue;
+        // apply leaves an imported project's client as it is.
+        if (projectId ? !isNew("project", projectId) : aboutImported("CLIENT_UNRESOLVED", boardId))
+          continue;
         const type = contactTypes.get(ref.contactId);
         if (type !== "cliente") {
           add(
@@ -712,7 +747,7 @@ export async function buildPlan(
         boardId,
       );
     }
-    for (const [groupId, workflowId] of stageWorkflowIds(bm)) {
+    for (const [groupId, workflowId] of tramoTargetIds(bm)) {
       if (!liveWorkflows.has(workflowId)) {
         add(
           "MAPPING_INVALID",
@@ -721,61 +756,7 @@ export async function buildPlan(
         );
       }
     }
-    if (bm.areaId && !areaWorkflowMap.has(bm.areaId)) {
-      add(
-        "MAPPING_INVALID",
-        `areaId: area ${bm.areaId} does not exist`,
-        boardId,
-      );
-    }
-    if (PROJECT_STRATEGIES.has(bm.strategy)) {
-      const areaFlows = bm.areaId ? areaWorkflowMap.get(bm.areaId) : undefined;
-      const taskFlows = taskAreaWorkflowIds(bm);
-      for (const [itemId, templateId] of Object.entries(bm.templateMatches)) {
-        const template = translateLookups.templates[templateId];
-        if (!template) continue; // translate reports it for the item
-        // A template of a workflow a task value maps to is checked with that value (#686).
-        if (taskFlows.includes(template.workflowId)) continue;
-        if (!bm.areaId) {
-          add(
-            "TEMPLATE_INVALID",
-            `Template ${templateId} can't be checked: the board has no areaId`,
-            boardId,
-            itemId,
-          );
-        } else if (areaFlows && !areaFlows.includes(template.workflowId)) {
-          add(
-            "TEMPLATE_INVALID",
-            `Template ${templateId} is not in a workflow of area ${bm.areaId}`,
-            boardId,
-            itemId,
-          );
-        }
-      }
-    }
   }
-
-  issues.push(...(await taskAreaIssues(active, lookups)));
-
-  // --- translate ----------------------------------------------------------
-  const result = translate(data, mapping, translateLookups, {
-    importedById: options.importedById ?? PLAN_IMPORTER_ID,
-  });
-  for (const i of result.issues) add(i.code, i.message, i.boardId, i.itemId);
-
-  // --- already imported ---------------------------------------------------
-  const imported = await importedSets(result, lookups);
-  const isNew = (entity: ImportEntity, externalId: string) =>
-    !imported.refs.get(entity)?.has(externalId);
-  /** The Cincel id a row ref points at, when it exists already (null: created by this apply). */
-  const rowIdOf = (ref: RowRef): string | null =>
-    ref.kind === "existing"
-      ? ref.id
-      : (imported.refs.get(ref.entity)?.get(ref.externalId) ?? null);
-  const refKey = (ref: RowRef) =>
-    ref.kind === "existing"
-      ? ref.id
-      : (rowIdOf(ref) ?? `planned:${ref.entity}:${ref.externalId}`);
 
   const newContacts = result.contacts.filter((c) =>
     isNew("contact", c.externalId),
@@ -797,6 +778,23 @@ export async function buildPlan(
   for (const p of result.projects) {
     if (p.client?.kind === "planned" && !contactBoard.has(p.client.externalId))
       contactBoard.set(p.client.externalId, p.source.boardId);
+  }
+
+  // --- TRAMO_MISSING --------------------------------------------------------
+  // New tasks outside the admin group that neither their group nor the board place in a tramo.
+  const unplaced = newTasks.filter((t) => t.kind !== "admin" && t.workflowId == null);
+  for (const group of groupBy(unplaced, (t) =>
+    pairKey(t.source.boardId, t.source.groupId ?? ""),
+  ).values()) {
+    const t = group[0];
+    const where = t.source.groupTitle
+      ? `group "${t.source.groupTitle}"`
+      : "the board";
+    add(
+      "TRAMO_MISSING",
+      `${group.length} task${group.length === 1 ? " " : "s "}of ${where} resolve${group.length === 1 ? "s" : ""} no tramo; choose the board's tramo or a tramo for the group`,
+      t.source.boardId,
+    );
   }
 
   // --- CONTACT_NAME_TAKEN ---------------------------------------------------
@@ -838,21 +836,17 @@ export async function buildPlan(
     p.externalId !== p.source.boardId && !p.externalId.includes(":")
       ? p.externalId
       : undefined;
-  const withClient = newProjects.filter((p) => p.client != null);
-  const knownClientPairs = withClient.flatMap((p) => {
-    const clientId = rowIdOf(p.client!);
-    return clientId ? [{ clientId, lowerName: p.name.toLowerCase() }] : [];
-  });
-  const takenNames = await lookups.projectNamesTaken(knownClientPairs);
-  for (const group of groupBy(withClient, (p) =>
-    pairKey(refKey(p.client!), p.name.toLowerCase()),
-  ).values()) {
+  // Names are unique firm-wide among live active or paused projects (projects_name_lower_uq).
+  const openProjects = newProjects.filter((p) => p.status !== "completado");
+  const takenNames = await lookups.projectNamesTaken(
+    openProjects.map((p) => p.name.toLowerCase()),
+  );
+  for (const group of groupBy(openProjects, (p) => p.name.toLowerCase()).values()) {
     const p = group[0];
-    const clientId = rowIdOf(p.client!);
-    if (clientId && takenNames.has(pairKey(clientId, p.name.toLowerCase()))) {
+    if (takenNames.has(p.name.toLowerCase())) {
       add(
         "PROJECT_NAME_TAKEN",
-        `The client already has a project named "${p.name}"; set another name in projectNames`,
+        `An active project named "${p.name}" exists already; set another name in projectNames`,
         p.source.boardId,
         projectItem(p),
       );
@@ -860,7 +854,7 @@ export async function buildPlan(
     if (group.length > 1) {
       add(
         "PROJECT_NAME_TAKEN",
-        `${group.length} new projects of one client are named "${p.name}" (${group.map((g) => g.externalId).join(", ")}); set projectNames`,
+        `${group.length} new projects are named "${p.name}" (${group.map((g) => g.externalId).join(", ")}); set projectNames`,
         p.source.boardId,
         projectItem(p),
       );
@@ -886,24 +880,6 @@ export async function buildPlan(
         projectItem(p),
       );
     }
-  }
-
-  // --- AREA_NAME_TAKEN (#686) ---------------------------------------------
-  const newAreas = result.areas.filter((a) => isNew("area", a.externalId));
-  const takenAreas =
-    newAreas.length > 0 && lookups.areaNamesTaken
-      ? await lookups.areaNamesTaken(newAreas.map((a) => a.name.toLowerCase()))
-      : new Set<string>();
-  for (const a of newAreas) {
-    if (!takenAreas.has(a.name.toLowerCase())) continue;
-    const board = active.find((b) =>
-      Object.values(b.taskAreas).some((t) => t.action === "create_area" && t.name.trim().toLowerCase() === a.name.toLowerCase()),
-    );
-    add(
-      "AREA_NAME_TAKEN",
-      `An área named "${a.name}" exists already; map the value to it instead of creating it`,
-      board?.mondayBoardId,
-    );
   }
 
   // --- TEMPLATE_COLLISION -------------------------------------------------
@@ -1126,6 +1102,30 @@ function groupBy<T>(
   return out;
 }
 
+/**
+ * The monday item ids whose rows exist already: imported tasks, projects and
+ * contacts, and checklist subitems of an imported task. Issues about them are
+ * dropped, since apply doesn't touch those rows (brief §4.9).
+ */
+function alreadyImportedItems(
+  result: TranslateResult,
+  isNew: (entity: ImportEntity, externalId: string) => boolean,
+): Set<string> {
+  const out = new Set<string>();
+  for (const t of result.tasks)
+    if (!isNew("task", t.externalId)) out.add(t.externalId);
+  for (const p of result.projects)
+    if (!isNew("project", p.externalId)) out.add(p.externalId);
+  for (const c of result.contacts)
+    if (!isNew("contact", c.externalId)) out.add(c.externalId);
+  for (const c of result.checklistItems) {
+    const parent = c.task.kind === "planned" ? c.task.externalId : null;
+    if (!isNew("checklist_item", c.externalId) || (parent && out.has(parent)))
+      out.add(c.externalId);
+  }
+  return out;
+}
+
 /** The planned rows `import_refs` (and `import_files`, for files) has already. */
 async function importedSets(
   result: TranslateResult,
@@ -1146,7 +1146,6 @@ async function importedSets(
     ["task_dependency", result.taskDependencies],
     ["history_event", result.historyEvents],
     ["schedule_task", result.scheduleTasks],
-    ["area", result.areas],
   ];
   const refs = new Map<ImportEntity, Map<string, string>>();
   for (const [entity, rows] of byEntity) {
@@ -1218,15 +1217,20 @@ const COLUMNS: [CountKey, string][] = [
 const cell = (text: string) =>
   text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 
-function issueTable(issues: readonly PlanIssue[]): string[] {
-  return [
-    "| Code | Board | Item | Message |",
-    "|---|---|---|---|",
-    ...issues.map(
-      (i) =>
-        `| ${i.code} | ${i.boardId ?? "-"} | ${i.itemId ?? "-"} | ${cell(i.message)} |`,
+/** Issues grouped by `group` (their code), in first-seen order: a heading with the count, then the table. */
+function issueGroups(issues: readonly PlanIssue[]): string[] {
+  if (issues.length === 0) return ["None."];
+  const groups = groupBy(issues, (i) => i.group);
+  return [...groups].flatMap(([group, rows], index) => [
+    ...(index > 0 ? [""] : []),
+    `### ${group} (${rows.length})`,
+    "",
+    "| Board | Item | Message |",
+    "|---|---|---|",
+    ...rows.map(
+      (i) => `| ${i.boardId ?? "-"} | ${i.itemId ?? "-"} | ${cell(i.message)} |`,
     ),
-  ];
+  ]);
 }
 
 /** The plan.md report. */
@@ -1260,11 +1264,11 @@ export function formatPlanMarkdown(
     "",
     "## Blocking issues",
     "",
-    ...(blocking.length === 0 ? ["None."] : issueTable(blocking)),
+    ...issueGroups(blocking),
     "",
     "## Warnings",
     "",
-    ...(warnings.length === 0 ? ["None."] : issueTable(warnings)),
+    ...issueGroups(warnings),
     "",
   ];
   return lines.join("\n");

@@ -1,49 +1,52 @@
 /**
- * The groups table of Equivalencias (#687): what each monday group becomes (a phase of the board's workflow,
- * a new phase, a workflow stage, its own project or nothing) as select values and immutable mapping edits.
- * The default shown is `resolveGroupTarget`, the one translate imports. Pure and client-safe.
+ * The groups table of Equivalencias and of Reacomodar importación: what each monday group becomes (a tramo, a
+ * fase of a tramo, an espacio, its own project, tareas de administración or nothing) as select values and
+ * immutable mapping edits. The default shown is `resolveGroupTarget`, the one translate imports. Pure and
+ * client-safe.
  */
 import {
   GROUP_TARGET_STRATEGIES,
+  activeCatalogPhases,
   groupTargetKinds,
   groupsLookLikeClients,
+  isGroupTargetValid,
   nameKey,
   resolveGroupTarget,
-  workflowPhaseNames,
+  type ResolvedGroupTarget,
 } from "@/scripts/monday/group-targets";
 import type { GroupTarget } from "@/scripts/monday/mapping.schema";
 import type { MondayBoardSource, MondayImportChoices } from "@/lib/types/monday-import";
 import type { BoardDraft } from "@/lib/monday-import/wizard-steps";
 
-export type GroupChoice = { value: string; label: string };
+/** One option of a group's select; `group` is the tramo name the fase options are grouped under. */
+export type GroupChoice = { value: string; label: string; group?: string };
 
 export function hasGroupTargets(board: BoardDraft): boolean {
   return GROUP_TARGET_STRATEGIES.has(board.strategy);
 }
 
-/** The board workflow's phase names, from the active templates. */
-export function boardPhases(board: BoardDraft, choices: MondayImportChoices): string[] {
-  return workflowPhaseNames(choices.templates, board.workflowId);
-}
-
-export function encodeGroupTarget(target: GroupTarget): string {
+/** Select value of a target; the unresolved tramo has none (the select shows its placeholder). */
+export function encodeGroupTarget(target: ResolvedGroupTarget): string {
   switch (target.kind) {
-    case "workflow_phase":
-      return `workflow_phase:${target.phase}`;
-    case "stage":
-      return `stage:${target.workflowId}`;
+    case "tramo":
+      return target.workflowId ? `tramo:${target.workflowId}` : "";
+    case "phase":
+      return `phase:${target.phaseId}`;
     default:
       return target.kind;
   }
 }
 
 export function decodeGroupTarget(value: string): GroupTarget | null {
-  if (value.startsWith("workflow_phase:")) {
-    const phase = value.slice("workflow_phase:".length);
-    return phase.trim() ? { kind: "workflow_phase", phase } : null;
+  if (value.startsWith("tramo:")) {
+    const workflowId = value.slice("tramo:".length).trim();
+    return workflowId ? { kind: "tramo", workflowId } : null;
   }
-  if (value.startsWith("stage:")) return { kind: "stage", workflowId: value.slice("stage:".length) };
-  if (value === "phase" || value === "project" || value === "ignore") return { kind: value };
+  if (value.startsWith("phase:")) {
+    const phaseId = value.slice("phase:".length).trim();
+    return phaseId ? { kind: "phase", phaseId } : null;
+  }
+  if (value === "space" || value === "project" || value === "admin" || value === "ignore") return { kind: value };
   return null;
 }
 
@@ -52,33 +55,37 @@ export function currentGroupTarget(
   board: BoardDraft,
   group: { id: string; title: string },
   choices: MondayImportChoices,
-): GroupTarget {
-  return resolveGroupTarget(board, group, boardPhases(board, choices));
+): ResolvedGroupTarget {
+  return resolveGroupTarget(board, group, choices);
 }
 
-/** The options of one group's select, in the order of the issue: workflow phases and stages first. */
+/**
+ * The options of one group's select (FE §4.6 item 1), in this order: every tramo, every active fase grouped by
+ * tramo, an espacio, its own project (board_as_project only), tareas de administración, and ignore.
+ */
 export function groupTargetChoices(
   board: BoardDraft,
   group: { title: string },
   choices: MondayImportChoices,
 ): GroupChoice[] {
   const kinds = groupTargetKinds(board.strategy);
-  const workflowName = choices.workflows.find((workflow) => workflow.id === board.workflowId)?.name;
   const out: GroupChoice[] = [];
-  if (kinds.includes("workflow_phase")) {
-    for (const phase of boardPhases(board, choices)) {
-      out.push({ value: `workflow_phase:${phase}`, label: `Fase «${phase}» de ${workflowName ?? "el workflow"}` });
-    }
-  }
-  if (kinds.includes("stage")) {
+  if (kinds.includes("tramo")) {
     for (const workflow of choices.workflows) {
-      if (workflow.id === board.workflowId) continue;
-      out.push({ value: `stage:${workflow.id}`, label: `Etapa «${workflow.name}»` });
+      out.push({ value: `tramo:${workflow.id}`, label: `Tramo «${workflow.name}»` });
     }
   }
-  if (kinds.includes("phase")) out.push({ value: "phase", label: `Fase nueva «${group.title}» del proyecto` });
-  if (kinds.includes("project")) out.push({ value: "project", label: `Proyecto propio «${group.title}»` });
-  if (kinds.includes("ignore")) out.push({ value: "ignore", label: "No importar" });
+  if (kinds.includes("phase")) {
+    for (const workflow of choices.workflows) {
+      for (const phase of activeCatalogPhases(workflow)) {
+        out.push({ value: `phase:${phase.id}`, label: `Fase «${phase.name}» · ${workflow.name}`, group: workflow.name });
+      }
+    }
+  }
+  if (kinds.includes("space")) out.push({ value: "space", label: `Espacio «${group.title}»` });
+  if (kinds.includes("project")) out.push({ value: "project", label: `Proyecto aparte «${group.title}»` });
+  if (kinds.includes("admin")) out.push({ value: "admin", label: "Tareas de administración" });
+  if (kinds.includes("ignore")) out.push({ value: "ignore", label: "Ignorar" });
   return out;
 }
 
@@ -101,12 +108,19 @@ export function setGroupTarget(board: BoardDraft, groupId: string, target: Group
   return next;
 }
 
-/** Workflow phases chosen for groups that the new workflow doesn't have go back to the default. */
-export function pruneGroupTargets(board: BoardDraft, choices: MondayImportChoices): BoardDraft {
-  const phases = new Set(boardPhases(board, choices).map((phase) => phase.toLowerCase()));
+/**
+ * Saved targets that no longer apply go back to the default: `phase` targets whose fase is inactive or gone,
+ * `tramo` targets whose tramo is gone, and, when the export is given, targets of groups no longer in it.
+ */
+export function pruneGroupTargets(
+  board: BoardDraft,
+  choices: MondayImportChoices,
+  source?: Pick<MondayBoardSource, "groups">,
+): BoardDraft {
+  const groupIds = source ? new Set(source.groups.map((group) => group.id)) : null;
   const entries = Object.entries(board.groupTargets ?? {});
   const kept = entries.filter(
-    ([, target]) => target.kind !== "workflow_phase" || phases.has(target.phase.trim().toLowerCase()),
+    ([groupId, target]) => (!groupIds || groupIds.has(groupId)) && isGroupTargetValid(target, choices),
   );
   return kept.length === entries.length ? board : { ...board, groupTargets: Object.fromEntries(kept) };
 }

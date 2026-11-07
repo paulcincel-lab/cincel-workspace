@@ -46,6 +46,11 @@ export function foldIcsLine(line: string): string {
   return parts.join(CRLF + " ");
 }
 
+/** "Tramo: Diseño · Fase: Ejecutivo", or "Tramo: Diseño" when the task has no fase. */
+export function tramoPhaseLine(event: Pick<CalendarEvent, "tramoLabel" | "phaseLabel">): string {
+  return event.phaseLabel ? `Tramo: ${event.tramoLabel} · Fase: ${event.phaseLabel}` : `Tramo: ${event.tramoLabel}`;
+}
+
 function compactDate(isoDate: string): string {
   return isoDate.replace(/-/g, "");
 }
@@ -77,13 +82,10 @@ export function buildIcs(
   for (const event of events) {
     const description = [
       `Proyecto: ${event.project}`,
-      `Etapa: ${event.stageLabel}`,
+      tramoPhaseLine(event),
       `Responsable: ${event.responsible}`,
-      event.phase ? `Fase: ${event.phase}` : null,
       `Tipo: ${event.type}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
+    ].join("\n");
 
     lines.push(
       "BEGIN:VEVENT",

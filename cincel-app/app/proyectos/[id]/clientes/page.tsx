@@ -10,13 +10,14 @@ import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/comp
 import { listInvitablePortalContactsAction } from "@/lib/actions/portal-contacts-actions";
 import { listProjectPortalAccessAction } from "@/lib/actions/portal-actions";
 import { fetchProjectAction } from "@/lib/actions/projects-actions";
-import { resolvePortalCapabilities, type PortalCapabilities } from "@/lib/auth/permissions";
+import { canSeeAdminData, resolvePortalCapabilities, type PortalCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
 
 /** Portal capabilities of the signed-in staff member; null without a usable session. Redirects propagate. */
-async function loadCapabilities(): Promise<PortalCapabilities | null> {
+async function loadCapabilities(): Promise<{ capabilities: PortalCapabilities; isAdmin: boolean } | null> {
   try {
-    return resolvePortalCapabilities(await requireCapabilityUser());
+    const user = await requireCapabilityUser();
+    return { capabilities: resolvePortalCapabilities(user), isAdmin: canSeeAdminData(user) };
   } catch (error) {
     if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "FORBIDDEN")) return null;
     throw error;
@@ -57,8 +58,9 @@ function StateCard({ title, message }: { title: string; message: string }) {
 export default async function ProjectClientesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params;
 
-  const capabilities = await loadCapabilities();
-  if (!capabilities?.manageAccess) {
+  const viewer = await loadCapabilities();
+  const capabilities = viewer?.capabilities ?? null;
+  if (!viewer || !capabilities?.manageAccess) {
     return (
       <Shell>
         <ProjectSectionNav projectId={projectId} showClientes={false} />
@@ -86,6 +88,10 @@ export default async function ProjectClientesPage({ params }: { params: Promise<
     listInvitablePortalContactsAction(project.id),
   ]);
 
+  // `project.client` is null for non-admins, so the gating reads the invitable
+  // contacts, which carry the project's own client (accepted exception, FE §3.5).
+  const hasClient = viewer.isAdmin ? project.client !== null : contacts.some((contact) => contact.isProjectClient);
+
   return (
     <Shell>
       <ProjectSectionNav projectId={project.id} showClientes />
@@ -95,6 +101,8 @@ export default async function ProjectClientesPage({ params }: { params: Promise<
         rows={rows}
         contacts={contacts}
         capabilities={capabilities}
+        hasClient={hasClient}
+        canAssignClient={viewer.isAdmin}
       />
     </Shell>
   );

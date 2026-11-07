@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Label } from "@/components/ui/shadcn/label";
+import { Switch } from "@/components/ui/shadcn/switch";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,7 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
   const [editing, setEditing] = useState<TaskStatusOption | null>(null);
   const [name, setName] = useState("");
   const [closes, setCloses] = useState(false);
+  const [countsAsCompleted, setCountsAsCompleted] = useState(false);
   const [formError, setFormError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -70,8 +72,15 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
     setEditing(status);
     setName(status?.name ?? "");
     setCloses(status?.closes ?? false);
+    setCountsAsCompleted(status?.countsAsCompleted ?? false);
     setFormError("");
     setShowEditor(true);
+  }
+
+  function changeCloses(next: boolean) {
+    setCloses(next);
+    // A status that stays open never counts as finished work.
+    setCountsAsCompleted(next);
   }
 
   async function save() {
@@ -83,11 +92,16 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
     setFormError("");
     try {
       if (editing)
-        await updateTaskStatusAction(editing.id, { name, closes });
+        await updateTaskStatusAction(editing.id, {
+          name,
+          closes,
+          countsAsCompleted: closes && countsAsCompleted,
+        });
       else
         await createTaskStatusAction({
           name,
           closes,
+          countsAsCompleted: closes && countsAsCompleted,
           sortOrder: statuses.length,
         });
       await refresh();
@@ -126,6 +140,15 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
         cell: ({ row }) => (
           <span className="text-sm text-foreground">
             {row.original.closes ? "Sí" : "No"}
+          </span>
+        ),
+      },
+      {
+        id: "countsAsCompleted",
+        header: "Cuenta como completada",
+        cell: ({ row }) => (
+          <span className="text-sm text-foreground">
+            {row.original.countsAsCompleted ? "Sí" : "No"}
           </span>
         ),
       },
@@ -196,19 +219,34 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <label className="flex items-start gap-2 text-sm">
+            <div className="flex items-start gap-2 text-sm">
               <Checkbox
+                id="status-closes"
                 checked={closes}
-                onCheckedChange={(checked) => setCloses(Boolean(checked))}
+                onCheckedChange={(checked) => changeCloses(Boolean(checked))}
               />
-              <span>
-                Cuenta como terminado
+              <div>
+                <Label htmlFor="status-closes">Cierra la tarea</Label>
                 <span className="block text-muted-foreground">
-                  Las tareas en este estatus cuentan como completadas en
-                  métricas y dejan de vencer.
+                  Las tareas en este estatus se cierran y dejan de vencer.
                 </span>
-              </span>
-            </label>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 text-sm">
+              <Switch
+                id="status-counts-as-completed"
+                checked={countsAsCompleted}
+                disabled={!closes}
+                onCheckedChange={(checked) => setCountsAsCompleted(Boolean(checked))}
+              />
+              <div>
+                <Label htmlFor="status-counts-as-completed">Cuenta como completada</Label>
+                <span className="block text-muted-foreground">
+                  Apágalo para estatus como Cancelado: cierran la tarea pero no
+                  cuentan como trabajo terminado.
+                </span>
+              </div>
+            </div>
             {formError ? (
               <p className="text-sm text-destructive">{formError}</p>
             ) : null}

@@ -158,7 +158,6 @@ function makeTask(): TaskDetail {
     kind: "usuario",
     templateId: null,
     workflowId: null,
-    phase: null,
     phaseId: null,
     spaceId: null,
     closedAt: null,
@@ -183,8 +182,7 @@ function makeTask(): TaskDetail {
       clientName: "Cliente",
     },
     workflow: null,
-    areaColorSlot: null,
-    phaseRef: null,
+    phase: null,
     space: null,
     manager: null,
     support: [],
@@ -239,6 +237,7 @@ function renderContactSheet() {
       onDelete={noop}
       canEdit={false}
       canDelete={false}
+      isAdmin={false}
     />,
   );
 }

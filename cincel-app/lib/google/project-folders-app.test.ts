@@ -19,6 +19,7 @@ type ProjectRow = {
   id: string;
   code: string | null;
   name: string;
+  clientId: string | null;
   driveFolderId: string | null;
   driveInternalFolderId: string | null;
   driveClientFolderId: string | null;
@@ -32,6 +33,7 @@ function project(overrides: Partial<ProjectRow> = {}): ProjectRow {
     id: PROJECT_ID,
     code: "P-07",
     name: "Casa Valle",
+    clientId: "client-1",
     driveFolderId: null,
     driveInternalFolderId: null,
     driveClientFolderId: null,

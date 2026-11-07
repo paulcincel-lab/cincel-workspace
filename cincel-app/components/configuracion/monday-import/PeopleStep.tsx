@@ -114,7 +114,12 @@ export function PeopleStep({
             </p>
           ) : null}
           {canCreate && runId ? (
-            <CreateStaffButton runId={runId} user={user} onCreated={(member) => created(user, member)} />
+            <CreateStaffButton
+              runId={runId}
+              user={user}
+              positions={choices.positions ?? []}
+              onCreated={(member) => created(user, member)}
+            />
           ) : null}
         </TableCell>
       </TableRow>

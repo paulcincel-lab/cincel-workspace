@@ -92,6 +92,8 @@ export async function invitePortalClientAction(input: InvitePortalClientInput): 
 
   const project = await portalRepository.findProject(projectId);
   if (!project) return { ok: false, error: "not_found" };
+  // Project flow: a project can exist before its client is assigned; nobody is invited until then.
+  if (project.clientId === null) return { ok: false, error: "no_client" };
 
   const contact = await portalRepository.findContact(contactId);
   if (!contact || contact.type === "proveedor") return { ok: false, error: "not_project_contact" };

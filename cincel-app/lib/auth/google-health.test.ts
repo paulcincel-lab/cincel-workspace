@@ -51,7 +51,7 @@ describe("loadGoogleHealth", () => {
     results.queue = [
       [
         { kind: "role", n: 2 },
-        { kind: "area", n: 3 },
+        { kind: "position", n: 3 },
       ],
       [{ kind: "group_mapping_error", reason: "http 403", at }],
       [{ message: "No se pudo crear la carpeta", at }],

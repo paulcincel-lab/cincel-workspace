@@ -1,11 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
+import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
+import * as workflowPhasesRepository from "@/lib/repositories/workflow-phases-repository";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
+import {
+  OrderedIdsSchema,
+  UuidSchema,
+  WorkflowPhaseInputSchema,
+  WorkflowTaskTemplateInputSchema,
+  parseInput,
+} from "@/lib/validation/project-flow";
 import type {
   Workflow,
   WorkflowDetail,
@@ -17,16 +26,44 @@ import type {
   WorkflowTaskTemplateInput,
 } from "@/lib/types/core";
 
+const TRAMOS_PATH = "/configuracion/tramos";
+
 async function requireWorkflowsCapabilities() {
   return resolveWorkflowsCapabilities(await requireCapabilityUser());
 }
 
+/** Signed-in user allowed to manage tramos, fases and templates; FORBIDDEN otherwise. */
+async function requireWorkflowsManager() {
+  const user = await requireCapabilityUser();
+  if (!resolveWorkflowsCapabilities(user).canManageWorkflows) throw flowError(FLOW_ERROR.FORBIDDEN);
+  return user;
+}
+
+/** The tramos admin page (old and new route) and the Actividades layout (tabs, sidebar). */
+function revalidateTramos(options: { positions?: boolean; projects?: boolean } = {}) {
+  revalidatePath("/configuracion/tramos");
+  revalidatePath("/configuracion/workflows");
+  if (options.positions) revalidatePath("/configuracion/puestos");
+  if (options.projects) revalidatePath("/proyectos");
+  revalidatePath("/actividades", "layout");
+}
+
+/**
+ * Any staff session reads the active tramos, fases and templates (Actividades,
+ * Proyectos, Equipo and Puestos all need them). An `includeInactive*` flag
+ * requires `canManageWorkflows` (else FORBIDDEN).
+ */
 export async function fetchWorkflowsAction(
   options: { includeInactive?: boolean; includeInactiveTemplates?: boolean; includeInactivePhases?: boolean } = {}
 ): Promise<WorkflowDetail[]> {
   const caps = await requireWorkflowsCapabilities();
-  if (!caps.canViewWorkflows) return [];
-  return workflowsRepository.listWorkflows(options);
+  // Active rows for any staff session; the inactive flags only for managers, ignored otherwise (BE §7.1).
+  if (!caps.canManageWorkflows) return workflowsRepository.listWorkflows({});
+  const flags: { includeInactive?: true; includeInactiveTemplates?: true; includeInactivePhases?: true } = {};
+  if (options.includeInactive === true) flags.includeInactive = true;
+  if (options.includeInactiveTemplates === true) flags.includeInactiveTemplates = true;
+  if (options.includeInactivePhases === true) flags.includeInactivePhases = true;
+  return workflowsRepository.listWorkflows(flags);
 }
 
 export async function fetchWorkflowAction(id: string): Promise<WorkflowDetail | null> {
@@ -64,29 +101,43 @@ export async function deleteWorkflowAction(id: string): Promise<void> {
   revalidatePath("/configuracion/workflows");
 }
 
+function revalidateTemplates(layout: boolean) {
+  revalidatePath(TRAMOS_PATH);
+  if (layout) revalidatePath("/actividades", "layout");
+}
+
+/** `phaseId` is required. Errors: FORBIDDEN, NOT_FOUND, EMPTY, INVALID, PHASE_MISMATCH, NAME_TAKEN. */
 export async function createTemplateAction(
   workflowId: string,
   input: WorkflowTaskTemplateInput
 ): Promise<WorkflowTaskTemplate> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
-    throw new Error("FORBIDDEN: template create");
+    throw flowError(FLOW_ERROR.FORBIDDEN, "template create");
   }
-  const row = await workflowsRepository.createTemplate(workflowId, input, user.member.id);
-  revalidatePath("/configuracion/workflows");
+  const id = parseInput(UuidSchema, workflowId);
+  const parsed = parseInput(WorkflowTaskTemplateInputSchema, input);
+  const row = await workflowsRepository.createTemplate(id, parsed, user.member.id);
+  revalidateTemplates(true);
   return row;
 }
 
+/**
+ * Partial patch; `phaseId`, when sent, must be a fase of the template's tramo.
+ * Errors: FORBIDDEN, NOT_FOUND, EMPTY, INVALID, PHASE_MISMATCH, NAME_TAKEN.
+ */
 export async function updateTemplateAction(
   id: string,
   patch: Partial<WorkflowTaskTemplateInput>
 ): Promise<WorkflowTaskTemplate> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
-    throw new Error("FORBIDDEN: template edit");
+    throw flowError(FLOW_ERROR.FORBIDDEN, "template edit");
   }
-  const row = await workflowsRepository.updateTemplate(id, patch, user.member.id);
-  revalidatePath("/configuracion/workflows");
+  const templateId = parseInput(UuidSchema, id);
+  const parsed = parseInput(WorkflowTaskTemplateInputSchema.partial(), patch);
+  const row = await workflowsRepository.updateTemplate(templateId, parsed, user.member.id);
+  revalidateTemplates(true);
   return row;
 }
 
@@ -96,7 +147,7 @@ export async function deactivateTemplateAction(id: string): Promise<WorkflowTask
     throw new Error("FORBIDDEN: template deactivate");
   }
   const row = await workflowsRepository.deactivateTemplate(id, user.member.id);
-  revalidatePath("/configuracion/workflows");
+  revalidateTemplates(false);
   return row;
 }
 
@@ -106,19 +157,25 @@ export async function reorderTemplatesAction(workflowId: string, orderedIds: str
     throw new Error("FORBIDDEN: template reorder");
   }
   await workflowsRepository.reorderTemplates(workflowId, orderedIds);
-  revalidatePath("/configuracion/workflows");
+  revalidateTemplates(false);
 }
 
 // ── Tramos y fases (project flow BE §7.1) ───────────────────────────────────
 
 /** Active tramos for the sidebar and tabs (staff session). */
 export async function fetchTramosNavAction(): Promise<WorkflowRef[]> {
-  return notImplemented("fetchTramosNavAction");
+  await requireCapabilityUser();
+  return workflowsRepository.listTramosNav();
 }
 
-/** `canManageWorkflows`. Errors: FORBIDDEN, NOT_FOUND, NAME_TAKEN, EMPTY. */
+/** `canManageWorkflows`. Appended last. Errors: FORBIDDEN, NOT_FOUND, NAME_TAKEN, EMPTY. */
 export async function createWorkflowPhaseAction(workflowId: string, input: WorkflowPhaseInput): Promise<WorkflowPhase> {
-  return notImplemented("createWorkflowPhaseAction", workflowId, input);
+  const user = await requireWorkflowsManager();
+  const id = parseInput(UuidSchema, workflowId);
+  const values = parseInput(WorkflowPhaseInputSchema, input);
+  const row = await workflowPhasesRepository.createPhase(id, values, user.member.id);
+  revalidateTramos({ positions: true });
+  return row;
 }
 
 /** Rename, activate/deactivate. Errors: FORBIDDEN, NOT_FOUND, NAME_TAKEN, EMPTY. */
@@ -126,15 +183,33 @@ export async function updateWorkflowPhaseAction(
   id: string,
   patch: Partial<WorkflowPhaseInput>
 ): Promise<WorkflowPhase> {
-  return notImplemented("updateWorkflowPhaseAction", id, patch);
+  const user = await requireWorkflowsManager();
+  const phaseId = parseInput(UuidSchema, id);
+  const values = parseInput(WorkflowPhaseInputSchema.partial(), patch);
+  const row = await workflowPhasesRepository.updatePhase(phaseId, values, user.member.id);
+  revalidateTramos({ positions: true });
+  return row;
 }
 
 /** `orderedIds` must be exactly the tramo's fase ids. Errors: FORBIDDEN, NOT_FOUND. */
 export async function reorderWorkflowPhasesAction(workflowId: string, orderedIds: string[]): Promise<void> {
-  return notImplemented("reorderWorkflowPhasesAction", workflowId, orderedIds);
+  await requireWorkflowsManager();
+  const id = parseInput(UuidSchema, workflowId);
+  const ids = parseInput(OrderedIdsSchema, orderedIds);
+  await workflowPhasesRepository.reorderPhases(id, ids);
+  revalidateTramos({ positions: true });
 }
 
-/** The "Iniciar automáticamente" switch. Errors: FORBIDDEN, NOT_FOUND. */
+/**
+ * The "Iniciar automáticamente" switch: `true` stores `on_create` for the
+ * first active tramo and `on_ready` for the others, `false` stores `manual`.
+ * Errors: FORBIDDEN, NOT_FOUND.
+ */
 export async function setWorkflowAutoStartAction(workflowId: string, autoStart: boolean): Promise<Workflow> {
-  return notImplemented("setWorkflowAutoStartAction", workflowId, autoStart);
+  const user = await requireWorkflowsManager();
+  const id = parseInput(UuidSchema, workflowId);
+  const enabled = parseInput(z.boolean(), autoStart);
+  const row = await workflowsRepository.setWorkflowAutoStart(id, enabled, user.member.id);
+  revalidateTramos({ projects: true });
+  return row;
 }

@@ -4,7 +4,7 @@
  * the step of the wizard where it gets fixed. Never shows ids or server paths. Pure and client-safe.
  */
 import type { PlanIssueCode } from "@/scripts/monday/plan";
-import type { MondayImportStep } from "@/lib/types/monday-import";
+import type { MondayImportStep, MondayPreviewIssue } from "@/lib/types/monday-import";
 
 /** Where a problem gets fixed: the wizard step, opened on the issue's board when it has one. */
 export const ISSUE_FIX_STEP: Record<PlanIssueCode, MondayImportStep> = {
@@ -24,8 +24,10 @@ export const ISSUE_FIX_STEP: Record<PlanIssueCode, MondayImportStep> = {
   RELATION_MISSING: "equivalencias",
   DATES_MISSING: "equivalencias",
   FILE_MISSING: "opciones",
-  AREA_NAME_TAKEN: "equivalencias",
-  AREA_UNMAPPED: "equivalencias",
+  TRAMO_MISSING: "equivalencias",
+  PHASE_UNRESOLVED: "equivalencias",
+  CLIENT_MISSING: "equivalencias",
+  ADMIN_ASSIGNEE_CLEARED: "equivalencias",
 };
 
 /** The first "quoted" value of a plan message (a monday name, label or code), or null. */
@@ -43,17 +45,15 @@ export function issueText(code: PlanIssueCode, message: string): string {
   const name = quoted(message);
   switch (code) {
     case "CLIENT_UNRESOLVED":
-      return name
-        ? `El proyecto «${name}» no tiene cliente. Elige uno en Cliente.`
-        : "El cliente elegido no existe o no es un cliente del Directorio. Elige otro en Cliente.";
+      return "El cliente elegido no existe o no es un cliente del Directorio. Elige otro en Cliente.";
     case "CONTACT_NAME_TAKEN":
       return /exists already/.test(message)
         ? `Ya existe un contacto llamado ${named(name, "igual")}. Elige ese contacto o cambia el nombre en monday.`
         : `Varios contactos nuevos se llaman ${named(name, "igual")}. Elige un contacto existente o cambia los nombres en monday.`;
     case "PROJECT_NAME_TAKEN":
-      return /already has/.test(message)
-        ? `El cliente ya tiene un proyecto llamado ${named(name, "igual")}. Ponle otro nombre en Nombres y códigos de proyecto.`
-        : `Varios proyectos nuevos del mismo cliente se llaman ${named(name, "igual")}. Ponles otro nombre en Nombres y códigos de proyecto.`;
+      return /exists already|already has/.test(message)
+        ? `Ya hay un proyecto activo llamado ${named(name, "igual")}. Ponle otro nombre en Nombres y códigos de proyecto.`
+        : `Varios proyectos nuevos se llaman ${named(name, "igual")}. Ponles otro nombre en Nombres y códigos de proyecto.`;
     case "PROJECT_CODE_TAKEN":
       return /existing project/.test(message)
         ? `Otro proyecto ya usa el código ${named(name, "elegido")}. Cámbialo en Nombres y códigos de proyecto.`
@@ -65,9 +65,9 @@ export function issueText(code: PlanIssueCode, message: string): string {
     case "STATUS_DEFAULTED":
       return `La etiqueta de estatus ${named(name, "sin nombre")} no tiene equivalente; sus tareas quedan como Pendiente. Revísala en Estatus.`;
     case "TEMPLATE_COLLISION":
-      return `${named(name, "Un elemento")} coincide con una plantilla que ya se usa en su proyecto. Quita una en Plantillas del workflow.`;
+      return `${named(name, "Un elemento")} coincide con una plantilla que ya se usa en su proyecto. Quita una en Tareas de plantilla.`;
     case "TEMPLATE_INVALID":
-      return "La plantilla elegida no existe o no es del departamento del tablero. Revisa Plantillas del workflow.";
+      return "La plantilla elegida no existe o no es del tramo de la tarea. Revisa Tareas de plantilla.";
     case "PROVIDER_SUBTYPE_MISSING":
       return "Elige el tipo de proveedor de los contactos.";
     case "SCHEDULE_EXISTS":
@@ -75,10 +75,9 @@ export function issueText(code: PlanIssueCode, message: string): string {
     case "DRIVE_NOT_CONFIGURED":
       return "Google Drive no está listo para subir los archivos. Apaga los archivos en Opciones.";
     case "MAPPING_INVALID":
-      if (message.startsWith("workflowId")) return "El workflow elegido ya no existe. Elige otro.";
-      if (message.startsWith("areaId")) return "El departamento elegido ya no existe. Elige otro.";
-      if (message.startsWith("taskAreas"))
-        return "Un área o workflow elegido en Área y workflow de las tareas ya no existe o no va con esa área. Elige otro.";
+      if (message.startsWith("workflowId")) return "El tramo elegido ya no existe. Elige otro en Tramo del tablero.";
+      if (message.startsWith("groupTargets"))
+        return "El tramo o la fase elegida para un grupo ya no existe. Elige otra en Grupos y tramo.";
       if (message.startsWith("contactMatches")) return "Un contacto elegido no existe o no es del tipo del tablero. Elige otro.";
       return "Falta una equivalencia o no es válida. Revisa este tablero.";
     case "PERSON_UNMATCHED": {
@@ -91,11 +90,49 @@ export function issueText(code: PlanIssueCode, message: string): string {
       return `${named(name, "Un elemento")} no tiene línea de tiempo; no entra al cronograma.`;
     case "FILE_MISSING":
       return `El archivo ${named(name, "de un elemento")} no se descargó; no se importa. Exporta otra vez o apaga los archivos en Opciones.`;
-    case "AREA_NAME_TAKEN":
-      return `Ya existe un área llamada ${named(name, "igual")}. Elígela en Área y workflow de las tareas en vez de crearla.`;
-    case "AREA_UNMAPPED":
-      return `El valor ${named(name, "de un elemento")} no tiene área ni workflow; sus tareas quedan con el workflow del tablero. Elígelos en Área y workflow de las tareas.`;
+    case "TRAMO_MISSING":
+      return "Elige un tramo: hay tareas de este tablero sin tramo. Elige el Tramo del tablero o un tramo para su grupo.";
+    case "PHASE_UNRESOLVED":
+      return `${named(name, "Una tarea")} no coincide con ninguna fase; se importa sin fase para revisarla.`;
+    case "CLIENT_MISSING":
+      return `El proyecto ${named(name, "nuevo")} no tiene cliente; se crea con la tarea de administración «Asignar cliente y origen».`;
+    case "ADMIN_ASSIGNEE_CLEARED":
+      return "Una tarea de administración tenía responsables que no son administradores; se importa sin ellos.";
   }
+}
+
+/** Accordion titles of the grouped warnings in Vista previa (FE §4.6 item 9); `{n}` is the count. */
+export const WARNING_GROUP_TITLES: Partial<Record<PlanIssueCode, (n: number) => string>> = {
+  PERSON_UNMATCHED: (n) => `Personas sin equivalente (${n})`,
+  STATUS_DEFAULTED: (n) => `Estatus sin equivalente (${n})`,
+  DATES_MISSING: (n) => `Elementos sin línea de tiempo (${n})`,
+  PHASE_UNRESOLVED: (n) => `Tareas sin fase (${n})`,
+  CLIENT_MISSING: (n) => `Proyectos sin cliente (${n})`,
+  ADMIN_ASSIGNEE_CLEARED: (n) => `Tareas de administración sin responsable (${n})`,
+};
+
+export interface PreviewWarningGroup {
+  code: PlanIssueCode;
+  /** The accordion title: the code's title with its count, else the first issue's text. */
+  title: string;
+  issues: MondayPreviewIssue[];
+}
+
+/**
+ * Vista previa's warnings grouped by issue code, in order of first appearance (blocking issues stay a list and are
+ * left out). Codes without a title are titled with their issue text.
+ */
+export function groupPreviewWarnings(issues: readonly MondayPreviewIssue[]): PreviewWarningGroup[] {
+  const groups = new Map<PlanIssueCode, MondayPreviewIssue[]>();
+  for (const issue of issues) {
+    if (issue.blocking) continue;
+    groups.set(issue.code, [...(groups.get(issue.code) ?? []), issue]);
+  }
+  return [...groups].map(([code, list]) => ({
+    code,
+    title: WARNING_GROUP_TITLES[code]?.(list.length) ?? list[0].message,
+    issues: list,
+  }));
 }
 
 /** The monday user id of a PERSON_UNMATCHED issue (#689), so the Vista previa links to that row of Personas. */

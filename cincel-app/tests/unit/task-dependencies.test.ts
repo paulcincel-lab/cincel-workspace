@@ -27,6 +27,9 @@ import {
 
 const url = process.env.TEST_DATABASE_URL;
 
+/** Administrator scope: these tests cover every kind. */
+const VIEWER = { staffId: "", isAdmin: true };
+
 class Rollback extends Error {}
 
 describe.skipIf(!url)("task dependencies (test DB)", () => {
@@ -103,7 +106,7 @@ describe.skipIf(!url)("task dependencies (test DB)", () => {
       });
       await addTaskDependency(a.id, b.id);
 
-      await expect(listTaskDependencies(a.id)).resolves.toEqual({
+      await expect(listTaskDependencies(a.id, VIEWER)).resolves.toEqual({
         dependsOn: [
           {
             id: b.id,
@@ -115,7 +118,7 @@ describe.skipIf(!url)("task dependencies (test DB)", () => {
         ],
         blocks: [],
       });
-      await expect(listTaskDependencies(b.id)).resolves.toEqual({
+      await expect(listTaskDependencies(b.id, VIEWER)).resolves.toEqual({
         dependsOn: [],
         blocks: [
           {
@@ -178,7 +181,7 @@ describe.skipIf(!url)("task dependencies (test DB)", () => {
       const b = await addTask(tx, ctx, "B");
       await addTaskDependency(a.id, b.id);
       await removeTaskDependency(a.id, b.id);
-      await expect(listTaskDependencies(a.id)).resolves.toEqual({
+      await expect(listTaskDependencies(a.id, VIEWER)).resolves.toEqual({
         dependsOn: [],
         blocks: [],
       });
@@ -197,7 +200,7 @@ describe.skipIf(!url)("task dependencies (test DB)", () => {
         .update(schema.tasks)
         .set({ deletedAt: new Date() })
         .where(eq(schema.tasks.id, b.id));
-      await expect(listTaskDependencies(a.id)).resolves.toEqual({
+      await expect(listTaskDependencies(a.id, VIEWER)).resolves.toEqual({
         dependsOn: [],
         blocks: [],
       });

@@ -1,7 +1,7 @@
-import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { areas, workspaceGroupMappings } from "@/lib/db/schema";
+import { positions, workspaceGroupMappings } from "@/lib/db/schema";
 import type { GroupMapping, GroupMappingKind } from "@/lib/types/workspace-access";
 
 /** A validated mapping row, with the group id resolved through `groups.get`. */
@@ -10,7 +10,7 @@ export type GroupMappingValues = {
   groupId: string;
   kind: GroupMappingKind;
   role: string | null;
-  areaId: string | null;
+  positionId: string | null;
   rank: number;
 };
 
@@ -19,13 +19,13 @@ const columns = {
   groupEmail: workspaceGroupMappings.groupEmail,
   kind: workspaceGroupMappings.kind,
   role: workspaceGroupMappings.role,
-  areaId: workspaceGroupMappings.areaId,
-  areaName: areas.name,
+  positionId: workspaceGroupMappings.positionId,
+  positionName: positions.name,
   rank: workspaceGroupMappings.rank,
 };
 
 function selectMappings() {
-  return db.select(columns).from(workspaceGroupMappings).leftJoin(areas, eq(areas.id, workspaceGroupMappings.areaId));
+  return db.select(columns).from(workspaceGroupMappings).leftJoin(positions, eq(positions.id, workspaceGroupMappings.positionId));
 }
 
 export async function listGroupMappings(): Promise<GroupMapping[]> {
@@ -39,16 +39,6 @@ export async function listGroupMappings(): Promise<GroupMapping[]> {
 export async function getGroupMapping(id: string): Promise<GroupMapping | null> {
   const [row] = await selectMappings().where(eq(workspaceGroupMappings.id, id)).limit(1);
   return row ?? null;
-}
-
-/** Whether a live (not soft-deleted) area with this id exists. */
-export async function areaExists(areaId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: areas.id })
-    .from(areas)
-    .where(and(eq(areas.id, areaId), isNull(areas.deletedAt)))
-    .limit(1);
-  return Boolean(row);
 }
 
 /** Whether another mapping already uses this group for this kind. */

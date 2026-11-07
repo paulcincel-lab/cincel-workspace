@@ -1,9 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { revalidatePath } from "next/cache";
+
 import { setFakeDirectoryState } from "@/lib/google/fake-directory";
 import type { GroupMapping } from "@/lib/types/workspace-access";
 
-const AREA_ID = "11111111-1111-4111-8111-111111111111";
+const POSITION_ID = "11111111-1111-4111-8111-111111111111";
 const MAPPING_ID = "22222222-2222-4222-8222-222222222222";
 
 const sessionAccess = vi.hoisted(() => ({
@@ -23,13 +25,15 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 const repo = vi.hoisted(() => ({
   listGroupMappings: vi.fn(),
   getGroupMapping: vi.fn(),
-  areaExists: vi.fn(),
   groupMappingExists: vi.fn(),
   insertGroupMapping: vi.fn(),
   updateGroupMapping: vi.fn(),
   deleteGroupMapping: vi.fn(),
 }));
 vi.mock("@/lib/repositories/workspace-group-mappings-repository", () => repo);
+
+const positionExists = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/repositories/positions-repository", () => ({ positionExists }));
 
 const recheckStaffAccess = vi.hoisted(() => vi.fn());
 const recordDirectoryError = vi.hoisted(() => vi.fn());
@@ -54,8 +58,8 @@ const mapping: GroupMapping = {
   groupEmail: "cincel-direccion@example.test",
   kind: "role",
   role: "Dirección",
-  areaId: null,
-  areaName: null,
+  positionId: null,
+  positionName: null,
   rank: 70,
 };
 
@@ -85,13 +89,13 @@ describe("workspace-access-actions (group mappings)", () => {
         },
         {
           id: "g-diseno",
-          email: "cincel-area-diseno@example.test",
+          email: "cincel-puesto-diseno@example.test",
           name: "Diseño",
         },
       ],
     });
     asRole("Administrador");
-    repo.areaExists.mockResolvedValue(true);
+    positionExists.mockResolvedValue(true);
     repo.groupMappingExists.mockResolvedValue(false);
     repo.getGroupMapping.mockResolvedValue(mapping);
     repo.insertGroupMapping.mockResolvedValue(mapping);
@@ -121,27 +125,45 @@ describe("workspace-access-actions (group mappings)", () => {
         groupId: "g-direccion",
         kind: "role",
         role: "Dirección",
-        areaId: null,
+        positionId: null,
         rank: 70,
       });
     });
 
-    it("creates an area mapping with rank 0", async () => {
+    it("creates a position mapping with rank 0", async () => {
       const result = await createGroupMappingAction({
-        groupEmail: "cincel-area-diseno@example.test",
-        kind: "area",
-        areaId: AREA_ID,
+        groupEmail: "cincel-puesto-diseno@example.test",
+        kind: "position",
+        positionId: POSITION_ID,
         rank: 99,
       });
       expect(result.ok).toBe(true);
       expect(repo.insertGroupMapping).toHaveBeenCalledWith({
-        groupEmail: "cincel-area-diseno@example.test",
+        groupEmail: "cincel-puesto-diseno@example.test",
         groupId: "g-diseno",
-        kind: "area",
+        kind: "position",
         role: null,
-        areaId: AREA_ID,
+        positionId: POSITION_ID,
         rank: 0,
       });
+    });
+
+    it("checks the puesto exists and revalidates Google and Puestos", async () => {
+      await createGroupMappingAction({
+        groupEmail: "cincel-puesto-diseno@example.test",
+        kind: "position",
+        positionId: POSITION_ID,
+      });
+      expect(positionExists).toHaveBeenCalledWith(POSITION_ID);
+      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/google");
+      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/puestos");
+    });
+
+    it("revalidates Google and Puestos on delete", async () => {
+      await expect(deleteGroupMappingAction(MAPPING_ID)).resolves.toEqual({ ok: true });
+      expect(repo.deleteGroupMapping).toHaveBeenCalledWith(MAPPING_ID);
+      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/google");
+      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/puestos");
     });
 
     it("updates a mapping, excluding itself from the duplicate check", async () => {
@@ -211,21 +233,21 @@ describe("workspace-access-actions (group mappings)", () => {
     it.each([
       ["bad email", { ...roleInput, groupEmail: "not-an-email" }],
       ["unknown role", { ...roleInput, role: "Cliente" }],
-      ["role with an area", { ...roleInput, areaId: AREA_ID }],
+      ["role with a puesto", { ...roleInput, positionId: POSITION_ID }],
       ["fractional rank", { ...roleInput, rank: 1.5 }],
       [
-        "area without areaId",
+        "position without positionId",
         {
-          groupEmail: "cincel-area-diseno@example.test",
-          kind: "area" as const,
+          groupEmail: "cincel-puesto-diseno@example.test",
+          kind: "position" as const,
         },
       ],
       [
-        "area with a role",
+        "position with a role",
         {
-          groupEmail: "cincel-area-diseno@example.test",
-          kind: "area" as const,
-          areaId: AREA_ID,
+          groupEmail: "cincel-puesto-diseno@example.test",
+          kind: "position" as const,
+          positionId: POSITION_ID,
           role: "Dirección",
         },
       ],
@@ -238,12 +260,12 @@ describe("workspace-access-actions (group mappings)", () => {
       expect(repo.insertGroupMapping).not.toHaveBeenCalled();
     });
 
-    it("returns invalid for an area that doesn't exist", async () => {
-      repo.areaExists.mockResolvedValue(false);
+    it("returns invalid for a puesto that doesn't exist", async () => {
+      positionExists.mockResolvedValue(false);
       const result = await createGroupMappingAction({
-        groupEmail: "cincel-area-diseno@example.test",
-        kind: "area",
-        areaId: AREA_ID,
+        groupEmail: "cincel-puesto-diseno@example.test",
+        kind: "position",
+        positionId: POSITION_ID,
       });
       expect(result).toEqual({ ok: false, error: "invalid" });
     });

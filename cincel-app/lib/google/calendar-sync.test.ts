@@ -12,9 +12,10 @@ function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     title: "Entregar planos",
     project: "Casa Roble",
     responsible: "Ana",
-    stage: "diseno",
-    stageLabel: "Diseño",
-    phase: "",
+    tramo: "diseno",
+    tramoLabel: "Diseño",
+    phaseId: null,
+    phaseLabel: "",
     type: "Compromiso",
     href: "/actividades/diseno?task=task-1",
     ...overrides,
@@ -33,8 +34,12 @@ describe("toGoogleEvent", () => {
     expect(body.transparency).toBe("transparent");
   });
 
-  it("includes the phase when there is one", () => {
-    expect(toGoogleEvent(event({ phase: "Inicial" }), "https://x").description).toContain("Fase: Inicial");
+  it("names the tramo, and the fase when there is one", () => {
+    expect(toGoogleEvent(event(), "https://x").description).toContain("Tramo: Diseño\nResponsable: Ana");
+    expect(
+      toGoogleEvent(event({ phaseId: "f1", phaseLabel: "Ejecutivo" }), "https://x").description
+    ).toContain("Tramo: Diseño · Fase: Ejecutivo");
+    expect(toGoogleEvent(event(), "https://x").description).not.toContain("Etapa:");
   });
 });
 

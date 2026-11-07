@@ -2,14 +2,15 @@
  * Database seed (rebuild Phase 1).
  *
  * Populates the minimum to log in and start using the app:
- *   - the three workflows (Presale, Diseño, Construcción), zero
- *     templates until the client supplies them (Phase 0)
- *   - areas, derived from the roster, each owning its workflow
- *   - the staff roster with HR profiles and area memberships
+ *   - the three workflows (Presale, Diseño, Construcción)
+ *   - the default fases, templates, puestos and flow statuses
+ *     (scripts/default-catalog.mjs; only where none exist yet)
+ *   - the staff roster with HR profiles
  *   - one admin login
  *
- * Idempotent: workflows upsert on key, areas and staff match on name (case-
- * insensitive), memberships and credentials upsert on their primary key.
+ * Idempotent: workflows upsert on key, staff match on name (case-insensitive),
+ * profiles and credentials upsert on their primary key, and the catalog never
+ * updates or revives existing rows.
  *
  * Run with: npm run db:seed
  */
@@ -19,9 +20,9 @@ import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import { defaultAreaColorSlot } from "../lib/areas/area-color";
 import { teamMembers as roster } from "../lib/data/team";
 import * as schema from "../lib/db/schema";
+import { ensureDefaultCatalog } from "./default-catalog.mjs";
 import { DEFAULT_WORKFLOWS } from "./default-workflows.mjs";
 import { resolveSeedAdminPassword } from "./seed-admin-password";
 
@@ -53,7 +54,7 @@ async function seedWorkflows() {
   for (const [i, w] of WORKFLOWS.entries()) {
     const [row] = await db
       .insert(schema.workflows)
-      .values({ key: w.key, name: w.name, sortOrder: i })
+      .values({ key: w.key, name: w.name, sortOrder: i, autoStart: w.autoStart })
       .onConflictDoUpdate({
         target: schema.workflows.key,
         targetWhere: sql`${schema.workflows.deletedAt} is null`,
@@ -66,52 +67,15 @@ async function seedWorkflows() {
   return ids;
 }
 
-async function seedAreas() {
-  const names = new Set<string>(WORKFLOWS.map((w) => w.area));
-  for (const m of roster) if (m.area.trim()) names.add(m.area.trim());
-
-  const ids = new Map<string, string>();
-  const taken: Array<number | null> = (
-    await db.select({ slot: schema.areas.colorSlot }).from(schema.areas).where(sql`${schema.areas.deletedAt} is null`)
-  ).map((r) => r.slot);
-  let i = 0;
-  for (const name of names) {
-    const existing = await db.query.areas.findFirst({
-      where: sql`lower(${schema.areas.name}) = lower(${name}) and ${schema.areas.deletedAt} is null`,
-    });
-    const row =
-      existing ??
-      (
-        await db
-          .insert(schema.areas)
-          .values({ name, sortOrder: i, colorSlot: defaultAreaColorSlot(name, taken) })
-          .returning()
-      )[0];
-    if (!existing) taken.push(row.colorSlot);
-    ids.set(name.toLowerCase(), row.id);
-    i += 1;
-  }
-  console.log(`  areas: ${ids.size} present`);
-  return ids;
+async function seedCatalog() {
+  const c = await ensureDefaultCatalog(client);
+  console.log(
+    `  catalog: ${c.phases} fases, ${c.templates} templates, ${c.positions} puestos, ` +
+      `${c.positionPhases} puesto fases, ${c.statuses} statuses created`
+  );
 }
 
-async function seedAreaWorkflows(
-  workflowIds: Map<string, string>,
-  areaIds: Map<string, string>
-) {
-  for (const w of WORKFLOWS) {
-    await db
-      .insert(schema.areaWorkflows)
-      .values({
-        areaId: areaIds.get(w.area.toLowerCase())!,
-        workflowId: workflowIds.get(w.key)!,
-      })
-      .onConflictDoNothing();
-  }
-  console.log(`  area_workflows: ${WORKFLOWS.length} linked`);
-}
-
-async function seedStaff(areaIds: Map<string, string>) {
+async function seedStaff() {
   let count = 0;
   for (const m of roster) {
     const existing = await db.query.staff.findFirst({
@@ -156,17 +120,9 @@ async function seedStaff(areaIds: Map<string, string>) {
       .insert(schema.staffProfiles)
       .values(profile)
       .onConflictDoUpdate({ target: schema.staffProfiles.staffId, set: profile });
-
-    const areaId = areaIds.get(m.area.trim().toLowerCase());
-    if (areaId) {
-      await db
-        .insert(schema.areaMembers)
-        .values({ areaId, staffId: row.id })
-        .onConflictDoNothing();
-    }
     count += 1;
   }
-  console.log(`  staff: ${count} upserted (with profiles and area memberships)`);
+  console.log(`  staff: ${count} upserted (with profiles)`);
 }
 
 async function seedAdminCredential() {
@@ -208,10 +164,9 @@ async function seedAdminCredential() {
 
 async function main() {
   console.log(`Seeding ${connectionString.replace(/:[^:@/]*@/, ":***@")}`);
-  const workflowIds = await seedWorkflows();
-  const areaIds = await seedAreas();
-  await seedAreaWorkflows(workflowIds, areaIds);
-  await seedStaff(areaIds);
+  await seedWorkflows();
+  await seedCatalog();
+  await seedStaff();
   await seedAdminCredential();
   console.log("Seed complete.");
   await client.end();

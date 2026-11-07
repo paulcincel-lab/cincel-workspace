@@ -81,13 +81,13 @@ export type TeamCapabilities = {
 };
 
 /**
- * Areas (`core.areas`, `core.area_members`, `core.area_workflows`) are a
- * company-structure admin surface: everyone can see the directory (staff
- * pickers, task assignment) but only Administrador / Dirección manage it.
+ * Puestos (`core.positions`, `core.staff_positions`, `core.position_phases`)
+ * are a company-structure admin surface: everyone can see them (staff
+ * pickers, task assignment) but only Administrador / Dirección manage them.
  */
-export type AreasCapabilities = {
-  canViewAreas: boolean;
-  canManageAreas: boolean;
+export type PositionsCapabilities = {
+  canViewPositions: boolean;
+  canManagePositions: boolean;
 };
 
 /**
@@ -102,7 +102,7 @@ export type TaskStatusesCapabilities = {
 /**
  * Workflows and their task templates (`core.workflows`,
  * `core.workflow_task_templates`) are the other half of the "method" admin
- * surface — same view-all / manage-admin-only shape as areas.
+ * surface — same view-all / manage-admin-only shape as puestos.
  */
 export type WorkflowsCapabilities = {
   canViewWorkflows: boolean;
@@ -749,12 +749,12 @@ function canManageCompanyStructureByRole(access: SystemAccessRole): boolean {
   return access === "Administrador" || access === "Dirección";
 }
 
-const AREAS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, AreasCapabilities> = Object.fromEntries(
+const POSITIONS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, PositionsCapabilities> = Object.fromEntries(
   SYSTEM_ACCESS_ROLES.map((role) => [
     role,
-    { canViewAreas: true, canManageAreas: canManageCompanyStructureByRole(role) },
+    { canViewPositions: true, canManagePositions: canManageCompanyStructureByRole(role) },
   ])
-) as Record<SystemAccessRole, AreasCapabilities>;
+) as Record<SystemAccessRole, PositionsCapabilities>;
 
 const TASK_STATUSES_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, TaskStatusesCapabilities> =
   Object.fromEntries(
@@ -861,11 +861,11 @@ function readRoleModuleOverrides(role: SystemAccessRole, moduleId: string): Stor
 
   const moduleState = roleState[moduleId];
 
-  if (!moduleState || typeof moduleState !== "object") {
-    return null;
+  if (moduleState && typeof moduleState === "object") {
+    return moduleState;
   }
 
-  return moduleState;
+  return null;
 }
 
 function readBooleanOverride(moduleState: StoredModulePermissionsState | null, key: string, fallback: boolean): boolean {
@@ -928,9 +928,9 @@ export function resolveTeamCapabilitiesFromDefaults(user: AuthenticatedUser | nu
   return TEAM_CAPABILITIES_BY_ROLE[access];
 }
 
-export function resolveAreasCapabilitiesFromDefaults(user: AuthenticatedUser | null): AreasCapabilities {
+export function resolvePositionsCapabilitiesFromDefaults(user: AuthenticatedUser | null): PositionsCapabilities {
   const access = resolveAccess(user);
-  return AREAS_CAPABILITIES_BY_ROLE[access];
+  return POSITIONS_CAPABILITIES_BY_ROLE[access];
 }
 
 export function resolveWorkflowsCapabilitiesFromDefaults(user: AuthenticatedUser | null): WorkflowsCapabilities {
@@ -1162,16 +1162,17 @@ export function resolveTaskStatusesCapabilities(user: AuthenticatedUser | null):
   };
 }
 
-export function resolveAreasCapabilities(user: AuthenticatedUser | null): AreasCapabilities {
+/** Puestos capabilities. */
+export function resolvePositionsCapabilities(user: AuthenticatedUser | null): PositionsCapabilities {
   const access = resolveAccess(user);
-  const defaults = resolveAreasCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "areas");
+  const defaults = resolvePositionsCapabilitiesFromDefaults(user);
+  const moduleOverrides = readRoleModuleOverrides(access, "positions");
 
   if (!moduleOverrides) return defaults;
 
   return {
-    canViewAreas: readBooleanOverride(moduleOverrides, "canViewAreas", defaults.canViewAreas),
-    canManageAreas: readBooleanOverride(moduleOverrides, "canManageAreas", defaults.canManageAreas),
+    canViewPositions: readBooleanOverride(moduleOverrides, "canViewPositions", defaults.canViewPositions),
+    canManagePositions: readBooleanOverride(moduleOverrides, "canManagePositions", defaults.canManagePositions),
   };
 }
 

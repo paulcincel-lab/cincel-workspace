@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const dbMock = vi.hoisted(() => ({ select: vi.fn(), transaction: vi.fn() }));
 vi.mock("@/lib/db/client", () => ({ db: dbMock }));
 
+import { staffPositions } from "@/lib/db/schema";
 import { getFakeDirectory, setFakeDirectoryState, type FakeDirectoryState } from "@/lib/google/fake-directory";
 import { DirectoryError } from "@/lib/google/directory";
 
@@ -19,8 +20,8 @@ const ROLE_GROUPS = {
   senior: "g-senior",
   colaboradores: "g-colaboradores",
 };
-const AREA_GROUPS = { construccion: "g-area-construccion", diseno: "g-area-diseno" };
-const AREAS = { construccion: "area-construccion", diseno: "area-diseno" };
+const POSITION_GROUPS = { residente: "g-puesto-residente", disenador: "g-puesto-disenador" };
+const POSITIONS = { residente: "position-residente", disenador: "position-disenador" };
 
 const MAPPINGS: GroupMappings = {
   roles: [
@@ -29,14 +30,14 @@ const MAPPINGS: GroupMappings = {
     { groupId: ROLE_GROUPS.senior, role: "Arquitecto Senior", rank: 40 },
     { groupId: ROLE_GROUPS.colaboradores, role: "Colaborador", rank: 20 },
   ],
-  areas: [
-    { groupId: AREA_GROUPS.construccion, areaId: AREAS.construccion },
-    { groupId: AREA_GROUPS.diseno, areaId: AREAS.diseno },
+  positions: [
+    { groupId: POSITION_GROUPS.residente, positionId: POSITIONS.residente },
+    { groupId: POSITION_GROUPS.disenador, positionId: POSITIONS.disenador },
   ],
 };
 
 function directoryWith(memberOf: string[], user: Partial<FakeDirectoryState> = {}): FakeDirectoryState {
-  const groupIds = [...Object.values(ROLE_GROUPS), ...Object.values(AREA_GROUPS)];
+  const groupIds = [...Object.values(ROLE_GROUPS), ...Object.values(POSITION_GROUPS)];
   return {
     users: [{ id: SUB, primaryEmail: EMAIL }],
     groups: groupIds.map((id) => ({ id, email: `${id}@${DOMAIN}`, members: memberOf.includes(id) ? [EMAIL] : [] })),
@@ -56,12 +57,12 @@ afterEach(() => {
 });
 
 describe("evaluateAccess", () => {
-  it("gives Arquitecto Senior and Construcción for the senior and construcción groups", async () => {
-    await expect(evaluate(directoryWith([ROLE_GROUPS.senior, AREA_GROUPS.construccion]))).resolves.toEqual({
+  it("gives Arquitecto Senior and Residente de obra for the senior and residente groups", async () => {
+    await expect(evaluate(directoryWith([ROLE_GROUPS.senior, POSITION_GROUPS.residente]))).resolves.toEqual({
       allowed: true,
       role: "Arquitecto Senior",
-      areaIds: [AREAS.construccion],
-      areasManaged: true,
+      positionIds: [POSITIONS.residente],
+      positionsManaged: true,
       reason: null,
     });
   });
@@ -77,42 +78,59 @@ describe("evaluateAccess", () => {
         { groupId: ROLE_GROUPS.colaboradores, role: "Colaborador", rank: 10 },
         { groupId: ROLE_GROUPS.senior, role: "Arquitecto Senior", rank: 10 },
       ],
-      areas: [],
+      positions: [],
     };
     const result = await evaluate(directoryWith([ROLE_GROUPS.colaboradores, ROLE_GROUPS.senior]), tied);
     expect(result).toMatchObject({ allowed: true, role: "Arquitecto Senior" });
   });
 
-  it("returns every matched área", async () => {
-    const result = await evaluate(directoryWith([ROLE_GROUPS.senior, AREA_GROUPS.construccion, AREA_GROUPS.diseno]));
-    expect(result.allowed && [...result.areaIds].sort()).toEqual([AREAS.construccion, AREAS.diseno]);
+  it("returns every matched puesto", async () => {
+    const result = await evaluate(
+      directoryWith([ROLE_GROUPS.senior, POSITION_GROUPS.residente, POSITION_GROUPS.disenador]),
+    );
+    expect(result.allowed && [...result.positionIds].sort()).toEqual([POSITIONS.disenador, POSITIONS.residente]);
   });
 
-  it("allows a role group without area groups, with no áreas", async () => {
+  it("gives a puesto once when two groups map to it", async () => {
+    const twice: GroupMappings = {
+      roles: MAPPINGS.roles,
+      positions: [
+        { groupId: POSITION_GROUPS.residente, positionId: POSITIONS.residente },
+        { groupId: POSITION_GROUPS.disenador, positionId: POSITIONS.residente },
+      ],
+    };
+    const result = await evaluate(
+      directoryWith([ROLE_GROUPS.senior, POSITION_GROUPS.residente, POSITION_GROUPS.disenador]),
+      twice,
+    );
+    expect(result).toMatchObject({ allowed: true, positionIds: [POSITIONS.residente], positionsManaged: true });
+  });
+
+  it("allows a role group without position groups, with no puestos", async () => {
     await expect(evaluate(directoryWith([ROLE_GROUPS.senior]))).resolves.toMatchObject({
       allowed: true,
-      areaIds: [],
-      areasManaged: true,
+      positionIds: [],
+      positionsManaged: true,
     });
   });
 
-  it("marks áreas as unmanaged when no area mapping exists", async () => {
-    const result = await evaluate(directoryWith([ROLE_GROUPS.senior]), { roles: MAPPINGS.roles, areas: [] });
-    expect(result).toMatchObject({ allowed: true, areaIds: [], areasManaged: false });
+  it("marks puestos as unmanaged when no position mapping exists", async () => {
+    const result = await evaluate(directoryWith([ROLE_GROUPS.senior]), { roles: MAPPINGS.roles, positions: [] });
+    expect(result).toMatchObject({ allowed: true, positionIds: [], positionsManaged: false });
   });
 
-  it("denies with no_role_group when the user is in no role group", async () => {
-    await expect(evaluate(directoryWith([AREA_GROUPS.construccion]))).resolves.toEqual({
+  it("denies with no_role_group when the user is only in position groups", async () => {
+    await expect(evaluate(directoryWith([POSITION_GROUPS.residente]))).resolves.toEqual({
       allowed: false,
       role: null,
-      areaIds: [],
-      areasManaged: false,
+      positionIds: [],
+      positionsManaged: false,
       reason: "no_role_group",
     });
   });
 
   it("denies with no_role_group when no role mapping is configured", async () => {
-    const result = await evaluate(directoryWith([ROLE_GROUPS.senior]), { roles: [], areas: MAPPINGS.areas });
+    const result = await evaluate(directoryWith([ROLE_GROUPS.senior]), { roles: [], positions: MAPPINGS.positions });
     expect(result).toMatchObject({ allowed: false, reason: "no_role_group" });
   });
 
@@ -184,7 +202,7 @@ describe("evaluateAccess", () => {
     const directory = { ...fake, hasMember: vi.fn(fake.hasMember) };
     const shared: GroupMappings = {
       roles: [{ groupId: ROLE_GROUPS.senior, role: "Arquitecto Senior", rank: 40 }],
-      areas: [{ groupId: ROLE_GROUPS.senior, areaId: AREAS.diseno }],
+      positions: [{ groupId: ROLE_GROUPS.senior, positionId: POSITIONS.disenador }],
     };
     await evaluateAccess(SUB, EMAIL, { directory, mappings: shared, workspaceDomain: DOMAIN });
     expect(directory.hasMember).toHaveBeenCalledTimes(1);
@@ -193,30 +211,33 @@ describe("evaluateAccess", () => {
 });
 
 describe("loadGroupMappings", () => {
-  it("ignores unknown roles and areas that are soft-deleted", async () => {
+  it("reads position mappings and ignores unknown roles and soft-deleted puestos", async () => {
     const rows = [
-      { groupId: "g1", kind: "role", role: "Arquitecto Senior", rank: 40, areaId: null, areaDeletedAt: null },
-      { groupId: "g2", kind: "role", role: "Cliente", rank: 90, areaId: null, areaDeletedAt: null },
-      { groupId: "g3", kind: "area", role: null, rank: 0, areaId: "a1", areaDeletedAt: null },
-      { groupId: "g4", kind: "area", role: null, rank: 0, areaId: "a2", areaDeletedAt: new Date() },
+      { groupId: "g1", kind: "role", role: "Arquitecto Senior", rank: 40, positionId: null, positionDeletedAt: null },
+      { groupId: "g2", kind: "role", role: "Cliente", rank: 90, positionId: null, positionDeletedAt: null },
+      { groupId: "g3", kind: "position", role: null, rank: 0, positionId: "p1", positionDeletedAt: null },
+      { groupId: "g4", kind: "position", role: null, rank: 0, positionId: "p2", positionDeletedAt: new Date() },
+      { groupId: "g5", kind: "position", role: null, rank: 0, positionId: null, positionDeletedAt: null },
     ];
     dbMock.select.mockReturnValue({ from: () => ({ leftJoin: async () => rows }) });
     await expect(loadGroupMappings()).resolves.toEqual({
       roles: [{ groupId: "g1", role: "Arquitecto Senior", rank: 40 }],
-      areas: [{ groupId: "g3", areaId: "a1" }],
+      positions: [{ groupId: "g3", positionId: "p1" }],
     });
   });
 });
 
 function recordingTx() {
-  const calls: Array<{ op: string; values?: unknown; set?: unknown }> = [];
+  const calls: Array<{ op: string; table?: unknown; values?: unknown; set?: unknown }> = [];
   const tx = {
     update: () => ({
       set: (set: unknown) => ({ where: async () => void calls.push({ op: "update", set }) }),
     }),
-    delete: () => ({ where: async () => void calls.push({ op: "delete" }) }),
-    insert: () => ({
-      values: (values: unknown) => ({ onConflictDoNothing: async () => void calls.push({ op: "insert", values }) }),
+    delete: (table: unknown) => ({ where: async () => void calls.push({ op: "delete", table }) }),
+    insert: (table: unknown) => ({
+      values: (values: unknown) => ({
+        onConflictDoNothing: async () => void calls.push({ op: "insert", table, values }),
+      }),
     }),
   };
   return { tx, calls };
@@ -226,8 +247,8 @@ describe("applyAccess", () => {
   const granted = {
     allowed: true as const,
     role: "Arquitecto Senior" as const,
-    areaIds: [AREAS.construccion],
-    areasManaged: true,
+    positionIds: [POSITIONS.residente],
+    positionsManaged: true,
     reason: null,
   };
 
@@ -241,22 +262,24 @@ describe("applyAccess", () => {
     expect((calls[0].set as { accessCheckedAt: Date }).accessCheckedAt).toBeInstanceOf(Date);
   });
 
-  it("replaces the áreas with workspace rows when area mappings exist", async () => {
+  it("replaces the puestos with workspace rows when position mappings exist", async () => {
     const { tx, calls } = recordingTx();
     await applyAccess("staff-1", granted, tx as never);
     expect(calls.map((call) => call.op)).toEqual(["update", "delete", "insert"]);
-    expect(calls[2].values).toEqual([{ areaId: AREAS.construccion, staffId: "staff-1", source: "workspace" }]);
+    expect(calls[1].table).toBe(staffPositions);
+    expect(calls[2].table).toBe(staffPositions);
+    expect(calls[2].values).toEqual([{ positionId: POSITIONS.residente, staffId: "staff-1", source: "workspace" }]);
   });
 
-  it("clears the áreas when area mappings exist but no area group matched", async () => {
+  it("clears the puestos when position mappings exist but no position group matched", async () => {
     const { tx, calls } = recordingTx();
-    await applyAccess("staff-1", { ...granted, areaIds: [] }, tx as never);
+    await applyAccess("staff-1", { ...granted, positionIds: [] }, tx as never);
     expect(calls.map((call) => call.op)).toEqual(["update", "delete"]);
   });
 
-  it("leaves the áreas alone when no area mapping exists", async () => {
+  it("leaves the puestos alone when no position mapping exists", async () => {
     const { tx, calls } = recordingTx();
-    await applyAccess("staff-1", { ...granted, areaIds: [], areasManaged: false }, tx as never);
+    await applyAccess("staff-1", { ...granted, positionIds: [], positionsManaged: false }, tx as never);
     expect(calls.map((call) => call.op)).toEqual(["update"]);
   });
 

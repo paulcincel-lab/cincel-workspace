@@ -28,6 +28,8 @@ vi.mock("next/cache", () => ({ revalidatePath }));
 const repo = vi.hoisted(() => ({
   createSubtask: vi.fn(),
   listSubtasks: vi.fn(),
+  assertTaskVisible: vi.fn(async () => undefined),
+  isTaskVisible: vi.fn(async () => true),
 }));
 vi.mock("@/lib/repositories/tasks-repository", () => repo);
 
@@ -47,7 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   caps.canCreate = true;
   caps.canView = true;
-  repo.createSubtask.mockResolvedValue({ id: "c1", projectId: PROJECT });
+  repo.createSubtask.mockResolvedValue({ id: "c1", projectId: PROJECT, project: { id: PROJECT, name: "Casa", clientName: null } });
   repo.listSubtasks.mockResolvedValue(refs);
 });
 
@@ -68,6 +70,12 @@ describe("createSubtaskAction", () => {
     await expect(createSubtaskAction(PARENT, { title: "x" })).rejects.toThrow(
       "FORBIDDEN",
     );
+    expect(repo.createSubtask).not.toHaveBeenCalled();
+  });
+
+  it("refuses a parent the viewer can't see (admin task) with FORBIDDEN", async () => {
+    repo.assertTaskVisible.mockRejectedValueOnce(new Error("FORBIDDEN"));
+    await expect(createSubtaskAction(PARENT, { title: "x" })).rejects.toThrow("FORBIDDEN");
     expect(repo.createSubtask).not.toHaveBeenCalled();
   });
 
@@ -94,9 +102,15 @@ describe("createSubtaskAction", () => {
 });
 
 describe("listSubtasksAction", () => {
+  it("returns nothing for a parent the viewer can't see (admin task)", async () => {
+    repo.isTaskVisible.mockResolvedValueOnce(false);
+    await expect(listSubtasksAction(PARENT)).resolves.toEqual([]);
+    expect(repo.listSubtasks).not.toHaveBeenCalled();
+  });
+
   it("returns the children as TaskRef[]", async () => {
     await expect(listSubtasksAction(PARENT)).resolves.toEqual(refs);
-    expect(repo.listSubtasks).toHaveBeenCalledWith(PARENT);
+    expect(repo.listSubtasks).toHaveBeenCalledWith(PARENT, { staffId: ACTOR, isAdmin: false });
   });
 
   it("returns nothing without view access", async () => {

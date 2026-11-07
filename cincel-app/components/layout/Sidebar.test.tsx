@@ -1,9 +1,19 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import type { WorkflowRef } from "@/lib/types/core";
+
+const state = vi.hoisted(() => ({
+  pathname: "/dashboard",
+  fetchTramos: (() => Promise.resolve([])) as () => Promise<WorkflowRef[]>,
+}));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/dashboard",
+  usePathname: () => state.pathname,
+}));
+
+vi.mock("@/lib/actions/workflows-actions", () => ({
+  fetchTramosNavAction: () => state.fetchTramos(),
 }));
 
 vi.mock("@/lib/auth/auth-service", () => ({
@@ -22,6 +32,8 @@ import Sidebar from "./Sidebar";
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  state.pathname = "/dashboard";
+  state.fetchTramos = () => Promise.resolve([]);
 });
 
 /**
@@ -73,5 +85,62 @@ describe("Sidebar — icon button names", () => {
     const wasExpanded = first.getAttribute("aria-expanded") === "true";
     fireEvent.click(first);
     expect(first.getAttribute("aria-expanded")).toBe(wasExpanded ? "false" : "true");
+  });
+});
+
+const TRAMOS: WorkflowRef[] = [
+  { id: "w-cons", key: "construccion", name: "Construcción", sortOrder: 3 },
+  { id: "w-pre", key: "presale", name: "Presale", sortOrder: 1 },
+  { id: "w-dis", key: "diseno", name: "Diseño", sortOrder: 2 },
+];
+
+describe("Sidebar — Actividades submenu from tramos", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 1280 });
+    window.dispatchEvent(new Event("resize"));
+    state.pathname = "/actividades/general";
+  });
+
+  it("lists General plus every active tramo in sortOrder, linked by key", async () => {
+    state.fetchTramos = () => Promise.resolve(TRAMOS);
+    render(<Sidebar />);
+
+    await waitFor(() => expect(screen.getByRole("link", { name: "Construcción" })).toBeTruthy());
+
+    const general = screen.getByRole("link", { name: "General" });
+    const presale = screen.getByRole("link", { name: "Presale" });
+    const diseno = screen.getByRole("link", { name: "Diseño" });
+    const construccion = screen.getByRole("link", { name: "Construcción" });
+
+    expect(general.getAttribute("href")).toBe("/actividades/general");
+    expect(presale.getAttribute("href")).toBe("/actividades/presale");
+    expect(diseno.getAttribute("href")).toBe("/actividades/diseno");
+    expect(construccion.getAttribute("href")).toBe("/actividades/construccion");
+
+    const links = screen.getAllByRole("link").map((link) => link.textContent);
+    const start = links.indexOf("General");
+    expect(links.slice(start, start + 4)).toEqual(["General", "Presale", "Diseño", "Construcción"]);
+
+    expect(screen.queryByText(/Departamento/i)).toBeNull();
+    expect(screen.queryByText("Taller de diseño")).toBeNull();
+    expect(screen.queryAllByTestId("sidebar-submenu-skeleton")).toHaveLength(0);
+  });
+
+  it("shows three skeleton rows while the tramos load", () => {
+    state.fetchTramos = () => new Promise<WorkflowRef[]>(() => {});
+    render(<Sidebar />);
+
+    expect(screen.getByRole("link", { name: "General" })).toBeTruthy();
+    expect(screen.getAllByTestId("sidebar-submenu-skeleton")).toHaveLength(3);
+  });
+
+  it("keeps only General when the tramos fail to load", async () => {
+    state.fetchTramos = () => Promise.reject(new Error("boom"));
+    render(<Sidebar />);
+
+    await waitFor(() => expect(screen.queryAllByTestId("sidebar-submenu-skeleton")).toHaveLength(0));
+    expect(screen.getByRole("link", { name: "General" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Presale" })).toBeNull();
+    expect(screen.queryByText(/Departamento/i)).toBeNull();
   });
 });

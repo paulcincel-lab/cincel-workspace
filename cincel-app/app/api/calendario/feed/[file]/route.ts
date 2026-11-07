@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { findStaffByCalendarFeedToken } from "@/lib/repositories/calendar-feed-repository";
 import { listMyTasks } from "@/lib/repositories/tasks-repository";
+import { staffViewerScope } from "@/lib/repositories/viewer-scope-repository";
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import { buildIcs } from "@/lib/calendar/ics";
 
@@ -25,7 +26,8 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const tasks = await listMyTasks(staff.id, { archived: false });
+  // Admin tasks only in an administrator's own feed (project flow BE §8.8).
+  const tasks = await listMyTasks(staff.id, { archived: false }, await staffViewerScope(staff.id));
   const ics = buildIcs(buildCalendarEvents(tasks), {
     baseUrl: request.nextUrl.origin,
     calendarName: `Cincel — ${staff.name}`,

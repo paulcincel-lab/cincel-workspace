@@ -3,12 +3,13 @@
  * are recorded in `history_events` under entity `workflow` (field
  * `phase:<name>`), like template edits.
  */
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { workflowPhases, workflowTaskTemplates } from "@/lib/db/schema";
+import { workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
 import type { FlowExecutor } from "@/lib/project-flow/db";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
+import { nameKey } from "@/lib/project-flow/names";
+import { recordChange } from "@/lib/repositories/history-repository";
 import type { WorkflowPhase, WorkflowPhaseInput, WorkflowPhaseRef } from "@/lib/types/core";
 
 export type ListPhasesOptions = { includeInactive?: boolean };
@@ -65,9 +66,97 @@ export async function listPhases(workflowId: string, opts: ListPhasesOptions = {
   return (await listPhasesByWorkflow([workflowId], opts)).get(workflowId) ?? [];
 }
 
+const UNIQUE_VIOLATION = "23505";
+
+function isUniqueViolation(err: unknown): boolean {
+  let current: unknown = err;
+  for (let depth = 0; current && depth < 5; depth++) {
+    if (typeof current === "object" && (current as { code?: unknown }).code === UNIQUE_VIOLATION) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+function cleanName(value: string): string {
+  const name = value.trim();
+  if (!name) throw new Error("EMPTY");
+  return name;
+}
+
+/** NAME_TAKEN when another fase of the tramo has the same nameKey (lower, no accents, collapsed spaces). */
+async function assertNameFree(executor: FlowExecutor, workflowId: string, name: string, exceptId?: string) {
+  const rows = await executor
+    .select({ name: workflowPhases.name })
+    .from(workflowPhases)
+    .where(
+      and(eq(workflowPhases.workflowId, workflowId), exceptId ? ne(workflowPhases.id, exceptId) : undefined)
+    );
+  const key = nameKey(name);
+  if (rows.some((r) => nameKey(r.name) === key)) throw new Error("NAME_TAKEN");
+}
+
+async function templateCountOf(executor: FlowExecutor, phaseId: string): Promise<number> {
+  const [row] = await executor
+    .select({ n: count() })
+    .from(workflowTaskTemplates)
+    .where(and(eq(workflowTaskTemplates.phaseId, phaseId), eq(workflowTaskTemplates.active, true)));
+  return Number(row?.n ?? 0);
+}
+
+function toPhase(row: typeof workflowPhases.$inferSelect, templateCount: number): WorkflowPhase {
+  return {
+    id: row.id,
+    workflowId: row.workflowId,
+    name: row.name,
+    sortOrder: row.sortOrder,
+    active: row.active,
+    templateCount,
+  };
+}
+
+/** History under entity `workflow`, field `phase:<name>`. */
+async function recordPhaseChange(
+  executor: FlowExecutor,
+  workflowId: string,
+  actorId: string,
+  phaseName: string,
+  before: string | null,
+  after: string | null
+) {
+  await recordChange(
+    { entity: "workflow", entityId: workflowId, actorId, field: `phase:${phaseName}`, before, after },
+    executor
+  );
+}
+
 /** Appends a fase last. Errors: NOT_FOUND (tramo), NAME_TAKEN (lower(name) or nameKey), EMPTY. */
 export async function createPhase(workflowId: string, input: WorkflowPhaseInput, actorId: string): Promise<WorkflowPhase> {
-  return notImplemented("createPhase", workflowId, input, actorId);
+  const name = cleanName(input.name);
+  try {
+    return await db.transaction(async (tx) => {
+      const [workflow] = await tx
+        .select({ id: workflows.id })
+        .from(workflows)
+        .where(and(eq(workflows.id, workflowId), isNull(workflows.deletedAt)))
+        .limit(1);
+      if (!workflow) throw new Error("NOT_FOUND");
+      await assertNameFree(tx, workflowId, name);
+      const existing = await tx
+        .select({ sortOrder: workflowPhases.sortOrder })
+        .from(workflowPhases)
+        .where(eq(workflowPhases.workflowId, workflowId));
+      const sortOrder = existing.reduce((max, r) => Math.max(max, r.sortOrder + 1), 0);
+      const [row] = await tx
+        .insert(workflowPhases)
+        .values({ workflowId, name, sortOrder, active: input.active ?? true })
+        .returning();
+      await recordPhaseChange(tx, workflowId, actorId, row.name, null, row.name);
+      return toPhase(row, 0);
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new Error("NAME_TAKEN");
+    throw err;
+  }
 }
 
 /** Rename, activate or deactivate. Errors: NOT_FOUND, NAME_TAKEN, EMPTY. */
@@ -76,17 +165,72 @@ export async function updatePhase(
   patch: Partial<WorkflowPhaseInput>,
   actorId: string
 ): Promise<WorkflowPhase> {
-  return notImplemented("updatePhase", id, patch, actorId);
+  const nextName = patch.name === undefined ? undefined : cleanName(patch.name);
+  try {
+    return await db.transaction(async (tx) => {
+      const [before] = await tx.select().from(workflowPhases).where(eq(workflowPhases.id, id)).limit(1);
+      if (!before) throw new Error("NOT_FOUND");
+      const name = nextName ?? before.name;
+      const active = patch.active ?? before.active;
+      if (name !== before.name) await assertNameFree(tx, before.workflowId, name, id);
+      if (name === before.name && active === before.active) {
+        return toPhase(before, await templateCountOf(tx, id));
+      }
+      const [after] = await tx
+        .update(workflowPhases)
+        .set({ name, active })
+        .where(eq(workflowPhases.id, id))
+        .returning();
+      if (after.name !== before.name) {
+        await recordPhaseChange(tx, before.workflowId, actorId, before.name, before.name, after.name);
+      }
+      if (after.active !== before.active) {
+        await recordPhaseChange(
+          tx,
+          before.workflowId,
+          actorId,
+          after.name,
+          before.active ? "activa" : "inactiva",
+          after.active ? "activa" : "inactiva"
+        );
+      }
+      return toPhase(after, await templateCountOf(tx, id));
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new Error("NAME_TAKEN");
+    throw err;
+  }
 }
 
 /** One transaction, `sort_order` = index. `orderedIds` must be exactly the tramo's fase ids (else NOT_FOUND). */
 export async function reorderPhases(workflowId: string, orderedIds: string[]): Promise<void> {
-  return notImplemented("reorderPhases", workflowId, orderedIds);
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: workflowPhases.id })
+      .from(workflowPhases)
+      .where(eq(workflowPhases.workflowId, workflowId));
+    const current = new Set(rows.map((r) => r.id));
+    const given = new Set(orderedIds);
+    if (given.size !== orderedIds.length || given.size !== current.size || orderedIds.some((id) => !current.has(id))) {
+      throw new Error("NOT_FOUND");
+    }
+    for (const [i, id] of orderedIds.entries()) {
+      await tx
+        .update(workflowPhases)
+        .set({ sortOrder: i })
+        .where(and(eq(workflowPhases.id, id), eq(workflowPhases.workflowId, workflowId)));
+    }
+  });
 }
 
 /** Throws PHASE_MISMATCH unless `phaseId` is a fase of `workflowId`. */
 export async function assertPhaseInWorkflow(tx: FlowExecutor, phaseId: string, workflowId: string): Promise<void> {
-  return notImplemented("assertPhaseInWorkflow", tx, phaseId, workflowId);
+  const [row] = await tx
+    .select({ id: workflowPhases.id })
+    .from(workflowPhases)
+    .where(and(eq(workflowPhases.id, phaseId), eq(workflowPhases.workflowId, workflowId)))
+    .limit(1);
+  if (!row) throw new Error("PHASE_MISMATCH");
 }
 
 /** The fase with `workflow_phases.key = phaseKey` in the live tramo `workflowKey`, or null (readiness gates). */
@@ -95,5 +239,11 @@ export async function resolveGatePhase(
   workflowKey: string,
   phaseKey: string
 ): Promise<WorkflowPhaseRef | null> {
-  return notImplemented("resolveGatePhase", executor, workflowKey, phaseKey);
+  const [row] = await executor
+    .select({ id: workflowPhases.id, name: workflowPhases.name, sortOrder: workflowPhases.sortOrder })
+    .from(workflowPhases)
+    .innerJoin(workflows, eq(workflows.id, workflowPhases.workflowId))
+    .where(and(eq(workflows.key, workflowKey), isNull(workflows.deletedAt), eq(workflowPhases.key, phaseKey)))
+    .limit(1);
+  return row ?? null;
 }

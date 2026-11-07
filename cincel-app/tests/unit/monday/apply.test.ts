@@ -10,7 +10,7 @@
  */
 import { rmSync } from "node:fs";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
@@ -40,12 +40,13 @@ import {
   createPlanDbLookups,
   readPlanExport,
 } from "@/scripts/monday/plan";
-import { ENTITY_TABLES } from "@/scripts/monday/rollback";
+import { ENTITY_TABLES, type TableEntity } from "@/scripts/monday/rollback";
 
 import {
   fakeDrive,
   io,
   nestedMapping as sharedNestedMapping,
+  seedFixtureWorkflow,
   writeExportFolder,
 } from "./apply-fixtures";
 
@@ -117,11 +118,15 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
   });
 
   async function inTx(fn: (tx: ImportDb) => Promise<void>) {
+    // Repeatable read keeps rows other test files commit meanwhile out of the table counts.
     await db
-      .transaction(async (tx) => {
-        await fn(tx);
-        throw new Rollback();
-      })
+      .transaction(
+        async (tx) => {
+          await fn(tx);
+          throw new Rollback();
+        },
+        { isolationLevel: "repeatable read" },
+      )
       .catch((err) => {
         if (!(err instanceof Rollback)) throw err;
       });
@@ -139,6 +144,7 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
     await tx
       .insert(schema.contacts)
       .values({ id: CLIENT, type: "cliente", name: "Apply Cliente" });
+    await seedFixtureWorkflow(tx);
   }
 
   /** Writes translate-nested-export.json out as an export folder (BE §4.1). */
@@ -184,7 +190,8 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
     await inTx(async (tx) => {
       await seed(tx);
       const mapping = nestedMapping();
-      delete mapping.boards[0].statusMaps.status["2"];
+      // A client that is not a contact: CLIENT_UNRESOLVED (blocking).
+      mapping.boards[0].client = { kind: "contact", contactId: "99999999-9999-4999-8999-999999999999" };
       const dir = exportFolder(mapping);
       const before = await tx
         .select({ n: sql<number>`count(*)::int` })
@@ -198,7 +205,7 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
         ),
       ).toBe(1);
       expect(c.err()).toContain("refused");
-      expect(c.err()).toContain("STATUS_UNMAPPED board 901 item 2002");
+      expect(c.err()).toContain("CLIENT_UNRESOLVED board 901");
       expect(phaseB).not.toHaveBeenCalled();
       expect(await batchesOf(tx)).toEqual([]);
       expect(
@@ -289,7 +296,7 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
       // Every ref points at a live row, with that row's updated_at.
       for (const ref of refs) {
         const { table, key, hasUpdatedAt } =
-          ENTITY_TABLES[ref.entity as ImportEntity];
+          ENTITY_TABLES[ref.entity as TableEntity];
         const found = (await tx.execute(
           sql.raw(
             `select ${hasUpdatedAt ? "updated_at" : "null as updated_at"} from core.${table} where ${key} = '${ref.rowId}' limit 1`,
@@ -320,10 +327,16 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
           .filter((r) => projectIds.includes(r.projectId))
           .every((r) => taskIds.has(r.id)),
       ).toBe(true);
+      // No "cambio" history on the imported rows (other test files may commit their own meanwhile).
       const cambios = await tx
         .select()
         .from(schema.historyEvents)
-        .where(eq(schema.historyEvents.kind, "cambio"));
+        .where(
+          and(
+            eq(schema.historyEvents.kind, "cambio"),
+            inArray(schema.historyEvents.entityId, [...taskIds, ...projectIds]),
+          ),
+        );
       expect(cambios).toEqual([]);
 
       // An applying batch of the account is resumed: phase A is skipped.

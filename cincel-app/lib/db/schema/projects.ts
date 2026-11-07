@@ -50,10 +50,6 @@ export const projects = core.table(
     currentWorkflowId: uuid("current_workflow_id").references(() => workflows.id, {
       onDelete: "set null",
     }),
-    /** @deprecated Legacy single phase. Dropped in release B (0025); fases derive from tasks. */
-    phase: text("phase"),
-    /** @deprecated Free-text project phases (#435). Reported by 0024 and dropped in release B (0025). */
-    phases: text("phases").array().notNull().default(sql`'{}'::text[]`),
     projectType: text("project_type"),
     addressStreet: text("address_street"),
     addressCity: text("address_city"),
@@ -97,11 +93,11 @@ export const projects = core.table(
     uniqueIndex("projects_code_uq")
       .on(t.code)
       .where(sql`${t.deletedAt} is null and ${t.code} is not null`),
-    // Replaced by projects_name_lower_uq (firm-wide, live active/paused) in 0024 step 11, after
-    // duplicate names are made unique.
-    uniqueIndex("projects_client_name_lower_uq")
-      .on(t.clientId, sql`lower(${t.name})`)
-      .where(sql`${t.deletedAt} is null`),
+    // Firm-wide among live active/paused projects (archived = completado/cancelado). Created by
+    // 0024 step 11 after duplicate names were made unique; replaces projects_client_name_lower_uq.
+    uniqueIndex("projects_name_lower_uq")
+      .on(sql`lower(${t.name})`)
+      .where(sql`${t.deletedAt} is null and ${t.status} in ('activo','pausado')`),
     index("idx_projects_name_trgm").using("gin", sql`${t.name} gin_trgm_ops`),
     index("idx_projects_client_id").on(t.clientId),
     index("idx_projects_origin_staff_id").on(t.originStaffId),

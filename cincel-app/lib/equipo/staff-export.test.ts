@@ -50,6 +50,8 @@ const sampleStaff: Staff[] = [
     lastLoginAt: null,
     accessRevokedAt: null,
     accessRevokedReason: null,
+    positions: [],
+    candidatePhases: [],
   },
 ];
 

@@ -44,8 +44,6 @@ export type SessionAccess = {
     | null;
 };
 
-const resolveAccessRole = staffAccessRole;
-
 /**
  * Server-side equivalent of the legacy `resolveCurrentSessionAccess()` — maps
  * the current request's session to an access decision + role for the route
@@ -55,7 +53,7 @@ export async function getSessionAccess(): Promise<SessionAccess> {
   const session = await getCheckedSession();
   if (!session) return { status: "guest", user: null };
 
-  const access = resolveAccessRole(session.user.role, session.user.email);
+  const access = staffAccessRole(session.user.role, session.user.email);
   if (!access) return { status: "no_system_access", user: null };
 
   const user = { ...session.user, access };

@@ -32,7 +32,7 @@ function exportData(): ExportData {
 
 function mappingInput(): MappingInput {
   return {
-    version: 1,
+    version: 2,
     boards: [
       {
         mondayBoardId: "301",
@@ -51,14 +51,6 @@ function mappingInput(): MappingInput {
           notas: "notes",
           deps: "dependencies",
         },
-        statusMaps: {
-          status: {
-            "0": { status: "pendiente" },
-            "1": { status: "completado" },
-            "2": { status: "bloqueado" },
-            "3": { customStatusId: CUSTOM_OPEN },
-          },
-        },
         templateMatches: { "1003": TEMPLATE },
       },
       {
@@ -72,7 +64,6 @@ function mappingInput(): MappingInput {
           email: "contact_email",
           phone: "contact_phone",
         },
-        statusMaps: {},
       },
       {
         mondayBoardId: "501",
@@ -83,12 +74,6 @@ function mappingInput(): MappingInput {
         projectCodes: { "6001": "OB-RUIZ" },
         columns: { name: "title", rel: "client" },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: {
-          sstatus: {
-            "5": { customStatusId: CUSTOM_CLOSES },
-            "6": { status: "en_proceso" },
-          },
-        },
       },
       {
         mondayBoardId: "601",
@@ -97,7 +82,6 @@ function mappingInput(): MappingInput {
         contactType: "proveedor",
         providerSubtype: "contratista",
         columns: { name: "title" },
-        statusMaps: {},
       },
       {
         mondayBoardId: "701",
@@ -106,7 +90,6 @@ function mappingInput(): MappingInput {
         groupClients: { ga: { kind: "new", name: " Familia Pérez " } },
         client: { kind: "new", name: "familia pérez" },
         columns: { name: "title" },
-        statusMaps: {},
       },
     ],
     people: {
@@ -116,6 +99,15 @@ function mappingInput(): MappingInput {
       "14": null,
     },
     options: { includeUpdates: true, includeFiles: true },
+    // The firm-wide status map snapshot, keyed by statusLabelKey(label).
+    statusMap: {
+      pendiente: { target: { status: "pendiente" } },
+      listo: { target: { status: "completado" } },
+      detenido: { target: { status: "bloqueado" } },
+      "revisión cliente": { target: { customStatusId: CUSTOM_OPEN } },
+      hecho: { target: { customStatusId: CUSTOM_CLOSES } },
+      "en curso": { target: { status: "en_proceso" } },
+    },
   };
 }
 
@@ -124,7 +116,8 @@ const lookups: CincelLookups = {
     [CUSTOM_OPEN]: { name: "Revisión cliente", closes: false },
     [CUSTOM_CLOSES]: { name: "Hecho", closes: true },
   },
-  templates: { [TEMPLATE]: { workflowId: WORKFLOW } },
+  phases: {},
+  templates: { [TEMPLATE]: { workflowId: BOARD_WORKFLOW } },
   staff: {
     [ANA]: { name: "Ana" },
     [BETO]: { name: "Beto" },
@@ -223,18 +216,18 @@ describe("translate: board_as_project", () => {
     );
   });
 
-  it("group → phase and seccion with dense-rank seccion_order; sort_order per group", () => {
+  it("group → seccion with dense-rank seccion_order; sort_order per group", () => {
     const r = run();
     const rows = ["1001", "1002", "1003", "1004", "1005"].map((id) => {
       const t = task(r, id);
-      return [t.phase, t.seccion, t.seccionOrder, t.sortOrder];
+      return [t.seccion, t.seccionOrder, t.sortOrder];
     });
     expect(rows).toEqual([
-      ["Diseño", "Diseño", 1, 1],
-      ["Diseño", "Diseño", 1, 2],
-      ["Obra", "Obra", 2, 1],
-      ["Obra", "Obra", 2, 2],
-      ["Extras", "Extras", 1, 1],
+      ["Diseño", 1, 1],
+      ["Diseño", 1, 2],
+      ["Obra", 2, 1],
+      ["Obra", 2, 2],
+      ["Extras", 1, 1],
     ]);
     expect(task(r, "1001").source).toEqual({
       boardId: "301",
@@ -244,7 +237,7 @@ describe("translate: board_as_project", () => {
     });
   });
 
-  it("status by label id, custom status derivation, empty cell", () => {
+  it("status by label text through the status map, custom status derivation, empty cell", () => {
     const r = run();
     expect(task(r, "1001")).toMatchObject({
       status: "completado",
@@ -296,9 +289,9 @@ describe("translate: board_as_project", () => {
     expect(run(data)).toEqual(before);
   });
 
-  it("unmapped status label is reported", () => {
+  it("a saved entry pointing at a deleted custom status is STATUS_UNMAPPED", () => {
     const input = mappingInput();
-    delete input.boards[0].statusMaps.status["2"];
+    input.statusMap!.detenido = { target: { customStatusId: SOL } };
     const r = run(exportData(), input);
     expect(task(r, "1003").status).toBe("pendiente");
     expect(r.issues).toContainEqual(
@@ -310,16 +303,20 @@ describe("translate: board_as_project", () => {
     );
   });
 
-  it("a defaulted status label imports as pendiente and is listed once for review", () => {
+  it("a label with no entry and no default imports as pendiente and is listed once for review", () => {
     const input = mappingInput();
-    input.boards[0].statusMaps.status["3"] = { status: "pendiente", defaulted: true };
-    const r = run(exportData(), input);
+    delete input.statusMap!["revisión cliente"];
+    // Without the custom status of the same name, nothing in the defaults table matches the label.
+    const { [CUSTOM_OPEN]: _sameName, ...customStatuses } = lookups.customStatuses;
+    void _sameName;
+    const r = translate(exportData(), Mapping.parse(input), { ...lookups, customStatuses }, { importedById: ADMIN });
+    expect(task(r, "1002")).toMatchObject({ status: "pendiente", customStatusId: null });
     const defaulted = r.issues.filter((i) => i.code === "STATUS_DEFAULTED");
     expect(defaulted).toEqual([
       {
         code: "STATUS_DEFAULTED",
         boardId: "301",
-        message: 'Status label 3 ("Revisión cliente") of column status has no equivalent; defaulted to pendiente',
+        message: 'Status label "Revisión cliente" has no equivalent; its tasks import as pendiente',
       },
     ]);
   });
@@ -380,7 +377,7 @@ describe("translate: board_as_project", () => {
     expect(run(exportData(), input).contactPeople).toEqual([]);
   });
 
-  it("timeline → commitment date, start, milestone; date column → delivery; notes", () => {
+  it("timeline → commitment and delivery dates, start, milestone; date column wins for delivery; notes", () => {
     const r = run();
     expect(task(r, "1001")).toMatchObject({
       start: "2026-01-05",
@@ -394,11 +391,13 @@ describe("translate: board_as_project", () => {
     expect(task(r, "1002")).toMatchObject({
       start: "2026-02-01",
       commitmentDate: "2026-02-01",
+      deliveryDate: "2026-02-01",
       milestone: true,
     });
     expect(task(r, "1005")).toMatchObject({
       start: "2026-03-01",
       commitmentDate: "2026-03-31",
+      deliveryDate: "2026-03-31",
     });
     expect(task(r, "1004")).toMatchObject({
       start: null,
@@ -430,12 +429,12 @@ describe("translate: board_as_project", () => {
     );
   });
 
-  it("kind: workflow for template matches, usuario with the board workflow otherwise", () => {
+  it("kind: workflow for template matches of the tramo, usuario with the board tramo otherwise", () => {
     const r = run();
     expect(task(r, "1003")).toMatchObject({
       kind: "workflow",
       templateId: TEMPLATE,
-      workflowId: WORKFLOW,
+      workflowId: BOARD_WORKFLOW,
     });
     expect(task(r, "1001")).toMatchObject({
       kind: "usuario",
@@ -454,17 +453,21 @@ describe("translate: board_as_project", () => {
     );
   });
 
-  it("board workflow → project workflow; every group → project phase, in position order (#678)", () => {
+  it("board tramo → the tasks' tramo, the project's one tramo and its current tramo", () => {
     const p = project(run(), "301");
-    expect(p.workflowId).toBe(BOARD_WORKFLOW);
-    expect(p.phases).toEqual(["Diseño", "Extras", "Obra", "Entrega final"]);
-    expect(p.data.stageWorkflowId).toBe(BOARD_WORKFLOW);
+    expect(p).toMatchObject({
+      workflowId: BOARD_WORKFLOW,
+      tramos: [BOARD_WORKFLOW],
+      currentWorkflowId: BOARD_WORKFLOW,
+    });
+    expect(p.data.stageWorkflowIds).toEqual([BOARD_WORKFLOW]);
 
     const input = mappingInput();
     input.boards[0].workflowId = null;
+    input.boards[0].templateMatches = {};
     const none = project(run(exportData(), input), "301");
-    expect(none.workflowId).toBeNull();
-    expect(none.data).not.toHaveProperty("stageWorkflowId");
+    expect(none).toMatchObject({ workflowId: null, tramos: [], currentWorkflowId: null });
+    expect(none.data).not.toHaveProperty("stageWorkflowIds");
   });
 
   it("project progress, dates and status", () => {
@@ -520,11 +523,12 @@ describe("translate: contacts and other strategies", () => {
       project: { externalId: "6001" },
       status: "en_proceso",
       sortOrder: 2,
-      phase: null,
+      workflowId: null,
+      phaseId: null,
     });
     expect(project(r, "6003").client).toBeNull();
-    // The item's group is its one phase; the board has no workflow.
-    expect(project(r, "6001")).toMatchObject({ workflowId: null, phases: ["Activas"] });
+    // The board has no tramo.
+    expect(project(r, "6001")).toMatchObject({ workflowId: null, tramos: [] });
     expect(r.issues).toContainEqual(
       expect.objectContaining({
         code: "CLIENT_UNRESOLVED",
@@ -560,7 +564,7 @@ describe("translate: contacts and other strategies", () => {
       status: "activo",
       progress: 0,
       workflowId: null,
-      phases: [],
+      tramos: [],
     });
   });
 
@@ -574,140 +578,22 @@ describe("translate: contacts and other strategies", () => {
     expect(r.projects.some((p) => p.source.boardId === "701")).toBe(false);
   });
 
-  it("item_as_project and group_as_project take the board workflow (#678)", () => {
+  it("item_as_project and group_as_project take the board tramo", () => {
     const input = mappingInput();
     input.boards[2].workflowId = WORKFLOW;
     input.boards[4].workflowId = WORKFLOW;
     const r = run(exportData(), input);
     for (const id of ["6001", "701:ga"]) {
-      expect(project(r, id).workflowId).toBe(WORKFLOW);
-      expect(project(r, id).data.stageWorkflowId).toBe(WORKFLOW);
+      expect(project(r, id)).toMatchObject({
+        workflowId: WORKFLOW,
+        tramos: [WORKFLOW],
+        currentWorkflowId: WORKFLOW,
+      });
+      expect(project(r, id).data.stageWorkflowIds).toEqual([WORKFLOW]);
     }
   });
 
   it("is deterministic", () => {
     expect(run()).toEqual(run());
-  });
-});
-
-describe("translate: group targets (#687)", () => {
-  const PHASE_TEMPLATE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-  const withPhases: CincelLookups = {
-    ...lookups,
-    templates: {
-      ...lookups.templates,
-      [PHASE_TEMPLATE]: { workflowId: BOARD_WORKFLOW, phase: " DISEÑO " },
-    },
-  };
-  const runWith = (input: MappingInput, l: CincelLookups = withPhases) =>
-    translate(exportData(), Mapping.parse(input), l, { importedById: ADMIN });
-
-  it("a group named like a phase of the board workflow takes that phase; the others a new phase", () => {
-    const r = runWith(mappingInput());
-    expect(project(r, "301").phases).toEqual(["DISEÑO", "Extras", "Obra", "Entrega final"]);
-    expect(task(r, "1001").phase).toBe("DISEÑO");
-    expect(task(r, "1003").phase).toBe("Obra");
-  });
-
-  it("phase and workflow_phase targets name the phase; a stage adds a project stage and no phase", () => {
-    const input = mappingInput();
-    input.boards[0].groupTargets = {
-      g_diseno: { kind: "phase" },
-      g_extra: { kind: "workflow_phase", phase: "Acabados" },
-      g_obra: { kind: "stage", workflowId: WORKFLOW },
-    };
-    const r = runWith(input);
-    const p = project(r, "301");
-    expect(p.phases).toEqual(["Diseño", "Acabados", "Entrega final"]);
-    expect(p.extraStages).toEqual([WORKFLOW]);
-    expect(p.data.stageWorkflowId).toBe(BOARD_WORKFLOW);
-    expect(p.data.stageWorkflowIds).toEqual([WORKFLOW]);
-    expect(task(r, "1001").phase).toBe("Diseño");
-    expect(task(r, "1005").phase).toBe("Acabados");
-    expect(task(r, "1003").phase).toBeNull();
-    expect(task(r, "1003").project.externalId).toBe("301");
-  });
-
-  it("a stage on the board workflow itself adds no extra stage", () => {
-    const input = mappingInput();
-    input.boards[0].groupTargets = { g_obra: { kind: "stage", workflowId: BOARD_WORKFLOW } };
-    const p = project(runWith(input), "301");
-    expect(p.extraStages).toBeUndefined();
-    expect(p.data).not.toHaveProperty("stageWorkflowIds");
-  });
-
-  it("a group as its own project takes its items, name, code and client", () => {
-    const input = mappingInput();
-    input.boards[0].groupTargets = { g_extra: { kind: "project" } };
-    input.boards[0].projectNames = { g_extra: "Casa Lomas · Extras" };
-    input.boards[0].projectCodes = { g_extra: "CL-EX" };
-    input.boards[0].groupClients = { g_extra: { kind: "contact", contactId: SOL } };
-    const r = runWith(input);
-    const own = project(r, "301:g_extra");
-    expect(own).toMatchObject({
-      name: "Casa Lomas · Extras",
-      code: "CL-EX",
-      client: { kind: "existing", id: SOL },
-      phases: [],
-      workflowId: BOARD_WORKFLOW,
-    });
-    expect(own.source.groupId).toBe("g_extra");
-    expect(task(r, "1005")).toMatchObject({ phase: null, seccion: "Extras", project: { externalId: "301:g_extra" } });
-    expect(project(r, "301").phases).toEqual(["DISEÑO", "Obra", "Entrega final"]);
-    expect(r.tasks.filter((t) => t.project.externalId === "301").map((t) => t.externalId)).toEqual([
-      "1001",
-      "1002",
-      "1003",
-      "1004",
-    ]);
-  });
-
-  it("ignored groups import none of their items", () => {
-    const input = mappingInput();
-    input.boards[0].groupTargets = { g_diseno: { kind: "ignore" } };
-    const r = runWith(input);
-    expect(r.tasks.some((t) => t.externalId === "1001" || t.externalId === "1002")).toBe(false);
-    expect(project(r, "301").phases).toEqual(["Extras", "Obra", "Entrega final"]);
-  });
-
-  it("no board project when every group is its own project or ignored", () => {
-    const input = mappingInput();
-    input.boards[0].client = null;
-    input.boards[0].groupClients = {
-      g_diseno: { kind: "contact", contactId: SOL },
-      g_obra: { kind: "contact", contactId: SOL },
-    };
-    input.boards[0].groupTargets = {
-      g_diseno: { kind: "project" },
-      g_obra: { kind: "project" },
-      g_extra: { kind: "ignore" },
-      g_final: { kind: "ignore" },
-    };
-    const r = runWith(input);
-    expect(r.projects.some((p) => p.externalId === "301")).toBe(false);
-    expect(r.projects.filter((p) => p.source.boardId === "301").map((p) => p.externalId)).toEqual([
-      "301:g_diseno",
-      "301:g_obra",
-    ]);
-    expect(r.issues.some((i) => i.code === "CLIENT_UNRESOLVED" && i.boardId === "301")).toBe(false);
-  });
-
-  it("item_as_project: the group's target sets each item project's phase or stage; ignore skips its items", () => {
-    const input = mappingInput();
-    input.boards[2].groupTargets = { g1: { kind: "stage", workflowId: WORKFLOW } };
-    const staged = project(runWith(input), "6001");
-    expect(staged.phases).toEqual([]);
-    expect(staged.extraStages).toEqual([WORKFLOW]);
-
-    input.boards[2].groupTargets = { g1: { kind: "ignore" } };
-    const ignored = runWith(input);
-    expect(ignored.projects.some((p) => p.source.boardId === "501")).toBe(false);
-    expect(ignored.tasks.some((t) => t.source.boardId === "501")).toBe(false);
-  });
-
-  it("a project target on item_as_project falls back to the default phase", () => {
-    const input = mappingInput();
-    input.boards[2].groupTargets = { g1: { kind: "project" } };
-    expect(project(runWith(input), "6001").phases).toEqual(["Activas"]);
   });
 });

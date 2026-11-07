@@ -71,6 +71,19 @@ describe("updateProjectAction", () => {
     expect(folders.syncProjectFolderName).toHaveBeenCalledWith(PROJECT);
   });
 
+  it("creates the client folders after a client is set", async () => {
+    await updateProjectAction(PROJECT, { clientId: "66666666-6666-4666-8666-666666666666" });
+    await runAfter();
+    expect(folders.syncProjectFolders).toHaveBeenCalledWith(PROJECT);
+    expect(folders.syncProjectFolderName).not.toHaveBeenCalled();
+  });
+
+  it("doesn't sync the folders when the client is cleared", async () => {
+    await updateProjectAction(PROJECT, { clientId: null });
+    await runAfter();
+    expect(folders.syncProjectFolders).not.toHaveBeenCalled();
+  });
+
   it("leaves Drive alone for other edits", async () => {
     await updateProjectAction(PROJECT, { progress: 40 });
     await runAfter();

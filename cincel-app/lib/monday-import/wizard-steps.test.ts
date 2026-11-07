@@ -28,13 +28,12 @@ import {
   previousStep,
   projectKeys,
   rollbackBlockerText,
-  setBoardArea,
+  COLUMN_TARGET_LABELS,
   setBoardWorkflow,
   setColumnTarget,
   setOptions,
   setPerson,
   setRecordEntry,
-  setStatusTarget,
   subitemsSection,
   suggestStaff,
   unmappedPeople,
@@ -50,6 +49,7 @@ import type {
   MondayImportJob,
   MondayImportRunState,
 } from "@/lib/types/monday-import";
+import { customStatusIndex } from "@/lib/monday-import/status-map";
 import { draftMapping, readExport, statusLabels, type InitLookups } from "@/scripts/monday/init";
 import type { MappingInput } from "@/scripts/monday/mapping.schema";
 
@@ -57,8 +57,8 @@ const FIXTURE = resolve(__dirname, "../../scripts/monday/__fixtures__/export-ini
 
 const ID = {
   ana: "00000000-0000-4000-8000-0000000000a1",
-  area: "00000000-0000-4000-8000-0000000000f6",
-  otherArea: "00000000-0000-4000-8000-0000000000f7",
+  faseObra: "00000000-0000-4000-8000-0000000000f6",
+  faseOther: "00000000-0000-4000-8000-0000000000f7",
   wfObra: "00000000-0000-4000-8000-000000000101",
   wfOther: "00000000-0000-4000-8000-000000000102",
   tplObra: "00000000-0000-4000-8000-000000000201",
@@ -73,28 +73,26 @@ const lookups: InitLookups = {
   customStatuses: async () => new Map(),
   matchClient: async () => null,
   contactsByName: async () => new Map(),
-  matchArea: async () => null,
-  areaWorkflows: async () => [],
+  workflows: async () => [],
+  savedStatusMap: async () => ({}),
   templateCandidates: async () => [],
 };
 
 const choices: MondayImportChoices = {
-  statuses: [{ id: ID.custom, name: "Revisión cliente", closes: false }],
-  areas: [
-    { id: ID.area, name: "Construcción", workflowIds: [ID.wfObra] },
-    { id: ID.otherArea, name: "Diseño", workflowIds: [] },
-  ],
+  statuses: [{ id: ID.custom, name: "Revisión cliente", closes: false, countsAsCompleted: false }],
   workflows: [
-    { id: ID.wfObra, name: "Obra" },
-    { id: ID.wfOther, name: "Otro" },
+    { id: ID.wfObra, name: "Obra", phases: [{ id: ID.faseObra, name: "Levantamiento", sortOrder: 1 }] },
+    { id: ID.wfOther, name: "Otro", phases: [{ id: ID.faseOther, name: "Otra fase", sortOrder: 1 }] },
   ],
   templates: [
-    { id: ID.tplObra, workflowId: ID.wfObra, name: "Levantamiento" },
-    { id: ID.tplOther, workflowId: ID.wfOther, name: "Otro" },
+    { id: ID.tplObra, workflowId: ID.wfObra, phaseId: ID.faseObra, name: "Levantamiento" },
+    { id: ID.tplOther, workflowId: ID.wfOther, phaseId: ID.faseOther, name: "Otro" },
   ],
+  positions: [],
   clients: [{ id: ID.acme, name: "Acme" }],
   staff: [{ id: ID.ana, name: "Ana Admin", email: "ana@cincel.mx" }],
   providerSubtypes: [],
+  statusMap: {},
 };
 
 let mapping: MappingInput;
@@ -240,59 +238,43 @@ describe("select encodings", () => {
 });
 
 describe("draft edits over the fixture", () => {
-  it("prefills every status label of a status column from init", () => {
-    const board = findBoard(mapping, "101")!;
-    const labelIds = boardSource("101").statusLabels.status.map((l) => l.id);
-    expect(Object.keys(board.statusMaps.status).sort()).toEqual([...labelIds].sort());
+  it("drafts the firm-wide status map with every label of the status columns", () => {
+    const keys = Object.keys(mapping.statusMap ?? {});
+    for (const label of boardSource("101").statusLabels.status) expect(keys).toContain(label.name.trim().toLowerCase());
   });
 
-  it("adds a status map with defaults when a column becomes status, and drops it otherwise", () => {
+  it("sets a column's field without touching the status map", () => {
     const board = findBoard(mapping, "101")!;
-    const src = boardSource("101");
-    const off = setColumnTarget(board, src, "status_1", "ignore");
-    expect(off.statusMaps.status_1).toBeUndefined();
-    const on = setColumnTarget(off, src, "status_1", "status");
-    const listo = src.statusLabels.status_1.find((l) => l.name === "Listo")!;
-    const detenido = src.statusLabels.status_1.find((l) => l.name === "Detenido")!;
-    expect(on.statusMaps.status_1[listo.id]).toEqual({ status: "completado" });
-    const porIniciar = src.statusLabels.status_1.find((l) => l.name === "Por iniciar")!;
-    expect(on.statusMaps.status_1[detenido.id]).toEqual({ status: "bloqueado" });
-    expect(on.statusMaps.status_1[porIniciar.id]).toEqual({ status: "pendiente", defaulted: true });
-    expect(on.columns.status_1).toBe("status");
+    const off = setColumnTarget(board, "status_1", "ignore");
+    expect(off.columns.status_1).toBe("ignore");
+    expect(setColumnTarget(off, "status", "people", true).subitemColumns?.status).toBe("people");
   });
 
-  it("never defaults a label monday doesn't mark done to Completado", () => {
+  it("labels the date targets for the project flow", () => {
+    expect(COLUMN_TARGET_LABELS.timeline).toBe("Línea de tiempo → compromiso y entrega");
+    expect(COLUMN_TARGET_LABELS.closed_date).toBe("Fecha que finalizó");
+  });
+
+  it("defaults labels with the firm-wide table, never Completado unless done or the table says so", () => {
     expect(defaultStatusTarget({ name: "Urgente", isDone: false })).toEqual({ status: "pendiente", defaulted: true });
     expect(defaultStatusTarget({ name: "Completado", isDone: false })).toEqual({ status: "pendiente", defaulted: true });
     expect(defaultStatusTarget({ name: "Pendiente", isDone: false })).toEqual({ status: "pendiente" });
     expect(defaultStatusTarget({ name: "Listo", isDone: true })).toEqual({ status: "completado" });
+    expect(defaultStatusTarget({ name: "Entregado", isDone: false })).toEqual({ status: "completado" });
+    const seeded = customStatusIndex([{ id: ID.custom, name: "En espera" }]);
+    expect(defaultStatusTarget({ name: "En Espera", isDone: false }, seeded)).toEqual({ customStatusId: ID.custom });
     expect(isDefaultedStatus({ status: "pendiente", defaulted: true })).toBe(true);
     expect(isDefaultedStatus({ status: "pendiente" })).toBe(false);
     expect(isDefaultedStatus(undefined)).toBe(false);
   });
 
-  it("clears the review flag once a label's status is picked", () => {
-    const board = findBoard(mapping, "101")!;
-    const picked = decodeStatusTarget(encodeStatusTarget({ status: "pendiente", defaulted: true }))!;
-    const next = setStatusTarget(board, "status", "7", picked);
-    expect(next.statusMaps.status["7"]).toEqual({ status: "pendiente" });
-  });
-
-  it("sets one status label, keeping the others", () => {
-    const board = findBoard(mapping, "101")!;
-    const [first, second] = Object.keys(board.statusMaps.status);
-    const next = setStatusTarget(board, "status", first, { customStatusId: ID.custom });
-    expect(next.statusMaps.status[first]).toEqual({ customStatusId: ID.custom });
-    expect(next.statusMaps.status[second]).toEqual(board.statusMaps.status[second]);
-  });
-
-  it("picks the área's only workflow and drops templates of another workflow", () => {
+  it("keeps template matches of the tramos the board's tasks land in when the tramo changes", () => {
     const board = { ...findBoard(mapping, "101")!, workflowId: ID.wfOther, templateMatches: { x: ID.tplOther } };
-    const withArea = setBoardArea(board, ID.area, choices);
-    expect(withArea.workflowId).toBe(ID.wfObra);
-    expect(setBoardWorkflow(withArea, ID.wfObra, choices).templateMatches).toEqual({});
-    const kept = setBoardWorkflow({ ...board, templateMatches: { x: ID.tplOther } }, ID.wfOther, choices);
-    expect(kept.templateMatches).toEqual({ x: ID.tplOther });
+    expect(setBoardWorkflow(board, ID.wfObra, choices).templateMatches).toEqual({});
+    expect(setBoardWorkflow(board, ID.wfOther, choices).templateMatches).toEqual({ x: ID.tplOther });
+    // A group mapped to a fase of the other tramo keeps that tramo's templates.
+    const grouped = { ...board, groupTargets: { topics: { kind: "phase" as const, phaseId: ID.faseOther } } };
+    expect(setBoardWorkflow(grouped, ID.wfObra, choices).templateMatches).toEqual({ x: ID.tplOther });
   });
 
   it("names projects by board, group or item for each strategy", () => {

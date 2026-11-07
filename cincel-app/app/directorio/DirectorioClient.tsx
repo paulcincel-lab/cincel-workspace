@@ -30,7 +30,7 @@ import {
   type DirectorioRow,
 } from "@/lib/directorio/types";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveClientsCapabilities } from "@/lib/auth/permissions";
+import { canSeeAdminData, resolveClientsCapabilities } from "@/lib/auth/permissions";
 import {
   createContactAction,
   deleteContactAction,
@@ -548,6 +548,7 @@ export function DirectorioClient({ initialContacts }: DirectorioClientProps) {
           }}
           canEdit={clientsCapabilities.canEditClient}
           canDelete={clientsCapabilities.canDeleteClient}
+          isAdmin={canSeeAdminData(authenticatedUser)}
         />
       ) : null}
     </div>

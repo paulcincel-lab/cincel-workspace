@@ -1,12 +1,23 @@
 // @vitest-environment happy-dom
 /** Personas (#689): "Crear integrante", the email-then-name suggestion and the "Eliminados en monday" group. */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const createMondayStaffAction = vi.fn();
+const suggestMondayPositionAction = vi.fn();
 vi.mock("@/lib/actions/monday-import-actions", () => ({
   createMondayStaffAction: (...args: unknown[]) => createMondayStaffAction(...args),
+  suggestMondayPositionAction: (...args: unknown[]) => suggestMondayPositionAction(...args),
 }));
+
+const noSuggestion = { ok: true, suggestion: { position: null, tasks: 0, topPhases: [] } };
+
+/** "Crear integrante" opens the puesto popover; its own "Crear integrante" creates the person. */
+async function createFromRow(row: HTMLElement) {
+  fireEvent.click(within(row).getByRole("button", { name: "Crear integrante" }));
+  const popover = await screen.findByRole("dialog");
+  fireEvent.click(within(popover).getByRole("button", { name: "Crear integrante" }));
+}
 
 import { PeopleStep } from "./PeopleStep";
 import type { MappingInput } from "@/scripts/monday/mapping.schema";
@@ -29,24 +40,30 @@ const source: MondayExportSource = {
 
 const choices: MondayImportChoices = {
   statuses: [],
-  areas: [],
   workflows: [],
   templates: [],
   clients: [],
   staff: [{ id: BETO_ID, name: "Beto Ejemplo", email: null }],
   providerSubtypes: [],
+  positions: [],
+  statusMap: {},
 };
 
 const mapping: MappingInput = {
-  version: 1,
+  version: 2,
   boards: [],
   people: { "1": null, "2": null, "3": { action: "ignore" }, "4": { action: "ignore" } },
   options: { includeUpdates: true, includeFiles: true },
 };
 
+beforeEach(() => {
+  suggestMondayPositionAction.mockResolvedValue(noSuggestion);
+});
+
 afterEach(() => {
   cleanup();
   createMondayStaffAction.mockReset();
+  suggestMondayPositionAction.mockReset();
 });
 
 describe("PeopleStep (#689)", () => {
@@ -68,9 +85,9 @@ describe("PeopleStep (#689)", () => {
       />,
     );
     const row = document.getElementById("persona-1")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Crear integrante" }));
+    await createFromRow(row);
     await waitFor(() => expect(onMappingChange).toHaveBeenCalled());
-    expect(createMondayStaffAction).toHaveBeenCalledWith("run-1", "1");
+    expect(createMondayStaffAction).toHaveBeenCalledWith("run-1", "1", { positionIds: [] });
     expect(onStaffCreated).toHaveBeenCalledWith({ id: NEW_ID, name: "Persona Nueva", email: "nueva@example.test" });
     expect(onMappingChange.mock.calls[0][0].people["1"]).toEqual({ action: "staff", staffId: NEW_ID, created: true });
   });
@@ -85,7 +102,7 @@ describe("PeopleStep (#689)", () => {
       <PeopleStep mapping={mapping} source={source} choices={choices} runId="run-1" onMappingChange={onMappingChange} />,
     );
     const row = document.getElementById("persona-1")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Crear integrante" }));
+    await createFromRow(row);
     expect((await screen.findByRole("alert")).textContent).toContain("Ya hay un integrante con ese correo");
     expect(onMappingChange).not.toHaveBeenCalled();
   });

@@ -80,7 +80,9 @@ export type PortalActionError =
   | "not_project_contact"
   | "socio_unconfirmed"
   | "invalid_email"
-  | "rate_limited";
+  | "rate_limited"
+  /** The project has no client yet (project flow); invitations wait until one is set. */
+  | "no_client";
 
 export type PortalActivityRow = {
   id: string;

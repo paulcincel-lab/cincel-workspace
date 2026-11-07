@@ -6,12 +6,14 @@
 // when BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are set, unless
 // AUTH_PASSWORD_ENABLED=false (then it is skipped and logged), and creates
 // the default workflows (scripts/default-workflows.mjs) when core.workflows is
-// empty, so a fresh install can create projects without running the seed.
+// empty, so a fresh install can create projects without running the seed,
+// then their default fases, templates and puestos (scripts/default-catalog.mjs).
 import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
+import { ensureDefaultCatalog } from "./default-catalog.mjs";
 import { ensureDefaultWorkflows } from "./default-workflows.mjs";
 import { bootstrapAdminFromEnv, ensureBootstrapAdmin, passwordAuthEnabledFromEnv } from "./bootstrap-admin.mjs";
 
@@ -36,6 +38,12 @@ try {
   console.log("migrations applied");
   const created = await ensureDefaultWorkflows(sql);
   console.log(created ? `default workflows: created ${created}` : "default workflows: already present");
+  const catalog = await ensureDefaultCatalog(sql);
+  console.log(
+    Object.values(catalog).some((n) => n > 0)
+      ? `default catalog: created ${catalog.phases} fases, ${catalog.templates} templates, ${catalog.positions} puestos, ${catalog.positionPhases} puesto fases, ${catalog.statuses} statuses`
+      : "default catalog: already present"
+  );
   if (admin) {
     const changes = await ensureBootstrapAdmin(sql, admin, { passwordEnabled: passwordAuthEnabledFromEnv() });
     console.log(`bootstrap admin ${admin.email}: ${changes.length ? changes.join(", ") : "up to date"}`);

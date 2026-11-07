@@ -39,7 +39,7 @@ const mappings: GroupMappings = {
     { groupId: ROLE_GROUP, role: "Arquitecto Senior", rank: 40 },
     { groupId: DIRECCION_GROUP, role: "Dirección", rank: 70 },
   ],
-  areas: [],
+  positions: [],
 };
 
 const session = vi.hoisted(() => ({ token: "", redirects: [] as string[], asAdmin: false }));

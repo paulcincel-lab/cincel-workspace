@@ -1,4 +1,3 @@
-import { getDepartamento } from "@/lib/actividades/departamento";
 import type { CalendarEvent, CalendarEventType, CalendarFilterOptions, CalendarFilters, CalendarTypeSummaryRow } from "@/lib/types/calendar";
 import type { TaskListItem } from "@/lib/types/core";
 
@@ -6,8 +5,12 @@ const DEFAULT_FILTERS: CalendarFilters = {
   project: "Todos",
   responsible: "Todos",
   type: "Todos",
-  stage: "Todas",
+  tramo: "Todos",
+  phase: "Todas",
 };
+
+export const NO_TRAMO_LABEL = "Sin tramo";
+export const ADMIN_TRAMO_LABEL = "Administración";
 
 export function dateKey(value: Date): string {
   return value.toISOString().slice(0, 10);
@@ -35,12 +38,11 @@ function workflowHref(workflowKey: string | null): string {
   return `/actividades/${workflowKey}`;
 }
 
-export function formatStageLabel(workflowKey: string | null, workflowName: string | null): string {
-  if (!workflowKey) {
-    return workflowName || "Sin area";
-  }
-
-  return getDepartamento(workflowKey)?.label || workflowName || workflowKey;
+/** Tramo key and label of a task's calendar events. */
+export function calendarTramo(task: Pick<TaskListItem, "kind" | "workflow">): { tramo: string; tramoLabel: string } {
+  if (task.workflow) return { tramo: task.workflow.key, tramoLabel: task.workflow.name };
+  if (task.kind === "admin") return { tramo: "admin", tramoLabel: ADMIN_TRAMO_LABEL };
+  return { tramo: "sin-tramo", tramoLabel: NO_TRAMO_LABEL };
 }
 
 function defaultTimeByType(type: CalendarEventType): string {
@@ -71,7 +73,7 @@ function defaultTimeFor(task: TaskListItem, type: CalendarEventType): string {
 }
 
 function inferAdditionalType(task: TaskListItem): CalendarEventType | null {
-  const phase = (task.phase || "").toLowerCase();
+  const phase = (task.phase?.name ?? "").toLowerCase();
 
   if (phase.includes("reuni")) {
     return "Reunion";
@@ -109,7 +111,7 @@ export function buildCalendarEvents(tasks: TaskListItem[]): CalendarEvent[] {
   for (const task of tasks) {
     const workflowKey = task.workflow?.key ?? null;
     const baseHref = `${workflowHref(workflowKey)}?project=${encodeURIComponent(task.project.name)}`;
-    const stageLabel = formatStageLabel(workflowKey, task.workflow?.name ?? null);
+    const { tramo, tramoLabel } = calendarTramo(task);
 
     const pushEvent = ({ date, type, suffix }: { date: string | null; type: CalendarEventType; suffix: string }) => {
       if (!date) {
@@ -117,16 +119,17 @@ export function buildCalendarEvents(tasks: TaskListItem[]): CalendarEvent[] {
       }
 
       events.push({
-        id: `${suffix}-${workflowKey ?? "sin-area"}-${task.id}-${date}`,
+        id: `${suffix}-${tramo}-${task.id}-${date}`,
         taskId: task.id,
         date,
         time: defaultTimeFor(task, type),
         title: eventTitle(task, type),
         project: task.project.name,
         responsible: task.manager?.name || "Sin responsable",
-        stage: workflowKey ?? "sin-area",
-        stageLabel,
-        phase: task.phase || "",
+        tramo,
+        tramoLabel,
+        phaseId: task.phase?.id ?? null,
+        phaseLabel: task.phase?.name ?? "",
         type,
         href: baseHref,
       });
@@ -166,20 +169,28 @@ export function buildCalendarFilterOptions(events: CalendarEvent[]): CalendarFil
   const projects = new Set<string>();
   const responsibles = new Set<string>();
   const types = new Set<string>();
-  const stages = new Set<string>();
+  const phasesByTramo = new Map<string, Set<string>>();
 
   for (const event of events) {
     if (event.project) projects.add(event.project);
     if (event.responsible) responsibles.add(event.responsible);
     if (event.type) types.add(event.type);
-    if (event.stageLabel) stages.add(event.stageLabel);
+    if (event.tramoLabel) {
+      const phases = phasesByTramo.get(event.tramoLabel) ?? new Set<string>();
+      if (event.phaseLabel) phases.add(event.phaseLabel);
+      phasesByTramo.set(event.tramoLabel, phases);
+    }
   }
 
+  const sorted = (values: Iterable<string>) => Array.from(values).sort((a, b) => a.localeCompare(b));
   return {
-    projects: ["Todos", ...Array.from(projects).sort((a, b) => a.localeCompare(b))],
-    responsibles: ["Todos", ...Array.from(responsibles).sort((a, b) => a.localeCompare(b))],
-    types: ["Todos", ...Array.from(types).sort((a, b) => a.localeCompare(b))],
-    stages: ["Todas", ...Array.from(stages).sort((a, b) => a.localeCompare(b))],
+    projects: ["Todos", ...sorted(projects)],
+    responsibles: ["Todos", ...sorted(responsibles)],
+    types: ["Todos", ...sorted(types)],
+    tramos: ["Todos", ...sorted(phasesByTramo.keys())],
+    phasesByTramo: Object.fromEntries(
+      Array.from(phasesByTramo.entries()).map(([tramo, phases]) => [tramo, ["Todas", ...sorted(phases)]])
+    ),
   };
 }
 
@@ -188,14 +199,17 @@ export function applyCalendarFilters(events: CalendarEvent[], filters: Partial<C
     ...DEFAULT_FILTERS,
     ...filters,
   };
+  const anyTramo = safeFilters.tramo === "Todos";
 
   return events.filter((event) => {
     const matchesProject = safeFilters.project === "Todos" || event.project === safeFilters.project;
     const matchesResponsible = safeFilters.responsible === "Todos" || event.responsible === safeFilters.responsible;
     const matchesType = safeFilters.type === "Todos" || event.type === safeFilters.type;
-    const matchesStage = safeFilters.stage === "Todas" || event.stageLabel === safeFilters.stage;
+    const matchesTramo = anyTramo || event.tramoLabel === safeFilters.tramo;
+    // The fase filter only applies once a tramo is picked (FE §3.9).
+    const matchesPhase = anyTramo || safeFilters.phase === "Todas" || event.phaseLabel === safeFilters.phase;
 
-    return matchesProject && matchesResponsible && matchesType && matchesStage;
+    return matchesProject && matchesResponsible && matchesType && matchesTramo && matchesPhase;
   });
 }
 

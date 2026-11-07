@@ -40,9 +40,12 @@ import type { MappingInput } from "@/scripts/monday/mapping.schema";
 import {
   createRollbackCommand,
   ENTITY_TABLES,
+  type TableEntity,
 } from "@/scripts/monday/rollback";
 import type { CliIo } from "@/scripts/monday/run";
 import type { ExportData } from "@/scripts/monday/translate";
+
+import { FIXTURE_WORKFLOW, seedFixtureWorkflow } from "./apply-fixtures";
 
 const ANA = "22222222-2222-4222-8222-222222222222";
 const ANA_EMAIL = "ana.rollback@example.com";
@@ -144,23 +147,26 @@ function io() {
 
 /** The mapping of translate-nested-export.json (checklist, child tasks, item_as_project, crm). */
 function nestedMapping(): MappingInput {
-  const STATUS = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
-    "2": { status: "en_proceso" },
-  } as const;
-  const SUB = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
+  // Firm-wide status map, keyed by label text (the export's "Pendiente", "Listo", "En curso").
+  const statusMap = {
+    pendiente: { target: { status: "pendiente" }, priority: null },
+    listo: { target: { status: "completado" }, priority: null },
+    "en curso": { target: { status: "en_proceso" }, priority: null },
   } as const;
   return {
-    version: 1,
+    version: 2,
+    statusMap,
     boards: [
       {
         mondayBoardId: "901",
         name: "Casa Nido",
         strategy: "board_as_project",
         client: { kind: "contact", contactId: CLIENT },
+        workflowId: FIXTURE_WORKFLOW,
+        groupTargets: {
+          g_obra: { kind: "tramo", workflowId: FIXTURE_WORKFLOW },
+          g_diseno: { kind: "tramo", workflowId: FIXTURE_WORKFLOW },
+        },
         columns: {
           name: "title",
           status: "status",
@@ -170,7 +176,6 @@ function nestedMapping(): MappingInput {
           planta: "ignore",
         },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
         subitems: "checklist",
         schedule: { enabled: true, planta: { columnId: "planta" } },
       },
@@ -179,9 +184,9 @@ function nestedMapping(): MappingInput {
         name: "Casa Faro",
         strategy: "board_as_project",
         client: { kind: "contact", contactId: CLIENT },
+        workflowId: FIXTURE_WORKFLOW,
         columns: { name: "title", status: "status" },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
         subitems: "child_tasks",
       },
       {
@@ -189,9 +194,9 @@ function nestedMapping(): MappingInput {
         name: "Obras",
         strategy: "item_as_project",
         client: { kind: "contact", contactId: CLIENT },
+        workflowId: FIXTURE_WORKFLOW,
         columns: { name: "title", presupuesto: "import_data" },
         subitemColumns: { name: "title" },
-        statusMaps: {},
       },
       {
         mondayBoardId: "904",
@@ -199,7 +204,6 @@ function nestedMapping(): MappingInput {
         strategy: "crm_contacts",
         contactType: "cliente",
         columns: { name: "title", rfc: "import_data" },
-        statusMaps: {},
       },
     ],
     people: {
@@ -303,6 +307,7 @@ describe.skipIf(!url)("rollback after apply (test DB, fake Drive)", { timeout: 6
         await tx
           .insert(schema.contacts)
           .values({ id: CLIENT, type: "cliente", name: "Rollback Cliente" });
+        await seedFixtureWorkflow(tx as unknown as ImportDb);
 
         const fake = fakeDrive();
         const env = { GOOGLE_SHARED_DRIVE_ID: SHARED_DRIVE };
@@ -379,7 +384,7 @@ describe.skipIf(!url)("rollback after apply (test DB, fake Drive)", { timeout: 6
     tx: ImportDb,
     ref: Applied["refs"][number],
   ): Promise<boolean> {
-    const { table, key } = ENTITY_TABLES[ref.entity as ImportEntity];
+    const { table, key } = ENTITY_TABLES[ref.entity as TableEntity];
     const extra =
       ref.entity === "task_support"
         ? sql` and staff_id::text = ${(ref.data as { staffId: string }).staffId}`

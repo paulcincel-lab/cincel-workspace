@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
 import { ProjectCreateModal } from "@/components/proyectos/ProjectCreateModal";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
+import { TramoBadge } from "@/components/v2/status/TramoBadge";
 import { PageHeader } from "@/components/v2/layout/PageHeader";
 import { KpiRow } from "@/components/v2/layout/KpiRow";
 import { createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
@@ -19,11 +21,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { useProjectsData, type ProjectItem } from "@/lib/proyectos/use-projects-data";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { exportTableData, type ExportColumn } from "@/lib/utils/export-service";
-import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
-import type { ProjectInput, ProjectStatus } from "@/lib/types/core";
+import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import type { ProjectCreateInput, ProjectStatus, WorkflowRef } from "@/lib/types/core";
 
 interface ProyectosClientProps {
   initialProjects: ProjectItem[];
+  /** Presale starts on its own when a project is created; drives the create sheet's copy. */
+  presaleAutoStart?: boolean;
 }
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
@@ -33,12 +37,20 @@ const STATUS_LABEL: Record<ProjectStatus, string> = {
   cancelado: "Cancelado",
 };
 
-export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
+/** The project's current tramo, or null (`needsTramo`). */
+export function currentTramoOf(project: ProjectItem): WorkflowRef | null {
+  if (project.needsTramo) return null;
+  return project.currentWorkflow ?? project.tramos.find((t) => t.current) ?? null;
+}
+
+export function ProyectosClient({ initialProjects, presaleAutoStart = false }: ProyectosClientProps) {
   const generalSettings = useGeneralSettings();
   const router = useRouter();
   const { projectsData, isLoadingData, authenticatedUser, updateProject, archiveProject, removeProject, addProject } =
     useProjectsData(initialProjects);
   const capabilities = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
+  // Client is admin-only data: non-admins get no Cliente column (not even hidden) and no Cliente in exports.
+  const isAdmin = canSeeAdminData(authenticatedUser);
   const [view, setView] = useState<"activos" | "archivados">("activos");
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
   const [showCreate, setShowCreate] = useState(false);
@@ -80,13 +92,16 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
   const exportColumns = useMemo<ExportColumn<ProjectItem>[]>(
     () => [
       { key: "project", header: "Proyecto", getValue: (p) => p.name },
-      { key: "client", header: "Cliente", getValue: (p) => p.client?.name ?? "" },
-      { key: "stage", header: "Etapas", getValue: (p) => p.stages.map((s) => s.name).join(", ") || "Sin etapa" },
+      { key: "tramo", header: "Tramo", getValue: (p) => currentTramoOf(p)?.name ?? "Sin tramo" },
+      { key: "activePhase", header: "Fase activa", getValue: (p) => p.activePhase?.name ?? "—" },
       { key: "manager", header: "Encargado", getValue: (p) => p.manager?.name ?? "Sin encargado" },
-      { key: "status", header: "Estado", getValue: (p) => STATUS_LABEL[p.status] },
       { key: "openTasks", header: "Tareas abiertas", getValue: (p) => p.taskCounts.open },
+      { key: "status", header: "Estado", getValue: (p) => STATUS_LABEL[p.status] },
+      ...(isAdmin
+        ? [{ key: "client", header: "Cliente", getValue: (p: ProjectItem) => p.client?.name ?? "Por asignar" }]
+        : []),
     ],
-    []
+    [isAdmin]
   );
 
   async function exportProjects(format: "xlsx" | "pdf") {
@@ -121,22 +136,36 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
         cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
       },
       {
-        id: "client",
-        header: "Cliente",
-        cell: ({ row }) => row.original.client?.name ?? "—",
+        id: "tramo",
+        header: "Tramo",
+        cell: ({ row }) => {
+          const tramo = currentTramoOf(row.original);
+          if (!tramo && isAdmin) {
+            return (
+              <Badge
+                variant="destructive"
+                render={
+                  <Link
+                    href={`/proyectos/${row.original.id}/ficha#tramos`}
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                }
+              >
+                Asignar tramo
+              </Badge>
+            );
+          }
+          return <TramoBadge tramo={tramo} />;
+        },
       },
       {
-        id: "stage",
-        header: "Etapas",
+        id: "activePhase",
+        header: "Fase activa",
         cell: ({ row }) =>
-          row.original.stages.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {row.original.stages.map((stage) => (
-                <Badge key={stage.id} variant="outline">{stage.name}</Badge>
-              ))}
-            </div>
+          row.original.activePhase ? (
+            row.original.activePhase.name
           ) : (
-            <Badge variant="outline">Sin etapa</Badge>
+            <span className="text-muted-foreground">—</span>
           ),
       },
       {
@@ -166,6 +195,20 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
         header: "Estado",
         cell: ({ row }) => <Badge variant="secondary">{STATUS_LABEL[row.original.status]}</Badge>,
       },
+      ...(isAdmin
+        ? [
+            {
+              id: "client",
+              header: "Cliente",
+              cell: ({ row }) =>
+                row.original.client ? (
+                  <span>{row.original.client.name}</span>
+                ) : (
+                  <Badge variant="destructive">Por asignar</Badge>
+                ),
+            } satisfies ColumnDef<ProjectItem, unknown>,
+          ]
+        : []),
       createRowActionsColumn<ProjectItem>((project) => {
         const isActive = project.status === "activo" || project.status === "pausado";
         const actions: RowAction<ProjectItem>[] = [
@@ -209,10 +252,10 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
         return actions;
       }),
     ],
-    [router, updateProject, archiveProject, removeProject, capabilities, selected]
+    [router, updateProject, archiveProject, removeProject, capabilities, selected, isAdmin]
   );
 
-  async function handleCreate(input: ProjectInput) {
+  async function handleCreate(input: ProjectCreateInput) {
     const created = await addProject(input);
     setShowCreate(false);
     if (created) router.push(`/proyectos/${created.id}/ficha`);
@@ -275,7 +318,11 @@ export function ProyectosClient({ initialProjects }: ProyectosClientProps) {
       />
 
       {showCreate ? (
-        <ProjectCreateModal onClose={() => setShowCreate(false)} onConfirm={handleCreate} />
+        <ProjectCreateModal
+          onClose={() => setShowCreate(false)}
+          onConfirm={handleCreate}
+          presaleAutoStart={presaleAutoStart}
+        />
       ) : null}
     </div>
   );

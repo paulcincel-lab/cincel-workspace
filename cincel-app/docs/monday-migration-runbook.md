@@ -380,6 +380,39 @@ npm run monday -- rollback --batch <import_batch_id>
 After a rollback, the same export can be applied again with a corrected
 mapping.
 
+### 8.1 remap: re-sort an imported project onto tramos and fases
+
+Moves an imported project's tasks between tramo, fase, espacio, their own
+project ("Proyecto aparte") and Tareas de administración, by monday group
+(project flow BE §11). Statuses, dates, titles and people stay; no task or
+history is deleted, and the batch can still be rolled back afterwards. It
+reads the batch's stored export folder (`import_batches.export_path`), so
+that folder must still be there.
+
+```bash
+set -a; . ./.env.monday.prod; set +a          # or .env.monday.staging
+# dry run: prints each project's boards, counts, samples and issues
+npm run monday -- remap --projects "Madrid 22,Guadalajara 83" \
+  --target "Obra=tramo:construccion"
+# write (an active Administrador's email)
+npm run monday -- remap --projects "Madrid 22,Guadalajara 83" \
+  --target "Obra=tramo:construccion" --apply --by <admin email>
+```
+
+- Without `--target`, each group keeps its saved target (from an earlier
+  remap) or the default: a group named like a tramo goes to that tramo, like
+  a fase to that fase, "Administrativo" to Tareas de administración, anything
+  else to the board's tramo. `--target "<group title>=<target>"` overrides
+  one group; targets are `tramo:<key or name>`, `phase:<tramo>/<fase>`,
+  `space`, `project`, `admin` and `ignore`.
+- A board listed as `missing from the stored export (source null)` is left as
+  it is; re-export it before relying on the remap. When the whole export is
+  gone the command exits non-zero with `EXPORT_MISSING`.
+- Check that `Tasks: N before, N after` matches the project's live task count.
+- Any `BLOCKING` issue (no tramo for a group, a "Proyecto aparte" name already
+  taken) stops `--apply` for every listed project. Re-running the same
+  targets changes nothing.
+
 ## 9. Go-live and close-out
 
 ### 9.1 Go-live
@@ -449,3 +482,21 @@ this repo):
 
 | Client | Token created by / on | Export date | Staging batch | Production batch | Go-live | Token revoked | Archive handed to / on | Deleted on |
 | ------ | --------------------- | ----------- | ------------- | ---------------- | ------- | ------------- | ---------------------- | ---------- |
+
+## Stored exports still on disk (project flow pre-flight)
+
+The project flow remap (`docs/specs/project-flow/backend.md` §11.2) reads
+the stored export of each imported project from `import_batches.export_path`.
+Check that the folders are still there before the remap is planned:
+
+```bash
+DATABASE_URL=... npx tsx scripts/monday/check-exports.ts \
+  --projects "Madrid 22,Guadalajara 83,Local Espiropapa" > exports-check.md
+```
+
+Run it where the paths in `export_path` resolve (wizard imports live under
+`MONDAY_IMPORT_DIR`, `/data/monday` in the image). It is read only. Each
+project prints `presente` or `FALTA: <reason>`, with every source board's
+files and `.done` marker; the exit code is 1 when anything is missing. Re-export
+a missing project's boards from monday, then run it again. Paste the output
+on the tracking issue.

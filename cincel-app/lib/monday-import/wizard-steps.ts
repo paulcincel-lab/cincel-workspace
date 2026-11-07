@@ -25,6 +25,7 @@ import type {
 } from "@/lib/types/monday-import";
 import type { RollbackBlocker } from "@/scripts/monday/rollback";
 import { matchStaff } from "@/lib/monday-import/people";
+import { defaultStatusEntry, isDefaultedTarget } from "@/lib/monday-import/status-map";
 import { ownProjectGroups, pruneGroupTargets } from "@/lib/monday-import/group-targets";
 
 export type BoardDraft = MappingInput["boards"][number];
@@ -97,7 +98,8 @@ export const COLUMN_TARGET_LABELS: Record<ColumnTarget, string> = {
   people: "Responsables",
   commitment_date: "Fecha compromiso",
   delivery_date: "Fecha de entrega",
-  timeline: "Cronograma (inicio y fin)",
+  timeline: "Línea de tiempo → compromiso y entrega",
+  closed_date: "Fecha que finalizó",
   dependencies: "Dependencias",
   files: "Archivos",
   client: "Cliente",
@@ -188,65 +190,34 @@ export function updateBoard(
   };
 }
 
-const BASE_STATUS_BY_NAME: Record<string, "pendiente" | "en_proceso" | "bloqueado"> = {
-  pendiente: "pendiente",
-  "en proceso": "en_proceso",
-  bloqueado: "bloqueado",
-};
-
 /**
- * A label's first target, by the same rules as init: done labels close the task; a label named like a base status
- * (or blocked / in progress) gets it; the rest start Pendiente flagged `defaulted` for review, never Completado.
+ * A label's first target, from the firm-wide defaults table (lib/monday-import/status-map.ts): En Proceso, Entregado,
+ * Confirmado, Cancelado, No se Requiere, En espera, Importante, Siguiente Paso and "-"; done labels close the task;
+ * base names and the blocked / in progress patterns; the rest start Pendiente flagged `defaulted` for review.
+ * `customStatuses` (by `defaultsKey(name)`) resolves Cancelado and En espera to the seeded custom statuses.
  */
-export function defaultStatusTarget(label: { name?: string; isDone: boolean }): StatusTarget {
-  if (label.isDone) return { status: "completado" };
-  const name = label.name ?? "";
-  const key = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-  const base = BASE_STATUS_BY_NAME[key];
-  if (base) return { status: base };
-  if (/stuck|bloquead|detenid/i.test(name)) return { status: "bloqueado" };
-  if (/working|proceso|curso/i.test(name)) return { status: "en_proceso" };
-  return { status: "pendiente", defaulted: true };
+export function defaultStatusTarget(
+  label: { name?: string; isDone: boolean },
+  customStatuses: ReadonlyMap<string, string> = new Map(),
+): StatusTarget {
+  return defaultStatusEntry({ name: label.name ?? "", isDone: label.isDone }, customStatuses).target;
 }
 
-/** Whether init (or the wizard) found no equivalent for the label and drafted Pendiente: «Sin equivalente, revisar». */
+/** Whether no equivalent was found for the label and it starts as Pendiente: «Sin equivalente». */
 export function isDefaultedStatus(target: StatusTarget | undefined): boolean {
-  return Boolean(target && "status" in target && target.defaulted);
+  return isDefaultedTarget(target);
 }
 
-/**
- * Sets a column's Cincel field. Turning a column into `status` adds a status map for its labels so every label
- * has a visible equivalent; turning it into something else drops that map.
- */
+/** Sets a column's Cincel field (board column, or subitem column with `subitem`). */
 export function setColumnTarget(
   board: BoardDraft,
-  source: MondayBoardSource,
   columnId: string,
   target: ColumnTarget,
   subitem = false,
 ): BoardDraft {
-  const next: BoardDraft = subitem
+  return subitem
     ? { ...board, subitemColumns: { ...(board.subitemColumns ?? {}), [columnId]: target } }
     : { ...board, columns: { ...board.columns, [columnId]: target } };
-  const statusMaps = { ...board.statusMaps };
-  const other = subitem ? next.columns : (next.subitemColumns ?? {});
-  const stillStatus = other[columnId] === "status";
-  if (target === "status") {
-    const current = statusMaps[columnId] ?? {};
-    const filled = { ...current };
-    for (const label of source.statusLabels[columnId] ?? []) filled[label.id] ??= defaultStatusTarget(label);
-    statusMaps[columnId] = filled;
-  } else if (!stillStatus) {
-    delete statusMaps[columnId];
-  }
-  return { ...next, statusMaps };
-}
-
-export function setStatusTarget(board: BoardDraft, columnId: string, labelId: string, target: StatusTarget): BoardDraft {
-  return {
-    ...board,
-    statusMaps: { ...board.statusMaps, [columnId]: { ...(board.statusMaps[columnId] ?? {}), [labelId]: target } },
-  };
 }
 
 /** Sets or clears (empty string) one entry of a record field such as projectNames, projectCodes, templateMatches. */
@@ -261,26 +232,20 @@ export function setRecordEntry(
   return next;
 }
 
-/** Picking an área keeps the workflow only when it belongs to it, or picks the área's only workflow. */
-export function setBoardArea(board: BoardDraft, areaId: string | null, choices: MondayImportChoices): BoardDraft {
-  const area = choices.areas.find((candidate) => candidate.id === areaId);
-  const flows = area?.workflowIds ?? [];
-  let workflowId = board.workflowId ?? null;
-  if (area && workflowId && !flows.includes(workflowId)) workflowId = null;
-  if (area && !workflowId && flows.length === 1) workflowId = flows[0];
-  return { ...board, areaId: areaId ?? null, workflowId };
-}
-
-/** Workflows offered for a board: the área's when it has any, else every workflow. */
-export function workflowsForBoard(board: BoardDraft, choices: MondayImportChoices): MondayImportChoices["workflows"] {
-  const area = choices.areas.find((candidate) => candidate.id === board.areaId);
-  if (!area || area.workflowIds.length === 0) return choices.workflows;
-  return choices.workflows.filter((workflow) => area.workflowIds.includes(workflow.id));
-}
-
-/** Changing the workflow drops template matches and group phases (#687) that belong to another workflow. */
+/**
+ * Sets "Tramo del tablero". Template matches stay when their tramo is still one the board's tasks can land in (the
+ * new tramo, or a tramo or fase a group is mapped to); group fases no longer in the catalog go back to the default.
+ */
 export function setBoardWorkflow(board: BoardDraft, workflowId: string | null, choices: MondayImportChoices): BoardDraft {
-  const allowed = new Set(choices.templates.filter((t) => t.workflowId === workflowId).map((t) => t.id));
+  const tramos = new Set<string>(workflowId ? [workflowId] : []);
+  for (const target of Object.values(board.groupTargets ?? {})) {
+    if (target.kind === "tramo") tramos.add(target.workflowId);
+    if (target.kind === "phase") {
+      const tramo = choices.workflows.find((w) => w.phases.some((p) => p.id === target.phaseId));
+      if (tramo) tramos.add(tramo.id);
+    }
+  }
+  const allowed = new Set(choices.templates.filter((t) => tramos.has(t.workflowId)).map((t) => t.id));
   const templateMatches = Object.fromEntries(
     Object.entries(board.templateMatches ?? {}).filter(([, templateId]) => allowed.has(templateId)),
   );
@@ -377,27 +342,12 @@ export function clampOptions(mapping: MappingInput, info: MondayImportOptionsInf
 
 const PROJECT_STRATEGIES = new Set<BoardStrategy>(["board_as_project", "group_as_project", "item_as_project"]);
 
-/** Whether the board's strategy creates projects, which need a client. */
+/**
+ * Whether the board's strategy creates projects, which can take a client. The client is optional: without one the
+ * project gets the admin task «Asignar cliente y origen».
+ */
 export function needsClient(strategy: BoardStrategy): boolean {
   return PROJECT_STRATEGIES.has(strategy);
-}
-
-/**
- * Whether a board's projects are left without a client: a project strategy with no Cliente, and on
- * `group_as_project` some group without its own client either (groups fall back to the board's).
- */
-export function lacksClient(board: BoardDraft, source?: MondayBoardSource): boolean {
-  if (!needsClient(board.strategy) || board.client) return false;
-  if (board.strategy !== "group_as_project") return true;
-  const groups = source?.groups ?? [];
-  return groups.length === 0 || groups.some((group) => !board.groupClients?.[group.id]);
-}
-
-/** The boards whose projects have no client yet, for the warnings on Equivalencias. */
-export function boardsWithoutClient(mapping: MappingInput, source: MondayExportSource | null): BoardDraft[] {
-  return mapping.boards.filter((board) =>
-    lacksClient(board, source?.boards.find((candidate) => candidate.id === board.mondayBoardId)),
-  );
 }
 
 /** Clickable step chips: the finished ones, while nothing runs and the import isn't applied yet (#679). */

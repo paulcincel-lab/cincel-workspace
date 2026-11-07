@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
+import { viewerScopeOf } from "@/lib/auth/viewer-scope";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 
 /**
@@ -13,14 +14,17 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ taskId: string; attachmentId: string }> }
 ): Promise<NextResponse> {
+  let user;
   try {
-    await requireCapabilityUser();
+    user = await requireCapabilityUser();
   } catch {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   }
 
   const { taskId, attachmentId } = await params;
-  const attachment = await tasksRepository.getTaskAttachmentData(attachmentId);
+  // An admin task's attachments don't exist for non-admins (project flow BE §12).
+  const visible = await tasksRepository.isTaskVisible(taskId, viewerScopeOf(user));
+  const attachment = visible ? await tasksRepository.getTaskAttachmentData(attachmentId) : null;
   if (!attachment || attachment.taskId !== taskId) {
     return NextResponse.json({ error: "Adjunto no encontrado." }, { status: 404 });
   }

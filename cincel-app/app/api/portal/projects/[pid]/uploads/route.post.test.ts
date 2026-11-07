@@ -195,6 +195,17 @@ describe("POST /api/portal/projects/[pid]/uploads", () => {
     expect(mocks.receivePortalUpload).not.toHaveBeenCalled();
   });
 
+  it("answers 409 on a ready tree without client folders (project without a client)", async () => {
+    state.access.set(
+      `u-me:${PID}`,
+      readyAccess({ driveFolderStatus: "ready", driveClientFolderId: null, driveInboundFolderId: null })
+    );
+    const res = await call(PID);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: "folder_not_ready" });
+    expect(mocks.receivePortalUpload).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["too_large", 413, "El archivo supera 50 MB"],
     ["unsupported_type", 415, "Tipo de archivo no permitido"],

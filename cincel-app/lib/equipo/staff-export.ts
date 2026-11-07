@@ -20,7 +20,8 @@ export const STAFF_KIND_LABEL: Record<Staff["kind"], string> = {
 
 export const staffExportColumns: ExportColumn<Staff>[] = [
   { key: "name", header: "Colaborador", getValue: (s) => s.name },
-  { key: "role", header: "Puesto", getValue: (s) => s.role ?? "" },
+  { key: "positions", header: "Puestos", getValue: (s) => (s.positions ?? []).map((p) => p.name).join(", ") },
+  { key: "role", header: "Acceso", getValue: (s) => s.role ?? "" },
   { key: "kind", header: "Tipo", getValue: (s) => STAFF_KIND_LABEL[s.kind] },
   { key: "email", header: "Correo", getValue: (s) => s.email ?? "" },
   { key: "phone", header: "Teléfono", getValue: (s) => s.phone ?? "" },

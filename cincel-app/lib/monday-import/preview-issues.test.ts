@@ -1,18 +1,24 @@
 // @vitest-environment node
-/** Vista previa problems in Spanish with the step that fixes them (#679). */
+/** Vista previa problems in Spanish with the step that fixes them (#679), and the grouped warnings (FE §4.6 item 9). */
 import { describe, expect, it } from "vitest";
 
-import { ISSUE_FIX_STEP, issuePersonId, issuePersonName, issueText } from "@/lib/monday-import/preview-issues";
+import {
+  groupPreviewWarnings,
+  ISSUE_FIX_STEP,
+  issuePersonId,
+  issuePersonName,
+  issueText,
+} from "@/lib/monday-import/preview-issues";
+import type { MondayPreviewIssue } from "@/lib/types/monday-import";
 import { BLOCKING_CODES, WARNING_CODES, type PlanIssueCode } from "@/scripts/monday/plan";
 
 /** English plan messages as scripts/monday/plan.ts and translate.ts write them. */
 const PLAN_MESSAGES: [PlanIssueCode, string][] = [
-  ["CLIENT_UNRESOLVED", 'Project "Casa Norte" has no client'],
   ["CLIENT_UNRESOLVED", "client: contact 00000000-0000-4000-8000-0000000000e5 does not exist"],
   ["CONTACT_NAME_TAKEN", 'A cliente named "Familia Mar" exists already; reuse it with contactMatches or rename it in monday'],
   ["CONTACT_NAME_TAKEN", '2 new cliente contacts are named "Familia Mar" (1, 2)'],
-  ["PROJECT_NAME_TAKEN", 'The client already has a project named "Casa Nido"; set another name in projectNames'],
-  ["PROJECT_NAME_TAKEN", '2 new projects of one client are named "Casa Nido" (901, 902); set projectNames'],
+  ["PROJECT_NAME_TAKEN", 'An active project named "Casa Nido" exists already; set another name in projectNames'],
+  ["PROJECT_NAME_TAKEN", '2 new projects are named "Casa Nido" (901, 902); set projectNames'],
   ["PROJECT_CODE_TAKEN", 'Project code "CN-01" is used by an existing project; change projectCode / projectCodes'],
   ["PROJECT_CODE_TAKEN", 'Project code "CN-01" repeats in 2 new projects (901, 902)'],
   ["STATUS_UNMAPPED", 'Status label 3 ("Revisión") of column status has no target'],
@@ -23,7 +29,7 @@ const PLAN_MESSAGES: [PlanIssueCode, string][] = [
   ["SCHEDULE_EXISTS", "Project p1 already has a cronograma not created by this import; turn schedule off for it"],
   ["DRIVE_NOT_CONFIGURED", "GOOGLE_SHARED_DRIVE_ID is not set"],
   ["MAPPING_INVALID", "workflowId: workflow w1 does not exist"],
-  ["MAPPING_INVALID", "areaId: area a1 does not exist"],
+  ["MAPPING_INVALID", "groupTargets.g1: fase f1 does not exist"],
   ["MAPPING_INVALID", "contactMatches.11: contact c1 does not exist"],
   ["MAPPING_INVALID", "boards.0.client.name: Too small"],
   ["PERSON_UNMATCHED", "monday user 7 (Luis Pérez) has no staff match"],
@@ -32,7 +38,13 @@ const PLAN_MESSAGES: [PlanIssueCode, string][] = [
   ["FILE_MISSING", 'File 88 ("plano.pdf") is in files/index.json but /data/monday/run-1/files/88/plano.pdf is not on disk'],
   ["FILE_MISSING", 'File 89 ("foto.jpg") is not in files/index.json'],
   ["STATUS_DEFAULTED", 'Status label 5 ("Urgente") of column status has no equivalent; defaulted to pendiente'],
+  ["TRAMO_MISSING", "3 tasks of board 901 resolve no tramo; choose the board's tramo or a tramo for the group"],
+  ["PHASE_UNRESOLVED", '"Muros" matches no fase; it imports without one for review'],
+  ["CLIENT_MISSING", 'Project "Casa Norte" has no client; it gets the task "Asignar cliente y origen"'],
+  ["ADMIN_ASSIGNEE_CLEARED", "Admin task: Luis Pérez removed (not administrators)"],
 ];
+
+const messageOf = (code: PlanIssueCode, index = 0) => PLAN_MESSAGES.filter(([c]) => c === code)[index][1];
 
 describe("issueText", () => {
   it.each(PLAN_MESSAGES)("writes %s in Spanish without ids, paths or English", (code, message) => {
@@ -43,23 +55,28 @@ describe("issueText", () => {
   });
 
   it("keeps the monday names the message is about", () => {
-    expect(issueText("CLIENT_UNRESOLVED", 'Project "Casa Norte" has no client')).toBe(
-      "El proyecto «Casa Norte» no tiene cliente. Elige uno en Cliente.",
+    expect(issueText("CLIENT_MISSING", messageOf("CLIENT_MISSING"))).toBe(
+      "El proyecto «Casa Norte» no tiene cliente; se crea con la tarea de administración «Asignar cliente y origen».",
     );
-    expect(issueText("PROJECT_NAME_TAKEN", PLAN_MESSAGES[4][1])).toContain("«Casa Nido»");
-    expect(issueText("STATUS_UNMAPPED", PLAN_MESSAGES[8][1])).toContain("«Revisión»");
-    expect(issueText("PERSON_UNMATCHED", PLAN_MESSAGES[19][1])).toContain("«Luis Pérez»");
-    expect(issueText("FILE_MISSING", PLAN_MESSAGES[22][1])).toContain("«plano.pdf»");
-    expect(issueText("STATUS_DEFAULTED", PLAN_MESSAGES[24][1])).toBe(
+    expect(issueText("PHASE_UNRESOLVED", messageOf("PHASE_UNRESOLVED"))).toBe(
+      "«Muros» no coincide con ninguna fase; se importa sin fase para revisarla.",
+    );
+    expect(issueText("PROJECT_NAME_TAKEN", messageOf("PROJECT_NAME_TAKEN"))).toContain("«Casa Nido»");
+    expect(issueText("STATUS_UNMAPPED", messageOf("STATUS_UNMAPPED"))).toContain("«Revisión»");
+    expect(issueText("PERSON_UNMATCHED", messageOf("PERSON_UNMATCHED"))).toContain("«Luis Pérez»");
+    expect(issueText("FILE_MISSING", messageOf("FILE_MISSING"))).toContain("«plano.pdf»");
+    expect(issueText("STATUS_DEFAULTED", messageOf("STATUS_DEFAULTED"))).toBe(
       "La etiqueta de estatus «Urgente» no tiene equivalente; sus tareas quedan como Pendiente. Revísala en Estatus.",
     );
   });
 
   it("tells a taken name from a repeated one", () => {
-    expect(issueText("CONTACT_NAME_TAKEN", PLAN_MESSAGES[2][1])).toMatch(/^Ya existe/);
-    expect(issueText("CONTACT_NAME_TAKEN", PLAN_MESSAGES[3][1])).toMatch(/^Varios/);
-    expect(issueText("PROJECT_CODE_TAKEN", PLAN_MESSAGES[6][1])).toMatch(/^Otro proyecto/);
-    expect(issueText("PROJECT_CODE_TAKEN", PLAN_MESSAGES[7][1])).toMatch(/se repite/);
+    expect(issueText("CONTACT_NAME_TAKEN", messageOf("CONTACT_NAME_TAKEN"))).toMatch(/^Ya existe/);
+    expect(issueText("CONTACT_NAME_TAKEN", messageOf("CONTACT_NAME_TAKEN", 1))).toMatch(/^Varios/);
+    expect(issueText("PROJECT_NAME_TAKEN", messageOf("PROJECT_NAME_TAKEN"))).toMatch(/^Ya hay un proyecto activo/);
+    expect(issueText("PROJECT_NAME_TAKEN", messageOf("PROJECT_NAME_TAKEN", 1))).toMatch(/^Varios/);
+    expect(issueText("PROJECT_CODE_TAKEN", messageOf("PROJECT_CODE_TAKEN"))).toMatch(/^Otro proyecto/);
+    expect(issueText("PROJECT_CODE_TAKEN", messageOf("PROJECT_CODE_TAKEN", 1))).toMatch(/se repite/);
   });
 });
 
@@ -70,6 +87,8 @@ describe("ISSUE_FIX_STEP", () => {
 
   it("fixes clients on Equivalencias, people on Personas and Drive on Opciones", () => {
     expect(ISSUE_FIX_STEP.CLIENT_UNRESOLVED).toBe("equivalencias");
+    expect(ISSUE_FIX_STEP.TRAMO_MISSING).toBe("equivalencias");
+    expect(ISSUE_FIX_STEP.PHASE_UNRESOLVED).toBe("equivalencias");
     expect(ISSUE_FIX_STEP.PERSON_UNMATCHED).toBe("personas");
     expect(ISSUE_FIX_STEP.DRIVE_NOT_CONFIGURED).toBe("opciones");
   });
@@ -80,5 +99,41 @@ describe("ISSUE_FIX_STEP", () => {
     expect(issuePersonName("PERSON_UNMATCHED", message)).toBe("Luis Pérez (Obra)");
     expect(issuePersonName("PERSON_UNMATCHED", "monday user 8 (?) has no staff match")).toBeNull();
     expect(issuePersonId("RELATION_MISSING", message)).toBeNull();
+  });
+});
+
+describe("groupPreviewWarnings", () => {
+  const issue = (code: PlanIssueCode, blocking = false, message = `texto ${code}`): MondayPreviewIssue => ({
+    code,
+    blocking,
+    boardId: "901",
+    itemId: null,
+    boardName: "Casa Nido",
+    itemName: null,
+    message,
+    fixStep: ISSUE_FIX_STEP[code],
+  });
+
+  it("groups warnings by code with a counted title, leaving blocking issues out", () => {
+    const groups = groupPreviewWarnings([
+      issue("PHASE_UNRESOLVED"),
+      issue("TRAMO_MISSING", true),
+      issue("PERSON_UNMATCHED"),
+      issue("PHASE_UNRESOLVED"),
+      issue("CLIENT_MISSING"),
+      issue("ADMIN_ASSIGNEE_CLEARED"),
+      issue("STATUS_DEFAULTED"),
+      issue("DATES_MISSING"),
+      issue("RELATION_MISSING", false, "Un elemento vinculado no está en la exportación; ese vínculo no se importa."),
+    ]);
+    expect(groups.map((g) => [g.code, g.title, g.issues.length])).toEqual([
+      ["PHASE_UNRESOLVED", "Tareas sin fase (2)", 2],
+      ["PERSON_UNMATCHED", "Personas sin equivalente (1)", 1],
+      ["CLIENT_MISSING", "Proyectos sin cliente (1)", 1],
+      ["ADMIN_ASSIGNEE_CLEARED", "Tareas de administración sin responsable (1)", 1],
+      ["STATUS_DEFAULTED", "Estatus sin equivalente (1)", 1],
+      ["DATES_MISSING", "Elementos sin línea de tiempo (1)", 1],
+      ["RELATION_MISSING", "Un elemento vinculado no está en la exportación; ese vínculo no se importa.", 1],
+    ]);
   });
 });

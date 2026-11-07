@@ -17,9 +17,9 @@ import { decodeClient, encodeClient, type BoardDraft } from "@/lib/monday-import
 import type { MondayBoardSource, MondayImportChoices } from "@/lib/types/monday-import";
 
 /**
- * Groups of a board_as_project or item_as_project board (#687): each one becomes a phase of the board's
- * workflow, a new phase, a workflow stage, its own project or nothing. Suggests "Grupo como proyecto" for the
- * whole board when its groups are named like clients.
+ * Groups of a board_as_project or item_as_project board: each one becomes one of the six targets (a tramo, a
+ * fase, an espacio, a separate project, admin tasks or nothing), defaulting to `resolveGroupTarget`. Suggests
+ * "Grupo como proyecto" for the whole board when its groups are named like clients. Also used by the remap.
  */
 export function GroupTargetsTable({
   board,
@@ -45,7 +45,7 @@ export function GroupTargetsTable({
           <AlertDescription className="space-y-2">
             <p>
               Varios grupos se llaman como clientes del Directorio. Con «Grupo como proyecto» cada grupo será un
-              proyecto con su cliente, en lugar de una fase.
+              proyecto con su cliente, en lugar de un tramo o una fase.
             </p>
             <Button
               size="sm"

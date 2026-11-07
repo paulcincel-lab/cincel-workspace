@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import TaskDrawer from "@/components/tareas/TaskDrawer";
 import { TaskMemberProjectFilters, matchesMemberFilter, matchesProjectFilter } from "@/components/tareas/TaskMemberProjectFilters";
-import { DEPARTMENTOS } from "@/lib/actividades/departamento";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { formatDateDMY } from "@/lib/utils/date";
+import { tramoPhaseLabel } from "@/lib/tasks/labels";
 import {
   BASE_STATUSES,
   BASE_STATUS_LABEL,
@@ -42,6 +42,7 @@ import type {
   TaskStatusOption,
   TaskLinkInput,
   WorkflowDetail,
+  WorkflowRef,
 } from "@/lib/types/core";
 
 /** A board column: one per built-in status, then one per custom status. Keyed by the status select value. */
@@ -71,16 +72,18 @@ interface TableroClientProps {
   initialBoard: Record<TaskStatus, TaskListItem[]>;
   customStatuses: TaskStatusOption[];
   workflows: WorkflowDetail[];
+  /** Current tramo per project id, for the "Tramo actual del proyecto" line under "Todos". */
+  projectTramos?: Record<string, WorkflowRef | null>;
 }
 
 function flattenBoard(board: Record<TaskStatus, TaskListItem[]>): TaskListItem[] {
   return BASE_STATUSES.flatMap((s) => board[s] ?? []);
 }
 
-export function TableroClient({ initialBoard, customStatuses, workflows }: TableroClientProps) {
+export function TableroClient({ initialBoard, customStatuses, workflows, projectTramos = {} }: TableroClientProps) {
   const [boardTasks, setBoardTasks] = useState<TaskListItem[]>(() => flattenBoard(initialBoard));
   const [visibleCount, setVisibleCount] = useState<Record<string, number>>({});
-  const [departmentFilter, setDepartmentFilter] = useState<string>("");
+  const [workflowFilter, setWorkflowFilter] = useState<string>("");
   const [projectId, setProjectId] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
@@ -93,14 +96,11 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
   // Open on the viewer's own tasks; clearing the member filter shows everyone's.
   const [memberIds, setMemberIds] = useState<string[]>(() => (viewerId ? [viewerId] : []));
 
-  const workflowIdBySlug = useMemo(() => {
-    const map = new Map<string, string>();
-    DEPARTMENTOS.forEach((d) => {
-      const workflow = workflows.find((w) => w.key === d.slug);
-      if (workflow) map.set(d.slug, workflow.id);
-    });
-    return map;
-  }, [workflows]);
+  // One tab per active tramo, in catalog order.
+  const tramoTabs = useMemo(
+    () => workflows.filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder),
+    [workflows]
+  );
 
   const columns = useMemo<BoardColumn[]>(
     () => [
@@ -125,17 +125,16 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
 
   const refresh = useCallback(async () => {
     try {
-      const workflowId = departmentFilter ? workflowIdBySlug.get(departmentFilter) : undefined;
-      const rows = await fetchBoardAction(workflowId ? { workflowId } : {});
+      const rows = await fetchBoardAction(workflowFilter ? { workflowId: workflowFilter } : {});
       setBoardTasks(flattenBoard(rows));
       setVisibleCount({});
     } catch (err) {
       console.error(err);
     }
-  }, [departmentFilter, workflowIdBySlug]);
+  }, [workflowFilter]);
 
   useEffect(() => {
-    // Re-fetch the board whenever the department filter changes — refresh()
+    // Re-fetch the board whenever the tramo filter changes — refresh()
     // is also reused after a drag-and-drop status change, so it can't be
     // inlined here without duplicating the fetch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -312,12 +311,12 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
         title="Tablero"
         description="Arrastra una tarjeta entre columnas para cambiar su estatus."
         actions={
-          <Tabs value={departmentFilter || "__all__"} onValueChange={(v) => setDepartmentFilter(v === "__all__" ? "" : (v as string))}>
+          <Tabs value={workflowFilter || "__all__"} onValueChange={(v) => setWorkflowFilter(v === "__all__" ? "" : (v as string))}>
             <TabsList>
-              <TabsTrigger value="__all__">General</TabsTrigger>
-              {DEPARTMENTOS.map((d) => (
-                <TabsTrigger key={d.slug} value={d.slug}>
-                  {d.label}
+              <TabsTrigger value="__all__">Todos</TabsTrigger>
+              {tramoTabs.map((w) => (
+                <TabsTrigger key={w.id} value={w.id}>
+                  {w.name}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -375,6 +374,9 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
               ) : (
                 tasks.map((task) => {
                   const draggable = canDragTask(task);
+                  const projectTramo = projectTramos[task.projectId] ?? null;
+                  const showProjectTramo =
+                    !workflowFilter && !!task.workflow && !!projectTramo && projectTramo.id !== task.workflow.id;
                   return (
                     <div
                       key={task.id}
@@ -388,6 +390,12 @@ export function TableroClient({ initialBoard, customStatuses, workflows }: Table
                     >
                       <p className="font-medium">{task.title}</p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">{task.project.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{tramoPhaseLabel(task)}</p>
+                      {showProjectTramo ? (
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          Tramo actual del proyecto: {projectTramo?.name}
+                        </p>
+                      ) : null}
 
                       <div className="mt-2 flex items-center justify-between gap-2">
                         {task.manager ? (

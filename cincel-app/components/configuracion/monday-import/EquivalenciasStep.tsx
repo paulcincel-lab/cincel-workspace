@@ -1,52 +1,45 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
+import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
-import { Button } from "@/components/ui/shadcn/button";
-import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Switch } from "@/components/ui/shadcn/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
 import { ChoiceSelect, type Choice } from "@/components/configuracion/monday-import/ChoiceSelect";
-import { TaskAreaWorkflowSection } from "@/components/configuracion/monday-import/TaskAreaWorkflowSection";
 import { GroupTargetsTable } from "@/components/configuracion/monday-import/GroupTargetsTable";
-import { hasGroupTargets } from "@/lib/monday-import/group-targets";
-import { createTaskStatusAction } from "@/lib/actions/task-statuses-actions";
+import { currentGroupTarget, hasGroupTargets, pruneGroupTargets } from "@/lib/monday-import/group-targets";
+import { placementLabel, templateItemPlacement } from "@/lib/monday-import/template-phases";
+import { StatusMapTable, type CreatedStatus } from "@/components/configuracion/monday-import/StatusMapTable";
+import { statusMapLabels } from "@/lib/monday-import/status-map";
 import {
-  BASE_STATUS_LABELS,
   COLUMN_TARGET_LABELS,
   CONTACT_TYPE_LABELS,
   SUBITEM_LABELS,
-  boardsWithoutClient,
   decodeClient,
-  decodeStatusTarget,
   encodeClient,
-  encodeStatusTarget,
   findBoard,
   groupEquivalent,
-  isDefaultedStatus,
-  lacksClient,
   projectKeys,
-  setBoardArea,
-  setBoardWorkflow,
   setColumnTarget,
   setRecordEntry,
-  setStatusTarget,
   strategyDescription,
   subitemsSection,
   templateCandidateItems,
   updateBoard,
-  workflowsForBoard,
   type BoardDraft,
 } from "@/lib/monday-import/wizard-steps";
 import type { ColumnTarget, MappingInput } from "@/scripts/monday/mapping.schema";
-import type { MondayBoardSource, MondayExportSource, MondayImportChoices } from "@/lib/types/monday-import";
+import type {
+  MondayBoardSource,
+  MondayExportSource,
+  MondayImportChoices,
+  MondayStatusMap,
+} from "@/lib/types/monday-import";
 
 const NONE = "__none__";
-const CREATE_STATUS = "__create__";
 
 const COLUMN_CHOICES: Choice[] = Object.entries(COLUMN_TARGET_LABELS).map(([value, label]) => ({ value, label }));
 
@@ -84,101 +77,20 @@ function EquivalenceTable({ monday, cincel, children }: { monday: string; cincel
   );
 }
 
-/** One status label row; "Crear estatus" opens an inline form that creates it in Configuración → Estatus. */
-function StatusLabelRow({
-  label,
-  value,
-  defaulted,
-  statusChoices,
-  onChange,
-  onStatusCreated,
-}: {
-  label: { id: string; name: string; isDone: boolean };
-  value: string;
-  /** No equivalent was found and it defaulted to Pendiente: flagged until the admin picks one. */
-  defaulted: boolean;
-  statusChoices: Choice[];
-  onChange: (value: string) => void;
-  onStatusCreated: (status: { id: string; name: string; closes: boolean }) => void;
-}) {
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState(label.name);
-  const [closes, setCloses] = useState(label.isDone);
-  const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
-  const errorId = `status-create-error-${label.id}`;
-
-  function create() {
-    setError("");
-    if (!name.trim()) {
-      setError("Escribe el nombre del estatus.");
-      return;
-    }
-    startTransition(async () => {
-      try {
-        const created = await createTaskStatusAction({ name: name.trim(), closes });
-        onStatusCreated({ id: created.id, name: created.name, closes: created.closes });
-        onChange(`custom:${created.id}`);
-        setCreating(false);
-      } catch {
-        setError("No se pudo crear el estatus. Revisa que el nombre no exista ya.");
-      }
-    });
-  }
-
-  return (
-    <TableRow>
-      <TableCell className="align-top">
-        <span className="text-foreground">{label.name}</span>
-        {label.isDone ? (
-          <Badge variant="outline" className="ml-2">
-            Terminado en monday
-          </Badge>
-        ) : null}
-        {defaulted ? (
-          <Badge variant="secondary" className="ml-2">
-            Sin equivalente, revisar
-          </Badge>
-        ) : null}
-      </TableCell>
-      <TableCell className="space-y-2">
-        <ChoiceSelect
-          label={`Estatus para ${label.name}`}
-          value={value}
-          choices={[...statusChoices, { value: CREATE_STATUS, label: "Crear estatus…" }]}
-          onChange={(next) => (next === CREATE_STATUS ? setCreating(true) : onChange(next))}
-        />
-        {creating ? (
-          <div className="space-y-2">
-            <Input
-              aria-label="Nombre del estatus nuevo"
-              value={name}
-              aria-invalid={error ? true : undefined}
-              aria-describedby={error ? errorId : undefined}
-              onChange={(event) => setName(event.target.value)}
-            />
-            <Label className="flex items-center gap-2">
-              <Checkbox checked={closes} onCheckedChange={(checked) => setCloses(checked === true)} />
-              Cierra la tarea
-            </Label>
-            <div className="flex gap-2">
-              <Button size="sm" disabled={isPending} onClick={create}>
-                {isPending ? "Creando…" : "Crear estatus"}
-              </Button>
-              <Button size="sm" variant="ghost" disabled={isPending} onClick={() => setCreating(false)}>
-                Cancelar
-              </Button>
-            </div>
-            {error ? (
-              <Alert id={errorId} variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
-          </div>
-        ) : null}
-      </TableCell>
-    </TableRow>
-  );
+/**
+ * Whether the board needs "Tramo del tablero": only when no group targets a tramo or a fase (FE §4.6 item 2).
+ * Boards whose groups aren't mapped one by one always take the board's tramo.
+ */
+export function boardTramoRequired(
+  board: BoardDraft,
+  source: MondayBoardSource,
+  choices: MondayImportChoices,
+): boolean {
+  if (!hasGroupTargets(board)) return true;
+  return !source.groups.some((group) => {
+    const target = currentGroupTarget(board, group, choices);
+    return (target.kind === "tramo" && Boolean(target.workflowId)) || target.kind === "phase";
+  });
 }
 
 /** One board's full mapping; also the body of its card in the board gallery (#685). */
@@ -187,29 +99,14 @@ export function BoardEquivalences({
   source,
   choices,
   onBoardChange,
-  onStatusCreated,
 }: {
   board: BoardDraft;
   source: MondayBoardSource;
   choices: MondayImportChoices;
   onBoardChange: (update: (board: BoardDraft) => BoardDraft) => void;
-  onStatusCreated: (status: { id: string; name: string; closes: boolean }) => void;
 }) {
   const isCrm = board.strategy === "crm_contacts";
   const subitemsCopy = subitemsSection(board.strategy, board.subitems);
-  const statusChoices: Choice[] = [
-    ...Object.entries(BASE_STATUS_LABELS).map(([value, label]) => ({ value: `status:${value}`, label })),
-    ...choices.statuses.map((status) => ({ value: `custom:${status.id}`, label: `${status.name} (personalizado)` })),
-  ];
-  const columnTitle = new Map(
-    [...source.columns, ...source.subitemColumns].map((column) => [column.id, column.title]),
-  );
-  const statusColumns = [
-    ...Object.entries(board.columns).filter(([, target]) => target === "status").map(([id]) => id),
-    ...Object.entries(board.subitemColumns ?? {})
-      .filter(([id, target]) => target === "status" && board.columns[id] !== "status")
-      .map(([id]) => id),
-  ];
   const relationColumns = source.columns.filter(
     (column) => board.columns[column.id] === "client" || column.type === "board_relation",
   );
@@ -219,18 +116,15 @@ export function BoardEquivalences({
     ...relationColumns.map((column) => ({ value: `relation:${column.id}`, label: `Columna «${column.title}»` })),
     { value: "new", label: "Nuevo contacto" },
   ];
-  const areaChoices: Choice[] = [
-    { value: NONE, label: "Sin departamento" },
-    ...choices.areas.map((area) => ({ value: area.id, label: area.name })),
+  const tramoChoices: Choice[] = [
+    { value: NONE, label: "Sin tramo" },
+    ...choices.workflows.map((workflow) => ({ value: workflow.id, label: workflow.name })),
   ];
-  const workflowChoices: Choice[] = [
-    { value: NONE, label: "Sin workflow" },
-    ...workflowsForBoard(board, choices).map((workflow) => ({ value: workflow.id, label: workflow.name })),
-  ];
-  const templateChoices: Choice[] = [
+  const tramoMissing = !board.workflowId && boardTramoRequired(board, source, choices);
+  const templateChoices = (workflowId: string | null): Choice[] => [
     { value: NONE, label: "Sin plantilla" },
     ...choices.templates
-      .filter((template) => template.workflowId === board.workflowId)
+      .filter((template) => template.workflowId === workflowId)
       .map((template) => ({ value: template.id, label: template.name })),
   ];
   const keys = projectKeys(board, source);
@@ -257,7 +151,7 @@ export function BoardEquivalences({
             value={targets[column.id] ?? "ignore"}
             choices={COLUMN_CHOICES}
             onChange={(value) =>
-              onBoardChange((current) => setColumnTarget(current, source, column.id, value as ColumnTarget, subitem))
+              onBoardChange((current) => setColumnTarget(current, column.id, value as ColumnTarget, subitem))
             }
           />
         </TableCell>
@@ -282,29 +176,6 @@ export function BoardEquivalences({
           {columnRows(source.columns, false)}
         </EquivalenceTable>
       </Section>
-
-      {statusColumns.length > 0 ? (
-        <Section id={`status-${board.mondayBoardId}`} title="Estatus" description="Cada etiqueta de estatus de monday.">
-          {statusColumns.map((columnId) => (
-            <EquivalenceTable key={columnId} monday={`Etiqueta de «${columnTitle.get(columnId) ?? columnId}»`} cincel="Estatus de Cincel">
-              {(source.statusLabels[columnId] ?? []).map((label) => (
-                <StatusLabelRow
-                  key={label.id}
-                  label={label}
-                  value={encodeStatusTarget(board.statusMaps[columnId]?.[label.id])}
-                  defaulted={isDefaultedStatus(board.statusMaps[columnId]?.[label.id])}
-                  statusChoices={statusChoices}
-                  onStatusCreated={onStatusCreated}
-                  onChange={(value) => {
-                    const target = decodeStatusTarget(value);
-                    if (target) onBoardChange((current) => setStatusTarget(current, columnId, label.id, target));
-                  }}
-                />
-              ))}
-            </EquivalenceTable>
-          ))}
-        </Section>
-      ) : null}
 
       {isCrm ? (
         <Section id={`crm-${board.mondayBoardId}`} title="Contactos" description="Tipo de contacto y coincidencias en el Directorio.">
@@ -364,28 +235,27 @@ export function BoardEquivalences({
         </Section>
       ) : (
         <>
-          <Section id={`groups-${board.mondayBoardId}`} title="Grupos, departamento y workflow">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Departamento</Label>
-                <ChoiceSelect
-                  label="Departamento"
-                  value={board.areaId ?? NONE}
-                  choices={areaChoices}
-                  onChange={(value) => onBoardChange((current) => setBoardArea(current, value === NONE ? null : value, choices))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Workflow</Label>
-                <ChoiceSelect
-                  label="Workflow"
-                  value={board.workflowId ?? NONE}
-                  choices={workflowChoices}
-                  onChange={(value) =>
-                    onBoardChange((current) => setBoardWorkflow(current, value === NONE ? null : value, choices))
-                  }
-                />
-              </div>
+          <Section id={`groups-${board.mondayBoardId}`} title="Grupos y tramo">
+            <div className="space-y-2 sm:max-w-sm">
+              <Label>Tramo del tablero</Label>
+              <ChoiceSelect
+                label="Tramo del tablero"
+                value={board.workflowId ?? NONE}
+                choices={tramoChoices}
+                onChange={(value) =>
+                  onBoardChange((current) =>
+                    pruneGroupTargets({ ...current, workflowId: value === NONE ? null : value }, choices),
+                  )
+                }
+              />
+              <p className="text-sm text-muted-foreground">
+                El tramo de los grupos y elementos que no resuelven uno.
+              </p>
+              {tramoMissing ? (
+                <p role="alert" className="text-sm text-destructive">
+                  Elige un tramo.
+                </p>
+              ) : null}
             </div>
             {hasGroupTargets(board) ? (
               <GroupTargetsTable
@@ -425,12 +295,10 @@ export function BoardEquivalences({
             )}
           </Section>
 
-          <TaskAreaWorkflowSection board={board} source={source} choices={choices} onBoardChange={onBoardChange} />
-
           <Section
             id={`client-${board.mondayBoardId}`}
-            title="Cliente (obligatorio)"
-            description="El cliente de los proyectos de este tablero. Sin cliente no se pueden importar."
+            title="Cliente (opcional)"
+            description="Sin cliente, cada proyecto se crea con la tarea de administración «Asignar cliente y origen»."
           >
             <ChoiceSelect
               label="Cliente"
@@ -438,15 +306,6 @@ export function BoardEquivalences({
               choices={clientChoices}
               onChange={(value) => onBoardChange((current) => ({ ...current, client: decodeClient(value) }))}
             />
-            {lacksClient(board, source) ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  {board.strategy === "group_as_project"
-                    ? "Hay grupos sin cliente. Elige el cliente aquí o en cada grupo."
-                    : "Este tablero no tiene cliente. Elige un contacto, una columna o Nuevo contacto."}
-                </AlertDescription>
-              </Alert>
-            ) : null}
             {board.client?.kind === "new" ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -618,33 +477,47 @@ export function BoardEquivalences({
 
           <Section
             id={`templates-${board.mondayBoardId}`}
-            title="Plantillas del workflow"
-            description="Los elementos que coinciden con una tarea de plantilla del workflow."
+            title="Tareas de plantilla"
+            description="Cada elemento con su tarea de plantilla del tramo y la fase que tendrá en Cincel."
           >
-            {!board.workflowId ? (
-              <p className="text-sm text-muted-foreground">Elige un workflow para asignar plantillas.</p>
-            ) : templateItems.length === 0 ? (
+            {templateItems.length === 0 ? (
               <p className="text-sm text-muted-foreground">Este tablero no tiene elementos.</p>
             ) : (
-              <EquivalenceTable monday="Elemento de monday" cincel="Plantilla de tarea">
-                {templateItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>{item.name}</TableCell>
-                    <TableCell>
-                      <ChoiceSelect
-                        label={`Plantilla para ${item.name}`}
-                        value={board.templateMatches?.[item.id] ?? NONE}
-                        choices={templateChoices}
-                        onChange={(value) =>
-                          onBoardChange((current) => ({
-                            ...current,
-                            templateMatches: setRecordEntry(current.templateMatches, item.id, value === NONE ? "" : value),
-                          }))
-                        }
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
+              <EquivalenceTable monday="Elemento de monday" cincel="Tarea de plantilla · Tramo · Fase">
+                {templateItems.map((item) => {
+                  const placement = templateItemPlacement(board, source, item, choices);
+                  const hasTramo = !placement.admin && !placement.ignored && placement.workflowId;
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell className="align-top">{item.name}</TableCell>
+                      <TableCell className="space-y-2 whitespace-normal">
+                        {hasTramo ? (
+                          <ChoiceSelect
+                            label={`Plantilla para ${item.name}`}
+                            value={board.templateMatches?.[item.id] ?? NONE}
+                            choices={templateChoices(placement.workflowId)}
+                            onChange={(value) =>
+                              onBoardChange((current) => ({
+                                ...current,
+                                templateMatches: setRecordEntry(
+                                  current.templateMatches,
+                                  item.id,
+                                  value === NONE ? "" : value,
+                                ),
+                              }))
+                            }
+                          />
+                        ) : null}
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className={hasTramo ? "text-foreground" : "text-muted-foreground"}>
+                            {placementLabel(placement)}
+                          </span>
+                          {placement.review ? <Badge variant="outline">Sin fase · revisar</Badge> : null}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </EquivalenceTable>
             )}
           </Section>
@@ -661,21 +534,22 @@ export function EquivalenciasStep({
   choices,
   onMappingChange,
   onStatusCreated,
+  onStatusMapSaved,
   initialBoardId,
 }: {
   mapping: MappingInput;
   source: MondayExportSource;
   choices: MondayImportChoices;
   onMappingChange: (mapping: MappingInput) => void;
-  onStatusCreated: (status: { id: string; name: string; closes: boolean }) => void;
+  onStatusCreated: (status: CreatedStatus) => void;
+  /** The firm-wide status map the server saved (FE §4.6 item 5). */
+  onStatusMapSaved?: (statusMap: MondayStatusMap) => void;
   /** The board to open on, e.g. from "Corregir" in Vista previa. */
   initialBoardId?: string | null;
 }) {
   const [boardId, setBoardId] = useState(initialBoardId ?? mapping.boards[0]?.mondayBoardId ?? "");
   const board = findBoard(mapping, boardId) ?? mapping.boards[0];
   const boardSource = source.boards.find((candidate) => candidate.id === board?.mondayBoardId);
-  const withoutClient = boardsWithoutClient(mapping, source);
-  const missingNames = withoutClient.map((candidate) => candidate.name).join(", ");
 
   if (!board) {
     return (
@@ -687,47 +561,33 @@ export function EquivalenciasStep({
 
   return (
     <div className="space-y-6">
+      <Section
+        id="monday-status-map"
+        title="Estatus de monday"
+        description="Se guarda para todo el despacho y se usa en esta y en las próximas importaciones."
+      >
+        <StatusMapTable
+          labels={statusMapLabels(mapping, source)}
+          choices={choices}
+          onStatusCreated={onStatusCreated}
+          onSaved={onStatusMapSaved}
+        />
+      </Section>
       <div className="space-y-2">
         <Label>Tablero</Label>
         <ChoiceSelect
           label="Tablero"
           value={board.mondayBoardId}
-          choices={mapping.boards.map((candidate) => ({
-            value: candidate.mondayBoardId,
-            label: withoutClient.includes(candidate) ? `${candidate.name} (sin cliente)` : candidate.name,
-          }))}
+          choices={mapping.boards.map((candidate) => ({ value: candidate.mondayBoardId, label: candidate.name }))}
           onChange={setBoardId}
         />
       </div>
-      {withoutClient.length > 0 ? (
-        <Alert variant="destructive">
-          <AlertTitle>Faltan clientes</AlertTitle>
-          <AlertDescription>
-            <p>Estos tableros crean proyectos sin cliente y no se podrán importar:</p>
-            <ul className="flex flex-wrap gap-2 pt-1">
-              {withoutClient.map((candidate) => (
-                <li key={candidate.mondayBoardId}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={candidate.mondayBoardId === board.mondayBoardId}
-                    onClick={() => setBoardId(candidate.mondayBoardId)}
-                  >
-                    {candidate.name}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      ) : null}
       {boardSource ? (
         <BoardEquivalences
           key={board.mondayBoardId}
           board={board}
           source={boardSource}
           choices={choices}
-          onStatusCreated={onStatusCreated}
           onBoardChange={(update) => onMappingChange(updateBoard(mapping, board.mondayBoardId, update))}
         />
       ) : (
@@ -735,13 +595,6 @@ export function EquivalenciasStep({
           <AlertDescription>Este tablero no está en la exportación. Exporta otra vez en Tableros.</AlertDescription>
         </Alert>
       )}
-      {withoutClient.length > 0 ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Sin cliente: {missingNames}. Puedes seguir, pero la Vista previa no dejará importar hasta que elijas uno.
-          </AlertDescription>
-        </Alert>
-      ) : null}
     </div>
   );
 }

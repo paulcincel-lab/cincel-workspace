@@ -36,8 +36,11 @@ const fetchProjectsActionMock = vi.fn();
 vi.mock("@/lib/actions/projects-actions", () => ({
   fetchProjectsAction: (...args: unknown[]) => fetchProjectsActionMock(...args),
   createProjectAction: vi.fn(),
-  applyWorkflowAction: vi.fn(),
   deleteProjectAction: vi.fn(),
+}));
+
+vi.mock("@/lib/actions/tramo-start-actions", () => ({
+  startTramoAction: vi.fn(),
 }));
 
 const fetchWorkflowsActionMock = vi.fn();

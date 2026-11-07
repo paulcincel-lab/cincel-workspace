@@ -15,22 +15,30 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import {
-  areas,
-  areaWorkflows,
+  appSettings,
   contacts,
   importBatches,
+  positionPhases,
+  positions,
   projects,
   providerSubtype,
   staff,
   taskStatuses,
+  workflowPhases,
   workflows,
   workflowTaskTemplates,
 } from "@/lib/db/schema";
 import type { DriveAdmin } from "@/lib/google/drive-admin";
 import type { ImportDb } from "@/lib/import/refs";
+import {
+  mondayPeopleByItem,
+  personTaskPlacements,
+  suggestPositionFrom,
+  type PositionSuggestionCatalog,
+} from "@/lib/monday-import/people";
 import { buildPreview } from "@/lib/monday-import/preview";
 import {
   createRun,
@@ -56,6 +64,7 @@ import type {
   MondayImportOptionsInfo,
   MondayImportRunState,
   MondayImportStep,
+  MondayPositionSuggestion,
   MondayPreview,
   MondayRollbackCheck,
 } from "@/lib/types/monday-import";
@@ -75,7 +84,12 @@ import {
   subitemBoardIds,
 } from "@/scripts/monday/export";
 import { createDbLookups, draftMapping, readExport, readJson, statusLabels, type InitLookups } from "@/scripts/monday/init";
-import { Mapping } from "@/scripts/monday/mapping.schema";
+import {
+  Mapping,
+  MondayStatusMap as MondayStatusMapSchema,
+  statusLabelKey,
+  type MondayStatusMap,
+} from "@/scripts/monday/mapping.schema";
 import {
   buildPlan,
   checkDriveConfigured,
@@ -86,9 +100,10 @@ import {
 import { MeDocument } from "@/scripts/monday/queries";
 import { createRollbackCommand, findRollbackBlockers, openServiceAccountDrive } from "@/scripts/monday/rollback";
 import { TOKEN_ENV } from "@/scripts/monday/token";
-import { taskAreaValue } from "@/scripts/monday/translate";
 
 import { importedProjectHref } from "./links";
+import { MONDAY_STATUS_MAP_SETTING } from "@/lib/project-flow/catalog";
+import { parseStoredStatusMap, statusMapCustomIds } from "./status-map";
 
 type Env = Record<string, string | undefined>;
 
@@ -107,6 +122,10 @@ export interface WizardDeps {
   /** init / plan lookups; the DB ones by default. */
   initLookups?: (db: ImportDb) => InitLookups;
   planLookups?: (db: ImportDb) => PlanLookups;
+  /** The saved firm-wide status map; `readSavedStatusMap` (app_settings) by default. */
+  savedStatusMap?: (db: ImportDb) => Promise<MondayStatusMap>;
+  /** Puestos with candidate fases and the fase and tramo names, for the puesto suggestion; the DB ones by default. */
+  positionCatalog?: (db: ImportDb) => Promise<PositionSuggestionCatalog>;
 }
 
 const STEPS: readonly MondayImportStep[] = [
@@ -344,7 +363,7 @@ export function mergeDraft(existing: MappingInput | null, drafted: MappingInput,
   if (!existing) return { ...drafted, boards: drafted.boards.filter((b) => picked.has(b.mondayBoardId)) };
   const kept = new Map(existing.boards.map((b) => [b.mondayBoardId, b]));
   return {
-    version: 1,
+    version: 2,
     boards: drafted.boards
       .filter((b) => picked.has(b.mondayBoardId))
       .map((b) => kept.get(b.mondayBoardId) ?? b),
@@ -355,6 +374,8 @@ export function mergeDraft(existing: MappingInput | null, drafted: MappingInput,
       ...(drafted.options.includeFiles === false ? { includeFiles: false } : {}),
       ...(drafted.options.includeUpdates === false ? { includeUpdates: false } : {}),
     },
+    // The saved firm-wide map plus defaults for this export's labels; preview and apply read the saved setting.
+    statusMap: drafted.statusMap ?? {},
   };
 }
 
@@ -450,35 +471,26 @@ async function readManifestAccount(dir: string): Promise<StoredRun["account"]> {
 // Equivalencias
 // ---------------------------------------------------------------------------
 
-/** Column types whose values can give tasks their área and workflow (#686). */
-const TASK_AREA_COLUMN_TYPES = new Set(["dropdown", "status", "text"]);
-/** Values listed per column; more are mapped in mapping.json by hand. */
-const TASK_AREA_VALUES_MAX = 200;
-
-/**
- * Distinct values per dropdown, status or text column (#686), read as translate reads them: item columns from the
- * active items, subitem columns from their active subitems (the tasks of item_as_project boards).
- */
-function taskAreaColumnValues(
-  board: Awaited<ReturnType<typeof readExport>>["boards"][number]["board"],
-  items: Awaited<ReturnType<typeof readExport>>["boards"][number]["items"],
-): Record<string, string[]> {
-  const active = <T extends { state?: unknown }>(list: readonly (T | null | undefined)[]): T[] =>
-    list.filter((i): i is T => i != null && (i.state == null || i.state === "active"));
-  const out: Record<string, string[]> = {};
-  const collect = (columns: readonly { id: string; type: string }[], rows: readonly unknown[]) => {
-    for (const c of columns) {
-      if (!TASK_AREA_COLUMN_TYPES.has(c.type)) continue;
-      const values = (out[c.id] ??= []);
-      for (const row of rows) {
-        const value = taskAreaValue(row as Parameters<typeof taskAreaValue>[0], c.id);
-        if (value && !values.includes(value) && values.length < TASK_AREA_VALUES_MAX) values.push(value);
-      }
+/** Active items and subitems per status column and label: `${columnId}\0${statusLabelKey(label)}` → count. */
+function statusLabelCounts(items: readonly unknown[]): Map<string, number> {
+  const out = new Map<string, number>();
+  const active = (row: unknown) => {
+    const state = (row as { state?: unknown } | null)?.state;
+    return row != null && (state == null || state === "active");
+  };
+  const visit = (row: unknown) => {
+    for (const value of (row as { column_values?: unknown[] } | null)?.column_values ?? []) {
+      const v = value as { __typename?: string; id?: string; label?: string | null } | null;
+      if (v?.__typename !== "StatusValue" || !v.id || !v.label) continue;
+      const key = `${v.id}\u0000${statusLabelKey(v.label)}`;
+      out.set(key, (out.get(key) ?? 0) + 1);
     }
   };
-  const top = active(items);
-  collect(board.columns, top);
-  collect(board.subitem_columns ?? [], top.flatMap((i) => active(i.subitems ?? [])));
+  for (const item of items) {
+    if (!active(item)) continue;
+    visit(item);
+    for (const sub of (item as { subitems?: unknown[] | null }).subitems ?? []) if (active(sub)) visit(sub);
+  }
   return out;
 }
 
@@ -513,13 +525,15 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
   const data = await readExport(dir);
   const picked = new Set(run.boardIds);
   // An item and a subitem column can share an id; init maps the union of their labels, so the source lists it too.
-  const labelsOf = (cols: { id: string; type: string; title: string; settings: unknown }[]) => {
-    const out: Record<string, { id: string; name: string; isDone: boolean }[]> = {};
+  const labelsOf = (cols: { id: string; type: string; title: string; settings: unknown }[], items: readonly unknown[]) => {
+    const counts = statusLabelCounts(items);
+    const out: Record<string, { id: string; name: string; isDone: boolean; items: number }[]> = {};
     for (const c of cols) {
       if (c.type !== "status") continue;
       const list = (out[c.id] ??= []);
       for (const l of statusLabels(c)) {
-        if (!list.some((x) => x.id === l.id)) list.push({ id: l.id, name: l.label, isDone: l.isDone });
+        if (list.some((x) => x.id === l.id)) continue;
+        list.push({ id: l.id, name: l.label, isDone: l.isDone, items: counts.get(`${c.id}\u0000${statusLabelKey(l.label)}`) ?? 0 });
       }
     }
     return out;
@@ -535,12 +549,11 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
         columns: plain(board.columns),
         subitemColumns: plain(board.subitem_columns ?? []),
         groups: board.groups.map((g) => ({ id: g.id, title: g.title })),
-        statusLabels: labelsOf([...board.columns, ...(board.subitem_columns ?? [])]),
+        statusLabels: labelsOf([...board.columns, ...(board.subitem_columns ?? [])], items),
         itemCount: items.length,
         items: items
           .filter((i) => i.state == null || i.state === "active")
           .map((i) => ({ id: i.id, name: i.name, groupId: i.group?.id ?? null })),
-        taskAreaValues: taskAreaColumnValues(board, items),
         userIds: boardPeople(items),
       })),
     users: data.users.map((u) => ({ id: u.id, name: u.name, email: u.email ?? null, kind: u.kind ?? null })),
@@ -549,57 +562,126 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
   };
 }
 
-/** The Cincel side of every Equivalencias select. */
+/** The Cincel side of every Equivalencias select (project flow FE §7.8): tramos with fases, puestos, saved status map. */
 export async function getImportChoices(db: ImportDb): Promise<MondayImportChoices> {
-  const [statusRows, areaRows, areaFlowRows, workflowRows, templateRows, clientRows, staffRows] = await Promise.all([
-    db
-      .select({ id: taskStatuses.id, name: taskStatuses.name, closes: taskStatuses.closes })
-      .from(taskStatuses)
-      .where(isNull(taskStatuses.deletedAt))
-      .orderBy(asc(taskStatuses.sortOrder), asc(taskStatuses.name)),
-    db
-      .select({ id: areas.id, name: areas.name })
-      .from(areas)
-      .where(and(isNull(areas.deletedAt), eq(areas.active, true)))
-      .orderBy(asc(areas.sortOrder), asc(areas.name)),
-    db.select({ areaId: areaWorkflows.areaId, workflowId: areaWorkflows.workflowId }).from(areaWorkflows),
-    db
-      .select({ id: workflows.id, name: workflows.name })
-      .from(workflows)
-      .where(and(isNull(workflows.deletedAt), eq(workflows.active, true)))
-      .orderBy(asc(workflows.sortOrder), asc(workflows.name)),
-    db
-      .select({
-        id: workflowTaskTemplates.id,
-        workflowId: workflowTaskTemplates.workflowId,
-        name: workflowTaskTemplates.title,
-        phase: workflowTaskTemplates.phase,
-      })
-      .from(workflowTaskTemplates)
-      .where(eq(workflowTaskTemplates.active, true))
-      .orderBy(asc(workflowTaskTemplates.workflowId), asc(workflowTaskTemplates.sortOrder)),
-    db
-      .select({ id: contacts.id, name: contacts.name })
-      .from(contacts)
-      .where(and(eq(contacts.type, "cliente"), isNull(contacts.deletedAt)))
-      .orderBy(asc(contacts.name)),
-    db
-      .select({ id: staff.id, name: staff.name, email: staff.email })
-      .from(staff)
-      .where(and(isNull(staff.deletedAt), eq(staff.active, true)))
-      .orderBy(asc(staff.name)),
-  ]);
-  const flows = new Map<string, string[]>();
-  for (const r of areaFlowRows) flows.set(r.areaId, [...(flows.get(r.areaId) ?? []), r.workflowId]);
+  const [statusRows, workflowRows, phaseRows, templateRows, positionRows, positionPhaseRows, clientRows, staffRows, statusMap] =
+    await Promise.all([
+      db
+        .select({
+          id: taskStatuses.id,
+          name: taskStatuses.name,
+          closes: taskStatuses.closes,
+          countsAsCompleted: taskStatuses.countsAsCompleted,
+        })
+        .from(taskStatuses)
+        .where(isNull(taskStatuses.deletedAt))
+        .orderBy(asc(taskStatuses.sortOrder), asc(taskStatuses.name)),
+      db
+        .select({ id: workflows.id, name: workflows.name })
+        .from(workflows)
+        .where(and(isNull(workflows.deletedAt), eq(workflows.active, true)))
+        .orderBy(asc(workflows.sortOrder), asc(workflows.name)),
+      db
+        .select({
+          id: workflowPhases.id,
+          workflowId: workflowPhases.workflowId,
+          name: workflowPhases.name,
+          sortOrder: workflowPhases.sortOrder,
+        })
+        .from(workflowPhases)
+        .where(eq(workflowPhases.active, true))
+        .orderBy(asc(workflowPhases.workflowId), asc(workflowPhases.sortOrder), asc(workflowPhases.name)),
+      db
+        .select({
+          id: workflowTaskTemplates.id,
+          workflowId: workflowTaskTemplates.workflowId,
+          phaseId: workflowTaskTemplates.phaseId,
+          name: workflowTaskTemplates.title,
+        })
+        .from(workflowTaskTemplates)
+        .where(and(eq(workflowTaskTemplates.active, true), isNotNull(workflowTaskTemplates.phaseId)))
+        .orderBy(asc(workflowTaskTemplates.workflowId), asc(workflowTaskTemplates.sortOrder)),
+      db
+        .select({ id: positions.id, name: positions.name })
+        .from(positions)
+        .where(and(isNull(positions.deletedAt), eq(positions.active, true)))
+        .orderBy(asc(positions.sortOrder), asc(positions.name)),
+      db.select({ positionId: positionPhases.positionId, phaseId: positionPhases.phaseId }).from(positionPhases),
+      db
+        .select({ id: contacts.id, name: contacts.name })
+        .from(contacts)
+        .where(and(eq(contacts.type, "cliente"), isNull(contacts.deletedAt)))
+        .orderBy(asc(contacts.name)),
+      db
+        .select({ id: staff.id, name: staff.name, email: staff.email })
+        .from(staff)
+        .where(and(isNull(staff.deletedAt), eq(staff.active, true)))
+        .orderBy(asc(staff.name)),
+      readSavedStatusMap(db),
+    ]);
+  const phasesOf = new Map<string, { id: string; name: string; sortOrder: number }[]>();
+  for (const p of phaseRows)
+    phasesOf.set(p.workflowId, [...(phasesOf.get(p.workflowId) ?? []), { id: p.id, name: p.name, sortOrder: p.sortOrder }]);
+  const candidates = new Map<string, string[]>();
+  for (const r of positionPhaseRows) candidates.set(r.positionId, [...(candidates.get(r.positionId) ?? []), r.phaseId]);
   return {
     statuses: statusRows,
-    areas: areaRows.map((a) => ({ ...a, workflowIds: flows.get(a.id) ?? [] })),
-    workflows: workflowRows,
-    templates: templateRows,
+    workflows: workflowRows.map((w) => ({ ...w, phases: phasesOf.get(w.id) ?? [] })),
+    templates: templateRows.flatMap((t) => (t.phaseId ? [{ ...t, phaseId: t.phaseId }] : [])),
+    positions: positionRows.map((p) => ({ ...p, phaseIds: candidates.get(p.id) ?? [] })),
     clients: clientRows,
     staff: staffRows,
     providerSubtypes: [...providerSubtype.enumValues],
+    statusMap,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Firm-wide status map (project flow BE §7.8, RD-5)
+// ---------------------------------------------------------------------------
+
+/** The saved firm-wide status map (app_settings `monday.status_map`); empty when none is saved. */
+export async function readSavedStatusMap(db: ImportDb): Promise<MondayStatusMap> {
+  const [row] = await db
+    .select({ value: appSettings.value })
+    .from(appSettings)
+    .where(eq(appSettings.key, MONDAY_STATUS_MAP_SETTING));
+  return parseStoredStatusMap(row?.value ?? null);
+}
+
+/**
+ * Saves the whole firm-wide map, keyed by `statusLabelKey(label)`, and returns what was stored. Every later import
+ * reads it, so labels saved once aren't asked again. Throws `WizardError("STATUS_NOT_FOUND")` when an entry points at
+ * a custom status that doesn't exist (or was deleted).
+ */
+export async function saveStatusMap(db: ImportDb, map: unknown): Promise<MondayStatusMap> {
+  const parsed = MondayStatusMapSchema.safeParse(map);
+  if (!parsed.success) throw new WizardError("El mapa de estatus no tiene un formato válido.");
+  const entries: MondayStatusMap = {};
+  for (const [label, entry] of Object.entries(parsed.data)) {
+    const key = statusLabelKey(label);
+    if (key) entries[key] = entry;
+  }
+  const ids = statusMapCustomIds(entries);
+  if (ids.length > 0) {
+    const found = await db
+      .select({ id: taskStatuses.id })
+      .from(taskStatuses)
+      .where(and(inArray(taskStatuses.id, ids), isNull(taskStatuses.deletedAt)));
+    const live = new Set(found.map((r) => r.id));
+    if (ids.some((id) => !live.has(id))) throw new WizardError("STATUS_NOT_FOUND");
+  }
+  const value = JSON.stringify(entries);
+  await db
+    .insert(appSettings)
+    .values({ key: MONDAY_STATUS_MAP_SETTING, value })
+    .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
+  return entries;
+}
+
+/** The draft with the saved firm-wide map as its `statusMap`: what preview and apply translate with. */
+async function withSavedStatusMap(deps: WizardDeps, mapping: MappingInput): Promise<MappingInput> {
+  return { ...mapping, statusMap: await (deps.savedStatusMap ?? readSavedStatusMap)(deps.db) };
 }
 
 /** Zod issues as "path: message" lines. */
@@ -701,23 +783,84 @@ async function enforceDisabledOptions(run: StoredRun, mapping: MappingInput, dep
   return next;
 }
 
-/** Paso 6: the plan dry run as counts, issues and sample items. */
-export async function previewImport(runId: string, importedById: string, deps: WizardDeps): Promise<MondayPreview> {
-  const run = await requireRun(runId, deps);
+/** The plan dry run of a run's draft, translated with the saved firm-wide status map (what apply will use). */
+async function planRun(run: StoredRun, importedById: string | undefined, deps: WizardDeps) {
   const env = envOf(deps);
   const dir = runDir(run.runId, env);
   const stored = await readDraftMapping(run.runId, env);
   if (!stored) throw new WizardError("Todavía no hay equivalencias: primero exporta los tableros.");
-  const mapping = await enforceDisabledOptions(run, stored, deps);
+  const mapping = await withSavedStatusMap(deps, await enforceDisabledOptions(run, stored, deps));
   const { data } = await readPlanExport(dir);
   const lookups = (deps.planLookups ?? createPlanDbLookups)(deps.db);
   const plan = await buildPlan(data, mapping, lookups, {
     fileExists: (localPath) => existsSync(join(dir, localPath)),
     checkDrive: () => checkDriveConfigured(deps.openDrive ?? openServiceAccountDrive, env),
-    importedById,
+    ...(importedById ? { importedById } : {}),
   });
+  return { plan, data, lookups, mapping };
+}
+
+/** Paso 6: the plan dry run as counts, issues and sample items. */
+export async function previewImport(runId: string, importedById: string, deps: WizardDeps): Promise<MondayPreview> {
+  const run = await requireRun(runId, deps);
+  const { plan, data, lookups } = await planRun(run, importedById, deps);
   const names = await lookups.translateLookups();
   return buildPreview(plan, data, names);
+}
+
+// ---------------------------------------------------------------------------
+// Puesto suggestion for "Crear integrante" (project flow BE §10.8)
+// ---------------------------------------------------------------------------
+
+/** Live, active puestos with their candidate fases, and the fase and tramo names the suggestion shows. */
+export async function suggestionCatalog(db: ImportDb): Promise<PositionSuggestionCatalog> {
+  const [positionRows, candidateRows, phaseRows, workflowRows] = await Promise.all([
+    db
+      .select({ id: positions.id, name: positions.name, sortOrder: positions.sortOrder })
+      .from(positions)
+      .where(and(isNull(positions.deletedAt), eq(positions.active, true)))
+      .orderBy(asc(positions.sortOrder), asc(positions.name)),
+    db.select({ positionId: positionPhases.positionId, phaseId: positionPhases.phaseId }).from(positionPhases),
+    db
+      .select({
+        id: workflowPhases.id,
+        workflowId: workflowPhases.workflowId,
+        name: workflowPhases.name,
+        sortOrder: workflowPhases.sortOrder,
+      })
+      .from(workflowPhases),
+    db.select({ id: workflows.id, name: workflows.name, sortOrder: workflows.sortOrder }).from(workflows),
+  ]);
+  const phaseIds = new Map<string, string[]>();
+  for (const r of candidateRows) phaseIds.set(r.positionId, [...(phaseIds.get(r.positionId) ?? []), r.phaseId]);
+  return {
+    positions: positionRows.map((p) => ({ ...p, phaseIds: phaseIds.get(p.id) ?? [] })),
+    phases: Object.fromEntries(phaseRows.map((p) => [p.id, { workflowId: p.workflowId, name: p.name, sortOrder: p.sortOrder }])),
+    workflows: Object.fromEntries(workflowRows.map((w) => [w.id, { name: w.name, sortOrder: w.sortOrder }])),
+  };
+}
+
+/**
+ * "Crear integrante": the puesto suggested by where a monday person's tasks land in this import. Translates the run
+ * as the Vista previa does, takes the tasks where the person is manager or support, counts them per resolved fase and
+ * scores each live, active puesto by the tasks in its candidate fases (BE §10.8).
+ */
+export async function suggestPosition(
+  runId: string,
+  mondayUserId: string,
+  deps: WizardDeps,
+): Promise<MondayPositionSuggestion> {
+  const run = await requireRun(runId, deps);
+  const { plan, data, mapping } = await planRun(run, undefined, deps);
+  const tasks = plan.translation?.result.tasks ?? [];
+  const support = new Set((plan.translation?.result.taskSupport ?? []).map((s) => s.externalId));
+  const person = mapping.people?.[mondayUserId];
+  const placements = personTaskPlacements(tasks, mondayUserId, {
+    staffId: person && person.action === "staff" ? person.staffId : null,
+    supportKeys: support,
+    peopleByItem: mondayPeopleByItem(data.boards.flatMap((b) => b.items)),
+  });
+  return suggestPositionFrom(placements, await (deps.positionCatalog ?? suggestionCatalog)(deps.db));
 }
 
 // ---------------------------------------------------------------------------
@@ -761,6 +904,9 @@ export async function startApply(
       "apply",
       "Importando a Cincel",
       async ({ io, progress }) => {
+        // Snapshot of the saved firm-wide status map, right before apply: the batch records what was used.
+        const latest = await readDraftMapping(run.runId, env);
+        if (latest) await writeDraftMapping(run.runId, await withSavedStatusMap(deps, latest), env);
         const code = await command(["--export", dir, "--by", by.email], io);
         const created = await runBatch(deps.db, dir);
         if (created) await updateRun(runId, (r) => {

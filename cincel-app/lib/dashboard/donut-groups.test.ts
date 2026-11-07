@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectsByArea, tasksByBaseStatus } from "./donut-groups";
+import { projectsByTramo, tasksByBaseStatus } from "./donut-groups";
 
 describe("tasksByBaseStatus", () => {
   it("counts custom statuses under their base status", () => {
@@ -22,22 +22,33 @@ describe("tasksByBaseStatus", () => {
   });
 });
 
-describe("projectsByArea", () => {
-  it("groups by área and puts projects without one in Sin área", () => {
-    const diseno = { id: "a2", name: "Diseño", colorSlot: 2 };
-    const slices = projectsByArea([
-      { area: diseno },
-      { area: diseno },
-      { area: null },
+describe("projectsByTramo", () => {
+  it("groups by current tramo in tramo order and puts projects without one in Sin tramo", () => {
+    const presale = { id: "w1", key: "presale", name: "Presale", sortOrder: 1 };
+    const diseno = { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 };
+    const slices = projectsByTramo([
+      { currentWorkflow: diseno },
+      { currentWorkflow: null },
+      { currentWorkflow: presale },
+      { currentWorkflow: diseno },
     ]);
-    expect(slices).toEqual([
-      { key: "a2", label: "Diseño", count: 2, color: "var(--chart-2)" },
-      {
-        key: "sin-area",
-        label: "Sin área",
-        count: 1,
-        color: "var(--muted-foreground)",
-      },
+    expect(slices.map(({ key, label, count }) => ({ key, label, count }))).toEqual([
+      { key: "w1", label: "Presale", count: 1 },
+      { key: "w2", label: "Diseño", count: 2 },
+      { key: "sin-tramo", label: "Sin tramo", count: 1 },
     ]);
+    expect(slices[0].color).toBe("var(--chart-1)");
+    expect(slices[1].color).toBe("var(--chart-2)");
+    expect(slices[2].color).toBe("var(--muted-foreground)");
+  });
+
+  it("has no Sin tramo slice when every project has a tramo", () => {
+    const slices = projectsByTramo([{ currentWorkflow: { id: "w3", key: "construccion", name: "Construcción", sortOrder: 3 } }]);
+    expect(slices).toHaveLength(1);
+    expect(slices[0]).toMatchObject({ key: "w3", count: 1 });
+  });
+
+  it("returns no slices for no projects", () => {
+    expect(projectsByTramo([])).toEqual([]);
   });
 });

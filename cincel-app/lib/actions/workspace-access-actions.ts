@@ -10,6 +10,7 @@ import { OFFICIAL_CINCEL_ROLES, SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { DirectoryError, getDirectory } from "@/lib/google/directory";
 import { ensureMissingProjectFolders } from "@/lib/google/project-folders-app";
 import type { EnsureMissingProjectFoldersCounts } from "@/lib/google/project-folders-app";
+import { positionExists } from "@/lib/repositories/positions-repository";
 import * as mappingsRepository from "@/lib/repositories/workspace-group-mappings-repository";
 import type { GroupMappingValues } from "@/lib/repositories/workspace-group-mappings-repository";
 import type {
@@ -28,6 +29,7 @@ import type {
  */
 
 const GOOGLE_SETTINGS_PATH = "/configuracion/google";
+const POSITIONS_SETTINGS_PATH = "/configuracion/puestos";
 const TEAM_PATH = "/equipo";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,6 +59,12 @@ function isUniqueViolation(err: unknown): boolean {
   return false;
 }
 
+/** Mappings show on Google and set the `googleManaged` flag on Puestos. */
+function revalidateMappingPaths(): void {
+  revalidatePath(GOOGLE_SETTINGS_PATH);
+  revalidatePath(POSITIONS_SETTINGS_PATH);
+}
+
 /** Shape checks that don't need Google; the group id comes later from `groups.get`. */
 async function validate(input: GroupMappingInput): Promise<Omit<GroupMappingValues, "groupId"> | null> {
   if (!input || typeof input !== "object") return null;
@@ -66,17 +74,17 @@ async function validate(input: GroupMappingInput): Promise<Omit<GroupMappingValu
   if (input.kind === "role") {
     const role = input.role;
     if (typeof role !== "string" || !(OFFICIAL_CINCEL_ROLES as readonly string[]).includes(role)) return null;
-    if (input.areaId) return null;
+    if (input.positionId) return null;
     const rank = input.rank ?? 0;
     if (!Number.isInteger(rank)) return null;
-    return { groupEmail, kind: "role", role, areaId: null, rank };
+    return { groupEmail, kind: "role", role, positionId: null, rank };
   }
 
-  if (input.kind === "area") {
-    const areaId = input.areaId;
-    if (!isUuid(areaId) || input.role) return null;
-    if (!(await mappingsRepository.areaExists(areaId))) return null;
-    return { groupEmail, kind: "area", role: null, areaId, rank: 0 };
+  if (input.kind === "position") {
+    const positionId = input.positionId;
+    if (!isUuid(positionId) || input.role) return null;
+    if (!(await positionExists(positionId))) return null;
+    return { groupEmail, kind: "position", role: null, positionId, rank: 0 };
   }
 
   return null;
@@ -125,7 +133,7 @@ export async function createGroupMappingAction(input: GroupMappingInput): Promis
   if ("ok" in values) return values;
   try {
     const mapping = await mappingsRepository.insertGroupMapping(values);
-    revalidatePath(GOOGLE_SETTINGS_PATH);
+    revalidateMappingPaths();
     return { ok: true, mapping };
   } catch (error) {
     if (isUniqueViolation(error)) return fail("duplicate");
@@ -142,7 +150,7 @@ export async function updateGroupMappingAction(id: string, input: GroupMappingIn
   try {
     const mapping = await mappingsRepository.updateGroupMapping(id, values);
     if (!mapping) return fail("invalid");
-    revalidatePath(GOOGLE_SETTINGS_PATH);
+    revalidateMappingPaths();
     return { ok: true, mapping };
   } catch (error) {
     if (isUniqueViolation(error)) return fail("duplicate");
@@ -156,7 +164,7 @@ export async function deleteGroupMappingAction(
   if (!(await isAdministrator())) return { ok: false, error: "forbidden" };
   if (!isUuid(id)) return { ok: false, error: "invalid" };
   await mappingsRepository.deleteGroupMapping(id);
-  revalidatePath(GOOGLE_SETTINGS_PATH);
+  revalidateMappingPaths();
   return { ok: true };
 }
 

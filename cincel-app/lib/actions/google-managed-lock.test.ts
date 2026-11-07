@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * Role and área changes for Google-managed staff are refused by the server
+ * Role and puesto changes for Google-managed staff are refused by the server
  * actions themselves (BE §A.7, §A.11 #12), not only hidden in the UI.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,22 +17,26 @@ vi.mock("@/lib/auth/session", () => ({
 const staffRepo = vi.hoisted(() => ({
   getStaffRoleLock: vi.fn(),
   googleManagedStaffIds: vi.fn(),
-  listStaffAreaIds: vi.fn(),
   updateStaff: vi.fn(),
-  setStaffAreas: vi.fn(),
+  staffExists: vi.fn(async () => true),
+  hasPositionGroupMappings: vi.fn(),
+  listStaffPositionIds: vi.fn(),
 }));
 vi.mock("@/lib/repositories/staff-repository", () => staffRepo);
 
-const areasRepo = vi.hoisted(() => ({ listAreaMemberIds: vi.fn(), setAreaMembers: vi.fn() }));
-vi.mock("@/lib/repositories/areas-repository", () => areasRepo);
+const positionsRepo = vi.hoisted(() => ({
+  setStaffPositions: vi.fn(),
+}));
+vi.mock("@/lib/repositories/positions-repository", () => positionsRepo);
 
 import { GOOGLE_MANAGED_ERROR, GOOGLE_MANAGED_REFUSAL } from "@/lib/types/workspace-access";
 
-import { setAreaMembersAction } from "./areas-actions";
-import { setStaffAreasAction, updateStaffAction } from "./staff-actions";
+import { setStaffPositionsAction, updateStaffAction } from "./staff-actions";
 
-const GOOGLE = "google-staff";
-const PASSWORD = "password-staff";
+const GOOGLE = "00000000-0000-4000-8000-000000000001";
+const PASSWORD = "00000000-0000-4000-8000-000000000002";
+const POSITION_1 = "00000000-0000-4000-8000-0000000000a1";
+const POSITION_2 = "00000000-0000-4000-8000-0000000000a2";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -41,9 +45,10 @@ beforeEach(() => {
     googleManaged: id === GOOGLE,
   }));
   staffRepo.googleManagedStaffIds.mockImplementation(async (ids: string[]) => new Set(ids.filter((id) => id === GOOGLE)));
-  staffRepo.listStaffAreaIds.mockResolvedValue(["area-1"]);
+  staffRepo.staffExists.mockResolvedValue(true);
+  staffRepo.hasPositionGroupMappings.mockResolvedValue(true);
+  staffRepo.listStaffPositionIds.mockResolvedValue([POSITION_1]);
   staffRepo.updateStaff.mockResolvedValue({ id: "x" });
-  areasRepo.listAreaMemberIds.mockResolvedValue([GOOGLE, PASSWORD]);
 });
 
 describe("updateStaffAction", () => {
@@ -64,36 +69,25 @@ describe("updateStaffAction", () => {
   });
 });
 
-describe("setStaffAreasAction", () => {
-  it("refuses an área change for Google-managed staff", async () => {
-    await expect(setStaffAreasAction(GOOGLE, ["area-1", "area-2"])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
-    await expect(setStaffAreasAction(GOOGLE, [])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
-    expect(staffRepo.setStaffAreas).not.toHaveBeenCalled();
+describe("setStaffPositionsAction", () => {
+  it("refuses a puesto change for Google-managed staff when position mappings exist", async () => {
+    await expect(setStaffPositionsAction(GOOGLE, [POSITION_1, POSITION_2])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
+    await expect(setStaffPositionsAction(GOOGLE, [])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
+    expect(staffRepo.listStaffPositionIds).toHaveBeenCalledWith(GOOGLE, "workspace");
+    expect(positionsRepo.setStaffPositions).not.toHaveBeenCalled();
   });
 
-  it("accepts the same áreas back, and any change for non-Google staff", async () => {
-    await setStaffAreasAction(GOOGLE, ["area-1"]);
-    await setStaffAreasAction(PASSWORD, ["area-2"]);
-    expect(staffRepo.setStaffAreas).toHaveBeenCalledTimes(2);
+  it("accepts the workspace puestos back, and any change for non-Google staff", async () => {
+    await setStaffPositionsAction(GOOGLE, [POSITION_1]);
+    await setStaffPositionsAction(PASSWORD, [POSITION_2]);
+    expect(positionsRepo.setStaffPositions).toHaveBeenCalledTimes(2);
+    expect(positionsRepo.setStaffPositions).toHaveBeenLastCalledWith(PASSWORD, [POSITION_2]);
+  });
+
+  it("lets Google-managed staff change puestos while no position mapping exists", async () => {
+    staffRepo.hasPositionGroupMappings.mockResolvedValue(false);
+    await setStaffPositionsAction(GOOGLE, [POSITION_1, POSITION_2]);
+    expect(positionsRepo.setStaffPositions).toHaveBeenCalledWith(GOOGLE, [POSITION_1, POSITION_2]);
   });
 });
 
-describe("setAreaMembersAction", () => {
-  it("refuses removing a Google-managed member", async () => {
-    await expect(setAreaMembersAction("area-1", [{ staffId: PASSWORD }])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
-    expect(areasRepo.setAreaMembers).not.toHaveBeenCalled();
-  });
-
-  it("refuses adding a Google-managed member", async () => {
-    areasRepo.listAreaMemberIds.mockResolvedValue([PASSWORD]);
-    await expect(
-      setAreaMembersAction("area-1", [{ staffId: PASSWORD }, { staffId: GOOGLE }]),
-    ).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
-  });
-
-  it("allows changes that only touch non-Google staff", async () => {
-    await setAreaMembersAction("area-1", [{ staffId: GOOGLE }, { staffId: "other" }]);
-    await setAreaMembersAction("area-1", [{ staffId: GOOGLE, role: "Líder" }]);
-    expect(areasRepo.setAreaMembers).toHaveBeenCalledTimes(2);
-  });
-});

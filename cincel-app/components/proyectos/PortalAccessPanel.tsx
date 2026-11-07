@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Info } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { InvitePortalClientSheet, PORTAL_ERROR_MESSAGES } from "@/components/proyectos/InvitePortalClientSheet";
@@ -92,7 +94,30 @@ export type PortalAccessPanelProps = {
   rows: PortalAccessRow[];
   contacts: PortalInvitableContact[];
   capabilities: PortalCapabilities;
+  /** The project has a client. Without one, inviting and the client folder wait (FE §3.5 portal gating). */
+  hasClient?: boolean;
+  /** Administrators get a link to the ficha to assign the client. */
+  canAssignClient?: boolean;
 };
+
+export const PORTAL_NO_CLIENT_TEXT = "Asigna un cliente al proyecto para invitarlo al portal y crear su carpeta.";
+
+/** Shown instead of the invite sheet and the folder hint while the project has no client. */
+export function PortalNoClientAlert({ projectId, canAssignClient }: { projectId: string; canAssignClient: boolean }) {
+  return (
+    <Alert>
+      <Info />
+      <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <span>{PORTAL_NO_CLIENT_TEXT}</span>
+        {canAssignClient ? (
+          <Link href={`/proyectos/${projectId}/ficha`} className="underline">
+            Asignar cliente
+          </Link>
+        ) : null}
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 /** Clientes tab body (FE §2.4): Drive hint, access table with row actions, Invitar cliente and the Actividad card. */
 export function PortalAccessPanel({
@@ -101,6 +126,8 @@ export function PortalAccessPanel({
   rows,
   contacts,
   capabilities,
+  hasClient = true,
+  canAssignClient = false,
 }: PortalAccessPanelProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -199,10 +226,14 @@ export function PortalAccessPanel({
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
           <p className="mt-1 text-sm text-muted-foreground">Clientes con acceso al portal para {projectName}.</p>
         </div>
-        <Button onClick={() => setInviteOpen(true)}>Invitar cliente</Button>
+        {hasClient ? <Button onClick={() => setInviteOpen(true)}>Invitar cliente</Button> : null}
       </div>
 
-      <PortalClientFolderHint projectId={projectId} />
+      {hasClient ? (
+        <PortalClientFolderHint projectId={projectId} />
+      ) : (
+        <PortalNoClientAlert projectId={projectId} canAssignClient={canAssignClient} />
+      )}
 
       {notice ? (
         <Alert variant={notice.kind === "error" ? "destructive" : "default"} aria-live="polite">
@@ -219,13 +250,15 @@ export function PortalAccessPanel({
 
       <PortalActivityCard projectId={projectId} />
 
-      <InvitePortalClientSheet
-        projectId={projectId}
-        contacts={contacts}
-        open={inviteOpen}
-        onOpenChange={setInviteOpen}
-        onInvited={() => router.refresh()}
-      />
+      {hasClient ? (
+        <InvitePortalClientSheet
+          projectId={projectId}
+          contacts={contacts}
+          open={inviteOpen}
+          onOpenChange={setInviteOpen}
+          onInvited={() => router.refresh()}
+        />
+      ) : null}
 
       <AlertDialog open={confirm !== null} onOpenChange={(next) => (next ? undefined : setConfirm(null))}>
         <AlertDialogContent>

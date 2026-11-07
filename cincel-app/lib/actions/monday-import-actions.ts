@@ -17,7 +17,13 @@
  *                                                    → { job }  background export, then init drafts mapping.json
  *   getMondayExportSourceAction(runId)               → { source: MondayExportSource }  monday side of Pasos 2–4
  *   getMondayImportChoicesAction()                   → { choices: MondayImportChoices }  Cincel side of Pasos 2–4
- *   createMondayStaffAction(runId, mondayUserId)     → { staff }  Paso 4 "Crear integrante": pending until Google sign-in
+ *   createMondayStaffAction(runId, mondayUserId, { positionIds? })
+ *                                                    → { staff }  Paso 4 "Crear integrante": pending until Google sign-in
+ *   suggestMondayPositionAction(runId, mondayUserId) → { suggestion: MondayPositionSuggestion }
+ *   saveMondayStatusMapAction(map)                   → { statusMap }  firm-wide; error STATUS_NOT_FOUND
+ *   getMondayRemapAction(projectId)                  → { remap: MondayRemapState }  errors NOT_IMPORTED, EXPORT_MISSING
+ *   previewMondayRemapAction(projectId, input)       → { preview: MondayRemapPreview }  no writes
+ *   applyMondayRemapAction(projectId, input)         → { updated }  one transaction; re-applying changes nothing
  *   saveMondayMappingDraftAction(runId, mapping, step?)
  *                                                    → { issues: string[] }  saved even when issues remain
  *   downloadMondayMappingAction(runId)               → { fileName, content }  mapping.json
@@ -38,6 +44,9 @@
  * never in storage. It is never stored, logged or returned. Files excluded with Drive not configured is
  * allowed: apply ends the batch without Drive and the folders stay pending for the backfill.
  */
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
 import { getSessionAccess } from "@/lib/auth/session";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { db } from "@/lib/db/client";
@@ -61,15 +70,19 @@ import {
   saveStep,
   startApply,
   startExport,
+  saveStatusMap,
   startRollback,
+  suggestPosition,
   uploadDraft,
   WizardError,
   type StartExportInput,
   type WizardDeps,
 } from "@/lib/monday-import/service";
+import { createStaffWithPositions, statusMapStatusesExist } from "@/lib/monday-import/wizard-writes";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
-import { createStaffFromMonday, CreateStaffRefused, type CreatedStaff } from "@/scripts/monday/created-staff";
+import { CreateStaffRefused, type CreatedStaff } from "@/scripts/monday/created-staff";
+import { MondayStatusMap as MondayStatusMapSchema, ProjectFlowGroupTarget } from "@/scripts/monday/mapping.schema";
+import { applyRemap, loadRemapState, planRemap } from "@/scripts/monday/remap";
 import * as onboardingRepository from "@/lib/repositories/onboarding-repository";
 import type {
   MondayConnection,
@@ -95,6 +108,9 @@ type Admin = { id: string; email: string };
 const FORBIDDEN = "Solo un Administrador puede importar de monday.";
 const UNEXPECTED = "Algo salió mal. Intenta de nuevo.";
 const BAD_RUN = "No se encontró esta importación.";
+
+/** Error codes the project flow actions answer as is; the screens map them to their copy (FE §9). */
+const CODES = new Set(["STATUS_NOT_FOUND", "NOT_IMPORTED", "EXPORT_MISSING", "PROJECT_NAME_TAKEN"]);
 
 // MONDAY_FAKE=1 (local e2e only) answers with the CLI fixture account instead of calling monday.
 const deps = (): WizardDeps => (isMondayFake() ? { db, createClient: createFakeMondayClient } : { db });
@@ -122,6 +138,9 @@ async function guarded<T extends object>(
     return { ok: true, ...(await fn(admin)) };
   } catch (err) {
     if (err instanceof WizardError) return { ok: false, error: err.message };
+    if (err instanceof Error && (CODES.has(err.message) || err.message.startsWith("INVALID: "))) {
+      return { ok: false, error: err.message };
+    }
     // The token is never part of an error: it only lives in the monday client's headers.
     console.error(`[monday-import] ${name} failed:`, err instanceof Error ? err.message : err);
     return { ok: false, error: UNEXPECTED };
@@ -130,6 +149,32 @@ async function guarded<T extends object>(
 
 function checkRunId(runId: unknown): asserts runId is string {
   if (!isRunId(runId)) throw new WizardError(BAD_RUN);
+}
+
+const uuid = z.uuid();
+
+function checkProjectId(projectId: unknown): asserts projectId is string {
+  if (!uuid.safeParse(projectId).success) throw new WizardError("INVALID: projectId");
+}
+
+const MondayUserIdSchema = z.union([z.string().trim().min(1).max(40), z.number().int().nonnegative()]);
+const PositionIdsSchema = z.array(uuid).max(50);
+const RemapInputSchema = z
+  .array(
+    z.object({
+      boardId: z.string().trim().min(1).max(40),
+      workflowId: uuid.nullable(),
+      groupTargets: z.record(z.string().min(1).max(100), ProjectFlowGroupTarget),
+    }),
+  )
+  .max(100);
+
+/** zod parse with the `INVALID: <path>` error of the project flow actions (BE §6). */
+function parse<T>(schema: z.ZodType<T>, value: unknown, root: string): T {
+  const parsed = schema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  const path = parsed.error.issues[0]?.path.map(String).join(".");
+  throw new WizardError(`INVALID: ${path ? `${root}.${path}` : root}`);
 }
 
 export async function getMondayImportStatusAction(): Promise<
@@ -216,17 +261,17 @@ export async function getMondayImportChoicesAction(): Promise<MondayImportResult
 export async function createMondayStaffAction(
   runId: string,
   mondayUserId: string,
-  // Project flow (FE §7.8): the puestos to give the new person; saved once the importer switches (Phase 4).
+  // Project flow (FE §7.8): the puestos to give the new person (`staff_positions`, manual), in the same transaction.
   options: { positionIds?: string[] } = {},
 ): Promise<MondayImportResult<{ staff: CreatedStaff }>> {
-  void options;
   return guarded("create-staff", async () => {
     checkRunId(runId);
+    const positionIds = parse(PositionIdsSchema, options?.positionIds ?? [], "positionIds");
     const source = await getExportSource(runId, deps());
     const user = source.users.find((u) => u.id === String(mondayUserId));
     if (!user) throw new WizardError("Esta persona no está en la exportación.");
     try {
-      const staff = await createStaffFromMonday(deps().db, user);
+      const staff = await createStaffWithPositions(deps().db, user, positionIds);
       await recordCreatedStaff(runId, staff.id, deps());
       return { staff };
     } catch (err) {
@@ -325,7 +370,11 @@ export async function suggestMondayPositionAction(
   runId: string,
   mondayUserId: string,
 ): Promise<MondayImportResult<{ suggestion: MondayPositionSuggestion }>> {
-  return notImplemented("suggestMondayPositionAction", runId, mondayUserId);
+  return guarded("suggest-position", async () => {
+    checkRunId(runId);
+    const userId = String(parse(MondayUserIdSchema, mondayUserId, "mondayUserId"));
+    return { suggestion: await suggestPosition(runId, userId, deps()) };
+  });
 }
 
 /**
@@ -335,12 +384,21 @@ export async function suggestMondayPositionAction(
 export async function saveMondayStatusMapAction(
   entries: MondayStatusMap,
 ): Promise<MondayImportResult<{ statusMap: MondayStatusMap }>> {
-  return notImplemented("saveMondayStatusMapAction", entries);
+  return guarded("status-map", async () => {
+    const statusMap: MondayStatusMap = parse(MondayStatusMapSchema, entries, "statusMap");
+    if (!(await statusMapStatusesExist(db, statusMap))) throw new WizardError("STATUS_NOT_FOUND");
+    await saveStatusMap(db, statusMap);
+    revalidatePath("/configuracion/importar-monday");
+    return { statusMap };
+  });
 }
 
 /** The project's boards with their groups and current targets. Errors: NOT_IMPORTED, EXPORT_MISSING. */
 export async function getMondayRemapAction(projectId: string): Promise<MondayImportResult<{ remap: MondayRemapState }>> {
-  return notImplemented("getMondayRemapAction", projectId);
+  return guarded("remap", async () => {
+    checkProjectId(projectId);
+    return { remap: await loadRemapState(db, projectId) };
+  });
 }
 
 /** Pure: counts, up to 10 samples and grouped issues; no writes. */
@@ -348,7 +406,12 @@ export async function previewMondayRemapAction(
   projectId: string,
   input: MondayRemapInput,
 ): Promise<MondayImportResult<{ preview: MondayRemapPreview }>> {
-  return notImplemented("previewMondayRemapAction", projectId, input);
+  return guarded("remap-preview", async () => {
+    checkProjectId(projectId);
+    const remapInput = parse(RemapInputSchema, input, "input");
+    const { preview } = await planRemap(db, projectId, remapInput);
+    return { preview };
+  });
 }
 
 /** One transaction; re-applying the same input changes nothing. */
@@ -356,5 +419,14 @@ export async function applyMondayRemapAction(
   projectId: string,
   input: MondayRemapInput,
 ): Promise<MondayImportResult<{ updated: number }>> {
-  return notImplemented("applyMondayRemapAction", projectId, input);
+  return guarded("remap-apply", async (admin) => {
+    checkProjectId(projectId);
+    const remapInput = parse(RemapInputSchema, input, "input");
+    const { updated } = await applyRemap(db, projectId, remapInput, admin.id);
+    revalidatePath(`/proyectos/${projectId}/ficha`);
+    revalidatePath("/actividades", "layout");
+    revalidatePath("/proyectos");
+    revalidatePath("/dashboard");
+    return { updated };
+  });
 }

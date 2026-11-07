@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
+import { canSeeAdminData, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { flowError } from "@/lib/project-flow/errors";
+import { scopeTaskDto, viewerScopeOf } from "@/lib/auth/viewer-scope";
 import * as taskDependenciesRepository from "@/lib/repositories/task-dependencies-repository";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
+import { scheduleTaskClosingHook } from "@/lib/tasks/closing-hook";
+import { AdminTaskFiltersSchema, AdminTaskInputSchema, parseInput } from "@/lib/validation/project-flow";
 import type {
   AdminTaskInput,
   HistoryEvent,
@@ -25,7 +28,25 @@ import type {
 } from "@/lib/types/core";
 
 async function requireTasksCapabilities() {
-  return resolveActivitiesCapabilities(await requireCapabilityUser());
+  const user = await requireCapabilityUser();
+  return { ...resolveActivitiesCapabilities(user), viewer: viewerScopeOf(user) };
+}
+
+/**
+ * Session user, its viewer scope, and the visibility guard on the given task
+ * ids (BE §12): an admin task is FORBIDDEN for non-admins.
+ */
+async function requireTaskWriter(...taskIds: string[]) {
+  const user = await requireCapabilityUser();
+  const viewer = viewerScopeOf(user);
+  await Promise.all([...new Set(taskIds)].map((id) => tasksRepository.assertTaskVisible(id, viewer)));
+  return { user, viewer };
+}
+
+/** The checklist item's task id as a one-item list (empty when the item is gone). */
+async function checklistItemTask(itemId: string): Promise<string[]> {
+  const taskId = await tasksRepository.checklistItemTaskId(itemId);
+  return taskId ? [taskId] : [];
 }
 
 function revalidateTareas(projectId?: string) {
@@ -38,12 +59,13 @@ function revalidateTareas(projectId?: string) {
 export async function fetchTasksAction(filters: TaskFilters = {}): Promise<TaskListItem[]> {
   const caps = await requireTasksCapabilities();
   if (!caps.canViewActivities) return [];
-  return tasksRepository.listTasks(filters);
+  return tasksRepository.listTasks(filters, caps.viewer);
 }
 
+/** Own tasks; an administrator also gets their own admin tasks (BE §7.5). */
 export async function fetchMyTasksAction(filters: TaskFilters = {}): Promise<TaskListItem[]> {
   const user = await requireCapabilityUser();
-  return tasksRepository.listMyTasks(user.member.id, filters);
+  return tasksRepository.listMyTasks(user.member.id, filters, viewerScopeOf(user));
 }
 
 export async function fetchBoardAction(filters: TaskFilters = {}): Promise<Record<TaskStatus, TaskListItem[]>> {
@@ -51,7 +73,7 @@ export async function fetchBoardAction(filters: TaskFilters = {}): Promise<Recor
   if (!caps.canViewActivities) {
     return { pendiente: [], en_proceso: [], completado: [], bloqueado: [] };
   }
-  return tasksRepository.listBoard(filters);
+  return tasksRepository.listBoard(filters, caps.viewer);
 }
 
 export async function fetchCalendarAction(
@@ -61,15 +83,21 @@ export async function fetchCalendarAction(
 ): Promise<TaskListItem[]> {
   const caps = await requireTasksCapabilities();
   if (!caps.canViewActivities) return [];
-  return tasksRepository.listCalendar(dateFrom, dateTo, filters);
+  return tasksRepository.listCalendar(dateFrom, dateTo, filters, caps.viewer);
 }
 
 export async function fetchTaskAction(id: string): Promise<TaskDetail | null> {
   const caps = await requireTasksCapabilities();
   if (!caps.canViewActivities) return null;
-  return tasksRepository.getTask(id);
+  // An admin task is null for non-admins (BE §7.5).
+  return tasksRepository.getTaskForViewer(id, caps.viewer);
 }
 
+/**
+ * A user task in a tramo. Errors: INVALID (no `workflowId` or not a live
+ * tramo), PHASE_MISMATCH (fase not of that tramo), SPACE_MISMATCH (espacio not
+ * of the project). Never starts the tramo: no `project_stages` row is written.
+ */
 export async function createUserTaskAction(input: UserTaskInput): Promise<TaskDetail> {
   const user = await requireCapabilityUser();
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
@@ -77,7 +105,7 @@ export async function createUserTaskAction(input: UserTaskInput): Promise<TaskDe
   }
   const row = await tasksRepository.createUserTask(input, user.member.id);
   revalidateTareas(input.projectId);
-  return row;
+  return scopeTaskDto(row, viewerScopeOf(user));
 }
 
 const SUBTASK_ERRORS: Record<string, string> = {
@@ -86,17 +114,17 @@ const SUBTASK_ERRORS: Record<string, string> = {
 };
 
 /**
- * Creates a `usuario` child task with the parent's project, phase and
- * workflow. Same permission as creating a task. Throws FORBIDDEN, NOT_FOUND
- * or NESTED (the parent is already a subtask).
+ * Creates a `usuario` child task with the parent's project, tramo and fase.
+ * Same permission as creating a task. Throws FORBIDDEN, NOT_FOUND, NESTED
+ * (the parent is already a subtask) or SPACE_MISMATCH.
  */
 export async function createSubtaskAction(parentId: string, input: SubtaskInput): Promise<TaskDetail> {
-  const user = await requireCapabilityUser();
+  const { user, viewer } = await requireTaskWriter(parentId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) throw new Error("FORBIDDEN");
   try {
     const row = await tasksRepository.createSubtask(parentId, input, user.member.id);
     revalidateTareas(row.projectId);
-    return row;
+    return scopeTaskDto(row, viewer);
   } catch (err) {
     const code = err instanceof Error ? SUBTASK_ERRORS[err.message] : undefined;
     if (code) throw new Error(code);
@@ -108,11 +136,17 @@ export async function createSubtaskAction(parentId: string, input: SubtaskInput)
 export async function listSubtasksAction(parentId: string): Promise<TaskRef[]> {
   const caps = await requireTasksCapabilities();
   if (!caps.canViewActivities) return [];
-  return tasksRepository.listSubtasks(parentId);
+  if (!(await tasksRepository.isTaskVisible(parentId, caps.viewer))) return [];
+  return tasksRepository.listSubtasks(parentId, caps.viewer);
 }
 
+/**
+ * `phaseId` within the task's tramo (PHASE_MISMATCH), `spaceId` of its project
+ * (SPACE_MISMATCH), neither on an admin task (ADMIN_TASK). `workflowId` only
+ * when the task has none (else INVALID).
+ */
 export async function updateTaskAction(id: string, patch: TaskPatch): Promise<TaskDetail> {
-  const user = await requireCapabilityUser();
+  const { user, viewer } = await requireTaskWriter(id);
   const caps = resolveActivitiesCapabilities(user);
   if (patch.status !== undefined && caps.statusScope === "none") {
     throw new Error("FORBIDDEN: task status change");
@@ -125,41 +159,43 @@ export async function updateTaskAction(id: string, patch: TaskPatch): Promise<Ta
   }
   const row = await tasksRepository.updateTask(id, patch, user.member.id);
   revalidateTareas(row.projectId);
-  return row;
+  if (patch.status !== undefined) await scheduleTaskClosingHook(row, user.member.id);
+  return scopeTaskDto(row, viewer);
 }
 
 export async function setTaskStatusAction(id: string, status: TaskStatus): Promise<TaskDetail> {
-  const user = await requireCapabilityUser();
+  const { user, viewer } = await requireTaskWriter(id);
   if (resolveActivitiesCapabilities(user).statusScope === "none") {
     throw new Error("FORBIDDEN: task status change");
   }
   const row = await tasksRepository.setTaskStatus(id, status, user.member.id);
   revalidateTareas(row.projectId);
-  return row;
+  await scheduleTaskClosingHook(row, user.member.id);
+  return scopeTaskDto(row, viewer);
 }
 
 export async function assignTaskAction(id: string, managerId: string | null): Promise<TaskDetail> {
-  const user = await requireCapabilityUser();
+  const { user, viewer } = await requireTaskWriter(id);
   if (!resolveActivitiesCapabilities(user).canChangeResponsible) {
     throw new Error("FORBIDDEN: task reassign");
   }
   const row = await tasksRepository.assignTask(id, managerId, user.member.id);
   revalidateTareas(row.projectId);
-  return row;
+  return scopeTaskDto(row, viewer);
 }
 
 export async function archiveTaskAction(id: string, archived: boolean): Promise<TaskDetail> {
-  const user = await requireCapabilityUser();
+  const { user, viewer } = await requireTaskWriter(id);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: task archive");
   }
   const row = await tasksRepository.setTaskArchived(id, archived, user.member.id);
   revalidateTareas(row.projectId);
-  return row;
+  return scopeTaskDto(row, viewer);
 }
 
 export async function deleteTaskAction(id: string): Promise<void> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(id);
   if (!resolveActivitiesCapabilities(user).canDeleteActivity) {
     throw new Error("FORBIDDEN: task delete");
   }
@@ -173,17 +209,17 @@ export async function deleteTaskAction(id: string): Promise<void> {
  * plain task delete — merging is destructive to the losing records.
  */
 export async function mergeTasksAction(keepId: string, duplicateIds: string[]): Promise<TaskDetail> {
-  const user = await requireCapabilityUser();
+  const { user, viewer } = await requireTaskWriter(keepId, ...duplicateIds);
   if (!resolveActivitiesCapabilities(user).canDeleteActivity) {
     throw new Error("FORBIDDEN: task merge");
   }
   const row = await tasksRepository.mergeTasks(keepId, duplicateIds, user.member.id);
   revalidateTareas();
-  return row;
+  return scopeTaskDto(row, viewer);
 }
 
 export async function setTaskSupportAction(taskId: string, staffIds: string[]) {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(taskId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: task support edit");
   }
@@ -193,7 +229,7 @@ export async function setTaskSupportAction(taskId: string, staffIds: string[]) {
 }
 
 export async function addChecklistItemAction(taskId: string, title: string): Promise<TaskChecklistItem> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(taskId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: checklist edit");
   }
@@ -206,14 +242,14 @@ export async function updateChecklistItemAction(
   id: string,
   patch: { title?: string; completed?: boolean }
 ): Promise<TaskChecklistItem> {
-  await requireCapabilityUser();
+  await requireTaskWriter(...(await checklistItemTask(id)));
   const row = await tasksRepository.updateChecklistItem(id, patch);
   revalidateTareas();
   return row;
 }
 
 export async function removeChecklistItemAction(id: string): Promise<void> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(...(await checklistItemTask(id)));
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: checklist edit");
   }
@@ -222,13 +258,13 @@ export async function removeChecklistItemAction(id: string): Promise<void> {
 }
 
 export async function reorderChecklistAction(taskId: string, orderedIds: string[]): Promise<void> {
-  await requireCapabilityUser();
+  await requireTaskWriter(taskId);
   await tasksRepository.reorderChecklist(taskId, orderedIds);
   revalidateTareas();
 }
 
 export async function reorderProjectTasksAction(projectId: string, orderedTaskIds: string[]): Promise<void> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(...orderedTaskIds);
   if (!resolveActivitiesCapabilities(user).canReorderPhases) {
     throw new Error("FORBIDDEN: tasks reorder");
   }
@@ -237,7 +273,7 @@ export async function reorderProjectTasksAction(projectId: string, orderedTaskId
 }
 
 export async function reorderTasksAction(orderedTaskIds: string[]): Promise<void> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(...orderedTaskIds);
   if (!resolveActivitiesCapabilities(user).canReorderPhases) {
     throw new Error("FORBIDDEN: tasks reorder");
   }
@@ -246,14 +282,15 @@ export async function reorderTasksAction(orderedTaskIds: string[]): Promise<void
 }
 
 export async function addTaskCommentAction(taskId: string, comment: string): Promise<HistoryEvent> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(taskId);
   const row = await tasksRepository.addTaskComment(taskId, comment, user.member.id);
   revalidateTareas();
   return row;
 }
 
 export async function fetchTaskHistoryAction(taskId: string): Promise<HistoryEvent[]> {
-  await requireCapabilityUser();
+  const user = await requireCapabilityUser();
+  if (!(await tasksRepository.isTaskVisible(taskId, viewerScopeOf(user)))) return [];
   return tasksRepository.listTaskHistory(taskId);
 }
 
@@ -265,7 +302,7 @@ const ATTACHMENT_ERROR_MESSAGES: Record<string, string> = {
 
 /** Attaches a file to a task as a comment (#425). Images and .txt only, up to 10MB. */
 export async function addTaskAttachmentAction(taskId: string, formData: FormData): Promise<TaskAttachment> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(taskId);
 
   const file = formData.get("file");
   if (!(file instanceof File)) {
@@ -290,13 +327,14 @@ export async function addTaskAttachmentAction(taskId: string, formData: FormData
 }
 
 export async function setTaskCustomStatusAction(id: string, customStatusId: string): Promise<TaskDetail> {
-  const user = await requireCapabilityUser();
+  const { user, viewer } = await requireTaskWriter(id);
   if (resolveActivitiesCapabilities(user).statusScope === "none") {
     throw new Error("FORBIDDEN: task status change");
   }
   const row = await tasksRepository.setTaskCustomStatus(id, customStatusId, user.member.id);
   revalidateTareas(row.projectId);
-  return row;
+  await scheduleTaskClosingHook(row, user.member.id);
+  return scopeTaskDto(row, viewer);
 }
 
 const LINK_ERROR_MESSAGES: Record<string, string> = {
@@ -307,7 +345,7 @@ const LINK_ERROR_MESSAGES: Record<string, string> = {
 
 /** Adds an internal or client Drive/web link to a task (#436). */
 export async function addTaskLinkAction(taskId: string, input: TaskLinkInput): Promise<TaskLink> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(taskId);
   try {
     const row = await tasksRepository.addTaskLink(taskId, input, user.member.id);
     revalidateTareas();
@@ -319,7 +357,8 @@ export async function addTaskLinkAction(taskId: string, input: TaskLinkInput): P
 }
 
 export async function removeTaskLinkAction(id: string): Promise<void> {
-  const user = await requireCapabilityUser();
+  const linkTaskId = await tasksRepository.taskLinkTaskId(id);
+  const { user } = await requireTaskWriter(...(linkTaskId ? [linkTaskId] : []));
   await tasksRepository.removeTaskLink(id, user.member.id);
   revalidateTareas();
 }
@@ -330,7 +369,7 @@ export async function removeTaskLinkAction(id: string): Promise<void> {
  * Throws `FORBIDDEN`, `NOT_FOUND`, `OTHER_PROJECT`, `SELF`, `DUPLICATE`, `CYCLE`.
  */
 export async function addTaskDependencyAction(taskId: string, dependsOnTaskId: string): Promise<void> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(taskId, dependsOnTaskId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: task dependency edit");
   }
@@ -340,7 +379,7 @@ export async function addTaskDependencyAction(taskId: string, dependsOnTaskId: s
 
 /** Removes a dependency. Throws `FORBIDDEN`, `NOT_FOUND`. */
 export async function removeTaskDependencyAction(taskId: string, dependsOnTaskId: string): Promise<void> {
-  const user = await requireCapabilityUser();
+  const { user } = await requireTaskWriter(taskId, dependsOnTaskId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: task dependency edit");
   }
@@ -354,7 +393,8 @@ export async function listTaskDependenciesAction(
 ): Promise<{ dependsOn: TaskRef[]; blocks: TaskRef[] }> {
   const caps = await requireTasksCapabilities();
   if (!caps.canViewActivities) return { dependsOn: [], blocks: [] };
-  return taskDependenciesRepository.listTaskDependencies(taskId);
+  if (!(await tasksRepository.isTaskVisible(taskId, caps.viewer))) return { dependsOn: [], blocks: [] };
+  return taskDependenciesRepository.listTaskDependencies(taskId, caps.viewer);
 }
 
 // ── Admin tasks (project flow BE §7.5) ──────────────────────────────────────
@@ -366,10 +406,19 @@ export async function listTaskDependenciesAction(
 export async function fetchAdminTasksAction(
   filters: { projectId?: string; includeClosed?: boolean } = {}
 ): Promise<TaskListItem[]> {
-  return notImplemented("fetchAdminTasksAction", filters);
+  const user = await requireCapabilityUser();
+  if (!canSeeAdminData(user)) throw flowError("FORBIDDEN");
+  return tasksRepository.listAdminTasks(parseInput(AdminTaskFiltersSchema, filters));
 }
 
 /** `kind = 'admin'`. Errors: FORBIDDEN (non-admin), NOT_FOUND, ASSIGNEE_NOT_ADMIN. */
 export async function createAdminTaskAction(input: AdminTaskInput): Promise<TaskDetail> {
-  return notImplemented("createAdminTaskAction", input);
+  const user = await requireCapabilityUser();
+  if (!canSeeAdminData(user)) throw flowError("FORBIDDEN");
+  const parsed = parseInput(AdminTaskInputSchema, input);
+  const row = await tasksRepository.createAdminTask(parsed, user.member.id);
+  revalidateTareas(row.projectId);
+  revalidatePath("/actividades", "layout");
+  revalidatePath("/dashboard");
+  return row;
 }

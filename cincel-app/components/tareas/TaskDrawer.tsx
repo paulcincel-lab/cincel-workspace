@@ -2,7 +2,17 @@
 
 import { useMemo, useState } from "react";
 
-import type { StaffRef, TaskChecklistItem, TaskDetail, TaskLinkInput, TaskRef } from "@/lib/types/core";
+import type {
+  ProjectSpaceRef,
+  StaffRef,
+  TaskChecklistItem,
+  TaskDetail,
+  TaskLinkInput,
+  TaskRef,
+  WorkflowPhaseRef,
+  WorkflowRef,
+} from "@/lib/types/core";
+import { tramoPhaseLabel } from "@/lib/tasks/labels";
 import TaskDependencies from "@/components/tareas/TaskDependencies";
 import TaskSubtasks from "@/components/tareas/TaskSubtasks";
 import { WaitingBadge } from "@/components/tareas/TaskRowMeta";
@@ -12,6 +22,7 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/com
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
 import { HistoryCommentInput } from "@/components/ui/HistoryCommentInput";
@@ -23,6 +34,10 @@ const STATUS_LABEL: Record<TaskDetail["status"], string> = {
   completado: "Completado",
   bloqueado: "Bloqueado",
 };
+
+/** Select values for "Sin fase" / "Sin espacio" (Select items can't carry null). */
+const NO_PHASE = "__none__";
+const NO_SPACE = "__none__";
 
 const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const ATTACHMENT_ACCEPT = "image/*,.txt,text/plain";
@@ -55,6 +70,16 @@ type Props = {
   onOpenTask?: (taskId: string) => void;
   /** Called after a dependency is added or removed, so the caller can refetch the task ("En espera"). */
   onDependenciesChange?: () => void;
+  /** The task's tramo catalog (active fases, plus the task's own fase if inactive); enables the Fase select. */
+  phases?: WorkflowPhaseRef[];
+  /** The task's project espacios; enables the Espacio select. */
+  spaces?: ProjectSpaceRef[];
+  onChangePhase?: (phaseId: string | null) => void;
+  onChangeSpace?: (spaceId: string | null) => void;
+  /** Active tramos, for a non-admin task with no tramo (legacy rows). */
+  tramos?: WorkflowRef[];
+  /** Sets the tramo of a task that has none; the Tramo select is hidden once it has one. */
+  onChangeTramo?: (workflowId: string) => void;
 };
 
 type BackEntry = { id: string; title: string };
@@ -75,6 +100,12 @@ export default function TaskDrawer({
   onChangeSupport,
   onOpenTask,
   onDependenciesChange,
+  phases,
+  spaces,
+  onChangePhase,
+  onChangeSpace,
+  tramos = [],
+  onChangeTramo,
 }: Props) {
   /** Tasks the user came from inside this drawer (parent → subtask), for "← {padre}". */
   const [backStack, setBackStack] = useState<BackEntry[]>([]);
@@ -89,6 +120,12 @@ export default function TaskDrawer({
     if (!task) return [];
     return [...task.history].sort((a, b) => a.eventAt.localeCompare(b.eventAt));
   }, [task]);
+
+  const isAdminTask = task?.kind === "admin";
+  const showTramoSelect = Boolean(task && !isAdminTask && !task.workflowId && onChangeTramo && tramos.length > 0);
+  const showPhaseSelect = Boolean(task && !isAdminTask && task.workflowId && phases && onChangePhase);
+  const showSpaceSelect = Boolean(task && !isAdminTask && spaces && spaces.length > 0 && onChangeSpace);
+  const currentPhaseInList = Boolean(task?.phaseId && phases?.some((p) => p.id === task.phaseId));
 
   const backTo = backStack.length > 0 ? backStack[backStack.length - 1] : null;
   // A child whose parent was soft-deleted behaves as top-level and can take subtasks.
@@ -220,7 +257,8 @@ export default function TaskDrawer({
 
               <div className="mt-4 flex flex-wrap gap-2 text-sm text-muted-foreground">
                 <span className="rounded-full bg-muted px-3 py-1">{task.project.name}</span>
-                {task.phase ? <span className="rounded-full bg-muted px-3 py-1">{task.phase}</span> : null}
+                <span className="rounded-full bg-muted px-3 py-1">{tramoPhaseLabel(task)}</span>
+                {task.space ? <span className="rounded-full bg-muted px-3 py-1">{task.space.name}</span> : null}
                 <span className="rounded-full bg-muted px-3 py-1">{task.customStatus?.name ?? STATUS_LABEL[task.status]}</span>
                 <WaitingBadge waitingOn={task.waitingOn} />
               </div>
@@ -230,6 +268,97 @@ export default function TaskDrawer({
               <section>
                 <h3 className="text-lg font-semibold text-foreground">Resumen</h3>
                 <div className="mt-3 grid gap-3 rounded-2xl border border-border bg-muted p-4 text-sm text-muted-foreground">
+                  {showTramoSelect ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Tramo</span>
+                      <Select
+                        items={Object.fromEntries(tramos.map((t) => [t.id, t.name]))}
+                        value=""
+                        onValueChange={(v) => {
+                          if (v) onChangeTramo?.(v as string);
+                        }}
+                      >
+                        <SelectTrigger aria-label="Tramo" className="w-56">
+                          <SelectValue placeholder="Sin tramo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tramos.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                  {showPhaseSelect ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Fase</span>
+                      <Select
+                        items={{
+                          [NO_PHASE]: "Sin fase · revisar",
+                          ...Object.fromEntries((phases ?? []).map((p) => [p.id, p.name])),
+                          ...(task.phaseId && !currentPhaseInList && task.phase
+                            ? { [task.phaseId]: `${task.phase.name} (inactiva)` }
+                            : {}),
+                        }}
+                        value={task.phaseId ?? NO_PHASE}
+                        onValueChange={(v) => {
+                          const next = v && v !== NO_PHASE ? (v as string) : null;
+                          if (next && next !== task.phaseId) onChangePhase?.(next);
+                        }}
+                      >
+                        <SelectTrigger aria-label="Fase" className="w-56">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {task.phaseId ? null : (
+                            <SelectItem value={NO_PHASE} disabled>
+                              Sin fase · revisar
+                            </SelectItem>
+                          )}
+                          {task.phaseId && !currentPhaseInList && task.phase ? (
+                            <SelectItem value={task.phaseId} disabled>
+                              {task.phase.name} (inactiva)
+                            </SelectItem>
+                          ) : null}
+                          {(phases ?? []).map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                  {showSpaceSelect ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Espacio</span>
+                      <Select
+                        items={{
+                          [NO_SPACE]: "Sin espacio",
+                          ...Object.fromEntries((spaces ?? []).map((sp) => [sp.id, sp.name])),
+                        }}
+                        value={task.spaceId ?? NO_SPACE}
+                        onValueChange={(v) => {
+                          const next = v && v !== NO_SPACE ? (v as string) : null;
+                          if (next !== task.spaceId) onChangeSpace?.(next);
+                        }}
+                      >
+                        <SelectTrigger aria-label="Espacio" className="w-56">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_SPACE}>Sin espacio</SelectItem>
+                          {(spaces ?? []).map((sp) => (
+                            <SelectItem key={sp.id} value={sp.id}>
+                              {sp.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">Responsable</span>
                     <span className="font-medium">{task.manager?.name ?? "Sin responsable"}</span>

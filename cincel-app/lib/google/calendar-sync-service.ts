@@ -14,6 +14,7 @@ import { planSync, toDesiredEvents, type DesiredEvent } from "@/lib/google/calen
 import { getStaffAccessToken } from "@/lib/google/staff-token";
 import * as syncRepository from "@/lib/repositories/google-calendar-sync-repository";
 import { listMyTasks } from "@/lib/repositories/tasks-repository";
+import { staffViewerScope } from "@/lib/repositories/viewer-scope-repository";
 
 /**
  * Pushes a staff member's tasks into a dedicated "Cincel" calendar in their
@@ -88,7 +89,8 @@ export async function syncGoogleCalendar(staffId: string, baseUrl: string): Prom
     const token = await calendarToken(staffId);
     const calendarId = await ensureCalendar(token, staffId);
 
-    const tasks = await listMyTasks(staffId, { archived: false });
+    // Admin tasks only in an administrator's own calendar (project flow BE §8.8).
+    const tasks = await listMyTasks(staffId, { archived: false }, await staffViewerScope(staffId));
     const desired = toDesiredEvents(buildCalendarEvents(tasks), baseUrl);
     const plan = planSync(desired, await syncRepository.listSyncedEvents(staffId));
 

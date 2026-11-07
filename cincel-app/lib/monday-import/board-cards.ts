@@ -4,13 +4,14 @@
  * and the tests share it.
  */
 import { ownProjectGroups } from "@/lib/monday-import/group-targets";
-import { unmappedTaskAreaValues } from "@/lib/monday-import/task-areas";
-import { isDefaultedStatus, lacksClient, validateMapping, type BoardDraft } from "@/lib/monday-import/wizard-steps";
+import { validateMapping, type BoardDraft } from "@/lib/monday-import/wizard-steps";
+import { GROUP_TARGET_STRATEGIES, resolveGroupTarget } from "@/scripts/monday/group-targets";
 import type { BoardStrategy, MappingInput } from "@/scripts/monday/mapping.schema";
 import type {
   MondayBoardSource,
   MondayConnection,
   MondayExportSource,
+  MondayImportChoices,
   MondayPreview,
   MondayPreviewBoard,
 } from "@/lib/types/monday-import";
@@ -58,12 +59,45 @@ export function initials(name: string): string {
   return letters.join("").toUpperCase();
 }
 
-/** The problems of one board's mapping: schema errors, no client, labels and área values without an equivalent. */
+/** Strategies whose items become tasks, which need a tramo. */
+const TASK_STRATEGIES = new Set<BoardStrategy>(["board_as_project", "group_as_project", "item_as_project"]);
+
+/**
+ * Whether some of the board's tasks resolve no tramo (TRAMO_MISSING): the board has no "Tramo del tablero" and a
+ * group with items (or an item outside any group) isn't placed in a tramo or fase by its target. Without `choices`
+ * only the groups' own targets count; with them, the defaults by name count too. Admin and ignored groups need none.
+ */
+export function needsBoardTramo(
+  board: BoardDraft,
+  source: MondayBoardSource,
+  choices: Pick<MondayImportChoices, "workflows"> | null = null,
+): boolean {
+  if (!TASK_STRATEGIES.has(board.strategy) || board.workflowId) return false;
+  if (source.items.length === 0) return false;
+  if (!GROUP_TARGET_STRATEGIES.has(board.strategy)) return true;
+  const withItems = new Set(source.items.map((item) => item.groupId));
+  if (withItems.has(null)) return true;
+  return source.groups.some((group) => {
+    if (!withItems.has(group.id)) return false;
+    const target = choices
+      ? resolveGroupTarget(board, group, choices)
+      : (board.groupTargets?.[group.id] ?? { kind: "tramo" as const, workflowId: null });
+    if (target.kind === "tramo") return !target.workflowId;
+    return target.kind === "space" || target.kind === "project";
+  });
+}
+
+/**
+ * The problems of one board's mapping: schema errors, "Elige un tramo." (blocking) when some of its tasks resolve no
+ * tramo, "{n} tareas sin fase." (warning) from the Vista previa, and the preview's other blocking issues of the board.
+ * A missing client is no longer a problem (the project gets "Asignar cliente y origen").
+ */
 export function boardProblems(
   mapping: MappingInput,
   boardId: string,
   source: MondayBoardSource | undefined,
   preview: MondayPreview | null = null,
+  choices: Pick<MondayImportChoices, "workflows"> | null = null,
 ): string[] {
   const index = mapping.boards.findIndex((board) => board.mondayBoardId === boardId);
   const board = mapping.boards[index];
@@ -74,18 +108,16 @@ export function boardProblems(
   const problems = validateMapping(mapping)
     .filter((issue) => issue === prefix || issue.startsWith(`${prefix}.`) || issue.startsWith(`${prefix}:`))
     .map((issue) => issue.slice(prefix.length).replace(/^[.:]\s*/, ""));
-  if (lacksClient(board, source)) problems.push("Sin cliente.");
-  const defaulted = Object.values(board.statusMaps ?? {}).reduce(
-    (sum, labels) => sum + Object.values(labels).filter((target) => isDefaultedStatus(target)).length,
-    0,
-  );
-  if (defaulted > 0)
-    problems.push(defaulted === 1 ? "1 estatus sin equivalente." : `${defaulted} estatus sin equivalente.`);
-  const areas = unmappedTaskAreaValues(board, source).length;
-  if (areas > 0)
-    problems.push(areas === 1 ? "1 valor de área sin equivalente." : `${areas} valores de área sin equivalente.`);
+  const tramoMissing = needsBoardTramo(board, source, choices);
+  if (tramoMissing) problems.push("Elige un tramo.");
+  const withoutPhase = (preview?.issues ?? []).filter(
+    (issue) => issue.code === "PHASE_UNRESOLVED" && issue.boardId === boardId,
+  ).length;
+  if (withoutPhase > 0) problems.push(withoutPhase === 1 ? "1 tarea sin fase." : `${withoutPhase} tareas sin fase.`);
   for (const issue of preview?.issues ?? []) {
-    if (issue.blocking && issue.boardId === boardId && !problems.includes(issue.message)) problems.push(issue.message);
+    if (!issue.blocking || issue.boardId !== boardId) continue;
+    if (tramoMissing && issue.code === "TRAMO_MISSING") continue;
+    if (!problems.includes(issue.message)) problems.push(issue.message);
   }
   return problems;
 }
@@ -155,12 +187,15 @@ export function buildBoardCards({
   source,
   preview,
   reviewed,
+  choices = null,
 }: {
   connection: MondayConnection | null;
   mapping: MappingInput | null;
   source: MondayExportSource | null;
   preview: MondayPreview | null;
   reviewed: ReadonlySet<string>;
+  /** The catalog, so a group named like a tramo or fase counts as placed. */
+  choices?: Pick<MondayImportChoices, "workflows"> | null;
 }): BoardCard[] {
   const base: Pick<BoardCard, "id" | "name" | "workspaceId" | "workspaceName" | "itemCount">[] = [
     ...(connection?.boards ?? []).map((board) => ({
@@ -181,7 +216,7 @@ export function buildBoardCards({
     const draft = mapping?.boards.find((board) => board.mondayBoardId === summary.id);
     const boardSource = source?.boards.find((board) => board.id === summary.id);
     const exported = Boolean(draft && boardSource);
-    const problems = mapping && draft ? boardProblems(mapping, summary.id, boardSource, preview) : [];
+    const problems = mapping && draft ? boardProblems(mapping, summary.id, boardSource, preview, choices) : [];
     const previewBoard = preview?.boards.find((board) => board.boardId === summary.id);
     let counts: BoardCounts = { proyectos: 0, tareas: null, contactos: 0, avisos: problems.length };
     if (preview && previewBoard) counts = previewCounts(previewBoard, preview, problems.length);

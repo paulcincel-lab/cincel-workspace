@@ -132,6 +132,12 @@ export function keepVerifiedCreatedStaff<T>(mapping: T, allowed: ReadonlySet<str
 
 const ident = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
+/**
+ * Tables whose rows about a created staff member go with them: the puestos "Crear integrante" gave
+ * (`staff_positions`, project flow BE §10.9). They don't count as use, and a removal deletes them.
+ */
+export const OWNED_STAFF_TABLES: readonly string[] = ["staff_positions"];
+
 /** Every foreign key column into core.staff, read from the catalog so a new table is never missed. */
 async function staffPointers(db: ImportDb): Promise<{ table: string; column: string }[]> {
   const found = await rows(
@@ -141,7 +147,8 @@ async function staffPointers(db: ImportDb): Promise<{ table: string; column: str
       join pg_class cl on cl.oid = c.conrelid
       join pg_namespace n on n.oid = cl.relnamespace
       join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
-      where c.contype = 'f' and c.confrelid = 'core.staff'::regclass`,
+      where c.contype = 'f' and c.confrelid = 'core.staff'::regclass
+        and not (n.nspname = 'core' and cl.relname = any(${sql.raw(`array[${OWNED_STAFF_TABLES.map((t) => `'${t}'`).join(",")}]::text[]`)}))`,
   );
   return found.map((r) => ({ table: `${ident(String(r.schema))}.${ident(String(r.tbl))}`, column: ident(String(r.col)) }));
 }
@@ -190,6 +197,8 @@ export async function removeUnusedCreatedStaff(
       kept.push(id);
       continue;
     }
+    // A soft delete doesn't cascade: the puestos given at creation go here.
+    await tx.execute(sql`delete from core.staff_positions where staff_id = ${id}`);
     await tx.execute(sql`update core.staff set deleted_at = now(), updated_at = now() where id = ${id}`);
     removed.push(id);
   }
