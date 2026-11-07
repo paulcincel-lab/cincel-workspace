@@ -134,8 +134,8 @@ describe("Proyecto · Reporte (sheet)", () => {
 describe("style guard (FE §18 item 15)", () => {
   const root = path.resolve(__dirname, "../..");
   const files = [
-    "app/proyectos/[id]/cronograma/page.tsx",
-    "app/proyectos/[id]/cronograma/reporte/page.tsx",
+    "app/(staff)/proyectos/[id]/cronograma/page.tsx",
+    "app/(staff)/proyectos/[id]/cronograma/reporte/page.tsx",
     "components/cronograma/cronograma-view.tsx",
     "components/cronograma/cronograma-report.tsx",
     "components/cronograma/report-toolbar.tsx",
@@ -150,7 +150,7 @@ describe("style guard (FE §18 item 15)", () => {
   });
 
   it.each([
-    "app/proyectos/[id]/cronograma/reporte/page.tsx",
+    "app/(staff)/proyectos/[id]/cronograma/reporte/page.tsx",
     "components/cronograma/cronograma-report.tsx",
     "components/cronograma/report-toolbar.tsx",
   ])("%s (report) has no style switch", (file) => {
@@ -159,6 +159,6 @@ describe("style guard (FE §18 item 15)", () => {
 
   it("the tab renders through CronogramaWidget, not a copy of cronograma-view", () => {
     expect(read("components/cronograma/cronograma-view.tsx")).toMatch(/<CronogramaWidget/);
-    expect(read("app/proyectos/[id]/cronograma/page.tsx")).toMatch(/layout="redesign"/);
+    expect(read("app/(staff)/proyectos/[id]/cronograma/page.tsx")).toMatch(/layout="redesign"/);
   });
 });

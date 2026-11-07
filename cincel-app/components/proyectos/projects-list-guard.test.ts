@@ -15,7 +15,7 @@ const FILES = [
   "components/proyectos/ProjectsPortfolio.tsx",
   "components/proyectos/NewProjectDialog.tsx",
   "components/proyectos/projects-portfolio-data.ts",
-  "app/proyectos/page.tsx",
+  "app/(staff)/proyectos/page.tsx",
 ].map((path) => ({ path, text: readFileSync(join(ROOT, path), "utf8") }));
 
 /** Widgets the list composes (FE §4.10.2: `EntityCardGrid` and `DistributionWidget` through these and `ListPage`). */

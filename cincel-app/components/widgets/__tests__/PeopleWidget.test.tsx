@@ -114,7 +114,7 @@ describe("PeopleWidget per style (same fixture)", () => {
     const { getAllByRole, queryByRole } = renderIn("analitico", <PeopleWidget people={PEOPLE_FIXTURE} show={ALL} />);
     expect(queryByRole("article")).toBeNull();
     const [main, availability] = getAllByRole("table");
-    const headers = within(main).getAllByRole("columnheader").map((h) => h.textContent);
+    const headers = within(main).getAllByRole("columnheader").map((h) => (h.textContent ?? "").replace(/[▲▼]/g, ""));
     expect(headers).toEqual([
       "Persona",
       "Puesto",
@@ -140,7 +140,7 @@ describe("PeopleWidget per style (same fixture)", () => {
     const alejandro = within(within(main).getByRole("row", { name: /Alejandro Riofrio/ }));
     expect(alejandro.getAllByRole("cell")[5].textContent).toBe("—");
 
-    expect(within(availability).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+    expect(within(availability).getAllByRole("columnheader").map((h) => (h.textContent ?? "").replace(/[▲▼]/g, ""))).toEqual([
       "Persona",
       "lun",
       "mar",

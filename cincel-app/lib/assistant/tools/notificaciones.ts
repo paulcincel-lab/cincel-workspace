@@ -32,15 +32,7 @@ import {
 } from "@/lib/actions/notifications-actions";
 import { defineTool, type DefinedTool } from "@/lib/assistant/define-tool";
 import { resolveProject, resolveStaff } from "@/lib/assistant/resolvers";
-import {
-  summarizeCancelReminder,
-  summarizeCreateReminder,
-  summarizeListNotifications,
-  summarizeListReminders,
-  summarizeMarkNotificationsRead,
-  summarizeNotifyPeople,
-  summarizeScheduleDigest,
-} from "@/lib/assistant/tool-summaries";
+import { toolSummaries } from "@/lib/assistant/tool-summaries";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { db } from "@/lib/db/client";
 import { actionErrorText } from "@/lib/errors";
@@ -185,7 +177,7 @@ const list_notifications = defineTool({
   available: () => NOTIFICATIONS.fetchNotificationsAction,
   confirm: false,
   write: false,
-  summarize: summarizeListNotifications,
+  summarize: toolSummaries.list_notifications,
   async run(_ctx, input) {
     try {
       const page = await fetchNotificationsAction({ unreadOnly: input.unreadOnly, kinds: input.types });
@@ -209,7 +201,7 @@ const mark_notifications_read = defineTool({
   available: () => NOTIFICATIONS.markNotificationsReadAction,
   confirm: false,
   write: true,
-  summarize: summarizeMarkNotificationsRead,
+  summarize: toolSummaries.mark_notifications_read,
   async run(_ctx, input) {
     try {
       const { unreadCount } = await markNotificationsReadAction(input.all ? "all" : (input.ids ?? []));
@@ -229,7 +221,7 @@ const create_reminder = defineTool({
   available: () => MY_SPACE.parseReminderTextAction && MY_SPACE.createReminderAction,
   confirm: false,
   write: true,
-  summarize: summarizeCreateReminder,
+  summarize: toolSummaries.create_reminder,
   async run(_ctx, input) {
     try {
       let text = input.text;
@@ -285,7 +277,7 @@ const list_reminders = defineTool({
   available: () => MY_SPACE.fetchRemindersAction,
   confirm: false,
   write: false,
-  summarize: summarizeListReminders,
+  summarize: toolSummaries.list_reminders,
   async run(_ctx, input) {
     try {
       const reminders = await fetchRemindersAction({ from: input.from, to: input.to });
@@ -305,7 +297,7 @@ const cancel_reminder = defineTool({
   available: () => MY_SPACE.cancelReminderAction && MY_SPACE.snoozeReminderAction,
   confirm: false,
   write: true,
-  summarize: summarizeCancelReminder,
+  summarize: toolSummaries.cancel_reminder,
   async run(_ctx, input) {
     try {
       if (input.snoozeUntil) {
@@ -330,7 +322,7 @@ const notify_people = defineTool({
   available: () => true,
   confirm: true,
   write: true,
-  summarize: summarizeNotifyPeople,
+  summarize: toolSummaries.notify_people,
   async run(ctx, input) {
     try {
       if (input.link && !isAllowedNotificationLink(input.link)) {
@@ -372,7 +364,7 @@ const schedule_digest = defineTool({
     NOTIFICATIONS.fetchNotificationPreferencesAction && NOTIFICATIONS.updateNotificationPreferencesAction,
   confirm: false,
   write: true,
-  summarize: summarizeScheduleDigest,
+  summarize: toolSummaries.schedule_digest,
   async run(_ctx, input) {
     if (input.time !== DIGEST_TIME) {
       return {

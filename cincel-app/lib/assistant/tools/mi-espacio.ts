@@ -14,14 +14,7 @@
 import { z } from "zod";
 
 import { defineTool, type DefinedTool } from "@/lib/assistant/define-tool";
-import {
-  summarizeClockIn,
-  summarizeCreateChecklist,
-  summarizeCreateNote,
-  summarizeGetMyHours,
-  summarizePauseOrClockOut,
-  summarizeTeamHoursReport,
-} from "@/lib/assistant/tool-summaries";
+import { toolSummaries } from "@/lib/assistant/tool-summaries";
 import { IMPLEMENTED as MY_SPACE } from "@/lib/actions/my-space-actions.flags";
 import { IMPLEMENTED as TIME_TRACKING } from "@/lib/actions/time-tracking-actions.flags";
 import {
@@ -163,7 +156,7 @@ const create_note = defineTool({
   available: () => MY_SPACE.createNoteAction && MY_SPACE.updateNoteAction && MY_SPACE.fetchNotesAction,
   confirm: false,
   write: true,
-  summarize: (input) => summarizeCreateNote(input),
+  summarize: toolSummaries.create_note,
   async run(_ctx, input) {
     try {
       if (input.noteId) {
@@ -203,7 +196,7 @@ const create_checklist = defineTool({
   available: () => MY_SPACE.createChecklistAction,
   confirm: false,
   write: true,
-  summarize: (input) => summarizeCreateChecklist(input),
+  summarize: toolSummaries.create_checklist,
   async run(_ctx, input) {
     try {
       const checklist = await createChecklistAction({ title: input.title, items: input.items });
@@ -229,7 +222,7 @@ const clock_in = defineTool({
   available: () => TIME_TRACKING.clockInAction,
   confirm: false,
   write: true,
-  summarize: (input) => summarizeClockIn(input),
+  summarize: toolSummaries.clock_in,
   async run() {
     try {
       const status = await clockInAction({ source: "assistant" });
@@ -254,7 +247,7 @@ const pause_or_clock_out = defineTool({
   available: () => TIME_TRACKING.pauseWorkAction && TIME_TRACKING.clockOutAction,
   confirm: false,
   write: true,
-  summarize: (input) => summarizePauseOrClockOut(input),
+  summarize: toolSummaries.pause_or_clock_out,
   async run(_ctx, input) {
     try {
       const status = input.action === "pausa" ? await pauseWorkAction() : await clockOutAction();
@@ -279,7 +272,7 @@ const get_my_hours = defineTool({
   available: () => TIME_TRACKING.fetchMyTodayAction && TIME_TRACKING.fetchMyWeekHoursAction,
   confirm: false,
   write: false,
-  summarize: (input) => summarizeGetMyHours(input),
+  summarize: toolSummaries.get_my_hours,
   async run(_ctx, input) {
     try {
       if (input.range === "hoy") {
@@ -311,7 +304,7 @@ const team_hours_report = defineTool({
   available: () => TIME_TRACKING.fetchTeamHoursAction,
   confirm: false,
   write: false,
-  summarize: (input) => summarizeTeamHoursReport(input),
+  summarize: toolSummaries.team_hours_report,
   async run(ctx, input) {
     if (!canViewTeamHours(ctx.user)) return failure(new Error("FORBIDDEN"));
     try {

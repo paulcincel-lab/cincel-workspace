@@ -60,14 +60,7 @@ import {
 } from "@/lib/assistant/agenda/google-calendar";
 import { defineTool, type DefinedTool } from "@/lib/assistant/define-tool";
 import { byNameIlike, resolveProject, type Resolved } from "@/lib/assistant/resolvers";
-import {
-  summarizeCancelEvent,
-  summarizeCreateEvent,
-  summarizeFindFreeSlots,
-  summarizeListEvents,
-  summarizeScheduleSiteVisit,
-  summarizeUpdateEvent,
-} from "@/lib/assistant/tool-summaries";
+import { summarizeCreateEvent, summarizeScheduleSiteVisit, toolSummaries } from "@/lib/assistant/tool-summaries";
 import { recordViaAsistente } from "@/lib/assistant/via-asistente";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { getAppOrigin } from "@/lib/auth/safe-return-to";
@@ -413,7 +406,7 @@ export const list_events = defineTool({
   available: () => true,
   confirm: false,
   write: false,
-  summarize: summarizeListEvents,
+  summarize: toolSummaries.list_events,
   async run({ user }, input) {
     if (!validRange(input.from, input.to, LIST_RANGE_DAYS)) return rangeError(LIST_RANGE_DAYS);
     try {
@@ -480,7 +473,7 @@ export const find_free_slots = defineTool({
   available: () => TIME_TRACKING.fetchTimeTrackingSettingsAction && VACATIONS.fetchTeamAbsencesAction,
   confirm: false,
   write: false,
-  summarize: summarizeFindFreeSlots,
+  summarize: toolSummaries.find_free_slots,
   async run({ user }, input) {
     if (!validRange(input.from, input.to, SLOTS_RANGE_DAYS)) return rangeError(SLOTS_RANGE_DAYS);
     try {
@@ -562,7 +555,7 @@ export const create_event = defineTool({
   available: eventWritesAvailable,
   confirm: true,
   write: true,
-  summarize: summarizeCreateEvent,
+  summarize: toolSummaries.create_event,
   async run({ user }, input) {
     if (!calendarEventsGrantAvailable()) return writesDisabled();
     try {
@@ -617,7 +610,7 @@ export const update_event = defineTool({
   available: eventWritesAvailable,
   confirm: true,
   write: true,
-  summarize: summarizeUpdateEvent,
+  summarize: toolSummaries.update_event,
   async run({ user }, input) {
     if (!calendarEventsGrantAvailable()) return writesDisabled();
     try {
@@ -662,7 +655,7 @@ export const cancel_event = defineTool({
   available: eventWritesAvailable,
   confirm: true,
   write: true,
-  summarize: summarizeCancelEvent,
+  summarize: toolSummaries.cancel_event,
   async run({ user }, input) {
     if (!calendarEventsGrantAvailable()) return writesDisabled();
     try {
@@ -719,7 +712,7 @@ export const schedule_site_visit = defineTool({
   available: eventWritesAvailable,
   confirm: true,
   write: true,
-  summarize: summarizeScheduleSiteVisit,
+  summarize: toolSummaries.schedule_site_visit,
   async run({ user }, input) {
     if (!calendarEventsGrantAvailable()) return writesDisabled();
     try {

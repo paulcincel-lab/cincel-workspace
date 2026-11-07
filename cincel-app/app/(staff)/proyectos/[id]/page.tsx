@@ -8,16 +8,8 @@ import { buttonVariants } from "@/components/ui/shadcn/button";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { loadProjectResumen } from "@/lib/proyectos/project-resumen";
-import type { PresentationStyle } from "@/lib/types/redesign";
 import { getResolvedAppearance } from "@/lib/ui/preferences-server";
-
-const STYLES: readonly PresentationStyle[] = ["visual", "esencial", "analitico"];
-
-/** `?estilo=visual|esencial|analitico` overrides the style for this render only (FE §4.2). */
-function estiloOverride(value: string | string[] | undefined): PresentationStyle | null {
-  const raw = Array.isArray(value) ? value[0] : value;
-  return STYLES.find((style) => style === raw) ?? null;
-}
+import { readEstiloOverride } from "@/lib/ui/style-override";
 
 /** The signed-in staff member; null without a usable session. Redirects propagate. */
 async function loadUser(): Promise<AuthenticatedUser | null> {
@@ -64,7 +56,8 @@ export default async function ProjectPage({
   const resumen = await loadProjectResumen(id, user);
   if (!resumen) return <StateCard title="Proyecto no encontrado" message="El proyecto no existe o ya no tienes acceso." />;
 
-  const estilo = estiloOverride(query.estilo);
+  // `?estilo=visual|esencial|analitico` overrides the style for this render only (FE §4.2).
+  const estilo = readEstiloOverride(query);
   return (
     <StyleProvider style={estilo ?? appearance.style} isOverridden={estilo !== null} scope="staff">
       <div className="flex flex-col gap-4">

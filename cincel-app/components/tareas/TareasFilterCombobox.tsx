@@ -51,7 +51,7 @@ export function TareasFilterCombobox({
         <span>{text}</span>
         <ChevronDown aria-hidden="true" data-icon="inline-end" />
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-0">
+      <PopoverContent className="w-64 p-0" aria-label={label}>
         <Command>
           <CommandInput placeholder={searchPlaceholder} aria-label={searchPlaceholder} />
           <CommandList>

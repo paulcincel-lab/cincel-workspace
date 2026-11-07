@@ -22,6 +22,8 @@ const ALLOWED_WIDGETS = new Set([
   "AgendaWidget",
   "ProgressListWidget",
   "PeopleWidget",
+  // The page column: Esencial's 980 px max content width (FE §15.2), decided inside the library.
+  "StyleContent",
 ]);
 
 function sourceFiles(dir: string): string[] {

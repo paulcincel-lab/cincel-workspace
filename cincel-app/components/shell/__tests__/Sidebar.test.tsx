@@ -12,7 +12,11 @@ const state = vi.hoisted(() => ({
   bottomTabs: [] as { activeKey: string | null; items: { key: string }[]; more: { key: string }[] }[],
 }));
 
-vi.mock("next/navigation", () => ({ usePathname: () => state.pathname }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => state.pathname,
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+}));
 vi.mock("@/lib/actions/search-actions.flags", () => ({ IMPLEMENTED: state.search }));
 vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({ IMPLEMENTED: state.time }));
 vi.mock("@/lib/actions/notifications-actions.flags", () => ({ IMPLEMENTED: state.notifications }));
@@ -249,20 +253,30 @@ describe("AppShellClient", () => {
   });
 
   it("shows the assistant button only once implemented and never on /asistente", () => {
-    renderShell("/inicio");
+    // AppShell mounts the assistant launcher next to its client part.
+    const renderFullShell = (pathname: string, hideAssistant?: boolean) => {
+      state.pathname = pathname;
+      render(
+        <AppShell appearance={APPEARANCE} session={ADMIN_SESSION} nav={FULL_NAV} today={null} hideAssistant={hideAssistant}>
+          <h1>Contenido</h1>
+        </AppShell>,
+      );
+    };
+
+    renderFullShell("/inicio");
     expect(screen.queryByRole("button", { name: "Pregúntale a Cincel" })).toBeNull();
 
     cleanup();
     state.assistant.fetchAssistantThreadAction = true;
-    renderShell("/inicio");
+    renderFullShell("/inicio");
     expect(screen.getByRole("button", { name: "Pregúntale a Cincel" })).toBeTruthy();
 
     cleanup();
-    renderShell("/asistente");
+    renderFullShell("/asistente");
     expect(screen.queryByRole("button", { name: "Pregúntale a Cincel" })).toBeNull();
 
     cleanup();
-    renderShell("/inicio", FULL_NAV, true);
+    renderFullShell("/inicio", true);
     expect(screen.queryByRole("button", { name: "Pregúntale a Cincel" })).toBeNull();
   });
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 const navigation = vi.hoisted(() => ({
   notFound: vi.fn(() => {
@@ -7,6 +7,10 @@ const navigation = vi.hoisted(() => ({
   }),
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
+  }),
+  // Next's own control-flow errors pass through the segment guard.
+  unstable_rethrow: vi.fn((err: unknown) => {
+    if (err instanceof Error && err.message.startsWith("NEXT_")) throw err;
   }),
 }));
 vi.mock("next/navigation", () => navigation);
@@ -76,7 +80,7 @@ import AjustesPermisosLayout from "../(admin)/permisos/layout";
 import AjustesMondayLayout from "../(admin)/monday/layout";
 import AjustesGoogleLayout from "../(admin)/google/layout";
 
-type SegmentLayout = (props: { children: ReactNode }) => Promise<ReactElement>;
+type SegmentLayout = (props: { children: ReactNode }) => Promise<ReactNode>;
 
 const SEGMENTS: Record<string, SegmentLayout> = {
   general: AjustesGeneralLayout,
@@ -95,8 +99,8 @@ function as(access: string, role = access) {
   viewer.role = role;
 }
 
-async function renderSegment(segment: string): Promise<ReactElement<{ children: ReactNode }>> {
-  return (await SEGMENTS[segment]({ children: "contenido" })) as ReactElement<{ children: ReactNode }>;
+async function renderSegment(segment: string): Promise<ReactNode> {
+  return SEGMENTS[segment]({ children: "contenido" });
 }
 
 beforeEach(() => {
@@ -122,8 +126,7 @@ describe("/ajustes segment guards", () => {
 
   it.each(Object.keys(SEGMENTS))("renders /ajustes/%s for an Administrador", async (segment) => {
     as("Administrador");
-    const element = await renderSegment(segment);
-    expect(element.props.children).toBe("contenido");
+    expect(await renderSegment(segment)).toBe("contenido");
     expect(navigation.notFound).not.toHaveBeenCalled();
   });
 
@@ -137,22 +140,19 @@ describe("/ajustes segment guards", () => {
 
   it("lets Dirección open /ajustes/horario through canViewTeamHours", async () => {
     as("Dirección", "Dirección");
-    const element = await renderSegment("horario");
-    expect(element.props.children).toBe("contenido");
+    expect(await renderSegment("horario")).toBe("contenido");
   });
 
   it("admits /ajustes/horario with canManageTimeTracking alone", async () => {
     // A Colaborador has neither capability; grant only the settings one.
     permissionSpies.canManageTimeTracking.mockReturnValueOnce(true);
-    const element = await renderSegment("horario");
-    expect(element.props.children).toBe("contenido");
+    expect(await renderSegment("horario")).toBe("contenido");
   });
 
   it("admits /ajustes/horario with canViewTeamHours alone", async () => {
     permissionSpies.canManageTimeTracking.mockReturnValueOnce(false);
     permissionSpies.canViewTeamHours.mockReturnValueOnce(true);
-    const element = await renderSegment("horario");
-    expect(element.props.children).toBe("contenido");
+    expect(await renderSegment("horario")).toBe("contenido");
   });
 
   it("returns 404 on /ajustes/horario with neither capability", async () => {

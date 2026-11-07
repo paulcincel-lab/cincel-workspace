@@ -21,13 +21,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
 import { defineTool, type DefinedTool, type ToolRunContext } from "@/lib/assistant/define-tool";
-import {
-  summarizeCompareQuotes,
-  summarizeGetPerson,
-  summarizeInviteClientToPortal,
-  summarizeRequestClientApproval,
-  summarizeRequestQuotes,
-} from "@/lib/assistant/tool-summaries";
+import { summarizeInviteClientToPortal, toolSummaries } from "@/lib/assistant/tool-summaries";
 import { loadOwnerMail } from "@/lib/assistant/owner-mail";
 import { fetchContactsAction } from "@/lib/actions/contacts-actions";
 import { createGmailDraftAction, fetchGmailThreadAction, fetchGmailThreadsAction } from "@/lib/actions/gmail-actions";
@@ -179,7 +173,7 @@ const get_person = defineTool({
   available: () => PEOPLE.fetchPersonaDetailAction,
   confirm: false,
   write: false,
-  summarize: summarizeGetPerson,
+  summarize: toolSummaries.get_person,
   async run(_ctx, input) {
     try {
       const resolved = await resolveStaffByName(input.name);
@@ -258,7 +252,7 @@ const invite_client_to_portal = defineTool({
   available: () => true,
   confirm: true,
   write: true,
-  summarize: summarizeInviteClientToPortal,
+  summarize: toolSummaries.invite_client_to_portal,
   async run(ctx, input) {
     try {
       const project = await resolveProjectRef(ctx, input.project);
@@ -320,7 +314,7 @@ const request_client_approval = defineTool({
   available: () => true,
   confirm: true,
   write: true,
-  summarize: summarizeRequestClientApproval,
+  summarize: toolSummaries.request_client_approval,
   async run(ctx, input) {
     try {
       const project = await resolveProjectRef(ctx, input.project);
@@ -468,7 +462,7 @@ const request_quotes = defineTool({
   available: () => true,
   confirm: true,
   write: true,
-  summarize: summarizeRequestQuotes,
+  summarize: toolSummaries.request_quotes,
   async run(ctx, input) {
     try {
       if (input.deadline < todayIso()) return fail("PAST_TIME", "La fecha límite ya pasó. Indica una fecha futura.");
@@ -612,7 +606,7 @@ const compare_quotes = defineTool({
   available: () => GMAIL.fetchGmailThreadsAction && GMAIL.fetchGmailThreadAction,
   confirm: false,
   write: false,
-  summarize: summarizeCompareQuotes,
+  summarize: toolSummaries.compare_quotes,
   async run(ctx, input) {
     try {
       const query = input.requestId ?? input.item ?? "";

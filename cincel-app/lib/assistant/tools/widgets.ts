@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 import { defineTool, type DefinedTool } from "@/lib/assistant/define-tool";
-import { summarizeRenderTable, summarizeRenderTimeline } from "@/lib/assistant/tool-summaries";
+import { toolSummaries } from "@/lib/assistant/tool-summaries";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { AgendaItem, RecordColumnFormat, RecordTableData } from "@/lib/types/widgets";
 
@@ -150,7 +150,7 @@ const render_table = defineTool({
   available: () => true,
   confirm: false,
   write: false,
-  summarize: summarizeRenderTable,
+  summarize: toolSummaries.render_table,
   async run(_ctx, input) {
     return { ok: true, rendered: "table", rows: input.rows.length } as const;
   },
@@ -165,7 +165,7 @@ const render_timeline = defineTool({
   available: () => true,
   confirm: false,
   write: false,
-  summarize: summarizeRenderTimeline,
+  summarize: toolSummaries.render_timeline,
   async run(_ctx, input) {
     return { ok: true, rendered: "timeline", items: input.items.length } as const;
   },

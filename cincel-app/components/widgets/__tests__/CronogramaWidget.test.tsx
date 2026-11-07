@@ -98,10 +98,12 @@ describe("CronogramaWidget", () => {
     expect(within(avance).getByText("2")).toBeTruthy();
 
     const partidas = getByRole("region", { name: "Partidas" });
-    const table = within(partidas).getByRole("table");
-    expect(within(table).getByRole("columnheader", { name: "Duración" })).toBeTruthy();
-    expect(within(table).getByRole("columnheader", { name: "Holgura" })).toBeTruthy();
-    const instalaciones = within(table).getByText("Instalaciones").closest("tr");
+    // RecordTable renders Esencial as a text list (FE §3.5 Cronograma tab: partidas with dates and % as text).
+    expect(within(partidas).queryByRole("table")).toBeNull();
+    const list = within(partidas).getByRole("list");
+    expect(within(list).getAllByText("Duración").length).toBeGreaterThan(0);
+    expect(within(list).getAllByText("Holgura").length).toBeGreaterThan(0);
+    const instalaciones = within(list).getByText("Instalaciones").closest("li");
     expect(instalaciones).not.toBeNull();
     expect(within(instalaciones as HTMLElement).getAllByText(percentText(90)).length).toBeGreaterThan(0);
 

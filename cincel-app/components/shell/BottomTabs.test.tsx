@@ -11,7 +11,10 @@ const state = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => state.pathname,
+  useSearchParams: () => new URLSearchParams(),
 }));
+// The Bandeja badge slot is an async server component, which a client-side render cannot resolve.
+vi.mock("@/lib/actions/notifications-actions.flags", () => ({ IMPLEMENTED: { fetchNotificationsAction: false } }));
 vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({
   get IMPLEMENTED() {
     return {

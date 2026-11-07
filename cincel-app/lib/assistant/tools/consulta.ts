@@ -19,13 +19,7 @@ import { searchWorkspaceAction } from "@/lib/actions/search-actions";
 import { fetchMyTasksAction, fetchTaskAction, fetchTasksAction } from "@/lib/actions/tasks-actions";
 import { defineTool, type DefinedTool, type ToolRunContext } from "@/lib/assistant/define-tool";
 import { resolveProject } from "@/lib/assistant/resolvers";
-import {
-  summarizeGetProject,
-  summarizeGetTask,
-  summarizeListMyTasks,
-  summarizeSearchWorkspace,
-  taskStatusLabel,
-} from "@/lib/assistant/tool-summaries";
+import { taskStatusLabel, toolSummaries } from "@/lib/assistant/tool-summaries";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { canSeeAdminData } from "@/lib/auth/permissions";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
@@ -205,7 +199,7 @@ export const search_workspace = defineTool({
   available: () => SEARCH_IMPLEMENTED.searchWorkspaceAction,
   confirm: false,
   write: false,
-  summarize: summarizeSearchWorkspace,
+  summarize: toolSummaries.search_workspace,
   async run(_ctx, input) {
     const limit = input.limit ?? 10;
     let results: SearchResult[];
@@ -258,7 +252,7 @@ export const get_project = defineTool({
   available: always,
   confirm: false,
   write: false,
-  summarize: summarizeGetProject,
+  summarize: toolSummaries.get_project,
   async run(ctx, input) {
     const target = await projectIdFor(ctx, input.project);
     if (!target.ok) return target;
@@ -354,7 +348,7 @@ export const get_task = defineTool({
   available: always,
   confirm: false,
   write: false,
-  summarize: summarizeGetTask,
+  summarize: toolSummaries.get_task,
   async run(ctx, input) {
     const found = await findTask(ctx, input);
     if (!found.ok) return found;
@@ -397,7 +391,7 @@ export const list_my_tasks = defineTool({
   available: always,
   confirm: false,
   write: false,
-  summarize: summarizeListMyTasks,
+  summarize: toolSummaries.list_my_tasks,
   async run(ctx, input) {
     const rows = await fetchMyTasksAction({ status: input.status ?? OPEN_STATUSES });
     const visible = canSeeAdminData(ctx.user) ? rows : rows.filter((t) => t.kind !== "admin");

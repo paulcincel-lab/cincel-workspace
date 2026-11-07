@@ -33,12 +33,30 @@ describe("assistant tool registry", () => {
     }
   });
 
-  it("domain files import the flags modules only, never the actions modules (Rule 3)", () => {
+  it("domain files import the flags module of every redesign action they call (Rule 3)", () => {
+    const ACTIONS_DIR = join(__dirname, "..", "..", "actions");
     for (const domain of domainFiles()) {
       const source = readFileSync(join(TOOLS_DIR, `${domain}.ts`), "utf8");
-      const actionImports = source.match(/from\s+["']@\/lib\/actions\/[^"']+["']/g) ?? [];
-      for (const line of actionImports) {
-        expect(line, `${domain}.ts: ${line}`).toMatch(/-actions\.flags["']$/);
+      const imports = [
+        ...source.matchAll(/import\s*\{([^}]*)\}\s*from\s+["']@\/lib\/actions\/([a-z-]+-actions)["']/g),
+        ...source.matchAll(/const\s*\{([^}]*)\}\s*=\s*await\s+import\(\s*["']@\/lib\/actions\/([a-z-]+-actions)["']\s*\)/g),
+      ];
+      for (const [, names, module] of imports) {
+        const flagsPath = join(ACTIONS_DIR, `${module}.flags.ts`);
+        let flags: string;
+        try {
+          flags = readFileSync(flagsPath, "utf8");
+        } catch {
+          continue; // an actions file without redesign actions has no flags module
+        }
+        const flagged = names
+          .split(",")
+          .map((name) => name.trim().split(/\s+as\s+/)[0])
+          .filter((name) => name && new RegExp(`\\b${name}\\s*:`).test(flags));
+        if (flagged.length === 0) continue;
+        expect(source, `${domain}.ts calls ${flagged.join(", ")} and imports ${module}.flags`).toMatch(
+          new RegExp(`["']@/lib/actions/${module}\\.flags["']`),
+        );
       }
     }
   });

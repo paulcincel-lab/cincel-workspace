@@ -33,16 +33,7 @@ import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { defineTool, type DefinedTool } from "@/lib/assistant/define-tool";
 import { extractTaskTitles, MAX_TASKS_FROM_NOTES } from "@/lib/assistant/notes-to-tasks";
 import { resolveStaff } from "@/lib/assistant/resolvers";
-import {
-  formatDueDate,
-  summarizeAddChecklistItem,
-  summarizeAddTaskComment,
-  summarizeCreateTasksFromNotes,
-  summarizeRebalanceWorkload,
-  summarizeRescheduleTask,
-  summarizeUpdateTaskStatus,
-  taskStatusLabel,
-} from "@/lib/assistant/tool-summaries";
+import { formatDueDate, taskStatusLabel, toolSummaries } from "@/lib/assistant/tool-summaries";
 import { failure, OPEN_STATUSES, findTask, projectIdFor } from "@/lib/assistant/tools/consulta";
 import { recordViaAsistente, viaAsistente } from "@/lib/assistant/via-asistente";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
@@ -131,7 +122,7 @@ export const update_task_status = defineTool({
   available: always,
   confirm: false,
   write: true,
-  summarize: summarizeUpdateTaskStatus,
+  summarize: toolSummaries.update_task_status,
   async run(ctx, input) {
     const found = await findTask(ctx, { taskId: input.taskId });
     if (!found.ok) return found;
@@ -196,7 +187,7 @@ export const reschedule_task = defineTool({
   available: always,
   confirm: true,
   write: true,
-  summarize: summarizeRescheduleTask,
+  summarize: toolSummaries.reschedule_task,
   async run(ctx, input) {
     const found = await findTask(ctx, { taskId: input.taskId });
     if (!found.ok) return found;
@@ -265,7 +256,7 @@ export const add_task_comment = defineTool({
   available: always,
   confirm: true,
   write: true,
-  summarize: summarizeAddTaskComment,
+  summarize: toolSummaries.add_task_comment,
   async run(ctx, input) {
     const found = await findTask(ctx, { taskId: input.taskId });
     if (!found.ok) return found;
@@ -307,7 +298,7 @@ export const add_checklist_item = defineTool({
   available: always,
   confirm: false,
   write: true,
-  summarize: summarizeAddChecklistItem,
+  summarize: toolSummaries.add_checklist_item,
   async run(ctx, input) {
     const found = await findTask(ctx, { taskId: input.taskId });
     if (!found.ok) return found;
@@ -362,7 +353,7 @@ export const create_tasks_from_notes = defineTool({
   available: always,
   confirm: true,
   write: true,
-  summarize: summarizeCreateTasksFromNotes,
+  summarize: toolSummaries.create_tasks_from_notes,
   async run(ctx, input) {
     const target = await projectIdFor(ctx, input.project);
     if (!target.ok) return target;
@@ -537,7 +528,7 @@ export const rebalance_workload = defineTool({
   available: always,
   confirm: true,
   write: true,
-  summarize: summarizeRebalanceWorkload,
+  summarize: toolSummaries.rebalance_workload,
   async run(ctx, input) {
     let workflow: WorkflowDetail | null = null;
     if (input.tramo) {

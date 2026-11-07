@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
 
-import { AJUSTES_SEGMENT_CAPABILITY } from "@/lib/auth/ajustes-segments";
-import { requirePageCapability } from "@/lib/auth/session";
+import { canManageAppearance } from "@/lib/auth/permissions";
+import { guardAjustesSegment } from "@/lib/auth/ajustes-segment-guard";
 
 /** Server guard of /ajustes/tema (redesign FE §3.8, §8; BE §12.2): 404 without the segment capability. */
 export default async function AjustesTemaLayout({ children }: { children: ReactNode }) {
-  await requirePageCapability(AJUSTES_SEGMENT_CAPABILITY.tema);
-  return <>{children}</>;
+  return guardAjustesSegment(canManageAppearance, children);
 }

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Separator } from "@/components/ui/shadcn/separator";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { AssistantMessageParts } from "@/components/asistente/AssistantMessageParts";
-import { buildAssistantChatRequestBody } from "@/lib/assistant/chat-request";
+import { AssistantContextStore, createAssistantChatTransport } from "@/components/asistente/assistant-transport";
 import type { AssistantContext } from "@/lib/types/redesign";
 
 /**
@@ -92,25 +92,20 @@ export function AssistantChat({ thread, context, draft, onTurnFinished, hideHead
   const [restoredCount, setRestoredCount] = useState(thread ? 0 : initialMessages.length);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const contextRef = useRef<AssistantContext>(context ?? { route: "/asistente" });
+  const [contextStore] = useState(() => new AssistantContextStore(context ?? { route: "/asistente" }));
   const onTurnFinishedRef = useRef(onTurnFinished);
 
   useEffect(() => {
-    contextRef.current = context ?? { route: "/asistente" };
+    contextStore.set(context ?? { route: "/asistente" });
     onTurnFinishedRef.current = onTurnFinished;
-  }, [context, onTurnFinished]);
+  }, [context, onTurnFinished, contextStore]);
 
   const transport = useMemo(
     () =>
       serverThreadId
-        ? new DefaultChatTransport<UIMessage>({
-            api: "/api/asistente/chat",
-            prepareSendMessagesRequest: ({ id, messages: all }) => ({
-              body: buildAssistantChatRequestBody({ id, messages: all, context: contextRef.current }),
-            }),
-          })
+        ? createAssistantChatTransport("/api/asistente/chat", contextStore)
         : new DefaultChatTransport<UIMessage>({ api: "/api/asistente/chat" }),
-    [serverThreadId],
+    [serverThreadId, contextStore],
   );
 
   const { messages, sendMessage, status, setMessages, addToolApprovalResponse } = useChat({
@@ -146,9 +141,14 @@ export function AssistantChat({ thread, context, draft, onTurnFinished, hideHead
   }, [messages, serverThreadId]);
 
   // A starter prompt from the page goes into the composer; it is never sent on its own.
+  const [appliedDraft, setAppliedDraft] = useState<AssistantChatProps["draft"]>(undefined);
+  if (draft && draft !== appliedDraft) {
+    setAppliedDraft(draft);
+    setInput(draft.text);
+  }
+
   useEffect(() => {
     if (!draft) return;
-    setInput(draft.text);
     requestAnimationFrame(() => {
       const el = textareaRef.current;
       if (!el) return;

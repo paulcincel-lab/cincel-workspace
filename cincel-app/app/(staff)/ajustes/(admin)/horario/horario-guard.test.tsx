@@ -16,6 +16,10 @@ const navigation = vi.hoisted(() => ({
     throw new Error("NEXT_NOT_FOUND");
   }),
   redirect: vi.fn(),
+  // Next's own control-flow errors pass through the segment guard.
+  unstable_rethrow: vi.fn((err: unknown) => {
+    if (err instanceof Error && err.message.startsWith("NEXT_")) throw err;
+  }),
 }));
 vi.mock("next/navigation", () => navigation);
 
@@ -71,7 +75,7 @@ describe("/ajustes/horario segment guard", () => {
 
   it.each(["Administrador", "Dirección"])("admits %s", async (access) => {
     session.current = testUser(access);
-    await expect(HorarioSegmentLayout({ children: null })).resolves.toBeTruthy();
+    await expect(HorarioSegmentLayout({ children: "contenido" })).resolves.toBe("contenido");
   });
 
   it.each(OTHER_ROLES)("404 for %s", async (access) => {

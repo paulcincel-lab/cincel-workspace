@@ -1,9 +1,9 @@
 // @vitest-environment node
 /**
  * Cron job registry (redesign BE §8.0.4, §13, §21): importing the jobs folder
- * registers exactly the five canonical jobs; the Phase 5/6 jobs are
- * registered but never due and run nothing; the Phase 1 jobs are scheduled
- * as the spec says.
+ * registers exactly the five canonical jobs; the jobs without a window
+ * (reminders, Gmail, jornadas, delivery) are due on every tick; the digest
+ * keeps its 07:30 window.
  */
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -11,6 +11,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { DAILY_PRODUCERS, runDailyProducers, type DailyProducer } from "@/lib/cron/daily-producers";
+import { vencimientoProducer } from "@/lib/cron/daily-producers/vencimiento";
 import "@/lib/cron/jobs";
 import { dailyDigestDue } from "@/lib/cron/jobs/daily-digest";
 import { CRON_JOB_NAMES, registeredJobs, type CronJobContext } from "@/lib/cron/registry";
@@ -35,19 +36,20 @@ describe("cron registry", () => {
   it("has one file per canonical job in lib/cron/jobs", () => {
     const dir = resolve(__dirname, "../jobs");
     const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".ts") && f !== "index.ts")
+      .filter((f) => f.endsWith(".ts") && f !== "index.ts" && !f.endsWith(".test.ts"))
       .map((f) => f.replace(/\.ts$/, ""))
       .sort();
     expect(files).toEqual([...CRON_JOB_NAMES].sort());
   });
 
   it.each(["reminders-fire", "gmail-sync", "auto-close-jornadas"] as const)(
-    "%s is registered, never due and does nothing",
-    async (name) => {
+    "%s is registered and due on every tick without a window",
+    (name) => {
       const job = registeredJobs().find((j) => j.name === name);
       expect(job).toBeDefined();
-      expect(job!.due(new Date("2026-11-09T14:00:00Z"), TZ)).toEqual({ run: false });
-      expect(await job!.run(ctx())).toEqual({ count: 0 });
+      for (const iso of ["2026-11-09T06:00:00Z", "2026-11-09T14:00:00Z", "2026-11-10T05:59:00Z"]) {
+        expect(job!.due(new Date(iso), TZ)).toEqual({ run: true });
+      }
     }
   );
 
@@ -94,9 +96,9 @@ describe("dailyDigestDue", () => {
 });
 
 describe("daily producers", () => {
-  it("lists the vencimiento producer, which produces nothing yet", async () => {
+  it("lists the vencimiento producer", () => {
     expect(DAILY_PRODUCERS.map((p) => p.name)).toEqual(["vencimiento"]);
-    expect(await runDailyProducers(ctx())).toEqual({ count: 0, failed: [] });
+    expect(DAILY_PRODUCERS[0]).toBe(vencimientoProducer);
   });
 
   it("runs every producer in order and keeps going after one throws", async () => {

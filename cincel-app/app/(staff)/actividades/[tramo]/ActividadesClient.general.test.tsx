@@ -17,6 +17,7 @@ vi.mock("@/lib/auth/auth-service", () => ({
 vi.mock("@/lib/auth/permissions", () => ({
   resolveActivitiesCapabilities: () => ({}),
   canChangeActivityStatus: () => false,
+  canSeeAdminData: () => false,
 }));
 
 const storage = vi.hoisted(() => ({

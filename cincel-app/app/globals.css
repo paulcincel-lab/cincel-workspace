@@ -77,8 +77,6 @@
   --destructive: #c6362b;
   --success: #e9f5ee;
   --success-foreground: #1e7a46;
-  --warning: #8a5e00;
-  --warning-ink: #8a5e00;
   --border: #e5e5e5;
   --input: #e5e5e5;
   --ring: #0a0a0a;
@@ -133,8 +131,6 @@
   --destructive: #e0574a;
   --success: rgba(79, 190, 132, 0.14);
   --success-foreground: #4fbe84;
-  --warning: #e0b44a;
-  --warning-ink: #e0b44a;
   --border: rgba(255, 255, 255, 0.14);
   --input: rgba(255, 255, 255, 0.18);
   --ring: #e4e4e4;
@@ -172,8 +168,6 @@
     --destructive: #e0574a;
     --success: rgba(79, 190, 132, 0.14);
     --success-foreground: #4fbe84;
-    --warning: #e0b44a;
-    --warning-ink: #e0b44a;
     --border: rgba(255, 255, 255, 0.14);
     --input: rgba(255, 255, 255, 0.18);
     --ring: #e4e4e4;

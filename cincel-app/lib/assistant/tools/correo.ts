@@ -26,13 +26,7 @@ import { z } from "zod";
 
 import { defineTool, type DefinedTool, type ToolRunContext } from "@/lib/assistant/define-tool";
 import { hasOwnerMail } from "@/lib/assistant/owner-mail";
-import {
-  summarizeDraftEmail,
-  summarizeLinkEmailToProject,
-  summarizeSearchEmail,
-  summarizeSendEmail,
-  summarizeSummarizeEmailThread,
-} from "@/lib/assistant/tool-summaries";
+import { summarizeLinkEmailToProject, toolSummaries } from "@/lib/assistant/tool-summaries";
 import { IMPLEMENTED as GMAIL } from "@/lib/actions/gmail-actions.flags";
 import {
   createGmailDraftAction,
@@ -356,7 +350,7 @@ export const tools: DefinedTool[] = [
     available: () => gmailReady("fetchGmailThreadsAction"),
     confirm: false,
     write: false,
-    summarize: (input) => summarizeSearchEmail(input),
+    summarize: toolSummaries.search_email,
     run: runSearchEmail,
   }),
   defineTool({
@@ -368,7 +362,7 @@ export const tools: DefinedTool[] = [
     available: () => gmailReady("fetchGmailThreadAction"),
     confirm: false,
     write: false,
-    summarize: (input) => summarizeSummarizeEmailThread(input),
+    summarize: toolSummaries.summarize_email_thread,
     run: runSummarizeEmailThread,
   }),
   defineTool({
@@ -380,7 +374,7 @@ export const tools: DefinedTool[] = [
     available: () => gmailReady("createGmailDraftAction"),
     confirm: false,
     write: true,
-    summarize: (input) => summarizeDraftEmail(input),
+    summarize: toolSummaries.draft_email,
     run: runDraftEmail,
   }),
   defineTool({
@@ -392,7 +386,7 @@ export const tools: DefinedTool[] = [
     available: () => gmailReady("sendGmailDraftAction"),
     confirm: true,
     write: true,
-    summarize: (input) => summarizeSendEmail(input),
+    summarize: toolSummaries.send_email,
     run: runSendEmail,
   }),
   defineTool({
@@ -404,7 +398,7 @@ export const tools: DefinedTool[] = [
     available: () => gmailReady("linkGmailThreadToProjectAction"),
     confirm: false,
     write: true,
-    summarize: (input) => summarizeLinkEmailToProject(input),
+    summarize: toolSummaries.link_email_to_project,
     run: runLinkEmailToProject,
   }),
 ];

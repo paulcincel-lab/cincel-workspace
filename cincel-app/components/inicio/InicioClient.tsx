@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { buttonVariants } from "@/components/ui/shadcn/button";
+import { StyleContent } from "@/components/widgets/StyleContent";
 import { greetingFor, inicioDateLine, initialsOf } from "@/lib/inicio/header";
 import type { InicioData } from "@/lib/types/redesign";
 
@@ -53,7 +54,7 @@ export function InicioClient({ data, photoUrl, me, now }: InicioClientProps) {
   }
 
   return (
-    <div className="flex w-full flex-col gap-4 in-data-[style=esencial]:mx-auto in-data-[style=esencial]:max-w-[980px]">
+    <StyleContent className="flex flex-col gap-4">
       <header className="flex flex-wrap items-start gap-4">
         <ProfilePhotoButton photoUrl={photo} initials={initials} onChange={handlePhotoChange} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -94,6 +95,6 @@ export function InicioClient({ data, photoUrl, me, now }: InicioClientProps) {
         <ProjectProgressList items={data.projectsProgress} />
         <WorkloadBars people={data.workload} />
       </div>
-    </div>
+    </StyleContent>
   );
 }

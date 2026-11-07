@@ -41,16 +41,7 @@ import {
 import { quantityTakeoff, TakeoffError } from "@/lib/assistant/calc/takeoff";
 import { EMPTY_ZONING_FICHA, zoningCheck, type ZoningFicha } from "@/lib/assistant/calc/zoning";
 import { defineTool, type DefinedTool, type ToolRunContext } from "@/lib/assistant/define-tool";
-import {
-  summarizeMeasureAreasFromPlan,
-  summarizeMoodboardFromReferences,
-  summarizeParametricCostEstimate,
-  summarizeProgressReport,
-  summarizeQuantityTakeoff,
-  summarizeScheduleFromTemplate,
-  summarizeSitePhotoLog,
-  summarizeZoningCheck,
-} from "@/lib/assistant/tool-summaries";
+import { toolSummaries } from "@/lib/assistant/tool-summaries";
 import {
   askVision,
   driveCallerFor,
@@ -722,7 +713,7 @@ export const tools: DefinedTool[] = [
     available: always,
     confirm: false,
     write: false,
-    summarize: summarizeMeasureAreasFromPlan,
+    summarize: toolSummaries.measure_areas_from_plan,
     run: guarded(runMeasureAreas),
   }),
   defineTool({
@@ -734,7 +725,7 @@ export const tools: DefinedTool[] = [
     available: always,
     confirm: false,
     write: false,
-    summarize: summarizeQuantityTakeoff,
+    summarize: toolSummaries.quantity_takeoff,
     run: guarded((_ctx, input: z.output<typeof takeoffSchema>) => runTakeoff(input)),
   }),
   defineTool({
@@ -746,7 +737,7 @@ export const tools: DefinedTool[] = [
     available: always,
     confirm: false,
     write: false,
-    summarize: summarizeParametricCostEstimate,
+    summarize: toolSummaries.parametric_cost_estimate,
     run: guarded((_ctx, input: z.output<typeof parametricSchema>) => runParametric(input)),
   }),
   defineTool({
@@ -758,7 +749,7 @@ export const tools: DefinedTool[] = [
     available: always,
     confirm: false,
     write: false,
-    summarize: summarizeZoningCheck,
+    summarize: toolSummaries.zoning_check,
     run: guarded(runZoning),
   }),
   defineTool({
@@ -770,7 +761,7 @@ export const tools: DefinedTool[] = [
     available: always,
     confirm: true,
     write: true,
-    summarize: summarizeSitePhotoLog,
+    summarize: toolSummaries.site_photo_log,
     run: guarded(runSitePhotoLog),
   }),
   defineTool({
@@ -782,7 +773,7 @@ export const tools: DefinedTool[] = [
     available: always,
     confirm: true,
     write: true,
-    summarize: summarizeScheduleFromTemplate,
+    summarize: toolSummaries.schedule_from_template,
     run: guarded(runScheduleFromTemplate),
   }),
   defineTool({
@@ -794,7 +785,7 @@ export const tools: DefinedTool[] = [
     available: always,
     confirm: false,
     write: false,
-    summarize: summarizeMoodboardFromReferences,
+    summarize: toolSummaries.moodboard_from_references,
     run: guarded(runMoodboard),
   }),
   defineTool({
@@ -806,7 +797,7 @@ export const tools: DefinedTool[] = [
     available: always,
     confirm: true,
     write: false,
-    summarize: summarizeProgressReport,
+    summarize: toolSummaries.progress_report,
     run: guarded(runProgressReport),
   }),
 ];

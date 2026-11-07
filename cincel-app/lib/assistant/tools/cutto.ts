@@ -28,23 +28,7 @@
 import { z } from "zod";
 
 import { defineTool, type DefinedTool } from "@/lib/assistant/define-tool";
-import {
-  summarizeCreateMeeting,
-  summarizeCreateProjectChannel,
-  summarizeGetMeetingNotes,
-  summarizeInviteToMeeting,
-  summarizeJoinVoiceRoom,
-  summarizeListConversations,
-  summarizeListMeetings,
-  summarizeListVoiceRooms,
-  summarizeMeetingToTasks,
-  summarizePostToProjectChannel,
-  summarizeReadConversation,
-  summarizeReplyInThread,
-  summarizeSendMessage,
-  summarizeStartCall,
-  summarizeSummarizeChannel,
-} from "@/lib/assistant/tool-summaries";
+import { toolSummaries } from "@/lib/assistant/tool-summaries";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
@@ -269,7 +253,7 @@ const create_meeting = defineTool({
   available,
   confirm: true,
   write: true,
-  summarize: summarizeCreateMeeting,
+  summarize: toolSummaries.create_meeting,
   async run(ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -307,7 +291,7 @@ const start_call = defineTool({
   available,
   confirm: true,
   write: true,
-  summarize: summarizeStartCall,
+  summarize: toolSummaries.start_call,
   async run(_ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -335,7 +319,7 @@ const list_meetings = defineTool({
   available,
   confirm: false,
   write: false,
-  summarize: summarizeListMeetings,
+  summarize: toolSummaries.list_meetings,
   async run(ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -358,7 +342,7 @@ const invite_to_meeting = defineTool({
   available,
   confirm: true,
   write: true,
-  summarize: summarizeInviteToMeeting,
+  summarize: toolSummaries.invite_to_meeting,
   async run(_ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -382,7 +366,7 @@ const get_meeting_notes = defineTool({
   available,
   confirm: false,
   write: false,
-  summarize: summarizeGetMeetingNotes,
+  summarize: toolSummaries.get_meeting_notes,
   async run(_ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -404,7 +388,7 @@ const meeting_to_tasks = defineTool({
   available,
   confirm: true,
   write: true,
-  summarize: summarizeMeetingToTasks,
+  summarize: toolSummaries.meeting_to_tasks,
   async run(ctx, input) {
     if (!canCreateTasks(ctx.user)) return fail("FORBIDDEN");
     const client = api();
@@ -461,7 +445,7 @@ const list_voice_rooms = defineTool({
   available,
   confirm: false,
   write: false,
-  summarize: summarizeListVoiceRooms,
+  summarize: toolSummaries.list_voice_rooms,
   async run(ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -485,7 +469,7 @@ const join_voice_room = defineTool({
   available,
   confirm: false,
   write: false,
-  summarize: summarizeJoinVoiceRoom,
+  summarize: toolSummaries.join_voice_room,
   async run(_ctx, input) {
     // A voice room is joined through its Cutto room link; the URL scheme is
     // confirmed with the Cutto team before release (Q1).
@@ -505,7 +489,7 @@ const list_conversations = defineTool({
   available,
   confirm: false,
   write: false,
-  summarize: summarizeListConversations,
+  summarize: toolSummaries.list_conversations,
   async run(_ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -527,7 +511,7 @@ const read_conversation = defineTool({
   available,
   confirm: false,
   write: false,
-  summarize: summarizeReadConversation,
+  summarize: toolSummaries.read_conversation,
   async run(_ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -549,7 +533,7 @@ const summarize_channel = defineTool({
   available,
   confirm: false,
   write: false,
-  summarize: summarizeSummarizeChannel,
+  summarize: toolSummaries.summarize_channel,
   async run(_ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -576,7 +560,7 @@ const send_message = defineTool({
   available,
   confirm: true,
   write: true,
-  summarize: summarizeSendMessage,
+  summarize: toolSummaries.send_message,
   async run(_ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -610,7 +594,7 @@ const post_to_project_channel = defineTool({
   available,
   confirm: true,
   write: true,
-  summarize: summarizePostToProjectChannel,
+  summarize: toolSummaries.post_to_project_channel,
   async run(ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -644,7 +628,7 @@ const reply_in_thread = defineTool({
   available,
   confirm: true,
   write: true,
-  summarize: summarizeReplyInThread,
+  summarize: toolSummaries.reply_in_thread,
   async run(_ctx, input) {
     const client = api();
     if (isFailure(client)) return client;
@@ -668,7 +652,7 @@ const create_project_channel = defineTool({
   available,
   confirm: true,
   write: true,
-  summarize: summarizeCreateProjectChannel,
+  summarize: toolSummaries.create_project_channel,
   async run(ctx, input) {
     if (!isLead(ctx.user)) return fail("FORBIDDEN");
     const client = api();

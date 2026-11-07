@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import {
-  DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type FileUIPart,
   type UIMessage,
@@ -12,10 +11,11 @@ import {
 import { ArrowUpIcon, HistoryIcon, Maximize2Icon, MicIcon, PaperclipIcon, XIcon } from "lucide-react";
 
 import { AssistantMessageParts } from "@/components/asistente/AssistantMessageParts";
+import { AssistantContextStore, createAssistantChatTransport } from "@/components/asistente/assistant-transport";
 import { useConfirmedContext } from "@/components/asistente/use-confirmed-context";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
-import { Button } from "@/components/ui/shadcn/button";
+import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +27,6 @@ import {
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { fetchAssistantThreadAction, fetchAssistantThreadsAction } from "@/lib/actions/assistant-actions";
-import { buildAssistantChatRequestBody } from "@/lib/assistant/chat-request";
 import { actionErrorText } from "@/lib/errors";
 import type { AssistantContext, AssistantThreadSummary } from "@/lib/types/redesign";
 
@@ -126,24 +125,15 @@ export function AssistantSheet({ open, onOpenChange, context, threadId, finalFoc
   const fileInputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const contextRef = useRef(context);
+  const [contextStore] = useState(() => new AssistantContextStore(context));
 
   useEffect(() => {
-    contextRef.current = context;
-  }, [context]);
+    contextStore.set(context);
+  }, [context, contextStore]);
 
   const confirmed = useConfirmedContext(context, open);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport<UIMessage>({
-        api: ASSISTANT_CHAT_API,
-        prepareSendMessagesRequest: ({ id, messages }) => ({
-          body: buildAssistantChatRequestBody({ id, messages, context: contextRef.current }),
-        }),
-      }),
-    [],
-  );
+  const transport = useMemo(() => createAssistantChatTransport(ASSISTANT_CHAT_API, contextStore), [contextStore]);
 
   const { messages, sendMessage, setMessages, status, addToolApprovalResponse } = useChat({
     id: conversation.id,
@@ -160,22 +150,41 @@ export function AssistantSheet({ open, onOpenChange, context, threadId, finalFoc
     setMessagesRef.current = setMessages;
   }, [setMessages]);
 
-  const loadThread = useCallback(async (id: string) => {
+  const applyThread = useCallback((id: string, stored: UIMessage[]) => {
     setError(null);
-    try {
-      const { messages: stored } = await fetchAssistantThreadAction(id);
-      // A new id recreates the chat with `stored`; the same id keeps the chat, so set them on it.
-      setConversation((prev) => (prev.id === id ? prev : { id, messages: stored }));
-      setMessagesRef.current(stored);
-    } catch (err) {
-      setError(actionErrorText(err));
-    }
+    // A new id recreates the chat with `stored`; the same id keeps the chat, so set them on it.
+    setConversation((prev) => (prev.id === id ? prev : { id, messages: stored }));
+    setMessagesRef.current(stored);
   }, []);
+
+  const loadThread = useCallback(
+    async (id: string) => {
+      try {
+        const { messages: stored } = await fetchAssistantThreadAction(id);
+        applyThread(id, stored);
+      } catch (err) {
+        setError(actionErrorText(err));
+      }
+    },
+    [applyThread],
+  );
 
   // A thread handed in by the caller (e.g. the full page) replaces the current one.
   useEffect(() => {
-    if (threadId) void loadThread(threadId);
-  }, [threadId, loadThread]);
+    if (!threadId) return;
+    let cancelled = false;
+    fetchAssistantThreadAction(threadId).then(
+      ({ messages: stored }) => {
+        if (!cancelled) applyThread(threadId, stored);
+      },
+      (err: unknown) => {
+        if (!cancelled) setError(actionErrorText(err));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, applyThread]);
 
   useEffect(() => {
     if (messages.length > 0) endRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -311,16 +320,15 @@ export function AssistantSheet({ open, onOpenChange, context, threadId, finalFoc
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            nativeButton={false}
+          <Link
+            href={`/asistente?thread=${encodeURIComponent(conversation.id)}`}
+            onClick={() => onOpenChange(false)}
+            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
             aria-label="Pantalla completa"
             title="Pantalla completa"
-            render={<Link href={`/asistente?thread=${encodeURIComponent(conversation.id)}`} onClick={() => onOpenChange(false)} />}
           >
             <Maximize2Icon aria-hidden />
-          </Button>
+          </Link>
           <SheetClose render={<Button variant="ghost" size="icon-sm" aria-label="Cerrar" title="Cerrar" />}>
             <XIcon aria-hidden />
           </SheetClose>
