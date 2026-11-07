@@ -12,6 +12,7 @@ export default defineConfig({
       "tests/unit/**/*.{test,spec}.{ts,tsx}",
       "tests/db/**/*.{test,spec}.{ts,tsx}",
       "tests/api/**/*.{test,spec}.{ts,tsx}",
+      "tests/guards/**/*.{test,spec}.{ts,tsx}",
       "lib/**/*.{test,spec}.{ts,tsx}",
       "app/**/*.{test,spec}.{ts,tsx}",
       "components/**/*.{test,spec}.{ts,tsx}",

@@ -1,27 +1,50 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { toast } from "sonner";
 
-import type { EmptyStateProps } from "@/components/shell/EmptyState";
+import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
+import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
+import { DataTable } from "@/components/ui/DataTable";
+import ExportMenu from "@/components/ui/ExportMenu";
+import { Badge } from "@/components/ui/shadcn/badge";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { TableCell, TableRow } from "@/components/ui/shadcn/table";
+import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
+import { createSelectionColumn } from "@/components/v2/table/bulk-select";
+import { RowActionsMenu, createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
+import { actionErrorText } from "@/lib/errors";
+import type { PresentationStyle } from "@/lib/types/redesign";
+import type { RecordColumn, RecordTableData } from "@/lib/types/widgets";
+import { exportTableData, type ExportFormat, type ExportValue } from "@/lib/utils/export-service";
+
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/shadcn/table";
-import type { RowAction } from "@/components/v2/table/RowActionsMenu";
-import type { RecordTableData } from "@/lib/types/widgets";
+  columnAlign,
+  columnMono,
+  computeTotals,
+  formatCell,
+  formatTotal,
+  groupLabel,
+  heatLevel,
+  isNegativeDelta,
+  rowId,
+  visibleColumns,
+} from "./record-table-format";
+import { StyleView } from "./StyleView";
 
 /**
- * The table of the widget library (redesign FE §4.10.1); extends
- * `components/ui/DataTable`. Cells format by `column.format` unless
- * `renderCell` returns a node.
+ * The table of the widget library (redesign FE §4.10.1, §15.2); extends
+ * `components/ui/DataTable` with `RowActionsMenu`, bulk select,
+ * `BulkActionBar` and `ExportMenu`. Cells format by `column.format` unless
+ * `renderCell` returns a node; columns with `hideOn` are dropped per style.
  *
- * Contract stub: a minimal plain table (columns and raw cell values) so
- * widgets can render through it until the full widget lands (styles,
- * grouping, totals, heat, `hideOn`, selection, row actions).
+ * - Visual: rows inside a card, 14 px, groups under a header with a count.
+ * - Esencial: plain list (title + "label value" meta), no heat, no totals.
+ * - Analítico: dense table, 12.5 px (headers 11.5 px on `muted`), mono
+ *   right-aligned numbers, heat cells and the totals row.
+ *
+ * With `selectable`, the selected rows can be exported (Excel / PDF).
  */
 export type RecordTableProps = {
   data: RecordTableData;
@@ -32,27 +55,298 @@ export type RecordTableProps = {
   emptyState?: EmptyStateProps;
 };
 
-export function RecordTable({ data, renderCell }: RecordTableProps) {
+type Row = Record<string, unknown>;
+
+/** Empty-state copy when the caller passes none (same as `DataTable`). */
+export const RECORD_TABLE_EMPTY_TITLE = "No hay resultados";
+
+const EXPORT_COMPANY = "Cincel";
+const EXPORT_NAME = "Registros";
+
+const HEAT_CLASS = {
+  crit: "bg-[color-mix(in_oklab,var(--destructive)_16%,var(--card))] text-destructive",
+  warn: "bg-[color-mix(in_oklab,var(--warning)_22%,var(--card))] text-[color:var(--warning-ink)]",
+} as const;
+
+export function RecordTable(props: RecordTableProps) {
+  if (props.data.rows.length === 0) {
+    return <EmptyState {...(props.emptyState ?? { title: RECORD_TABLE_EMPTY_TITLE })} />;
+  }
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {data.columns.map((column) => (
-            <TableHead key={column.key}>{column.label}</TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {data.rows.map((row, index) => (
-          <TableRow key={typeof row.id === "string" ? row.id : index}>
-            {data.columns.map((column) => (
-              <TableCell key={column.key}>
-                {renderCell?.(column.key, row) ?? String(row[column.key] ?? "")}
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <StyleView
+      visual={() => <TableView {...props} style="visual" />}
+      esencial={() => <ListView {...props} />}
+      analitico={() => <TableView {...props} style="analitico" />}
+    />
+  );
+}
+
+/** Loading state of a `RecordTable`: the `list` skeleton in Esencial, `table` otherwise. */
+export function RecordTableSkeleton({ rows }: { rows?: number }) {
+  return (
+    <StyleView
+      visual={() => <LoadingSkeleton variant="table" rows={rows} />}
+      esencial={() => <LoadingSkeleton variant="list" rows={rows} />}
+      analitico={() => <LoadingSkeleton variant="table" rows={rows} />}
+    />
+  );
+}
+
+function cellContent(column: RecordColumn, row: Row, renderCell: RecordTableProps["renderCell"]): ReactNode {
+  const custom = renderCell?.(column.key, row);
+  return custom !== undefined ? custom : formatCell(column, row);
+}
+
+function useSelection(rows: Row[]) {
+  const [selected, setSelected] = useState<ReadonlySet<string | number>>(new Set());
+  const ids = useMemo(() => rows.map((row, index) => rowId(row, index)), [rows]);
+  const toggle = (id: string | number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (all: (string | number)[]) =>
+    setSelected((prev) => (all.length > 0 && all.every((id) => prev.has(id)) ? new Set() : new Set(all)));
+  const clear = () => setSelected(new Set());
+  const selectedRows = rows.filter((_, index) => selected.has(ids[index]));
+  return { selected, ids, toggle, toggleAll, clear, selectedRows };
+}
+
+type Selection = ReturnType<typeof useSelection>;
+
+function exportValue(value: unknown): ExportValue {
+  if (value === null || value === undefined || value instanceof Date) return value;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  return String(value);
+}
+
+function SelectionBar({ columns, selection }: { columns: RecordColumn[]; selection: Selection }) {
+  const onExport = async (format: ExportFormat) => {
+    try {
+      await exportTableData<Row>({
+        moduleName: EXPORT_NAME,
+        fileName: EXPORT_NAME.toLowerCase(),
+        format,
+        companyName: EXPORT_COMPANY,
+        columns: columns.map((column) => ({
+          key: column.key,
+          header: column.label,
+          isDate: column.format === "date",
+          getValue: (row) => exportValue(row[column.key]),
+        })),
+        rows: selection.selectedRows,
+      });
+    } catch (err) {
+      toast.error(actionErrorText(err));
+    }
+  };
+  return (
+    <BulkActionBar
+      selectedCount={selection.selectedRows.length}
+      itemLabel="filas"
+      actions={[{ label: "Quitar selección", onClick: selection.clear }]}
+    >
+      <ExportMenu onExport={onExport} scaleClassName="scale-100" />
+    </BulkActionBar>
+  );
+}
+
+function TableView({
+  data,
+  renderCell,
+  density,
+  selectable,
+  rowActions,
+  style,
+}: RecordTableProps & { style: Extract<PresentationStyle, "visual" | "analitico"> }) {
+  const analitico = style === "analitico";
+  const columns = visibleColumns(data.columns, style);
+  const byKey = new Map(columns.map((column) => [column.key, column]));
+  const selection = useSelection(data.rows);
+  const indexOf = useMemo(() => new Map(data.rows.map((row, index) => [row, index])), [data.rows]);
+  const idOf = (row: Row) => rowId(row, indexOf.get(row) ?? 0);
+  const compact = (density ?? (analitico ? "compacta" : "comoda")) === "compacta";
+  const hasActions = Boolean(rowActions && rowActions.length > 0);
+  const hasSelection = Boolean(selectable) && selection.selectedRows.length > 0;
+
+  const defs: ColumnDef<Row, unknown>[] = [
+    ...(selectable
+      ? [
+          createSelectionColumn<Row>({
+            getId: idOf,
+            selectedIds: selection.selected,
+            onToggle: selection.toggle,
+            onToggleAll: selection.toggleAll,
+          }),
+        ]
+      : []),
+    ...columns.map(
+      (column): ColumnDef<Row, unknown> => ({
+        id: column.key,
+        accessorFn: (row) => row[column.key],
+        header: () => (
+          <span style={column.width ? { display: "inline-block", minWidth: column.width } : undefined}>
+            {column.label}
+          </span>
+        ),
+        cell: ({ row }) => cellContent(column, row.original, renderCell),
+      }),
+    ),
+    ...(hasActions ? [createRowActionsColumn<Row>(() => rowActions ?? [])] : []),
+  ];
+
+  const alignClass = (column: RecordColumn) =>
+    [
+      columnAlign(column) === "right" ? "text-right tabular-nums" : "",
+      columnMono(column, style) ? "font-mono" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+  const padding = compact ? "py-1" : "py-2.5";
+
+  const totals = analitico ? computeTotals(data, columns) : null;
+  const footer = totals ? (
+    <TableRow data-slot="totals-row">
+      {selectable ? <TableCell /> : null}
+      {columns.map((column) => (
+        <TableCell key={column.key} data-column={column.key} className={`py-1 font-semibold ${alignClass(column)}`}>
+          {formatTotal(column, totals)}
+        </TableCell>
+      ))}
+      {hasActions ? <TableCell /> : null}
+    </TableRow>
+  ) : undefined;
+
+  const wrapper = [
+    analitico ? "rounded-[10px]! shadow-none!" : "",
+    hasSelection ? "rounded-t-none! border-t-0!" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div data-slot="record-table" data-style={style}>
+      {selectable ? <SelectionBar columns={columns} selection={selection} /> : null}
+      <DataTable<Row>
+        columns={defs}
+        data={data.rows}
+        getRowId={(row, index) => rowId(row, index)}
+        rowClassName={(row) => (selectable && selection.selected.has(idOf(row)) ? "bg-muted" : undefined)}
+        headerClassName={(id) => {
+          const column = byKey.get(id);
+          return [column ? alignClass(column) : "", analitico ? "h-8 text-[11.5px] text-muted-foreground" : ""]
+            .filter(Boolean)
+            .join(" ");
+        }}
+        cellClassName={(id, row) => {
+          const column = byKey.get(id);
+          if (!column) return padding;
+          const heat = analitico ? heatLevel(data.heat, column.key, row[column.key]) : null;
+          return [
+            padding,
+            alignClass(column),
+            heat ? HEAT_CLASS[heat] : "",
+            isNegativeDelta(column, row) ? "text-destructive" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+        }}
+        tableClassName={analitico ? "text-[12.5px] [&_thead_tr]:bg-muted" : "text-sm"}
+        wrapperClassName={wrapper}
+        footer={footer}
+        groupBy={data.groupBy ? (row) => groupLabel(data, row) : undefined}
+        renderGroupHeader={(label, rows) =>
+          analitico ? (
+            <span data-slot="group-header" className="flex items-center gap-2 text-[11.5px] font-semibold">
+              <span>{label}</span>
+              <span className="font-mono text-muted-foreground">{rows.length}</span>
+            </span>
+          ) : (
+            <span data-slot="group-header" className="flex items-center gap-2 text-sm font-semibold">
+              <span>{label}</span>
+              <Badge variant="secondary">{rows.length}</Badge>
+            </span>
+          )
+        }
+        emptyMessage={RECORD_TABLE_EMPTY_TITLE}
+      />
+    </div>
+  );
+}
+
+function ListView({ data, renderCell, density, selectable, rowActions }: RecordTableProps) {
+  const baseId = useId();
+  const columns = visibleColumns(data.columns, "esencial");
+  const [title, ...meta] = columns;
+  const selection = useSelection(data.rows);
+  const compact = density === "compacta";
+  const hasActions = Boolean(rowActions && rowActions.length > 0);
+
+  const groups: { label: string; items: { row: Row; index: number }[] }[] = [];
+  data.rows.forEach((row, index) => {
+    const label = groupLabel(data, row);
+    const group = groups.find((g) => g.label === label);
+    if (group) group.items.push({ row, index });
+    else groups.push({ label, items: [{ row, index }] });
+  });
+
+  const renderItem = ({ row, index }: { row: Row; index: number }) => {
+    const id = selection.ids[index];
+    return (
+      <li key={id} data-slot="record-item" className={`flex items-start gap-3 px-4 ${compact ? "py-2" : "py-3"}`}>
+        {selectable ? (
+          <Checkbox
+            className="mt-1"
+            checked={selection.selected.has(id)}
+            onCheckedChange={() => selection.toggle(id)}
+            aria-label="Seleccionar fila"
+          />
+        ) : null}
+        <div className="min-w-0 flex-1">
+          {title ? (
+            <div data-column={title.key} className="text-[15px] text-foreground">
+              {cellContent(title, row, renderCell)}
+            </div>
+          ) : null}
+          {meta.length > 0 ? (
+            <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-muted-foreground">
+              {meta.map((column) => (
+                <span key={column.key} data-column={column.key}>
+                  {column.label}{" "}
+                  <span className={`text-foreground${columnMono(column, "esencial") ? " font-mono" : ""}`}>
+                    {cellContent(column, row, renderCell)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        {hasActions ? <RowActionsMenu row={row} actions={rowActions ?? []} /> : null}
+      </li>
+    );
+  };
+
+  return (
+    <div data-slot="record-table" data-style="esencial" className="flex flex-col gap-4">
+      {selectable ? <SelectionBar columns={columns} selection={selection} /> : null}
+      {groups.map((group, groupIndex) => {
+        const headingId = data.groupBy ? `${baseId}-group-${groupIndex}` : undefined;
+        return (
+          <section key={`${groupIndex}-${group.label}`} className="flex flex-col gap-2">
+            {headingId ? (
+              <p id={headingId} data-slot="group-header" className="text-[13px] font-semibold text-foreground">
+                {group.label} <span className="font-normal text-muted-foreground">· {group.items.length}</span>
+              </p>
+            ) : null}
+            <ul aria-labelledby={headingId} className="divide-y divide-border rounded-xl border border-border bg-card">
+              {group.items.map(renderItem)}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
   );
 }

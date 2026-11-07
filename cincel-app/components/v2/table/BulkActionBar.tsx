@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { Button } from "@/components/ui/shadcn/button";
 
 export interface BulkAction {
@@ -10,6 +12,8 @@ interface BulkActionBarProps {
   selectedCount: number;
   itemLabel?: string;
   actions: BulkAction[];
+  /** Extra controls after the action buttons (e.g. an `ExportMenu`). */
+  children?: ReactNode;
 }
 
 /**
@@ -18,7 +22,7 @@ interface BulkActionBarProps {
  * · Marcar completadas · Archivar" from the Actividades redesign. Renders
  * nothing when `selectedCount` is 0, so callers can mount it unconditionally.
  */
-export function BulkActionBar({ selectedCount, itemLabel = "tareas", actions }: BulkActionBarProps) {
+export function BulkActionBar({ selectedCount, itemLabel = "tareas", actions, children }: BulkActionBarProps) {
   if (selectedCount === 0) return null;
 
   return (
@@ -38,6 +42,7 @@ export function BulkActionBar({ selectedCount, itemLabel = "tareas", actions }: 
             {action.label}
           </Button>
         ))}
+        {children}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import {
   type ColumnDef,
   type SortingState,
@@ -16,6 +16,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -56,7 +57,30 @@ type DataTableProps<T> = {
    * can't produce a single well-defined order to persist.
    */
   onReorderRows?: (orderedIds: string[]) => void;
+  /** Extra classes per header cell, by column id. */
+  headerClassName?: (columnId: string) => string | undefined;
+  /** Extra classes per body cell, by column id and row. */
+  cellClassName?: (columnId: string, row: T) => string | undefined;
+  /** Rows rendered in a `<tfoot>` below the body (e.g. a totals row); hidden while loading or empty. */
+  footer?: ReactNode;
+  /**
+   * Groups the (sorted) rows by this key, in order of first appearance, with
+   * a full-width header row per group rendered by `renderGroupHeader`.
+   */
+  groupBy?: (row: T) => string;
+  renderGroupHeader?: (group: string, rows: T[]) => ReactNode;
 };
+
+function groupRows<R>(rows: R[], keyOf: (row: R) => string): { key: string; rows: R[] }[] {
+  const groups = new Map<string, R[]>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    const list = groups.get(key);
+    if (list) list.push(row);
+    else groups.set(key, [row]);
+  }
+  return Array.from(groups, ([key, groupRowsList]) => ({ key, rows: groupRowsList }));
+}
 
 function SortIcon({ direction }: { direction: "asc" | "desc" | false }) {
   return (
@@ -81,6 +105,11 @@ export function DataTable<T>({
   tableClassName = "",
   wrapperClassName = "",
   onReorderRows,
+  headerClassName,
+  cellClassName,
+  footer,
+  groupBy,
+  renderGroupHeader,
 }: DataTableProps<T>): ReactNode {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -100,7 +129,11 @@ export function DataTable<T>({
     getFilteredRowModel: searchPlaceholder ? getFilteredRowModel() : undefined,
   });
 
-  const rows = table.getRowModel().rows;
+  const sortedRows = table.getRowModel().rows;
+  const groups = groupBy ? groupRows(sortedRows, (row) => groupBy(row.original)) : null;
+  const rows = groups ? groups.flatMap((g) => g.rows) : sortedRows;
+  const colSpan = columns.length + (reorderEnabled ? 1 : 0);
+  const groupStarts = new Map((groups ?? []).map((g) => [g.rows[0].id, g] as const));
 
   return (
     <div className={`overflow-hidden rounded-2xl border border-border bg-card shadow-sm ${wrapperClassName}`}>
@@ -126,7 +159,7 @@ export function DataTable<T>({
                 return (
                   <TableHead
                     key={header.id}
-                    className={sortable ? "cursor-pointer select-none" : ""}
+                    className={`${sortable ? "cursor-pointer select-none" : ""} ${headerClassName?.(header.column.id) ?? ""}`}
                     onClick={sortable ? header.column.getToggleSortingHandler() : undefined}
                     aria-sort={
                       header.column.getIsSorted() === "asc"
@@ -163,64 +196,73 @@ export function DataTable<T>({
             </TableRow>
           ) : (
             rows.map((row) => (
-              <TableRow
-                key={row.id}
-                onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                onDragOver={
-                  reorderEnabled && dragRowId
-                    ? (e) => {
-                        e.preventDefault();
-                        setDragOverRowId(row.id);
-                      }
-                    : undefined
-                }
-                onDragLeave={reorderEnabled ? () => setDragOverRowId((cur) => (cur === row.id ? null : cur)) : undefined}
-                onDrop={
-                  reorderEnabled && dragRowId
-                    ? (e) => {
-                        e.preventDefault();
-                        setDragOverRowId(null);
-                        const fromId = dragRowId;
-                        setDragRowId(null);
-                        if (!onReorderRows || fromId === row.id) return;
-                        const ids = rows.map((r) => r.id);
-                        const fromIndex = ids.indexOf(fromId);
-                        const toIndex = ids.indexOf(row.id);
-                        if (fromIndex === -1 || toIndex === -1) return;
-                        ids.splice(toIndex, 0, ids.splice(fromIndex, 1)[0]);
-                        onReorderRows(ids);
-                      }
-                    : undefined
-                }
-                className={`${onRowClick ? "cursor-pointer" : ""} ${dragOverRowId === row.id ? "bg-muted" : ""} ${rowClassName?.(row.original) ?? ""}`}
-              >
-                {reorderEnabled ? (
-                  <TableCell
-                    className="w-8 cursor-grab text-muted-foreground active:cursor-grabbing"
-                    draggable
-                    onClick={(e) => e.stopPropagation()}
-                    onDragStart={(e) => {
-                      e.stopPropagation();
-                      setDragRowId(row.id);
-                    }}
-                    onDragEnd={() => {
-                      setDragRowId(null);
-                      setDragOverRowId(null);
-                    }}
-                    title="Arrastra para reordenar"
-                  >
-                    ⠿
-                  </TableCell>
+              <Fragment key={row.id}>
+                {groupStarts.has(row.id) && renderGroupHeader ? (
+                  <TableRow data-slot="group-row" className="hover:bg-transparent">
+                    <TableCell colSpan={colSpan}>
+                      {renderGroupHeader(groupStarts.get(row.id)!.key, groupStarts.get(row.id)!.rows.map((r) => r.original))}
+                    </TableCell>
+                  </TableRow>
                 ) : null}
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
+                <TableRow
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onDragOver={
+                    reorderEnabled && dragRowId
+                      ? (e) => {
+                          e.preventDefault();
+                          setDragOverRowId(row.id);
+                        }
+                      : undefined
+                  }
+                  onDragLeave={reorderEnabled ? () => setDragOverRowId((cur) => (cur === row.id ? null : cur)) : undefined}
+                  onDrop={
+                    reorderEnabled && dragRowId
+                      ? (e) => {
+                          e.preventDefault();
+                          setDragOverRowId(null);
+                          const fromId = dragRowId;
+                          setDragRowId(null);
+                          if (!onReorderRows || fromId === row.id) return;
+                          const ids = rows.map((r) => r.id);
+                          const fromIndex = ids.indexOf(fromId);
+                          const toIndex = ids.indexOf(row.id);
+                          if (fromIndex === -1 || toIndex === -1) return;
+                          ids.splice(toIndex, 0, ids.splice(fromIndex, 1)[0]);
+                          onReorderRows(ids);
+                        }
+                      : undefined
+                  }
+                  className={`${onRowClick ? "cursor-pointer" : ""} ${dragOverRowId === row.id ? "bg-muted" : ""} ${rowClassName?.(row.original) ?? ""}`}
+                >
+                  {reorderEnabled ? (
+                    <TableCell
+                      className="w-8 cursor-grab text-muted-foreground active:cursor-grabbing"
+                      draggable
+                      onClick={(e) => e.stopPropagation()}
+                      onDragStart={(e) => {
+                        e.stopPropagation();
+                        setDragRowId(row.id);
+                      }}
+                      onDragEnd={() => {
+                        setDragRowId(null);
+                        setDragOverRowId(null);
+                      }}
+                      title="Arrastra para reordenar"
+                    >
+                      ⠿
+                    </TableCell>
+                  ) : null}
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id} className={cellClassName?.(cell.column.id, row.original)}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </Fragment>
             ))
           )}
         </TableBody>
+        {footer && !isLoading && rows.length > 0 ? <TableFooter>{footer}</TableFooter> : null}
       </Table>
     </div>
   );

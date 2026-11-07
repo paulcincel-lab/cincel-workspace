@@ -86,8 +86,66 @@ function typePrefix(type: string): string {
  * Tasks only store dates, so the calendar shows an estimated time (see
  * calendar-service.ts). The leading "≈" marks it as approximate everywhere.
  */
-function approxTime(time: string): string {
+export function approxTime(time: string): string {
   return `≈${time}`;
+}
+
+/** One cell of a Monday-first month grid (presentation only; shared with `AgendaWidget`). */
+export type MonthCell<T> = {
+  key: string;
+  date: Date;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  dayNumber: number;
+  events: T[];
+};
+
+/**
+ * The Monday-first cells of the month containing `month`, leading and
+ * trailing days included. `keyOf` turns a local day into the key used by
+ * `eventsByDate` (defaults to the calendar service `dateKey`).
+ */
+export function buildMonthCells<T>(
+  month: Date,
+  eventsByDate: Map<string, T[]>,
+  today: Date,
+  keyOf: (date: Date) => string = dateKey
+): MonthCell<T>[] {
+  const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+  const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+  const leadingEmpty = (monthStart.getDay() + 6) % 7;
+  const daysInMonth = monthEnd.getDate();
+  const totalCells = Math.ceil((leadingEmpty + daysInMonth) / 7) * 7;
+
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(monthStart.getDate() - leadingEmpty);
+  const todayKey = keyOf(today);
+
+  return Array.from({ length: totalCells }).map((_, index) => {
+    const currentDate = new Date(gridStart);
+    currentDate.setDate(gridStart.getDate() + index);
+    const key = keyOf(currentDate);
+
+    return {
+      key,
+      date: currentDate,
+      isCurrentMonth: currentDate.getMonth() === monthStart.getMonth(),
+      isToday: key === todayKey,
+      dayNumber: currentDate.getDate(),
+      events: eventsByDate.get(key) ?? [],
+    };
+  });
+}
+
+/** Weekday header row of the month grid (lun. … dom.). */
+export function CalendarWeekdayHeader() {
+  return (
+    <div className="grid grid-cols-7 border-b border-border text-center text-sm font-semibold text-foreground">
+      {getWeekdayLabels().map((label) => (
+        <div key={label} className="border-r border-border py-2 last:border-r-0">{label}</div>
+      ))}
+    </div>
+  );
 }
 
 function monthLabel(date: Date): string {
@@ -229,30 +287,7 @@ export default function UnifiedCalendar({
     [projectColorMap]
   );
 
-  const monthGrid = useMemo(() => {
-    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-    const leadingEmpty = (monthStart.getDay() + 6) % 7;
-    const daysInMonth = monthEnd.getDate();
-    const totalCells = Math.ceil((leadingEmpty + daysInMonth) / 7) * 7;
-
-    const gridStart = new Date(monthStart);
-    gridStart.setDate(monthStart.getDate() - leadingEmpty);
-
-    return Array.from({ length: totalCells }).map((_, index) => {
-      const currentDate = new Date(gridStart);
-      currentDate.setDate(gridStart.getDate() + index);
-      const key = dateKey(currentDate);
-
-      return {
-        key,
-        isCurrentMonth: currentDate.getMonth() === monthStart.getMonth(),
-        isToday: key === dateKey(today),
-        dayNumber: currentDate.getDate(),
-        events: groupedByDate.get(key) ?? [],
-      };
-    });
-  }, [cursor, groupedByDate, today]);
+  const monthGrid = useMemo(() => buildMonthCells(cursor, groupedByDate, today), [cursor, groupedByDate, today]);
 
   useEffect(() => {
     if (!onVisibleRangeChange || monthGrid.length === 0) {
@@ -432,11 +467,7 @@ export default function UnifiedCalendar({
             {view === "month" ? (
               <div className="overflow-x-auto">
                 <div className="min-w-[900px]">
-                  <div className="grid grid-cols-7 border-b border-border text-center text-sm font-semibold text-foreground">
-                    {getWeekdayLabels().map((label) => (
-                      <div key={label} className="border-r border-border py-2 last:border-r-0">{label}</div>
-                    ))}
-                  </div>
+                  <CalendarWeekdayHeader />
                   <div className="grid grid-cols-7">
                     {monthGrid.map((cell) => {
                       const visibleEvents = cell.events.slice(0, 2);
@@ -588,11 +619,7 @@ export default function UnifiedCalendar({
         <>
           <div className="overflow-x-auto">
             <div className="min-w-[900px]">
-              <div className="grid grid-cols-7 border-b border-border text-center text-sm font-semibold text-foreground">
-                {getWeekdayLabels().map((label) => (
-                  <div key={label} className="border-r border-border py-2 last:border-r-0">{label}</div>
-                ))}
-              </div>
+              <CalendarWeekdayHeader />
               <div className="grid grid-cols-7">
                 {monthGrid.map((cell) => {
                   const visibleEvents = cell.events.slice(0, 2);

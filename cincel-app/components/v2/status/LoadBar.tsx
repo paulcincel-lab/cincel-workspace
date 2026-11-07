@@ -6,6 +6,8 @@ interface LoadBarSegment {
   /** Relative emphasis, 0-1 — lets segments share one hue instead of one color per category. */
   opacity?: number;
   label?: string;
+  /** Fill, a CSS color such as "var(--chart-1)"; defaults to `foreground`. */
+  color?: string;
 }
 
 interface LoadBarProps {
@@ -26,7 +28,11 @@ export function LoadBar({ segments, className }: LoadBarProps) {
           key={i}
           title={seg.label}
           className="h-full bg-foreground"
-          style={{ width: `${seg.percent}%`, opacity: seg.opacity ?? 1 }}
+          style={{
+            width: `${seg.percent}%`,
+            opacity: seg.opacity ?? 1,
+            ...(seg.color ? { backgroundColor: seg.color } : {}),
+          }}
         />
       ))}
     </div>
