@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkflowDetail } from "@/lib/types/core";
+import type { WorkflowDetail, WorkflowTaskTemplateInput } from "@/lib/types/core";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
 const WORKFLOW = "11111111-1111-4111-8111-111111111111";
@@ -179,7 +179,7 @@ describe("createTemplateAction", () => {
   });
 
   it("refuses a template without a fase", async () => {
-    await expect(createTemplateAction(WORKFLOW, { title: "Sin fase" })).rejects.toThrow(
+    await expect(createTemplateAction(WORKFLOW, { title: "Sin fase" } as WorkflowTaskTemplateInput)).rejects.toThrow(
       /^(INVALID|PHASE_MISMATCH)/
     );
   });

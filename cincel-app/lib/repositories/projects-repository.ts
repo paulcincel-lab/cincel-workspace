@@ -12,7 +12,6 @@ import {
   projectStages,
   projects,
   staff,
-  workflowPhases,
   workflows,
 } from "@/lib/db/schema";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
@@ -44,19 +43,6 @@ import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import { parseInput, ProjectCreateInputSchema } from "@/lib/validation/project-flow";
 
 type ProjectRow = typeof projects.$inferSelect;
-
-/** Deprecated free-text project phases: trim, drop blanks and case-insensitive duplicates. */
-function normalizePhases(list: ReadonlyArray<string | null | undefined>): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of list) {
-    const value = raw?.trim();
-    if (!value || seen.has(value.toLowerCase())) continue;
-    seen.add(value.toLowerCase());
-    out.push(value);
-  }
-  return out;
-}
 
 const clean = (v: string | null | undefined): string | null => {
   const t = v?.trim();

@@ -7,21 +7,13 @@ import { ProyectosClient } from "./ProyectosClient";
 export default async function ProyectosPage() {
   // Server-rendered initial data — no client-side fetch waterfall on first paint.
   let initialProjects: Awaited<ReturnType<typeof fetchProjectsAction>> = [];
+  // The create sheet says Presale starts on its own only while that setting is on.
   let presaleAutoStart = false;
   const [projectsResult, workflowsResult] = await Promise.allSettled([fetchProjectsAction(), fetchWorkflowsAction()]);
   // Not authorized / no session — the client falls back to hydrating itself.
   if (projectsResult.status === "fulfilled") initialProjects = projectsResult.value;
   if (workflowsResult.status === "fulfilled") {
-    presaleAutoStart = workflowsResult.value.find((w) => w.key === "presale")?.autoStart === "on_create";
-  }
-
-  // The create sheet says Presale starts on its own only while that setting is on.
-  let presaleAutoStart = false;
-  try {
-    const workflows = await fetchWorkflowsAction();
-    presaleAutoStart = workflows.some((w) => w.key === "presale" && w.active && w.autoStart === "on_create");
-  } catch {
-    // Without workflows the sheet just omits the auto-start sentence.
+    presaleAutoStart = workflowsResult.value.some((w) => w.key === "presale" && w.active && w.autoStart === "on_create");
   }
 
   return (

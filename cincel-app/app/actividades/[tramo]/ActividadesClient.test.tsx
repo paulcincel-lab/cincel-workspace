@@ -284,7 +284,7 @@ describe("ActividadesClient tabs and template flow", () => {
         workflows={[presaleWorkflow, disenoWorkflow]}
         initialProjects={[]}
         initialStaff={[]}
-        initialTasks={[makeTask({ id: "a", title: "Planta", workflowId: "wf-diseno", phase: "Anteproyecto" })]}
+        initialTasks={[makeTask({ id: "a", title: "Planta", workflowId: "wf-diseno", phaseId: "ph-1", phase: { id: "ph-1", name: "Anteproyecto", sortOrder: 0 } })]}
       />,
     );
 

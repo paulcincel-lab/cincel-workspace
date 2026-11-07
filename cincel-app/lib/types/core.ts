@@ -48,12 +48,9 @@ export type Staff = {
   /** Set when the access re-check revoked access (ISO); cleared by the next allowed sign-in. */
   accessRevokedAt: string | null;
   accessRevokedReason: string | null;
-  /**
-   * Project flow (FE §7.1): the person's puestos and the candidate fases they
-   * suggest. Optional until the staff DTOs fill them (Equipo, Phase 3).
-   */
-  positions?: PositionRef[];
-  candidatePhases?: Array<WorkflowPhaseRef & { workflowName: string }>;
+  /** Project flow (FE §7.1): the person's puestos and the candidate fases they suggest. */
+  positions: PositionRef[];
+  candidatePhases: Array<WorkflowPhaseRef & { workflowName: string }>;
 };
 
 /** A collaborator's emergency contact, for quick access in Equipo (#451). */

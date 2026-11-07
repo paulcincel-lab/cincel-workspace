@@ -126,7 +126,7 @@ const noInitMatches: InitLookups = {
 
 /** Plan lookups of an empty Cincel with Ana and the client of nestedMapping. */
 const planLookups: PlanLookups = {
-  translateLookups: async () => ({ customStatuses: {}, templates: {}, staff: { [ANA]: { name: "Ana" } } }),
+  translateLookups: async () => ({ customStatuses: {}, phases: {}, templates: {}, staff: { [ANA]: { name: "Ana" } } }),
   importedRefs: async () => new Map(),
   importedAssets: async () => new Set(),
   contactTypes: async (ids) => new Map(ids.filter((id) => id === CLIENT).map((id) => [id, "cliente" as const])),

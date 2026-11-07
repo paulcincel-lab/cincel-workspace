@@ -48,6 +48,7 @@ import {
   workflowTaskTemplates,
 } from "../../lib/db/schema";
 import type { DriveAdmin } from "../../lib/google/drive-admin";
+import { parseStoredStatusMap } from "../../lib/monday-import/status-map";
 import { MONDAY_STATUS_MAP_SETTING } from "../../lib/project-flow/catalog";
 import { nameKey } from "../../lib/project-flow/names";
 import {
@@ -265,19 +266,13 @@ export interface PlanLookups {
 const pairKey = (a: string, b: string) => `${a}|${b}`;
 
 /** The saved firm-wide status map (app_settings `monday.status_map`); empty when unset or unreadable. */
-async function savedStatusMap(db: ImportDb): Promise<MondayStatusMap> {
+export async function savedStatusMap(db: ImportDb): Promise<MondayStatusMap> {
   const [row] = await db
     .select({ value: appSettings.value })
     .from(appSettings)
     .where(eq(appSettings.key, MONDAY_STATUS_MAP_SETTING))
     .limit(1);
-  if (!row) return {};
-  try {
-    const parsed = MondayStatusMap.safeParse(JSON.parse(row.value));
-    return parsed.success ? parsed.data : {};
-  } catch {
-    return {};
-  }
+  return parseStoredStatusMap(row?.value ?? null);
 }
 
 /** `PlanLookups` over the Cincel DB. */

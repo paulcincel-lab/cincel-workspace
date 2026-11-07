@@ -58,7 +58,7 @@ describe.skipIf(!url)("viewer scope on task and project reads (test DB)", async 
     clientId = client!.id;
     const [project] = await db
       .insert(schema.projects)
-      .values({ name: `Visibilidad ${run}`, clientId, clientType: "cliente", origin: "Referido", originStaffId: adminId })
+      .values({ name: `Visibilidad ${run}`, clientId, origin: "Referido", originStaffId: adminId })
       .returning({ id: schema.projects.id });
     projectId = project!.id;
 

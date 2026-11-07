@@ -30,7 +30,6 @@ const tasks: TaskListItem[] = [
     kind: "usuario",
     templateId: null,
     workflowId: "w1",
-    phase: null,
     phaseId: null,
     spaceId: null,
     closedAt: null,

@@ -1298,9 +1298,13 @@ describe.skipIf(!url)("plan lookups (test DB)", () => {
           { key: "plan-gone", name: "Plan Gone", deletedAt: new Date() },
         ])
         .returning();
+      const [phase] = await tx
+        .insert(schema.workflowPhases)
+        .values({ workflowId: wf.id, name: "Plan fase" })
+        .returning();
       const [template] = await tx
         .insert(schema.workflowTaskTemplates)
-        .values({ workflowId: wf.id, title: "Plan plantilla" })
+        .values({ workflowId: wf.id, phaseId: phase.id, title: "Plan plantilla" })
         .returning();
       const [project, other] = await tx
         .insert(schema.projects)

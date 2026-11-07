@@ -151,7 +151,7 @@ export function BoardEquivalences({
             value={targets[column.id] ?? "ignore"}
             choices={COLUMN_CHOICES}
             onChange={(value) =>
-              onBoardChange((current) => setColumnTarget(current, source, column.id, value as ColumnTarget, subitem))
+              onBoardChange((current) => setColumnTarget(current, column.id, value as ColumnTarget, subitem))
             }
           />
         </TableCell>

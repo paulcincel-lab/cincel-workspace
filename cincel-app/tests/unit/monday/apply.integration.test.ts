@@ -395,7 +395,8 @@ describe.skipIf(!url)(
       await inTx(async (tx) => {
         await seed(tx);
         const mapping = nestedMapping(STAFF, CLIENT);
-        delete mapping.boards[0].statusMaps.status["2"];
+        // A client that is not a contact: CLIENT_UNRESOLVED (blocking).
+        mapping.boards[0].client = { kind: "contact", contactId: "99999999-9999-4999-8999-999999999999" };
         const dir = exportFolder(mapping);
         const cmd = commands(tx);
 

@@ -150,18 +150,16 @@ export function io() {
  * the client of every project board.
  */
 export function nestedMapping(staffId: string, clientId: string): MappingInput {
-  const STATUS = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
-    "2": { status: "en_proceso" },
-  } as const;
-  const SUB = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
+  // Firm-wide status map, keyed by label text (the export's "Pendiente", "Listo", "En curso").
+  const statusMap = {
+    pendiente: { target: { status: "pendiente" }, priority: null },
+    listo: { target: { status: "completado" }, priority: null },
+    "en curso": { target: { status: "en_proceso" }, priority: null },
   } as const;
   const client = { kind: "contact", contactId: clientId } as const;
   return {
-    version: 1,
+    version: 2,
+    statusMap,
     boards: [
       {
         mondayBoardId: "901",
@@ -177,7 +175,6 @@ export function nestedMapping(staffId: string, clientId: string): MappingInput {
           planta: "ignore",
         },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
         subitems: "checklist",
         schedule: { enabled: true, planta: { columnId: "planta" } },
       },
@@ -188,7 +185,6 @@ export function nestedMapping(staffId: string, clientId: string): MappingInput {
         client,
         columns: { name: "title", status: "status" },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
         subitems: "child_tasks",
       },
       {
@@ -198,7 +194,6 @@ export function nestedMapping(staffId: string, clientId: string): MappingInput {
         client,
         columns: { name: "title", presupuesto: "import_data" },
         subitemColumns: { name: "title" },
-        statusMaps: {},
       },
       {
         mondayBoardId: "904",
@@ -206,7 +201,6 @@ export function nestedMapping(staffId: string, clientId: string): MappingInput {
         strategy: "crm_contacts",
         contactType: "cliente",
         columns: { name: "title", rfc: "import_data" },
-        statusMaps: {},
       },
     ],
     people: {

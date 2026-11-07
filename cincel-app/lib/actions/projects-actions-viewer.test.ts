@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
 const PROJECT = "55555555-5555-4555-8555-555555555555";
+const WORKFLOW = "66666666-6666-4666-8666-666666666666";
 
 const session = vi.hoisted(() => ({ access: "Colaborador" as string }));
 vi.mock("@/lib/auth/session", () => ({
@@ -36,23 +37,22 @@ const detail = {
 const repo = vi.hoisted(() => ({
   listProjects: vi.fn(async () => []),
   getProject: vi.fn(async () => null),
-  setProjectStage: vi.fn(),
-  setProjectStages: vi.fn(),
+  setProjectCurrentTramo: vi.fn(),
+  assignProjectTramo: vi.fn(),
 }));
 vi.mock("@/lib/repositories/projects-repository", () => repo);
 
 import {
   fetchProjectAction,
   fetchProjectsAction,
-  setProjectStageAction,
-  setProjectStagesAction,
+  setProjectCurrentTramoAction,
 } from "./projects-actions";
 
 beforeEach(() => {
   vi.clearAllMocks();
   session.access = "Colaborador";
-  repo.setProjectStage.mockResolvedValue(detail);
-  repo.setProjectStages.mockResolvedValue(detail);
+  repo.setProjectCurrentTramo.mockResolvedValue(detail);
+  repo.assignProjectTramo.mockResolvedValue(detail);
 });
 
 describe("project reads", () => {
@@ -70,15 +70,19 @@ describe("project reads", () => {
   });
 });
 
-describe("stage changes", () => {
+describe("current tramo changes", () => {
   it("return no client or origin to a non-admin", async () => {
-    for (const row of [await setProjectStageAction(PROJECT, "w1"), await setProjectStagesAction(PROJECT, ["w1"])]) {
-      expect(row).toMatchObject({ clientId: null, origin: null, originStaffId: null, client: null, originStaff: null });
-    }
+    expect(await setProjectCurrentTramoAction(PROJECT, WORKFLOW)).toMatchObject({
+      clientId: null,
+      origin: null,
+      originStaffId: null,
+      client: null,
+      originStaff: null,
+    });
   });
 
   it("keep them for an administrator", async () => {
     session.access = "Administrador";
-    expect(await setProjectStageAction(PROJECT, "w1")).toMatchObject({ clientId: "c1", client: { name: "Cliente" } });
+    expect(await setProjectCurrentTramoAction(PROJECT, WORKFLOW)).toMatchObject({ clientId: "c1", client: { name: "Cliente" } });
   });
 });

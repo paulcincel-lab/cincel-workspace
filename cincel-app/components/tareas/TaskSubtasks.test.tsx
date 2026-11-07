@@ -35,7 +35,6 @@ function makeTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
     kind: "usuario",
     templateId: null,
     workflowId: null,
-    phase: null,
     phaseId: null,
     spaceId: null,
     closedAt: null,

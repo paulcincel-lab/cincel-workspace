@@ -13,8 +13,6 @@ import {
 } from "@/scripts/monday/mapping.schema";
 import type { MondayExportSource, MondayImportChoices } from "@/lib/types/monday-import";
 
-/** The app_settings key of the saved firm-wide map. */
-export const STATUS_MAP_SETTING_KEY = "monday.status_map";
 
 type BaseStatus = "pendiente" | "en_proceso" | "completado" | "bloqueado";
 

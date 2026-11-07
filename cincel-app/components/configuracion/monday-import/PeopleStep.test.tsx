@@ -40,16 +40,17 @@ const source: MondayExportSource = {
 
 const choices: MondayImportChoices = {
   statuses: [],
-  areas: [],
   workflows: [],
   templates: [],
   clients: [],
   staff: [{ id: BETO_ID, name: "Beto Ejemplo", email: null }],
   providerSubtypes: [],
+  positions: [],
+  statusMap: {},
 };
 
 const mapping: MappingInput = {
-  version: 1,
+  version: 2,
   boards: [],
   people: { "1": null, "2": null, "3": { action: "ignore" }, "4": { action: "ignore" } },
   options: { includeUpdates: true, includeFiles: true },

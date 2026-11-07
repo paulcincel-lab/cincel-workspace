@@ -50,11 +50,11 @@ const source: MondayExportSource = {
 };
 
 const mapping: MappingInput = {
-  version: 1,
+  version: 2,
   boards: [
-    { mondayBoardId: "b1", name: "Uno", strategy: "board_as_project", columns: { status: "status" }, statusMaps: {} },
-    { mondayBoardId: "b2", name: "Dos", strategy: "group_as_project", columns: { status: "status" }, statusMaps: {} },
-    { mondayBoardId: "b3", name: "Tres", strategy: "skip", columns: { status: "status" }, statusMaps: {} },
+    { mondayBoardId: "b1", name: "Uno", strategy: "board_as_project", columns: { status: "status" } },
+    { mondayBoardId: "b2", name: "Dos", strategy: "group_as_project", columns: { status: "status" } },
+    { mondayBoardId: "b3", name: "Tres", strategy: "skip", columns: { status: "status" } },
   ],
   people: {},
   options: {},

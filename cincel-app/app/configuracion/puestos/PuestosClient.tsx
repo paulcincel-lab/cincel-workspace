@@ -28,7 +28,7 @@ import {
 } from "@/lib/actions/positions-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveAreasCapabilities } from "@/lib/auth/permissions";
+import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
 import type { Position, WorkflowDetail } from "@/lib/types/core";
 
 const ERROR_COPY: Record<string, string> = {
@@ -60,7 +60,7 @@ export function PuestosClient({ initialPositions, initialWorkflows }: PuestosCli
   const [workflows, setWorkflows] = useState<WorkflowDetail[]>(initialWorkflows);
   const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
   const canManage = useMemo(
-    () => resolveAreasCapabilities(authenticatedUser).canManageAreas,
+    () => resolvePositionsCapabilities(authenticatedUser).canManagePositions,
     [authenticatedUser],
   );
 
@@ -209,7 +209,6 @@ export function PuestosClient({ initialPositions, initialWorkflows }: PuestosCli
           ]
         : []),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [canManage],
   );
 

@@ -10,6 +10,7 @@ import {
   staffProfiles,
   workflowPhases,
   workflows,
+  workspaceGroupMappings,
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { recordChanges } from "@/lib/repositories/history-repository";
@@ -48,6 +49,8 @@ export function toStaff(row: StaffRow): Staff {
     lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
     accessRevokedAt: row.accessRevokedAt?.toISOString() ?? null,
     accessRevokedReason: row.accessRevokedReason,
+    positions: [],
+    candidatePhases: [],
   };
 }
 

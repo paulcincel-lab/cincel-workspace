@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { UserTaskInput } from "@/lib/types/core";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
 const PROJECT = "44444444-4444-4444-8444-444444444444";
@@ -308,7 +309,7 @@ describe("createUserTaskAction", () => {
   });
 
   it("throws INVALID without a tramo", async () => {
-    await expect(createUserTaskAction({ projectId: PROJECT, title: "Medir muros" })).rejects.toThrow(
+    await expect(createUserTaskAction({ projectId: PROJECT, title: "Medir muros" } as UserTaskInput)).rejects.toThrow(
       /^INVALID/
     );
   });

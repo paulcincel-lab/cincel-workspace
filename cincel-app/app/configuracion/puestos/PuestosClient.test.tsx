@@ -39,7 +39,6 @@ const workflows = [
     autoStart: "manual",
     readiness: null,
     templates: [],
-    areas: [],
     phases: [
       { id: "f1", name: "Ejecutivo", sortOrder: 0, workflowId: "w1", active: true, templateCount: 3 },
       { id: "f2", name: "Proyecto Estructural", sortOrder: 1, workflowId: "w1", active: true, templateCount: 2 },

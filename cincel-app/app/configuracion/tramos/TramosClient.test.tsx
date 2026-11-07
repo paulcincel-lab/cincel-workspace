@@ -37,7 +37,6 @@ function template(overrides: Partial<WorkflowTaskTemplate>): WorkflowTaskTemplat
     workflowId: "w-diseno",
     phaseId: "p-ejecutivo",
     phaseName: "Ejecutivo",
-    phase: null,
     title: "Tarea",
     notes: null,
     defaultPriority: "media",
@@ -61,7 +60,6 @@ const PRESALE: WorkflowDetail = {
   phases: [phase({ id: "p-cobro", name: "Cobro", workflowId: "w-presale", templateCount: 1 })],
   templates: [],
   readiness: null,
-  areas: [],
 };
 
 const DISENO: WorkflowDetail = {
@@ -84,7 +82,6 @@ const DISENO: WorkflowDetail = {
     afterWorkflow: { id: "w-presale", key: "presale", name: "Presale", sortOrder: 1 },
     afterPhase: { id: "p-cobro", name: "Cobro", sortOrder: 0 },
   },
-  areas: [],
 };
 
 function row(text: string) {

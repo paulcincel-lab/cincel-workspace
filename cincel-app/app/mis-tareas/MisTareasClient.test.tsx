@@ -40,7 +40,6 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     kind: "usuario",
     templateId: null,
     workflowId: null,
-    phase: null,
     phaseId: null,
     spaceId: null,
     closedAt: null,

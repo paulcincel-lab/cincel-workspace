@@ -7,9 +7,6 @@
 import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { disenoTemplate } from "@/lib/templates/diseno";
-import { operativasTemplate } from "@/lib/templates/operativas";
-import { presaleTemplate } from "@/lib/templates/presale";
 import {
   DEFAULT_CATALOG,
   DEFAULT_FLOW_STATUSES,
@@ -71,17 +68,6 @@ describe("DEFAULT_CATALOG", () => {
         expect(new Set(p.templates.map((t) => t.title.toLowerCase())).size).toBe(p.templates.length);
       }
     }
-  });
-
-  it("keeps every legacyTitle equal to the old TS template, in the same order and fase", () => {
-    const strip = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-    const legacy = (key: string) =>
-      tramo(key).phases.flatMap((p) => p.templates.map((t) => [strip(p.name), t.legacyTitle]));
-    const ts = (rows: Array<{ phase: string; description: string }>) =>
-      rows.map((r) => [strip(r.phase), r.description]);
-    expect(legacy("presale")).toEqual(ts(presaleTemplate));
-    expect(legacy("diseno")).toEqual(ts(disenoTemplate));
-    expect(legacy("construccion")).toEqual(ts(operativasTemplate));
   });
 
   it("fixes the spelling of the TS titles (RD-1)", () => {

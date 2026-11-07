@@ -55,8 +55,8 @@ import {
   defaultStatusEntry,
   fillStatusMap,
   parseStoredStatusMap,
-  STATUS_MAP_SETTING_KEY,
 } from "../../lib/monday-import/status-map";
+import { MONDAY_STATUS_MAP_SETTING } from "../../lib/project-flow/catalog";
 import { createMondayDb, type MondayDbHandle } from "./db";
 import type { BoardFile, ColumnDef, Manifest } from "./export";
 import { DONE_FILE } from "./export";
@@ -330,7 +330,7 @@ export function createDbLookups(db: ImportDb): InitLookups {
     async savedStatusMap() {
       const [row] = await rows(
         db,
-        sql`select value from core.app_settings where key = ${STATUS_MAP_SETTING_KEY}`,
+        sql`select value from core.app_settings where key = ${MONDAY_STATUS_MAP_SETTING}`,
       );
       return parseStoredStatusMap(row ? String(row.value) : null);
     },

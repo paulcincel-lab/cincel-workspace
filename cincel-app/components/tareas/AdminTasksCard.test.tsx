@@ -78,7 +78,6 @@ function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
     kind: "admin",
     templateId: null,
     workflowId: null,
-    phase: null,
     phaseId: null,
     spaceId: null,
     closedAt: null,
@@ -99,7 +98,6 @@ function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
     customStatus: null,
     project: { id: "p1", name: "Casa Lomas", clientName: null },
     workflow: null,
-    areaColorSlot: null,
     phase: null,
     space: null,
     manager: null,
@@ -255,7 +253,7 @@ describe("NewTaskModal admin mode", () => {
         open
         projects={[{ id: "p1", name: "Casa Lomas" }]}
         staff={[{ id: "s1", name: "Ana" }]}
-        phaseOptions={["Anteproyecto"]}
+        phases={[{ id: "f-ante", name: "Anteproyecto", sortOrder: 0 }]}
         onClose={() => {}}
         onSave={() => {}}
       />

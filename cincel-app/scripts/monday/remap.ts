@@ -67,6 +67,7 @@ import type {
 import { createMondayDb, type MondayDb, type MondayDbHandle } from "./db";
 import type { BoardFile } from "./export";
 import { readExport, statusLabels } from "./init";
+import { savedStatusMap } from "./plan";
 import type { ProjectFlowGroupTarget } from "./mapping.schema";
 import type { CliIo, CommandHandler } from "./run";
 
@@ -135,7 +136,7 @@ export interface RemapCatalog {
   phases: CatalogPhase[];
 }
 interface Catalog extends RemapCatalog {
-  templates: Map<string, { workflowId: string; phaseId: string | null; title: string; active: boolean }>;
+  templates: Map<string, { workflowId: string; phaseId: string; title: string; active: boolean }>;
 }
 
 async function loadCatalog(db: Exec): Promise<Catalog> {
@@ -600,7 +601,6 @@ async function loadChoices(db: Exec, catalog: Catalog): Promise<MondayImportChoi
   const active = catalog.workflows.filter((w) => w.active);
   return {
     statuses: statusRows,
-    areas: [],
     workflows: active.map((w) => ({
       id: w.id,
       name: w.name,
@@ -613,9 +613,8 @@ async function loadChoices(db: Exec, catalog: Catalog): Promise<MondayImportChoi
       .map(([id, t]) => ({
         id,
         workflowId: t.workflowId,
+        phaseId: t.phaseId,
         name: t.title,
-        phase: phaseById(catalog, t.phaseId)?.name ?? null,
-        ...(t.phaseId ? { phaseId: t.phaseId } : {}),
       })),
     clients: clientRows,
     staff: staffRows,
@@ -625,6 +624,7 @@ async function loadChoices(db: Exec, catalog: Catalog): Promise<MondayImportChoi
       name: p.name,
       phaseIds: positionPhaseRows.filter((r) => r.positionId === p.id).map((r) => r.phaseId),
     })),
+    statusMap: await savedStatusMap(db),
   };
 }
 

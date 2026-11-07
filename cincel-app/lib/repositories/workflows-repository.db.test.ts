@@ -140,14 +140,4 @@ describe.skipIf(!url)("workflow templates (test DB)", async () => {
     const moved = await repo.updateTemplate(row.id, { phaseId: faseA2 }, actorId);
     expect(moved).toMatchObject({ phaseId: faseA2, phaseName: "Fase 2" });
   });
-
-  it("refuses to update a template that has no fase without one", async () => {
-    const [legacy] = await db
-      .insert(schema.workflowTaskTemplates)
-      .values({ workflowId: tramoA, title: `Sin fase ${run}` })
-      .returning({ id: schema.workflowTaskTemplates.id });
-    await expect(repo.updateTemplate(legacy.id, { title: "Renombrada" }, actorId)).rejects.toThrow("INVALID: phaseId");
-    const fixed = await repo.updateTemplate(legacy.id, { phaseId: faseA1 }, actorId);
-    expect(fixed.phaseId).toBe(faseA1);
-  });
 });

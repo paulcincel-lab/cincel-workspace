@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
@@ -25,13 +25,16 @@ export function PhaseEditorDrawer({ open, workflow, phase, onClose, onSaved }: P
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  // Reset the form each time the drawer opens or switches fase (state adjusted during render, not in an effect).
+  const [shown, setShown] = useState({ open, phase });
+  if (shown.open !== open || shown.phase !== phase) {
+    setShown({ open, phase });
     if (open) {
       setName(phase?.name ?? "");
       setError("");
       setSaving(false);
     }
-  }, [open, phase]);
+  }
 
   async function save() {
     const trimmed = name.trim();

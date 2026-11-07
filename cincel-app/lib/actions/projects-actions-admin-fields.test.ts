@@ -31,6 +31,7 @@ const repo = vi.hoisted(() => ({ createProject: vi.fn(), updateProject: vi.fn() 
 vi.mock("@/lib/repositories/projects-repository", () => repo);
 
 import { archiveProjectAction, createProjectAction, updateProjectAction } from "./projects-actions";
+import type { ProjectCreateInput } from "@/lib/types/core";
 
 async function runAfter() {
   for (const cb of afterCallbacks.splice(0)) await cb();
@@ -46,7 +47,7 @@ beforeEach(() => {
 
 describe("createProjectAction (name only)", () => {
   it("passes only the name to the repository, whatever else the caller sends", async () => {
-    await createProjectAction({ name: "Casa Valle", clientId: CLIENT, currentWorkflowId: null });
+    await createProjectAction({ name: "Casa Valle", clientId: CLIENT, currentWorkflowId: null } as unknown as ProjectCreateInput);
     expect(repo.createProject).toHaveBeenCalledWith({ name: "Casa Valle" }, ACTOR);
   });
 

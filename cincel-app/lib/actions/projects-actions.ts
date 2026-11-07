@@ -7,7 +7,6 @@ import { requireCapabilityUser } from "@/lib/auth/session";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { retryProjectFolders, syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import * as projectSpacesRepository from "@/lib/repositories/project-spaces-repository";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
@@ -255,7 +254,7 @@ export async function setProjectCurrentTramoAction(id: string, workflowId: strin
     row = await projectsRepository.assignProjectTramo(id, workflowId, user.member.id);
   }
   revalidateProjectFlow(id);
-  return row;
+  return scopeProjectDto(row, viewerScopeOf(user));
 }
 
 /** Signed-in user allowed to edit the project's general data (espacios); FORBIDDEN otherwise. */

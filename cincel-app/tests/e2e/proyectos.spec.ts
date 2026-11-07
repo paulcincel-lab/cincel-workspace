@@ -12,6 +12,7 @@ import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
 const PROJECT_NAME = `Proyecto E2E ${RUN_ID}`;
+const CLIENT_NAME = `Cliente E2E ${RUN_ID}`;
 
 const connectionString =
   process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";

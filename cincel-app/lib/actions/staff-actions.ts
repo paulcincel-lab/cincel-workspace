@@ -8,7 +8,7 @@ import {
   resolvePositionsCapabilities,
   resolveTeamCapabilities,
 } from "@/lib/auth/permissions";
-import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
+import { flowError } from "@/lib/project-flow/errors";
 import * as positionsRepository from "@/lib/repositories/positions-repository";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";

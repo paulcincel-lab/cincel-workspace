@@ -48,6 +48,7 @@ vi.mock("@/lib/repositories/project-spaces-repository", async () => {
   };
 });
 
+import { UNSCOPED_VIEWER } from "@/lib/auth/viewer-scope";
 import { createSubtask, createUserTask, listTasks, updateTask } from "@/lib/repositories/tasks-repository";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -286,9 +287,9 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
       await inTx(async (tx, ctx) => {
         const a = await addTask(tx, ctx, "A", { workflowId: ctx.workflowId, phaseId: ctx.anteproyectoId, spaceId: ctx.cocinaId });
         await addTask(tx, ctx, "B", { workflowId: ctx.workflowId, phaseId: ctx.ejecutivoId });
-        const byPhase = await listTasks({ projectId: ctx.projectId, phaseId: ctx.anteproyectoId });
+        const byPhase = await listTasks({ projectId: ctx.projectId, phaseId: ctx.anteproyectoId }, UNSCOPED_VIEWER);
         expect(byPhase.map((t) => t.id)).toEqual([a.id]);
-        const bySpace = await listTasks({ projectId: ctx.projectId, spaceId: ctx.cocinaId });
+        const bySpace = await listTasks({ projectId: ctx.projectId, spaceId: ctx.cocinaId }, UNSCOPED_VIEWER);
         expect(bySpace.map((t) => t.id)).toEqual([a.id]);
       });
     });
@@ -297,8 +298,8 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
       await inTx(async (tx, ctx) => {
         const a = await addTask(tx, ctx, "Planos", { workflowId: ctx.workflowId, spaceId: ctx.cocinaId });
         const b = await addTask(tx, ctx, "Renders", { workflowId: ctx.workflowId, phaseId: ctx.ejecutivoId });
-        expect((await listTasks({ projectId: ctx.projectId, search: "cocina" })).map((t) => t.id)).toEqual([a.id]);
-        expect((await listTasks({ projectId: ctx.projectId, search: "ejecut" })).map((t) => t.id)).toEqual([b.id]);
+        expect((await listTasks({ projectId: ctx.projectId, search: "cocina" }, UNSCOPED_VIEWER)).map((t) => t.id)).toEqual([a.id]);
+        expect((await listTasks({ projectId: ctx.projectId, search: "ejecut" }, UNSCOPED_VIEWER)).map((t) => t.id)).toEqual([b.id]);
       });
     });
 
@@ -310,7 +311,7 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
         const ante2 = await addTask(tx, ctx, "Ante 2", { workflowId: ctx.workflowId, phaseId: ctx.anteproyectoId, sortOrder: 2 });
         const ante1 = await addTask(tx, ctx, "Ante 1", { workflowId: ctx.workflowId, phaseId: ctx.anteproyectoId, sortOrder: 1 });
         const first = await addTask(tx, ctx, "Presale", { workflowId: ctx.firstWorkflowId, phaseId: ctx.foreignPhaseId });
-        const rows = await listTasks({ projectId: ctx.projectId });
+        const rows = await listTasks({ projectId: ctx.projectId }, UNSCOPED_VIEWER);
         expect(rows.map((t) => t.id)).toEqual([first.id, ante1.id, ante2.id, ejec.id, noPhase.id, noTramo.id]);
       });
     });

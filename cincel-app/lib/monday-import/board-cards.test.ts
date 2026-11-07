@@ -137,11 +137,6 @@ describe("board card problems and chips (#685)", () => {
     expect(boardProblems(space, "b1", ruizSource)).toEqual(["Elige un tramo."]);
   });
 
-  it("leaves status labels to the firm-wide status map: a defaulted label is no board problem", () => {
-    const mapping = mappingOf(ruiz({ statusMaps: { status: { "0": { status: "pendiente", defaulted: true } } } }));
-    expect(boardProblems(mapping, "b1", ruizSource)).toEqual([]);
-  });
-
   it("counts groups named like a tramo or fase as placed when the catalog is given", () => {
     const mapping = mappingOf(ruiz({ workflowId: null }));
     // "Diseño" is a tramo and "Obra" a fase of Construcción.

@@ -54,7 +54,6 @@ import {
   writeDraftMapping,
   type StoredRun,
 } from "@/lib/monday-import/runs";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
 import type {
   MappingInput,
   MondayConnection,
@@ -103,7 +102,8 @@ import { createRollbackCommand, findRollbackBlockers, openServiceAccountDrive } 
 import { TOKEN_ENV } from "@/scripts/monday/token";
 
 import { importedProjectHref } from "./links";
-import { parseStoredStatusMap, STATUS_MAP_SETTING_KEY, statusMapCustomIds } from "./status-map";
+import { MONDAY_STATUS_MAP_SETTING } from "@/lib/project-flow/catalog";
+import { parseStoredStatusMap, statusMapCustomIds } from "./status-map";
 
 type Env = Record<string, string | undefined>;
 
@@ -645,7 +645,7 @@ export async function readSavedStatusMap(db: ImportDb): Promise<MondayStatusMap>
   const [row] = await db
     .select({ value: appSettings.value })
     .from(appSettings)
-    .where(eq(appSettings.key, STATUS_MAP_SETTING_KEY));
+    .where(eq(appSettings.key, MONDAY_STATUS_MAP_SETTING));
   return parseStoredStatusMap(row?.value ?? null);
 }
 
@@ -674,7 +674,7 @@ export async function saveStatusMap(db: ImportDb, map: unknown): Promise<MondayS
   const value = JSON.stringify(entries);
   await db
     .insert(appSettings)
-    .values({ key: STATUS_MAP_SETTING_KEY, value })
+    .values({ key: MONDAY_STATUS_MAP_SETTING, value })
     .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
   return entries;
 }
@@ -988,23 +988,4 @@ export async function startRollback(runId: string, deps: WizardDeps): Promise<Mo
     if (err instanceof Error && err.message === "JOB_RUNNING") throw new WizardError("Ya hay un proceso en curso en esta importación.");
     throw err;
   }
-}
-
-// --- Project flow (BE §7.8, §10.8): contracts implemented with the wizard choices and suggestion work ---
-
-/**
- * Stores the whole firm-wide status map in app_settings `monday.status_map` (JSON). The caller has parsed the map
- * and checked that every `customStatusId` is a live status (`STATUS_NOT_FOUND` otherwise).
- */
-export async function saveStatusMap(db: ImportDb, map: import("@/lib/types/monday-import").MondayStatusMap): Promise<void> {
-  return notImplemented("saveStatusMap", db, map);
-}
-
-/** "Crear integrante": the puesto suggested by the fases of the person's tasks in the run's translation (BE §10.8). */
-export async function suggestPosition(
-  runId: string,
-  mondayUserId: string,
-  deps: WizardDeps,
-): Promise<import("@/lib/types/monday-import").MondayPositionSuggestion> {
-  return notImplemented("suggestPosition", runId, mondayUserId, deps);
 }

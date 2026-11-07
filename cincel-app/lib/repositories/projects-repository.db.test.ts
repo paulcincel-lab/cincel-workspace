@@ -29,7 +29,6 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
 
   const ids = { staff: [] as string[], contacts: [] as string[], projects: [] as string[], workflows: [] as string[] };
   let actorId = "";
-  let clientId = "";
   /** The first active tramo, with its auto-start restored afterwards. */
   let first: { id: string; autoStart: "on_create" | "on_ready" | "manual" } | null = null;
   let firstPhaseIds: string[] = [];
@@ -42,13 +41,6 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
       .returning({ id: schema.staff.id });
     actorId = actor.id;
     ids.staff.push(actor.id);
-
-    const [contact] = await db
-      .insert(schema.contacts)
-      .values({ type: "cliente", name: `Cliente ${run}` })
-      .returning({ id: schema.contacts.id });
-    clientId = contact.id;
-    ids.contacts.push(contact.id);
 
     const [row] = await db
       .select({ id: schema.workflows.id, autoStart: schema.workflows.autoStart })
@@ -92,7 +84,7 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
   });
 
   const create = async (name: string) => {
-    const row = await repo.createProject({ name, clientId }, actorId);
+    const row = await repo.createProject({ name }, actorId);
     ids.projects.push(row.id);
     return row;
   };
@@ -105,7 +97,7 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
       const row = await create(`  Casa ${run} A  `);
 
       expect(row.name).toBe(`Casa ${run} A`);
-      expect(row.clientId).toBe(clientId);
+      expect(row.clientId).toBeNull();
       expect(row).not.toHaveProperty("phase");
       expect(row).not.toHaveProperty("phases");
       expect(startTramo).toHaveBeenCalledTimes(1);
@@ -136,7 +128,7 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
       await db.update(schema.workflows).set({ autoStart: "on_create" }).where(eq(schema.workflows.id, first.id));
       startTramo.mockRejectedValueOnce(new Error("boom"));
 
-      await expect(repo.createProject({ name: `Casa ${run} C`, clientId }, actorId)).rejects.toThrow("boom");
+      await expect(repo.createProject({ name: `Casa ${run} C` }, actorId)).rejects.toThrow("boom");
       const rows = await db
         .select({ id: schema.projects.id })
         .from(schema.projects)
@@ -147,8 +139,8 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
     it("rejects a taken name with NAME_TAKEN and a blank one with EMPTY", async () => {
       if (first) await db.update(schema.workflows).set({ autoStart: "manual" }).where(eq(schema.workflows.id, first.id));
       await create(`Casa ${run} D`);
-      await expect(repo.createProject({ name: `casa ${run} d`, clientId }, actorId)).rejects.toThrow("NAME_TAKEN");
-      await expect(repo.createProject({ name: "   ", clientId }, actorId)).rejects.toThrow("EMPTY");
+      await expect(repo.createProject({ name: `casa ${run} d` }, actorId)).rejects.toThrow("NAME_TAKEN");
+      await expect(repo.createProject({ name: "   " }, actorId)).rejects.toThrow("EMPTY");
     });
   });
 

@@ -145,17 +145,15 @@ function io() {
 
 /** The mapping of translate-nested-export.json (checklist, child tasks, item_as_project, crm). */
 function nestedMapping(): MappingInput {
-  const STATUS = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
-    "2": { status: "en_proceso" },
-  } as const;
-  const SUB = {
-    "0": { status: "pendiente" },
-    "1": { status: "completado" },
+  // Firm-wide status map, keyed by label text (the export's "Pendiente", "Listo", "En curso").
+  const statusMap = {
+    pendiente: { target: { status: "pendiente" }, priority: null },
+    listo: { target: { status: "completado" }, priority: null },
+    "en curso": { target: { status: "en_proceso" }, priority: null },
   } as const;
   return {
-    version: 1,
+    version: 2,
+    statusMap,
     boards: [
       {
         mondayBoardId: "901",
@@ -171,7 +169,6 @@ function nestedMapping(): MappingInput {
           planta: "ignore",
         },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
         subitems: "checklist",
         schedule: { enabled: true, planta: { columnId: "planta" } },
       },
@@ -182,7 +179,6 @@ function nestedMapping(): MappingInput {
         client: { kind: "contact", contactId: CLIENT },
         columns: { name: "title", status: "status" },
         subitemColumns: { name: "title", sstatus: "status" },
-        statusMaps: { status: STATUS, sstatus: SUB },
         subitems: "child_tasks",
       },
       {
@@ -192,7 +188,6 @@ function nestedMapping(): MappingInput {
         client: { kind: "contact", contactId: CLIENT },
         columns: { name: "title", presupuesto: "import_data" },
         subitemColumns: { name: "title" },
-        statusMaps: {},
       },
       {
         mondayBoardId: "904",
@@ -200,7 +195,6 @@ function nestedMapping(): MappingInput {
         strategy: "crm_contacts",
         contactType: "cliente",
         columns: { name: "title", rfc: "import_data" },
-        statusMaps: {},
       },
     ],
     people: {

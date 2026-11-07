@@ -4,12 +4,10 @@ import { isStaffAdministrator } from "@/lib/auth/access-role";
 import { TASK_TREND_TIME_ZONE } from "@/lib/dashboard/task-trend";
 import { historyEvents, staff, tasks } from "@/lib/db/schema";
 
+import { ASSIGN_CLIENT_SYSTEM_KEY, ASSIGN_CLIENT_TASK_TITLE } from "./catalog";
 import type { FlowExecutor, FlowTx } from "./db";
 import { flowError, FLOW_ERROR } from "./errors";
 
-/** `tasks.system_key` of the "Asignar cliente y origen" admin task. */
-export const ASSIGN_CLIENT_SYSTEM_KEY = "assign_client";
-export const ASSIGN_CLIENT_TASK_TITLE = "Asignar cliente y origen";
 
 /** Today's calendar date (YYYY-MM-DD) in the app's time zone (America/Mexico_City). */
 export function todayInAppTimeZone(now: Date = new Date()): string {
