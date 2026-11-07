@@ -8,3 +8,4 @@ ADR instead).
 |---|---|---|
 | [0001](0001-name-snapshot-pattern.md) | Name-snapshot vs. foreign-key references | Proposed |
 | [0002](0002-audit-log-shapes.md) | Audit-log representation | Proposed |
+| [0003](0003-project-flow-tramos-fases-puestos.md) | Project flow: tramos, fases and puestos replace áreas | Accepted |

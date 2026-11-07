@@ -36,5 +36,10 @@
   "monday Migration Phase 1: Schema, Drive Foundations + Export": "monday-migration:1",
   "monday Migration Phase 2: Mapping, Translate + Plan": "monday-migration:2",
   "monday Migration Phase 3: Apply + Rollback": "monday-migration:3",
-  "monday Migration Phase 4: Subtasks, Dependencies, Datos de monday + Project Bitácora": "monday-migration:4"
+  "monday Migration Phase 4: Subtasks, Dependencies, Datos de monday + Project Bitácora": "monday-migration:4",
+  "Project Flow Phase 1: Schema, Catalog Seed + Backfill": "project-flow:1",
+  "Project Flow Phase 2: Tramos, Fases + Iniciar Tramo": "project-flow:2",
+  "Project Flow Phase 3: Name-only Projects, Admin Tasks + Puestos": "project-flow:3",
+  "Project Flow Phase 4: monday Importer + Reacomodar Importación": "project-flow:4",
+  "Project Flow Phase 5: Cleanup Release (Drops)": "project-flow:5"
 }
