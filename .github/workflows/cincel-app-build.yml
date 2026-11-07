@@ -21,7 +21,7 @@ defaults:
 
 jobs:
   verify:
-    if: github.event_name != 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -46,7 +46,7 @@ jobs:
 
   unit-tests:
     needs: verify
-    if: github.event_name != 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
 
     # A migrated Postgres for the tests that read TEST_DATABASE_URL (each
@@ -93,7 +93,7 @@ jobs:
 
   e2e-tests:
     needs: verify
-    if: github.event_name != 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
 
     services:
