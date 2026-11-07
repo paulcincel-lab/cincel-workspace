@@ -21,7 +21,8 @@ import type { PortalAccessRow, PortalActivityRow } from "@/lib/types/portal";
  * in the same transaction. Portal code never imports this module.
  */
 
-export type PortalAuditKind = "invite" | "resend" | "revoke" | "disable" | "enable";
+/** `approval_request`: the assistant asked the project's portal clients to approve a file. */
+export type PortalAuditKind = "invite" | "resend" | "revoke" | "disable" | "enable" | "approval_request";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 

@@ -1,25 +1,18 @@
 "use client";
 
-import { Separator } from "@/components/ui/shadcn/separator";
+import { AttentionListWidget } from "@/components/widgets/AttentionListWidget";
+
+import { toAttentionItems } from "./widget-adapters";
 
 type Props = {
   title: string;
   items: string[];
 };
 
-/** Renders `render_list` output — a short titled enumeration. */
+/**
+ * `render_list` (redesign FE §3.9, §4.11.1): a short titled enumeration as a
+ * library `AttentionListWidget`, which renders the user's style.
+ */
 export function AssistantListMessage({ title, items }: Props) {
-  return (
-    <div className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div className="px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-      </div>
-      <Separator />
-      <ul className="list-disc space-y-1.5 px-8 py-3 text-sm text-muted-foreground">
-        {items.map((item, index) => (
-          <li key={index}>{item}</li>
-        ))}
-      </ul>
-    </div>
-  );
+  return <AttentionListWidget title={title} items={toAttentionItems(items)} totalCount={items.length} />;
 }

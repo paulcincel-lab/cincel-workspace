@@ -18,6 +18,30 @@ vi.mock("@/lib/auth/session-context", () => ({
   },
 }));
 
+// Org appearance and General settings, read without a session.
+const settings = vi.hoisted(() => ({
+  appearance: null as null | { redesignDefault: boolean; redesignAvailable: boolean },
+  contactEmail: undefined as string | undefined,
+}));
+vi.mock("@/lib/repositories/app-settings-repository", () => ({
+  getAppSettingEntry: async (key: string) =>
+    key === "appearance.theme" && settings.appearance
+      ? { value: JSON.stringify({ version: 1, data: settings.appearance }), updatedAt: new Date() }
+      : null,
+}));
+vi.mock("@/lib/settings/general-settings-server", () => ({
+  getGeneralSettings: async () => ({
+    settings: {
+      company: {
+        primaryEmail: "contacto@example.test",
+        ...(settings.contactEmail === undefined ? {} : { contactEmail: settings.contactEmail }),
+      },
+    },
+    hasCustom: true,
+    savedAt: null,
+  }),
+}));
+
 import {
   WORKSPACE_DENIAL_REASONS,
   type WorkspaceDenialReason,
@@ -50,6 +74,8 @@ async function renderPage(
 describe("/login/denegado", () => {
   beforeEach(() => {
     sessionReads.count = 0;
+    settings.appearance = null;
+    settings.contactEmail = undefined;
     vi.stubEnv("GOOGLE_WORKSPACE_DOMAIN", "example.test");
   });
 
@@ -115,5 +141,75 @@ describe("/login/denegado", () => {
         .getAttribute("href"),
     ).toBe("/login");
     expect(sessionReads.count).toBe(0);
+  });
+});
+
+describe("/login/denegado look", () => {
+  beforeEach(() => {
+    sessionReads.count = 0;
+    settings.appearance = { redesignDefault: true, redesignAvailable: true };
+    settings.contactEmail = "admin@example.test";
+    vi.stubEnv("GOOGLE_WORKSPACE_DOMAIN", "example.test");
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    ["missing", null],
+    ["off", { redesignDefault: false, redesignAvailable: true }],
+    ["unavailable", { redesignDefault: true, redesignAvailable: false }],
+  ])("renders today's page when the org setting is %s", async (_label, appearance) => {
+    settings.appearance = appearance;
+    await renderPage({ motivo: "revoked", email: "persona@gmail.com" });
+
+    expect(screen.queryByTestId("auth-centered-layout")).toBeNull();
+    expect(screen.getByRole("link", { name: "Volver a intentar" })).not.toBeNull();
+    expect(screen.queryByText("Contactar al administrador")).toBeNull();
+  });
+
+  it("shows the denied email, Usar otra cuenta and Contactar al administrador", async () => {
+    await renderPage({ motivo: "domain", email: "persona@gmail.com" });
+
+    expect(screen.getByTestId("auth-centered-layout")).not.toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Tu cuenta no tiene acceso" })).not.toBeNull();
+    expect(screen.getByRole("alert").textContent).toBe(EXPECTED.domain);
+    expect(screen.getByTestId("denied-email").textContent).toContain("persona@gmail.com");
+    expect(
+      screen.getByRole("link", { name: "Usar otra cuenta" }).getAttribute("href"),
+    ).toBe("/login");
+    const contact = screen.getByRole("link", { name: "Contactar al administrador" });
+    expect(contact.getAttribute("href")).toBe(
+      "mailto:admin@example.test?subject=Acceso%20a%20Cincel%20Workspace",
+    );
+    expect(sessionReads.count).toBe(0);
+  });
+
+  it("hides Contactar al administrador when contactEmail is empty", async () => {
+    settings.contactEmail = "";
+    await renderPage({ motivo: "revoked", email: "persona@gmail.com" });
+
+    expect(screen.getByRole("link", { name: "Usar otra cuenta" })).not.toBeNull();
+    expect(screen.queryByRole("link", { name: "Contactar al administrador" })).toBeNull();
+  });
+
+  it("hides Contactar al administrador when contactEmail is not set or not an email", async () => {
+    settings.contactEmail = undefined;
+    await renderPage({ motivo: "revoked" });
+    expect(screen.queryByRole("link", { name: "Contactar al administrador" })).toBeNull();
+
+    cleanup();
+    settings.contactEmail = "javascript:alert(1)";
+    await renderPage({ motivo: "revoked" });
+    expect(screen.queryByRole("link", { name: "Contactar al administrador" })).toBeNull();
+  });
+
+  it("omits the email block when no email was passed", async () => {
+    await renderPage({ motivo: "revoked" });
+
+    expect(screen.queryByTestId("denied-email")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toBe(EXPECTED.revoked);
   });
 });

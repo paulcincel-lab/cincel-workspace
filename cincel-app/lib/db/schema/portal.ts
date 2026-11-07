@@ -146,7 +146,7 @@ export const portalAuditEvents = core.table(
   "portal_audit_events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    // "invite" | "resend" | "revoke" | "disable" | "enable"
+    // "invite" | "resend" | "revoke" | "disable" | "enable" | "approval_request"
     kind: text("kind").notNull(),
     portalUserId: uuid("portal_user_id")
       .notNull()

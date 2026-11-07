@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import type { SessionAccess } from "@/lib/auth/session";
 
@@ -13,15 +13,22 @@ const redirect = vi.hoisted(() =>
   }),
 );
 
+const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
+const appearance = vi.hoisted(() => ({ redesignEnabled: false }));
+const completeFirstAccessAction = vi.hoisted(() => vi.fn());
+
 vi.mock("next/navigation", () => ({
   redirect,
-  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => router,
 }));
 vi.mock("@/lib/auth/session", () => ({
   getSessionAccess: async () => session.value,
 }));
 vi.mock("@/lib/auth/auth-actions", () => ({
-  completeFirstAccessAction: vi.fn(),
+  completeFirstAccessAction,
+}));
+vi.mock("@/lib/auth/auth-appearance", () => ({
+  isAuthRedesignOn: async () => appearance.redesignEnabled,
 }));
 
 import ChangePasswordPage from "./page";
@@ -36,6 +43,10 @@ describe("/change-password", () => {
 
   beforeEach(() => {
     redirect.mockClear();
+    router.replace.mockClear();
+    router.refresh.mockClear();
+    completeFirstAccessAction.mockReset();
+    appearance.redesignEnabled = false;
   });
 
   afterEach(() => {
@@ -91,4 +102,79 @@ describe("/change-password", () => {
       );
     },
   );
+
+  describe("redesign flag", () => {
+    beforeEach(() => {
+      setPasswordFlag(undefined);
+      session.value = {
+        status: "pending_first_access",
+        user: { id: "staff-1" },
+      } as SessionAccess;
+    });
+
+    it("renders the legacy form exactly as today with the flag off", async () => {
+      appearance.redesignEnabled = false;
+      render(await ChangePasswordPage());
+      expect(screen.queryByTestId("auth-split-layout")).toBeNull();
+      expect(screen.getByRole("heading", { name: "Define tu nueva contraseña" })).not.toBeNull();
+      expect(screen.getByText("Regresar a Login")).not.toBeNull();
+    });
+
+    it("renders the split layout with the redesigned card with the flag on", async () => {
+      appearance.redesignEnabled = true;
+      render(await ChangePasswordPage());
+      expect(screen.getByTestId("auth-split-layout")).not.toBeNull();
+      expect(screen.getByRole("heading", { name: "Cambia tu contraseña" })).not.toBeNull();
+      expect(screen.getByLabelText("Contraseña nueva")).not.toBeNull();
+      expect(screen.getByLabelText("Confirmar contraseña nueva")).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Guardar y continuar" })).not.toBeNull();
+      expect(screen.queryByRole("heading", { name: "Define tu nueva contraseña" })).toBeNull();
+    });
+  });
+
+  describe.each([
+    ["legacy", false, "Nueva contraseña", "Confirmar nueva contraseña"],
+    ["redesign", true, "Contraseña nueva", "Confirmar contraseña nueva"],
+  ] as const)("%s form submit", (_name, flag, nextLabel, confirmLabel) => {
+    beforeEach(() => {
+      setPasswordFlag(undefined);
+      appearance.redesignEnabled = flag;
+      session.value = {
+        status: "pending_first_access",
+        user: { id: "staff-1" },
+      } as SessionAccess;
+    });
+
+    async function fillAndSubmit(next: string, confirm: string) {
+      render(await ChangePasswordPage());
+      fireEvent.change(screen.getByLabelText(nextLabel), { target: { value: next } });
+      fireEvent.change(screen.getByLabelText(confirmLabel), { target: { value: confirm } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Guardar y continuar" }));
+      });
+    }
+
+    it.each([
+      ["password_too_short", "La nueva contraseña debe tener al menos 8 caracteres."],
+      ["password_confirmation_mismatch", "La confirmación no coincide con la nueva contraseña."],
+      ["password_login_disabled", "El acceso con contraseña está desactivado. Entra con Google."],
+      ["no_session", "Tu sesión expiró. Inicia sesión de nuevo."],
+      ["unexpected", "No fue posible completar el primer acceso."],
+    ])("shows the %s message and stays on the page", async (reason, message) => {
+      completeFirstAccessAction.mockResolvedValue({ ok: false, reason });
+      await fillAndSubmit("corta", "otra");
+      expect(completeFirstAccessAction).toHaveBeenCalledWith("corta", "otra");
+      expect(screen.getByRole("alert").textContent).toContain(message);
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+
+    it("submits both fields and redirects to /dashboard on success", async () => {
+      completeFirstAccessAction.mockResolvedValue({ ok: true });
+      await fillAndSubmit("Ensenada2026", "Ensenada2026");
+      expect(completeFirstAccessAction).toHaveBeenCalledWith("Ensenada2026", "Ensenada2026");
+      expect(screen.getByRole("status").textContent).toContain("Contraseña actualizada.");
+      expect(router.replace).toHaveBeenCalledWith("/dashboard");
+      expect(router.refresh).toHaveBeenCalled();
+    });
+  });
 });

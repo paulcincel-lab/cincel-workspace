@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
+import { AssistantLauncher } from "@/components/asistente/AssistantLauncher";
 import { bandejaBadgeSlot } from "@/lib/shell/sidebar-slots/bandeja-badge";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
 import { timeClockSlot } from "@/lib/shell/sidebar-slots/time-clock";
@@ -61,6 +62,9 @@ export function AppShell({ children, appearance, session, nav, today, hideAssist
       >
         {children}
       </AppShellClient>
+      <Suspense fallback={null}>
+        <AssistantLauncher hidden={hideAssistant} />
+      </Suspense>
       {today ? (
         <ClockInPrompt status={today} requiredFrom={today.requiredFrom} now={new Date()} name={session.name} />
       ) : null}

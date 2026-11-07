@@ -3,11 +3,9 @@
 import { usePathname } from "next/navigation";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
-import { AssistantButton } from "@/components/asistente/AssistantButton";
-import { AssistantSheet } from "@/components/asistente/AssistantSheet";
 import { SidebarInset, SidebarProvider } from "@/components/ui/shadcn/sidebar";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
-import { isAssistantVisible, isSearchVisible } from "@/lib/shell/visibility";
+import { isSearchVisible } from "@/lib/shell/visibility";
 import type { TodayStatus } from "@/lib/types/redesign";
 import { BOTTOM_TABS_CONTENT_CLASS } from "@/lib/ui/mobile-nav";
 import type { NavItem, NavItemKey, NavModel } from "@/lib/ui/nav";
@@ -43,15 +41,13 @@ export function bottomTabsOf(nav: NavModel): { items: NavItem[]; more: NavItem[]
 
 const SIDEBAR_STYLE = { "--sidebar-width": "248px" } as CSSProperties;
 
-export function AppShellClient({ children, nav: clientNav, session, today, hideAssistant, slots }: AppShellClientProps) {
+export function AppShellClient({ children, nav: clientNav, session, today, slots }: AppShellClientProps) {
   const pathname = usePathname();
   const nav = useMemo(() => withNavIcons(clientNav), [clientNav]);
   const activeKey = activeNavKey(pathname, nav);
   const tabs = useMemo(() => bottomTabsOf(nav), [nav]);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
   const showSearch = isSearchVisible();
-  const showAssistant = isAssistantVisible(pathname, hideAssistant);
 
   return (
     <SidebarProvider style={SIDEBAR_STYLE}>
@@ -72,12 +68,6 @@ export function AppShellClient({ children, nav: clientNav, session, today, hideA
       </SidebarInset>
       <BottomTabs activeKey={activeKey} items={tabs.items} more={tabs.more} />
       {showSearch ? <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} /> : null}
-      {showAssistant ? (
-        <>
-          <AssistantButton onOpen={() => setAssistantOpen(true)} />
-          <AssistantSheet open={assistantOpen} onOpenChange={setAssistantOpen} context={{ route: pathname ?? "/" }} />
-        </>
-      ) : null}
     </SidebarProvider>
   );
 }

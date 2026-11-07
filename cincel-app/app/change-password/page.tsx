@@ -1,14 +1,22 @@
 import { redirect } from "next/navigation";
 
+import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
+import ChangePasswordCard from "@/components/auth/ChangePasswordCard";
 import ChangePasswordForm from "@/components/auth/ChangePasswordForm";
 import { isPasswordAuthEnabled } from "@/lib/auth/auth-flags";
 import { LOGIN_ROUTE, SIGN_OUT_TO_LOGIN_URL } from "@/lib/auth/public-routes";
+import { isAuthRedesignOn } from "@/lib/auth/auth-appearance";
 import { getSessionAccess } from "@/lib/auth/session";
 
 /**
  * First-access password change (backend spec §A.5.1). Only reachable for a
  * `pending_first_access` session while AUTH_PASSWORD_ENABLED is on; otherwise
  * it redirects once and never back and forth.
+ *
+ * Redesign (FE §3.10): the split layout renders only when the org has
+ * `redesignAvailable && redesignDefault`, the resolver's rule with no user
+ * row (a first-access user has not reached any page that could store one);
+ * otherwise the legacy form renders exactly as before.
  */
 export default async function ChangePasswordPage() {
   const access = await getSessionAccess();
@@ -19,6 +27,13 @@ export default async function ChangePasswordPage() {
 
   if (access.status === "pending_first_access") {
     if (isPasswordAuthEnabled()) {
+      if (await isAuthRedesignOn()) {
+        return (
+          <AuthSplitLayout>
+            <ChangePasswordCard />
+          </AuthSplitLayout>
+        );
+      }
       return <ChangePasswordForm />;
     }
     // With passwords off the session can never finish first access, and the

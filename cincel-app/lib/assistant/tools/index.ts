@@ -11,6 +11,7 @@ import { tools as agenda } from "./agenda";
 import { tools as arquitectura } from "./arquitectura";
 import { tools as consulta } from "./consulta";
 import { tools as correo } from "./correo";
+import { tools as cutto } from "./cutto";
 import { tools as miEspacio } from "./mi-espacio";
 import { tools as notificaciones } from "./notificaciones";
 import { tools as personas } from "./personas";
@@ -27,6 +28,7 @@ export const DEFINED_TOOLS: readonly DefinedTool[] = [
   ...personas,
   ...arquitectura,
   ...widgets,
+  ...cutto,
 ];
 
 /** A registered tool by name. */

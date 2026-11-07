@@ -1,66 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
-import { completeFirstAccessAction } from "@/lib/auth/auth-actions";
 
-type Draft = {
-  nextPassword: string;
-  confirmPassword: string;
-};
+import { useChangePassword } from "./use-change-password";
 
-const EMPTY_DRAFT: Draft = {
-  nextPassword: "",
-  confirmPassword: "",
-};
-
+/** Legacy first-access form, rendered while the redesign flag is off. */
 export default function ChangePasswordForm() {
-  const router = useRouter();
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
-  const [error, setError] = useState<string>("");
-  const [success, setSuccess] = useState<string>("");
-  const [isPending, startTransition] = useTransition();
-
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-    setSuccess("");
-
-    startTransition(async () => {
-      const result = await completeFirstAccessAction(
-        draft.nextPassword,
-        draft.confirmPassword
-      );
-      if (!result.ok) {
-        if (result.reason === "password_login_disabled") {
-          setError("El acceso con contraseña está desactivado. Entra con Google.");
-          return;
-        }
-        if (result.reason === "password_too_short") {
-          setError("La nueva contraseña debe tener al menos 8 caracteres.");
-          return;
-        }
-        if (result.reason === "password_confirmation_mismatch") {
-          setError("La confirmación no coincide con la nueva contraseña.");
-          return;
-        }
-        if (result.reason === "no_session") {
-          setError("Tu sesión expiró. Inicia sesión de nuevo.");
-          return;
-        }
-        setError("No fue posible completar el primer acceso.");
-        return;
-      }
-
-      setSuccess("Contraseña actualizada. Redirigiendo al Dashboard...");
-      router.replace("/dashboard");
-      router.refresh();
-    });
-  };
+  const { draft, setNextPassword, setConfirmPassword, error, success, isPending, handleSubmit } =
+    useChangePassword();
 
   return (
     <main className="min-h-screen bg-muted px-4 py-10 sm:px-8">
@@ -90,7 +40,7 @@ export default function ChangePasswordForm() {
               <Input
                 type="password"
                 value={draft.nextPassword}
-                onChange={(event) => setDraft((current) => ({ ...current, nextPassword: event.target.value }))}
+                onChange={(event) => setNextPassword(event.target.value)}
                 placeholder="Mínimo 8 caracteres"
                 aria-describedby="change-password-help"
               />
@@ -102,7 +52,7 @@ export default function ChangePasswordForm() {
               <Input
                 type="password"
                 value={draft.confirmPassword}
-                onChange={(event) => setDraft((current) => ({ ...current, confirmPassword: event.target.value }))}
+                onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="Repite la contraseña"
                 aria-describedby="change-password-confirm-help"
               />
