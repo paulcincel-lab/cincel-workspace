@@ -80,9 +80,12 @@ export const staffProfiles = core.table(
     emergencyContactRelation: text("emergency_contact_relation"),
     emergencyContactPhone: text("emergency_contact_phone"),
     emergencyContactAddress: text("emergency_contact_address"),
+    /** Per-person vacation days per year; null = org default `app_settings('vacations').daysPerYear` (BE §3.9). */
+    vacationDays: integer("vacation_days"),
     ...stamps,
   },
   (t) => [
+    check("staff_profiles_vacation_days_check", sql`${t.vacationDays} is null or ${t.vacationDays} >= 0`),
     uniqueIndex("staff_profiles_curp_uq").on(t.curp).where(sql`${t.curp} is not null`),
     uniqueIndex("staff_profiles_rfc_uq").on(t.rfc).where(sql`${t.rfc} is not null`),
   ]

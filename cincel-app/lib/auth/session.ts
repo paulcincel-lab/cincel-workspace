@@ -10,6 +10,7 @@ import type { SessionStaffAccess, SessionUser as RepoSessionUser } from "@/lib/r
 import type { SystemAccessRole } from "@/lib/data/roles";
 
 import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
+import { notImplemented } from "@/lib/stubs";
 
 export { SESSION_COOKIE };
 
@@ -190,6 +191,17 @@ export async function requireCapabilityUser(): Promise<
     email: user.email ?? "",
     access: user.access,
   };
+}
+
+/**
+ * Page guard of the redesign's admin settings segments (redesign BE §12.2, FE §8):
+ * one `app/(staff)/ajustes/(admin)/<segment>/layout.tsx` per segment calls it
+ * with that segment's capability; failure → `notFound()`. Contract stub.
+ */
+export async function requirePageCapability(
+  cap: (user: import("@/lib/auth/auth-service").AuthenticatedUser) => boolean,
+): Promise<import("@/lib/auth/auth-service").AuthenticatedUser> {
+  return notImplemented("requirePageCapability", cap);
 }
 
 /** Delete the current session row and clear the cookie. */

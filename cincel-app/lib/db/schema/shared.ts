@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   primaryKey,
   text,
   timestamp,
@@ -153,3 +154,29 @@ export const appSettings = core.table("app_settings", {
   value: text("value").notNull(),
   ...stamps,
 });
+
+// ── Cron (redesign BE §3.11, §13) ───────────────────────────────────────────
+
+/** Lease rows for `/api/cron/tick` (review B14: replaces advisory locks). `job` = "tick" or a job name. */
+export const cronLeases = core.table("cron_leases", {
+  job: text("job").primaryKey(),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }).notNull().default(sql`'epoch'`),
+  /** Random id of the holder. */
+  owner: text("owner"),
+});
+
+/** One row per windowed job run; `(job, window_key)` makes a window run once. */
+export const cronRuns = core.table(
+  "cron_runs",
+  {
+    job: text("job").notNull(),
+    /** Idempotency key, e.g. "daily-digest:2026-11-09". */
+    windowKey: text("window_key").notNull(),
+    /** 'running' | 'done' | 'failed' */
+    status: text("status").notNull(),
+    detail: jsonb("detail"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.job, t.windowKey] })]
+);

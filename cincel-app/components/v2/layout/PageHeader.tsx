@@ -1,10 +1,15 @@
 import type { ReactNode } from "react";
 
-interface PageHeaderProps {
+export type PageHeaderProps = {
   title: string;
   description?: string;
+  /** Redesign FE §4.2; rendered once the v3 header lands. */
+  breadcrumb?: { label: string; href?: string }[];
+  /** Right side; wraps under 768 px. */
   actions?: ReactNode;
-}
+  /** Redesign FE §4.2 (e.g. "Solo tú lo ves", "Admin"); rendered once the v3 header lands. */
+  badge?: ReactNode;
+};
 
 /**
  * The title + description + actions toolbar repeated at the top of every

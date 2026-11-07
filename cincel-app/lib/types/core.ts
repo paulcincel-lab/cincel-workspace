@@ -23,7 +23,12 @@ export type HistoryEntity =
   | "resource_link"
   | "staff"
   | "area"
-  | "workflow";
+  | "workflow"
+  // Redesign (BE §3.2): owner-only entities the assistant may act on.
+  | "note"
+  | "reminder"
+  | "time_entry"
+  | "vacation_request";
 export type HistoryEventKind = "comentario" | "cambio";
 export type ContactTagKind = "categoria" | "habilidad";
 
@@ -663,3 +668,6 @@ export type DriveFileMeta = {
 };
 
 export type DriveFileInput = Omit<DriveFileMeta, "id">;
+
+// ── Redesign contracts (BE §6) ──────────────────────────────────────────────
+export * from "./redesign";

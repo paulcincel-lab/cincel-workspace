@@ -2,6 +2,7 @@ import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { SYSTEM_ACCESS_ROLES, isAdministratorRole, type SystemAccessRole } from "@/lib/data/roles";
 import type { ResourceSection } from "@/lib/types/resource";
 import { readStorage } from "@/lib/repositories/browser-state-repository";
+import { notImplemented } from "@/lib/stubs";
 
 export const PERMISSIONS_CUSTOM_STORAGE_KEY = "cincel.permissions.custom.v1";
 
@@ -1382,6 +1383,28 @@ export function canViewSensitiveStaffData(user: AuthenticatedUser | null): boole
 /** Company-wide appearance (primary color) applies to everyone: admins only, like the data above. */
 export function canManageAppearance(user: AuthenticatedUser | null): boolean {
   return canViewSensitiveStaffData(user);
+}
+
+// ── Redesign capabilities (BE §12.1). Contract stubs; R1-42 implements them. ──
+
+/** General settings (Ajustes › General): today's rule, `canViewSensitiveStaffData`. */
+export function canManageGeneralSettings(user: AuthenticatedUser | null): boolean {
+  return notImplemented("canManageGeneralSettings", user);
+}
+
+/** Control de horario settings: access "Administrador". */
+export function canManageTimeTracking(user: AuthenticatedUser | null): boolean {
+  return notImplemented("canManageTimeTracking", user);
+}
+
+/** Team hours report and CSV export: access "Administrador" or "Dirección". */
+export function canViewTeamHours(user: AuthenticatedUser | null): boolean {
+  return notImplemented("canViewTeamHours", user);
+}
+
+/** Vacation decisions and settings: access "Administrador" or "Dirección" (never one's own request). */
+export function canDecideVacations(user: AuthenticatedUser | null): boolean {
+  return notImplemented("canDecideVacations", user);
 }
 
 /**
