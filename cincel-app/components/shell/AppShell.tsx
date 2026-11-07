@@ -9,6 +9,7 @@ import type { NavModel } from "@/lib/ui/nav";
 import { toClientNavModel } from "@/lib/ui/nav-client";
 
 import { AppShellClient } from "./AppShellClient";
+import { ClockInPrompt } from "./ClockInPrompt";
 import { SidebarSlotOutlet } from "./SidebarSlotOutlet";
 import { StyleProvider } from "./StyleProvider";
 
@@ -60,6 +61,9 @@ export function AppShell({ children, appearance, session, nav, today, hideAssist
       >
         {children}
       </AppShellClient>
+      {today ? (
+        <ClockInPrompt status={today} requiredFrom={today.requiredFrom} now={new Date()} name={session.name} />
+      ) : null}
     </StyleProvider>
   );
 }

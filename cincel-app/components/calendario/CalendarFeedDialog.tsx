@@ -36,7 +36,7 @@ export const CALENDAR_CONNECT_URL = "/api/auth/google/start?scope=calendar&retur
  * Direct sync (#434): once the staff member grants the Calendar consent, tasks are pushed into a "Cincel" calendar the app creates there —
  * updates land within minutes instead of Google's hours-long ICS polling.
  */
-function GoogleCalendarSyncSection({ open }: { open: boolean }) {
+export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
   const [status, setStatus] = useState<GoogleCalendarSyncStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");

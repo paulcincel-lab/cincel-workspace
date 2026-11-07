@@ -1,18 +1,18 @@
 /**
  * Settings section "Gmail: estado, Conectar, Sincronizar ahora, Desconectar" of /ajustes/integraciones (redesign FE §3.8, §21.1; Phase 5).
  *
- * Contract stub: hidden until Phase 5 implements it.
+ * Hidden while `fetchGmailStatusAction` is a stub; the card shows "Sincronizar
+ * ahora" and "Desconectar" only once their own actions are implemented.
+ * Renders inside `IntegracionesClient`, which holds the Gmail status.
  */
+import { IntegracionesGmail } from "@/components/ajustes/IntegracionesClient";
+import { IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
-
-function IntegracionesGmailSection() {
-  return null;
-}
 
 export const integracionesGmailSection: SettingsSectionEntry = {
   page: "integraciones",
   name: "gmail",
   order: 10,
-  visible: () => false,
-  Component: IntegracionesGmailSection,
+  visible: () => IMPLEMENTED.fetchGmailStatusAction,
+  Component: IntegracionesGmail,
 };

@@ -82,6 +82,8 @@ export const staffProfiles = core.table(
     emergencyContactAddress: text("emergency_contact_address"),
     /** Per-person vacation days per year; null = org default `app_settings('vacations').daysPerYear` (BE §3.9). */
     vacationDays: integer("vacation_days"),
+    /** Email signature the person edits in Ajustes › Perfil (redesign FE §3.8); null = none. */
+    emailSignature: text("email_signature"),
     ...stamps,
   },
   (t) => [

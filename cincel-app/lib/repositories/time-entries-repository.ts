@@ -1,7 +1,8 @@
 /** Control de horario entries (redesign BE §3.8, §8.7). Own rows via `ownerScoped`. */
+import { and, asc, gte, inArray, lte } from "drizzle-orm";
+
 import { timeEntries } from "@/lib/db/schema";
 import { ownerScoped, type OwnerDb } from "@/lib/repositories/owner-scoped";
-import { notImplemented } from "@/lib/stubs";
 
 export type TimeEntryRow = typeof timeEntries.$inferSelect;
 
@@ -12,5 +13,17 @@ export async function listTimeEntries(
   db: OwnerDb,
   filter: { staffIds: string[]; from: string; to: string },
 ): Promise<TimeEntryRow[]> {
-  return notImplemented("listTimeEntries", db, filter);
+  const ids = [...new Set(filter.staffIds)];
+  if (ids.length === 0) return [];
+  return db
+    .select()
+    .from(timeEntries)
+    .where(
+      and(
+        inArray(timeEntries.staffId, ids),
+        gte(timeEntries.workDate, filter.from),
+        lte(timeEntries.workDate, filter.to),
+      ),
+    )
+    .orderBy(asc(timeEntries.staffId), asc(timeEntries.workDate), asc(timeEntries.startedAt));
 }

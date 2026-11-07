@@ -310,6 +310,7 @@ function toProfile(row: typeof staffProfiles.$inferSelect): StaffProfile {
     emergencyContactRelation: row.emergencyContactRelation,
     emergencyContactPhone: row.emergencyContactPhone,
     emergencyContactAddress: row.emergencyContactAddress,
+    emailSignature: row.emailSignature,
   };
 }
 
@@ -416,11 +417,27 @@ export async function upsertStaffProfile(
     emergencyContactRelation: clean(profile.emergencyContactRelation),
     emergencyContactPhone: clean(profile.emergencyContactPhone),
     emergencyContactAddress: clean(profile.emergencyContactAddress),
+    // Only written when sent, so an Equipo save never clears the person's own signature.
+    ...(profile.emailSignature !== undefined ? { emailSignature: clean(profile.emailSignature) } : {}),
   };
   const [row] = await db
     .insert(staffProfiles)
     .values(values)
     .onConflictDoUpdate({ target: staffProfiles.staffId, set: values })
+    .returning();
+  return toProfile(row);
+}
+
+/**
+ * Set only the email signature of a staff member (Ajustes › Perfil, redesign
+ * FE §3.8); the rest of the profile row is left as it is.
+ */
+export async function setStaffEmailSignature(staffId: string, signature: string | null): Promise<StaffProfile> {
+  const emailSignature = clean(signature);
+  const [row] = await db
+    .insert(staffProfiles)
+    .values({ staffId, emailSignature })
+    .onConflictDoUpdate({ target: staffProfiles.staffId, set: { emailSignature } })
     .returning();
   return toProfile(row);
 }

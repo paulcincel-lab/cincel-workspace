@@ -1,18 +1,17 @@
 /**
  * Settings section "Control de horario activado / desactivado y fecha obligatoria" of /ajustes/horario (redesign FE §3.8, §21.1; Phase 6).
  *
- * Contract stub: hidden until Phase 6 implements it.
+ * `canManageTimeTracking` only. Renders inside `HorarioClient`, which holds the settings.
  */
+import { HorarioControl } from "@/components/ajustes/HorarioSections";
+import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
+import { canManageTimeTracking } from "@/lib/auth/permissions";
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
-
-function HorarioControlSection() {
-  return null;
-}
 
 export const horarioControlSection: SettingsSectionEntry = {
   page: "horario",
   name: "control",
   order: 10,
-  visible: () => false,
-  Component: HorarioControlSection,
+  visible: (user) => IMPLEMENTED.fetchTimeTrackingSettingsAction && canManageTimeTracking(user),
+  Component: HorarioControl,
 };

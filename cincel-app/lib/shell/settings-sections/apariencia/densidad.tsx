@@ -1,18 +1,16 @@
 /**
  * Settings section "Densidad" of /ajustes/apariencia (redesign FE §3.8, §21.1; Phase 6).
- *
- * Contract stub: hidden until Phase 6 implements it.
+ * Every staff member sees it once `updateMyPreferencesAction` is implemented;
+ * the state lives in `AparienciaClient`.
  */
+import { AparienciaDensidadSection } from "@/components/ajustes/AparienciaSections";
+import { IMPLEMENTED } from "@/lib/actions/preferences-actions.flags";
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
-
-function AparienciaDensidadSection() {
-  return null;
-}
 
 export const aparienciaDensidadSection: SettingsSectionEntry = {
   page: "apariencia",
   name: "densidad",
   order: 40,
-  visible: () => false,
+  visible: () => IMPLEMENTED.updateMyPreferencesAction,
   Component: AparienciaDensidadSection,
 };

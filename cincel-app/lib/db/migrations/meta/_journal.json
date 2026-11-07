@@ -190,6 +190,13 @@
       "when": 1794281350196,
       "tag": "0026_redesign_contracts",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794064923521,
+      "tag": "0027_profile_email_signature",
+      "breakpoints": true
     }
   ]
 }

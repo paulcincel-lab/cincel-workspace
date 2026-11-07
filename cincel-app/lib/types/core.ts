@@ -74,6 +74,8 @@ export type StaffProfile = {
   emergencyContactRelation: string | null;
   emergencyContactPhone: string | null;
   emergencyContactAddress: string | null;
+  /** Edited by the person in Ajustes › Perfil (redesign FE §3.8); a profile save that omits it leaves it untouched. */
+  emailSignature?: string | null;
 };
 
 export type StaffAccess = {

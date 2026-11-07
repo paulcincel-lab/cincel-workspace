@@ -1,18 +1,18 @@
 /**
  * Settings section "Lo que ve el equipo al iniciar sesión" of /ajustes/horario (redesign FE §3.8, §21.1; Phase 6).
  *
- * Contract stub: hidden until Phase 6 implements it.
+ * `canManageTimeTracking` only: a preview of the `ClockInPrompt` copy for the
+ * settings being edited. Renders inside `HorarioClient`.
  */
+import { HorarioVistaPrevia } from "@/components/ajustes/HorarioSections";
+import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
+import { canManageTimeTracking } from "@/lib/auth/permissions";
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
-
-function HorarioVistaPreviaSection() {
-  return null;
-}
 
 export const horarioVistaPreviaSection: SettingsSectionEntry = {
   page: "horario",
   name: "vista-previa",
   order: 30,
-  visible: () => false,
-  Component: HorarioVistaPreviaSection,
+  visible: (user) => IMPLEMENTED.fetchTimeTrackingSettingsAction && canManageTimeTracking(user),
+  Component: HorarioVistaPrevia,
 };
