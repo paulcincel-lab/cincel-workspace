@@ -88,8 +88,10 @@ import {
   Mapping,
   MondayStatusMap as MondayStatusMapSchema,
   statusLabelKey,
+  type MappingUpgradeLookups,
   type MondayStatusMap,
 } from "@/scripts/monday/mapping.schema";
+import { saveUpgradedStatusLabels, upgradeDbLookups, upgradeStoredMapping } from "@/scripts/monday/mapping-upgrade";
 import {
   buildPlan,
   checkDriveConfigured,
@@ -126,6 +128,10 @@ export interface WizardDeps {
   savedStatusMap?: (db: ImportDb) => Promise<MondayStatusMap>;
   /** Puestos with candidate fases and the fase and tramo names, for the puesto suggestion; the DB ones by default. */
   positionCatalog?: (db: ImportDb) => Promise<PositionSuggestionCatalog>;
+  /** The fases and saved status map a v1 draft is upgraded with; `upgradeDbLookups` by default. */
+  upgradeLookups?: (db: ImportDb) => Promise<MappingUpgradeLookups>;
+  /** Adds a v1 draft's status labels to the saved map; `saveUpgradedStatusLabels` by default. */
+  saveUpgradedLabels?: (db: ImportDb, added: MondayStatusMap) => Promise<unknown>;
 }
 
 const STEPS: readonly MondayImportStep[] = [
@@ -329,7 +335,7 @@ export async function getRunState(runId: string, deps: WizardDeps): Promise<Mond
     boardIds: run.boardIds,
     exportOptions: run.exportOptions,
     exported: exportedAll(dir, run.boardIds),
-    mapping: await readDraftMapping(run.runId, env),
+    mapping: await readRunDraft(run.runId, deps),
     jobs,
     batchId: batch?.id ?? run.batchId,
     batchStatus: batch?.status ?? null,
@@ -389,7 +395,7 @@ export async function draftRunMapping(run: StoredRun, deps: WizardDeps): Promise
   const drafted = (await draftMapping(data, (deps.initLookups ?? createDbLookups)(deps.db))) as MappingInput;
   if (!run.exportOptions.files) drafted.options = { ...drafted.options, includeFiles: false };
   if (!run.exportOptions.updates) drafted.options = { ...drafted.options, includeUpdates: false };
-  const merged = mergeDraft(await readDraftMapping(run.runId, env), drafted, run.boardIds);
+  const merged = mergeDraft(await readRunDraft(run.runId, deps), drafted, run.boardIds);
   await writeDraftMapping(run.runId, merged, env);
   return merged;
 }
@@ -684,6 +690,32 @@ async function withSavedStatusMap(deps: WizardDeps, mapping: MappingInput): Prom
   return { ...mapping, statusMap: await (deps.savedStatusMap ?? readSavedStatusMap)(deps.db) };
 }
 
+/**
+ * A v1 mapping (a draft stored before the project flow, or an uploaded file) as v2 (BE §10 intro); null when `raw`
+ * isn't a v1 mapping. Its status labels the saved firm-wide map doesn't have yet are added to it, since preview
+ * and apply translate with the saved map.
+ */
+async function upgradeDraft(runId: string, raw: unknown, deps: WizardDeps): Promise<MappingInput | null> {
+  const result = await upgradeStoredMapping(raw, {
+    lookups: () => (deps.upgradeLookups ?? upgradeDbLookups)(deps.db),
+    exportData: () => readExport(runDir(runId, envOf(deps))),
+  });
+  if (!result) return null;
+  if (Object.keys(result.added).length > 0)
+    await (deps.saveUpgradedLabels ?? saveUpgradedStatusLabels)(deps.db, result.added);
+  return result.mapping;
+}
+
+/** The run's draft, always v2: a v1 draft is upgraded on read and saved back. */
+export async function readRunDraft(runId: string, deps: WizardDeps): Promise<MappingInput | null> {
+  const env = envOf(deps);
+  const raw = await readDraftMapping(runId, env);
+  const upgraded = await upgradeDraft(runId, raw, deps);
+  if (!upgraded) return raw;
+  await writeDraftMapping(runId, upgraded, env);
+  return upgraded;
+}
+
 /** Zod issues as "path: message" lines. */
 export function mappingIssues(raw: unknown): string[] {
   const parsed = Mapping.safeParse(raw);
@@ -723,7 +755,7 @@ export async function saveDraft(
 /** mapping.json download, the same file the CLI reads. */
 export async function downloadDraft(runId: string, deps: WizardDeps): Promise<{ fileName: string; content: string }> {
   await requireRun(runId, deps);
-  const mapping = await readDraftMapping(runId, envOf(deps));
+  const mapping = await readRunDraft(runId, deps);
   if (!mapping) throw new WizardError("Todavía no hay equivalencias: primero exporta los tableros.");
   return { fileName: "mapping.json", content: `${JSON.stringify(mapping, null, 2)}\n` };
 }
@@ -737,6 +769,7 @@ export async function uploadDraft(runId: string, text: string, deps: WizardDeps)
   } catch {
     return { issues: ["El archivo no es JSON válido."] };
   }
+  raw = (await upgradeDraft(runId, raw, deps)) ?? raw;
   const issues = mappingIssues(raw);
   if (issues.length > 0) return { issues };
   await writeDraftMapping(runId, keepVerifiedCreatedStaff(raw, createdStaffOf(run)), envOf(deps));
@@ -787,7 +820,7 @@ async function enforceDisabledOptions(run: StoredRun, mapping: MappingInput, dep
 async function planRun(run: StoredRun, importedById: string | undefined, deps: WizardDeps) {
   const env = envOf(deps);
   const dir = runDir(run.runId, env);
-  const stored = await readDraftMapping(run.runId, env);
+  const stored = await readRunDraft(run.runId, deps);
   if (!stored) throw new WizardError("Todavía no hay equivalencias: primero exporta los tableros.");
   const mapping = await withSavedStatusMap(deps, await enforceDisabledOptions(run, stored, deps));
   const { data } = await readPlanExport(dir);
@@ -884,7 +917,7 @@ export async function startApply(
   const dir = runDir(run.runId, env);
   const batch = await runBatch(deps.db, dir);
   if (batch?.status === "applied") throw new WizardError("Esta importación ya se aplicó.");
-  const draft = await readDraftMapping(run.runId, env);
+  const draft = await readRunDraft(run.runId, deps);
   if (!draft) throw new WizardError("Todavía no hay equivalencias.");
   // The batch's mapping is what rollback reads: only staff this run created may stay marked `created`.
   const stored = keepVerifiedCreatedStaff(draft, createdStaffOf(run));
@@ -905,7 +938,7 @@ export async function startApply(
       "Importando a Cincel",
       async ({ io, progress }) => {
         // Snapshot of the saved firm-wide status map, right before apply: the batch records what was used.
-        const latest = await readDraftMapping(run.runId, env);
+        const latest = await readRunDraft(run.runId, deps);
         if (latest) await writeDraftMapping(run.runId, await withSavedStatusMap(deps, latest), env);
         const code = await command(["--export", dir, "--by", by.email], io);
         const created = await runBatch(deps.db, dir);

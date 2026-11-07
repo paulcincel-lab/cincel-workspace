@@ -8,7 +8,7 @@
  * export folder for the preview. The apply → rollback flow needs
  * TEST_DATABASE_URL and runs in a transaction that is rolled back.
  */
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -37,8 +37,10 @@ import {
   getOptionsInfo,
   getRunState,
   importedProjects,
+  mappingIssues,
   mergeDraft,
   previewImport,
+  readRunDraft,
   recordCreatedStaff,
   resolveWizardToken,
   saveDraft,
@@ -303,6 +305,68 @@ describe("monday wizard draft and preview", () => {
 
     expect((await uploadDraft(run.runId, "{nope", deps)).issues).toEqual(["El archivo no es JSON válido."]);
     expect((await uploadDraft(run.runId, JSON.stringify(nestedMapping(ANA, CLIENT)), deps)).issues).toEqual([]);
+  });
+
+  /** nestedMapping as mapping v1: an área, v1 group targets and per-board status maps keyed by label id. */
+  function nestedMappingV1() {
+    const v2 = nestedMapping(ANA, CLIENT);
+    const { statusMap: _statusMap, ...rest } = v2;
+    void _statusMap;
+    return {
+      ...rest,
+      version: 1,
+      boards: v2.boards.map((b) =>
+        b.mondayBoardId === "901"
+          ? {
+              ...b,
+              areaId: "55555555-5555-4555-8555-555555555555",
+              groupTargets: { g_obra: { kind: "stage", workflowId: FIXTURE_WORKFLOW }, g_diseno: { kind: "workflow_phase", phase: "Diseño" } },
+              statusMaps: { status: { "1": { status: "completado" }, "2": { status: "en_proceso" } } },
+            }
+          : { ...b, groupTargets: undefined },
+      ),
+    };
+  }
+  const FASE_DISENO = "66666666-6666-4666-8666-666666666666";
+  const upgradeLookups = async () => ({
+    phases: { [FASE_DISENO]: { workflowId: FIXTURE_WORKFLOW, name: "Diseño" } },
+    statusMap: { listo: { target: { status: "bloqueado" as const }, priority: null } },
+  });
+
+  it("reads a stored v1 draft back as v2 and saves it, adding only the labels the saved map lacks", async () => {
+    const run = await nestedRun(nestedMapping(ANA, CLIENT));
+    writeFileSync(join(runDir(run.runId, env), "mapping.json"), JSON.stringify(nestedMappingV1()));
+    const saveUpgradedLabels = vi.fn(async () => undefined);
+    const deps = { db: {} as ImportDb, env, upgradeLookups, saveUpgradedLabels } satisfies WizardDeps;
+
+    const mapping = (await readRunDraft(run.runId, deps))!;
+    expect(mapping.version).toBe(2);
+    const board = mapping.boards.find((b) => b.mondayBoardId === "901")!;
+    expect(board.groupTargets).toEqual({
+      g_obra: { kind: "tramo", workflowId: FIXTURE_WORKFLOW },
+      g_diseno: { kind: "phase", phaseId: FASE_DISENO },
+    });
+    expect(board).not.toHaveProperty("areaId");
+    expect(board).not.toHaveProperty("statusMaps");
+    // "Listo" is already in the saved map, so only "En curso" is added.
+    expect(saveUpgradedLabels).toHaveBeenCalledTimes(1);
+    expect(saveUpgradedLabels).toHaveBeenCalledWith(deps.db, {
+      "en curso": { target: { status: "en_proceso" }, priority: null },
+    });
+    // Saved back as v2: the next read doesn't upgrade again.
+    const stored = JSON.parse(readFileSync(join(runDir(run.runId, env), "mapping.json"), "utf8")) as MappingInput;
+    expect(stored.version).toBe(2);
+    expect(mappingIssues(stored)).toEqual([]);
+    expect((await readRunDraft(run.runId, deps))!.version).toBe(2);
+    expect(saveUpgradedLabels).toHaveBeenCalledTimes(1);
+  });
+
+  it("upgrades an uploaded v1 mapping.json instead of rejecting it", async () => {
+    const run = await nestedRun(nestedMapping(ANA, CLIENT));
+    const deps = { db: {} as ImportDb, env, upgradeLookups, saveUpgradedLabels: async () => undefined } satisfies WizardDeps;
+    expect((await uploadDraft(run.runId, JSON.stringify(nestedMappingV1()), deps)).issues).toEqual([]);
+    const stored = JSON.parse(readFileSync(join(runDir(run.runId, env), "mapping.json"), "utf8")) as MappingInput;
+    expect(stored.version).toBe(2);
   });
 
   it("keeps `created` only on staff the run's Crear integrante made (#689)", async () => {

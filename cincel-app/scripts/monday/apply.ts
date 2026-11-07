@@ -84,6 +84,7 @@ import {
   checkDriveConfigured,
   createPlanDbLookups,
   readMappingFile,
+  upgradeMappingFile,
   readPlanExport,
   type Plan,
   type PlanLookups,
@@ -972,7 +973,20 @@ export function createApplyCommand(
           `monday apply: board ${id} has no .done marker; its export is incomplete.\n`,
         );
       }
-      const mapping = await readMappingFile(dir);
+      const read = await readMappingFile(dir);
+      const mapping =
+        "issue" in read
+          ? read
+          : {
+              raw: await upgradeMappingFile(
+                dir,
+                read.raw,
+                data,
+                handle.db,
+                io,
+                "apply",
+              ),
+            };
 
       let written: { batchId: string; counts: PhaseACounts };
       try {
