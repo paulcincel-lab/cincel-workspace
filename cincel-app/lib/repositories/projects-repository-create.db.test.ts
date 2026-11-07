@@ -57,6 +57,18 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
   }
 
   beforeAll(async () => {
+    // What scripts/migrate.mjs seeds after the migrations (BE §5.4); idempotent, never updates existing rows.
+    const { default: postgres } = await import("postgres");
+    const { ensureDefaultWorkflows } = await import("@/scripts/default-workflows.mjs");
+    const { ensureDefaultCatalog } = await import("@/scripts/default-catalog.mjs");
+    const seedSql = postgres(url!, { max: 1, onnotice: () => {} });
+    try {
+      await ensureDefaultWorkflows(seedSql);
+      await ensureDefaultCatalog(seedSql);
+    } finally {
+      await seedSql.end();
+    }
+
     const [member] = await db
       .insert(schema.staff)
       .values({ name: `Flow staff ${run}`, role: "Colaborador" })

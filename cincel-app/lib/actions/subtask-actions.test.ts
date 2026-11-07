@@ -49,7 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   caps.canCreate = true;
   caps.canView = true;
-  repo.createSubtask.mockResolvedValue({ id: "c1", projectId: PROJECT });
+  repo.createSubtask.mockResolvedValue({ id: "c1", projectId: PROJECT, project: { id: PROJECT, name: "Casa", clientName: null } });
   repo.listSubtasks.mockResolvedValue(refs);
 });
 

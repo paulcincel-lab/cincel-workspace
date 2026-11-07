@@ -1367,7 +1367,7 @@ describe.skipIf(!url)("plan lookups (test DB)", () => {
 
       const l = createPlanDbLookups(tx);
       const t = await l.translateLookups();
-      expect(t.templates[template.id]).toEqual({ workflowId: wf.id, phaseId: null });
+      expect(t.templates[template.id]).toEqual({ workflowId: wf.id, phaseId: phase.id });
       expect(t.staff[admin.id]).toMatchObject({ name: "Plan Admin" });
       expect(await l.importedRefs("project", ["plan-901", "plan-902"])).toEqual(
         new Map([["plan-901", other.id]]),

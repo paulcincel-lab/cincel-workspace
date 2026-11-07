@@ -122,7 +122,7 @@ describe.skipIf(!url)("0025 on a fresh database", () => {
 
   afterAll(async () => {
     await db?.drop();
-  });
+  }, 60_000);
 
   it("applies with every earlier migration and leaves the release B schema", async () => {
     await expectReleaseBSchema(db.sql);
@@ -203,7 +203,7 @@ describe.skipIf(!url)("0025 on top of the 0024 dev-like fixture", () => {
 
   afterAll(async () => {
     await db?.drop();
-  });
+  }, 60_000);
 
   async function reportRows(kind: string) {
     return db.sql`

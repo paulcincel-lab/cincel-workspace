@@ -306,7 +306,10 @@ describe("translate: board_as_project", () => {
   it("a label with no entry and no default imports as pendiente and is listed once for review", () => {
     const input = mappingInput();
     delete input.statusMap!["revisión cliente"];
-    const r = run(exportData(), input);
+    // Without the custom status of the same name, nothing in the defaults table matches the label.
+    const { [CUSTOM_OPEN]: _sameName, ...customStatuses } = lookups.customStatuses;
+    void _sameName;
+    const r = translate(exportData(), Mapping.parse(input), { ...lookups, customStatuses }, { importedById: ADMIN });
     expect(task(r, "1002")).toMatchObject({ status: "pendiente", customStatusId: null });
     const defaulted = r.issues.filter((i) => i.code === "STATUS_DEFAULTED");
     expect(defaulted).toEqual([

@@ -10,7 +10,7 @@ import { revalidatePath } from "next/cache";
 
 const caps = vi.hoisted(() => ({
   canManageWorkflows: true,
-  canManageAreas: true,
+  canManagePositions: true,
   canViewActivities: true,
   canCreateActivity: true,
   canEditCollaborator: true,
@@ -32,7 +32,7 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   canSeeAdminData: () => caps.admin,
   resolveWorkflowsCapabilities: () => ({ canViewWorkflows: true, canManageWorkflows: caps.canManageWorkflows }),
-  resolveAreasCapabilities: () => ({ canViewAreas: true, canManageAreas: caps.canManageAreas }),
+  resolvePositionsCapabilities: () => ({ canViewPositions: true, canManagePositions: caps.canManagePositions }),
   resolveActivitiesCapabilities: () => ({
     canViewActivities: caps.canViewActivities,
     canCreateActivity: caps.canCreateActivity,
@@ -152,7 +152,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   Object.assign(caps, {
     canManageWorkflows: true,
-    canManageAreas: true,
+    canManagePositions: true,
     canViewActivities: true,
     canCreateActivity: true,
     canEditCollaborator: true,
@@ -224,13 +224,13 @@ describe("workflows-actions (§7.1)", () => {
 
 describe("positions-actions (§7.2)", () => {
   it("reads for any staff session", async () => {
-    caps.canManageAreas = false;
+    caps.canManagePositions = false;
     positionsRepo.listPositions.mockResolvedValue([]);
     await expect(fetchPositionsAction()).resolves.toEqual([]);
   });
 
   it("rejects every write without the puestos capability", async () => {
-    caps.canManageAreas = false;
+    caps.canManagePositions = false;
     await expect(createPositionAction({ name: "Diseñador" })).rejects.toThrow("FORBIDDEN");
     await expect(updatePositionAction(P, { name: "Diseñador" })).rejects.toThrow("FORBIDDEN");
     await expect(deletePositionAction(P)).rejects.toThrow("FORBIDDEN");
@@ -283,8 +283,10 @@ describe("setStaffPositionsAction (§7.2)", () => {
   it("refuses a change for Google-managed staff while position mappings exist", async () => {
     staffRepo.googleManagedStaffIds.mockResolvedValue(new Set([S1]));
     await expect(setStaffPositionsAction(S1, [F1, P])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
-    await expect(setStaffPositionsAction(S1, [F1])).resolves.toBeUndefined();
     expect(positionsRepo.setStaffPositions).not.toHaveBeenCalled();
+    // Sending the workspace puestos back is not a change.
+    await expect(setStaffPositionsAction(S1, [F1])).resolves.toBeUndefined();
+    expect(positionsRepo.setStaffPositions).toHaveBeenCalledWith(S1, [F1]);
   });
 
   it("lets Google-managed staff change when no position mapping exists", async () => {
@@ -294,9 +296,9 @@ describe("setStaffPositionsAction (§7.2)", () => {
     expect(positionsRepo.setStaffPositions).toHaveBeenCalledWith(S1, [P]);
   });
 
-  it("replaces only the manual rows", async () => {
+  it("dedupes the ids; the repository replaces only the manual rows", async () => {
     await setStaffPositionsAction(S1, [F1, P, P]);
-    expect(positionsRepo.setStaffPositions).toHaveBeenCalledWith(S1, [P]);
+    expect(positionsRepo.setStaffPositions).toHaveBeenCalledWith(S1, [F1, P]);
     expect(revalidatePath).toHaveBeenCalledWith("/configuracion/puestos");
   });
 });

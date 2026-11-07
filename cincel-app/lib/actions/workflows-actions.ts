@@ -57,15 +57,13 @@ export async function fetchWorkflowsAction(
   options: { includeInactive?: boolean; includeInactiveTemplates?: boolean; includeInactivePhases?: boolean } = {}
 ): Promise<WorkflowDetail[]> {
   const caps = await requireWorkflowsCapabilities();
-  const wantsInactive = Boolean(
-    options.includeInactive || options.includeInactiveTemplates || options.includeInactivePhases
-  );
-  if (wantsInactive && !caps.canManageWorkflows) throw flowError(FLOW_ERROR.FORBIDDEN, "inactive workflows");
-  return workflowsRepository.listWorkflows({
-    includeInactive: options.includeInactive === true,
-    includeInactiveTemplates: options.includeInactiveTemplates === true,
-    includeInactivePhases: options.includeInactivePhases === true,
-  });
+  // Active rows for any staff session; the inactive flags only for managers, ignored otherwise (BE §7.1).
+  if (!caps.canManageWorkflows) return workflowsRepository.listWorkflows({});
+  const flags: { includeInactive?: true; includeInactiveTemplates?: true; includeInactivePhases?: true } = {};
+  if (options.includeInactive === true) flags.includeInactive = true;
+  if (options.includeInactiveTemplates === true) flags.includeInactiveTemplates = true;
+  if (options.includeInactivePhases === true) flags.includeInactivePhases = true;
+  return workflowsRepository.listWorkflows(flags);
 }
 
 export async function fetchWorkflowAction(id: string): Promise<WorkflowDetail | null> {

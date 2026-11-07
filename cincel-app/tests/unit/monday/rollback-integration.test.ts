@@ -45,6 +45,8 @@ import {
 import type { CliIo } from "@/scripts/monday/run";
 import type { ExportData } from "@/scripts/monday/translate";
 
+import { FIXTURE_WORKFLOW, seedFixtureWorkflow } from "./apply-fixtures";
+
 const ANA = "22222222-2222-4222-8222-222222222222";
 const ANA_EMAIL = "ana.rollback@example.com";
 const CLIENT = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -160,6 +162,11 @@ function nestedMapping(): MappingInput {
         name: "Casa Nido",
         strategy: "board_as_project",
         client: { kind: "contact", contactId: CLIENT },
+        workflowId: FIXTURE_WORKFLOW,
+        groupTargets: {
+          g_obra: { kind: "tramo", workflowId: FIXTURE_WORKFLOW },
+          g_diseno: { kind: "tramo", workflowId: FIXTURE_WORKFLOW },
+        },
         columns: {
           name: "title",
           status: "status",
@@ -177,6 +184,7 @@ function nestedMapping(): MappingInput {
         name: "Casa Faro",
         strategy: "board_as_project",
         client: { kind: "contact", contactId: CLIENT },
+        workflowId: FIXTURE_WORKFLOW,
         columns: { name: "title", status: "status" },
         subitemColumns: { name: "title", sstatus: "status" },
         subitems: "child_tasks",
@@ -186,6 +194,7 @@ function nestedMapping(): MappingInput {
         name: "Obras",
         strategy: "item_as_project",
         client: { kind: "contact", contactId: CLIENT },
+        workflowId: FIXTURE_WORKFLOW,
         columns: { name: "title", presupuesto: "import_data" },
         subitemColumns: { name: "title" },
       },
@@ -298,6 +307,7 @@ describe.skipIf(!url)("rollback after apply (test DB, fake Drive)", { timeout: 6
         await tx
           .insert(schema.contacts)
           .values({ id: CLIENT, type: "cliente", name: "Rollback Cliente" });
+        await seedFixtureWorkflow(tx as unknown as ImportDb);
 
         const fake = fakeDrive();
         const env = { GOOGLE_SHARED_DRIVE_ID: SHARED_DRIVE };

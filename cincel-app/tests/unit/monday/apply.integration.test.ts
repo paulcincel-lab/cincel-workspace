@@ -46,6 +46,7 @@ import {
   fakeDrive,
   io,
   nestedMapping,
+  seedFixtureWorkflow,
   writeExportFolder,
 } from "./apply-fixtures";
 
@@ -190,6 +191,7 @@ describe.skipIf(!url)(
       await tx
         .insert(schema.contacts)
         .values({ id: CLIENT, type: "cliente", name: "Integración Cliente" });
+      await seedFixtureWorkflow(tx);
     }
 
     function exportFolder(
@@ -332,7 +334,7 @@ describe.skipIf(!url)(
         }
         for (const [table, n] of Object.entries(refsPerTable))
           expect(added[table] ?? 0, table).toBe(n);
-        // Besides those, only the batch bookkeeping grows.
+        // Besides those, only the batch bookkeeping and one stage per imported project (BE §10.5) grow.
         const others = Object.fromEntries(
           Object.entries(added).filter(([table]) => !(table in refsPerTable)),
         );
@@ -340,6 +342,7 @@ describe.skipIf(!url)(
           import_batches: 1,
           import_refs: refs.length,
           import_files: t.files,
+          project_stages: counts.project,
         });
 
         // Each ref points at a live row.
@@ -403,14 +406,14 @@ describe.skipIf(!url)(
         const planned = await cmd.plan(dir);
         expect(planned.code).toBe(1);
         expect(planned.clean).toBe(false);
-        expect(planned.err).toContain("STATUS_UNMAPPED board 901 item 2002");
+        expect(planned.err).toContain("CLIENT_UNRESOLVED board 901");
 
         const before = await tableCounts(tx);
         const applied = await cmd.apply(dir);
         expect(applied.code).toBe(1);
         expect(applied.err).toContain("refused");
         expect(applied.err).toContain("nothing was written");
-        expect(applied.err).toContain("STATUS_UNMAPPED board 901 item 2002");
+        expect(applied.err).toContain("CLIENT_UNRESOLVED board 901");
         expect(await tableCounts(tx)).toEqual(before);
         expect(cmd.drive.writes()).toEqual([]);
       });
@@ -422,9 +425,7 @@ describe.skipIf(!url)(
         await tx
           .insert(schema.workflows)
           .values({ id: WORKFLOW, key: `wf-${WORKFLOW}`, name: "Diseño" });
-        const mapping = nestedMapping(STAFF, CLIENT);
-        for (const board of mapping.boards)
-          if (board.strategy !== "crm_contacts") board.workflowId = WORKFLOW;
+        const mapping = nestedMapping(STAFF, CLIENT, WORKFLOW);
         const dir = exportFolder(mapping);
         const cmd = commands(tx);
         const planned = await cmd.plan(dir);
@@ -516,7 +517,8 @@ describe.skipIf(!url)(
           .select()
           .from(schema.projectStages)
           .where(eq(schema.projectStages.projectId, boardId));
-        expect(stages.map((s) => s.workflowId).sort()).toEqual([WORKFLOW, STAGE].sort());
+        // One stage per tramo with tasks (BE §10.5): every task of board 901 left in it is in group Obra.
+        expect(stages.map((s) => s.workflowId)).toEqual([STAGE]);
 
         expect(await findRollbackBlockers(tx, batch.id)).toEqual([]);
         await deleteBatchRows(tx, batch.id);

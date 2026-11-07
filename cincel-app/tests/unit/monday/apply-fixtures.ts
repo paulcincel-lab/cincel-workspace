@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { workflows } from "@/lib/db/schema";
 import {
   FOLDER_MIME_TYPE,
   type DriveAdmin,
@@ -14,6 +15,7 @@ import {
   type ListOptions,
   type UploadInput,
 } from "@/lib/google/drive-admin";
+import type { ImportDb } from "@/lib/import/refs";
 import nestedFixture from "@/scripts/monday/__fixtures__/translate-nested-export.json";
 import type { MappingInput } from "@/scripts/monday/mapping.schema";
 import type { CliIo } from "@/scripts/monday/run";
@@ -144,12 +146,22 @@ export function io() {
   return { cli, out: () => out.join(""), err: () => err.join("") };
 }
 
+/** The tramo of the project boards of `nestedMapping` unless a test passes its own (see `seedFixtureWorkflow`). */
+export const FIXTURE_WORKFLOW = "56656656-0000-4000-8000-0000000000a0";
+
+/** Inserts the `FIXTURE_WORKFLOW` tramo; call it inside the test's rolled-back transaction. */
+export async function seedFixtureWorkflow(tx: ImportDb): Promise<void> {
+  await tx.insert(workflows).values({ id: FIXTURE_WORKFLOW, key: `wf-${FIXTURE_WORKFLOW}`, name: "Tramo de prueba" });
+}
+
 /**
  * The mapping of translate-nested-export.json (checklist, child tasks,
  * item_as_project, crm), with `staffId` as monday user 11 and `clientId` as
- * the client of every project board.
+ * the client of every project board. Every project board, and both groups of
+ * board 901, go to `workflowId`, so tramos already in the database (a group
+ * named "Diseño") never change where the tasks land.
  */
-export function nestedMapping(staffId: string, clientId: string): MappingInput {
+export function nestedMapping(staffId: string, clientId: string, workflowId: string = FIXTURE_WORKFLOW): MappingInput {
   // Firm-wide status map, keyed by label text (the export's "Pendiente", "Listo", "En curso").
   const statusMap = {
     pendiente: { target: { status: "pendiente" }, priority: null },
@@ -166,6 +178,11 @@ export function nestedMapping(staffId: string, clientId: string): MappingInput {
         name: "Casa Nido",
         strategy: "board_as_project",
         client,
+        workflowId,
+        groupTargets: {
+          g_obra: { kind: "tramo", workflowId },
+          g_diseno: { kind: "tramo", workflowId },
+        },
         columns: {
           name: "title",
           status: "status",
@@ -183,6 +200,7 @@ export function nestedMapping(staffId: string, clientId: string): MappingInput {
         name: "Casa Faro",
         strategy: "board_as_project",
         client,
+        workflowId,
         columns: { name: "title", status: "status" },
         subitemColumns: { name: "title", sstatus: "status" },
         subitems: "child_tasks",
@@ -192,6 +210,7 @@ export function nestedMapping(staffId: string, clientId: string): MappingInput {
         name: "Obras",
         strategy: "item_as_project",
         client,
+        workflowId,
         columns: { name: "title", presupuesto: "import_data" },
         subitemColumns: { name: "title" },
       },

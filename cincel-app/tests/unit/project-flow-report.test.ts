@@ -8,6 +8,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { projectFlowMigrationReport } from "@/lib/db/schema/flow-report";
 import { PROJECT_FLOW_REPORT_KINDS } from "@/lib/project-flow/catalog";
 import {
   EMPTY_REPORT_MESSAGE,
@@ -87,17 +88,18 @@ class Rollback extends Error {}
 
 describe.skipIf(!url)("loadReport (test DB)", () => {
   const sql = postgres(url ?? "", { max: 1, onnotice: () => {} });
+  const db = drizzle(sql);
   afterAll(() => sql.end());
 
   it("reads the rows written by the migration report", async () => {
-    await sql
-      .begin(async (tx) => {
-        await tx`delete from core.project_flow_migration_report`;
-        await tx`
-          insert into core.project_flow_migration_report (kind, entity, value, detail)
-          values ('area', 'area', 'Diseño', ${tx.json({ members: 3 })}),
-                 ('project_phases', 'project', 'Obra', null)`;
-        const rows = await loadReport(drizzle(tx as unknown as postgres.Sql));
+    await db
+      .transaction(async (tx) => {
+        await tx.delete(projectFlowMigrationReport);
+        await tx.insert(projectFlowMigrationReport).values([
+          { kind: "area", entity: "area", value: "Diseño", detail: { members: 3 } },
+          { kind: "project_phases", entity: "project", value: "Obra", detail: null },
+        ]);
+        const rows = await loadReport(tx as unknown as typeof db);
         expect(rows.map((r) => r.kind)).toEqual(["area", "project_phases"]);
         expect(rows[0].detail).toEqual({ members: 3 });
         expect(formatReport(rows)).toContain("## `area` (1)");

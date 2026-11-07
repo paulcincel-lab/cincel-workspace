@@ -18,12 +18,13 @@ const staffRepo = vi.hoisted(() => ({
   getStaffRoleLock: vi.fn(),
   googleManagedStaffIds: vi.fn(),
   updateStaff: vi.fn(),
+  staffExists: vi.fn(async () => true),
+  hasPositionGroupMappings: vi.fn(),
+  listStaffPositionIds: vi.fn(),
 }));
 vi.mock("@/lib/repositories/staff-repository", () => staffRepo);
 
 const positionsRepo = vi.hoisted(() => ({
-  hasPositionMappings: vi.fn(),
-  listStaffPositionIds: vi.fn(),
   setStaffPositions: vi.fn(),
 }));
 vi.mock("@/lib/repositories/positions-repository", () => positionsRepo);
@@ -44,8 +45,9 @@ beforeEach(() => {
     googleManaged: id === GOOGLE,
   }));
   staffRepo.googleManagedStaffIds.mockImplementation(async (ids: string[]) => new Set(ids.filter((id) => id === GOOGLE)));
-  positionsRepo.hasPositionMappings.mockResolvedValue(true);
-  positionsRepo.listStaffPositionIds.mockResolvedValue([POSITION_1]);
+  staffRepo.staffExists.mockResolvedValue(true);
+  staffRepo.hasPositionGroupMappings.mockResolvedValue(true);
+  staffRepo.listStaffPositionIds.mockResolvedValue([POSITION_1]);
   staffRepo.updateStaff.mockResolvedValue({ id: "x" });
 });
 
@@ -71,7 +73,7 @@ describe("setStaffPositionsAction", () => {
   it("refuses a puesto change for Google-managed staff when position mappings exist", async () => {
     await expect(setStaffPositionsAction(GOOGLE, [POSITION_1, POSITION_2])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
     await expect(setStaffPositionsAction(GOOGLE, [])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
-    expect(positionsRepo.listStaffPositionIds).toHaveBeenCalledWith(GOOGLE, "workspace");
+    expect(staffRepo.listStaffPositionIds).toHaveBeenCalledWith(GOOGLE, "workspace");
     expect(positionsRepo.setStaffPositions).not.toHaveBeenCalled();
   });
 
@@ -83,7 +85,7 @@ describe("setStaffPositionsAction", () => {
   });
 
   it("lets Google-managed staff change puestos while no position mapping exists", async () => {
-    positionsRepo.hasPositionMappings.mockResolvedValue(false);
+    staffRepo.hasPositionGroupMappings.mockResolvedValue(false);
     await setStaffPositionsAction(GOOGLE, [POSITION_1, POSITION_2]);
     expect(positionsRepo.setStaffPositions).toHaveBeenCalledWith(GOOGLE, [POSITION_1, POSITION_2]);
   });

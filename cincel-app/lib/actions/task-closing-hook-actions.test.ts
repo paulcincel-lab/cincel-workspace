@@ -35,6 +35,7 @@ const repo = vi.hoisted(() => ({
   setTaskStatus: vi.fn(),
   setTaskCustomStatus: vi.fn(),
   updateTask: vi.fn(),
+  assertTaskVisible: vi.fn(async () => undefined),
 }));
 vi.mock("@/lib/repositories/tasks-repository", () => repo);
 vi.mock("@/lib/repositories/task-dependencies-repository", () => ({}));
@@ -42,7 +43,7 @@ vi.mock("@/lib/repositories/task-dependencies-repository", () => ({}));
 import { setTaskCustomStatusAction, setTaskStatusAction, updateTaskAction } from "./tasks-actions";
 
 function taskRow(id: string, workflowId: string | null = PRESALE) {
-  return { id, projectId: PROJECT, workflowId, kind: "workflow", status: "completado" };
+  return { id, projectId: PROJECT, workflowId, kind: "workflow", status: "completado", project: { id: PROJECT, name: "Casa", clientName: null } };
 }
 
 async function runScheduled() {

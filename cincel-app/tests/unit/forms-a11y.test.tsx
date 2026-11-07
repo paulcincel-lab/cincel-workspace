@@ -121,7 +121,7 @@ describe("form fields have accessible names", () => {
         positionOptions={[]}
       />,
     );
-    for (const name of ["Apellidos", "Puesto", "Capacidad", "CURP", "RFC", "Celular", "Correo institucional"]) {
+    for (const name of ["Apellidos", "Capacidad", "CURP", "RFC", "Celular", "Correo institucional"]) {
       expect(screen.getByLabelText(name)).toBeTruthy();
     }
     expect(screen.getByRole("combobox", { name: "Disponibilidad" })).toBeTruthy();

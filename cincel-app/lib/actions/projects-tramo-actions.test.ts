@@ -66,6 +66,7 @@ const repo = vi.hoisted(() => ({
   createProject: vi.fn(),
   updateProject: vi.fn(),
   setProjectCurrentTramo: vi.fn(),
+  assignProjectTramo: vi.fn(),
 }));
 vi.mock("@/lib/repositories/projects-repository", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/repositories/projects-repository")>()),
@@ -113,6 +114,16 @@ beforeEach(() => {
     if (id !== PROJECT) throw new Error("NOT_FOUND");
     if (!state.stages.some((s) => s.workflowId === workflowId)) throw new Error("NOT_STARTED");
     state.current = workflowId;
+    return project();
+  });
+  // The repository's "Asignar tramo" path: only without a current tramo, through startTramo stageOnly.
+  repo.assignProjectTramo.mockImplementation(async (id: string, workflowId: string, actorId: string) => {
+    if (id !== PROJECT) throw new Error("NOT_FOUND");
+    if (state.current !== null) throw new Error("NOT_STARTED");
+    await flow.startTramo(
+      {},
+      { projectId: id, workflowId, phaseIds: [], assignment: { mode: "none" }, actorId, trigger: "manual", stageOnly: true }
+    );
     return project();
   });
   flow.startTramo.mockImplementation(

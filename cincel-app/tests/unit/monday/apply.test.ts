@@ -10,7 +10,7 @@
  */
 import { rmSync } from "node:fs";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
@@ -46,6 +46,7 @@ import {
   fakeDrive,
   io,
   nestedMapping as sharedNestedMapping,
+  seedFixtureWorkflow,
   writeExportFolder,
 } from "./apply-fixtures";
 
@@ -139,6 +140,7 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
     await tx
       .insert(schema.contacts)
       .values({ id: CLIENT, type: "cliente", name: "Apply Cliente" });
+    await seedFixtureWorkflow(tx);
   }
 
   /** Writes translate-nested-export.json out as an export folder (BE §4.1). */
@@ -199,7 +201,7 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
         ),
       ).toBe(1);
       expect(c.err()).toContain("refused");
-      expect(c.err()).toContain("STATUS_UNMAPPED board 901 item 2002");
+      expect(c.err()).toContain("CLIENT_UNRESOLVED board 901");
       expect(phaseB).not.toHaveBeenCalled();
       expect(await batchesOf(tx)).toEqual([]);
       expect(
@@ -321,10 +323,16 @@ describe.skipIf(!url)("apply phase A (test DB)", { timeout: 60_000 }, () => {
           .filter((r) => projectIds.includes(r.projectId))
           .every((r) => taskIds.has(r.id)),
       ).toBe(true);
+      // No "cambio" history on the imported rows (other test files may commit their own meanwhile).
       const cambios = await tx
         .select()
         .from(schema.historyEvents)
-        .where(eq(schema.historyEvents.kind, "cambio"));
+        .where(
+          and(
+            eq(schema.historyEvents.kind, "cambio"),
+            inArray(schema.historyEvents.entityId, [...taskIds, ...projectIds]),
+          ),
+        );
       expect(cambios).toEqual([]);
 
       // An applying batch of the account is resumed: phase A is skipped.

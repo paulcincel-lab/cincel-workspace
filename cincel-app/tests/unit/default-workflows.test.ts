@@ -86,6 +86,12 @@ describe.skipIf(!url)("ensureDefaultWorkflows (test DB)", () => {
   async function clearWorkflows(tx: postgres.TransactionSql) {
     // Rolled back with the transaction. Workflow tasks restrict the delete, so they go first.
     await tx`delete from core.tasks where workflow_id is not null`;
+    await tx`delete from core.tramo_start_batches`;
+    await tx`delete from core.workflow_task_templates`;
+    await tx`delete from core.position_phases`;
+    await tx`delete from core.workflow_phases`;
+    await tx`delete from core.project_stages`;
+    await tx`update core.projects set current_workflow_id = null where current_workflow_id is not null`;
     await tx`delete from core.workflows`;
   }
 

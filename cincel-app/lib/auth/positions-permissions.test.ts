@@ -13,7 +13,6 @@ vi.mock("@/lib/repositories/browser-state-repository", () => ({
 
 import {
   PERMISSIONS_CUSTOM_STORAGE_KEY,
-  mapLegacyModuleState,
   resolvePositionsCapabilities,
   resolvePositionsCapabilitiesFromDefaults,
 } from "@/lib/auth/permissions";
@@ -69,61 +68,24 @@ describe("positions capability", () => {
   });
 });
 
-describe("legacy areas module mapping", () => {
-  it("a stored areas module resolves to positions permissions", () => {
-    storeOverrides({
-      "Jefe de Taller": { areas: { canViewAreas: true, canManageAreas: true } },
-      Dirección: { areas: { canViewAreas: false, canManageAreas: false } },
-    });
-
-    expect(resolvePositionsCapabilities(makeUser("Jefe de Taller"))).toEqual({
-      canViewPositions: true,
-      canManagePositions: true,
-    });
-    expect(resolvePositionsCapabilities(makeUser("Dirección"))).toEqual({
-      canViewPositions: false,
-      canManagePositions: false,
-    });
-  });
-
-  it("missing legacy keys fall back to the defaults", () => {
-    storeOverrides({ Administrador: { areas: { canViewAreas: false } } });
-    expect(resolvePositionsCapabilities(makeUser("Administrador"))).toEqual({
-      canViewPositions: false,
-      canManagePositions: true,
-    });
-  });
-
-  it("a stored positions module wins over a legacy areas one", () => {
-    storeOverrides({
-      Colaborador: {
-        positions: { canViewPositions: true, canManagePositions: false },
-        areas: { canViewAreas: true, canManageAreas: true },
-      },
-    });
-    expect(resolvePositionsCapabilities(makeUser("Colaborador")).canManagePositions).toBe(false);
+describe("stored role configs", () => {
+  it("a stored positions module overrides the defaults", () => {
+    storeOverrides({ Colaborador: { positions: { canViewPositions: true, canManagePositions: true } } });
+    expect(resolvePositionsCapabilities(makeUser("Colaborador")).canManagePositions).toBe(true);
   });
 
   it("without stored overrides the defaults apply", () => {
     expect(resolvePositionsCapabilities(makeUser("Colaborador")).canManagePositions).toBe(false);
   });
 
-  it("mapLegacyModuleState renames keys and ignores unknown ones", () => {
-    expect(
-      mapLegacyModuleState({ areas: { canViewAreas: true, canManageAreas: false, other: true } }, "positions")
-    ).toEqual({ canViewPositions: true, canManagePositions: false });
-    expect(mapLegacyModuleState({}, "positions")).toBeNull();
-    expect(mapLegacyModuleState({ areas: { canViewAreas: true } }, "team")).toBeNull();
-  });
-
-  it("the Permisos page reads a stored areas module as Puestos", () => {
+  it("the Permisos page drops a stored areas module", () => {
     const defaults = buildDefaultPermissionsState();
     const stored = {
       version: 1,
       roles: { Colaborador: { areas: { canViewAreas: true, canManageAreas: true } } },
     };
     const state = sanitizePermissionsState(defaults, stored);
-    expect(state.Colaborador.positions).toEqual({ canViewPositions: true, canManagePositions: true });
+    expect(state.Colaborador.positions).toEqual(defaults.Colaborador.positions);
     expect(state.Colaborador.areas).toBeUndefined();
   });
 });

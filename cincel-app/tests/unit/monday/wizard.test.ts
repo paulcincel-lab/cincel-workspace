@@ -58,7 +58,7 @@ import { createDbLookups, draftStatusMap, type InitLookups } from "@/scripts/mon
 import type { MappingInput } from "@/scripts/monday/mapping.schema";
 import type { PlanLookups } from "@/scripts/monday/plan";
 
-import { fakeDrive, nestedMapping, writeExportFolder } from "./apply-fixtures";
+import { FIXTURE_WORKFLOW, fakeDrive, nestedMapping, seedFixtureWorkflow, writeExportFolder } from "./apply-fixtures";
 
 const TOKEN = "secret-token-xyz";
 const ANA = "11111111-1111-4111-8111-111111111111";
@@ -133,7 +133,7 @@ const planLookups: PlanLookups = {
   contactNamesTaken: async () => new Set(),
   projectNamesTaken: async () => new Set(),
   projectCodesTaken: async () => new Set(),
-  workflowIds: async () => new Set(),
+  workflowIds: async () => new Set([FIXTURE_WORKFLOW]),
   projectTemplatesTaken: async () => new Set(),
   foreignSchedules: async () => new Set(),
 };
@@ -260,7 +260,7 @@ describe("monday wizard connect and export", () => {
 
     const source = await getExportSource(run.runId, deps);
     expect(source.boards[0]).toMatchObject({ id: "101", name: "Proyectos", itemCount: 3 });
-    expect(source.boards[0].statusLabels.status).toEqual([{ id: "1", name: "Listo", isDone: false }]);
+    expect(source.boards[0].statusLabels.status).toEqual([{ id: "1", name: "Listo", isDone: false, items: 4 }]);
     // The card avatars (#685): only monday users, each once, from the board's people columns.
     const userIds = new Set(source.users.map((user) => user.id));
     for (const board of source.boards) {
@@ -510,6 +510,7 @@ describe.skipIf(!url)("monday wizard apply and rollback (test DB)", { timeout: 6
     await inTx(async (tx) => {
       await tx.insert(schema.staff).values({ id: ANA, name: "Ana Wizard", email: "ana.wizard@example.com" });
       await tx.insert(schema.contacts).values({ id: CLIENT, type: "cliente", name: "Wizard Cliente" });
+      await seedFixtureWorkflow(tx);
       const mapping = nestedMapping(ANA, CLIENT);
       mapping.options = { includeUpdates: true, includeFiles: false };
       const run = await nestedRun(mapping);

@@ -47,31 +47,23 @@ beforeEach(() => {
 describe("fetchWorkflowsAction", () => {
   it("returns the active rows to any staff session, even without canViewWorkflows", async () => {
     await expect(fetchWorkflowsAction()).resolves.toEqual([{ id: WORKFLOW }]);
-    expect(repo.listWorkflows).toHaveBeenCalledWith({
-      includeInactive: false,
-      includeInactiveTemplates: false,
-      includeInactivePhases: false,
-    });
+    expect(repo.listWorkflows).toHaveBeenCalledWith({});
   });
 
   it.each([
     { includeInactive: true },
     { includeInactiveTemplates: true },
     { includeInactivePhases: true },
-  ])("rejects %o without canManageWorkflows", async (opts) => {
+  ])("ignores %o without canManageWorkflows", async (opts) => {
     caps.canView = true;
-    await expect(fetchWorkflowsAction(opts)).rejects.toThrow(/^FORBIDDEN/);
-    expect(repo.listWorkflows).not.toHaveBeenCalled();
+    await expect(fetchWorkflowsAction(opts)).resolves.toEqual([{ id: WORKFLOW }]);
+    expect(repo.listWorkflows).toHaveBeenCalledWith({});
   });
 
   it("passes the inactive flags through with canManageWorkflows", async () => {
     caps.canManage = true;
     await fetchWorkflowsAction({ includeInactive: true, includeInactivePhases: true });
-    expect(repo.listWorkflows).toHaveBeenCalledWith({
-      includeInactive: true,
-      includeInactiveTemplates: false,
-      includeInactivePhases: true,
-    });
+    expect(repo.listWorkflows).toHaveBeenCalledWith({ includeInactive: true, includeInactivePhases: true });
   });
 });
 

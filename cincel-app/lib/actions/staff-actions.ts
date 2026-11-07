@@ -30,18 +30,6 @@ async function isRoleLocked(staffId: string, patch: Partial<StaffInput>): Promis
 }
 
 /**
- * Puestos of Google-managed staff come from Workspace once position mappings
- * exist (BE §7.2): any set other than their `workspace` rows is refused.
- */
-async function arePositionsLocked(staffId: string, positionIds: string[]): Promise<boolean> {
-  if (!(await staffRepository.googleManagedStaffIds([staffId])).has(staffId)) return false;
-  if (!(await positionsRepository.hasPositionMappings())) return false;
-  const current = new Set(await positionsRepository.listStaffPositionIds(staffId, "workspace"));
-  const wanted = new Set(positionIds);
-  return current.size !== wanted.size || [...wanted].some((id) => !current.has(id));
-}
-
-/**
  * Everyone's emergency contact, for quick access in Equipo (#451). `null`
  * when the caller may not see staff PII — see canViewSensitiveStaffData.
  */
@@ -170,9 +158,15 @@ export async function setStaffPositionsAction(
   const user = await requireCapabilityUser();
   if (!resolveTeamCapabilities(user).canEditCollaborator) throw flowError("FORBIDDEN");
   const id = parseInput(UuidSchema, staffId);
-  const ids = parseInput(UuidArraySchema, positionIds);
-  if (await arePositionsLocked(id, ids)) return GOOGLE_MANAGED_REFUSAL;
-  await positionsRepository.setStaffPositions(id, ids);
+  const wanted = [...new Set(parseInput(UuidArraySchema, positionIds))];
+  if (!(await staffRepository.staffExists(id))) throw flowError("NOT_FOUND", "staff");
+  // Puestos of Google-managed staff come from Workspace once position mappings exist (BE §7.2).
+  if ((await staffRepository.googleManagedStaffIds([id])).has(id) && (await staffRepository.hasPositionGroupMappings())) {
+    const workspace = new Set(await staffRepository.listStaffPositionIds(id, "workspace"));
+    if (workspace.size !== wanted.length || wanted.some((p) => !workspace.has(p))) return GOOGLE_MANAGED_REFUSAL;
+  }
+  // The repository replaces only the manual rows; puestos held from Workspace stay.
+  await positionsRepository.setStaffPositions(id, wanted);
   revalidatePath("/equipo");
   revalidatePath("/configuracion/puestos");
 }

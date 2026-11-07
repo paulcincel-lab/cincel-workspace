@@ -42,6 +42,7 @@ vi.mock("@/lib/auth/permissions", () => ({
   resolveActivitiesCapabilities: () => ({ canViewActivities: canView.value }),
   resolveProjectsCapabilities: () => ({ canViewProjects: canView.value }),
   resolveClientsCapabilities: () => ({ canViewClients: canView.value }),
+  canSeeAdminData: () => true,
 }));
 
 const createdAt = new Date("2026-10-05T12:00:00Z");

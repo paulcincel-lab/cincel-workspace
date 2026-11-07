@@ -2,7 +2,7 @@
  * Puestos: the firm's job positions, who holds them and their candidate fases
  * (project flow BE §8.4). Candidates are suggestions only.
  */
-import { and, asc, count, eq, inArray, isNotNull, isNull, max, ne, notInArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, max, ne, notInArray } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -209,32 +209,6 @@ export async function reorderPositions(orderedIds: string[]): Promise<void> {
       await tx.update(positions).set({ sortOrder: i }).where(livePosition(id));
     }
   });
-}
-
-/** Puesto ids a person holds (live puestos only), optionally of one `source`. */
-export async function listStaffPositionIds(staffId: string, source?: "manual" | "workspace"): Promise<string[]> {
-  const rows = await db
-    .select({ positionId: staffPositions.positionId })
-    .from(staffPositions)
-    .innerJoin(positions, eq(positions.id, staffPositions.positionId))
-    .where(
-      and(
-        eq(staffPositions.staffId, staffId),
-        isNull(positions.deletedAt),
-        source ? eq(staffPositions.source, source) : undefined
-      )
-    );
-  return rows.map((row) => row.positionId);
-}
-
-/** Whether any Google group mapping points at a puesto (Workspace then owns Google-managed staff's puestos). */
-export async function hasPositionMappings(): Promise<boolean> {
-  const [row] = await db
-    .select({ id: workspaceGroupMappings.id })
-    .from(workspaceGroupMappings)
-    .where(isNotNull(workspaceGroupMappings.positionId))
-    .limit(1);
-  return Boolean(row);
 }
 
 /**

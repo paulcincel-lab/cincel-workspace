@@ -865,47 +865,7 @@ function readRoleModuleOverrides(role: SystemAccessRole, moduleId: string): Stor
     return moduleState;
   }
 
-  return mapLegacyModuleState(roleState, moduleId);
-}
-
-/**
- * Modules renamed in place: a stored role config may still carry the old module id and action keys. Kept for one
- * release so saved Permisos configurations keep working (Áreas became Puestos).
- */
-const LEGACY_MODULE_ALIASES: Record<string, { moduleId: string; actions: Record<string, string> }> = {
-  positions: {
-    moduleId: "areas",
-    actions: { canViewAreas: "canViewPositions", canManageAreas: "canManagePositions" },
-  },
-};
-
-/**
- * Returns the module state stored under a legacy module id, with its action keys renamed to the current ones, or
- * null when there is none.
- */
-export function mapLegacyModuleState(
-  roleState: Record<string, unknown> | null | undefined,
-  moduleId: string
-): Record<string, unknown> | null {
-  const alias = LEGACY_MODULE_ALIASES[moduleId];
-  if (!alias || !roleState || typeof roleState !== "object") {
-    return null;
-  }
-
-  const legacyState = roleState[alias.moduleId];
-  if (!legacyState || typeof legacyState !== "object") {
-    return null;
-  }
-
-  const mapped: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(legacyState as Record<string, unknown>)) {
-    const nextKey = alias.actions[key];
-    if (nextKey && (typeof value === "boolean" || typeof value === "string")) {
-      mapped[nextKey] = value;
-    }
-  }
-
-  return mapped;
+  return null;
 }
 
 function readBooleanOverride(moduleState: StoredModulePermissionsState | null, key: string, fallback: boolean): boolean {
@@ -1202,7 +1162,7 @@ export function resolveTaskStatusesCapabilities(user: AuthenticatedUser | null):
   };
 }
 
-/** Puestos capabilities; a stored `areas` module is read as `positions` (see `LEGACY_MODULE_ALIASES`). */
+/** Puestos capabilities. */
 export function resolvePositionsCapabilities(user: AuthenticatedUser | null): PositionsCapabilities {
   const access = resolveAccess(user);
   const defaults = resolvePositionsCapabilitiesFromDefaults(user);
