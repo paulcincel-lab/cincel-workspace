@@ -3,8 +3,11 @@ import Header from "@/components/layout/Header";
 import { fetchContactsAction } from "@/lib/actions/contacts-actions";
 import type { ContactListItem } from "@/lib/types/core";
 import { DirectorioClient } from "./DirectorioClient";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 
-export default async function DirectorioPage() {
+export default async function DirectorioPage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/directorio", searchParams);
   let contacts: ContactListItem[] = [];
   try {
     contacts = await fetchContactsAction();

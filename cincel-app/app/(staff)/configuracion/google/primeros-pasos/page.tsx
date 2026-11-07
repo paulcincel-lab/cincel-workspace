@@ -9,12 +9,15 @@ import { getSessionAccess } from "@/lib/auth/session";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
 import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 
 /**
  * First-login Google setup wizard of the bootstrap admin (#671). Administrador only, checked here on the server
  * (and again by every action); any other admin goes to Configuración → Google instead.
  */
-export default async function GoogleSetupWizardPage() {
+export default async function GoogleSetupWizardPage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/configuracion/google/primeros-pasos", searchParams);
   const access = await getSessionAccess();
   if (access.status !== "active" || access.user?.access !== SYSTEM_ADMIN_ROLE) redirect("/dashboard");
   if (!isBootstrapAdminEmail(access.user.email)) redirect("/configuracion/google");

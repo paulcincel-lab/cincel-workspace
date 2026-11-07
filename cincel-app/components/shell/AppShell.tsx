@@ -19,6 +19,9 @@ import { StyleProvider } from "./StyleProvider";
  *
  * Server part: renders the sidebar slots (`lib/shell/sidebar-slots/*`) and
  * hands a serializable nav model to the client part.
+ *
+ * Below 768 px the client part renders the compact top bar (`MobileTopBar`)
+ * and pads the page so the fixed `BottomTabs` never cover it.
  */
 export type AppShellProps = {
   children: ReactNode;

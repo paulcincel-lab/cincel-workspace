@@ -2,8 +2,11 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { fetchMyTasksAction } from "@/lib/actions/tasks-actions";
 import { MisTareasClient } from "./MisTareasClient";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 
-export default async function MisTareasPage() {
+export default async function MisTareasPage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/mis-tareas", searchParams);
   let initialTasks: Awaited<ReturnType<typeof fetchMyTasksAction>> = [];
   try {
     initialTasks = await fetchMyTasksAction();

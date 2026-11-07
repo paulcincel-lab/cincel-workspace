@@ -12,6 +12,8 @@ import {
 } from "@/lib/auth/public-routes";
 import { useSessionAccess } from "@/lib/auth/session-context";
 
+// Kept only for the legacy /configuracion paths. /ajustes is never matched
+// here: each admin segment has its own server guard (redesign FE §8, BE §12.2).
 const CONFIG_ROUTE_PREFIX = "/configuracion";
 
 export default function AppRouteGuard({ children }: { children: React.ReactNode }) {

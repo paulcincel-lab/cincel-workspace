@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { staffAccessRole } from "@/lib/auth/access-role";
 import { accessRecheckHours, isAccessCheckDue, recheckStaffAccess } from "@/lib/auth/access-recheck";
@@ -10,7 +10,7 @@ import type { SessionStaffAccess, SessionUser as RepoSessionUser } from "@/lib/r
 import type { SystemAccessRole } from "@/lib/data/roles";
 
 import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
-import { notImplemented } from "@/lib/stubs";
+import { CHANGE_PASSWORD_ROUTE, LOGIN_ROUTE } from "@/lib/auth/public-routes";
 
 export { SESSION_COOKIE };
 
@@ -179,7 +179,12 @@ export async function requireSessionAccess(): Promise<
 export async function requireCapabilityUser(): Promise<
   import("@/lib/auth/auth-service").AuthenticatedUser
 > {
-  const user = await requireSessionAccess();
+  return toCapabilityUser(await requireSessionAccess());
+}
+
+function toCapabilityUser(
+  user: NonNullable<SessionAccess["user"]>,
+): import("@/lib/auth/auth-service").AuthenticatedUser {
   return {
     member: {
       id: user.id,
@@ -200,12 +205,22 @@ export async function requireCapabilityUser(): Promise<
 /**
  * Page guard of the redesign's admin settings segments (redesign BE §12.2, FE §8):
  * one `app/(staff)/ajustes/(admin)/<segment>/layout.tsx` per segment calls it
- * with that segment's capability; failure → `notFound()`. Contract stub.
+ * with that segment's capability. A viewer without it gets `notFound()` (no
+ * redirect, no hint that the page exists); a guest is sent to `/login` and a
+ * first-access account to `/change-password`, like the `(staff)` layout.
+ * Returns the capability user so the page can run its own section checks.
  */
 export async function requirePageCapability(
   cap: (user: import("@/lib/auth/auth-service").AuthenticatedUser) => boolean,
 ): Promise<import("@/lib/auth/auth-service").AuthenticatedUser> {
-  return notImplemented("requirePageCapability", cap);
+  const access = await getSessionAccess();
+  if (access.status === "guest") redirect(LOGIN_ROUTE);
+  if (access.status === "pending_first_access") redirect(CHANGE_PASSWORD_ROUTE);
+  if (access.status !== "active" || !access.user) notFound();
+
+  const user = toCapabilityUser(access.user);
+  if (!cap(user)) notFound();
+  return user;
 }
 
 /** Delete the current session row and clear the cookie. */

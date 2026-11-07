@@ -2,8 +2,11 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { EstatusClient } from "./EstatusClient";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 
-export default async function ConfiguracionEstatusPage() {
+export default async function ConfiguracionEstatusPage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/configuracion/estatus", searchParams);
   let initialStatuses: Awaited<ReturnType<typeof fetchTaskStatusesAction>> = [];
   try {
     initialStatuses = await fetchTaskStatusesAction();

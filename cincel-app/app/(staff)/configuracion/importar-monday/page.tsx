@@ -10,6 +10,8 @@ import { getSessionAccess } from "@/lib/auth/session";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
 import type { MondayImportChoices, MondayImportRunState } from "@/lib/types/monday-import";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 
 /**
  * Configuración → Importar de monday (#672), also the first-login wizard of Google-signed-in admins. Administrador
@@ -17,7 +19,8 @@ import type { MondayImportChoices, MondayImportRunState } from "@/lib/types/mond
  * resumes the latest import (or starts one). A full-screen takeover (#685): no sidebar; its ✕ goes back to
  * Configuración and keeps the run.
  */
-export default async function ImportarMondayPage() {
+export default async function ImportarMondayPage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/configuracion/importar-monday", searchParams);
   const access = await getSessionAccess();
   if (access.status !== "active" || access.user?.access !== SYSTEM_ADMIN_ROLE) redirect("/dashboard");
   if (isBootstrapAdminEmail(access.user.email)) redirect("/configuracion/permisos");

@@ -141,4 +141,14 @@ describe("AppRouteGuard", () => {
     renderAt("/configuracion/google", { status: "active", user: activeUser("Administrador") });
     expect(screen.getByText("contenido")).toBeTruthy();
   });
+
+  it.each(["/ajustes/apariencia", "/ajustes/permisos", "/ajustes/general"])(
+    "leaves %s to its server segment guard (no client prefix check)",
+    (path) => {
+      renderAt(path, { status: "active", user: activeUser() });
+
+      expect(screen.getByText("contenido")).toBeTruthy();
+      expect(nav.replace).not.toHaveBeenCalled();
+    },
+  );
 });

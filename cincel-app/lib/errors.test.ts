@@ -49,6 +49,19 @@ describe("actionErrorText", () => {
     );
   });
 
+  it("maps INVALID and RATE_LIMITED in the search context", () => {
+    expect(actionErrorText(new Error("INVALID: query"), "search")).toBe("Escribe al menos 2 letras.");
+    expect(actionErrorText(new Error("RATE_LIMITED"), "search")).toBe(
+      "Demasiados intentos seguidos. Espera unos segundos e intenta de nuevo.",
+    );
+    expect(actionErrorText(new Error("boom"), "search")).toBe("No se pudo completar la acción. Intenta de nuevo.");
+  });
+
+  it("maps the photo upload codes", () => {
+    expect(actionErrorText(new Error("TOO_LARGE"), "photo")).toBe("La imagen pesa más de 2 MB. Elige una más ligera.");
+    expect(actionErrorText(new Error("INVALID_TYPE"), "photo")).toBe("Ese archivo no es una imagen. Usa JPG, PNG o WebP.");
+  });
+
   it("falls back to the generic copy", () => {
     expect(actionErrorText(new Error("boom"))).toBe("No se pudo completar la acción. Intenta de nuevo.");
   });

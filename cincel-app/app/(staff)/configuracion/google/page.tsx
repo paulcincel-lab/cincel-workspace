@@ -4,9 +4,12 @@ import { GoogleWorkspaceSettings } from "@/components/configuracion/GoogleWorksp
 import { fetchPositionsAction } from "@/lib/actions/positions-actions";
 import { getGoogleHealthAction, listGroupMappingsAction } from "@/lib/actions/workspace-access-actions";
 import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 
 /** Administrador only: `AppRouteGuard` gates `/configuracion/*` and every action re-checks the role. */
-export default async function ConfiguracionGooglePage() {
+export default async function ConfiguracionGooglePage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/configuracion/google", searchParams);
   let mappings: GroupMapping[] = [];
   let positions: { id: string; name: string }[] = [];
   let health: GoogleHealth | null = null;

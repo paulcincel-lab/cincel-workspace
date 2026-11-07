@@ -4,8 +4,11 @@ import { fetchPositionsAction } from "@/lib/actions/positions-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import type { Position, WorkflowDetail } from "@/lib/types/core";
 import { PuestosClient } from "./PuestosClient";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 
-export default async function ConfiguracionPuestosPage() {
+export default async function ConfiguracionPuestosPage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/configuracion/puestos", searchParams);
   let initialPositions: Position[] = [];
   let initialWorkflows: WorkflowDetail[] = [];
   try {

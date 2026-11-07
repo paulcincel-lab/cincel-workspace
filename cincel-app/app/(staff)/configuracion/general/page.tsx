@@ -5,8 +5,11 @@ import {
   type AppearanceState,
 } from "@/lib/actions/app-settings-actions";
 import { buildDefaultLoadedGeneralSettings, type LoadedGeneralSettings } from "@/lib/settings/general-settings";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 
-export default async function ConfiguracionGeneralPage() {
+export default async function ConfiguracionGeneralPage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/configuracion/general", searchParams);
   let appearance: AppearanceState = { primaryColor: null, canManage: false, canManageGeneral: false };
   let general: LoadedGeneralSettings = buildDefaultLoadedGeneralSettings();
   try {

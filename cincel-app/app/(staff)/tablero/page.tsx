@@ -6,6 +6,8 @@ import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import type { TaskListItem, TaskStatus, TaskStatusOption, WorkflowDetail, WorkflowRef } from "@/lib/types/core";
 import { TableroClient } from "./TableroClient";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 
 const EMPTY_BOARD: Record<TaskStatus, TaskListItem[]> = {
   pendiente: [],
@@ -14,7 +16,8 @@ const EMPTY_BOARD: Record<TaskStatus, TaskListItem[]> = {
   bloqueado: [],
 };
 
-export default async function TableroPage() {
+export default async function TableroPage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/tablero", searchParams);
   let initialBoard: Record<TaskStatus, TaskListItem[]> = EMPTY_BOARD;
   let workflows: WorkflowDetail[] = [];
   let customStatuses: TaskStatusOption[] = [];

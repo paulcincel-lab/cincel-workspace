@@ -9,12 +9,15 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/shadcn/sidebar";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
 import { isAssistantVisible, isSearchVisible } from "@/lib/shell/visibility";
 import type { TodayStatus } from "@/lib/types/redesign";
+import { BOTTOM_TABS_CONTENT_CLASS } from "@/lib/ui/mobile-nav";
 import type { NavItem, NavItemKey, NavModel } from "@/lib/ui/nav";
 import { activeNavKey, withNavIcons, type ClientNavModel } from "@/lib/ui/nav-client";
 
 import type { AppShellProps } from "./AppShell";
 import { BottomTabs } from "./BottomTabs";
 import { CommandPalette } from "./CommandPalette";
+import { MobileTopBar } from "./MobileTopBar";
+import { OfflineBanner } from "./OfflineBanner";
 import { Sidebar } from "./Sidebar";
 
 /** Client part of `AppShell`: active item, search and assistant open state. */
@@ -61,7 +64,11 @@ export function AppShellClient({ children, nav: clientNav, session, today, hideA
         slots={slots}
       />
       <SidebarInset id="contenido" className="min-w-0">
-        {children}
+        <MobileTopBar session={session} today={today} />
+        <div className={BOTTOM_TABS_CONTENT_CLASS}>
+          <OfflineBanner />
+          {children}
+        </div>
       </SidebarInset>
       <BottomTabs activeKey={activeKey} items={tabs.items} more={tabs.more} />
       {showSearch ? <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} /> : null}

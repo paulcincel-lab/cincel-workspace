@@ -9,6 +9,8 @@ import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { fetchTramoBoardAction } from "@/lib/actions/tramo-start-actions";
 import { GENERAL_SLUG } from "@/lib/actividades/tramo-page";
 import type { TramoBoard, WorkflowDetail } from "@/lib/types/core";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
 import { ActividadesClient } from "./ActividadesClient";
 
 /** The Presale tramo, whose page hosts "Para administración". */
@@ -16,10 +18,13 @@ const ADMIN_TASKS_SLUG = "presale";
 
 export default async function ActividadesPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tramo: string }>;
-}) {
+} & LegacyPageProps) {
   const { tramo: slug } = await params;
+  // Flag on: `/tareas?vista=lista&tramo=<slug>`, plus `iniciar=1` with Project Flow's `?project=X` deep link.
+  await redirectLegacyIfRedesignOn(`/actividades/${encodeURIComponent(slug)}`, searchParams);
   const isGeneral = slug === GENERAL_SLUG;
 
   // `[tramo]` is a `workflows.key`. Resolve it first, outside the try below:
