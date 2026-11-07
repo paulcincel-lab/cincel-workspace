@@ -16,6 +16,12 @@ vi.mock("@/lib/actions/import-actions", () => ({
 
 import TaskDrawer from "./TaskDrawer";
 
+/** A real mouse press on a base-ui Select option: pointerdown, then click (base-ui ignores a bare click). */
+function pressOption(option: HTMLElement) {
+  fireEvent.pointerDown(option, { pointerType: "mouse" });
+  fireEvent.click(option);
+}
+
 const DISENO = { id: "w-diseno", key: "diseno", name: "Diseño", sortOrder: 2 };
 const PRESALE = { id: "w-presale", key: "presale", name: "Presale", sortOrder: 1 };
 const PHASES = [
@@ -103,7 +109,7 @@ describe("TaskDrawer fase, espacio and tramo", () => {
     fireEvent.click(screen.getByRole("combobox", { name: "Fase" }));
     const options = await screen.findAllByRole("option");
     expect(options.map((o) => o.textContent)).toEqual(["Anteproyecto", "Ejecutivo"]);
-    fireEvent.click(screen.getByRole("option", { name: "Ejecutivo" }));
+    pressOption(screen.getByRole("option", { name: "Ejecutivo" }));
     expect(onChangePhase).toHaveBeenCalledWith("f-ejec");
   });
 
@@ -116,7 +122,7 @@ describe("TaskDrawer fase, espacio and tramo", () => {
     const onChangeSpace = vi.fn();
     renderDrawer(makeTask(), { spaces: SPACES, onChangeSpace });
     fireEvent.click(screen.getByRole("combobox", { name: "Espacio" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Depto 201" }));
+    pressOption(await screen.findByRole("option", { name: "Depto 201" }));
     expect(onChangeSpace).toHaveBeenCalledWith("e-201");
   });
 
@@ -134,7 +140,7 @@ describe("TaskDrawer fase, espacio and tramo", () => {
     });
     expect(screen.queryByRole("combobox", { name: "Fase" })).toBeNull();
     fireEvent.click(screen.getByRole("combobox", { name: "Tramo" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Presale" }));
+    pressOption(await screen.findByRole("option", { name: "Presale" }));
     expect(onChangeTramo).toHaveBeenCalledWith(PRESALE.id);
   });
 

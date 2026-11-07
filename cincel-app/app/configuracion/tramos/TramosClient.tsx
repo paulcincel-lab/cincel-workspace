@@ -107,8 +107,9 @@ interface TramosClientProps {
 
 export function TramosClient({ initialWorkflows }: TramosClientProps) {
   const [workflows, setWorkflows] = useState<WorkflowDetail[]>(initialWorkflows);
+  // The first tramo in flow order starts selected.
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(
-    initialWorkflows[0]?.id ?? null,
+    () => [...initialWorkflows].sort((a, b) => a.sortOrder - b.sortOrder)[0]?.id ?? null,
   );
   const [pageError, setPageError] = useState("");
 

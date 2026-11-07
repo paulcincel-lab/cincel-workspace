@@ -114,7 +114,7 @@ describe("ProyectosClient columns", () => {
     rows.current = [WITH_TRAMO, WITHOUT_TRAMO];
     render(<ProyectosClient initialProjects={[]} />);
 
-    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent?.trim());
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent?.replace(/[▲▼]/g, "").trim());
     expect(headers).toEqual(
       expect.arrayContaining(["Proyecto", "Tramo", "Fase activa", "Encargado", "Tareas abiertas", "Estado", "Cliente"])
     );
@@ -139,7 +139,7 @@ describe("ProyectosClient columns", () => {
     rows.current = [WITH_TRAMO, WITHOUT_TRAMO];
     render(<ProyectosClient initialProjects={[]} />);
 
-    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent?.trim());
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent?.replace(/[▲▼]/g, "").trim());
     expect(headers).not.toContain("Cliente");
 
     const withoutTramo = within(rowOf("Oficinas Centro"));

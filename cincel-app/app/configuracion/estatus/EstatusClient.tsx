@@ -219,32 +219,34 @@ export function EstatusClient({ initialStatuses }: EstatusClientProps) {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <label className="flex items-start gap-2 text-sm">
+            <div className="flex items-start gap-2 text-sm">
               <Checkbox
+                id="status-closes"
                 checked={closes}
                 onCheckedChange={(checked) => changeCloses(Boolean(checked))}
               />
-              <span>
-                Cierra la tarea
+              <div>
+                <Label htmlFor="status-closes">Cierra la tarea</Label>
                 <span className="block text-muted-foreground">
                   Las tareas en este estatus se cierran y dejan de vencer.
                 </span>
-              </span>
-            </label>
-            <label className="flex items-start gap-2 text-sm">
+              </div>
+            </div>
+            <div className="flex items-start gap-2 text-sm">
               <Switch
+                id="status-counts-as-completed"
                 checked={countsAsCompleted}
                 disabled={!closes}
                 onCheckedChange={(checked) => setCountsAsCompleted(Boolean(checked))}
               />
-              <span>
-                Cuenta como completada
+              <div>
+                <Label htmlFor="status-counts-as-completed">Cuenta como completada</Label>
                 <span className="block text-muted-foreground">
                   Apágalo para estatus como Cancelado: cierran la tarea pero no
                   cuentan como trabajo terminado.
                 </span>
-              </span>
-            </label>
+              </div>
+            </div>
             {formError ? (
               <p className="text-sm text-destructive">{formError}</p>
             ) : null}

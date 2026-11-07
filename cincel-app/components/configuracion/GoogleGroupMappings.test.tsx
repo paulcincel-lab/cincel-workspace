@@ -16,6 +16,12 @@ vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 import { GoogleGroupMappings } from "./GoogleGroupMappings";
 
+/** A real mouse press on a base-ui Select option: pointerdown, then click (base-ui ignores a bare click). */
+function pressOption(option: HTMLElement) {
+  fireEvent.pointerDown(option, { pointerType: "mouse" });
+  fireEvent.click(option);
+}
+
 const POSITION_ID = "00000000-0000-4000-8000-000000000001";
 const roleMapping: GroupMapping = {
   id: "00000000-0000-4000-8000-0000000000a1",
@@ -151,8 +157,7 @@ describe("GoogleGroupMappings", () => {
 
     await openRowMenu(positionMapping.groupEmail, "Editar");
     fireEvent.click(await screen.findByLabelText("Puesto"));
-    // happy-dom only commits a click on the first option of a base-ui Select.
-    fireEvent.click(await screen.findByRole("option", { name: "Arquitecto" }));
+    pressOption(await screen.findByRole("option", { name: "Arquitecto" }));
     expect(screen.queryByLabelText("Rango")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 

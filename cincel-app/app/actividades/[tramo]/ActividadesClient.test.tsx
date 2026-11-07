@@ -271,7 +271,8 @@ describe("ActividadesClient tabs and template flow", () => {
       />,
     );
 
-    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    // The first tablist is the tramo tabs (the filter bar has Activas / Archivadas).
+    const tabs = within(screen.getAllByRole("tablist")[0]).getAllByRole("tab").map((t) => t.textContent);
     expect(tabs).toEqual(["General", "Presale", "Diseño"]);
   });
 
@@ -288,7 +289,7 @@ describe("ActividadesClient tabs and template flow", () => {
       />,
     );
 
-    expect(screen.getByText("Anteproyecto · Ejecutivo")).toBeTruthy();
+    expect(screen.getByLabelText("Fases").textContent).toBe("Anteproyecto · Ejecutivo");
   });
 
   it("no longer offers Iniciar plantilla", () => {
@@ -348,6 +349,6 @@ describe("ActividadesClient tramos from the database", () => {
     );
 
     expect(screen.queryByRole("button", { name: /Iniciar plantilla/ })).toBeNull();
-    expect(screen.getByText("Inicial · Presentación")).toBeTruthy();
+    expect(screen.getByLabelText("Fases").textContent).toBe("Inicial · Presentación");
   });
 });

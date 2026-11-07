@@ -15,6 +15,12 @@ vi.mock("@/lib/actions/tramo-start-actions", () => actions);
 
 import { candidatesText, sampleTasksText, StartTramoSheet } from "./StartTramoSheet";
 
+/** A real mouse press on a base-ui Select option: pointerdown, then click (base-ui ignores a bare click). */
+function pressOption(option: HTMLElement) {
+  fireEvent.pointerDown(option, { pointerType: "mouse" });
+  fireEvent.click(option);
+}
+
 const workflow = { id: "w-diseno", key: "diseno", name: "Diseño", sortOrder: 2 };
 
 function member(id: string, name: string, lastName: string | null = null): Staff & { suggested: boolean } {
@@ -233,7 +239,7 @@ describe("StartTramoSheet", () => {
     await screen.findByText("Iniciar Diseño · Casa Roble");
     fireEvent.click(screen.getByRole("radio", { name: "Por fase con candidatos" }));
     fireEvent.click(await screen.findByRole("combobox", { name: "Responsable de Ejecutivo" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Eva Ruiz" }));
+    pressOption(await screen.findByRole("option", { name: "Eva Ruiz" }));
 
     fireEvent.click(createButton());
     await waitFor(() =>

@@ -62,7 +62,7 @@ function StatusMapRowView({
   const [countsAsCompleted, setCountsAsCompleted] = useState(row.isDone);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
-  const errorId = `status-map-create-error-${row.key}`;
+  const errorId = `status-map-create-error-${row.key.replace(/\s+/g, "-")}`;
 
   function create() {
     setError("");
@@ -127,26 +127,26 @@ function StatusMapRowView({
               onChange={(event) => setName(event.target.value)}
             />
             <div className="flex flex-wrap gap-4">
-              <Label className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <Checkbox
-                  aria-label="Cierra la tarea"
+                  id={`${errorId}-closes`}
                   checked={closes}
                   onCheckedChange={(checked) => {
                     setCloses(checked === true);
                     if (checked !== true) setCountsAsCompleted(false);
                   }}
                 />
-                Cierra la tarea
-              </Label>
-              <Label className="flex items-center gap-2">
+                <Label htmlFor={`${errorId}-closes`}>Cierra la tarea</Label>
+              </div>
+              <div className="flex items-center gap-2">
                 <Checkbox
-                  aria-label="Cuenta como completada"
+                  id={`${errorId}-counts`}
                   checked={closes && countsAsCompleted}
                   disabled={!closes}
                   onCheckedChange={(checked) => setCountsAsCompleted(checked === true)}
                 />
-                Cuenta como completada
-              </Label>
+                <Label htmlFor={`${errorId}-counts`}>Cuenta como completada</Label>
+              </div>
             </div>
             <div className="flex gap-2">
               <Button size="sm" disabled={isPending} onClick={create}>

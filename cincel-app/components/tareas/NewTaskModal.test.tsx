@@ -5,6 +5,12 @@ import type { ComponentProps } from "react";
 
 import NewTaskModal from "./NewTaskModal";
 
+/** A real mouse press on a base-ui Select option: pointerdown, then click (base-ui ignores a bare click). */
+function pressOption(option: HTMLElement) {
+  fireEvent.pointerDown(option, { pointerType: "mouse" });
+  fireEvent.click(option);
+}
+
 const projects = [
   { id: "p-1", name: "Casa Roble" },
   { id: "p-2", name: "Torre Norte" },
@@ -42,7 +48,7 @@ function renderModal(overrides: Partial<ComponentProps<typeof NewTaskModal>> = {
 
 async function pick(trigger: string, option: string) {
   fireEvent.click(screen.getByRole("combobox", { name: trigger }));
-  fireEvent.click(await screen.findByRole("option", { name: option }));
+  pressOption(await screen.findByRole("option", { name: option }));
 }
 
 describe("NewTaskModal", () => {

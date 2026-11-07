@@ -10,13 +10,12 @@ const state = vi.hoisted(() => ({ admin: false }));
 const actions = vi.hoisted(() => ({
   fetchProjectAction: vi.fn(),
   updateProjectAction: vi.fn(),
-  setProjectStagesAction: vi.fn(),
   setProjectMembersAction: vi.fn(),
   setProjectContactsAction: vi.fn(),
   addProjectLinkAction: vi.fn(),
   removeProjectLinkAction: vi.fn(),
-  previewApplyWorkflowAction: vi.fn(),
-  applyWorkflowAction: vi.fn(),
+  fetchProjectSpacesAction: vi.fn(),
+  setProjectCurrentTramoAction: vi.fn(),
 }));
 
 const taskActions = vi.hoisted(() => ({
@@ -153,6 +152,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   actions.fetchProjectAction.mockResolvedValue(project());
   actions.updateProjectAction.mockResolvedValue(project());
+  actions.fetchProjectSpacesAction.mockResolvedValue([]);
   taskActions.fetchTasksAction.mockResolvedValue([]);
   taskActions.fetchAdminTasksAction.mockResolvedValue([adminTask()]);
 });

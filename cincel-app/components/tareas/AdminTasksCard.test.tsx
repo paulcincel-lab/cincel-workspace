@@ -276,6 +276,6 @@ describe("NewTaskModal admin mode", () => {
     );
     fireEvent.change(screen.getByPlaceholderText("Describe la tarea..."), { target: { value: "Cobro" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ phase: "", managerId: null, title: "Cobro" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ phaseId: null, spaceId: null, managerId: null, title: "Cobro" }));
   });
 });

@@ -82,8 +82,9 @@ describe("Sidebar — Configuración → Tramos y fases", () => {
     const link = screen.getByRole("link", { name: "Tramos y fases" });
     expect(link.getAttribute("href")).toBe("/configuracion/tramos");
     expect(screen.queryByRole("link", { name: "Workflows" })).toBeNull();
-    // Áreas stays until Phase 3.
-    expect(screen.getByRole("link", { name: "Áreas" })).toBeTruthy();
+    // Puestos replaces Áreas (ADR 0003).
+    expect(screen.queryByRole("link", { name: "Áreas" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Puestos" }).getAttribute("href")).toBe("/configuracion/puestos");
   });
 
   it("hides Tramos y fases from users without canManageWorkflows", () => {

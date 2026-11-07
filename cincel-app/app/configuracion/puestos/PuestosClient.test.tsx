@@ -92,7 +92,7 @@ describe("PuestosClient table", () => {
   it("lists puestos with their candidate fases and member count", async () => {
     renderPuestos();
     await waitFor(() => expect(actions.fetchPositionsAction).toHaveBeenCalled());
-    const headers = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
+    const headers = screen.getAllByRole("columnheader").map((th) => th.textContent?.replace(/[▲▼]/g, "").trim());
     expect(headers).toEqual(expect.arrayContaining(["Orden", "Puesto", "Fases candidatas", "Integrantes"]));
     expect(within(rowOf("Arquitecto proyectista")).getByText("Diseño · Ejecutivo")).toBeTruthy();
     expect(within(rowOf("Arquitecto proyectista")).getByText("2")).toBeTruthy();

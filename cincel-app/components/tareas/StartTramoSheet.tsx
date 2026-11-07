@@ -345,15 +345,15 @@ export function StartTramoSheet({
           <legend className="mb-2 text-sm font-medium text-foreground">Asignación</legend>
           <RadioGroup value={mode} onValueChange={(next) => setMode(next as AssignmentMode)}>
             <label className="flex items-center gap-2 text-sm text-foreground">
-              <RadioGroupItem value="self" aria-label="Asignarme todas" />
+              <RadioGroupItem value="self" />
               Asignarme todas
             </label>
             <label className="flex items-center gap-2 text-sm text-foreground">
-              <RadioGroupItem value="by_phase" aria-label="Por fase con candidatos" />
+              <RadioGroupItem value="by_phase" />
               Por fase con candidatos
             </label>
             <label className="flex items-center gap-2 text-sm text-foreground">
-              <RadioGroupItem value="none" aria-label="Sin asignar" />
+              <RadioGroupItem value="none" />
               Sin asignar
             </label>
           </RadioGroup>

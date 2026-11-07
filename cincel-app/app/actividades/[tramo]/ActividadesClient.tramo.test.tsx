@@ -358,7 +358,9 @@ describe("ActividadesClient tramo page", () => {
   });
 
   it("shows action errors in an inline Alert instead of window.alert", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    // happy-dom has no window.alert: stub it so a call would be seen.
+    const alertSpy = vi.fn();
+    vi.stubGlobal("alert", alertSpy);
     tasksActions.createUserTaskAction.mockRejectedValue(new Error("PHASE_MISMATCH"));
     renderPage({ initialTasks: [makeTask({ id: "a", title: "Croquis", phaseId: "f-ante" })] });
 
@@ -372,6 +374,6 @@ describe("ActividadesClient tramo page", () => {
 
     fireEvent.click(within(alert.closest("[role='alert']") as HTMLElement).getByRole("button", { name: "Cerrar" }));
     expect(screen.queryByText("Esa fase no pertenece al tramo de la tarea.")).toBeNull();
-    alertSpy.mockRestore();
+    vi.unstubAllGlobals();
   });
 });
