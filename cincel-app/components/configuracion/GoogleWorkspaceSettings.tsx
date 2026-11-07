@@ -16,13 +16,13 @@ import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
 
 export type GoogleWorkspaceSettingsProps = {
   mappings: GroupMapping[];
-  areas: { id: string; name: string }[];
+  positions: { id: string; name: string }[];
   /** Null when `getGoogleHealthAction()` failed. */
   health: GoogleHealth | null;
 };
 
 /** Configuración → Google (FE §2.5): breadcrumb and banner, then its sections in order. */
-export function GoogleWorkspaceSettings({ mappings, areas, health }: GoogleWorkspaceSettingsProps) {
+export function GoogleWorkspaceSettings({ mappings, positions, health }: GoogleWorkspaceSettingsProps) {
   return (
     <div className="space-y-6">
       <Breadcrumb>
@@ -43,7 +43,7 @@ export function GoogleWorkspaceSettings({ mappings, areas, health }: GoogleWorks
 
       <GoogleHealthStatus health={health} />
 
-      <GoogleGroupMappings mappings={mappings} areas={areas} />
+      <GoogleGroupMappings mappings={mappings} positions={positions} />
 
       {/* Health unknown (load failed): leave the button enabled; the action reports its own errors. */}
       <ProjectFoldersBackfill sharedDriveConfigured={health === null || health.sharedDriveId !== null} />

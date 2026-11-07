@@ -3,11 +3,15 @@ import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   areaMembers,
-  areaWorkflows,
   areas,
   authCredentials,
+  positionPhases,
+  positions,
   staff,
+  staffPositions,
   staffProfiles,
+  workflowPhases,
+  workspaceGroupMappings,
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { recordChanges } from "@/lib/repositories/history-repository";
@@ -121,8 +125,9 @@ export async function reorderStaff(orderedIds: string[]): Promise<void> {
 }
 
 /**
- * Staff who can be assigned to a task. When `workflowId` is given, staff in
- * the areas that own that workflow come first (`suggested = true`).
+ * Staff who can be assigned to a task. When `workflowId` is given, staff
+ * holding a live, active puesto that lists a fase of that tramo come first
+ * (`suggested = true`), then by name (BE §7.2, §8.7).
  */
 export async function listAssignableStaff(
   options: { workflowId?: string | null } = {}
@@ -131,15 +136,70 @@ export async function listAssignableStaff(
   if (!options.workflowId) return all.map((s) => ({ ...s, suggested: false }));
 
   const suggestedRows = await db
-    .select({ staffId: areaMembers.staffId })
-    .from(areaWorkflows)
-    .innerJoin(areaMembers, eq(areaMembers.areaId, areaWorkflows.areaId))
-    .where(eq(areaWorkflows.workflowId, options.workflowId));
+    .selectDistinct({ staffId: staffPositions.staffId })
+    .from(staffPositions)
+    .innerJoin(positions, eq(positions.id, staffPositions.positionId))
+    .innerJoin(positionPhases, eq(positionPhases.positionId, positions.id))
+    .innerJoin(workflowPhases, eq(workflowPhases.id, positionPhases.phaseId))
+    .where(
+      and(
+        eq(workflowPhases.workflowId, options.workflowId),
+        eq(positions.active, true),
+        isNull(positions.deletedAt)
+      )
+    );
   const suggested = new Set(suggestedRows.map((r) => r.staffId));
 
   return all
     .map((s) => ({ ...s, suggested: suggested.has(s.id) }))
     .sort((a, b) => Number(b.suggested) - Number(a.suggested) || a.name.localeCompare(b.name));
+}
+
+/** The subset of `ids` that are live, active staff (start-tramo manager check). */
+export async function liveActiveStaffIds(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(and(inArray(staff.id, ids), eq(staff.active, true), isNull(staff.deletedAt)));
+  return new Set(rows.map((r) => r.id));
+}
+
+/** True when the staff member exists and isn't deleted. */
+export async function staffExists(id: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(and(eq(staff.id, id), isNull(staff.deletedAt)))
+    .limit(1);
+  return Boolean(row);
+}
+
+/** Ids of the person's live puestos, optionally only one source ('manual' | 'workspace'). */
+export async function listStaffPositionIds(staffId: string, source?: "manual" | "workspace"): Promise<string[]> {
+  const rows = await db
+    .select({ positionId: staffPositions.positionId })
+    .from(staffPositions)
+    .innerJoin(positions, eq(positions.id, staffPositions.positionId))
+    .where(
+      and(
+        eq(staffPositions.staffId, staffId),
+        isNull(positions.deletedAt),
+        source ? eq(staffPositions.source, source) : undefined
+      )
+    );
+  return rows.map((r) => r.positionId);
+}
+
+/** True when some Google group maps to a live puesto (Workspace then manages puestos). */
+export async function hasPositionGroupMappings(): Promise<boolean> {
+  const [row] = await db
+    .select({ id: workspaceGroupMappings.id })
+    .from(workspaceGroupMappings)
+    .innerJoin(positions, eq(positions.id, workspaceGroupMappings.positionId))
+    .where(and(eq(workspaceGroupMappings.kind, "position"), isNull(positions.deletedAt)))
+    .limit(1);
+  return Boolean(row);
 }
 
 export async function getStaff(id: string): Promise<StaffDetail | null> {

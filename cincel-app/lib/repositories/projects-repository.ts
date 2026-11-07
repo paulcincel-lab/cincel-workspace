@@ -15,6 +15,7 @@ import {
   workflowTaskTemplates,
   workflows,
 } from "@/lib/db/schema";
+import { rethrowProjectNameTaken } from "@/lib/project-flow/old-ui-compat";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
 import { toTemplate } from "@/lib/repositories/workflows-repository";
 import type {
@@ -313,7 +314,12 @@ export async function createProject(input: ProjectInput, actorId: string): Promi
   if (!input.clientId) throw new Error("PROJECT_CLIENT_REQUIRED");
   if (!input.currentWorkflowId) throw new Error("PROJECT_STAGE_REQUIRED");
 
-  const [row] = await db.insert(projects).values(toValues(input)).returning();
+  // NAME_TAKEN: lower(name) is unique among live active/paused projects (BE §9.9).
+  const [row] = await db
+    .insert(projects)
+    .values(toValues(input))
+    .returning()
+    .catch(rethrowProjectNameTaken);
   await db.insert(projectStages).values({ projectId: row.id, workflowId: input.currentWorkflowId }).onConflictDoNothing();
   await recordChanges({
     entity: "project",
@@ -365,7 +371,13 @@ export async function updateProject(
     endDate: pick("endDate"),
     contractAmountMxn: pick("contractAmountMxn"),
   });
-  const [after] = await db.update(projects).set(merged).where(eq(projects.id, id)).returning();
+  // NAME_TAKEN also on un-archiving a project whose name is now taken (BE §7.3).
+  const [after] = await db
+    .update(projects)
+    .set(merged)
+    .where(eq(projects.id, id))
+    .returning()
+    .catch(rethrowProjectNameTaken);
   await recordChanges({
     entity: "project",
     entityId: id,

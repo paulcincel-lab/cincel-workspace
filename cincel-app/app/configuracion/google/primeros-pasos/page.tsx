@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import { GoogleSetupWizard } from "@/components/configuracion/GoogleSetupWizard";
-import { fetchAreasAction } from "@/lib/actions/areas-actions";
+import { fetchPositionsAction } from "@/lib/actions/positions-actions";
 import { getGoogleHealthAction, listGroupMappingsAction } from "@/lib/actions/workspace-access-actions";
 import { getSessionAccess } from "@/lib/auth/session";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
@@ -20,12 +20,12 @@ export default async function GoogleSetupWizardPage() {
   if (!isBootstrapAdminEmail(access.user.email)) redirect("/configuracion/google");
 
   let mappings: GroupMapping[] = [];
-  let areas: { id: string; name: string }[] = [];
+  let positions: { id: string; name: string }[] = [];
   let health: GoogleHealth | null = null;
   try {
-    const [mappingRows, areaRows] = await Promise.all([listGroupMappingsAction(), fetchAreasAction()]);
+    const [mappingRows, positionRows] = await Promise.all([listGroupMappingsAction(), fetchPositionsAction()]);
     mappings = mappingRows;
-    areas = areaRows.map((area) => ({ id: area.id, name: area.name }));
+    positions = positionRows.map((position) => ({ id: position.id, name: position.name }));
   } catch {
     // Lost the session mid-request: the guard redirects and nothing is loaded.
   }
@@ -40,7 +40,7 @@ export default async function GoogleSetupWizardPage() {
       <Sidebar />
       <section className="min-w-0 flex-1 overflow-y-auto px-4 py-14 md:p-10">
         <Header />
-        <GoogleSetupWizard health={health} mappings={mappings} areas={areas} />
+        <GoogleSetupWizard health={health} mappings={mappings} positions={positions} />
       </section>
     </main>
   );

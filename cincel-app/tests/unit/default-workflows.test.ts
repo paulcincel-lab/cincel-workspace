@@ -38,6 +38,10 @@ describe("DEFAULT_WORKFLOWS", () => {
     expect(DEFAULT_WORKFLOWS.map((w) => w.key)).toEqual(["presale", "diseno", "construccion"]);
     expect(DEFAULT_WORKFLOWS.map((w) => w.name)).toEqual(["Presale", "Diseño", "Construcción"]);
   });
+
+  it("starts Presale on project create and the others by hand", () => {
+    expect(DEFAULT_WORKFLOWS.map((w) => w.autoStart)).toEqual(["on_create", "manual", "manual"]);
+  });
 });
 
 describe("ensureDefaultWorkflows", () => {

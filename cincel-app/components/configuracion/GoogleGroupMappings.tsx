@@ -45,37 +45,37 @@ export const GROUP_MAPPING_ERROR_MESSAGES: Record<GroupMappingError, string> = {
   forbidden: "No tienes permiso.",
 };
 
-const KIND_LABELS: Record<GroupMappingKind, string> = { role: "Rol", area: "Área" };
+const KIND_LABELS: Record<GroupMappingKind, string> = { role: "Rol", position: "Puesto" };
 
-type AreaOption = { id: string; name: string };
+type PositionOption = { id: string; name: string };
 
 type MappingDraft = {
   groupEmail: string;
   kind: GroupMappingKind;
   role: string;
-  areaId: string;
+  positionId: string;
   rank: string;
 };
 
-const EMPTY_DRAFT: MappingDraft = { groupEmail: "", kind: "role", role: "", areaId: "", rank: "0" };
+const EMPTY_DRAFT: MappingDraft = { groupEmail: "", kind: "role", role: "", positionId: "", rank: "0" };
 
 function draftFromMapping(mapping: GroupMapping): MappingDraft {
   return {
     groupEmail: mapping.groupEmail,
     kind: mapping.kind,
     role: mapping.role ?? "",
-    areaId: mapping.areaId ?? "",
+    positionId: mapping.positionId ?? "",
     rank: String(mapping.rank),
   };
 }
 
 export type GoogleGroupMappingsProps = {
   mappings: GroupMapping[];
-  areas: AreaOption[];
+  positions: PositionOption[];
 };
 
 /** Configuración → Google, section 2 "Grupos de Google" (FE §2.5). */
-export function GoogleGroupMappings({ mappings, areas }: GoogleGroupMappingsProps) {
+export function GoogleGroupMappings({ mappings, positions }: GoogleGroupMappingsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -103,8 +103,14 @@ export function GoogleGroupMappings({ mappings, areas }: GoogleGroupMappingsProp
     const rank = Number(draft.rank.trim() || "0");
     const input =
       draft.kind === "role"
-        ? { groupEmail: draft.groupEmail, kind: "role" as const, role: draft.role || null, areaId: null, rank }
-        : { groupEmail: draft.groupEmail, kind: "area" as const, role: null, areaId: draft.areaId || null, rank: 0 };
+        ? { groupEmail: draft.groupEmail, kind: "role" as const, role: draft.role || null, positionId: null, rank }
+        : {
+            groupEmail: draft.groupEmail,
+            kind: "position" as const,
+            role: null,
+            positionId: draft.positionId || null,
+            rank: 0,
+          };
     setFormError("");
     startTransition(async () => {
       try {
@@ -151,7 +157,7 @@ export function GoogleGroupMappings({ mappings, areas }: GoogleGroupMappingsProp
       {
         id: "value",
         header: "Valor",
-        cell: ({ row }) => (row.original.kind === "role" ? row.original.role : row.original.areaName) ?? "—",
+        cell: ({ row }) => (row.original.kind === "role" ? row.original.role : row.original.positionName) ?? "—",
       },
       {
         id: "rank",
@@ -172,14 +178,14 @@ export function GoogleGroupMappings({ mappings, areas }: GoogleGroupMappingsProp
   );
 
   const roleItems = Object.fromEntries(OFFICIAL_CINCEL_ROLES.map((role) => [role, role]));
-  const areaItems = Object.fromEntries(areas.map((area) => [area.id, area.name]));
+  const positionItems = Object.fromEntries(positions.map((position) => [position.id, position.name]));
 
   return (
     <section className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Grupos de Google</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Qué grupo de Google Workspace da cada rol o área.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Qué grupo de Google Workspace da cada rol o puesto.</p>
         </div>
         <Button onClick={openCreate}>Agregar grupo</Button>
       </div>
@@ -237,7 +243,7 @@ export function GoogleGroupMappings({ mappings, areas }: GoogleGroupMappingsProp
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="role">{KIND_LABELS.role}</SelectItem>
-                  <SelectItem value="area">{KIND_LABELS.area}</SelectItem>
+                  <SelectItem value="position">{KIND_LABELS.position}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -280,19 +286,19 @@ export function GoogleGroupMappings({ mappings, areas }: GoogleGroupMappingsProp
               </>
             ) : (
               <div className="space-y-2">
-                <Label>Área</Label>
+                <Label>Puesto</Label>
                 <Select
-                  items={areaItems}
-                  value={draft.areaId || null}
-                  onValueChange={(value) => setDraft((current) => ({ ...current, areaId: (value as string) ?? "" }))}
+                  items={positionItems}
+                  value={draft.positionId || null}
+                  onValueChange={(value) => setDraft((current) => ({ ...current, positionId: (value as string) ?? "" }))}
                 >
-                  <SelectTrigger className="w-full" aria-label="Área">
-                    <SelectValue placeholder="Elige un área" />
+                  <SelectTrigger className="w-full" aria-label="Puesto">
+                    <SelectValue placeholder="Elige un puesto" />
                   </SelectTrigger>
                   <SelectContent>
-                    {areas.map((area) => (
-                      <SelectItem key={area.id} value={area.id}>
-                        {area.name}
+                    {positions.map((position) => (
+                      <SelectItem key={position.id} value={position.id}>
+                        {position.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

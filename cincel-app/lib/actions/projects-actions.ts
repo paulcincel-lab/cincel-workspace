@@ -7,6 +7,8 @@ import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { retryProjectFolders, syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
 import { notImplemented } from "@/lib/project-flow/not-implemented";
+import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
+import * as projectSpacesRepository from "@/lib/repositories/project-spaces-repository";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
 import type {
   ApplyWorkflowPreview,
@@ -19,6 +21,7 @@ import type {
   ProjectSpace,
 } from "@/lib/types/core";
 import type { ProjectFilters } from "@/lib/repositories/projects-repository";
+import { OrderedIdsSchema, ProjectSpaceNameSchema, UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
 async function requireProjectsCapabilities() {
   return resolveProjectsCapabilities(await requireCapabilityUser());
@@ -236,27 +239,56 @@ export async function setProjectCurrentTramoAction(id: string, workflowId: strin
   return notImplemented("setProjectCurrentTramoAction", id, workflowId);
 }
 
+/** Signed-in user allowed to edit the project's general data (espacios); FORBIDDEN otherwise. */
+async function requireProjectEditor() {
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canEditProjectGeneral) throw flowError(FLOW_ERROR.FORBIDDEN);
+  return user;
+}
+
+/** Espacios show on the ficha and filter the Actividades views. Without a project id, every ficha. */
+function revalidateSpaces(projectId?: string) {
+  if (projectId) revalidatePath(`/proyectos/${projectId}/ficha`);
+  else revalidatePath("/proyectos", "layout");
+  revalidatePath("/actividades", "layout");
+}
+
 /** By `sortOrder`, with live task counts. `canViewProjects`. */
 export async function fetchProjectSpacesAction(projectId: string): Promise<ProjectSpace[]> {
-  return notImplemented("fetchProjectSpacesAction", projectId);
+  const caps = await requireProjectsCapabilities();
+  if (!caps.canViewProjects) return [];
+  return projectSpacesRepository.listSpaces(parseInput(UuidSchema, projectId));
 }
 
 /** Appended last. `canEditProjectGeneral`. Errors: FORBIDDEN, NAME_TAKEN, EMPTY, NOT_FOUND. */
 export async function createProjectSpaceAction(projectId: string, name: string): Promise<ProjectSpace> {
-  return notImplemented("createProjectSpaceAction", projectId, name);
+  await requireProjectEditor();
+  const id = parseInput(UuidSchema, projectId);
+  const row = await projectSpacesRepository.createSpace(id, parseInput(ProjectSpaceNameSchema, name));
+  revalidateSpaces(id);
+  return row;
 }
 
 /** Errors: FORBIDDEN, NAME_TAKEN, EMPTY, NOT_FOUND. */
 export async function renameProjectSpaceAction(id: string, name: string): Promise<ProjectSpace> {
-  return notImplemented("renameProjectSpaceAction", id, name);
+  await requireProjectEditor();
+  const spaceId = parseInput(UuidSchema, id);
+  const row = await projectSpacesRepository.renameSpace(spaceId, parseInput(ProjectSpaceNameSchema, name));
+  revalidateSpaces(row.projectId);
+  return row;
 }
 
 /** Errors: FORBIDDEN, NOT_FOUND. */
 export async function reorderProjectSpacesAction(projectId: string, orderedIds: string[]): Promise<void> {
-  return notImplemented("reorderProjectSpacesAction", projectId, orderedIds);
+  await requireProjectEditor();
+  const id = parseInput(UuidSchema, projectId);
+  await projectSpacesRepository.reorderSpaces(id, parseInput(OrderedIdsSchema, orderedIds));
+  revalidateSpaces(id);
 }
 
 /** Its tasks keep their fase and lose the espacio. Errors: FORBIDDEN, NOT_FOUND. */
 export async function deleteProjectSpaceAction(id: string): Promise<void> {
-  return notImplemented("deleteProjectSpaceAction", id);
+  const user = await requireProjectEditor();
+  await projectSpacesRepository.deleteSpace(parseInput(UuidSchema, id), user.member.id);
+  revalidateSpaces();
 }

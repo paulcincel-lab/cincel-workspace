@@ -17,6 +17,7 @@ import {
   workflowPhases,
   workflows,
 } from "@/lib/db/schema";
+import { closedAtPatch } from "@/lib/project-flow/closing";
 import { notImplemented } from "@/lib/project-flow/not-implemented";
 import type { AdminTaskFilters } from "@/lib/validation/project-flow";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
@@ -564,6 +565,7 @@ export async function updateTask(id: string, patch: TaskPatch, actorId: string):
   if (patch.status !== undefined) {
     set.status = patch.status;
     set.customStatusId = null;
+    Object.assign(set, closedAtPatch(before, patch.status));
   }
   if (patch.managerId !== undefined) set.managerId = patch.managerId;
   if (patch.commitmentDate !== undefined) set.commitmentDate = clean(patch.commitmentDate);
@@ -596,7 +598,7 @@ export async function setTaskCustomStatus(
   if (!cs) throw new Error("TASK_STATUS_NOT_FOUND");
   const [after] = await db
     .update(tasks)
-    .set({ status: underlyingStatus(cs), customStatusId: cs.id })
+    .set({ status: underlyingStatus(cs), customStatusId: cs.id, ...closedAtPatch(before, underlyingStatus(cs)) })
     .where(eq(tasks.id, id))
     .returning();
   await recordChanges({ entity: "task", entityId: id, actorId, before, after, fields: TASK_TRACKED_FIELDS });

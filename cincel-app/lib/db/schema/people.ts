@@ -15,12 +15,11 @@ import { core, soft, stamps, staffKind } from "./_schema";
 import { workflowPhases, workflows } from "./workflows";
 
 /**
- * Whether a Workspace group mapping grants a role or an área (BE §A.3).
- * Project flow: migration 0024 step 13 renames 'area' to 'position' (and swaps
- * `workspace_group_mappings_kind_check`) together with the code switch to
- * puestos, so 0023 leaves the enum and the check untouched (BE §4.1).
+ * Whether a Workspace group mapping grants a role or a puesto (BE §3.11).
+ * Migration 0024 step 13 renamed 'area' to 'position' and swapped
+ * `workspace_group_mappings_kind_check`; 0023 leaves both untouched (BE §4.1).
  */
-export const groupMappingKind = core.enum("group_mapping_kind", ["role", "area"]);
+export const groupMappingKind = core.enum("group_mapping_kind", ["role", "position"]);
 
 /** Internal person: employee, freelance or servicio social (Part C.1). */
 export const staff = core.table(
@@ -221,9 +220,9 @@ export const workspaceGroupMappings = core.table(
     groupId: text("group_id").notNull(), // from groups.get; survives renames
     kind: groupMappingKind("kind").notNull(),
     role: text("role"), // kind = role: one of OFFICIAL_CINCEL_ROLES
-    /** @deprecated kind = area; always null once 0024 runs. Dropped in release B (0025). */
-    areaId: uuid("area_id").references(() => areas.id, { onDelete: "cascade" }), // kind = area
-    /** kind = position (after 0024 renames the enum value). `restrict`: a mapped puesto can't be deleted. */
+    /** @deprecated always null since 0024 step 13 removed the kind = area mappings. Dropped in release B (0025). */
+    areaId: uuid("area_id").references(() => areas.id, { onDelete: "cascade" }),
+    /** kind = position. `restrict`: a mapped puesto can't be deleted. */
     positionId: uuid("position_id").references(() => positions.id, { onDelete: "restrict" }),
     rank: integer("rank").notNull().default(0), // kind = role: higher wins
     ...stamps,
@@ -233,7 +232,7 @@ export const workspaceGroupMappings = core.table(
     index("idx_workspace_group_mappings_position_id").on(t.positionId),
     check(
       "workspace_group_mappings_kind_check",
-      sql`(${t.kind} = 'role' and ${t.role} is not null and ${t.areaId} is null) or (${t.kind} = 'area' and ${t.areaId} is not null and ${t.role} is null)`
+      sql`(${t.kind}::text = 'role' and ${t.role} is not null and ${t.positionId} is null) or (${t.kind}::text = 'position' and ${t.positionId} is not null and ${t.role} is null)`
     ),
   ]
 );

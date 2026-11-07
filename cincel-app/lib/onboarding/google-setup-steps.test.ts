@@ -35,8 +35,8 @@ const adminGroup: GroupMapping = {
   groupEmail: "admins@example.test",
   kind: "role",
   role: "Administrador",
-  areaId: null,
-  areaName: null,
+  positionId: null,
+  positionName: null,
   rank: ADMIN_GROUP_RANK,
 };
 
@@ -86,10 +86,16 @@ describe("canAdvance", () => {
 });
 
 describe("findAdminGroup", () => {
-  it("ignores area mappings and other roles", () => {
-    const area: GroupMapping = { ...adminGroup, kind: "area", role: null, areaId: "a", areaName: "Diseño" };
-    expect(findAdminGroup([area, otherGroup])).toBeNull();
-    expect(findAdminGroup([area, adminGroup])).toBe(adminGroup);
+  it("ignores position mappings and other roles", () => {
+    const position: GroupMapping = {
+      ...adminGroup,
+      kind: "position",
+      role: null,
+      positionId: "p",
+      positionName: "Diseñador",
+    };
+    expect(findAdminGroup([position, otherGroup])).toBeNull();
+    expect(findAdminGroup([position, adminGroup])).toBe(adminGroup);
   });
 });
 

@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { taskStatuses, tasks } from "@/lib/db/schema";
@@ -70,8 +70,8 @@ export async function createTaskStatus(input: TaskStatusInput): Promise<TaskStat
 }
 
 /**
- * Toggling `closes` also re-syncs tasks already in this status, so they
- * immediately count as finished (or open again) in metrics.
+ * Toggling `closes` also re-syncs tasks already in this status (their status
+ * and `closed_at`), so they immediately count as finished (or open again).
  */
 export async function updateTaskStatus(
   id: string,
@@ -94,7 +94,14 @@ export async function updateTaskStatus(
   return db.transaction(async (tx) => {
     const [after] = await tx.update(taskStatuses).set(values).where(eq(taskStatuses.id, id)).returning();
     if (values.closes !== before.closes) {
-      await tx.update(tasks).set({ status: underlyingStatus(values) }).where(eq(tasks.customStatusId, id));
+      // Keeps `tasks_closed_at_check` true: closing keeps an existing date, reopening clears it.
+      await tx
+        .update(tasks)
+        .set({
+          status: underlyingStatus(values),
+          closedAt: values.closes ? sql`coalesce(${tasks.closedAt}, now())` : null,
+        })
+        .where(eq(tasks.customStatusId, id));
     }
     return toOption(after);
   });

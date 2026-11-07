@@ -53,7 +53,7 @@ import { authEvents, sessions, staff } from "@/lib/db/schema";
 import { DirectoryError } from "@/lib/google/directory";
 
 const GOOGLE_STAFF = { googleSub: "sub-1", email: "ana@cincel.example" };
-const ALLOWED = { allowed: true, role: "Arquitecto Senior", areaIds: [], areasManaged: false, reason: null };
+const ALLOWED = { allowed: true, role: "Arquitecto Senior", positionIds: [], positionsManaged: false, reason: null };
 
 const ops = () => fake.state.calls.map((call) => call.op);
 const inserted = () => fake.state.calls.filter((call) => call.op === "insert").map((call) => call.values);

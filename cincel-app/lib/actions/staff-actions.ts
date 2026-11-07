@@ -8,10 +8,12 @@ import {
   resolveAreasCapabilities,
   resolveTeamCapabilities,
 } from "@/lib/auth/permissions";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
+import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
+import * as positionsRepository from "@/lib/repositories/positions-repository";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
 import { GOOGLE_MANAGED_REFUSAL, type GoogleManagedRefusal } from "@/lib/types/workspace-access";
+import { UuidArraySchema, UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
 const normalizeRole = (role: string | null | undefined) => role?.trim() || null;
 
@@ -161,12 +163,28 @@ export async function reorderStaffAction(orderedIds: string[]): Promise<void> {
 /**
  * Replaces setStaffAreasAction (project flow BE §7.2). `team.canEditCollaborator`.
  * Returns GOOGLE_MANAGED_REFUSAL for a Google-managed person when position
- * mappings exist and the set differs from the workspace rows. Errors:
- * FORBIDDEN, NOT_FOUND.
+ * mappings exist and the set differs from the workspace rows. Otherwise only
+ * the `manual` rows are replaced (puestos that come from Workspace stay).
+ * Errors: FORBIDDEN, NOT_FOUND.
  */
 export async function setStaffPositionsAction(
   staffId: string,
   positionIds: string[]
 ): Promise<GoogleManagedRefusal | void> {
-  return notImplemented("setStaffPositionsAction", staffId, positionIds);
+  const user = await requireCapabilityUser();
+  if (!resolveTeamCapabilities(user).canEditCollaborator) throw flowError(FLOW_ERROR.FORBIDDEN);
+  const id = parseInput(UuidSchema, staffId);
+  const wanted = [...new Set(parseInput(UuidArraySchema, positionIds))];
+  if (!(await staffRepository.staffExists(id))) throw flowError(FLOW_ERROR.NOT_FOUND, "staff");
+
+  const workspace = new Set(await staffRepository.listStaffPositionIds(id, "workspace"));
+  const googleManaged = (await staffRepository.googleManagedStaffIds([id])).has(id);
+  if (googleManaged && (await staffRepository.hasPositionGroupMappings())) {
+    const same = workspace.size === wanted.length && wanted.every((p) => workspace.has(p));
+    return same ? undefined : GOOGLE_MANAGED_REFUSAL;
+  }
+
+  await positionsRepository.setStaffPositions(id, wanted.filter((p) => !workspace.has(p)));
+  revalidatePath("/equipo");
+  revalidatePath("/configuracion/puestos");
 }

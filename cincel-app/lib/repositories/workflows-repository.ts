@@ -3,9 +3,11 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { areaWorkflows, areas, workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
 import { READINESS } from "@/lib/project-flow/catalog";
-import { notImplemented } from "@/lib/project-flow/not-implemented";
+import type { FlowExecutor } from "@/lib/project-flow/db";
+import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
+import { matchPhaseByName, resolveTemplatePhaseId } from "@/lib/project-flow/old-ui-compat";
 import { recordChanges } from "@/lib/repositories/history-repository";
-import { listPhasesByWorkflow } from "@/lib/repositories/workflow-phases-repository";
+import { assertPhaseInWorkflow, listPhasesByWorkflow } from "@/lib/repositories/workflow-phases-repository";
 import type {
   TramoReadiness,
   Workflow,
@@ -233,8 +235,6 @@ export async function softDeleteWorkflow(id: string, actorId: string): Promise<v
 function toTemplateValues(input: WorkflowTaskTemplateInput) {
   return {
     phase: clean(input.phase),
-    // Old-UI fallback (phaseId from the old `phase` text, else the first fase) lands in #739.
-    ...(input.phaseId ? { phaseId: input.phaseId } : {}),
     title: input.title.trim(),
     notes: clean(input.notes),
     defaultPriority: input.defaultPriority ?? "media",
@@ -244,6 +244,37 @@ function toTemplateValues(input: WorkflowTaskTemplateInput) {
     sortOrder: input.sortOrder ?? 0,
     active: input.active ?? true,
   };
+}
+
+/** Every fase of the tramo (inactive included), for the old-UI fallbacks. */
+async function phaseCandidatesOf(workflowId: string) {
+  return db
+    .select({
+      id: workflowPhases.id,
+      name: workflowPhases.name,
+      sortOrder: workflowPhases.sortOrder,
+      active: workflowPhases.active,
+    })
+    .from(workflowPhases)
+    .where(eq(workflowPhases.workflowId, workflowId));
+}
+
+/**
+ * The template's fase (BE §4.3 step 2): `phaseId` (checked against the tramo,
+ * PHASE_MISMATCH), else the old `phase` text by nameKey, else the tramo's
+ * first fase. NO_PHASES when the tramo has none, so `phase_id` is never null.
+ */
+async function templatePhaseIdFor(
+  workflowId: string,
+  source: { phaseId?: string | null; phase?: string | null }
+): Promise<string> {
+  if (source.phaseId) {
+    await assertPhaseInWorkflow(db, source.phaseId, workflowId);
+    return source.phaseId;
+  }
+  const phaseId = resolveTemplatePhaseId(source, await phaseCandidatesOf(workflowId));
+  if (!phaseId) throw flowError(FLOW_ERROR.NO_PHASES, "workflow");
+  return phaseId;
 }
 
 export async function listTemplates(
@@ -270,13 +301,14 @@ export async function createTemplate(
   actorId: string
 ): Promise<WorkflowTaskTemplate> {
   const values = toTemplateValues(input);
+  const phaseId = await templatePhaseIdFor(workflowId, input);
   if (input.sortOrder === undefined) {
     const existing = await listTemplates(workflowId, { includeInactive: true });
     values.sortOrder = existing.length;
   }
   const [row] = await db
     .insert(workflowTaskTemplates)
-    .values({ workflowId, ...values })
+    .values({ workflowId, ...values, phaseId })
     .returning();
   await recordChange(workflowId, actorId, "template_added", null, row.title);
   return toTemplate(row, await phaseNamesOf([row.phaseId]));
@@ -295,7 +327,6 @@ export async function updateTemplate(
   if (!before) throw new Error("TEMPLATE_NOT_FOUND");
   const merged = toTemplateValues({
     phase: patch.phase === undefined ? before.phase : patch.phase,
-    phaseId: patch.phaseId ?? before.phaseId ?? undefined,
     title: patch.title ?? before.title,
     notes: patch.notes === undefined ? before.notes : patch.notes,
     defaultPriority: patch.defaultPriority ?? before.defaultPriority,
@@ -307,9 +338,20 @@ export async function updateTemplate(
     sortOrder: patch.sortOrder ?? before.sortOrder,
     active: patch.active ?? before.active,
   });
+  // A new phaseId wins; an edited old `phase` text moves the template to the
+  // fase of that name when there is one; otherwise it keeps its fase, and a
+  // template still without one gets the fallback.
+  let phaseId: string;
+  if (patch.phaseId) {
+    phaseId = await templatePhaseIdFor(before.workflowId, { phaseId: patch.phaseId });
+  } else {
+    const byText =
+      patch.phase !== undefined ? matchPhaseByName(patch.phase, await phaseCandidatesOf(before.workflowId)) : null;
+    phaseId = byText ?? before.phaseId ?? (await templatePhaseIdFor(before.workflowId, { phase: merged.phase }));
+  }
   const [after] = await db
     .update(workflowTaskTemplates)
-    .set(merged)
+    .set({ ...merged, phaseId })
     .where(eq(workflowTaskTemplates.id, id))
     .returning();
   if (before.title !== after.title) {
@@ -339,15 +381,47 @@ export async function reorderTemplates(workflowId: string, orderedIds: string[])
 
 /** Active tramos for the sidebar and tabs, by `sortOrder` (BE §8.2). */
 export async function listTramosNav(): Promise<WorkflowRef[]> {
-  return notImplemented("listTramosNav");
+  const rows = await db
+    .select({ id: workflows.id, key: workflows.key, name: workflows.name, sortOrder: workflows.sortOrder })
+    .from(workflows)
+    .where(and(eq(workflows.active, true), isNull(workflows.deletedAt)))
+    .orderBy(asc(workflows.sortOrder), asc(workflows.name));
+  return rows.map(toRef);
 }
 
 /**
  * The UI switch (BE §7.1): `true` stores `on_create` for the first active
  * tramo and `on_ready` for the others; `false` stores `manual`. NOT_FOUND.
  */
-export async function setWorkflowAutoStart(id: string, enabled: boolean, actorId: string): Promise<Workflow> {
-  return notImplemented("setWorkflowAutoStart", id, enabled, actorId);
+export async function setWorkflowAutoStart(
+  id: string,
+  enabled: boolean,
+  actorId: string,
+  executor: FlowExecutor = db
+): Promise<Workflow> {
+  const [before] = await executor
+    .select()
+    .from(workflows)
+    .where(and(eq(workflows.id, id), isNull(workflows.deletedAt)))
+    .limit(1);
+  if (!before) throw flowError(FLOW_ERROR.NOT_FOUND, "workflow");
+  let next: Workflow["autoStart"] = "manual";
+  if (enabled) {
+    const [first] = await executor
+      .select({ id: workflows.id })
+      .from(workflows)
+      .where(and(eq(workflows.active, true), isNull(workflows.deletedAt)))
+      .orderBy(asc(workflows.sortOrder), asc(workflows.name))
+      .limit(1);
+    next = first?.id === id ? "on_create" : "on_ready";
+  }
+  if (before.autoStart === next) return toWorkflow(before);
+  const [after] = await executor.update(workflows).set({ autoStart: next }).where(eq(workflows.id, id)).returning();
+  await recordChanges(
+    { entity: "workflow", entityId: id, actorId, before, after, fields: ["autoStart"] },
+    executor
+  );
+  return toWorkflow(after);
 }
 
 /** @deprecated Áreas are removed (ADR 0003). */

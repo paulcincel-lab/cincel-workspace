@@ -36,7 +36,7 @@ export type GoogleSetupWizardProps = {
   /** Null when `getGoogleHealthAction()` failed. */
   health: GoogleHealth | null;
   mappings: GroupMapping[];
-  areas: { id: string; name: string }[];
+  positions: { id: string; name: string }[];
 };
 
 /** Stepper-like header: one badge per step, the current one marked with `aria-current`. */
@@ -120,7 +120,7 @@ function AdminGroupStep({ mappings, domain }: { mappings: GroupMapping[]; domain
           groupEmail,
           kind: "role",
           role: SYSTEM_ADMIN_ROLE,
-          areaId: null,
+          positionId: null,
           rank: ADMIN_GROUP_RANK,
         });
         if (!result.ok) {
@@ -196,7 +196,7 @@ const STEP_DESCRIPTIONS: Record<GoogleSetupStepId, string> = {
  * First-login wizard of the bootstrap admin (#671): only sets up the Google groups so others can sign in with
  * Google. "Omitir por ahora" and finishing both mark it completed for this staff member.
  */
-export function GoogleSetupWizard({ health, mappings, areas }: GoogleSetupWizardProps) {
+export function GoogleSetupWizard({ health, mappings, positions }: GoogleSetupWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<GoogleSetupStepId>(() => initialStep({ health, mappings }));
   const [isPending, startTransition] = useTransition();
@@ -237,7 +237,7 @@ export function GoogleSetupWizard({ health, mappings, areas }: GoogleSetupWizard
       <CardContent className="space-y-4">
         {step === "review" ? <ReviewStep health={health} /> : null}
         {step === "admin_group" ? <AdminGroupStep mappings={mappings} domain={domain} /> : null}
-        {step === "more_groups" ? <GoogleGroupMappings mappings={mappings} areas={areas} /> : null}
+        {step === "more_groups" ? <GoogleGroupMappings mappings={mappings} positions={positions} /> : null}
         {step === "done" ? <DoneStep domain={domain} /> : null}
 
         {error ? (

@@ -42,16 +42,16 @@ export function isGoogleManagedRefusal(value: unknown): value is GoogleManagedRe
   );
 }
 
-/** Which Workspace group means which role or area (BE §A.7, FE §5). */
-export type GroupMappingKind = "role" | "area";
+/** Which Workspace group means which role or puesto (BE §A.7, §7.7; FE §7.7). */
+export type GroupMappingKind = "role" | "position";
 
 export type GroupMapping = {
   id: string;
   groupEmail: string;
   kind: GroupMappingKind;
   role: string | null;
-  areaId: string | null;
-  areaName: string | null;
+  positionId: string | null;
+  positionName: string | null;
   rank: number;
 };
 
@@ -59,7 +59,7 @@ export type GroupMappingInput = {
   groupEmail: string;
   kind: GroupMappingKind;
   role?: string | null;
-  areaId?: string | null;
+  positionId?: string | null;
   rank?: number | null;
 };
 
