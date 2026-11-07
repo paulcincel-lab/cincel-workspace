@@ -27,16 +27,24 @@ import {
   updateResourceLinkAction,
 } from "@/lib/actions/resources-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
-import { readStorage, writeStorage, removeStorage } from "@/lib/repositories/browser-state-repository";
 import {
-  canPreviewInline,
-  driveContentUrl,
-  getDriveId,
   getDrivePreviewUrl,
   hasDriveUrl,
   inferLinkTypeFromUrl,
 } from "@/lib/google/drive-url";
 import DriveBrowser, { type DriveBrowserEntry } from "@/components/recursos/DriveBrowser";
+import { DriveFilePreviewSheet, ResourcePreview } from "@/components/recursos/ResourcePreview";
+import {
+  PRIMARY_SECTION_ORDER,
+  SECTION_DESCRIPTION,
+  SECTION_LABEL,
+  SECTION_ORDER,
+  loadRecentDocuments,
+  recentDocumentsToShow as pickRecentDocuments,
+  resolveResourcePreview,
+  saveRecentDocuments,
+  type RecentDocument,
+} from "@/components/recursos/resources-model";
 import DrivePickerDialog, { type DrivePickerEntry } from "@/components/recursos/DrivePickerDialog";
 import { showsPersonSelector } from "@/components/recursos/person-selector";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
@@ -50,27 +58,6 @@ import type {
   ResourceSubsection,
 } from "@/lib/types/resource";
 
-const RECENT_DOCS_STORAGE_KEY = "cincel.resources.recent-docs.v1";
-
-const SECTION_ORDER: ResourceSection[] = [
-  "mis-documentos",
-  "mis-favoritos",
-  "plantillas-diseno",
-  "formatos-obra",
-  "mis-vacaciones",
-  "formacion",
-  "empresa",
-];
-
-const PRIMARY_SECTION_ORDER: ResourceSection[] = [
-  "mis-documentos",
-  "mis-favoritos",
-  "plantillas-diseno",
-  "formatos-obra",
-  "mis-vacaciones",
-  "formacion",
-];
-
 const EMPRESA_SECTION_NAV = [
   { label: "Book", path: "/recursos/empresa/book" },
   { label: "Manual de la empresa", path: "/recursos/empresa/manual-de-la-empresa" },
@@ -78,26 +65,6 @@ const EMPRESA_SECTION_NAV = [
   { label: "RFC", path: "/recursos/empresa/rfc" },
   { label: "Políticas de la empresa", path: "/recursos/empresa/politicas-de-la-empresa" },
 ] as const;
-
-const SECTION_LABEL: Record<ResourceSection, string> = {
-  "mis-documentos": "Mis documentos",
-  "mis-favoritos": "Mis Favoritos",
-  "plantillas-diseno": "Plantillas de diseño",
-  "formatos-obra": "Formatos de Obra",
-  "mis-vacaciones": "Mis Vacaciones",
-  formacion: "Formación",
-  empresa: "Empresa",
-};
-
-const SECTION_DESCRIPTION: Record<ResourceSection, string> = {
-  "mis-documentos": "Documentos personales del integrante seleccionado.",
-  "mis-favoritos": "Documentos marcados como favoritos para consulta rápida.",
-  "plantillas-diseno": "Plantillas y formatos de diseño.",
-  "formatos-obra": "Formatos operativos para obra.",
-  "mis-vacaciones": "Formato y documentos de vacaciones.",
-  formacion: "Material de apoyo, aprendizaje y referencia.",
-  empresa: "Documentos internos e institucionales.",
-};
 
 const SECTION_PATH: Record<ResourceSection, string> = {
   "mis-documentos": "/recursos/mis-documentos",
@@ -130,15 +97,6 @@ type CreateDraft = {
   drive: Omit<DriveFileMeta, "id"> | null;
 };
 
-type RecentDocument = {
-  id: string;
-  title: string;
-  url: string;
-  href?: string;
-  openedAt: string;
-  section: ResourceSection;
-};
-
 type RemoveDraft = {
   scope: ResourceSection;
   selectedId: string;
@@ -156,37 +114,6 @@ const EMPTY_CREATE_DRAFT: CreateDraft = {
   status: "vigente",
   drive: null,
 };
-
-function loadRecentDocuments(): RecentDocument[] {
-  const stored = readStorage(RECENT_DOCS_STORAGE_KEY);
-
-  if (!stored) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as RecentDocument[];
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .map((item) => ({
-        ...item,
-        url: item.url ?? item.href,
-      }))
-      .filter((item) => hasDriveUrl(item.url))
-      .slice(0, 8);
-  } catch {
-    removeStorage(RECENT_DOCS_STORAGE_KEY);
-    return [];
-  }
-}
-
-function saveRecentDocuments(next: RecentDocument[]): void {
-  writeStorage(RECENT_DOCS_STORAGE_KEY, JSON.stringify(next.slice(0, 8)));
-}
 
 function FolderGlyph({ accent = "bg-foreground/70" }: { accent?: string }) {
   return (
@@ -641,31 +568,16 @@ export default function ResourcesWorkspace({
   const sectionTitle = pageLabel;
   const sectionDescription = pageDescription;
 
-  const recentDocumentsToShow = recentDocuments.length > 0
-    ? recentDocuments
-    : filteredLinks
-        .filter((link) => link.linkType === "drive_file")
-        .slice(0, 4)
-        .map((link) => ({
-          id: link.id,
-          title: link.title,
-          url: link.url,
-          openedAt: link.updatedAt,
-          section: link.section,
-        }));
+  const recentDocumentsToShow = pickRecentDocuments(recentDocuments, filteredLinks);
 
   const pageDocuments = pageMode ? grouped[pageMode].general : [];
   const selectedPageDocument = pageDocuments.find((link) => link.id === selectedDocumentId) ?? null;
   const fallbackPageDocument = pageDocuments.find((link) => getDrivePreviewUrl(link.url, link.linkType)) ?? pageDocuments[0] ?? null;
   const pagePreviewSource = selectedPageDocument ?? fallbackPageDocument;
-  const pagePreviewUrl = pagePreviewSource ? getDrivePreviewUrl(pagePreviewSource.url, pagePreviewSource.linkType) : null;
   // With Drive configured, preview Drive links through the app as the caller's
   // connected Google account (#433) instead of iframing drive.google.com,
   // which only works if the browser is signed into the right account.
-  const pageDriveFileId =
-    driveEnabled && pagePreviewSource && pagePreviewSource.linkType !== "web"
-      ? (pagePreviewSource.drive?.googleFileId ?? getDriveId(pagePreviewSource.url))
-      : null;
+  const { previewUrl: pagePreviewUrl } = resolveResourcePreview(pagePreviewSource, driveEnabled);
   const canEditPagePreview = pagePreviewSource
     ? canEditResourceInSection({
         capabilities: resourcesCapabilities,
@@ -1036,36 +948,13 @@ export default function ResourcesWorkspace({
                 </div>
 
                 <div className="mt-6 overflow-hidden rounded-[28px] border border-border bg-muted">
-                  {pageDriveFileId && pagePreviewSource?.linkType === "drive_folder" ? (
-                    <div className="flex h-[620px] flex-col bg-card">
-                      <DriveBrowser active rootFolderId={pageDriveFileId} onFileClick={setDrivePreview} />
-                    </div>
-                  ) : pageDriveFileId ? (
-                    canPreviewInline(pagePreviewSource?.drive?.mimeType) ? (
-                      <iframe
-                        title={pagePreviewSource?.title ?? pageLabel}
-                        src={driveContentUrl(pageDriveFileId)}
-                        className="h-[620px] w-full"
-                      />
-                    ) : (
-                      <div className="flex h-[620px] flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
-                        <p>Este tipo de archivo no tiene vista previa en la app.</p>
-                        <a href={driveContentUrl(pageDriveFileId)} className="font-medium text-foreground underline">
-                          Descargar
-                        </a>
-                      </div>
-                    )
-                  ) : pagePreviewUrl ? (
-                    <iframe
-                      title={pagePreviewSource?.title ?? pageLabel}
-                      src={pagePreviewUrl}
-                      className="h-[620px] w-full"
-                    />
-                  ) : (
-                    <div className="flex h-[620px] items-center justify-center p-8 text-center text-sm text-muted-foreground">
-                      {pagePreviewUnavailableReason}
-                    </div>
-                  )}
+                  <ResourcePreview
+                    link={pagePreviewSource}
+                    driveEnabled={driveEnabled}
+                    title={pageLabel}
+                    unavailableReason={pagePreviewUnavailableReason}
+                    onDriveFileClick={setDrivePreview}
+                  />
                 </div>
               </div>
 
@@ -1173,30 +1062,7 @@ export default function ResourcesWorkspace({
         onPick={applyDrivePick}
       />
 
-      <Sheet open={drivePreview !== null} onOpenChange={(next) => { if (!next) setDrivePreview(null); }}>
-        <SheetContent className="w-[90vw] max-w-5xl p-0" side="right">
-          <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-            <SheetTitle className="truncate">{drivePreview?.name}</SheetTitle>
-            {drivePreview ? (
-              <Button variant="outline" size="sm" onClick={() => window.open(drivePreview.webViewLink, "_blank", "noopener")}>
-                Abrir en Drive
-              </Button>
-            ) : null}
-          </div>
-          {drivePreview ? (
-            canPreviewInline(drivePreview.mimeType) ? (
-              <iframe title={drivePreview.name} src={driveContentUrl(drivePreview.id)} className="h-full w-full" />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
-                <p>Este tipo de archivo no tiene vista previa en la app.</p>
-                <a href={driveContentUrl(drivePreview.id)} className="font-medium text-foreground underline">
-                  Descargar
-                </a>
-              </div>
-            )
-          ) : null}
-        </SheetContent>
-      </Sheet>
+      <DriveFilePreviewSheet entry={drivePreview} onClose={() => setDrivePreview(null)} />
 
       <Sheet open={removeDraft !== null} onOpenChange={(next) => { if (!next) setRemoveDraft(null); }}>
         <SheetContent className="overflow-y-auto p-6">

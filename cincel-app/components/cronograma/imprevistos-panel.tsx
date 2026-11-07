@@ -150,7 +150,7 @@ export function ImprevistosPanel({ scheduleId, imprevistos, readOnly = false }: 
               rows={2}
             />
             <div className="flex items-center gap-2">
-              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-auto" />
+              <Input type="date" aria-label="Fecha del imprevisto" value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-auto" />
               <Button type="submit" size="sm" disabled={isPending || !texto.trim()}>
                 Agregar
               </Button>

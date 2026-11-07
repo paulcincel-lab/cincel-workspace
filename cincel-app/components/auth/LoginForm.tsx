@@ -1,32 +1,18 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Input } from "@/components/ui/shadcn/input";
 import { Separator } from "@/components/ui/shadcn/separator";
-import { loginAction } from "@/lib/auth/auth-actions";
 import type { LoginCallbackError } from "@/lib/auth/login-callback-error";
 
-type LoginDraft = {
-  email: string;
-  password: string;
-};
-
-const DEFAULT_DRAFT: LoginDraft = {
-  email: "",
-  password: "",
-};
-
-const CALLBACK_ERROR_MESSAGES: Record<LoginCallbackError, string> = {
-  state: "La sesión de inicio expiró. Intenta de nuevo.",
-  retry: "No pudimos verificar tu acceso con Google. Intenta de nuevo.",
-};
-
-const GOOGLE_START_URL = "/api/auth/google/start";
+import {
+  CALLBACK_ERROR_MESSAGES,
+  GOOGLE_START_URL,
+  NO_SIGN_IN_MESSAGE,
+  useCredentialsLogin,
+} from "./use-credentials-login";
 
 export type LoginFormProps = {
   googleEnabled: boolean;
@@ -43,49 +29,8 @@ function GoogleIcon() {
 }
 
 export default function LoginForm({ googleEnabled, passwordEnabled, callbackError }: LoginFormProps) {
-  const router = useRouter();
-  const [draft, setDraft] = useState<LoginDraft>(DEFAULT_DRAFT);
-  const [error, setError] = useState<string>("");
-  const [helpMessage, setHelpMessage] = useState<string>("");
-  const [isPending, startTransition] = useTransition();
-
-  const canSubmit = useMemo(() => {
-    return Boolean(draft.email.trim() && draft.password.trim()) && !isPending;
-  }, [draft.email, draft.password, isPending]);
-
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-    setHelpMessage("");
-
-    startTransition(async () => {
-      const result = await loginAction(draft.email, draft.password);
-
-      if (!result.ok) {
-        if (result.reason === "password_login_disabled") {
-          setError("El acceso con contraseña está desactivado. Entra con Google.");
-          return;
-        }
-        if (result.reason === "inactive_member") {
-          setError("Tu cuenta esta inactiva. Contacta a un administrador.");
-          return;
-        }
-        if (result.reason === "auth_disabled") {
-          setError("Esta cuenta no tiene acceso al sistema.");
-          return;
-        }
-        if (result.reason === "password_not_set") {
-          setError("La cuenta no tiene una contraseña temporal configurada.");
-          return;
-        }
-        setError("Correo o contraseña incorrectos.");
-        return;
-      }
-
-      router.replace(result.mustChangePassword ? "/change-password" : "/dashboard");
-      router.refresh();
-    });
-  };
+  const { draft, setEmail, setPassword, error, helpMessage, showHelp, canSubmit, handleSubmit } =
+    useCredentialsLogin();
 
   return (
     <main className="min-h-screen bg-muted px-4 py-6 sm:px-6 lg:px-8">
@@ -142,7 +87,7 @@ export default function LoginForm({ googleEnabled, passwordEnabled, callbackErro
 
             {!googleEnabled && !passwordEnabled ? (
               <Alert className="mb-4">
-                <AlertDescription>El inicio de sesión no está disponible. Contacta a tu director.</AlertDescription>
+                <AlertDescription>{NO_SIGN_IN_MESSAGE}</AlertDescription>
               </Alert>
             ) : null}
 
@@ -168,7 +113,7 @@ export default function LoginForm({ googleEnabled, passwordEnabled, callbackErro
                   <Input
                     type="email"
                     value={draft.email}
-                    onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))}
+                    onChange={(event) => setEmail(event.target.value)}
                     placeholder="ejemplo@empresa.com"
                     aria-describedby="login-email-help"
                     className="h-11"
@@ -184,7 +129,7 @@ export default function LoginForm({ googleEnabled, passwordEnabled, callbackErro
                     <Button
                       variant="link"
                       className="h-auto p-0 text-[11px] font-semibold uppercase tracking-[0.1em]"
-                      onClick={() => setHelpMessage("Contacta a tu director")}
+                      onClick={showHelp}
                     >
                       ¿Olvidaste tu contraseña?
                     </Button>
@@ -193,7 +138,7 @@ export default function LoginForm({ googleEnabled, passwordEnabled, callbackErro
                   <Input
                     type="password"
                     value={draft.password}
-                    onChange={(event) => setDraft((current) => ({ ...current, password: event.target.value }))}
+                    onChange={(event) => setPassword(event.target.value)}
                     placeholder="••••••••"
                     className="h-11"
                   />
@@ -230,7 +175,7 @@ export default function LoginForm({ googleEnabled, passwordEnabled, callbackErro
               <Button
                 variant="link"
                 className="h-auto p-0 font-semibold"
-                onClick={() => setHelpMessage("Contacta a tu director")}
+                onClick={showHelp}
               >
                 Contactar a Soporte IT
               </Button>

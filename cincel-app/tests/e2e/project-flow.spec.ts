@@ -19,6 +19,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import postgres from "postgres";
 import { loginAsAdmin } from "./helpers/seed-auth";
+import { ADMIN_EMAIL, setRedesignFor } from "./helpers/redesign";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
@@ -49,6 +50,9 @@ async function expectNoLegacyCopy(page: Page, path: string): Promise<void> {
 }
 
 test.describe("Project flow — brief acceptance", () => {
+  // Legacy routes and sidebar; the flag-on redirects are covered by ajustes-rutas.spec.ts.
+  test.beforeAll(() => setRedesignFor(ADMIN_EMAIL, false));
+
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page, BASE_URL);
   });

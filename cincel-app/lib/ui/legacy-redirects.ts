@@ -1,0 +1,129 @@
+/**
+ * Legacy route → redesign route table (FE §2.2). Pure and client-safe; the
+ * flag-aware server helper that calls it is `lib/ui/legacy-redirects-server.ts`.
+ *
+ * Every legacy `page.tsx` listed in FE §2.2 calls the server helper first: with
+ * the redesign flag on it redirects to the target returned here (query string
+ * preserved), with it off the page renders as today. The canonical link forms
+ * (`/tareas/[id]`, `/mi-espacio/notas/[id]`) and the new-only routes are not
+ * part of this table (`lib/ui/redesign-redirect.ts`).
+ */
+
+/** What a Next.js page receives as `searchParams`, or a ready `URLSearchParams`. */
+export type LegacySearchParams = Record<string, string | string[] | undefined> | URLSearchParams | null | undefined;
+
+/** `/configuracion/[x]` segments renamed under `/ajustes` (FE §2.2). */
+const CONFIGURACION_RENAMES: Readonly<Record<string, string>> = {
+  workflows: "tramos",
+  areas: "puestos",
+  "importar-monday": "monday",
+};
+
+/** `/recursos/[seccion]` segments renamed under `/biblioteca` (FE §2.2). */
+const RECURSOS_RENAMES: Readonly<Record<string, string>> = {
+  "mis-vacaciones": "vacaciones",
+};
+
+/** Fixed old path → new path (with its own fixed query), FE §2.2. */
+const STATIC_TARGETS: Readonly<Record<string, string>> = {
+  "/": "/inicio",
+  "/dashboard": "/inicio",
+  "/tablero": "/tareas?vista=tablero",
+  "/mis-tareas": "/tareas?vista=lista&responsable=yo",
+  "/calendario": "/tareas?vista=calendario",
+  "/actividades/general": "/tareas?vista=lista",
+  "/equipo": "/personas",
+  "/directorio": "/personas/clientes",
+  "/clientes": "/personas/clientes",
+  "/contratistas": "/personas/contratistas",
+  "/recursos": "/biblioteca",
+  "/recursos/empresa": "/biblioteca",
+  "/profile": "/ajustes/perfil",
+  "/configuracion": "/ajustes/apariencia",
+  "/configuracion/google/primeros-pasos": "/ajustes/google/primeros-pasos",
+};
+
+function toEntries(searchParams: LegacySearchParams): [string, string][] {
+  if (!searchParams) return [];
+  if (searchParams instanceof URLSearchParams) return [...searchParams.entries()];
+  const entries: [string, string][] = [];
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) for (const item of value) entries.push([key, item]);
+    else entries.push([key, value]);
+  }
+  return entries;
+}
+
+function normalizePath(pathname: string): string {
+  const path = pathname.split(/[?#]/, 1)[0] ?? "";
+  const trimmed = path.length > 1 ? path.replace(/\/+$/, "") : path;
+  return trimmed === "" ? "/" : trimmed;
+}
+
+function safeDecode(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+}
+
+/** Target path (with its fixed query) for an old path, or null when the path is not in FE §2.2. */
+function targetFor(path: string): string | null {
+  const fixed = STATIC_TARGETS[path];
+  if (fixed) return fixed;
+
+  const segments = path.split("/").filter(Boolean).map(safeDecode);
+  if (segments.some((segment) => segment === null)) return null;
+  const [root, first, second, ...rest] = segments as string[];
+  if (!first || rest.length > 0) return null;
+
+  switch (root) {
+    case "actividades":
+      if (second) return null;
+      return `/tareas?${new URLSearchParams({ vista: "lista", tramo: first }).toString()}`;
+    case "proveedores":
+      return second ? null : "/personas/proveedores";
+    case "recursos":
+      if (first === "empresa") return second ? `/biblioteca/empresa/${encodeURIComponent(second)}` : "/biblioteca";
+      if (second) return null;
+      return `/biblioteca/${encodeURIComponent(RECURSOS_RENAMES[first] ?? first)}`;
+    case "configuracion":
+      if (second) return null;
+      return `/ajustes/${encodeURIComponent(CONFIGURACION_RENAMES[first] ?? first)}`;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The redesign URL an old route redirects to when the flag is on (FE §2.2), or
+ * null when `pathname` is not a legacy route. The target's own query keys come
+ * first and win over the same keys in the old query; every other old key is
+ * kept in its original order. `/actividades/[tramo]?project=X` (Project Flow's
+ * start deep link) also gets `iniciar=1`.
+ */
+export function legacyRedirectTarget(pathname: string, searchParams?: LegacySearchParams): string | null {
+  const path = normalizePath(pathname);
+  const target = targetFor(path);
+  if (!target) return null;
+
+  const [targetPath, targetQuery = ""] = target.split("?", 2) as [string, string?];
+  const query = new URLSearchParams(targetQuery);
+  const fixedKeys = new Set(query.keys());
+  for (const [key, value] of toEntries(searchParams)) {
+    if (!fixedKeys.has(key)) query.append(key, value);
+  }
+
+  const isTramoStart = path.startsWith("/actividades/") && path !== "/actividades/general";
+  if (isTramoStart && query.get("project") && !query.has("iniciar")) query.append("iniciar", "1");
+
+  const serialized = query.toString();
+  return serialized ? `${targetPath}?${serialized}` : targetPath;
+}
+
+/** Props of a legacy page that only needs its query string for the redirect. */
+export type LegacyPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const state = vi.hoisted(() => ({ cookie: undefined as string | undefined }));
 const getPortalUser = vi.hoisted(() => vi.fn());
+const getPortalAppearance = vi.hoisted(() => vi.fn());
 const notFound = vi.hoisted(() =>
   vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
@@ -18,6 +19,23 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("next/navigation", () => ({ notFound }));
 vi.mock("@/lib/portal/session", () => ({ getPortalUser }));
+vi.mock("@/lib/portal/appearance", () => ({ getPortalAppearance }));
+vi.mock("@/lib/portal/style-server", () => ({
+  getPortalPresentation: async () => ({ redesignEnabled: true, style: "visual", fixedByOrg: false }),
+}));
+
+function appearance(redesignEnabled: boolean) {
+  return {
+    theme: "azul",
+    mode: "system",
+    style: "visual",
+    density: "comoda",
+    textSize: 14,
+    redesignEnabled,
+    cssVars: { light: { "--background": "#f1f4f9" }, dark: { "--background": "#0f1115" } },
+    version: 1,
+  };
+}
 
 import PortalLayout, { metadata } from "./layout";
 import PortalNotFound from "./not-found";
@@ -32,6 +50,8 @@ describe("portal layout", () => {
   beforeEach(() => {
     state.cookie = undefined;
     getPortalUser.mockReset();
+    getPortalAppearance.mockReset();
+    getPortalAppearance.mockResolvedValue(appearance(false));
   });
   afterEach(cleanup);
 
@@ -66,16 +86,56 @@ describe("portal layout", () => {
     expect(screen.getByText("acceder")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Salir" })).toBeNull();
   });
+
+  it("with the redesign off emits no appearance block or wrapper (today's look)", async () => {
+    const { container } = render(await PortalLayout({ children: <p>login</p> }));
+
+    expect(container.querySelector("style#portal-appearance")).toBeNull();
+    expect(container.querySelector("[data-portal-appearance]")).toBeNull();
+  });
+
+  it("with the redesign on scopes the organization tokens to the portal, with no client control", async () => {
+    getPortalAppearance.mockResolvedValue(appearance(true));
+
+    const { container } = render(await PortalLayout({ children: <p>login</p> }));
+
+    const style = container.querySelector("style#portal-appearance");
+    expect(style?.textContent).toContain("[data-portal-appearance]{color-scheme:light;--background:#f1f4f9}");
+    expect(style?.textContent).toContain(
+      "@media (prefers-color-scheme: dark){[data-portal-appearance]{color-scheme:dark;--background:#0f1115}}",
+    );
+    const scope = container.querySelector("[data-portal-appearance]");
+    expect(scope?.getAttribute("data-theme-id")).toBe("azul");
+    expect(scope?.textContent).toContain("login");
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
 });
 
 describe("portal 404 and error pages", () => {
+  beforeEach(() => {
+    getPortalAppearance.mockReset();
+    getPortalAppearance.mockResolvedValue(appearance(false));
+  });
   afterEach(cleanup);
 
-  it("404 is in Spanish and links back to /portal", () => {
-    render(<PortalNotFound />);
+  it("404 is in Spanish and links back to /portal", async () => {
+    render(await PortalNotFound());
 
     expect(screen.getByRole("heading", { name: "No encontramos esta página" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Volver a mis proyectos" }).getAttribute("href")).toBe("/portal");
+    expect(screen.queryByText("Error 404")).toBeNull();
+  });
+
+  it("404 renders the restyled card when the redesign is on", async () => {
+    getPortalAppearance.mockResolvedValue(appearance(true));
+
+    render(await PortalNotFound());
+
+    expect(screen.getByText("Error 404")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "No encontramos esta página" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Volver a mis proyectos" }).getAttribute("href")).toBe("/portal");
+    expect(screen.getByText("¿Necesitas ayuda? Escríbele a tu contacto en Cincel.")).toBeTruthy();
   });
 
   it("unknown /portal paths call notFound()", () => {

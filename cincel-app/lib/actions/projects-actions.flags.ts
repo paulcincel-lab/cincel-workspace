@@ -4,5 +4,5 @@
  * are not listed. Client-safe.
  */
 export const IMPLEMENTED = {
-  fetchProjectsPortfolioAction: false,
+  fetchProjectsPortfolioAction: true,
 } as const;

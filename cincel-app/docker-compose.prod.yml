@@ -37,6 +37,12 @@
 #   (that account's app password, never committed) and MAIL_FROM. Without
 #   SMTP_HOST the app only logs messages and invitations are not delivered.
 #   Not listed under `environment:` for the same reason as above.
+#
+# Cron tick (set in .env.production; see docs/deployment.md, "Cron tick"): the
+#   secret CRON_SECRET (`openssl rand -hex 32`, never committed). Without it
+#   /api/cron/tick answers 503 and no background job runs. The host crontab
+#   calls the route every minute on this compose network as http://app:3000.
+#   Not listed under `environment:` for the same reason as above.
 
 services:
   db:

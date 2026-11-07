@@ -7,6 +7,7 @@
 import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
+import { ADMIN_EMAIL, resetAdminPreferences, setRedesignFor } from "./helpers/redesign";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
@@ -48,7 +49,11 @@ async function taskRow(): Promise<{ status: string; custom: string | null }> {
 }
 
 test.describe("Estatus propios de tareas", () => {
-  test.beforeAll(seedTask);
+  test.beforeAll(async () => {
+    // The legacy routes (/configuracion/estatus, /tablero, /actividades) need the flag off.
+    await setRedesignFor(ADMIN_EMAIL, false);
+    await seedTask();
+  });
 
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
@@ -100,5 +105,23 @@ test.describe("Estatus propios de tareas", () => {
     await expect(page.getByRole("row").filter({ hasText: TASK_TITLE }).getByText(STATUS_NAME)).toBeVisible({
       timeout: 30_000,
     });
+  });
+});
+
+test.describe("Estatus propios de tareas — nuevo diseño", () => {
+  const NEW_STATUS = `Validación E2E ${RUN_ID}`;
+
+  test.beforeAll(() => setRedesignFor(ADMIN_EMAIL, true));
+  test.afterAll(resetAdminPreferences);
+
+  test("/configuracion/estatus opens Ajustes › Estatus, where a status is created", async ({ page }) => {
+    await loginAsAdmin(page, BASE_URL);
+    await page.goto(`${BASE_URL}/configuracion/estatus`, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/ajustes\/estatus$/, { timeout: 15_000 });
+
+    await page.getByRole("button", { name: "+ Nuevo estatus" }).click();
+    await page.getByLabel("Nombre").fill(NEW_STATUS);
+    await page.getByRole("button", { name: "Guardar" }).click();
+    await expect(page.getByRole("row").filter({ hasText: NEW_STATUS })).toBeVisible({ timeout: 15_000 });
   });
 });

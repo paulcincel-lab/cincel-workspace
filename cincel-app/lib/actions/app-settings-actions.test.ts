@@ -11,6 +11,17 @@ vi.mock("next/cache", () => ({ revalidatePath }));
 const repo = vi.hoisted(() => ({ getAppSetting: vi.fn(), getAppSettingEntry: vi.fn(), setAppSetting: vi.fn() }));
 vi.mock("@/lib/repositories/app-settings-repository", () => repo);
 
+vi.mock("@/lib/auth/permissions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth/permissions")>();
+  return {
+    ...actual,
+    canManageAppearance: vi.fn(actual.canManageAppearance),
+    canManageGeneralSettings: vi.fn(actual.canManageGeneralSettings),
+  };
+});
+
+import * as permissions from "@/lib/auth/permissions";
+
 import {
   fetchGeneralSettingsAction,
   restoreGeneralSettingsAction,
@@ -19,10 +30,62 @@ import {
 
 const ADMIN = { member: { role: "Administrador" }, access: "Administrador" };
 const COLLABORATOR = { member: { role: "Arquitecto" }, access: "Colaborador" };
+const DIRECCION = { member: { role: "Director" }, access: "Dirección" };
+const DENIED_USERS = [
+  ["Colaborador", COLLABORATOR],
+  ["Jefe de Construcción", { member: { role: "Jefe de Construcción" }, access: "Jefe de Construcción" }],
+  ["Arquitecto Senior", { member: { role: "Arquitecto Senior" }, access: "Arquitecto Senior" }],
+] as const;
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  const actual = await vi.importActual<typeof import("@/lib/auth/permissions")>("@/lib/auth/permissions");
+  vi.mocked(permissions.canManageAppearance).mockImplementation(actual.canManageAppearance);
+  vi.mocked(permissions.canManageGeneralSettings).mockImplementation(actual.canManageGeneralSettings);
   currentUser.value = ADMIN;
+});
+
+describe("general settings capability (canManageGeneralSettings)", () => {
+  it.each([
+    ["Administrador", ADMIN],
+    ["Dirección", DIRECCION],
+  ])("lets %s save and restore", async (_label, user) => {
+    currentUser.value = user;
+    repo.setAppSetting.mockResolvedValue(new Date("2026-11-04T16:30:00.000Z"));
+
+    await expect(saveGeneralSettingsAction(buildDefaultGeneralSettings())).resolves.toEqual({
+      savedAt: "2026-11-04T16:30:00.000Z",
+    });
+    await expect(restoreGeneralSettingsAction()).resolves.toBeUndefined();
+    expect(repo.setAppSetting).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(DENIED_USERS)("denies %s with FORBIDDEN on save and restore", async (_label, user) => {
+    currentUser.value = user;
+
+    await expect(saveGeneralSettingsAction(buildDefaultGeneralSettings())).rejects.toThrow(/^FORBIDDEN/);
+    await expect(restoreGeneralSettingsAction()).rejects.toThrow(/^FORBIDDEN/);
+    expect(repo.setAppSetting).not.toHaveBeenCalled();
+  });
+
+  it("checks canManageGeneralSettings, not canManageAppearance", async () => {
+    vi.mocked(permissions.canManageAppearance).mockReturnValue(false);
+    repo.setAppSetting.mockResolvedValue(new Date());
+
+    await expect(saveGeneralSettingsAction(buildDefaultGeneralSettings())).resolves.toHaveProperty("savedAt");
+    await expect(restoreGeneralSettingsAction()).resolves.toBeUndefined();
+    expect(permissions.canManageGeneralSettings).toHaveBeenCalledTimes(2);
+    expect(permissions.canManageAppearance).not.toHaveBeenCalled();
+  });
+
+  it("denies when canManageGeneralSettings refuses even if canManageAppearance allows", async () => {
+    vi.mocked(permissions.canManageAppearance).mockReturnValue(true);
+    vi.mocked(permissions.canManageGeneralSettings).mockReturnValue(false);
+
+    await expect(saveGeneralSettingsAction(buildDefaultGeneralSettings())).rejects.toThrow("FORBIDDEN");
+    await expect(restoreGeneralSettingsAction()).rejects.toThrow("FORBIDDEN");
+    expect(repo.setAppSetting).not.toHaveBeenCalled();
+  });
 });
 
 describe("saveGeneralSettingsAction", () => {

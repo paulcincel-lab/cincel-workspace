@@ -1,15 +1,14 @@
 "use client";
 
-import type { KpiWidgetProps } from "@/components/widgets/KpiWidget";
+import { KpiWidget, type KpiWidgetProps } from "@/components/widgets/KpiWidget";
 
 export type KpiTilesProps = KpiWidgetProps;
 
 /**
- * Inicio KPIs, Visual (redesign FE §4.3): an instance of `KpiWidget`.
- *
- * Contract stub: renders nothing until its owning issue implements it.
+ * Inicio KPIs (redesign FE §4.3): an instance of `KpiWidget`. The widget draws
+ * the Visual tiles, the Esencial numbers and the Analítico table from the same
+ * items and filters `visibleIn` itself; the page never picks the style.
  */
 export function KpiTiles(props: KpiTilesProps) {
-  void props;
-  return null;
+  return <KpiWidget {...props} />;
 }

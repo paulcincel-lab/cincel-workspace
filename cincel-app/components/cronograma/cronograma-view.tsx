@@ -7,7 +7,9 @@ import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
 import { fetchScheduleAction, setTaskStatusAction, toggleTaskFlagAction, type ScheduleViewData } from "@/lib/actions/schedule-actions";
+import { CronogramaWidget } from "@/components/widgets/CronogramaWidget";
 import { computeProgress } from "@/lib/cronograma/metrics";
+import { buildScheduleTable, SCHEDULE_TABLE_COLUMNS } from "@/lib/cronograma/schedule-table";
 import type { ScheduleStatus, ScheduleTask } from "@/lib/types/schedule";
 
 import { CronogramaHeader } from "./cronograma-header";
@@ -25,13 +27,21 @@ interface CronogramaViewProps {
   projectId: string;
   /** Pre-fetched server-side by the page. Null when the server render had no session (auth cookie not yet visible) — the client re-fetches once mounted. */
   initialView: ScheduleViewData | null;
+  /**
+   * "legacy" (default): today's page with its own Sidebar, Header and section nav.
+   * "redesign": the Cronograma tab inside the new shell (redesign FE §3.5); the
+   * same panels and state, rendered through `CronogramaWidget`.
+   */
+  layout?: "legacy" | "redesign";
+  /** Contract delivery date (ISO) for the "Entrega de obra" holgura; redesign only. */
+  contractEnd?: string | null;
 }
 
 type TaskOptimisticAction =
   | { type: "status"; taskId: string; status: ScheduleStatus }
   | { type: "flag"; taskId: string; flagged: boolean };
 
-export default function CronogramaView({ projectId, initialView }: CronogramaViewProps) {
+export default function CronogramaView({ projectId, initialView, layout = "legacy", contractEnd = null }: CronogramaViewProps) {
   const searchParams = useSearchParams();
   const weekOffset = Number.parseInt(searchParams.get("week") ?? "0", 10) || 0;
 
@@ -130,6 +140,77 @@ export default function CronogramaView({ projectId, initialView }: CronogramaVie
     [applyOptimisticTask, loadSchedule]
   );
 
+  const scheduleTable = useMemo(
+    () =>
+      layout === "redesign" && view && today
+        ? buildScheduleTable({ tasks: optimisticTasks, payments: view.data.payments, today, contractEnd })
+        : { columns: SCHEDULE_TABLE_COLUMNS, rows: [] },
+    [layout, view, today, optimisticTasks, contractEnd]
+  );
+
+  const panels =
+    !view || !today || !metrics ? null : (
+      <div className="space-y-6">
+        <CronogramaHeader
+          projectId={projectId}
+          scheduleId={view.data.schedule.id}
+          projectName={view.data.project.name}
+          address={view.data.project.address}
+          today={today}
+          weekOffset={weekOffset}
+          onImported={loadSchedule}
+        />
+
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </p>
+
+        {error ? (
+          <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        <GanttChart tasks={optimisticTasks} today={today} />
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <ProgressDonut metrics={metrics} />
+          <SCurveChart tasks={optimisticTasks} payments={view.data.payments} today={today} />
+        </div>
+        <WeekBoards
+          tasks={optimisticTasks}
+          today={today}
+          weekOffset={weekOffset}
+          onCycleStatus={handleCycleStatus}
+          onToggleFlag={handleToggleFlag}
+        />
+        <AlertasPanel
+          tasks={optimisticTasks}
+          today={today}
+          onCycleStatus={handleCycleStatus}
+          onToggleFlag={handleToggleFlag}
+        />
+        <ResumenCards metrics={metrics} />
+        <ImprevistosPanel
+          key={`${view.data.schedule.id}-v${view.data.schedule.version}`}
+          scheduleId={view.data.schedule.id}
+          imprevistos={view.data.imprevistos}
+        />
+        <AdicionalesPanel adicionales={view.data.adicionales} />
+      </div>
+    );
+
+  if (layout === "redesign") {
+    const emptyTable = { columns: SCHEDULE_TABLE_COLUMNS, rows: [] };
+    // `panels` is passed by spread: the widget wraps the existing panels for Visual.
+    const widgetProps = {
+      projectId,
+      table: notFound ? emptyTable : scheduleTable,
+      panels: notFound ? null : panels,
+      loading,
+    };
+    return <CronogramaWidget {...widgetProps} />;
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
@@ -139,58 +220,12 @@ export default function CronogramaView({ projectId, initialView }: CronogramaVie
           <ProjectSectionNav projectId={projectId} />
           {loading ? (
             <p className="text-sm text-muted-foreground">Cargando cronograma…</p>
-          ) : notFound || !view || !today || !metrics ? (
+          ) : notFound || !panels ? (
             <p className="text-sm text-muted-foreground">
               Este proyecto todavía no tiene un cronograma importado.
             </p>
           ) : (
-            <div className="space-y-6">
-              <CronogramaHeader
-                projectId={projectId}
-                scheduleId={view.data.schedule.id}
-                projectName={view.data.project.name}
-                address={view.data.project.address}
-                today={today}
-                weekOffset={weekOffset}
-                onImported={loadSchedule}
-              />
-
-              <p className="sr-only" role="status" aria-live="polite">
-                {announcement}
-              </p>
-
-              {error ? (
-                <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </p>
-              ) : null}
-
-              <GanttChart tasks={optimisticTasks} today={today} />
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                <ProgressDonut metrics={metrics} />
-                <SCurveChart tasks={optimisticTasks} payments={view.data.payments} today={today} />
-              </div>
-              <WeekBoards
-                tasks={optimisticTasks}
-                today={today}
-                weekOffset={weekOffset}
-                onCycleStatus={handleCycleStatus}
-                onToggleFlag={handleToggleFlag}
-              />
-              <AlertasPanel
-                tasks={optimisticTasks}
-                today={today}
-                onCycleStatus={handleCycleStatus}
-                onToggleFlag={handleToggleFlag}
-              />
-              <ResumenCards metrics={metrics} />
-              <ImprevistosPanel
-                key={`${view.data.schedule.id}-v${view.data.schedule.version}`}
-                scheduleId={view.data.schedule.id}
-                imprevistos={view.data.imprevistos}
-              />
-              <AdicionalesPanel adicionales={view.data.adicionales} />
-            </div>
+            panels
           )}
         </main>
       </div>

@@ -1,12 +1,15 @@
 /**
  * E2E: Tablero columns fit the viewport once custom statuses are added —
  * five columns fit at 1536px, more scroll inside the board, never the page.
+ * Flag off: the legacy `/tablero`. Flag on: the Tablero view of
+ * `/tareas?vista=tablero` (redesign FE §3.4), where empty columns collapse.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { test, expect, type Page } from "@playwright/test";
 import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
+import { setRedesignFlag } from "./helpers/redesign-flag";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
@@ -62,10 +65,12 @@ test.describe("Columnas del Tablero", () => {
   let hiddenIds: string[] = [];
 
   test.beforeAll(async () => {
+    await setRedesignFlag(false);
     hiddenIds = await hideOtherStatuses();
   });
 
   test.afterAll(async () => {
+    await setRedesignFlag(null);
     await withSql(async (sql) => {
       await sql`delete from core.task_statuses where name like ${`${STATUS_PREFIX}%`}`;
       if (hiddenIds.length) await sql`update core.task_statuses set deleted_at = null where id in ${sql(hiddenIds)}`;
@@ -89,5 +94,30 @@ test.describe("Columnas del Tablero", () => {
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByRole("group", { name: `${STATUS_PREFIX} 4`, exact: true })).toBeAttached({ timeout: 30_000 });
     expect(await boardMetrics(page)).toEqual({ boardScrolls: true, pageScrolls: false, columns: 8 });
+  });
+
+  test("flag on: custom status columns render on /tareas?vista=tablero and the page never scrolls sideways", async ({ page }) => {
+    await setRedesignFlag(true);
+    try {
+      // The legacy route redirects to the Tablero view (FE §2.2).
+      await page.goto(`${BASE_URL}/tablero`, { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/\/tareas\?(.*&)?vista=tablero/, { timeout: 30_000 });
+
+      await addStatuses(1, 10);
+      await page.goto(`${BASE_URL}/tareas?vista=tablero`, { waitUntil: "domcontentloaded" });
+      // Empty columns collapse to a vertical strip but stay on the board, named by their status.
+      await expect(page.getByRole("group", { name: new RegExp(`^${STATUS_PREFIX} 11`) })).toBeAttached({
+        timeout: 30_000,
+      });
+      for (const base of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
+        await expect(page.getByRole("group", { name: new RegExp(`^${base}`) }).first()).toBeAttached();
+      }
+      const pageScrolls = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+      );
+      expect(pageScrolls).toBe(false);
+    } finally {
+      await setRedesignFlag(false);
+    }
   });
 });

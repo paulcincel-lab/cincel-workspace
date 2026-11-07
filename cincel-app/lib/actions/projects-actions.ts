@@ -25,7 +25,7 @@ import type {
 } from "@/lib/types/core";
 import type { ProjectFilters } from "@/lib/repositories/projects-repository";
 import { OrderedIdsSchema, ProjectSpaceNameSchema, UuidSchema, parseInput } from "@/lib/validation/project-flow";
-import { stubDefault } from "@/lib/stubs";
+import { portfolioFor } from "@/lib/projects/portfolio";
 import type { PortfolioRow } from "@/lib/types/redesign";
 
 async function requireProjectsCapabilities() {
@@ -337,8 +337,12 @@ export async function deleteProjectSpaceAction(id: string): Promise<void> {
 /**
  * Portfolio metrics per visible project (redesign BE §7.12): real vs plan,
  * deviation, budget (admins only), open / overdue, next delivery, 7-day
- * series. Same scope as `fetchProjectsAction`. Phase 1 stub returns no rows.
+ * series. Same scope as `fetchProjectsAction`. Without `canSeeAdminData`,
+ * admin tasks are not counted and the budget is null; the next delivery never
+ * names an admin task.
  */
 export async function fetchProjectsPortfolioAction(): Promise<PortfolioRow[]> {
-  return stubDefault<PortfolioRow[]>([]);
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canViewProjects) return [];
+  return portfolioFor(user);
 }

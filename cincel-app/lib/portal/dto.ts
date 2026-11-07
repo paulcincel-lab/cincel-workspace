@@ -4,7 +4,7 @@
  * row (coordinator, contract amount, Drive ids, `tarea`, `responsable`, ...)
  * never reach a portal response (BE §B.8 #10).
  */
-import type { PortalProjectDTO, PortalScheduleDTO, PortalScheduleSectionDTO } from "@/lib/types/portal";
+import type { PortalProjectDTO, PortalScheduleDTO, PortalScheduleSectionDTO, PortalTramoDTO } from "@/lib/types/portal";
 
 export type PortalProjectRow = {
   id: string;
@@ -96,4 +96,37 @@ export function toPortalScheduleDTO(tasks: PortalScheduleTaskRow[] | null): Port
     }));
 
   return { sections };
+}
+
+/** The tramo columns the portal reads, joined with the project's `project_stages` row (null when not started). */
+export type PortalTramoRow = {
+  id: string;
+  key: string;
+  name: string;
+  active: boolean;
+  sortOrder: number;
+  startedAt: Date | string | null;
+  closedAt: Date | string | null;
+};
+
+/**
+ * Tramos in catalog order with the project's state in each: the project's current tramo and any started,
+ * still-open one are `en_curso`; a started and closed one is `completado`; the rest `por_iniciar`. Inactive
+ * tramos the project never started are left out. Only `key`, `name` and `state` reach the DTO.
+ */
+export function toPortalTramosDTO(rows: PortalTramoRow[], currentWorkflowId: string | null): PortalTramoDTO[] {
+  return [...rows]
+    .filter((r) => r.active || r.startedAt !== null || r.id === currentWorkflowId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es"))
+    .map((r) => {
+      const state: PortalTramoDTO["state"] =
+        r.id === currentWorkflowId
+          ? "en_curso"
+          : r.startedAt === null
+            ? "por_iniciar"
+            : r.closedAt === null
+              ? "en_curso"
+              : "completado";
+      return { key: r.key, name: r.name, state };
+    });
 }

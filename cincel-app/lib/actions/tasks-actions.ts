@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { canSeeAdminData, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
@@ -9,6 +10,7 @@ import { scopeTaskDto, viewerScopeOf } from "@/lib/auth/viewer-scope";
 import * as taskDependenciesRepository from "@/lib/repositories/task-dependencies-repository";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import { scheduleTaskClosingHook } from "@/lib/tasks/closing-hook";
+import { notifyTaskAssigned, notifyTaskCommented, notifyTraceId } from "@/lib/tasks/task-notifications";
 import { AdminTaskFiltersSchema, AdminTaskInputSchema, parseInput } from "@/lib/validation/project-flow";
 import type {
   AdminTaskInput,
@@ -105,6 +107,8 @@ export async function createUserTaskAction(input: UserTaskInput): Promise<TaskDe
   }
   const row = await tasksRepository.createUserTask(input, user.member.id);
   revalidateTareas(input.projectId);
+  const traceId = await notifyTraceId();
+  after(() => notifyTaskAssigned({ task: row, managerId: row.managerId, actorId: user.member.id, traceId }));
   return scopeTaskDto(row, viewerScopeOf(user));
 }
 
@@ -181,6 +185,8 @@ export async function assignTaskAction(id: string, managerId: string | null): Pr
   }
   const row = await tasksRepository.assignTask(id, managerId, user.member.id);
   revalidateTareas(row.projectId);
+  const traceId = await notifyTraceId();
+  after(() => notifyTaskAssigned({ task: row, managerId: row.managerId, actorId: user.member.id, traceId }));
   return scopeTaskDto(row, viewer);
 }
 
@@ -285,6 +291,10 @@ export async function addTaskCommentAction(taskId: string, comment: string): Pro
   const { user } = await requireTaskWriter(taskId);
   const row = await tasksRepository.addTaskComment(taskId, comment, user.member.id);
   revalidateTareas();
+  const traceId = await notifyTraceId();
+  after(() =>
+    notifyTaskCommented({ taskId, eventId: row.id, comment: row.comment ?? comment, actorId: user.member.id, traceId })
+  );
   return row;
 }
 

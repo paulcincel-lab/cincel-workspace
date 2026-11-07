@@ -4,5 +4,5 @@
  * are not listed. Client-safe.
  */
 export const IMPLEMENTED = {
-  fetchInicioAction: false,
+  fetchInicioAction: true,
 } as const;

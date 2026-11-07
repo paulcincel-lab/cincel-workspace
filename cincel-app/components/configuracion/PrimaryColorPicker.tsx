@@ -18,7 +18,12 @@ interface PrimaryColorPickerProps {
   canManage: boolean;
 }
 
-/** Company-wide primary color from the Tailwind palette; saved on pick, applied app-wide. */
+/**
+ * Company-wide primary color from the Tailwind palette; saved on pick, applied app-wide.
+ * Legacy (redesign off) General page only: the redesign evolves it into
+ * `components/ajustes/TokenRow` (one row per token in Ajustes › Tema y estilo),
+ * and this picker is removed with the legacy pipeline in the Cleanup phase.
+ */
 export function PrimaryColorPicker({ value, canManage }: PrimaryColorPickerProps) {
   const router = useRouter();
   const [current, setCurrent] = useState(value);

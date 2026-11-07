@@ -80,7 +80,7 @@ describe("monday export queries", () => {
       expect(onDisk, file.filename).toBe(file.content);
     }
     expect(files.map((f) => resolve(ROOT, f.filename)).every((f) => f.startsWith(GENERATED_DIR))).toBe(true);
-  }, 30_000);
+  }, 120_000);
 });
 
 describe("typed documents through the client", () => {

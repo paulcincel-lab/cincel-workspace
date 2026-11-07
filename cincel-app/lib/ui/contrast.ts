@@ -5,8 +5,8 @@
  * composited over the pair's background; `chart-N-tint` = `chart-N` mixed into
  * `card` in oklab at 14 % (light) / 22 % (dark).
  */
-import { notImplemented } from "@/lib/stubs";
 import type { OrgAppearance, TokenName } from "@/lib/types/redesign";
+import { compositeOver, mixOklab, requireColor, srgbToLinear, TINT_PERCENT, type Rgba } from "@/lib/ui/tints";
 
 export type ChartTint = "chart-1-tint" | "chart-2-tint" | "chart-3-tint" | "chart-4-tint" | "chart-5-tint";
 
@@ -47,7 +47,61 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   pair("ring", "background", 3),
 ];
 
+const WHITE: Rgba = { r: 255, g: 255, b: 255, a: 1 };
+const BLACK: Rgba = { r: 0, g: 0, b: 0, a: 1 };
+
+/** WCAG 2.1 relative luminance of an opaque sRGB color. */
+export function relativeLuminance(color: Rgba): number {
+  return 0.2126 * srgbToLinear(color.r) + 0.7152 * srgbToLinear(color.g) + 0.0722 * srgbToLinear(color.b);
+}
+
+/** WCAG 2.1 contrast ratio of two opaque colors (unrounded). */
+export function contrastRatio(a: Rgba, b: Rgba): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/**
+ * Resolves a pair's background to an opaque color. A translucent token is
+ * composited over the page `background`, and that one over white (light) or
+ * black (dark). Tints are mixed into `card` in oklab (FE §14.5).
+ */
+function resolveBackground(tokens: OrgAppearance["tokens"], bg: TokenName | ChartTint, mode: "light" | "dark"): Rgba {
+  const canvas = mode === "light" ? WHITE : BLACK;
+  const page = compositeOver(requireColor(tokens.background[mode]), canvas);
+  if (bg === "background") return page;
+  const card = compositeOver(requireColor(tokens.card[mode]), page);
+  if (bg === "card") return card;
+  const tint = /^chart-([1-5])-tint$/.exec(bg);
+  if (tint) {
+    const chart = requireColor(tokens[`chart-${tint[1]}` as TokenName][mode]);
+    return compositeOver(mixOklab(chart, card, TINT_PERCENT[mode]), card);
+  }
+  return compositeOver(requireColor(tokens[bg as TokenName][mode]), page);
+}
+
 /** One result per pair of `CONTRAST_PAIRS` for the given mode. */
 export function checkContrast(tokens: OrgAppearance["tokens"], mode: "light" | "dark"): ContrastResult[] {
-  return notImplemented("checkContrast", tokens, mode);
+  return CONTRAST_PAIRS.map((p) => {
+    const background = resolveBackground(tokens, p.bg, mode);
+    const foreground = compositeOver(requireColor(tokens[p.fg][mode]), background);
+    const raw = contrastRatio(foreground, background);
+    return { pair: p.pair, mode, ratio: Math.round(raw * 100) / 100, min: p.min, ok: raw >= p.min };
+  });
+}
+
+/** Both modes, light first. */
+export function checkContrastBothModes(tokens: OrgAppearance["tokens"]): ContrastResult[] {
+  return [...checkContrast(tokens, "light"), ...checkContrast(tokens, "dark")];
+}
+
+/**
+ * The `LOW_CONTRAST: <pair> <mode> <ratio>[, …]` error message (BE §7.1,
+ * §8.2) for the failing results, or `null` when every pair passes.
+ */
+export function lowContrastMessage(results: readonly ContrastResult[]): string | null {
+  const failing = results.filter((r) => !r.ok);
+  if (failing.length === 0) return null;
+  return `LOW_CONTRAST: ${failing.map((r) => `${r.pair} ${r.mode} ${r.ratio.toFixed(2)}`).join(", ")}`;
 }

@@ -2,7 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import PortalLoginForm, { PORTAL_LINK_ENDPOINT, PORTAL_SEND_FAILED_MESSAGE } from "./PortalLoginForm";
+import PortalLoginForm, {
+  PORTAL_LINK_ENDPOINT,
+  PORTAL_LOGIN_HINT,
+  PORTAL_LOGIN_SUBMIT_LABEL,
+  PORTAL_LOGIN_TITLE,
+  PORTAL_SEND_FAILED_MESSAGE,
+} from "./PortalLoginForm";
 
 const fetchMock = vi.fn();
 
@@ -153,5 +159,68 @@ describe("PortalLoginForm", () => {
 
     const message = screen.getByText("Demasiados intentos, espera unos minutos.");
     expect(message.closest("[aria-live='polite']")).toBeTruthy();
+  });
+});
+
+describe("PortalLoginForm restyled (organization redesign on)", () => {
+  async function submitRedesign(email: string) {
+    fireEvent.change(screen.getByLabelText("Correo"), { target: { value: email } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: PORTAL_LOGIN_SUBMIT_LABEL }));
+    });
+  }
+
+  it("shows the restyled request step with a page heading and the link hint", () => {
+    render(<PortalLoginForm linkError={false} redesign />);
+
+    expect(screen.getByRole("heading", { level: 1, name: PORTAL_LOGIN_TITLE })).toBeTruthy();
+    expect(screen.getByText(PORTAL_LOGIN_HINT)).toBeTruthy();
+    expect(screen.queryByText("Entra al portal")).toBeNull();
+  });
+
+  it("requests the link exactly as before and shows Revisa tu correo", async () => {
+    respond(200);
+    render(<PortalLoginForm linkError={false} redesign />);
+
+    await submitRedesign("ana@example.com");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      PORTAL_LINK_ENDPOINT,
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ email: "ana@example.com" }) }),
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Revisa tu correo" })).toBeTruthy();
+    expect(screen.getByText("ana@example.com").closest("p")?.textContent).toBe(
+      "Si tiene acceso, el enlace llegará a ana@example.com. Vence en 15 minutos y solo funciona una vez.",
+    );
+    expect((screen.getByRole("button", { name: "Reenviar enlace en 60 s" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("keeps the same validation, expired-link notice and rate-limit copy", async () => {
+    render(<PortalLoginForm linkError redesign />);
+    expect(screen.getByText("El enlace ya no es válido. Pide uno nuevo.")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: PORTAL_LOGIN_SUBMIT_LABEL }));
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Correo").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText("Escribe un correo válido.")).toBeTruthy();
+
+    respond(429);
+    await submitRedesign("ana@example.com");
+    expect(screen.getByText("Demasiados intentos, espera unos minutos.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: PORTAL_LOGIN_SUBMIT_LABEL })).toBeTruthy();
+  });
+
+  it("goes back to the request step with Cambiar correo", async () => {
+    respond(200);
+    render(<PortalLoginForm linkError={false} initialEmail="ana@example.com" redesign />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: PORTAL_LOGIN_SUBMIT_LABEL }));
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
+
+    expect(screen.getByRole("heading", { level: 1, name: PORTAL_LOGIN_TITLE })).toBeTruthy();
+    expect((screen.getByLabelText("Correo") as HTMLInputElement).value).toBe("ana@example.com");
   });
 });

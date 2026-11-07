@@ -32,6 +32,7 @@
  *   previewMondayImportAction(runId)                 → { preview: MondayPreview }  Paso 6; Next needs preview.canApply
  *   startMondayApplyAction(runId)                    → { job }  Paso 7, background; again on a failed job resumes it
  *   getMondayImportedProjectsAction(runId)           → { projects: MondayImportedProject[] }
+ *   getMondayImportHistoryAction()                   → { history: MondayImportHistoryEntry[] }  Ajustes › monday, read only
  *   checkMondayRollbackAction(runId)                 → { check: MondayRollbackCheck }  blockers explain why not
  *   startMondayRollbackAction(runId)                 → { job }  background rollback
  *
@@ -51,7 +52,9 @@ import { getSessionAccess } from "@/lib/auth/session";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { db } from "@/lib/db/client";
 import { createFakeMondayClient, isMondayFake } from "@/lib/monday-import/fake-monday";
+import { toMondayImportHistoryEntry, type MondayImportHistoryEntry } from "@/lib/monday-import/history";
 import { isRunId, latestRun } from "@/lib/monday-import/runs";
+import { listMondayImportBatches } from "@/lib/repositories/import-history-repository";
 import {
   checkRollback,
   connectMonday,
@@ -344,6 +347,13 @@ export async function getMondayImportedProjectsAction(
     checkRunId(runId);
     return { projects: await importedProjects(runId, deps()) };
   });
+}
+
+/** Ajustes › Importar de monday "Historial" (redesign FE §3.8): the latest import batches, newest first. Read only. */
+export async function getMondayImportHistoryAction(): Promise<MondayImportResult<{ history: MondayImportHistoryEntry[] }>> {
+  return guarded("history", async () => ({
+    history: (await listMondayImportBatches()).map(toMondayImportHistoryEntry),
+  }));
 }
 
 export async function checkMondayRollbackAction(

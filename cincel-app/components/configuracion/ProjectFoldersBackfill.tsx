@@ -16,11 +16,23 @@ export function projectFoldersSummary(counts: EnsureMissingProjectFoldersCounts)
   return parts.join(", ");
 }
 
+export const PROJECT_FOLDERS_TITLE = "Carpetas de proyectos";
+export const PROJECT_FOLDERS_DESCRIPTION = "Crea en Google Drive las carpetas de los proyectos que todavía no tienen una.";
+
+export type ProjectFoldersBackfillProps = {
+  sharedDriveConfigured?: boolean;
+  /**
+   * Without the card and its "Carpetas de proyectos" heading: Ajustes › Google
+   * renders it inside a `SettingsSection`.
+   */
+  bare?: boolean;
+};
+
 /**
  * Configuración → Google, section 3 "Carpetas de proyectos" (FE §2.5). The page is Administrador only.
  * Without a Shared Drive there is nowhere to create folders, so the button stays disabled with a hint.
  */
-export function ProjectFoldersBackfill({ sharedDriveConfigured = true }: { sharedDriveConfigured?: boolean }) {
+export function ProjectFoldersBackfill({ sharedDriveConfigured = true, bare = false }: ProjectFoldersBackfillProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [counts, setCounts] = useState<EnsureMissingProjectFoldersCounts | null>(null);
@@ -39,14 +51,16 @@ export function ProjectFoldersBackfill({ sharedDriveConfigured = true }: { share
     });
   }
 
+  const Wrapper = bare ? "div" : "section";
+
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground">Carpetas de proyectos</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Crea en Google Drive las carpetas de los proyectos que todavía no tienen una.
-        </p>
-      </div>
+    <Wrapper className={bare ? "space-y-4" : "space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm"}>
+      {bare ? null : (
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">{PROJECT_FOLDERS_TITLE}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{PROJECT_FOLDERS_DESCRIPTION}</p>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Button
@@ -73,6 +87,6 @@ export function ProjectFoldersBackfill({ sharedDriveConfigured = true }: { share
           <AlertDescription>{projectFoldersSummary(counts)}</AlertDescription>
         </Alert>
       ) : null}
-    </section>
+    </Wrapper>
   );
 }

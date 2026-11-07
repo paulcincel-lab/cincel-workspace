@@ -72,17 +72,52 @@ export async function createStaffAction(input: StaffInput): Promise<Staff> {
   return row;
 }
 
+// ── Own profile (Ajustes › Perfil, redesign FE §3.8) ───────────────────────
+// Everyone may change their own nombre, teléfono and firma de correo through
+// the same actions Equipo uses; puesto, rol and correo stay with Equipo / Google.
+
+const OWN_STAFF_FIELDS: ReadonlySet<string> = new Set(["name", "phone"]);
+const OWN_NAME_MAX = 120;
+const OWN_PHONE_MAX = 40;
+const OWN_SIGNATURE_MAX = 2000;
+
+function isOwnStaffPatch(patch: Partial<StaffInput>): boolean {
+  const keys = Object.keys(patch ?? {});
+  return keys.length > 0 && keys.every((key) => OWN_STAFF_FIELDS.has(key));
+}
+
+function assertOwnStaffPatch(patch: Partial<StaffInput>): void {
+  if (patch.name !== undefined) {
+    const name = typeof patch.name === "string" ? patch.name.trim() : "";
+    if (!name || name.length > OWN_NAME_MAX) throw new Error("INVALID: name");
+  }
+  if (patch.phone !== undefined && patch.phone !== null) {
+    if (typeof patch.phone !== "string" || patch.phone.trim().length > OWN_PHONE_MAX) {
+      throw new Error("INVALID: phone");
+    }
+  }
+}
+
+function isOwnSignaturePatch(profile: Partial<StaffProfile>): boolean {
+  const keys = Object.keys(profile ?? {});
+  return keys.length === 1 && keys[0] === "emailSignature";
+}
+
 export async function updateStaffAction(
   id: string,
   patch: Partial<StaffInput>
 ): Promise<Staff | GoogleManagedRefusal> {
   const user = await requireCapabilityUser();
-  if (!resolveTeamCapabilities(user).canEditCollaborator) {
+  const ownEdit = id === user.member.id && isOwnStaffPatch(patch);
+  if (!ownEdit && !resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff edit");
   }
+  if (ownEdit) assertOwnStaffPatch(patch);
   if (await isRoleLocked(id, patch)) return GOOGLE_MANAGED_REFUSAL;
   const row = await staffRepository.updateStaff(id, patch, user.member.id);
   revalidatePath("/equipo");
+  // The name shows in the shell (avatar menu) on every page.
+  if (ownEdit) revalidatePath("/", "layout");
   return row;
 }
 
@@ -110,6 +145,15 @@ export async function upsertStaffProfileAction(
   profile: Partial<StaffProfile>
 ): Promise<StaffProfile> {
   const user = await requireCapabilityUser();
+  if (staffId === user.member.id && isOwnSignaturePatch(profile)) {
+    const signature = profile.emailSignature;
+    if (signature !== null && (typeof signature !== "string" || signature.length > OWN_SIGNATURE_MAX)) {
+      throw new Error("INVALID: emailSignature");
+    }
+    const row = await staffRepository.setStaffEmailSignature(staffId, signature ?? null);
+    revalidatePath("/ajustes/perfil");
+    return row;
+  }
   if (!resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff profile edit");
   }

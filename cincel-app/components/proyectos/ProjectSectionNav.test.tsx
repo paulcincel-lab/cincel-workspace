@@ -52,7 +52,29 @@ describe("projectSectionLinks", () => {
   });
 });
 
+describe("projectSectionLinks · redesign layout", () => {
+  it("adds Resumen and Tareas, puts Ficha last and carries the counts", () => {
+    const links = projectSectionLinks("p1", { layout: "redesign", counts: { tareas: 39, archivos: 48, clientes: 2 } });
+    expect(links.map((l) => l.section)).toEqual(["resumen", "tareas", "cronograma", "archivos", "ficha"]);
+    expect(links[0].href).toBe("/proyectos/p1");
+    expect(links.find((l) => l.section === "tareas")?.count).toBe(39);
+    expect(links.find((l) => l.section === "archivos")?.count).toBe(48);
+    expect(links.find((l) => l.section === "cronograma")?.count).toBeUndefined();
+  });
+
+  it("adds Clientes before Ficha only when asked", () => {
+    const links = projectSectionLinks("p1", { layout: "redesign", showClientes: true });
+    expect(links.map((l) => l.section)).toEqual(["resumen", "tareas", "cronograma", "archivos", "clientes", "ficha"]);
+  });
+});
+
 describe("activeProjectSection", () => {
+  it("reads the bare project URL as Resumen and /tareas as Tareas", () => {
+    expect(activeProjectSection("/proyectos/p1")).toBe("resumen");
+    expect(activeProjectSection("/proyectos/p1/")).toBe("resumen");
+    expect(activeProjectSection("/proyectos/p1/tareas")).toBe("tareas");
+  });
+
   it("reads the section from the path", () => {
     expect(activeProjectSection("/proyectos/p1/ficha")).toBe("ficha");
     expect(activeProjectSection("/proyectos/p1/archivos")).toBe("archivos");

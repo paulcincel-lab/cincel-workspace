@@ -14,11 +14,32 @@ test.describe("Smoke — login and navigation", () => {
     await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
     await expect(page.getByLabel("Correo institucional")).toBeVisible();
     await expect(page.locator('input[type="password"]').first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
+  });
+
+  test("login page fits a 390 px screen without horizontal scroll", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByLabel("Correo institucional")).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test("denied page explains the refusal and links back to /login", async ({ page }) => {
+    await page.goto(`${BASE_URL}/login/denegado?motivo=revoked&email=persona%40gmail.com`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.getByText("Tu acceso a Cincel fue retirado en Google Workspace.")).toBeVisible();
+    // Today's page says "Volver a intentar"; the redesign (org default on) says "Usar otra cuenta".
+    const back = page.getByRole("link", { name: /Volver a intentar|Usar otra cuenta/ });
+    await expect(back).toHaveAttribute("href", "/login");
   });
 
   test("admin can log in and reach a private route", async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
-    await expect(page).toHaveURL(/\/(dashboard|directorio|proyectos|tareas|equipo)/);
+    await expect(page).toHaveURL(/\/(dashboard|inicio|directorio|proyectos|tareas|equipo)/);
   });
 });

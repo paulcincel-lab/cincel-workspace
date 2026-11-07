@@ -1,18 +1,16 @@
 /**
  * Settings section "Estilo de presentación" of /ajustes/apariencia (redesign FE §3.8, §21.1; Phase 6).
- *
- * Contract stub: hidden until Phase 6 implements it.
+ * Every staff member sees it once `updateMyPreferencesAction` is implemented;
+ * the state lives in `AparienciaClient`.
  */
+import { AparienciaEstiloSection } from "@/components/ajustes/AparienciaSections";
+import { IMPLEMENTED } from "@/lib/actions/preferences-actions.flags";
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
-
-function AparienciaEstiloSection() {
-  return null;
-}
 
 export const aparienciaEstiloSection: SettingsSectionEntry = {
   page: "apariencia",
   name: "estilo",
   order: 20,
-  visible: () => false,
+  visible: () => IMPLEMENTED.updateMyPreferencesAction,
   Component: AparienciaEstiloSection,
 };

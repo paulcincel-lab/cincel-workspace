@@ -2,7 +2,10 @@
  * Appearance resolver (redesign BE §8.1, FE §15.1). Pure and client-safe;
  * the server-side reader is `lib/ui/preferences-server.ts`.
  */
-import type { OrgAppearance, ResolvedAppearance, UserPreferences } from "@/lib/types/redesign";
+import type { AppearanceCookie, OrgAppearance, ResolvedAppearance, UserPreferences } from "@/lib/types/redesign";
+import { toCssVars } from "@/lib/ui/appearance-css";
+import { THEME_PRESETS } from "@/lib/ui/themes";
+import { AppearanceCookieSchema } from "@/lib/validation/redesign";
 
 /** Name of the appearance cookie: JSON `AppearanceCookie` (BE §8.2). */
 export const APPEARANCE_COOKIE = "cincel-appearance";
@@ -21,27 +24,90 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   quietHours: null,
 };
 
+/** Lifetime of the appearance cookie (BE §8.2). */
+const APPEARANCE_COOKIE_MAX_AGE_DAYS = 365;
+
+/** Cookie options of `cincel-appearance` (BE §8.2): readable by the client, Lax, one year, unsigned. */
+export const APPEARANCE_COOKIE_OPTIONS = {
+  httpOnly: false,
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: APPEARANCE_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
+};
+
 /**
- * Org + user → what the page renders (BE §8.1): theme (user override only when
- * allowed), tokens (org tokens for the base theme, else the preset), style,
- * mode / density / text size, `redesignEnabled = org.redesignAvailable &&
- * (user?.redesignEnabled ?? org.redesignDefault)`, `cssVars` and `version`.
+ * Org + user → what the page renders (BE §8.1):
+ * 1. theme: the user's only when `allowUserOverride`, else `org.baseTheme`;
+ * 2. tokens: the org tokens for the base theme, else the preset (a user theme
+ *    never inherits the org's token edits of another base);
+ * 3. style: the user's only when `allowUserOverride`, else `org.styleDefault`;
+ * 4. mode / density / text size from the user (defaults `system`, `comoda`, 14);
+ * 5. `redesignEnabled = org.redesignAvailable && (user?.redesignEnabled ?? org.redesignDefault)`;
+ * 6. `cssVars` for both modes and `version = org.v`.
  *
- * Contract stub: always resolves with the flag off (legacy pipeline), so the
- * root layout keeps rendering today's look until the resolver lands.
+ * `user.redesignEnabled` may be null (a stored row without a choice) and then
+ * follows the org default.
  */
 export function resolveAppearance(
   org: OrgAppearance & { v?: number },
-  user: UserPreferences | null,
+  user: (Omit<UserPreferences, "redesignEnabled"> & { redesignEnabled: boolean | null }) | null,
 ): ResolvedAppearance {
+  const theme = org.allowUserOverride && user?.theme ? user.theme : org.baseTheme;
+  const tokens = theme === org.baseTheme ? org.tokens : THEME_PRESETS[theme].tokens;
+  const style = org.allowUserOverride && user?.style ? user.style : org.styleDefault;
+  const mode = user?.mode ?? DEFAULT_USER_PREFERENCES.mode;
+  const density = user?.density ?? DEFAULT_USER_PREFERENCES.density;
+  const textSize = user?.textSize ?? DEFAULT_USER_PREFERENCES.textSize;
+  const redesignEnabled = org.redesignAvailable && (user?.redesignEnabled ?? org.redesignDefault);
+
+  const effective: OrgAppearance = { ...org, baseTheme: theme, tokens };
   return {
-    theme: org.baseTheme,
-    mode: user?.mode ?? DEFAULT_USER_PREFERENCES.mode,
-    style: org.styleDefault,
-    density: user?.density ?? DEFAULT_USER_PREFERENCES.density,
-    textSize: user?.textSize ?? DEFAULT_USER_PREFERENCES.textSize,
-    redesignEnabled: false,
-    cssVars: { light: {}, dark: {} },
+    theme,
+    mode,
+    style,
+    density,
+    textSize,
+    redesignEnabled,
+    cssVars: { light: toCssVars(effective, "light", textSize), dark: toCssVars(effective, "dark", textSize) },
     version: org.v ?? 1,
   };
+}
+
+/** The cookie value for a resolved appearance (BE §8.2). */
+export function appearanceCookieValue(appearance: ResolvedAppearance): AppearanceCookie {
+  return {
+    theme: appearance.theme,
+    mode: appearance.mode,
+    style: appearance.style,
+    density: appearance.density,
+    textSize: appearance.textSize,
+    v: appearance.version,
+  };
+}
+
+/** Serialized `cincel-appearance` cookie. */
+export function serializeAppearanceCookie(appearance: ResolvedAppearance): string {
+  return JSON.stringify(appearanceCookieValue(appearance));
+}
+
+/**
+ * Parses the cookie and re-validates every value. Returns null when it is
+ * missing, malformed, or its `v` differs from the current org version (the
+ * server then recomputes from the DB, BE §8.2).
+ */
+export function parseAppearanceCookie(raw: string | null | undefined, currentVersion: number): AppearanceCookie | null {
+  if (!raw) return null;
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    try {
+      json = JSON.parse(decodeURIComponent(raw));
+    } catch {
+      return null;
+    }
+  }
+  const parsed = AppearanceCookieSchema.safeParse(json);
+  if (!parsed.success) return null;
+  return parsed.data.v === currentVersion ? parsed.data : null;
 }

@@ -16,10 +16,11 @@ import { fetchContactsAction, createContactAction, mergeContactsAction } from "@
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { createGithubIssue, isGithubConfigured } from "@/lib/github/client";
+import { buildDefinedTools } from "@/lib/assistant/tools/index";
+import type { AssistantContext } from "@/lib/types/redesign";
+import { resolveProject, resolveStaff, type Resolved } from "@/lib/assistant/resolvers";
 import type {
   ContactKind,
-  ProjectListItem,
-  Staff,
   TaskListItem,
   TaskPriority,
   WorkflowDetail,
@@ -49,37 +50,8 @@ const WORKFLOW_LABELS: Record<string, string> = {
 // ── Name / key resolution helpers ────────────────────────────────────────────
 // The assistant only ever knows people/projects by name (never by uuid), so
 // every write tool has to resolve a name to an id first via the same read
-// actions the UI uses, and report back candidates when the match isn't unique.
-
-type Resolved<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string; candidates?: string[] };
-
-function byNameIlike<T extends { name: string }>(rows: T[], query: string): Resolved<T> {
-  const q = query.trim().toLowerCase();
-  const exact = rows.filter((r) => r.name.trim().toLowerCase() === q);
-  if (exact.length === 1) return { ok: true, value: exact[0] };
-  const partial = rows.filter((r) => r.name.toLowerCase().includes(q));
-  if (partial.length === 1) return { ok: true, value: partial[0] };
-  if (partial.length === 0) {
-    return { ok: false, error: `No se encontró "${query}".` };
-  }
-  return {
-    ok: false,
-    error: `"${query}" es ambiguo, coincide con varios.`,
-    candidates: partial.slice(0, 10).map((r) => r.name),
-  };
-}
-
-async function resolveProject(name: string): Promise<Resolved<ProjectListItem>> {
-  const rows = await fetchProjectsAction({ search: name });
-  return byNameIlike(rows, name);
-}
-
-async function resolveStaff(name: string): Promise<Resolved<Staff>> {
-  const rows = await fetchStaffAction();
-  return byNameIlike(rows, name);
-}
+// actions the UI uses, and report back candidates when the match isn't unique
+// (`lib/assistant/resolvers.ts`, shared with the tool domain files).
 
 async function resolveWorkflowByKey(key: string): Promise<Resolved<WorkflowDetail>> {
   const rows = await fetchWorkflowsAction();
@@ -787,7 +759,10 @@ export const ASSISTANT_TOOLS = {
  * - merge_duplicate_activities → canDeleteActivity
  * - discard_project          → canDeleteProject
  */
-export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
+export function buildAssistantTools(
+  user: AuthenticatedUser | null,
+  run?: { context: AssistantContext; threadId: string },
+): ToolSet {
   const activitiesCaps = resolveActivitiesCapabilities(user);
   const clientsCaps = resolveClientsCapabilities(user);
   const projectsCaps = resolveProjectsCapabilities(user);
@@ -820,5 +795,8 @@ export function buildAssistantTools(user: AuthenticatedUser | null): ToolSet {
   if (projectsCaps.canDeleteProject) {
     tools.discard_project = discard_project;
   }
+  // Registered tools (BE §10.1): capability ∧ available(ctx); a registered
+  // tool replaces a legacy one of the same name.
+  if (user && run) Object.assign(tools, buildDefinedTools({ user, ...run }));
   return tools;
 }

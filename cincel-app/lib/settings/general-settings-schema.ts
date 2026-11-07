@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import { GENERAL_SETTINGS_LOGO_MAX_BYTES, type GeneralSettings } from "@/lib/settings/general-settings";
+import {
+  GENERAL_SETTINGS_LOGO_MAX_BYTES,
+  type GeneralSettings,
+  isContactEmail,
+  isHttpsUrl,
+} from "@/lib/settings/general-settings";
 
 const TEXT_MAX = 300;
 const LOGO_DATA_URL = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/;
@@ -22,6 +27,22 @@ export function isValidLogoValue(value: string): boolean {
 const text = z.string().max(TEXT_MAX);
 const logo = z.string().refine(isValidLogoValue);
 
+/**
+ * An optional company link: a missing key (settings saved before the field
+ * existed), null or a blank string all become null; anything else must match
+ * the shape check.
+ */
+function optionalLink(isValid: (value: string) => boolean) {
+  return z
+    .string()
+    .trim()
+    .max(TEXT_MAX)
+    .refine((value) => value === "" || isValid(value))
+    .nullable()
+    .optional()
+    .transform((value): string | null => (value ? value : null));
+}
+
 const generalSettingsSchema = z
   .object({
     company: z
@@ -34,6 +55,8 @@ const generalSettingsSchema = z
         address: text,
         rfc: text,
         logoUrl: logo,
+        instagramUrl: optionalLink(isHttpsUrl),
+        contactEmail: optionalLink(isContactEmail),
       })
       .strict(),
     regional: z

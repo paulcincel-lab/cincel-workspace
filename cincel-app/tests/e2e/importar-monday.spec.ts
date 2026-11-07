@@ -12,6 +12,7 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 import { loginAsAdmin } from "./helpers/seed-auth";
+import { ADMIN_EMAIL, setRedesignFor } from "./helpers/redesign";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const ENABLED = process.env.E2E_MONDAY_FAKE === "1";
@@ -34,6 +35,8 @@ async function openFreshRun(page: Page): Promise<void> {
 test.describe("Importar de monday", () => {
   test.skip(!ENABLED, "needs E2E_MONDAY_FAKE=1 and a server started with MONDAY_FAKE=1");
   test.describe.configure({ mode: "serial", timeout: 180_000 });
+  // The legacy wizard route; with the flag on it lives at /ajustes/monday (ajustes-rutas.spec.ts).
+  test.beforeAll(() => setRedesignFor(ADMIN_EMAIL, false));
 
   test("selects one board, maps it from its card, previews, imports and rolls back", async ({ page }) => {
     await loginAsAdmin(page, BASE_URL);

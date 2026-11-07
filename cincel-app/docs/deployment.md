@@ -18,9 +18,15 @@
 | `CINCEL_ADMIN_EMAILS` | Recommended | `lib/data/roles.ts` | Comma-separated emails that get the `Administrador` role automatically regardless of their `team_members.role`. Unset = no auto-escalation. |
 | `GOOGLE_SA_CLIENT_EMAIL` / `GOOGLE_SA_PRIVATE_KEY` / `GOOGLE_SA_SUBJECT` / `GOOGLE_DRIVE_ROOT_FOLDER_ID` | Optional | `lib/google/*` | Service-account access for the Drive pickers. Leave unset to disable (manual URL entry still works, API routes return 503). `GOOGLE_DRIVE_ROOT_FOLDER_ID` is the picker's start folder; when unset it defaults to the root of `GOOGLE_SHARED_DRIVE_ID`. |
 | `GOOGLE_SHARED_DRIVE_ID` | Optional | `npm run monday` (monday migration CLI), project folders (`lib/google/project-folders.ts`) | Company Shared Drive where project folders are created, both by the monday migration and when a project is created or its folders are re-created in the app. The service account must be a **Content manager** on it. Also the default start folder for the Drive picker when `GOOGLE_DRIVE_ROOT_FOLDER_ID` is unset. See `docs/google-drive.md`. |
+| `CUTTO_API_URL` / `CUTTO_API_TOKEN` | **Leave unset** | `lib/integrations/cutto-api.server.ts`, `lib/assistant/tools/cutto.ts` | Server-only. Cutto has no API yet (open question Q1): while `CUTTO_API_URL` is unset `getCuttoApi()` returns `null` and the 15 Cutto assistant tools (meetings and messages) are not offered. Cincel only deep-links to Cutto through `NEXT_PUBLIC_CUTTO_BASE_URL`. Do not set either variable until the Cutto API is agreed; `CUTTO_API_TOKEN` will then be a secret. |
 | `MONDAY_IMPORT_DIR` | Image: `ENV` set to `/data/monday` | `lib/monday-import/runs.ts` (Configuración → Importar de monday) | Folder for the import wizard's runs (monday exports with client data and files). Unset = `<cwd>/exports/wizard`, which the image's `nextuser` can't create because `/app` belongs to root. The image makes `/data/monday` owned by `nextuser`; mount a persistent volume there (KCD: `kcd.yml` sets the default and the `/data/monday` volume; `docker-compose.prod.yml`: the `cincel_monday_data` volume). A folder the app can't write shows "La carpeta de importación no tiene permisos de escritura." and logs the path once. `MONDAY_TOKEN` is not needed: the wizard asks for the token and never stores it. |
+| `GMAIL_SYNC_MAX_PER_TICK` | Optional, default `10` | `lib/cron/jobs/gmail-sync.ts` | Max connected Gmail accounts the `gmail-sync` cron job syncs per tick (every minute), oldest last sync first, skipping disconnected accounts and accounts in backoff. With `N` connected accounts each one syncs about every `ceil(N / value)` minutes. Each sync costs Gmail API quota (first sync about 1,000 units, later ones a few units per changed thread); raise it if the Bandeja lags, lower it on quota errors (`gmail.sync_failed`, `RATE_LIMITED`). Needs the Gmail API and the `gmail.readonly` + `gmail.compose` scopes on the Internal staff OAuth client: see `docs/google-workspace-admin-checklist.md` §10. |
+| `SESSION_SECRET` | Required for Gmail drafts | `lib/gmail/confirm-token.ts` | Signs the 10-minute send confirmation of a Gmail draft (Mi espacio › Gmail). A long random secret (e.g. `openssl rand -hex 32`), never committed. Unset = saving a draft fails with a server error. Changing it invalidates drafts saved in the last 10 minutes (they need to be saved again before sending). |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Optional | `lib/assistant/provider.ts` | OpenAI-compatible `/v1` endpoint for `/asistente`. Unset = assistant disabled (route returns 503, UI shows a notice). |
+| `LLM_VISION` | Optional | `lib/assistant/vision.ts` | `true` when `LLM_MODEL` accepts image input. Unset = the assistant's file-reading tools (`measure_areas_from_plan`, `moodboard_from_references`) answer "no disponible". |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `MAIL_FROM` | Optional | `lib/email/index.ts` | Client portal mail (invitations, sign-in links, "archivo recibido"). Production: Gmail SMTP from one Workspace account (`smtp.gmail.com`, `465`, the account, its app password, see [Email](#email-client-portal)). `SMTP_PASSWORD` is a secret. Unset `SMTP_HOST` = messages are only logged. Local compose sends to Mailpit. |
+| `CRON_SECRET` | **Yes** for background jobs | `app/api/cron/tick/route.ts` | Bearer secret for `POST /api/cron/tick`, compared in constant time. Secret: `openssl rand -hex 32`, never committed (KCD generates it, `kcd.yml`; compose reads it from `.env.production`). Unset = the route answers `503` and no background job runs. See [Cron tick](#cron-tick). |
+| `NEXT_PUBLIC_CUTTO_BASE_URL` | Optional, default `https://cutto.cloudketer.dev` | `lib/integrations/cutto-links.ts` | Base URL of the "Abrir en Cutto" deep links. Public and inlined into the client bundle at **build** time (`npm run build` / `docker build`), so changing it needs a rebuild, not a restart. Cutto is never embedded in Cincel. |
 | `APP_PORT` | Compose only | `docker-compose.yml` | Host port mapped to the container's 3000. Default 3000. |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Compose only | `docker-compose.yml` `db` service | Default `cincel` / `cincel` / `cincel`. |
 | `MAILPIT_UI_PORT` / `MAILPIT_SMTP_PORT` | Compose only | `docker-compose.yml` `mailpit` service | Host ports for the local Mailpit UI and SMTP. Default `8025` / `1025`. |
@@ -87,6 +93,75 @@ holds auto-deploy for that recipe change until someone reviews it on the
 canvas and fills in the value. Gmail allows about 2,000 messages a day per
 Workspace account.
 
+## Cron tick
+
+Background work (notification email, the 07:30 daily digest and the jobs later
+phases add) runs from one authenticated route, `POST /api/cron/tick` (also
+`GET`). There is no queue and no worker: the **host cron** calls it every
+minute. The tick takes the `tick` lease for 55 s, runs the registered jobs
+(`lib/cron/jobs/`) and answers:
+
+| Status | Meaning |
+|---|---|
+| `200 { ran, skipped }` | The tick ran; `ran` lists `{ job, ms, count }` per job |
+| `204` | Another tick still holds the lease; nothing ran |
+| `401 { error: "UNAUTHORIZED" }` | Missing or wrong `Authorization: Bearer` |
+| `503 { error: "DISABLED" }` | `CRON_SECRET` is not set in the app's environment |
+
+### Secret
+
+1. Generate it once: `openssl rand -hex 32`.
+2. Put it in the app's environment, never in a committed file:
+   - **docker-compose.prod.yml:** add `CRON_SECRET=<value>` to `.env.production`
+     on the deploy host (read by the `app` service through `env_file`), then
+     `docker compose -f docker-compose.prod.yml up -d app`.
+   - **KCD:** `kcd.yml` declares `CRON_SECRET` as a generated secret
+     (`generate: hex32`); read the value from the KCD console for the crontab.
+3. Keep the same value in the crontab environment (below). Rotating it means
+   changing both and restarting `app`.
+
+### Host cron line
+
+The cron calls the app **on the Docker network** (`http://app:3000`), not
+through the public URL:
+
+```cron
+* * * * * curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" http://app:3000/api/cron/tick
+```
+
+The name `app` only resolves inside the compose network, so on the host the
+line runs `curl` in a throwaway container attached to that network. Install it
+with `crontab -e` as a user that can run `docker`:
+
+```cron
+CRON_SECRET=<the value from .env.production>
+* * * * * docker run --rm --network <compose-project>_default curlimages/curl:8.10.1 -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" http://app:3000/api/cron/tick >/dev/null 2>>/var/log/cincel-cron.log
+```
+
+- `<compose-project>_default` is the stack's default network; list it with
+  `docker network ls` (for a stack started from a `cincel-app` folder it is
+  `cincel-app_default`).
+- `-f` makes curl exit non-zero on `401`/`503`, so failures land in the log
+  file; `204` and `200` are silent.
+- Restrict the crontab (it holds the secret): it lives in the user's spool,
+  readable only by that user and root.
+
+### Check it after a deploy
+
+From the deploy host:
+
+```bash
+docker run --rm --network <compose-project>_default curlimages/curl:8.10.1 \
+  -sS -o - -w '\nHTTP %{http_code}\n' -X POST \
+  -H "Authorization: Bearer $CRON_SECRET" http://app:3000/api/cron/tick
+```
+
+Expect `HTTP 200` with `{ "ran": [...], "skipped": [...] }`, or `HTTP 204` when
+the minute's cron tick is running at the same time. Without the header expect
+`HTTP 401`. Job failures do not fail the tick: each one logs a JSON line
+`{ "msg": "cron.job_failed", "job", "trace_id", "error" }` in the `app` logs
+(`docker compose logs app`).
+
 ## Database migrations — REQUIRED on every deploy
 
 The app image does **not** run migrations at startup, and the standalone runtime
@@ -151,6 +226,14 @@ business data under those legacy ids.
 The seed loads only the roster and demo rows. Real projects / clients / tasks /
 history are entered through the app; there is no bulk importer.
 
+## npm scripts used in operations
+
+| Script | What |
+|---|---|
+| `npm run db:migrate` | Applies pending Drizzle migrations (the `migrate` service runs it) |
+| `npm run db:seed` | Roster + bootstrap admin + demo rows (first deploy only) |
+| `npm run themes:css` | Regenerates the token block of `app/globals.css` from `THEME_PRESETS.azul` (`scripts/themes-css.ts`). Run once in redesign Phase 9 (Cleanup), commit the result; not part of any deploy |
+
 ## CI
 
 `.github/workflows/cincel-app-build.yml` runs on PRs and pushes to `main`:
@@ -204,6 +287,17 @@ cookie-less request for a protected route to `/login`; full session validation
 - **App**: redeploy the previous image tag (e.g. the previous release's `X.Y.Z`). The schema is forward-compatible
   within a release train, but a rollback across a migration that dropped/renamed
   a column will break — check `lib/db/migrations` between the two versions.
+- **General settings company links**: images from before the redesign parse
+  `general_settings` with a `.strict()` save schema that doesn't know
+  `company.instagramUrl` / `company.contactEmail`. After rolling back to such an
+  image, strip the two keys so the stored row matches what that image expects:
+
+  ```sql
+  update core.app_settings
+     set value = ((value::jsonb) #- '{data,company,instagramUrl}' #- '{data,company,contactEmail}')::text,
+         updated_at = now()
+   where key = 'general_settings';
+  ```
 - **Migrations**: drizzle-kit has no down-migrations. To undo, write a new
   forward migration. Take a `pg_dump` before applying migrations on a database
   that holds real data (see `docs/backup-recovery.md`).

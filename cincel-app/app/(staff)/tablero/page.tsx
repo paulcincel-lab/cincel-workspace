@@ -1,0 +1,47 @@
+import Sidebar from "@/components/layout/Sidebar";
+import Header from "@/components/layout/Header";
+import { fetchBoardAction } from "@/lib/actions/tasks-actions";
+import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
+import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
+import { fetchProjectsAction } from "@/lib/actions/projects-actions";
+import type { TaskListItem, TaskStatus, TaskStatusOption, WorkflowDetail, WorkflowRef } from "@/lib/types/core";
+import { TableroClient } from "./TableroClient";
+import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
+import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
+
+const EMPTY_BOARD: Record<TaskStatus, TaskListItem[]> = {
+  pendiente: [],
+  en_proceso: [],
+  completado: [],
+  bloqueado: [],
+};
+
+export default async function TableroPage({ searchParams }: LegacyPageProps) {
+  await redirectLegacyIfRedesignOn("/tablero", searchParams);
+  let initialBoard: Record<TaskStatus, TaskListItem[]> = EMPTY_BOARD;
+  let workflows: WorkflowDetail[] = [];
+  let customStatuses: TaskStatusOption[] = [];
+  let projectTramos: Record<string, WorkflowRef | null> = {};
+
+  try {
+    [initialBoard, workflows, customStatuses] = await Promise.all([
+      fetchBoardAction(),
+      fetchWorkflowsAction(),
+      fetchTaskStatusesAction(),
+    ]);
+    const projects = await fetchProjectsAction();
+    projectTramos = Object.fromEntries(projects.map((p) => [p.id, p.currentWorkflow]));
+  } catch {
+    // Not authorized / no session — the client falls back to hydrating itself.
+  }
+
+  return (
+    <main className="flex min-h-screen bg-background text-foreground">
+      <Sidebar />
+      <section className="min-w-0 flex-1 overflow-y-auto p-10">
+        <Header />
+        <TableroClient initialBoard={initialBoard} customStatuses={customStatuses} workflows={workflows} projectTramos={projectTramos} />
+      </section>
+    </main>
+  );
+}

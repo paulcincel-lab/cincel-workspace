@@ -13,9 +13,10 @@ import { parseStaffOauthScope, startStaffOauth, staffOauthConfig } from "@/lib/g
  * with AUTH_GOOGLE_ENABLED. Rate limited to 20 per 10 minutes per IP
  * (`X-Real-IP`, §A.10). `return_to` is validated by `safeReturnTo()`.
  *
- * With `?scope=drive|calendar` it is the incremental consent of §A.6.2 for a
- * signed-in staff member: `prompt=consent`, `login_hint=<their email>`. Without
- * a session it sends the browser to `/login`.
+ * With `?scope=drive|calendar|gmail` (or its alias `?grant=`, redesign BE
+ * §11.1) it is the incremental consent of §A.6.2 for a signed-in staff
+ * member: `prompt=consent`, `login_hint=<their email>`. Without a session it
+ * sends the browser to `/login`.
  */
 
 export async function GET(request: NextRequest): Promise<Response> {
@@ -38,7 +39,8 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const params = request.nextUrl.searchParams;
   const returnTo = params.get("return_to");
-  const rawScope = params.get("scope");
+  // `grant` is an alias of `scope` (redesign BE §11.1, `?grant=gmail`); `scope` wins when both are sent.
+  const rawScope = params.get("scope") ?? params.get("grant");
   const scope = rawScope === null ? null : parseStaffOauthScope(rawScope);
   if (rawScope !== null && !scope) return new NextResponse("Permiso de Google no válido", { status: 400 });
 

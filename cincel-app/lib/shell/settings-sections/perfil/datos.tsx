@@ -1,18 +1,17 @@
 /**
  * Settings section "Datos personales" of /ajustes/perfil (redesign FE §3.8, §21.1; Phase 6).
  *
- * Contract stub: hidden until Phase 6 implements it.
+ * Editable nombre, teléfono and firma de correo (saved through the existing
+ * staff actions, which accept the caller's own fields); read-only puesto,
+ * correo, idioma and zona horaria. Renders inside `PerfilClient`.
  */
+import { PerfilDatos } from "@/components/ajustes/PerfilClient";
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
-
-function PerfilDatosSection() {
-  return null;
-}
 
 export const perfilDatosSection: SettingsSectionEntry = {
   page: "perfil",
   name: "datos",
   order: 20,
-  visible: () => false,
-  Component: PerfilDatosSection,
+  visible: () => true,
+  Component: PerfilDatos,
 };

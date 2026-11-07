@@ -24,7 +24,7 @@ import {
 
 import GeneralSettingsWorkspace from "./GeneralSettingsWorkspace";
 
-const admin = { primaryColor: null, canManage: true };
+const admin = { primaryColor: null, canManage: true, canManageGeneral: true };
 const SAVED_AT = "2026-11-04T16:30:00.000Z";
 
 describe("GeneralSettingsWorkspace", () => {
@@ -64,6 +64,33 @@ describe("GeneralSettingsWorkspace", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it("keeps the avatar-menu links it doesn't show when saving", async () => {
+    actions.saveGeneralSettingsAction.mockResolvedValue({ savedAt: SAVED_AT });
+    const settings = buildDefaultGeneralSettings();
+    settings.company.instagramUrl = "https://instagram.com/cincel";
+    settings.company.contactEmail = "hola@cincel.mx";
+    render(<GeneralSettingsWorkspace appearance={admin} general={{ settings, hasCustom: true, savedAt: SAVED_AT }} />);
+
+    expect(screen.queryByLabelText("Instagram")).toBeNull();
+    fireEvent.change(screen.getAllByDisplayValue("Cincel Workspace")[0], { target: { value: "Cincel Studio" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(actions.saveGeneralSettingsAction).toHaveBeenCalledTimes(1));
+    expect(actions.saveGeneralSettingsAction.mock.calls[0][0].company).toMatchObject({
+      tradeName: "Cincel Studio",
+      instagramUrl: "https://instagram.com/cincel",
+      contactEmail: "hola@cincel.mx",
+    });
+  });
+
+  it("does not touch the legacy header links in this browser", () => {
+    window.localStorage.setItem("cincel.header.links.v1", JSON.stringify({ instagram: "https://instagram.com/x" }));
+    render(<GeneralSettingsWorkspace appearance={admin} general={buildDefaultLoadedGeneralSettings()} />);
+
+    expect(window.localStorage.getItem("cincel.header.links.v1")).not.toBeNull();
+    expect(window.localStorage.getItem("cincel.header.links.migrated.v1")).toBeNull();
+  });
+
   it("shows an inline error when the save fails", async () => {
     actions.saveGeneralSettingsAction.mockRejectedValue(new Error("FORBIDDEN"));
     render(<GeneralSettingsWorkspace appearance={admin} general={buildDefaultLoadedGeneralSettings()} />);
@@ -77,7 +104,7 @@ describe("GeneralSettingsWorkspace", () => {
 
   it("keeps saving and restoring off for non-admins", () => {
     const general = { settings: buildDefaultGeneralSettings(), hasCustom: true, savedAt: SAVED_AT };
-    render(<GeneralSettingsWorkspace appearance={{ primaryColor: null, canManage: false }} general={general} />);
+    render(<GeneralSettingsWorkspace appearance={{ primaryColor: null, canManage: false, canManageGeneral: false }} general={general} />);
 
     fireEvent.change(screen.getAllByDisplayValue("Cincel Workspace")[0], { target: { value: "Cincel Studio" } });
     expect(screen.getByRole("button", { name: "Guardar cambios" }).hasAttribute("disabled")).toBe(true);

@@ -1,11 +1,23 @@
-// Shared semantic-tone → Tailwind classes for the assistant's card/stat-grid
-// widgets. Separate from render_chart's blue accent; matches the existing
-// Alto/Medio/Bajo risk color convention used elsewhere in the app (emerald =
-// good, amber = watch, red = critical).
+import type { Tone } from "@/lib/types/widgets";
+
+/**
+ * Semantic tone the `render_card` / `render_stat_grid` tools send
+ * (`lib/assistant/tools.ts` `TONE_ENUM`). The model-facing values stay as they
+ * are; the widgets map them onto the library `Tone` and plain shadcn `Badge`
+ * variants, so every color comes from the theme tokens.
+ */
 export type WidgetTone = "ok" | "warning" | "critical";
 
-export const TONE_BADGE_CLASSES: Record<WidgetTone, string> = {
-  ok: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  warning: "border-amber-200 bg-amber-50 text-amber-700",
-  critical: "border-red-200 bg-red-50 text-red-700",
+/** Tool tone → library `Tone` (`lib/types/widgets.ts`). */
+export const WIDGET_TONE_TO_TONE: Record<WidgetTone, Tone> = {
+  ok: "ok",
+  warning: "warn",
+  critical: "critical",
+};
+
+/** Tool tone → plain shadcn `Badge` variant. */
+export const WIDGET_TONE_BADGE_VARIANT: Record<WidgetTone, "success" | "secondary" | "destructive"> = {
+  ok: "success",
+  warning: "secondary",
+  critical: "destructive",
 };

@@ -112,7 +112,15 @@ export type EntityCard = {
   progress?: number;
   badges?: { label: string; tone: Tone }[];
   meta?: { label: string; value: string }[];
+  /**
+   * Whole-card token tint in Visual (FE §14.5): `muted`, or `chart-N` rendered
+   * as `tint-chart-N` with `ink-chart-N` text. Used by notes (`note.color`);
+   * Esencial and Analítico ignore it.
+   */
+  tint?: EntityCardTint;
 };
+
+export type EntityCardTint = "muted" | "chart-1" | "chart-2" | "chart-3" | "chart-4" | "chart-5";
 
 export type RecordColumnFormat = "text" | "count" | "percent" | "hours" | "days" | "date" | "delta" | "mxn";
 

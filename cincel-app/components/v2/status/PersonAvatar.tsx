@@ -6,8 +6,15 @@ interface PersonAvatarProps {
   name: string;
   subtitle?: string;
   imageSrc?: string;
-  size?: "sm" | "md";
+  /** Precomputed initials (e.g. `PersonDatum.initials`); derived from `name` when omitted. */
+  initials?: string;
+  /** Turns the name into a link. */
+  href?: string;
+  /** `lg` (44 px) is the redesign people-card size. */
+  size?: "sm" | "md" | "lg";
   className?: string;
+  /** Avatar only: the name stays available to screen readers and as a tooltip. */
+  hideName?: boolean;
 }
 
 /**
@@ -15,23 +22,50 @@ interface PersonAvatarProps {
  * Uses `--primary` for the initials fallback instead of AppAvatar's
  * hardcoded `bg-blue-600`, matching the monochrome token system.
  */
-export function PersonAvatar({ name, subtitle, imageSrc, size = "sm", className }: PersonAvatarProps) {
+export function PersonAvatar({
+  name,
+  subtitle,
+  imageSrc,
+  initials,
+  href,
+  size = "sm",
+  className,
+  hideName = false,
+}: PersonAvatarProps) {
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <Avatar className={size === "sm" ? "size-6" : "size-9"}>
+    <div
+      className={cn("flex items-center", size === "lg" ? "gap-3" : "gap-2", className)}
+      title={hideName ? name : undefined}
+    >
+      <Avatar className={size === "sm" ? "size-6" : size === "md" ? "size-9" : "size-11"}>
         {imageSrc ? <AvatarImage src={imageSrc} alt={`Foto de ${name}`} /> : null}
         <AvatarFallback
           className={cn(
-            "bg-primary font-bold text-primary-foreground",
+            "bg-primary text-primary-foreground",
+            size === "lg" ? "font-semibold" : "font-bold",
             size === "sm" ? "text-[10px]" : "text-sm"
           )}
         >
-          {getPersonInitials(name)}
+          {hideName ? (
+            <span aria-hidden="true">{initials ?? getPersonInitials(name)}</span>
+          ) : (
+            initials ?? getPersonInitials(name)
+          )}
         </AvatarFallback>
       </Avatar>
-      <span>
-        <div className="font-medium">{name}</div>
-        {subtitle ? <div className="text-[10.5px] text-muted-foreground">{subtitle}</div> : null}
+      <span className={hideName ? "sr-only" : undefined}>
+        <div className="font-medium">
+          {href ? (
+            <a href={href} className="hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              {name}
+            </a>
+          ) : (
+            name
+          )}
+        </div>
+        {subtitle ? (
+          <div className={cn("text-muted-foreground", size === "lg" ? "text-xs" : "text-[10.5px]")}>{subtitle}</div>
+        ) : null}
       </span>
     </div>
   );

@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/shadcn/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/shadcn/tooltip";
+import { EventDetailPopover } from "@/components/tareas/EventDetailPopover";
 import {
   addDays,
   applyCalendarFilters,
@@ -50,6 +51,12 @@ type UnifiedCalendarProps = {
    * mount and whenever the visible range changes (month navigation).
    */
   onVisibleRangeChange?: (fromDate: string, toDate: string) => void;
+  /**
+   * Event click opens `EventDetailPopover` instead of following the event
+   * link (redesign `/tareas` calendar). Off by default: the legacy pages keep
+   * their links.
+   */
+  eventDetails?: boolean;
 };
 
 /**
@@ -86,8 +93,66 @@ function typePrefix(type: string): string {
  * Tasks only store dates, so the calendar shows an estimated time (see
  * calendar-service.ts). The leading "≈" marks it as approximate everywhere.
  */
-function approxTime(time: string): string {
+export function approxTime(time: string): string {
   return `≈${time}`;
+}
+
+/** One cell of a Monday-first month grid (presentation only; shared with `AgendaWidget`). */
+export type MonthCell<T> = {
+  key: string;
+  date: Date;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  dayNumber: number;
+  events: T[];
+};
+
+/**
+ * The Monday-first cells of the month containing `month`, leading and
+ * trailing days included. `keyOf` turns a local day into the key used by
+ * `eventsByDate` (defaults to the calendar service `dateKey`).
+ */
+export function buildMonthCells<T>(
+  month: Date,
+  eventsByDate: Map<string, T[]>,
+  today: Date,
+  keyOf: (date: Date) => string = dateKey
+): MonthCell<T>[] {
+  const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+  const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+  const leadingEmpty = (monthStart.getDay() + 6) % 7;
+  const daysInMonth = monthEnd.getDate();
+  const totalCells = Math.ceil((leadingEmpty + daysInMonth) / 7) * 7;
+
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(monthStart.getDate() - leadingEmpty);
+  const todayKey = keyOf(today);
+
+  return Array.from({ length: totalCells }).map((_, index) => {
+    const currentDate = new Date(gridStart);
+    currentDate.setDate(gridStart.getDate() + index);
+    const key = keyOf(currentDate);
+
+    return {
+      key,
+      date: currentDate,
+      isCurrentMonth: currentDate.getMonth() === monthStart.getMonth(),
+      isToday: key === todayKey,
+      dayNumber: currentDate.getDate(),
+      events: eventsByDate.get(key) ?? [],
+    };
+  });
+}
+
+/** Weekday header row of the month grid (lun. … dom.). */
+export function CalendarWeekdayHeader() {
+  return (
+    <div className="grid grid-cols-7 border-b border-border text-center text-sm font-semibold text-foreground">
+      {getWeekdayLabels().map((label) => (
+        <div key={label} className="border-r border-border py-2 last:border-r-0">{label}</div>
+      ))}
+    </div>
+  );
 }
 
 function monthLabel(date: Date): string {
@@ -143,6 +208,7 @@ export default function UnifiedCalendar({
   canViewTeamCalendar = true,
   viewerName = "",
   onVisibleRangeChange,
+  eventDetails = false,
 }: UnifiedCalendarProps) {
   const normalizedViewerName = viewerName.trim();
   const today = useMemo(() => {
@@ -153,6 +219,15 @@ export default function UnifiedCalendar({
   const [view, setView] = useState<CalendarView>("month");
   const [cursor, setCursor] = useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(today));
+  const [openEvent, setOpenEvent] = useState<{ event: CalendarEvent; anchor: HTMLElement } | null>(null);
+
+  /** Event link click: stays inside the day cell and, with `eventDetails`, opens the popover. */
+  function handleEventClick(entry: CalendarEvent, clickEvent: MouseEvent<HTMLElement>) {
+    clickEvent.stopPropagation();
+    if (!eventDetails) return;
+    clickEvent.preventDefault();
+    setOpenEvent({ event: entry, anchor: clickEvent.currentTarget });
+  }
 
   const [filters, setFilters] = useState<CalendarScreenFilters>({
     project: "Todos",
@@ -229,30 +304,7 @@ export default function UnifiedCalendar({
     [projectColorMap]
   );
 
-  const monthGrid = useMemo(() => {
-    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-    const leadingEmpty = (monthStart.getDay() + 6) % 7;
-    const daysInMonth = monthEnd.getDate();
-    const totalCells = Math.ceil((leadingEmpty + daysInMonth) / 7) * 7;
-
-    const gridStart = new Date(monthStart);
-    gridStart.setDate(monthStart.getDate() - leadingEmpty);
-
-    return Array.from({ length: totalCells }).map((_, index) => {
-      const currentDate = new Date(gridStart);
-      currentDate.setDate(gridStart.getDate() + index);
-      const key = dateKey(currentDate);
-
-      return {
-        key,
-        isCurrentMonth: currentDate.getMonth() === monthStart.getMonth(),
-        isToday: key === dateKey(today),
-        dayNumber: currentDate.getDate(),
-        events: groupedByDate.get(key) ?? [],
-      };
-    });
-  }, [cursor, groupedByDate, today]);
+  const monthGrid = useMemo(() => buildMonthCells(cursor, groupedByDate, today), [cursor, groupedByDate, today]);
 
   useEffect(() => {
     if (!onVisibleRangeChange || monthGrid.length === 0) {
@@ -432,11 +484,7 @@ export default function UnifiedCalendar({
             {view === "month" ? (
               <div className="overflow-x-auto">
                 <div className="min-w-[900px]">
-                  <div className="grid grid-cols-7 border-b border-border text-center text-sm font-semibold text-foreground">
-                    {getWeekdayLabels().map((label) => (
-                      <div key={label} className="border-r border-border py-2 last:border-r-0">{label}</div>
-                    ))}
-                  </div>
+                  <CalendarWeekdayHeader />
                   <div className="grid grid-cols-7">
                     {monthGrid.map((cell) => {
                       const visibleEvents = cell.events.slice(0, 2);
@@ -460,7 +508,7 @@ export default function UnifiedCalendar({
                               <Link
                                 key={entry.id}
                                 href={entry.href}
-                                onClick={(event) => event.stopPropagation()}
+                                onClick={(event) => handleEventClick(entry, event)}
                                 className={`block truncate rounded border-l-4 px-2 py-1 text-[11px] font-semibold md:text-xs ${typeClassName(entry.type)}`}
                                 style={{ borderLeftColor: projectColorMap.get(entry.project) || "#6b6b6b" }}
                                 title={`${approxTime(entry.time)} · ${entry.title} · ${entry.project}`}
@@ -488,7 +536,7 @@ export default function UnifiedCalendar({
                       <div className="mt-2 space-y-2">
                         {day.events.length === 0 ? <p className="text-xs text-muted-foreground">Sin eventos</p> : null}
                         {day.events.map((entry) => (
-                          <Link key={entry.id} href={entry.href} className={`block rounded-lg px-2 py-1 text-xs font-semibold ${typeClassName(entry.type)}`}>
+                          <Link key={entry.id} href={entry.href} onClick={(event) => handleEventClick(entry, event)} className={`block rounded-lg px-2 py-1 text-xs font-semibold ${typeClassName(entry.type)}`}>
                             {approxTime(entry.time)} · {entry.title}
                           </Link>
                         ))}
@@ -509,7 +557,7 @@ export default function UnifiedCalendar({
                 ) : (
                   <div className="space-y-2">
                     {selectedDayEvents.map((entry) => (
-                      <Link key={entry.id} href={entry.href} className="flex items-start justify-between rounded-xl border border-border px-3 py-2 hover:bg-muted">
+                      <Link key={entry.id} href={entry.href} onClick={(event) => handleEventClick(entry, event)} className="flex items-start justify-between rounded-xl border border-border px-3 py-2 hover:bg-muted">
                         <div>
                           <p className="text-xs font-semibold text-muted-foreground">{approxTime(entry.time)}</p>
                           <p className="text-sm font-semibold text-foreground">{entry.title}</p>
@@ -588,11 +636,7 @@ export default function UnifiedCalendar({
         <>
           <div className="overflow-x-auto">
             <div className="min-w-[900px]">
-              <div className="grid grid-cols-7 border-b border-border text-center text-sm font-semibold text-foreground">
-                {getWeekdayLabels().map((label) => (
-                  <div key={label} className="border-r border-border py-2 last:border-r-0">{label}</div>
-                ))}
-              </div>
+              <CalendarWeekdayHeader />
               <div className="grid grid-cols-7">
                 {monthGrid.map((cell) => {
                   const visibleEvents = cell.events.slice(0, 2);
@@ -613,7 +657,7 @@ export default function UnifiedCalendar({
                           <Link
                             key={entry.id}
                             href={entry.href}
-                            onClick={(event) => event.stopPropagation()}
+                            onClick={(event) => handleEventClick(entry, event)}
                             className={`block truncate rounded border-l-4 px-2 py-1 text-[11px] font-semibold md:text-xs ${typeClassName(entry.type)}`}
                             style={{ borderLeftColor: projectColorMap.get(entry.project) || "#6b6b6b" }}
                           >
@@ -645,6 +689,7 @@ export default function UnifiedCalendar({
                   <Link
                     key={`summary-selected-${entry.id}`}
                     href={entry.href}
+                    onClick={(event) => handleEventClick(entry, event)}
                     className="rounded-xl border border-border bg-card px-3 py-2 hover:bg-muted"
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -670,6 +715,14 @@ export default function UnifiedCalendar({
           </div>
         </>
       )}
+      {openEvent ? (
+        <EventDetailPopover
+          key={openEvent.event.id}
+          event={openEvent.event}
+          anchor={openEvent.anchor}
+          onClose={() => setOpenEvent(null)}
+        />
+      ) : null}
     </article>
   );
 }

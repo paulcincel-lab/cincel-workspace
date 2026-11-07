@@ -24,6 +24,12 @@ export type CalendarEvent = {
   phaseLabel: string;
   type: CalendarEventType;
   href: string;
+  /** People on the event; the detail popover falls back to `responsible`. */
+  attendees?: string[];
+  /** Where it happens, when the event stores one. */
+  location?: string | null;
+  /** Only when a Cutto URL is stored on the event (`AgendaItem.meetingUrl`). */
+  meetingUrl?: string | null;
 };
 
 export type CalendarFilters = {

@@ -31,21 +31,36 @@ export const STAFF_SIGN_IN_SCOPES = ["openid", "email", "profile"];
 export const DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 
 /** Incremental grants (§A.6.2), the `scope` query value of `/api/auth/google/start`. */
+export const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
+
+/**
+ * Incremental grants (§A.6.2), the `scope` (or `grant`) query value of
+ * `/api/auth/google/start`. A value may hold several space-separated Google
+ * scopes (`gmail`: read + compose, redesign BE §11.1).
+ */
 export const STAFF_OAUTH_EXTRA_SCOPES = {
   drive: DRIVE_READONLY_SCOPE,
   calendar: CALENDAR_SCOPE,
+  gmail: `${GMAIL_READONLY_SCOPE} ${GMAIL_COMPOSE_SCOPE}`,
 } as const;
 
 export type StaffOauthScope = keyof typeof STAFF_OAUTH_EXTRA_SCOPES;
 
 export function parseStaffOauthScope(value: unknown): StaffOauthScope | null {
-  return value === "drive" || value === "calendar" ? value : null;
+  return value === "drive" || value === "calendar" || value === "gmail" ? value : null;
 }
 
-/** Whether a space-separated granted scope string includes an incremental grant's scope. */
+/** The Google scopes an incremental grant asks for. */
+export function staffOauthGoogleScopes(wanted: StaffOauthScope): string[] {
+  return STAFF_OAUTH_EXTRA_SCOPES[wanted].split(" ");
+}
+
+/** Whether a space-separated granted scope string includes every Google scope of an incremental grant. */
 export function hasGrantedScope(scope: string | null | undefined, wanted: StaffOauthScope): boolean {
   if (!scope) return false;
-  return scope.split(/\s+/).includes(STAFF_OAUTH_EXTRA_SCOPES[wanted]);
+  const granted = scope.split(/\s+/);
+  return staffOauthGoogleScopes(wanted).every((s) => granted.includes(s));
 }
 
 export type StaffOauthConfig = {
@@ -225,7 +240,7 @@ export type StartStaffOauthOptions = {
  * The Google auth URL and the state cookie to set alongside the redirect.
  *
  * Sign-in asks for `openid email profile` with `hd`, `prompt=select_account`.
- * An incremental grant (`scope`) adds Drive or Calendar with `prompt=consent`
+ * An incremental grant (`scope`) adds Drive, Calendar or Gmail with `prompt=consent`
  * and `login_hint`. Both use `include_granted_scopes` so the stored scope
  * keeps earlier grants, and `access_type=offline` for a refresh token.
  */
@@ -240,7 +255,7 @@ export function startStaffOauth(
   const { codeVerifier, codeChallenge } = createPkcePair();
 
   const url = oauthClient(config).generateAuthUrl({
-    scope: scope ? [...STAFF_SIGN_IN_SCOPES, STAFF_OAUTH_EXTRA_SCOPES[scope]] : STAFF_SIGN_IN_SCOPES,
+    scope: scope ? [...STAFF_SIGN_IN_SCOPES, ...staffOauthGoogleScopes(scope)] : STAFF_SIGN_IN_SCOPES,
     access_type: "offline",
     include_granted_scopes: true,
     prompt: scope ? "consent" : "select_account",

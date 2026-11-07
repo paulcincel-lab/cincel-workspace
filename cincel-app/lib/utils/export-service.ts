@@ -163,3 +163,33 @@ export async function exportTableData<TRow>(request: ExportRequest<TRow>): Promi
 
   await exportToPdf(request);
 }
+
+// ── CSV (redesign BE §7.7, `/api/horario/export`) ──────────────────────────
+
+/** UTF-8 byte order mark, so spreadsheet apps read accents correctly. */
+export const CSV_BOM = "﻿";
+
+/** A cell starting with `=`, `+`, `-`, `@`, tab or CR is prefixed with `'` (formula injection). */
+export function escapeCsvFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
+/** One CSV cell: formula-escaped, quoted when it holds a comma, quote or line break. */
+export function csvCell(value: ExportValue): string {
+  const text =
+    value === null || value === undefined
+      ? ""
+      : value instanceof Date
+        ? Number.isNaN(value.getTime())
+          ? ""
+          : value.toISOString()
+        : String(value);
+  const escaped = escapeCsvFormula(text);
+  return /[",\r\n]/.test(escaped) ? `"${escaped.replace(/"/g, '""')}"` : escaped;
+}
+
+/** A CSV document: BOM, header line, one line per row, CRLF line endings. */
+export function buildCsv(header: string[], rows: ExportValue[][]): string {
+  const lines = [header, ...rows].map((row) => row.map(csvCell).join(","));
+  return `${CSV_BOM}${lines.join("\r\n")}\r\n`;
+}

@@ -1,15 +1,24 @@
 /**
  * Nav item "Ajustes" (/ajustes) of the new shell (redesign FE §3.1, §21.1; Phase 6).
- * `resolve` returns the item with its badge, or null while it stays hidden
- * (its `IMPLEMENTED` flag is false or its read action reports disabled / empty).
- *
- * Contract stub: hidden until Phase 6 implements it.
+ * `resolve` returns the item, or null while it stays hidden: `/ajustes` opens
+ * Apariencia, which reads and writes the viewer's preferences, so the item
+ * waits for `fetchMyPreferencesAction` / `updateMyPreferencesAction`
+ * (`IMPLEMENTED` in `lib/actions/preferences-actions.flags.ts`). Every staff
+ * member gets it; the Organización pages inside Ajustes have their own guards.
+ * The nav model is built only for the new shell, so the item never shows with
+ * the redesign flag off.
  */
+import { Settings } from "lucide-react";
+
+import { IMPLEMENTED } from "@/lib/actions/preferences-actions.flags";
 import type { NavItemSource } from "@/lib/ui/nav";
 
 export const ajustesNavItem: NavItemSource = {
   key: "ajustes",
   section: "footer",
   order: 10,
-  resolve: async () => null,
+  resolve: async () => {
+    if (!IMPLEMENTED.fetchMyPreferencesAction || !IMPLEMENTED.updateMyPreferencesAction) return null;
+    return { key: "ajustes", label: "Ajustes", href: "/ajustes", icon: Settings };
+  },
 };

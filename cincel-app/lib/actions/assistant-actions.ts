@@ -1,46 +1,126 @@
 "use server";
 
 import type { UIMessage } from "ai";
+import { revalidatePath } from "next/cache";
 
-import { notImplementedAction, stubDefault } from "@/lib/stubs";
+import { LEGACY_IMPORT_SOURCE, normalizeLegacyMessages, titleFromMessages } from "@/lib/assistant/legacy-import";
+import { requireCapabilityUser } from "@/lib/auth/session";
+import { db } from "@/lib/db/client";
+import * as assistantRepository from "@/lib/repositories/assistant-repository";
 import type { AssistantActionRecord, AssistantContext, AssistantThreadSummary } from "@/lib/types/redesign";
+import { parseInput } from "@/lib/validation/project-flow";
+import { AssistantActionsQuerySchema, LegacyAssistantMessagesSchema, UuidSchema } from "@/lib/validation/redesign";
 
 /**
  * Server-side assistant threads and the approval audit (redesign BE §7.9,
- * §8.10). Owner-only. The chat route `POST /api/asistente/chat` is separate.
+ * §8.10). Owner-only: every query is scoped to the session staff id, so
+ * another user's thread id reads as `NOT_FOUND`. None of these call the
+ * model. The chat route `POST /api/asistente/chat` is separate.
  */
+
+const ASSISTANT_PATH = "/asistente";
+
+async function sessionStaffId(): Promise<string> {
+  const user = await requireCapabilityUser();
+  return user.member.id;
+}
+
+/** A thread id that isn't a uuid can't exist: `NOT_FOUND`, never `INVALID`. */
+function threadIdOrNotFound(id: unknown): string {
+  const parsed = UuidSchema.safeParse(id);
+  if (!parsed.success) throw new Error("NOT_FOUND");
+  return parsed.data;
+}
 
 /** Live threads, newest first, max 50. */
 export async function fetchAssistantThreadsAction(): Promise<AssistantThreadSummary[]> {
-  return stubDefault<AssistantThreadSummary[]>([]);
+  const staffId = await sessionStaffId();
+  const rows = await assistantRepository.listLiveAssistantThreads(db, staffId, assistantRepository.ASSISTANT_THREADS_KEEP);
+  return rows.map((row) => ({ id: row.id, title: row.title, updatedAt: row.updatedAt.toISOString() }));
 }
 
-/** Errors: `NOT_FOUND` (the stub has no threads, so every id is not found). */
+/** The caller's live thread with its messages in order. Errors: `NOT_FOUND`. */
 export async function fetchAssistantThreadAction(id: string): Promise<{
   thread: { id: string; title: string; context: AssistantContext; updatedAt: string };
   messages: UIMessage[];
 }> {
-  void id;
-  throw new Error("NOT_FOUND");
+  const staffId = await sessionStaffId();
+  const threadId = threadIdOrNotFound(id);
+  const thread = await assistantRepository.findOwnedAssistantThread(db, staffId, threadId);
+  if (!thread) throw new Error("NOT_FOUND");
+  const rows = await assistantRepository.listAssistantThreadMessages(db, thread.id);
+  const messages: UIMessage[] = [];
+  for (const row of rows) {
+    if (row.role === "tool") continue;
+    messages.push({ id: row.id, role: row.role, parts: row.parts as UIMessage["parts"] });
+  }
+  return {
+    thread: {
+      id: thread.id,
+      title: thread.title,
+      context: thread.context ?? { route: ASSISTANT_PATH },
+      updatedAt: thread.updatedAt.toISOString(),
+    },
+    messages,
+  };
 }
 
 /** Soft delete. Errors: `NOT_FOUND`. Revalidates `/asistente`. */
 export async function deleteAssistantThreadAction(id: string): Promise<void> {
-  return notImplementedAction("deleteAssistantThreadAction", id);
+  const staffId = await sessionStaffId();
+  const threadId = threadIdOrNotFound(id);
+  const deleted = await assistantRepository.softDeleteOwnedAssistantThread(db, staffId, threadId);
+  if (!deleted) throw new Error("NOT_FOUND");
+  revalidatePath(ASSISTANT_PATH);
 }
 
 /**
  * Store the legacy localStorage thread (`cincel.asistente.thread.v1`, ≤ 200
- * messages) as a new thread; no model call. Errors: `INVALID`. Revalidates `/asistente`.
+ * messages) as a new thread; no model call. Tool parts are kept for display
+ * only (`lib/assistant/legacy-import.ts`). Errors: `INVALID`. Revalidates `/asistente`.
  */
 export async function importLegacyAssistantThreadAction(messages: UIMessage[]): Promise<{ id: string }> {
-  return notImplementedAction("importLegacyAssistantThreadAction", messages);
+  const staffId = await sessionStaffId();
+  const parsed = parseInput(LegacyAssistantMessagesSchema, messages);
+  const rows = normalizeLegacyMessages(parsed);
+  if (rows.length === 0) throw new Error("INVALID: messages");
+  const created = await assistantRepository.createAssistantThreadWithMessages(db, staffId, {
+    title: titleFromMessages(rows),
+    context: { route: ASSISTANT_PATH },
+    importedFrom: LEGACY_IMPORT_SOURCE,
+    messages: rows,
+  });
+  revalidatePath(ASSISTANT_PATH);
+  return { id: created.id };
 }
 
-/** Audit of approval-gated tool calls, newest first, page 30. Errors: `NOT_FOUND` (thread). */
+/**
+ * Audit of approval-gated tool calls, newest first, page 30. `cursor` is the
+ * id of the last record of the previous page. Errors: `NOT_FOUND` (thread),
+ * `INVALID` (input).
+ */
 export async function fetchAssistantActionsAction(input: {
   threadId?: string;
   cursor?: string;
 }): Promise<AssistantActionRecord[]> {
-  return stubDefault<AssistantActionRecord[]>([], input);
+  const staffId = await sessionStaffId();
+  const parsed = parseInput(AssistantActionsQuerySchema, input ?? {});
+  let cursorId: string | undefined;
+  if (parsed.cursor) {
+    const cursor = UuidSchema.safeParse(parsed.cursor);
+    if (!cursor.success) throw new Error("INVALID: cursor");
+    cursorId = cursor.data;
+  }
+  if (parsed.threadId) {
+    // The audit outlives purged threads, so a soft-deleted thread of the caller still reads.
+    const thread = await assistantRepository.findOwnedAssistantThread(db, staffId, parsed.threadId, {
+      includeDeleted: true,
+    });
+    if (!thread) throw new Error("NOT_FOUND");
+  }
+  return assistantRepository.listAssistantActions(db, staffId, {
+    threadId: parsed.threadId,
+    cursorId,
+    limit: assistantRepository.ASSISTANT_ACTIONS_PAGE,
+  });
 }

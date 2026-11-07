@@ -42,14 +42,28 @@ export async function seedAuth(_page: Page): Promise<void> {
 
 /** Logs in as the seeded admin user. */
 export async function loginAsAdmin(page: Page, baseUrl: string): Promise<void> {
+  await loginAs(page, baseUrl, ADMIN_EMAIL, e2eAdminPassword());
+}
+
+/** The seeded admin's email (E2E_ADMIN_EMAIL, default paul@cincel.mx). */
+export function e2eAdminEmail(): string {
+  return ADMIN_EMAIL;
+}
+
+/**
+ * Logs in through the real login form. Waits for the landing page of either
+ * shell: the legacy routes, or the redesign routes when the user's
+ * `redesign_enabled` preference is on.
+ */
+export async function loginAs(page: Page, baseUrl: string, email: string, password: string): Promise<void> {
   // "load" (not "domcontentloaded") so bundles are downloaded and React has
   // hydrated before we fill the controlled inputs.
   await page.goto(`${baseUrl}/login`, { waitUntil: "load" });
-  await page.getByLabel("Correo institucional").fill(ADMIN_EMAIL);
-  await page.locator('input[type="password"]').first().fill(e2eAdminPassword());
+  await page.getByLabel("Correo institucional").fill(email);
+  await page.locator('input[type="password"]').first().fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await page.waitForURL(
-    /\/dashboard|\/directorio|\/proyectos|\/tareas|\/equipo|\/change-password/,
+    /\/dashboard|\/directorio|\/proyectos|\/tareas|\/equipo|\/change-password|\/inicio|\/mi-espacio|\/personas|\/biblioteca|\/mis-tareas|\/tablero/,
     { timeout: 20_000 }
   );
 }

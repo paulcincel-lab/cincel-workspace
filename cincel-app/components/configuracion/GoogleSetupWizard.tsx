@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, TriangleAlert } from "lucide-react";
 
 import { GoogleGroupMappings, GROUP_MAPPING_ERROR_MESSAGES } from "@/components/configuracion/GoogleGroupMappings";
+import { WizardStepper } from "@/components/configuracion/WizardStepper";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
@@ -37,6 +38,11 @@ export type GoogleSetupWizardProps = {
   health: GoogleHealth | null;
   mappings: GroupMapping[];
   positions: { id: string; name: string }[];
+  /**
+   * The caller's resolved redesign flag (`getResolvedAppearance().redesignEnabled`, redesign FE §2.3). Off (the
+   * default) renders today's wizard unchanged; on renders the restyled stepper and card (FE §3.10).
+   */
+  redesign?: boolean;
 };
 
 /** Stepper-like header: one badge per step, the current one marked with `aria-current`. */
@@ -196,7 +202,7 @@ const STEP_DESCRIPTIONS: Record<GoogleSetupStepId, string> = {
  * First-login wizard of the bootstrap admin (#671): only sets up the Google groups so others can sign in with
  * Google. "Omitir por ahora" and finishing both mark it completed for this staff member.
  */
-export function GoogleSetupWizard({ health, mappings, positions }: GoogleSetupWizardProps) {
+export function GoogleSetupWizard({ health, mappings, positions, redesign = false }: GoogleSetupWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<GoogleSetupStepId>(() => initialStep({ health, mappings }));
   const [isPending, startTransition] = useTransition();
@@ -226,14 +232,8 @@ export function GoogleSetupWizard({ health, mappings, positions }: GoogleSetupWi
     setStep(target);
   }
 
-  return (
-    <Card className="mx-auto w-full max-w-3xl">
-      <CardHeader>
-        <StepHeader current={step} />
-        <CardTitle className="pt-2">{current.label}</CardTitle>
-        <CardDescription>{STEP_DESCRIPTIONS[step]}</CardDescription>
-      </CardHeader>
-
+  const body = (
+    <>
       <CardContent className="space-y-4">
         {step === "review" ? <ReviewStep health={health} /> : null}
         {step === "admin_group" ? <AdminGroupStep mappings={mappings} domain={domain} /> : null}
@@ -281,6 +281,33 @@ export function GoogleSetupWizard({ health, mappings, positions }: GoogleSetupWi
           )}
         </div>
       </CardFooter>
+    </>
+  );
+
+  if (redesign) {
+    // Redesign (FE §3.10, frame `BienvenidaGoogle`): the stepper sits above the wizard card.
+    return (
+      <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6" data-wizard="google">
+        <WizardStepper steps={GOOGLE_SETUP_STEPS} current={step} />
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle className="text-xl font-semibold">{current.label}</CardTitle>
+            <CardDescription>{STEP_DESCRIPTIONS[step]}</CardDescription>
+          </CardHeader>
+          {body}
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <Card className="mx-auto w-full max-w-3xl">
+      <CardHeader>
+        <StepHeader current={step} />
+        <CardTitle className="pt-2">{current.label}</CardTitle>
+        <CardDescription>{STEP_DESCRIPTIONS[step]}</CardDescription>
+      </CardHeader>
+      {body}
     </Card>
   );
 }

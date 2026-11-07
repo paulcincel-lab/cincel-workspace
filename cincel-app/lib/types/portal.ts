@@ -34,6 +34,16 @@ export type PortalScheduleDTO = {
   sections: PortalScheduleSectionDTO[];
 } | null;
 
+/**
+ * One tramo of the project as the client sees it (FE §3.11 `PhaseStepper`): the tramo catalog in order, with
+ * the project's progress through it. Only the key, the name and the state; no ids, dates or staff.
+ */
+export type PortalTramoDTO = {
+  key: string;
+  name: string;
+  state: "completado" | "en_curso" | "por_iniciar";
+};
+
 /** One file the client sent (Mis envíos), from `portal_file_events` (`upload`). */
 export type PortalUploadDTO = { id: string; fileName: string; sizeBytes: number | null; at: string };
 

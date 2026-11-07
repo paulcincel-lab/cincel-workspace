@@ -16,6 +16,10 @@ interface MemberProfileModalProps {
  * Read-only personal profile overlay. PII fields load on demand from the
  * authenticated /api/team/sensitive/[id] route — they never ship in the bulk
  * staff list.
+ *
+ * Legacy (flag off) only: with the redesign on, this content is replaced by
+ * `/personas/equipo/[id]` (`components/personas/PersonaDetail`); deleted in
+ * the cleanup phase.
  */
 export function MemberProfileModal({ member, onClose }: MemberProfileModalProps) {
   const [sensitive, setSensitive] = useState<StaffSensitiveInfo | null>(null);

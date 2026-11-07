@@ -52,7 +52,7 @@ test.describe("Asistente — live LLM", () => {
     );
     await page.getByRole("button", { name: /Enviar|Pensando|Respondiendo/ }).click();
 
-    // render_chart → <AssistantChartMessage> → an <svg class="recharts-surface">
+    // render_chart → <AssistantChartMessage> → DistributionWidget (chart.tsx donut) → an <svg class="recharts-surface">
     await expect(page.locator("svg.recharts-surface").first()).toBeVisible({
       timeout: 120_000,
     });

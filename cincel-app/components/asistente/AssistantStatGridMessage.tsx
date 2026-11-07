@@ -1,40 +1,21 @@
 "use client";
 
-import { Badge } from "@/components/ui/shadcn/badge";
-import { TONE_BADGE_CLASSES, type WidgetTone } from "./tone";
+import { KpiWidget } from "@/components/widgets/KpiWidget";
+import { WidgetCard } from "@/components/widgets/WidgetCard";
 
-type Stat = { label: string; value: string; badge?: { label: string; tone: WidgetTone } };
+import { toKpiItems, type AssistantStat } from "./widget-adapters";
 
 type Props = {
   title?: string;
-  stats: Stat[];
+  stats: AssistantStat[];
 };
 
-/** Renders `render_stat_grid` output — several comparable metrics at a glance. */
+/**
+ * `render_stat_grid` (redesign FE §3.9, §4.11.1): several comparable metrics
+ * as a library `KpiWidget` (tiles, number grid or table per the user's style),
+ * inside a `WidgetCard` when the tool sends a title.
+ */
 export function AssistantStatGridMessage({ title, stats }: Props) {
-  return (
-    <div className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      {title ? (
-        <div className="border-b border-border px-4 py-3">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
-        </div>
-      ) : null}
-      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
-        {stats.map((stat) => (
-          <div key={stat.label} className="flex flex-col gap-1 bg-card p-3">
-            <p className="text-xs text-muted-foreground">{stat.label}</p>
-            <p className="text-base font-semibold text-foreground">{stat.value}</p>
-            {stat.badge ? (
-              <Badge
-                variant="outline"
-                className={`w-fit ${TONE_BADGE_CLASSES[stat.badge.tone]}`}
-              >
-                {stat.badge.label}
-              </Badge>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const kpis = <KpiWidget items={toKpiItems(stats)} />;
+  return title ? <WidgetCard title={title}>{kpis}</WidgetCard> : kpis;
 }

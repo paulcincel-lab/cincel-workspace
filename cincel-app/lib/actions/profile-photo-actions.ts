@@ -1,6 +1,10 @@
 "use server";
 
-import { notImplementedAction } from "@/lib/stubs";
+import { revalidatePath } from "next/cache";
+
+import { requireCapabilityUser } from "@/lib/auth/session";
+import { db } from "@/lib/db/client";
+import { deleteStaffPhoto } from "@/lib/repositories/preferences-repository";
 
 /**
  * Profile photo (redesign BE §7.2). Upload and read are route handlers
@@ -10,5 +14,7 @@ import { notImplementedAction } from "@/lib/stubs";
 
 /** Delete the caller's photo. Auth: staff. Revalidates `/` (layout). */
 export async function removeMyPhotoAction(): Promise<void> {
-  return notImplementedAction("removeMyPhotoAction");
+  const user = await requireCapabilityUser();
+  await deleteStaffPhoto(db, user.member.id);
+  revalidatePath("/", "layout");
 }

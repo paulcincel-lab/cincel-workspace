@@ -4,10 +4,18 @@ import { and, asc, eq, isNull, ne, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
-import { projectPortalAccess, projects, projectSchedules, scheduleTasks, staff } from "@/lib/db/schema";
-import type { PortalProjectDTO, PortalScheduleDTO } from "@/lib/types/portal";
+import {
+  projectPortalAccess,
+  projects,
+  projectSchedules,
+  projectStages,
+  scheduleTasks,
+  staff,
+  workflows,
+} from "@/lib/db/schema";
+import type { PortalProjectDTO, PortalScheduleDTO, PortalTramoDTO } from "@/lib/types/portal";
 
-import { toPortalProjectDTO, toPortalScheduleDTO } from "./dto";
+import { toPortalProjectDTO, toPortalScheduleDTO, toPortalTramosDTO } from "./dto";
 
 /**
  * The portal's read layer (BE §B.4.3). Portal pages and routes read data only
@@ -98,4 +106,35 @@ export async function getPortalSchedule(portalUserId: string, projectId: string)
     .where(eq(scheduleTasks.scheduleId, schedule.id))
     .orderBy(asc(scheduleTasks.sortOrder));
   return toPortalScheduleDTO(tasks);
+}
+
+/**
+ * The tramo catalog with the project's state in each (FE §3.11 `PhaseStepper`), or an empty list when the
+ * portal user has no access to the project. Reads only the tramo key, name, order and the project's stage
+ * dates; nothing about tasks or staff.
+ */
+export async function getPortalProjectTramos(portalUserId: string, projectId: string): Promise<PortalTramoDTO[]> {
+  const [project] = await db
+    .select({ currentWorkflowId: projects.currentWorkflowId })
+    .from(projectPortalAccess)
+    .innerJoin(projects, eq(projects.id, projectPortalAccess.projectId))
+    .where(and(visibleTo(portalUserId), eq(projects.id, projectId)))
+    .limit(1);
+  if (!project) return [];
+
+  const rows = await db
+    .select({
+      id: workflows.id,
+      key: workflows.key,
+      name: workflows.name,
+      active: workflows.active,
+      sortOrder: workflows.sortOrder,
+      startedAt: projectStages.startedAt,
+      closedAt: projectStages.closedAt,
+    })
+    .from(workflows)
+    .leftJoin(projectStages, and(eq(projectStages.workflowId, workflows.id), eq(projectStages.projectId, projectId)))
+    .where(isNull(workflows.deletedAt))
+    .orderBy(asc(workflows.sortOrder), asc(workflows.name));
+  return toPortalTramosDTO(rows, project.currentWorkflowId);
 }

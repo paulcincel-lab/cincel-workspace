@@ -1,15 +1,21 @@
 /**
  * Nav item "Inicio" (/inicio) of the new shell (redesign FE §3.1, §21.1; Phase 3).
- * `resolve` returns the item with its badge, or null while it stays hidden
- * (its `IMPLEMENTED` flag is false or its read action reports disabled / empty).
- *
- * Contract stub: hidden until Phase 3 implements it.
+ * `resolve` returns the item, or null while it stays hidden: until
+ * `fetchInicioAction` is implemented (`IMPLEMENTED` in
+ * `lib/actions/dashboard-actions.flags.ts`). The nav model is built only for
+ * the new shell, so the item never shows with the redesign flag off.
  */
+import { House } from "lucide-react";
+
+import { IMPLEMENTED } from "@/lib/actions/dashboard-actions.flags";
 import type { NavItemSource } from "@/lib/ui/nav";
 
 export const inicioNavItem: NavItemSource = {
   key: "inicio",
   section: "items",
   order: 10,
-  resolve: async () => null,
+  resolve: async () => {
+    if (!IMPLEMENTED.fetchInicioAction) return null;
+    return { key: "inicio", label: "Inicio", href: "/inicio", icon: House };
+  },
 };

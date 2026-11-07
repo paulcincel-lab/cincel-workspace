@@ -1,0 +1,413 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { PageHeader } from "@/components/v2/layout/PageHeader";
+import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
+import { Badge } from "@/components/ui/shadcn/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
+import TaskDrawer from "@/components/tareas/TaskDrawer";
+import { TaskMemberProjectFilters, matchesMemberFilter, matchesProjectFilter } from "@/components/tareas/TaskMemberProjectFilters";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { formatDateDMY } from "@/lib/utils/date";
+import { tramoPhaseLabel } from "@/lib/tasks/labels";
+import { parseStatusValue, statusSelectValue } from "@/lib/tasks/status-options";
+import { boardColumns, flattenBoard, groupTasksByColumn } from "@/components/tablero/board-model";
+import { useBoardDrag } from "@/components/tablero/useBoardDrag";
+import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
+import {
+  fetchBoardAction,
+  fetchTaskAction,
+  setTaskStatusAction,
+  setTaskCustomStatusAction,
+  addTaskCommentAction,
+  addTaskAttachmentAction,
+  addTaskLinkAction,
+  removeTaskLinkAction,
+  addChecklistItemAction,
+  updateChecklistItemAction,
+  removeChecklistItemAction,
+} from "@/lib/actions/tasks-actions";
+import type {
+  TaskChecklistItem,
+  TaskDetail,
+  TaskListItem,
+  TaskPriority,
+  TaskStatus,
+  TaskStatusOption,
+  TaskLinkInput,
+  WorkflowDetail,
+  WorkflowRef,
+} from "@/lib/types/core";
+
+// The board query itself stays cheap even with thousands of tasks (see
+// docs/phases/rebuild-phase-8-hardening.md profiling notes), but rendering
+// every card as DOM at once does not: a column can hold hundreds of tasks
+// with no per-view scoping. Cap the initial render per column and let the
+// user page in more, rather than adding a virtualization dependency for a
+// board that is usually a few dozen cards deep.
+const PAGE_SIZE = 50;
+
+const PRIORITY_LABEL: Record<TaskPriority, string> = {
+  alta: "Alta",
+  media: "Media",
+  baja: "Baja",
+};
+
+const PRIORITY_VARIANT: Record<TaskPriority, "destructive" | "secondary" | "outline"> = {
+  alta: "destructive",
+  media: "secondary",
+  baja: "outline",
+};
+
+interface TableroClientProps {
+  initialBoard: Record<TaskStatus, TaskListItem[]>;
+  customStatuses: TaskStatusOption[];
+  workflows: WorkflowDetail[];
+  /** Current tramo per project id, for the "Tramo actual del proyecto" line under "Todos". */
+  projectTramos?: Record<string, WorkflowRef | null>;
+}
+
+export function TableroClient({ initialBoard, customStatuses, workflows, projectTramos = {} }: TableroClientProps) {
+  const [boardTasks, setBoardTasks] = useState<TaskListItem[]>(() => flattenBoard(initialBoard));
+  const [visibleCount, setVisibleCount] = useState<Record<string, number>>({});
+  const [workflowFilter, setWorkflowFilter] = useState<string>("");
+  const [projectId, setProjectId] = useState("");
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
+
+  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const capabilities = useMemo(() => resolveActivitiesCapabilities(authenticatedUser), [authenticatedUser]);
+  const viewerId = authenticatedUser?.member.id || "";
+  // Open on the viewer's own tasks; clearing the member filter shows everyone's.
+  const [memberIds, setMemberIds] = useState<string[]>(() => (viewerId ? [viewerId] : []));
+
+  // One tab per active tramo, in catalog order.
+  const tramoTabs = useMemo(
+    () => workflows.filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder),
+    [workflows]
+  );
+
+  const columns = useMemo(() => boardColumns(customStatuses), [customStatuses]);
+
+  // Each task sits in its custom status's column when it has one, else in its built-in status's.
+  const filteredBoard = useMemo(
+    () =>
+      groupTasksByColumn(
+        boardTasks.filter((t) => matchesMemberFilter(t, memberIds) && matchesProjectFilter(t, projectId)),
+        columns
+      ),
+    [boardTasks, columns, memberIds, projectId]
+  );
+
+  const refresh = useCallback(async () => {
+    try {
+      const rows = await fetchBoardAction(workflowFilter ? { workflowId: workflowFilter } : {});
+      setBoardTasks(flattenBoard(rows));
+      setVisibleCount({});
+    } catch (err) {
+      console.error(err);
+    }
+  }, [workflowFilter]);
+
+  useEffect(() => {
+    // Re-fetch the board whenever the tramo filter changes — refresh()
+    // is also reused after a drag-and-drop status change, so it can't be
+    // inlined here without duplicating the fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!selectedTaskId) return;
+    let cancelled = false;
+    fetchTaskAction(selectedTaskId)
+      .then((detail) => {
+        if (!cancelled) setSelectedTaskDetail(detail);
+      })
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTaskId]);
+
+  const activeTaskDetail = selectedTaskId && selectedTaskDetail?.id === selectedTaskId ? selectedTaskDetail : null;
+
+  function applyDetailUpdate(updated: TaskDetail) {
+    setBoardTasks((cur) => cur.map((t) => (t.id === updated.id ? updated : t)));
+    setSelectedTaskDetail((cur) => (cur && cur.id === updated.id ? updated : cur));
+  }
+
+  function canDragTask(task: TaskListItem) {
+    return canChangeActivityStatus({
+      capabilities,
+      task: { manager: task.manager, support: task.support },
+      viewerId,
+    });
+  }
+
+  // The drag-and-drop flow must never move a card locally before the server
+  // confirms the status change — only after setTaskStatusAction resolves do
+  // we update `board`, so the UI never shows a status the server hasn't
+  // accepted (see docs/phases/rebuild-phase-6-tasks.md risk note).
+  async function handleDrop(taskId: string, columnKey: string) {
+    const task = boardTasks.find((t) => t.id === taskId);
+    if (!task || statusSelectValue(task) === columnKey || !canDragTask(task)) return;
+
+    try {
+      const target = parseStatusValue(columnKey);
+      const updated =
+        target.kind === "custom"
+          ? await setTaskCustomStatusAction(taskId, target.id)
+          : await setTaskStatusAction(taskId, target.status);
+      applyDetailUpdate(updated);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : "No se pudo cambiar el estatus de la tarea.";
+      window.alert(message.startsWith("FORBIDDEN:") ? "No tienes permiso para realizar esta acción." : message);
+      await refresh();
+    }
+  }
+
+  const { draggingTaskId, dragOverKey: dragOverStatus, cardProps, columnProps } = useBoardDrag<TaskListItem>({
+    canDrag: canDragTask,
+    onDrop: handleDrop,
+  });
+
+  async function reloadAfterDependencyChange() {
+    if (!selectedTaskId) return;
+    try {
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      await refresh();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function addComment(comment: string) {
+    if (!selectedTaskId) return;
+    try {
+      await addTaskCommentAction(selectedTaskId, comment);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function addLink(input: TaskLinkInput) {
+    if (!selectedTaskId) return;
+    try {
+      await addTaskLinkAction(selectedTaskId, input);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "No se pudo agregar el enlace.");
+    }
+  }
+
+  async function removeLink(linkId: string) {
+    if (!selectedTaskId) return;
+    try {
+      await removeTaskLinkAction(linkId);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function addAttachment(file: File, checklistItemId?: string) {
+    if (!selectedTaskId) return;
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      if (checklistItemId) formData.set("checklistItemId", checklistItemId);
+      await addTaskAttachmentAction(selectedTaskId, formData);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "No se pudo adjuntar el archivo.");
+    }
+  }
+
+  async function addChecklistItem(title: string) {
+    if (!selectedTaskId) return;
+    try {
+      await addChecklistItemAction(selectedTaskId, title);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function toggleChecklistItem(item: TaskChecklistItem) {
+    if (!selectedTaskId) return;
+    try {
+      await updateChecklistItemAction(item.id, { completed: !item.completed });
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function removeChecklistItem(item: TaskChecklistItem) {
+    if (!selectedTaskId) return;
+    try {
+      await removeChecklistItemAction(item.id);
+      const detail = await fetchTaskAction(selectedTaskId);
+      setSelectedTaskDetail(detail);
+      if (detail) applyDetailUpdate(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title="Tablero"
+        description="Arrastra una tarjeta entre columnas para cambiar su estatus."
+        actions={
+          <Tabs value={workflowFilter || "__all__"} onValueChange={(v) => setWorkflowFilter(v === "__all__" ? "" : (v as string))}>
+            <TabsList>
+              <TabsTrigger value="__all__">Todos</TabsTrigger>
+              {tramoTabs.map((w) => (
+                <TabsTrigger key={w.id} value={w.id}>
+                  {w.name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        }
+      />
+
+      <div className="mb-4">
+        <TaskMemberProjectFilters
+          tasks={boardTasks}
+          memberIds={memberIds}
+          onMemberIdsChange={setMemberIds}
+          projectId={projectId}
+          onProjectIdChange={setProjectId}
+          extraMembers={authenticatedUser ? [{ id: viewerId, name: authenticatedUser.member.name }] : []}
+        />
+      </div>
+
+      {/* Columns share the width and shrink to 220px; past that the board (not the page) scrolls sideways. */}
+      <div data-testid="tablero-board" className="flex w-full min-w-0 gap-4 overflow-x-auto pb-2">
+        {columns.map(({ key: status, label }) => {
+          const allTasks = filteredBoard[status] ?? [];
+          const visible = visibleCount[status] ?? PAGE_SIZE;
+          const tasks = allTasks.slice(0, visible);
+          const remaining = allTasks.length - tasks.length;
+          const isDragOver = dragOverStatus === status;
+          return (
+            <div
+              key={status}
+              role="group"
+              aria-label={label}
+              {...columnProps(status)}
+              className={`flex min-h-[200px] min-w-[220px] flex-1 basis-0 flex-col gap-2 rounded-lg border p-3 transition-colors ${
+                isDragOver ? "border-primary bg-muted" : "border-border bg-card"
+              }`}
+            >
+              <div className="mb-1 flex items-center justify-between">
+                <h2 className="text-sm font-semibold">{label}</h2>
+                <span className="text-xs text-muted-foreground">{allTasks.length}</span>
+              </div>
+
+              {tasks.length === 0 ? (
+                <p className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                  Sin tareas
+                </p>
+              ) : (
+                tasks.map((task) => {
+                  const drag = cardProps(task);
+                  const projectTramo = projectTramos[task.projectId] ?? null;
+                  const showProjectTramo =
+                    !workflowFilter && !!task.workflow && !!projectTramo && projectTramo.id !== task.workflow.id;
+                  return (
+                    <div
+                      key={task.id}
+                      {...drag}
+                      onClick={() => setSelectedTaskId(task.id)}
+                      className={`cursor-pointer rounded-md border border-border bg-card p-3 text-sm shadow-sm transition-opacity hover:border-primary ${
+                        draggingTaskId === task.id ? "opacity-50" : ""
+                      } ${drag.draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+                    >
+                      <p className="font-medium">{task.title}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{task.project.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{tramoPhaseLabel(task)}</p>
+                      {showProjectTramo ? (
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          Tramo actual del proyecto: {projectTramo?.name}
+                        </p>
+                      ) : null}
+
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        {task.manager ? (
+                          <PersonAvatar name={task.manager.name} size="sm" />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Sin responsable</span>
+                        )}
+                        <Badge variant={PRIORITY_VARIANT[task.priority]}>{PRIORITY_LABEL[task.priority]}</Badge>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                        {task.commitmentDate ? <span>Compromiso: {formatDateDMY(task.commitmentDate)}</span> : null}
+                        {task.deliveryDate ? <span>Entrega: {formatDateDMY(task.deliveryDate)}</span> : null}
+                      </div>
+
+                      {task.checklist.total > 0 ? (
+                        <div className="mt-1.5 text-[11px] text-muted-foreground">
+                          <ChecklistProgressCell total={task.checklist.total} completed={task.checklist.completed} />
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })
+              )}
+
+              {remaining > 0 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVisibleCount((cur) => ({ ...cur, [status]: (cur[status] ?? PAGE_SIZE) + PAGE_SIZE }))
+                  }
+                  className="rounded-md border border-dashed border-border p-2 text-center text-xs text-muted-foreground hover:border-primary hover:text-foreground"
+                >
+                  Cargar más ({remaining})
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      <TaskDrawer
+        open={selectedTaskId !== null}
+        task={activeTaskDetail}
+        onClose={() => setSelectedTaskId(null)}
+        onOpenTask={setSelectedTaskId}
+        onDependenciesChange={() => void reloadAfterDependencyChange()}
+        onAddComment={(comment) => void addComment(comment)}
+        onAddAttachment={(file, checklistItemId) => void addAttachment(file, checklistItemId)}
+        onAddLink={(input) => void addLink(input)}
+        onRemoveLink={(id) => void removeLink(id)}
+        onAddChecklistItem={(title) => void addChecklistItem(title)}
+        onToggleChecklistItem={(item) => void toggleChecklistItem(item)}
+        onRemoveChecklistItem={(item) => void removeChecklistItem(item)}
+      />
+    </div>
+  );
+}
