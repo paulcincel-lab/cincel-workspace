@@ -115,8 +115,9 @@ async function createUserTaskActionImpl(input: UserTaskInput): Promise<TaskDetai
   }
   const row = await tasksRepository.createUserTask(input, user.member.id);
   revalidateTareas(input.projectId);
-  const traceId = await notifyTraceId();
-  after(() => notifyTaskAssigned({ task: row, managerId: row.managerId, actorId: user.member.id, traceId }));
+  // Request-scoped values (actor, trace id) are read here; `after()` gets plain values only (#932).
+  const assigned = { task: row, managerId: row.managerId, actorId: user.member.id, traceId: await notifyTraceId() };
+  after(() => notifyTaskAssigned(assigned));
   return scopeTaskDto(row, viewerScopeOf(user));
 }
 
@@ -217,8 +218,9 @@ async function assignTaskActionImpl(id: string, managerId: string | null): Promi
   }
   const row = await tasksRepository.assignTask(id, managerId, user.member.id);
   revalidateTareas(row.projectId);
-  const traceId = await notifyTraceId();
-  after(() => notifyTaskAssigned({ task: row, managerId: row.managerId, actorId: user.member.id, traceId }));
+  // Request-scoped values (actor, trace id) are read here; `after()` gets plain values only (#932).
+  const assigned = { task: row, managerId: row.managerId, actorId: user.member.id, traceId: await notifyTraceId() };
+  after(() => notifyTaskAssigned(assigned));
   return scopeTaskDto(row, viewer);
 }
 
@@ -359,10 +361,15 @@ async function addTaskCommentActionImpl(taskId: string, comment: string): Promis
   const { user } = await requireTaskWriter(taskId);
   const row = await tasksRepository.addTaskComment(taskId, comment, user.member.id);
   revalidateTareas();
-  const traceId = await notifyTraceId();
-  after(() =>
-    notifyTaskCommented({ taskId, eventId: row.id, comment: row.comment ?? comment, actorId: user.member.id, traceId })
-  );
+  // Request-scoped values (actor, trace id) are read here; `after()` gets plain values only (#932).
+  const commented = {
+    taskId,
+    eventId: row.id,
+    comment: row.comment ?? comment,
+    actorId: user.member.id,
+    traceId: await notifyTraceId(),
+  };
+  after(() => notifyTaskCommented(commented));
   return row;
 }
 

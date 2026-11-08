@@ -31,11 +31,18 @@ export const cssMock = {};
 
 /** What `getResolvedAppearance` returns; tests set it. */
 export const appearanceState: { value: ResolvedAppearance | null } = { value: null };
+/** The org's `allowUserOverride` that `getStoredOrgAppearance` returns; tests set it. */
+export const orgPolicyState = { allowUserOverride: true };
 export const preferencesServerMock = {
   getResolvedAppearance: vi.fn(async () => {
     if (!appearanceState.value) throw new Error("appearanceState.value not set");
     return appearanceState.value;
   }),
+  getStoredOrgAppearance: vi.fn(async () => ({
+    ...THEME_PRESETS.azul,
+    allowUserOverride: orgPolicyState.allowUserOverride,
+    v: 1,
+  })),
 };
 
 export const preferencesActionsMock = {

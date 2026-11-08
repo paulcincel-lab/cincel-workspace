@@ -56,6 +56,10 @@ async function requestTraceId(): Promise<string> {
  * Schedules the closing hook in `after()` for each distinct (project, tramo)
  * pair of the given tasks, once the response is sent. Tasks without a tramo
  * (admin tasks, legacy rows) have no stage to close and are skipped.
+ *
+ * Everything request-scoped (the trace id from `headers()`, the actor) is read
+ * here, before `after()`: the callback only gets plain values and never calls
+ * `cookies()` / `headers()` (#932).
  */
 export async function scheduleTaskClosingHook(
   tasks: ClosingHookTask | ClosingHookTask[],

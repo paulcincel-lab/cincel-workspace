@@ -1,6 +1,6 @@
 name: cincel-app CI
 
-# Checks for pull requests: lint + build and unit tests. Playwright e2e runs
+# Checks for pull requests: lint + build (with a clean build log) and unit tests. Playwright e2e runs
 # locally (npm run test:e2e), not on the runners.
 # Images are built and published by cincel-app-docker.yml on push to main.
 on:
@@ -33,8 +33,19 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # The build must never reach a database: DATABASE_URL points at a closed
+      # local port, so any read during prerender logs ECONNREFUSED. The log is
+      # then checked for errors, DB connections and deprecations (#930);
+      # accepted notices live in scripts/build-log-allowlist.json.
       - name: Build
-        run: npm run build
+        env:
+          DATABASE_URL: postgres://build:build@127.0.0.1:9/build_unreachable
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee next-build.log
+
+      - name: Check the build log
+        run: node scripts/check-build-log.mjs next-build.log
 
   unit-tests:
     needs: verify

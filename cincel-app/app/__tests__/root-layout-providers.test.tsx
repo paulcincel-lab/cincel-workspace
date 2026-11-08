@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { appearanceFor, appearanceState } from "./root-layout-mocks";
+import { appearanceFor, appearanceState, orgPolicyState } from "./root-layout-mocks";
 
 vi.mock("next/font/google", async () => (await import("./root-layout-mocks")).fontMock);
 vi.mock("@/components/auth/AppRouteGuard", async () => (await import("./root-layout-mocks")).passthroughDefaultMock);
@@ -18,8 +18,20 @@ vi.mock("@/components/providers/QueryProvider", () => ({
   default: ({ children }: { children: ReactNode }) => <div data-testid="query-provider">{children}</div>,
 }));
 vi.mock("@/lib/stores/appearance-store", () => ({
-  AppearanceStoreProvider: ({ initial, children }: { initial: { theme: string; mode: string }; children: ReactNode }) => (
-    <div data-testid="appearance-provider" data-seed={`${initial.theme}/${initial.mode}`}>
+  AppearanceStoreProvider: ({
+    initial,
+    fixedByOrg,
+    children,
+  }: {
+    initial: { theme: string; mode: string };
+    fixedByOrg?: boolean;
+    children: ReactNode;
+  }) => (
+    <div
+      data-testid="appearance-provider"
+      data-seed={`${initial.theme}/${initial.mode}`}
+      data-fixed-by-org={String(fixedByOrg)}
+    >
       {children}
     </div>
   ),
@@ -48,5 +60,21 @@ describe("root layout providers", () => {
     expect(query[0].querySelector('[data-testid="appearance-provider"]')?.getAttribute("data-seed")).toBe("azul/light");
     expect(query[0].querySelector('[data-testid="toaster"]')).not.toBeNull();
     expect(doc.querySelectorAll('[data-testid="toaster"]')).toHaveLength(1);
+  });
+
+  it.each([
+    [true, "false"],
+    [false, "true"],
+  ])("seeds fixedByOrg from the org appearance (allowUserOverride %s → %s)", async (allowUserOverride, fixed) => {
+    appearanceState.value = appearanceFor("azul", { mode: "light" });
+    orgPolicyState.allowUserOverride = allowUserOverride;
+    try {
+      const { default: RootLayout } = await import("../layout");
+      const markup = renderToStaticMarkup(await RootLayout({ children: <main id="page">Inicio</main> }));
+      const doc = new DOMParser().parseFromString(`<!doctype html>${markup}`, "text/html");
+      expect(doc.querySelector('[data-testid="appearance-provider"]')?.getAttribute("data-fixed-by-org")).toBe(fixed);
+    } finally {
+      orgPolicyState.allowUserOverride = true;
+    }
   });
 });

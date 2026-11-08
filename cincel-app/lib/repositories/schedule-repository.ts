@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -9,6 +9,7 @@ import {
   schedulePaymentRows,
   scheduleTasks,
 } from "@/lib/db/schema";
+import type { ViewerScope } from "@/lib/types/core";
 import type { Adicional, CronogramaData, Imprevisto, PaymentRow, ScheduleTask } from "@/lib/types/schedule";
 
 function projectAddress(row: { addressStreet: string | null; addressCity: string | null; addressState: string | null }): string | null {
@@ -16,9 +17,18 @@ function projectAddress(row: { addressStreet: string | null; addressCity: string
   return parts.length ? parts.join(", ") : null;
 }
 
-/** One round trip: project + schedule + its tasks/payments/imprevistos/adicionales. Null if the project has no schedule imported yet. */
-export async function getScheduleForProject(projectId: string): Promise<CronogramaData | null> {
-  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) });
+/**
+ * The project's schedule as `viewer` sees it: project + schedule + its
+ * tasks/payments/imprevistos/adicionales. Null when the project has no
+ * schedule imported yet, is soft-deleted, or is outside the viewer's scope
+ * (the `projectsRepository.getProject(id, viewer)` rule: every live project).
+ * Payments are admin data: non-admins get `payments: []` and the payment rows
+ * are never read for them.
+ */
+export async function getScheduleForProject(projectId: string, viewer: ViewerScope): Promise<CronogramaData | null> {
+  const project = await db.query.projects.findFirst({
+    where: and(eq(projects.id, projectId), isNull(projects.deletedAt)),
+  });
   if (!project) return null;
 
   const schedule = await db.query.projectSchedules.findFirst({
@@ -31,10 +41,12 @@ export async function getScheduleForProject(projectId: string): Promise<Cronogra
       where: eq(scheduleTasks.scheduleId, schedule.id),
       orderBy: [asc(scheduleTasks.sortOrder)],
     }),
-    db.query.schedulePaymentRows.findMany({
-      where: eq(schedulePaymentRows.scheduleId, schedule.id),
-      orderBy: [asc(schedulePaymentRows.fecha)],
-    }),
+    viewer.isAdmin
+      ? db.query.schedulePaymentRows.findMany({
+          where: eq(schedulePaymentRows.scheduleId, schedule.id),
+          orderBy: [asc(schedulePaymentRows.fecha)],
+        })
+      : Promise.resolve([]),
     db.query.scheduleImprevistos.findMany({
       where: eq(scheduleImprevistos.scheduleId, schedule.id),
       orderBy: [asc(scheduleImprevistos.fecha)],

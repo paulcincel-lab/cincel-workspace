@@ -13,6 +13,7 @@ vi.mock("@/lib/auth/permissions", () => ({
   resolveProjectsCapabilities: (user: { access?: string } | null) => ({
     canViewProjects: user?.access !== "no-access",
   }),
+  canSeeAdminData: (user: { access?: string } | null) => user?.access === "Administrador",
 }));
 
 vi.mock("@/lib/repositories/schedule-repository", () => ({
@@ -44,14 +45,30 @@ describe("GET /api/proyectos/[id]/cronograma/export", () => {
   });
 
   it("404 when the project has no schedule", async () => {
-    requireCapabilityUserMock.mockResolvedValue({ access: "Colaborador" });
+    requireCapabilityUserMock.mockResolvedValue({ access: "Colaborador", member: { id: "staff-1" } });
     getScheduleForProjectMock.mockResolvedValue(null);
     const res = await GET(new Request("http://test"), ctx("p1"));
     expect(res.status).toBe(404);
   });
 
+  it("404 for a soft-deleted project or one outside the caller's scope, read with the caller as viewer", async () => {
+    requireCapabilityUserMock.mockResolvedValue({ access: "Colaborador", member: { id: "staff-1" } });
+    // The repository returns null for both (deleted_at set, or not visible to this viewer).
+    getScheduleForProjectMock.mockResolvedValue(null);
+    const res = await GET(new Request("http://test"), ctx("p-out-of-scope"));
+    expect(res.status).toBe(404);
+    expect(getScheduleForProjectMock).toHaveBeenCalledWith("p-out-of-scope", { staffId: "staff-1", isAdmin: false });
+  });
+
+  it("passes an admin caller as an admin viewer", async () => {
+    requireCapabilityUserMock.mockResolvedValue({ access: "Administrador", member: { id: "admin-1" } });
+    getScheduleForProjectMock.mockResolvedValue(null);
+    await GET(new Request("http://test"), ctx("p1"));
+    expect(getScheduleForProjectMock).toHaveBeenCalledWith("p1", { staffId: "admin-1", isAdmin: true });
+  });
+
   it("returns the legacy export shape from real schedule data", async () => {
-    requireCapabilityUserMock.mockResolvedValue({ access: "Colaborador" });
+    requireCapabilityUserMock.mockResolvedValue({ access: "Colaborador", member: { id: "staff-1" } });
     getScheduleForProjectMock.mockResolvedValue({
       project: { id: "p1", name: "Test", address: null },
       schedule: { id: "s1", version: 1, paymentCalendarLabel: null },

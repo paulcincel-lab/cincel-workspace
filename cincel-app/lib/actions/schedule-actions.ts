@@ -5,6 +5,7 @@ import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import { viewerScopeOf } from "@/lib/auth/viewer-scope";
 import { db } from "@/lib/db/client";
 import { projectSchedules, scheduleImprevistos, scheduleTaskEvents, scheduleTasks } from "@/lib/db/schema";
 import * as scheduleRepository from "@/lib/repositories/schedule-repository";
@@ -20,10 +21,6 @@ import type {
   LegacyStateApplyResult,
   ScheduleStatus,
 } from "@/lib/types/schedule";
-
-async function requireProjectsCapabilities() {
-  return resolveProjectsCapabilities(await requireCapabilityUser());
-}
 
 async function requireEditCapabilities() {
   const user = await requireCapabilityUser();
@@ -58,11 +55,17 @@ export interface ScheduleViewData {
   today: string;
 }
 
+/**
+ * The project's Cronograma for the caller (Cronograma, Reporte, Resumen, the
+ * assistant). Null without `canViewProjects`, for a soft-deleted project or one
+ * outside the caller's scope; schedule payments only reach admins
+ * (`canSeeAdminData`), everyone else gets `payments: []`.
+ */
 export async function fetchScheduleAction(projectId: string): Promise<ScheduleViewData | null> {
-  const caps = await requireProjectsCapabilities();
-  if (!caps.canViewProjects) return null;
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canViewProjects) return null;
 
-  const data = await scheduleRepository.getScheduleForProject(projectId);
+  const data = await scheduleRepository.getScheduleForProject(projectId, viewerScopeOf(user));
   if (!data) return null;
 
   return { data, today: todayInTimezone(SCHEDULE_TIMEZONE) };

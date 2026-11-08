@@ -16,7 +16,13 @@ ARG APP_VERSION=""
 ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# The build must never reach a database (#930): DATABASE_URL points at a closed
+# local port for this step only, and the image build fails when the log shows
+# errors, DB connections or deprecations (scripts/check-build-log.mjs).
+RUN set -o pipefail \
+  && DATABASE_URL=postgres://build:build@127.0.0.1:9/build_unreachable npm run build 2>&1 | tee /tmp/next-build.log \
+  && node scripts/check-build-log.mjs /tmp/next-build.log \
+  && rm /tmp/next-build.log
 
 FROM node:24-alpine
 RUN apk update && apk upgrade && apk add dumb-init && adduser -D nextuser
