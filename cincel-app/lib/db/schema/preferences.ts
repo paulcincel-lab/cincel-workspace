@@ -12,7 +12,7 @@ export const userPreferences = core.table(
       .references(() => staff.id, { onDelete: "cascade" }),
     /** null = org theme. */
     theme: themeId("theme"),
-    mode: colorMode("mode").notNull().default("system"),
+    mode: colorMode("mode").notNull().default("light"),
     /** null = org default style. */
     style: presentationStyle("style"),
     density: density("density").notNull().default("comoda"),

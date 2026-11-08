@@ -28,6 +28,10 @@ export type ListSpec =
       table: RecordTableData;
       /** Status change on drop; without it the board is read-only and drops are ignored. */
       onMove?: TaskBoardWidgetProps["onMove"];
+      /** "+ Agregar" in each column; without it the button isn't shown. */
+      onQuickAdd?: TaskBoardWidgetProps["onQuickAdd"];
+      /** Every configured custom status, so its column shows even when empty. */
+      customStatuses?: TaskBoardWidgetProps["customStatuses"];
     };
 
 export type ListPageProps = {
@@ -35,7 +39,11 @@ export type ListPageProps = {
   filters?: ReactNode;
   tabs?: ReactNode;
   spec: ListSpec;
-  /** Rendered instead of the widget when the spec carries no records. */
+  /**
+   * Rendered instead of the widget when the spec carries no records. A board
+   * always keeps its widget (its columns stay as drop targets) and hands this
+   * to the widget, which shows it only in the styles without columns.
+   */
   empty?: EmptyStateProps;
 };
 
@@ -55,7 +63,7 @@ export function isListSpecEmpty(spec: ListSpec): boolean {
 
 const readOnlyMove: TaskBoardWidgetProps["onMove"] = () => Promise.resolve();
 
-function ListWidget({ spec }: { spec: ListSpec }) {
+function ListWidget({ spec, empty }: { spec: ListSpec; empty?: EmptyStateProps }) {
   switch (spec.kind) {
     case "table":
       return <RecordTable data={spec.data} renderCell={spec.renderCell} rowActions={spec.rowActions} />;
@@ -64,12 +72,21 @@ function ListWidget({ spec }: { spec: ListSpec }) {
     case "people":
       return <PeopleWidget people={spec.people} show={spec.show} />;
     case "board":
-      return <TaskBoardWidget board={spec.board} table={spec.table} onMove={spec.onMove ?? readOnlyMove} />;
+      return (
+        <TaskBoardWidget
+          board={spec.board}
+          table={spec.table}
+          onMove={spec.onMove ?? readOnlyMove}
+          onQuickAdd={spec.onQuickAdd}
+          customStatuses={spec.customStatuses}
+          emptyState={empty}
+        />
+      );
   }
 }
 
 export function ListPage({ header, filters, tabs, spec, empty }: ListPageProps) {
-  const showEmpty = empty !== undefined && isListSpecEmpty(spec);
+  const showEmpty = empty !== undefined && spec.kind !== "board" && isListSpecEmpty(spec);
   return (
     <div className="flex min-w-0 flex-col gap-4" data-list-kind={spec.kind}>
       <PageHeader
@@ -83,7 +100,7 @@ export function ListPage({ header, filters, tabs, spec, empty }: ListPageProps) 
       />
       {tabs ? <div className="min-w-0">{tabs}</div> : null}
       {filters ? <div className="min-w-0">{filters}</div> : null}
-      <div className="min-w-0">{showEmpty ? <EmptyState {...empty} /> : <ListWidget spec={spec} />}</div>
+      <div className="min-w-0">{showEmpty ? <EmptyState {...empty} /> : <ListWidget spec={spec} empty={empty} />}</div>
     </div>
   );
 }

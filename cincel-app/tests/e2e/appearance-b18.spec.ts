@@ -2,7 +2,7 @@
  * E2E (review B18): with the OS in dark mode, the appearance follows the
  * user's mode — an explicit light choice is never overridden by the
  * `prefers-color-scheme` fallback rule in globals.css. Covers light, dark and
- * system.
+ * system, and the light default for a user without a saved mode.
  *
  * The admin's `user_preferences` row is written directly and removed after.
  *
@@ -85,6 +85,16 @@ test.describe("Apariencia — B18 dark-scheme run", () => {
     expect(state.background).toBe(expectedBackground(state.themeId, "light"));
   });
 
+  test("no saved preference: a new user sees light Azul Cincel on a dark OS", async ({ page }) => {
+    await setAdminPreferences(null);
+    await openApp(page);
+    const state = await htmlState(page);
+    expect(state.dataTheme).toBe("light");
+    expect(state.dark).toBe(false);
+    expect(state.modeScript).toBe(false);
+    expect(state.background).toBe(expectedBackground(state.themeId, "light"));
+  });
+
   test("dark: data-theme dark and .dark together", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "light" });
     await setAdminPreferences({ mode: "dark" });
@@ -110,6 +120,18 @@ test.describe("Apariencia — B18 dark-scheme run", () => {
     await expect.poll(async () => (await htmlState(page)).dataTheme).toBe("light");
     state = await htmlState(page);
     expect(state.dark).toBe(false);
+    expect(state.background).toBe(expectedBackground(state.themeId, "light"));
+  });
+});
+
+test.describe("Apariencia — default mode before sign-in", () => {
+  test("the login page renders light on a dark OS", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto(`${BASE_URL}/login`, { waitUntil: "load" });
+    const state = await htmlState(page);
+    expect(state.dataTheme).toBe("light");
+    expect(state.dark).toBe(false);
+    expect(state.modeScript).toBe(false);
     expect(state.background).toBe(expectedBackground(state.themeId, "light"));
   });
 });

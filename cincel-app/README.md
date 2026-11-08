@@ -101,7 +101,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     subgraph Dev["Desarrollo local"]
-        D1["npm run dev\n(next dev --webpack)"]
+        D1["npm run dev\n(next dev, Turbopack)"]
     end
 
     subgraph CI["GitHub Actions\n.github/workflows/cincel-app-build.yml"]
@@ -219,7 +219,9 @@ Ver [`.env.example`](./.env.example). Las relevantes:
 ### Scripts disponibles
 
 ```bash
-npm run dev              # servidor de desarrollo (next dev --webpack)
+npm run dev              # servidor de desarrollo (next dev, Turbopack)
+npm run dev:webpack      # servidor de desarrollo con webpack (solo para comparar o depurar)
+npm run analyze          # analizador de bundles de Turbopack (next experimental-analyze)
 npm run build            # build de producción (output: standalone)
 npm run start            # sirve el build de producción
 npm run lint             # eslint
@@ -253,9 +255,9 @@ El schema Drizzle vive en `lib/db/schema/` y las migraciones en `lib/db/migratio
 | Tipo | Herramienta | Ubicación | Qué cubre |
 |---|---|---|---|
 | Unitario | Vitest + happy-dom | `tests/unit/` | Matriz de permisos por rol, flujo de login/hash, reglas de negocio de Tareas (fechas obligatorias, historial append-only), rechazo de escritura sin capacidad |
-| E2E | Playwright | `tests/e2e/` | Login (flujo real de formulario), navegación, CRUD con verificación de persistencia en Postgres (Clientes, Proyectos, Tareas, Equipo, Proveedores), exportación |
+| E2E | Playwright | `tests/e2e/` | Un test por flujo principal: login → Inicio, crear y mover una tarea en el Tablero, proyecto y sus pestañas, vacaciones (solicitar, aprobar, saldo), Mi espacio → Bandeja, tema publicado por un admin, Control de horario, asistente con escritura confirmada, portal (acceso y proyecto), axe por tema |
 
-La suite E2E corre en CI contra una build de producción (`next build && next start`) con un servicio Postgres migrado + seed; no `next dev`, para evitar timeouts por compilación bajo demanda. `tests/e2e/global-cleanup.ts` purga las filas etiquetadas `E2E` antes y después de la corrida (la suite comparte una sola base sin aislamiento por test).
+La suite E2E corre en CI contra una build de producción (`next build && next start`) con un servicio Postgres migrado + seed; no `next dev`, para evitar timeouts por compilación bajo demanda. `tests/e2e/global-cleanup.ts` purga las filas etiquetadas `E2E` antes y después de la corrida (la suite comparte una sola base sin aislamiento por test). Los specs corren en paralelo (4 workers en CI); los que cambian ajustes de toda la organización (tema, Control de horario, apariencia del admin) van en el proyecto `org-settings` de `playwright.config.ts`, uno a la vez y después del resto. `mi-espacio.spec.ts` necesita `CRON_SECRET` con el mismo valor que lee el servidor.
 
 ## Estructura del proyecto
 

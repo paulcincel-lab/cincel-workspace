@@ -15,7 +15,7 @@ const badgeVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
         success:
-          "bg-success text-success-foreground [a]:hover:bg-success/70",
+          "bg-success/15 text-success dark:bg-success/20 [a]:hover:bg-success/25",
         warning:
           "bg-warning/15 text-warning-ink [a]:hover:bg-warning/25",
         outline:
@@ -23,6 +23,8 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        count:
+          "h-auto rounded-full px-[7px] py-px font-mono text-[11px] font-normal tabular-nums bg-primary/15 text-primary dark:bg-primary/20 group-has-[[data-active]]/menu-item:bg-primary-foreground/20 group-has-[[data-active]]/menu-item:text-primary-foreground",
       },
     },
     defaultVariants: {

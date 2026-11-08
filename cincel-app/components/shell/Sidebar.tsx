@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import {
   Sidebar as SidebarPrimitive,
@@ -26,12 +26,15 @@ import type { TodayStatus } from "@/lib/types/redesign";
 import type { NavItem, NavItemKey, NavModel } from "@/lib/ui/nav";
 
 import type { AppShellProps } from "./AppShell";
+import { AvatarMenu } from "./AvatarMenu";
 
 /**
  * Sidebar of the new shell (redesign FE §3.1, §4.1; frame `Sidebar`): logo,
- * search button, time clock slot, the nav items with their badges, the
- * Tramos list, Ajustes and the user block. Built on the shadcn `sidebar`
- * primitives; the active item uses the `sidebar-primary` tokens.
+ * search button, time clock slot (Jornada card), the nav items with their
+ * count badges (mono, primary tint), the "Áreas" list of tramos, Ajustes and
+ * the user block (avatar menu with the photo or initials, name and role).
+ * Built on the shadcn `sidebar` primitives; the active item uses the
+ * `sidebar-primary` tokens.
  */
 export type SidebarProps = {
   nav: NavModel;
@@ -42,18 +45,6 @@ export type SidebarProps = {
   /** Server-rendered registry slots (`lib/shell/sidebar-slots/*`). */
   slots?: SidebarSlotNodes;
 };
-
-function initialsOf(name: string): string {
-  return (
-    name
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((word) => word[0]?.toUpperCase() ?? "")
-      .join("") || "?"
-  );
-}
 
 function badgeText(count: number): string {
   return count > 99 ? "99+" : String(count);
@@ -67,7 +58,8 @@ function NavEntry({ item, active, badge }: { item: NavItem; active: boolean; bad
       <SidebarMenuButton
         className="h-9"
         isActive={active}
-        render={<Link href={item.href} aria-current={active ? "page" : undefined} />}
+        // Main pages are prefetched in full, so the click renders without waiting on the server.
+        render={<Link href={item.href} prefetch aria-current={active ? "page" : undefined} />}
       >
         <Icon aria-hidden="true" strokeWidth={1.8} />
         <span>{item.label}</span>
@@ -76,7 +68,9 @@ function NavEntry({ item, active, badge }: { item: NavItem; active: boolean; bad
       {badge !== undefined ? (
         <SidebarMenuBadge>{badge}</SidebarMenuBadge>
       ) : count ? (
-        <SidebarMenuBadge aria-hidden="true">{badgeText(count)}</SidebarMenuBadge>
+        <SidebarMenuBadge aria-hidden="true">
+          <Badge variant="count">{badgeText(count)}</Badge>
+        </SidebarMenuBadge>
       ) : null}
     </SidebarMenuItem>
   );
@@ -101,7 +95,7 @@ export function Sidebar({ nav, activeKey, session, today, onOpenSearch, slots = 
           </span>
           <span className="flex min-w-0 flex-col leading-tight">
             <span className="text-sm font-semibold tracking-[0.14em]">CINCEL</span>
-            <span className="truncate text-xs text-sidebar-foreground/70">{systemName}</span>
+            <span className="truncate text-xs text-sidebar-foreground/80">{systemName}</span>
           </span>
         </div>
         {showSearch ? (
@@ -135,7 +129,7 @@ export function Sidebar({ nav, activeKey, session, today, onOpenSearch, slots = 
 
           {nav.tramos.length > 0 ? (
             <SidebarGroup>
-              <SidebarGroupLabel id="sidebar-tramos">Tramos</SidebarGroupLabel>
+              <SidebarGroupLabel id="sidebar-tramos">Áreas</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu aria-labelledby="sidebar-tramos">
                   {nav.tramos.map((tramo) => (
@@ -168,10 +162,7 @@ export function Sidebar({ nav, activeKey, session, today, onOpenSearch, slots = 
           </nav>
         ) : null}
         <div className="flex items-center gap-2.5 px-2.5 py-2" data-slot="sidebar-user">
-          <Avatar className="size-[30px]">
-            {session.photoUrl ? <AvatarImage src={session.photoUrl} alt="" /> : null}
-            <AvatarFallback className="text-xs font-semibold">{initialsOf(session.name)}</AvatarFallback>
-          </Avatar>
+          <AvatarMenu session={session} />
           <span className="flex min-w-0 flex-1 flex-col leading-tight">
             {profileHref ? (
               <Link href={profileHref} className="truncate text-[13px] font-medium hover:underline">
@@ -180,7 +171,7 @@ export function Sidebar({ nav, activeKey, session, today, onOpenSearch, slots = 
             ) : (
               <span className="truncate text-[13px] font-medium">{session.name}</span>
             )}
-            <span className="truncate text-xs text-sidebar-foreground/70">{session.role}</span>
+            <span className="truncate text-xs text-sidebar-foreground/80">{session.role}</span>
           </span>
         </div>
       </SidebarFooter>

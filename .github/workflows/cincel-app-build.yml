@@ -117,6 +117,8 @@ jobs:
       # Throwaway value for the CI database only; no deployed instance uses it.
       SEED_ADMIN_PASSWORD: ci-e2e-admin-password
       E2E_ADMIN_PASSWORD: ci-e2e-admin-password
+      # Throwaway value: the web server and mi-espacio.spec.ts both read it to fire reminders via /api/cron/tick.
+      CRON_SECRET: ci-e2e-cron-secret
 
     steps:
       - name: Check out the repo

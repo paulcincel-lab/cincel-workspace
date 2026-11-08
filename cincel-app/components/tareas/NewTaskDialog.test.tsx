@@ -20,6 +20,8 @@ const actions = vi.hoisted(() => ({
   fetchAssignableStaffAction: vi.fn(),
   createUserTaskAction: vi.fn(),
   createSubtaskAction: vi.fn(),
+  setTaskStatusAction: vi.fn(),
+  setTaskCustomStatusAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectsAction: actions.fetchProjectsAction }));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowsAction: actions.fetchWorkflowsAction }));
@@ -27,6 +29,8 @@ vi.mock("@/lib/actions/staff-actions", () => ({ fetchAssignableStaffAction: acti
 vi.mock("@/lib/actions/tasks-actions", () => ({
   createUserTaskAction: actions.createUserTaskAction,
   createSubtaskAction: actions.createSubtaskAction,
+  setTaskStatusAction: actions.setTaskStatusAction,
+  setTaskCustomStatusAction: actions.setTaskCustomStatusAction,
 }));
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -60,7 +64,7 @@ vi.mock("@/components/patterns/FormDialog", () => ({
 }));
 
 import { NewTaskDialog, NewTaskDialogRoute, type NewTaskDialogProps } from "./NewTaskDialog";
-import { applyTemplate, tramoFases, tramoTemplateTitles } from "./new-task-form";
+import { applyTemplate, initialStatusTarget, tramoFases, tramoTemplateTitles } from "./new-task-form";
 import { newTaskSearch } from "./use-new-task-param";
 
 /** A real mouse press on a base-ui Select option: pointerdown, then click. */
@@ -97,6 +101,8 @@ beforeEach(() => {
   actions.fetchAssignableStaffAction.mockResolvedValue(STAFF);
   actions.createUserTaskAction.mockResolvedValue({ id: "task-1" });
   actions.createSubtaskAction.mockResolvedValue({ id: "sub-1" });
+  actions.setTaskStatusAction.mockResolvedValue({ id: "task-1" });
+  actions.setTaskCustomStatusAction.mockResolvedValue({ id: "task-1" });
 });
 
 afterEach(() => {
@@ -286,6 +292,63 @@ describe("NewTaskDialog", () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(actions.createSubtaskAction).toHaveBeenCalledTimes(2);
     expect(toasts.error).toHaveBeenCalledWith("No se pudo completar la acción. Intenta de nuevo.");
+    expect(router.refresh).toHaveBeenCalled();
+  });
+});
+
+describe("NewTaskDialog · board column (Tablero “+ Agregar”)", () => {
+  it("initialStatusTarget skips no column and the column the task already sits in", () => {
+    expect(initialStatusTarget(undefined, { status: "pendiente" })).toBeNull();
+    expect(initialStatusTarget("pendiente", { status: "pendiente", customStatus: null })).toBeNull();
+    expect(initialStatusTarget("en_proceso", { status: "pendiente" })).toEqual({ kind: "base", status: "en_proceso" });
+    expect(initialStatusTarget("custom:cs-qa", { status: "pendiente" })).toEqual({ kind: "custom", id: "cs-qa" });
+    expect(initialStatusTarget("custom:cs-qa", { status: "pendiente", customStatus: { id: "cs-qa" } })).toBeNull();
+  });
+
+  it("creates the task, then moves it to the preselected base estatus and refreshes", async () => {
+    actions.createUserTaskAction.mockResolvedValue({ id: "task-1", status: "pendiente", customStatus: null });
+    const { onOpenChange } = await renderDialog({ defaults: { status: "en_proceso" } });
+    fireEvent.change(titleInput(), { target: { value: "Render sala" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(actions.setTaskStatusAction).toHaveBeenCalledWith("task-1", "en_proceso");
+    expect(actions.setTaskCustomStatusAction).not.toHaveBeenCalled();
+    expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it("moves it to a custom:<id> column through setTaskCustomStatusAction", async () => {
+    actions.createUserTaskAction.mockResolvedValue({ id: "task-1", status: "pendiente", customStatus: null });
+    await renderDialog({ defaults: { status: "custom:cs-qa" } });
+    fireEvent.change(titleInput(), { target: { value: "Revisión QA" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
+
+    await waitFor(() => expect(actions.setTaskCustomStatusAction).toHaveBeenCalledWith("task-1", "cs-qa"));
+    expect(actions.setTaskStatusAction).not.toHaveBeenCalled();
+  });
+
+  it("makes no status call for the Pendiente column", async () => {
+    actions.createUserTaskAction.mockResolvedValue({ id: "task-1", status: "pendiente", customStatus: null });
+    const { onOpenChange } = await renderDialog({ defaults: { status: "pendiente" } });
+    fireEvent.change(titleInput(), { target: { value: "Levantamiento" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(actions.setTaskStatusAction).not.toHaveBeenCalled();
+    expect(actions.setTaskCustomStatusAction).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed status move without blocking the created task", async () => {
+    actions.createUserTaskAction.mockResolvedValue({ id: "task-1", status: "pendiente", customStatus: null });
+    actions.setTaskStatusAction.mockRejectedValue(new Error("FORBIDDEN: task status change"));
+    const { onOpenChange } = await renderDialog({ defaults: { status: "bloqueado" } });
+    fireEvent.change(titleInput(), { target: { value: "Permiso" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(actions.createUserTaskAction).toHaveBeenCalledTimes(1);
+    expect(toasts.success).toHaveBeenCalledWith("Tarea creada");
+    expect(toasts.error).toHaveBeenCalledWith("No tienes permiso para realizar esta acción.");
     expect(router.refresh).toHaveBeenCalled();
   });
 });

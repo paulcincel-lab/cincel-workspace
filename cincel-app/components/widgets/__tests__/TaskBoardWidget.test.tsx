@@ -47,7 +47,7 @@ vi.mock("@/components/shell/LoadingSkeleton", () => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
-import { TaskBoardWidget, boardSegments } from "@/components/widgets/TaskBoardWidget";
+import { BOARD_COLUMN_EMPTY, TaskBoardWidget, boardSegments } from "@/components/widgets/TaskBoardWidget";
 import {
   emptyTaskBoardFixture,
   taskBoardExpected,
@@ -242,14 +242,58 @@ describe("TaskBoardWidget · Visual moves", () => {
 });
 
 describe("TaskBoardWidget · empty and loading", () => {
-  it.each<PresentationStyle>(["visual", "esencial", "analitico"])("renders the default empty state in %s", (style) => {
+  it("Visual keeps every column open with 0 and a drop zone when the board is empty", () => {
+    renderBoard("visual", { board: emptyTaskBoardFixture, table: { ...taskBoardTableFixture, rows: [] } });
+
+    expect(screen.queryByTestId("empty-state")).toBeNull();
+    expect(screen.getByTestId("task-board")).toBeTruthy();
+    for (const label of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
+      const column = screen.getByRole("group", { name: `${label} · 0` });
+      expect(column.getAttribute("data-collapsed")).toBeNull();
+      expect(within(column).getByRole("heading", { name: label })).toBeTruthy();
+      expect(within(column).getByText(BOARD_COLUMN_EMPTY)).toBeTruthy();
+    }
+    expect(screen.getAllByTestId("board-column-empty")).toHaveLength(4);
+  });
+
+  it("shows a column per configured custom status even when no task is in it", () => {
+    renderBoard("visual", {
+      board: emptyTaskBoardFixture,
+      table: { ...taskBoardTableFixture, rows: [] },
+      customStatuses: [{ id: "cs-qa", name: "QA en revisión" }],
+    });
+    expect(screen.getByRole("group", { name: "QA en revisión · 0" })).toBeTruthy();
+  });
+
+  it("collapses an empty configured custom status to a strip that takes a drop", async () => {
+    const onMove = vi.fn(() => Promise.resolve());
+    const { container } = renderBoard("visual", { onMove, customStatuses: [{ id: "cs-qa", name: "QA en revisión" }] });
+
+    const strip = screen.getByRole("group", { name: "QA en revisión · 0" });
+    expect(strip.getAttribute("data-collapsed")).toBe("true");
+
+    fireEvent.dragStart(card(container, "t1"));
+    fireEvent.dragOver(strip);
+    await act(async () => {
+      fireEvent.drop(strip);
+    });
+
+    expect(onMove).toHaveBeenCalledWith("t1", "custom:cs-qa");
+    expect(screen.getByRole("group", { name: "QA en revisión · 1" }).contains(card(container, "t1"))).toBe(true);
+  });
+
+  it("lists a configured custom status once when tasks are also in it", () => {
+    renderBoard("visual", { customStatuses: [{ id: "cs-rev", name: "En revisión" }] });
+    expect(screen.getAllByRole("group", { name: /^En revisión · / })).toHaveLength(1);
+  });
+
+  it.each<PresentationStyle>(["esencial", "analitico"])("renders the default empty state in %s", (style) => {
     renderBoard(style, { board: emptyTaskBoardFixture, table: { ...taskBoardTableFixture, rows: [] } });
     expect(screen.getByTestId("empty-state").textContent).toContain("No hay tareas con estos filtros");
-    expect(screen.queryByTestId("task-board")).toBeNull();
   });
 
   it("renders the emptyState prop when given", () => {
-    renderBoard("visual", {
+    renderBoard("esencial", {
       board: emptyTaskBoardFixture as TaskBoard,
       emptyState: { title: "Sin tareas en Diseño", description: "Quita filtros para ver más." },
     });
@@ -266,5 +310,43 @@ describe("TaskBoardWidget · empty and loading", () => {
     const skeletons = screen.getAllByTestId("loading-skeleton");
     expect(skeletons.map((s) => s.getAttribute("data-variant"))).toEqual([variant]);
     expect(screen.queryByTestId("task-board")).toBeNull();
+  });
+});
+
+describe("TaskBoardWidget · quick-add", () => {
+  it("has no “+ Agregar” without onQuickAdd", () => {
+    renderBoard("visual");
+    expect(screen.queryByRole("button", { name: /^Agregar tarea en / })).toBeNull();
+  });
+
+  it("ends every open column in “+ Agregar” and calls onQuickAdd with its key", () => {
+    const onQuickAdd = vi.fn();
+    renderBoard("visual", { onQuickAdd });
+
+    for (const [key, count] of Object.entries(taskBoardExpected.counts)) {
+      const label = LABELS[key as keyof typeof LABELS];
+      const column = screen.getByRole("group", { name: `${label} · ${count}` });
+      const button = within(column).queryByRole("button", { name: `Agregar tarea en ${label}` });
+      // Collapsed strips (empty columns) stay as in the canvas: ring, 0, label.
+      if (count === 0) {
+        expect(button).toBeNull();
+        continue;
+      }
+      expect(button?.textContent).toBe("+ Agregar");
+      fireEvent.click(button!);
+      expect(onQuickAdd).toHaveBeenLastCalledWith(key);
+    }
+  });
+
+  it("shows “+ Agregar” in every column of an empty board", () => {
+    renderBoard("visual", { board: emptyTaskBoardFixture as TaskBoard, onQuickAdd: vi.fn() });
+    for (const label of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
+      expect(screen.getByRole("button", { name: `Agregar tarea en ${label}` })).toBeTruthy();
+    }
+  });
+
+  it.each<PresentationStyle>(["esencial", "analitico"])("has no quick-add in %s", (style) => {
+    renderBoard(style, { onQuickAdd: vi.fn() });
+    expect(screen.queryByRole("button", { name: /^Agregar tarea en / })).toBeNull();
   });
 });

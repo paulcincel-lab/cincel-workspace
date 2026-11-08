@@ -15,7 +15,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
-import { createSubtaskAction, createUserTaskAction } from "@/lib/actions/tasks-actions";
+import {
+  createSubtaskAction,
+  createUserTaskAction,
+  setTaskCustomStatusAction,
+  setTaskStatusAction,
+} from "@/lib/actions/tasks-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { actionErrorText } from "@/lib/errors";
 import type { ProjectListItem, TaskPriority, WorkflowDetail } from "@/lib/types/core";
@@ -25,6 +30,7 @@ import {
   applyTemplate,
   hasErrors,
   initialDraft,
+  initialStatusTarget,
   resolvePhaseId,
   resolveProjectId,
   resolveWorkflowId,
@@ -34,6 +40,7 @@ import {
   tramoTemplateTitles,
   validateDraft,
   type DraftErrors,
+  type NewTaskDefaults,
   type NewTaskDraft,
 } from "./new-task-form";
 import { useNewTaskParam } from "./use-new-task-param";
@@ -41,7 +48,8 @@ import { useNewTaskParam } from "./use-new-task-param";
 export type NewTaskDialogProps = {
   open: boolean;
   onOpenChange(open: boolean): void;
-  defaults?: { projectId?: string; tramoKey?: string; title?: string; description?: string };
+  /** Prefills the form; `status` is the board column the task is created in (Tablero "+ Agregar"). */
+  defaults?: NewTaskDefaults;
 };
 
 /** Select value for "Sin responsable" (Select items can't carry null). */
@@ -150,19 +158,28 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
     if (hasErrors(nextErrors)) return;
 
     setPending(true);
-    let taskId: string;
+    let created: Awaited<ReturnType<typeof createUserTaskAction>>;
     try {
-      const task = await createUserTaskAction(toUserTaskInput(resolved, fases));
-      taskId = task.id;
+      created = await createUserTaskAction(toUserTaskInput(resolved, fases));
     } catch (err) {
       setSubmitError(actionErrorText(err));
       setPending(false);
       return;
     }
 
-    // The task exists now: a failed subtarea is reported, not retried, so a
-    // second "Crear tarea" can't duplicate the task.
+    // The task exists now: a failed status move or subtarea is reported, not
+    // retried, so a second "Crear tarea" can't duplicate the task.
+    const taskId = created.id;
     let subtaskError: unknown = null;
+    const target = initialStatusTarget(defaults?.status, created);
+    if (target) {
+      try {
+        if (target.kind === "custom") await setTaskCustomStatusAction(taskId, target.id);
+        else await setTaskStatusAction(taskId, target.status);
+      } catch (err) {
+        subtaskError = err;
+      }
+    }
     for (const input of toSubtaskInputs(resolved)) {
       try {
         await createSubtaskAction(taskId, input);

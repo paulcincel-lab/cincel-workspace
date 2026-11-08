@@ -89,7 +89,7 @@ afterEach(() => {
 });
 
 describe("Sidebar", () => {
-  it("renders the logo, the seven items in order, the Tramos list, Ajustes and the user block", () => {
+  it("renders the logo, the seven items in order, the Áreas list, Ajustes and the user block", () => {
     renderSidebar();
 
     expect(screen.getByText("CINCEL")).toBeTruthy();
@@ -103,7 +103,7 @@ describe("Sidebar", () => {
       "/biblioteca",
       "/asistente",
     ]);
-    expect(screen.getByText("Tramos")).toBeTruthy();
+    expect(screen.getByText("Áreas")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Diseño" }).getAttribute("href")).toBe("/tareas?tramo=diseno");
     expect(within(screen.getByRole("navigation", { name: "Ajustes" })).getByRole("link", { name: "Ajustes" })).toBeTruthy();
     expect(screen.getByText("Alejandro Riofrio")).toBeTruthy();
@@ -139,6 +139,35 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Proyectos" }).textContent).not.toContain("pendientes");
   });
 
+  it("draws the count badges mono on the primary tint and hides them at 0", () => {
+    renderSidebar({ nav: { ...FULL_NAV, items: [navItem("mi-espacio", 5), navItem("tareas", 31), navItem("proyectos", 0)] } });
+    const badge = screen.getByText("31");
+    expect(badge.getAttribute("data-slot")).toBe("badge");
+    expect(badge.className).toContain("font-mono");
+    expect(badge.className).toContain("bg-primary/15");
+    expect(badge.className).toContain("text-primary");
+    const proyectos = screen.getByRole("link", { name: "Proyectos" }).closest("li")!;
+    expect(proyectos.querySelector("[data-slot=badge]")).toBeNull();
+  });
+
+  it("colors each tramo dot with its own color", () => {
+    renderSidebar({
+      nav: {
+        ...FULL_NAV,
+        tramos: [
+          ...FULL_NAV.tramos,
+          { key: "decoracion", name: "Decoración", colorVar: "var(--chart-4)", href: "/tareas?tramo=decoracion" },
+        ],
+      },
+    });
+    const dot = (name: string) =>
+      (screen.getByRole("link", { name }).querySelector("span[aria-hidden=true]") as HTMLElement).style.background;
+    expect(dot("Presale")).toBe("var(--chart-1)");
+    expect(dot("Diseño")).toBe("var(--chart-2)");
+    expect(dot("Construcción")).toBe("var(--chart-3)");
+    expect(dot("Decoración")).toBe("var(--chart-4)");
+  });
+
   it("caps long badges at 99+", () => {
     renderSidebar({ nav: { ...FULL_NAV, items: [navItem("tareas", 250)] } });
     expect(screen.getByText("99+")).toBeTruthy();
@@ -148,7 +177,7 @@ describe("Sidebar", () => {
     renderSidebar({ nav: { items: [navItem("proyectos")], tramos: [], footer: [] } });
 
     expect(within(mainNav()).getAllByRole("link")).toHaveLength(1);
-    expect(screen.queryByText("Tramos")).toBeNull();
+    expect(screen.queryByText("Áreas")).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Ajustes" })).toBeNull();
   });
 
@@ -165,6 +194,14 @@ describe("Sidebar", () => {
   it("shows the viewer initials when there is no photo", () => {
     renderSidebar({ session: STAFF_SESSION });
     expect(screen.getByText("PL")).toBeTruthy();
+    expect(document.querySelector("[data-slot=sidebar-user] [data-photo]")?.getAttribute("data-photo")).toBe("initials");
+    expect(screen.getByText("Diseñadora")).toBeTruthy();
+  });
+
+  it("uses the profile photo when there is one, and the avatar opens the account menu", () => {
+    renderSidebar({ session: { ...STAFF_SESSION, photoUrl: "/api/staff/s2/photo?v=abcd1234" } });
+    expect(document.querySelector("[data-slot=sidebar-user] [data-photo]")?.getAttribute("data-photo")).toBe("photo");
+    expect(screen.getByRole("button", { name: "Menú de la cuenta de Paula Lara" })).toBeTruthy();
   });
 
   it("hides the search button while searchWorkspaceAction is not implemented", () => {
@@ -230,6 +267,21 @@ describe("AppShellClient", () => {
   it("renders the page inside the main region", () => {
     renderShell("/inicio");
     expect(within(screen.getByRole("main")).getByRole("heading", { name: "Contenido" })).toBeTruthy();
+  });
+
+  it("pads the page once, in the shell content wrapper (FE §3: 0 28px 40px, 16 px mobile)", () => {
+    renderShell("/inicio");
+    const content = screen.getByRole("heading", { name: "Contenido" }).closest('[data-slot="page-content"]');
+    expect(content?.className.split(" ")).toEqual(
+      expect.arrayContaining(["p-4", "md:px-7", "md:pt-5", "md:pb-10", "gap-4"]),
+    );
+  });
+
+  it("leaves the Asistente page full bleed", () => {
+    renderShell("/asistente");
+    const content = screen.getByRole("heading", { name: "Contenido" }).closest('[data-slot="page-content"]');
+    expect(content?.className).not.toContain("md:px-7");
+    expect(content?.className).not.toContain("p-4");
   });
 
   it("hands the first four mobile tabs and the rest to BottomTabs", () => {

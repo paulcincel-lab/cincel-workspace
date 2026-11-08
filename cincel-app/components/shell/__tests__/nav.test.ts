@@ -123,6 +123,14 @@ describe("buildNavModel", () => {
     ]);
   });
 
+  it("passes each tramo's sortOrder so Decoración takes its chart slot (frame `Sidebar`)", async () => {
+    mocks.listTramos.mockResolvedValue([{ id: "w4", key: "decoracion", name: "Decoración", sortOrder: 4 }]);
+    mocks.tramoColorVar.mockImplementation((_key: string, sortOrder?: number) => `var(--chart-${sortOrder})`);
+    const nav = await buildNavModel(ADMIN_SESSION, [source("tareas", 30)]);
+    expect(mocks.tramoColorVar).toHaveBeenCalledWith("decoracion", 4);
+    expect(nav.tramos[0].colorVar).toBe("var(--chart-4)");
+  });
+
   it("uses the neutral color when a tramo has no chart slot", async () => {
     mocks.listTramos.mockResolvedValue([{ id: "w9", key: "decoracion", name: "Decoración", sortOrder: 4 }]);
     mocks.tramoColorVar.mockImplementation(() => {

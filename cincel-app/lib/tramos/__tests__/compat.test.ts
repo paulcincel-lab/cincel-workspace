@@ -96,6 +96,14 @@ describe("without Project Flow data", () => {
     expect(tramoColorVar("otro")).toBe("var(--muted-foreground)");
   });
 
+  it("colors a tramo outside the known keys by its sortOrder (frame `Sidebar`: Decoración → chart-4)", async () => {
+    const { tramoColorVar } = await loadCompat(false);
+    expect(tramoColorVar("decoracion", 4)).toBe("var(--chart-4)");
+    expect(tramoColorVar("presale", 9)).toBe("var(--chart-1)");
+    expect(tramoColorVar("otro", 0)).toBe("var(--muted-foreground)");
+    expect(tramoColorVar("otro", 12)).toBe("var(--muted-foreground)");
+  });
+
   it("returns null fase labels while no fase catalog exists", async () => {
     const { phaseLabel } = await loadCompat(false);
     expect(phaseLabel("f1")).toBeNull();

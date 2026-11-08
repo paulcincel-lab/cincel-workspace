@@ -8,7 +8,11 @@ const state = vi.hoisted(() => ({
   time: { clockInAction: true },
 }));
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/tareas" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/tareas",
+  // The user block's avatar menu routes on sign-out and photo changes.
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+}));
 // Every optional entry point on, so the axe run covers the fullest sidebar.
 vi.mock("@/lib/actions/search-actions.flags", () => ({ IMPLEMENTED: state.search }));
 vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({ IMPLEMENTED: state.time }));

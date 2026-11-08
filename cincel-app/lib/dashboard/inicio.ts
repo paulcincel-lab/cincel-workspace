@@ -221,6 +221,87 @@ export function tramoSplit<T>(items: T[], tramoOf: (item: T) => TramoKey | null)
   return [...counts].map(([tramo, n]) => ({ tramo, share: Math.round((n / items.length) * 1000) / 1000 }));
 }
 
+// ── KPI context lines (frame `Dashboard`) ───────────────────────────────────
+
+/** Context lines of the KPI cards when there is nothing to count. */
+export const KPI_CONTEXT = {
+  noActiveProjects: "Sin proyectos activos",
+  noOverdue: "Nada vencido hoy",
+  noBlocked: "Nada bloqueado hoy",
+  noReview: "Próxima revisión sin agendar",
+} as const;
+
+/** A tramo group of a KPI context line, ordered by `rank`, then label. */
+export type KpiTramoGroup = { key: string; label: string; rank: number };
+
+/** Tramo group of a task (as `byTramoOrder`): workflow order, no tramo, then admin. */
+export function taskTramoGroup(task: Pick<TaskListItem, "kind" | "workflow">): KpiTramoGroup {
+  return {
+    key: taskTramoKey(task),
+    label: taskTramoLabel(task),
+    rank: task.workflow
+      ? task.workflow.sortOrder
+      : task.kind === "admin"
+        ? Number.MAX_SAFE_INTEGER
+        : Number.MAX_SAFE_INTEGER - 1,
+  };
+}
+
+/** Tramo group of a project: its current workflow, else "Sin tramo" last. */
+export function projectTramoGroup(project: Pick<ProjectListItem, "currentWorkflow">): KpiTramoGroup {
+  const wf = project.currentWorkflow;
+  return wf
+    ? { key: wf.key, label: wf.name, rank: wf.sortOrder }
+    : { key: NO_TRAMO_KEY, label: NO_TRAMO_LABEL, rank: Number.MAX_SAFE_INTEGER };
+}
+
+function tramoCounts<T>(items: T[], groupOf: (item: T) => KpiTramoGroup): (KpiTramoGroup & { count: number })[] {
+  const groups = new Map<string, KpiTramoGroup & { count: number }>();
+  for (const item of items) {
+    const group = groupOf(item);
+    const entry = groups.get(group.key) ?? { ...group, count: 0 };
+    entry.count += 1;
+    groups.set(group.key, entry);
+  }
+  return [...groups.values()].sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label, "es"));
+}
+
+/** "Por área: Presale 2 · Diseño 1 · …" in tramo order; `empty` without items. */
+export function tramoCountsLine<T>(items: T[], groupOf: (item: T) => KpiTramoGroup, empty: string): string {
+  const counts = tramoCounts(items, groupOf);
+  if (counts.length === 0) return empty;
+  return `Por área: ${counts.map((g) => `${g.label} ${g.count}`).join(" · ")}`;
+}
+
+/**
+ * "Construcción concentra 14 de 31": the tramo with the most items (ties go
+ * to the first in tramo order); `empty` without items.
+ */
+export function tramoConcentrationLine<T>(items: T[], groupOf: (item: T) => KpiTramoGroup, empty: string): string {
+  const counts = tramoCounts(items, groupOf);
+  if (counts.length === 0) return empty;
+  const top = counts.reduce((best, g) => (g.count > best.count ? g : best));
+  return `${top.label} concentra ${top.count} de ${items.length}`;
+}
+
+const REVIEW_DATE_FORMAT = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" });
+
+/**
+ * "Próxima revisión 12 nov" (or "hoy" / "mañana"): the earliest review date
+ * from `today` on among `tasks`; "Próxima revisión sin agendar" without one.
+ */
+export function nextReviewLine(tasks: Pick<TaskListItem, "reviewDate">[], today: string): string {
+  const next = tasks
+    .map((t) => t.reviewDate)
+    .filter((d): d is string => d !== null && d >= today)
+    .sort()[0];
+  if (!next) return KPI_CONTEXT.noReview;
+  const days = isoDaysBetween(today, next);
+  if (days === 0) return "Próxima revisión hoy";
+  if (days === 1) return "Próxima revisión mañana";
+  return `Próxima revisión ${REVIEW_DATE_FORMAT.format(Date.parse(`${next}T00:00:00Z`)).replace(/\.$/, "")}`;
+}
+
 /** Average age in days (creation → `today`, 1 decimal) of the tasks of each group. */
 export function averageAgeByKey<T extends Pick<TaskListItem, "createdAt">>(
   tasks: T[],

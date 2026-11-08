@@ -306,6 +306,25 @@ export type PersonaDetail = {
   weekHours: DayHours[] | null;
   /** Mon–Fri. */
   availability: Availability[];
+  /**
+   * The person's last 10 actions (their history events on tasks and
+   * projects), newest first. Admin-task events and admin-only project fields
+   * (client, origin, contract amount) only with `canSeeAdminData`.
+   */
+  recentActivity: PersonaActivityItem[];
+};
+
+/** One "Actividad reciente" row of Persona detalle (BE §7.11). */
+export type PersonaActivityItem = {
+  id: string;
+  /** Spanish sentence, e.g. "Movió “Casa Lomas” a 90%" or "Comentó en “Plano de acabados”". */
+  text: string;
+  /** ISO timestamp of the event. */
+  at: string;
+  /** "hoy 10:12", "ayer 17:40", "4 nov 9:30" in the org time zone. */
+  when: string;
+  /** The task or project the event is on. */
+  href: string;
 };
 
 export type PeopleOverviewRow = {

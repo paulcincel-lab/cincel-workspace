@@ -16,7 +16,7 @@ export const PORTAL_STYLE_COOKIE = "cincel-portal-style";
 /** A missing `user_preferences` row means these (BE §3.3). */
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   theme: null,
-  mode: "system",
+  mode: "light",
   style: null,
   density: "comoda",
   textSize: 14,
@@ -40,7 +40,7 @@ export const APPEARANCE_COOKIE_OPTIONS = {
  * 2. tokens: the org tokens for the base theme, else the preset (a user theme
  *    never inherits the org's token edits of another base);
  * 3. style: the user's only when `allowUserOverride`, else `org.styleDefault`;
- * 4. mode / density / text size from the user (defaults `system`, `comoda`, 14);
+ * 4. mode / density / text size from the user (defaults `light`, `comoda`, 14);
  * 5. `cssVars` for both modes and `version = org.v`.
  */
 export function resolveAppearance(org: OrgAppearance & { v?: number }, user: UserPreferences | null): ResolvedAppearance {

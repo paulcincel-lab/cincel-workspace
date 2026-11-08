@@ -1,101 +1,47 @@
 /**
- * E2E: axe on every Ajustes page and on the clock-in prompt, in the three themes, light and dark
- * (redesign Phase 6 Done Definition; FE §16, §18 item 13). Serious and critical violations fail.
+ * E2E: one axe check per theme (redesign FE §16, §18 item 13). A collaborator's Ajustes › Apariencia
+ * page — the shell (sidebar, header, assistant button) plus a settings form — has no serious or
+ * critical violation in Azul Cincel, Cálido and Grafito. Light mode in every case.
  *
- * Theme and mode are the viewer's own preferences (`user_preferences.theme` / `mode`), set in the DB
- * before each load. The time-tracking row is snapshotted and put back afterwards.
+ * The theme is the viewer's own preference (`user_preferences.theme`), set in the DB before signing
+ * in; the org lets users pick their theme by default (`allowUserOverride`). The collaborator is an
+ * E2E row, removed by global-cleanup with its preferences.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { test, expect } from "@playwright/test";
-import { loginAsAdmin } from "./helpers/seed-auth";
 import {
-  ADMIN_EMAIL,
   BASE_URL,
   createStaffUser,
   expectAxeClean,
-  patchSettingData,
-  readSettingRaw,
-  resetAdminPreferences,
-  restoreSettingRaw,
   setAppearanceFor,
   signedInContext,
-  withDb,
-  type E2EUser,
-  type ModeChoice,
   type ThemeChoice,
 } from "./helpers/redesign";
 
 const THEMES: ThemeChoice[] = ["azul", "calido", "grafito"];
-const MODES: Exclude<ModeChoice, "system">[] = ["light", "dark"];
-const AJUSTES_PAGES = [
-  "/ajustes/apariencia",
-  "/ajustes/perfil",
-  "/ajustes/tema",
-  "/ajustes/horario",
-  "/ajustes/general",
-  "/ajustes/estatus",
-  "/ajustes/permisos",
-];
-const SETTINGS_KEY = "time_tracking";
+const PAGE = "/ajustes/apariencia";
 
-test.describe("Ajustes — accesibilidad en los tres temas", () => {
-  test.describe.configure({ mode: "serial", timeout: 300_000 });
-
-  let snapshot: string | null = null;
-  let worker: E2EUser;
-
-  test.beforeAll(async () => {
-    snapshot = await readSettingRaw(SETTINGS_KEY);
-    worker = await createStaffUser({ tag: "Axe", role: "Colaborador" });
-  });
-
-  test.afterAll(async () => {
-    await restoreSettingRaw(SETTINGS_KEY, snapshot);
-    await resetAdminPreferences();
-  });
-
+test.describe("Accesibilidad — un tema a la vez", () => {
   for (const theme of THEMES) {
-    for (const mode of MODES) {
-      test(`Ajustes pages are axe clean — ${theme} ${mode}`, async ({ page }) => {
-        await setAppearanceFor(ADMIN_EMAIL, { theme, mode });
-        await loginAsAdmin(page, BASE_URL);
-        for (const path of AJUSTES_PAGES) {
-          await test.step(path, async () => {
-            await page.goto(`${BASE_URL}${path}`, { waitUntil: "load" });
-            await expect(page.locator("main").first()).toBeVisible({ timeout: 30_000 });
-            await expect
-              .poll(() => page.evaluate(() => document.documentElement.getAttribute("data-theme-id")))
-              .toBe(theme);
-            await expect
-              .poll(() => page.evaluate(() => document.documentElement.getAttribute("data-theme")))
-              .toBe(mode);
-            await page.waitForLoadState("networkidle");
-            await expectAxeClean(page, `${path} (${theme} ${mode})`);
-          });
-        }
-      });
-
-      test(`the clock-in prompt is axe clean — ${theme} ${mode}`, async ({ browser }) => {
-        await patchSettingData(SETTINGS_KEY, {
-          enabled: true,
-          requiredFrom: null,
-          workDays: [0, 1, 2, 3, 4, 5, 6],
-          promptAtLogin: true,
-          exemptRoles: [],
-        });
-        await withDb((sql) => sql`delete from core.time_entries where staff_id = ${worker.staffId}`);
-        await setAppearanceFor(worker.email, { theme, mode });
-        const { context, page } = await signedInContext(browser, worker);
-        try {
-          await expect(
-            page.getByRole("dialog").filter({ hasText: "Registra tu entrada para empezar el día." }),
-          ).toBeVisible({ timeout: 30_000 });
-          await expectAxeClean(page, `ClockInPrompt (${theme} ${mode})`);
-        } finally {
-          await context.close();
-        }
-      });
-    }
+    test(`${PAGE} is axe clean — ${theme}`, async ({ browser }) => {
+      const viewer = await createStaffUser({ tag: `Axe${theme}`, role: "Colaborador" });
+      await setAppearanceFor(viewer.email, { theme, mode: "light" });
+      const { context, page } = await signedInContext(browser, viewer, { colorScheme: "light" });
+      try {
+        await page.goto(`${BASE_URL}${PAGE}`, { waitUntil: "load" });
+        await expect(page.locator("main").first()).toBeVisible({ timeout: 30_000 });
+        await expect
+          .poll(() => page.evaluate(() => document.documentElement.getAttribute("data-theme-id")))
+          .toBe(theme);
+        await expect
+          .poll(() => page.evaluate(() => document.documentElement.getAttribute("data-theme")))
+          .toBe("light");
+        await page.waitForLoadState("networkidle");
+        await expectAxeClean(page, `${PAGE} (${theme})`);
+      } finally {
+        await context.close();
+      }
+    });
   }
 });

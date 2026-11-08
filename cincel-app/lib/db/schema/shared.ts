@@ -36,6 +36,8 @@ export const historyEvents = core.table(
     ),
     index("idx_history_events_entity").on(t.entity, t.entityId, t.eventAt),
     index("idx_history_events_actor_id").on(t.actorId),
+    // Inicio's status feeds read every change of one field since a date, across all rows of an entity.
+    index("idx_history_events_change_feed").on(t.entity, t.field, t.eventAt).where(sql`${t.kind} = 'cambio'`),
   ]
 );
 

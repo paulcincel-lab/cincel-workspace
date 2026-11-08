@@ -19,7 +19,7 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   },
 }));
 
-import { countOverdueTasks, tareasNavItem } from "./tareas";
+import { countOpenTasks, tareasNavItem } from "./tareas";
 
 const SESSION = { staffId: "s1", name: "Ana", role: "Colaborador", isAdmin: false, photoUrl: null };
 
@@ -39,16 +39,17 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("countOverdueTasks", () => {
-  it("counts open tasks with a fecha compromiso before today", () => {
+describe("countOpenTasks", () => {
+  it("counts every task that is not closed, whatever its fecha compromiso", () => {
     const tasks = [
-      { commitmentDate: "2026-11-05", status: "pendiente" as const, customStatus: null },
-      { commitmentDate: "2026-11-06", status: "en_proceso" as const, customStatus: null },
-      { commitmentDate: "2026-11-01", status: "completado" as const, customStatus: null },
-      { commitmentDate: "2026-11-01", status: "en_proceso" as const, customStatus: { id: "cs1", name: "Cerrada", closes: true, countsAsCompleted: true } },
-      { commitmentDate: null, status: "pendiente" as const, customStatus: null },
+      { status: "pendiente" as const, customStatus: null },
+      { status: "en_proceso" as const, customStatus: null },
+      { status: "bloqueado" as const, customStatus: null },
+      { status: "completado" as const, customStatus: null },
+      { status: "en_proceso" as const, customStatus: { id: "cs1", name: "Cerrada", closes: true, countsAsCompleted: true } },
+      { status: "en_proceso" as const, customStatus: { id: "cs2", name: "En revisión", closes: false, countsAsCompleted: false } },
     ];
-    expect(countOverdueTasks(tasks, "2026-11-06")).toBe(1);
+    expect(countOpenTasks(tasks)).toBe(4);
   });
 });
 
@@ -59,17 +60,20 @@ describe("tareasNavItem", () => {
     expect(tareasNavItem.order).toBe(30);
   });
 
-  it("shows my overdue tasks as the badge", async () => {
+  it("shows my open tasks as the badge", async () => {
     state.tasks = [
       { commitmentDate: iso(-2), status: "pendiente", customStatus: null },
       { commitmentDate: iso(-1), status: "en_proceso", customStatus: null },
       { commitmentDate: iso(3), status: "pendiente", customStatus: null },
+      { commitmentDate: null, status: "bloqueado", customStatus: null },
+      { commitmentDate: iso(-5), status: "completado", customStatus: null },
     ];
     const item = await tareasNavItem.resolve(SESSION);
-    expect(item).toMatchObject({ key: "tareas", label: "Tareas", href: "/tareas", badge: 2 });
+    expect(item).toMatchObject({ key: "tareas", label: "Tareas", href: "/tareas", badge: 4 });
   });
 
-  it("has no badge with nothing overdue", async () => {
+  it("has no badge with every task closed", async () => {
+    state.tasks = [{ commitmentDate: iso(-1), status: "completado", customStatus: null }];
     const item = await tareasNavItem.resolve(SESSION);
     expect(item).not.toBeNull();
     expect(item?.badge).toBeUndefined();

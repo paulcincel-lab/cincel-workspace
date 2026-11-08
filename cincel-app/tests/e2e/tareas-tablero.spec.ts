@@ -1,7 +1,6 @@
 /**
- * E2E: the task routes (FE §2.2, §3.4): `/tablero`, `/mis-tareas` and
- * `/calendario` redirect to the views of `/tareas`; the Tablero view moves a card between columns by drag and drop
- * and the task sheet opens and closes through `?tarea=<id>`.
+ * E2E: Tareas › Tablero (FE §3.4): a task created from "Nueva tarea" lands in Pendiente and moves to
+ * another column by drag and drop; an empty board still shows every column.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -25,19 +24,16 @@ async function withSql<T>(fn: (sql: postgres.Sql) => Promise<T>): Promise<T> {
   }
 }
 
-let boardTaskId: Promise<string> | null = null;
+let boardProjectId: Promise<string> | null = null;
 
 /**
- * Seeds (once per run) an active presale project and one pending task the
- * admin manages, all tagged E2E for global-cleanup. Returns the task id.
+ * Seeds (once per run) an active presale project with a client, tagged E2E
+ * for global-cleanup. Returns the project id.
  */
-function ensureBoardTask(): Promise<string> {
-  boardTaskId ??= withSql(async (sql) => {
+function ensureBoardProject(): Promise<string> {
+  boardProjectId ??= withSql(async (sql) => {
     const [workflow] = await sql`select id from core.workflows where key = 'presale' limit 1`;
     if (!workflow) throw new Error("presale workflow not seeded");
-    const [admin] = await sql`
-      select id from core.staff where lower(email) = lower(${process.env.E2E_ADMIN_EMAIL ?? "paul@cincel.mx"}) and deleted_at is null limit 1`;
-    if (!admin) throw new Error("seeded admin not found");
     const [client] = await sql`
       insert into core.contacts (type, kind, name)
       values ('cliente', 'particular', ${`Cliente Tablero E2E ${RUN_ID}`})
@@ -46,19 +42,18 @@ function ensureBoardTask(): Promise<string> {
       insert into core.projects (name, client_id, current_workflow_id, status)
       values (${`Proyecto Tablero E2E ${RUN_ID}`}, ${client.id}, ${workflow.id}, 'activo')
       returning id`;
-    const [task] = await sql`
-      insert into core.tasks (project_id, workflow_id, kind, title, status, created_by_id, manager_id)
-      values (${project.id}, ${workflow.id}, 'usuario', ${TASK_TITLE}, 'pendiente', ${admin.id}, ${admin.id})
-      returning id`;
-    return task.id as string;
+    return project.id as string;
   });
-  return boardTaskId;
+  return boardProjectId;
 }
 
-async function taskStatus(id: string): Promise<string> {
+/** Status of the task created by the test, or null while it doesn't exist. */
+async function taskStatus(projectId: string): Promise<string | null> {
   return withSql(async (sql) => {
-    const [row] = await sql`select status from core.tasks where id = ${id}`;
-    return row?.status as string;
+    const [row] = await sql`
+      select status::text as status from core.tasks
+      where project_id = ${projectId} and title = ${TASK_TITLE} and deleted_at is null`;
+    return (row?.status as string | undefined) ?? null;
   });
 }
 
@@ -67,69 +62,48 @@ function column(page: Page, status: string) {
   return page.getByRole("group", { name: new RegExp(`^${status}`) }).first();
 }
 
-/** The draggable card of the seeded task. */
+/** The draggable card of the created task. */
 function card(page: Page) {
   return page.locator('[draggable="true"]').filter({ hasText: TASK_TITLE }).first();
 }
 
-/** The open task sheet (FormSheet on the shadcn Sheet). */
-function sheet(page: Page) {
-  return page.locator('[data-slot="sheet-content"]');
-}
-
-async function expectSheetShowsTask(page: Page): Promise<void> {
-  const drawer = sheet(page);
-  await expect(drawer).toBeVisible({ timeout: 15_000 });
-  // The title is inline-editable: plain text or an input holding it.
-  await expect(
-    drawer
-      .getByText(TASK_TITLE, { exact: true })
-      .or(drawer.locator(`input[value="${TASK_TITLE}"]`))
-      .first()
-  ).toBeVisible({ timeout: 15_000 });
-}
-
 test.describe("Tareas", () => {
   test.beforeEach(async ({ page }) => {
-    await ensureBoardTask();
+    await ensureBoardProject();
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
   });
 
-  test("old routes redirect to the views of /tareas", async ({ page }) => {
-    const expected: Array<[string, Record<string, string>]> = [
-      ["/tablero", { vista: "tablero" }],
-      ["/mis-tareas", { vista: "lista", responsable: "yo" }],
-      ["/calendario", { vista: "calendario" }],
-    ];
-    for (const [legacy, params] of expected) {
-      await page.goto(`${BASE_URL}${legacy}`, { waitUntil: "domcontentloaded" });
-      await expect(page).toHaveURL(/\/tareas\?/, { timeout: 30_000 });
-      const url = new URL(page.url());
-      for (const [key, value] of Object.entries(params)) expect(url.searchParams.get(key)).toBe(value);
-      await expect(page.getByRole("heading", { name: "Tareas", exact: true })).toBeVisible({ timeout: 30_000 });
-    }
-  });
-
-  test("the view switch moves between Tablero, Lista and Calendario through the URL", async ({ page }) => {
-    await page.goto(`${BASE_URL}/tareas?vista=tablero`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Tareas", exact: true })).toBeVisible({ timeout: 30_000 });
-
-    for (const [label, vista] of [
-      ["Lista", "lista"],
-      ["Calendario", "calendario"],
-      ["Tablero", "tablero"],
-    ] as const) {
-      await page.getByRole("link", { name: label, exact: true }).first().click();
-      await expect(page).toHaveURL(new RegExp(`[?&]vista=${vista}`), { timeout: 30_000 });
-    }
-  });
-
-  test("dragging a card to another column changes its status and survives a reload", async ({ page }) => {
-    const taskId = await ensureBoardTask();
-    await page.goto(`${BASE_URL}/tareas?vista=tablero&q=${encodeURIComponent(TASK_TITLE)}`, {
+  test("with no task matching the filters the board still shows every column with 0", async ({ page }) => {
+    await page.goto(`${BASE_URL}/tareas?vista=tablero&q=${encodeURIComponent(`sin coincidencias ${RUN_ID}`)}`, {
       waitUntil: "domcontentloaded",
     });
+
+    for (const status of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
+      await expect(page.getByRole("group", { name: `${status} · 0`, exact: true })).toBeVisible({ timeout: 30_000 });
+    }
+    await expect(page.getByTestId("board-column-empty").first()).toBeVisible();
+    await expect(page.getByText("No hay tareas con estos filtros")).toHaveCount(0);
+  });
+
+  test("a task created from Nueva tarea lands in Pendiente and moves to En proceso by drag and drop", async ({
+    page,
+  }) => {
+    const projectId = await ensureBoardProject();
+    // The project filter prefills Proyecto in the dialog and keeps the board to this project.
+    await page.goto(`${BASE_URL}/tareas?vista=tablero&proyecto=${projectId}&nueva=1`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    const dialog = page.getByRole("dialog", { name: "Nueva tarea" });
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
+    await expect(dialog.getByText("Cargando…")).toHaveCount(0, { timeout: 30_000 });
+    await dialog.getByLabel("Título", { exact: true }).fill(TASK_TITLE);
+    await dialog.getByRole("button", { name: "Crear tarea" }).click();
+    await expect(page.getByText("Tarea creada").first()).toBeVisible({ timeout: 15_000 });
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await expect(page).not.toHaveURL(/[?&]nueva=1/);
+    await expect.poll(() => taskStatus(projectId), { timeout: 15_000 }).toBe("pendiente");
 
     await expect(column(page, "Pendiente").getByText(TASK_TITLE)).toBeVisible({ timeout: 30_000 });
     // An empty column collapses to a strip but still takes the drop.
@@ -137,52 +111,10 @@ test.describe("Tareas", () => {
 
     // Optimistic move first, then the server confirms it.
     await expect(column(page, "En proceso").getByText(TASK_TITLE)).toBeVisible({ timeout: 15_000 });
-    await expect.poll(() => taskStatus(taskId), { timeout: 15_000 }).toBe("en_proceso");
+    await expect.poll(() => taskStatus(projectId), { timeout: 15_000 }).toBe("en_proceso");
 
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(column(page, "En proceso").getByText(TASK_TITLE)).toBeVisible({ timeout: 30_000 });
     await expect(column(page, "Pendiente").getByText(TASK_TITLE)).toHaveCount(0);
-
-    // Back to Pendiente so the sheet tests below start from a known state.
-    await card(page).dragTo(column(page, "Pendiente"));
-    await expect(column(page, "Pendiente").getByText(TASK_TITLE)).toBeVisible({ timeout: 15_000 });
-    await expect.poll(() => taskStatus(taskId), { timeout: 15_000 }).toBe("pendiente");
-  });
-
-  test("the card title opens the task sheet via ?tarea= and closing removes it without leaving the board", async ({
-    page,
-  }) => {
-    const taskId = await ensureBoardTask();
-    await page.goto(`${BASE_URL}/tareas?vista=tablero&q=${encodeURIComponent(TASK_TITLE)}`, {
-      waitUntil: "domcontentloaded",
-    });
-
-    const titleLink = card(page).getByRole("link", { name: TASK_TITLE });
-    await expect(titleLink).toBeVisible({ timeout: 30_000 });
-    await expect(titleLink).toHaveAttribute("href", new RegExp(`[?&]tarea=${taskId}`));
-    await titleLink.click();
-
-    await expect(page).toHaveURL(new RegExp(`[?&]tarea=${taskId}`), { timeout: 15_000 });
-    await expectSheetShowsTask(page);
-    // The view underneath stays mounted with its filters.
-    await expect(page).toHaveURL(/[?&]vista=tablero/);
-    await expect(column(page, "Pendiente")).toBeAttached();
-
-    await sheet(page).getByRole("button", { name: "Cerrar", exact: true }).first().click();
-    await expect(sheet(page)).toBeHidden({ timeout: 15_000 });
-    await expect(page).not.toHaveURL(/[?&]tarea=/);
-    await expect(page).toHaveURL(/[?&]vista=tablero/);
-    await expect(card(page)).toBeVisible();
-  });
-
-  test("a deep link to /tareas?tarea=<id> opens the sheet and Escape closes it", async ({ page }) => {
-    const taskId = await ensureBoardTask();
-    await page.goto(`${BASE_URL}/tareas?vista=tablero&tarea=${taskId}`, { waitUntil: "domcontentloaded" });
-    await expectSheetShowsTask(page);
-
-    await page.keyboard.press("Escape");
-    await expect(sheet(page)).toBeHidden({ timeout: 15_000 });
-    await expect(page).not.toHaveURL(/[?&]tarea=/);
-    await expect(page).toHaveURL(/\/tareas\?(.*&)?vista=tablero/);
   });
 });

@@ -6,9 +6,9 @@ import { BarChart3 } from "lucide-react";
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { useStyle } from "@/components/shell/StyleProvider";
-import { formatKpiDelta, KpiRow, type KpiTileProps } from "@/components/v2/layout/KpiRow";
+import { DELTA_TEXT, formatKpiDelta, KpiRow, type KpiTileProps } from "@/components/v2/layout/KpiRow";
 import { RecordTable } from "@/components/widgets/RecordTable";
-import { Sparkline } from "@/components/widgets/Sparkline";
+import { hasSparklineData, Sparkline } from "@/components/widgets/Sparkline";
 import { StyleView } from "@/components/widgets/StyleView";
 import { tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
 import type { PresentationStyle } from "@/lib/types/redesign";
@@ -20,8 +20,9 @@ import { cn } from "@/lib/utils";
  * `visibleIn` by the current style. Extends `components/v2/layout/KpiRow` /
  * `KpiTile`.
  *
- * - Visual: tiles with value, sparkline (`series7`), delta pill (colored by
- *   `delta.good`, whatever the sign) and tramo split bar.
+ * - Visual: tiles with label and delta chip (`delta.label` / `delta.tone`:
+ *   "+4 vs. semana", "sin cambio"), value, sparkline (`series7`, hidden
+ *   without data), tramo split bar and context line (`caption`).
  * - Esencial: one card of big numbers + labels; no charts, no tints.
  * - Analítico: `RecordTable` rows: Indicador, Hoy, Δ 7 días, Prom. 30 días,
  *   Mín – máx 30 d, Tendencia 7 d.
@@ -136,7 +137,7 @@ export function kpiTableData(items: KpiDatum[]): RecordTableData {
         item.min30 === undefined && item.max30 === undefined
           ? DASH
           : `${formatKpiNumber(item.min30)} – ${formatKpiNumber(item.max30)}`,
-      tendencia: item.series7 && item.series7.length > 0 ? item.series7.join(", ") : DASH,
+      tendencia: hasSparklineData(item.series7) ? item.series7.join(", ") : DASH,
     })),
   };
 }
@@ -168,7 +169,8 @@ function Analitico({ items }: { items: KpiDatum[] }) {
                 data-good={item.delta.good}
                 className={cn(
                   "block text-right font-mono tabular-nums",
-                  item.delta.good ? "text-success-foreground" : "text-destructive"
+                  // The 7-day change: zero reads neutral, else colored by `good`.
+                  DELTA_TEXT[item.delta.value === 0 ? "neutral" : item.delta.good ? "good" : "bad"]
                 )}
               >
                 {formatKpiDelta(item.delta.value)}
@@ -176,7 +178,7 @@ function Analitico({ items }: { items: KpiDatum[] }) {
               </span>
             );
           }
-          if (columnKey === "tendencia" && item.series7 && item.series7.length > 0) {
+          if (columnKey === "tendencia" && hasSparklineData(item.series7)) {
             return (
               <Sparkline
                 points={item.series7}

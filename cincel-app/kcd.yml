@@ -26,6 +26,7 @@ env:
   LLM_MODEL: { default: "gpt-4o-mini" }
   MAIL_FROM: { description: "Sender of portal mail, e.g. \"Cincel <portal@cincel.mx>\". Must be SMTP_USER itself or one of its verified Gmail \"Send mail as\" aliases. Empty = \"Cincel <SMTP_USER>\"." }
   MONDAY_IMPORT_DIR: { default: "/data/monday", description: "Folder for the monday import wizard's export runs (one subfolder per run). Must be writable by the app user; the image creates /data/monday for nextuser. Keep it on the /data/monday volume so runs survive a redeploy." }
+  SESSION_SECRET: { secret: true, generate: hex32, description: "Signs the 10-minute send confirmation of Gmail drafts (Mi espacio > Gmail). Unset = saving a draft fails with a server error. Changing it invalidates drafts saved in the last 10 minutes. See docs/deployment.md." }
   SMTP_HOST: { description: "Client portal mail (invitations, sign-in links): smtp.gmail.com, sending from one Workspace account. Empty = mail is only logged and nothing is delivered. Setup in docs/deployment.md." }
   SMTP_PASSWORD: { secret: true, description: "App password of the SMTP_USER Workspace account (Google Account > Security > App passwords; needs 2-Step Verification). See docs/deployment.md." }
   SMTP_PORT: { default: "465", description: "SMTP port: 465 for smtp.gmail.com (implicit TLS)." }

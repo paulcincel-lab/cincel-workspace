@@ -121,7 +121,7 @@ export function AsistentePageClient({ threads: initialThreads, initialThread, mi
     : threads.find((t) => t.id === conversation.id)?.title || conversation.title || UNTITLED;
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col lg:h-[calc(100dvh-2rem)] lg:flex-row">
+    <div className="flex min-h-0 w-full flex-1 flex-col lg:h-dvh lg:flex-row">
       <aside
         aria-label="Conversaciones"
         className="flex flex-col gap-1 border-b border-border bg-card p-3 lg:w-64 lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-b-0"

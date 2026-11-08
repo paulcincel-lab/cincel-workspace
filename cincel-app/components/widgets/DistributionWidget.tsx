@@ -1,14 +1,8 @@
 "use client";
 
-import { Pie, PieChart } from "recharts";
-
 import { useStyle } from "@/components/shell/StyleProvider";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/shadcn/chart";
+import type { ChartConfig } from "@/components/ui/shadcn/chart";
+import { LazyDonutChart } from "@/components/widgets/charts/lazy";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
@@ -159,27 +153,19 @@ function VisualDistribution({ title, segments, totalLabel }: DistributionWidgetP
 
   return (
     <div data-slot="distribution-visual" className="flex flex-col items-center gap-6 sm:flex-row">
-      <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
-        <ChartContainer
+      <div
+        role="img"
+        aria-label={distributionSummary(title, segments, totalLabel)}
+        className="relative shrink-0"
+        style={{ width: SIZE, height: SIZE }}
+      >
+        <LazyDonutChart
           config={config}
-          role="img"
-          aria-label={distributionSummary(title, segments, totalLabel)}
-          className="aspect-square size-full"
-        >
-          <PieChart accessibilityLayer={false}>
-            <ChartTooltip content={<ChartTooltipContent nameKey="key" hideLabel />} />
-            <Pie
-              data={visible.map((s) => ({ key: s.key, value: s.value, fill: s.colorVar }))}
-              dataKey="value"
-              nameKey="key"
-              innerRadius={SIZE / 2 - RING}
-              outerRadius={SIZE / 2}
-              stroke="var(--card)"
-              strokeWidth={visible.length > 1 ? GAP : 0}
-              isAnimationActive={false}
-            />
-          </PieChart>
-        </ChartContainer>
+          data={visible.map((s) => ({ key: s.key, value: s.value, fill: s.colorVar }))}
+          innerRadius={SIZE / 2 - RING}
+          outerRadius={SIZE / 2}
+          gap={visible.length > 1 ? GAP : 0}
+        />
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span data-slot="distribution-total" className="text-3xl font-semibold tabular-nums">
             {total}

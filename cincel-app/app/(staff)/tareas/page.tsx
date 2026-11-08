@@ -8,6 +8,7 @@ import {
   fetchMyTasksAction,
   fetchTasksAction,
 } from "@/lib/actions/tasks-actions";
+import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -82,20 +83,33 @@ export default async function TareasPage({ searchParams }: { searchParams: Promi
     const range = tareasCalendarRange(query.cal, new Date());
     return fetchCalendarAction(range.from, range.to, viewFilters);
   };
+  // Tablero shows a column per configured custom status, even when empty.
+  // A failed load only drops the empty custom columns, never the board.
+  const loadStatuses = async () => {
+    if (query.vista !== "tablero") return undefined;
+    try {
+      return await fetchTaskStatusesAction();
+    } catch (err) {
+      console.error("[tareas] statuses", err);
+      return [];
+    }
+  };
 
   const initial: TareasClientProps["initial"] = { tasks: [] };
   let staff: TareasClientProps["staff"] = [];
   try {
-    const [tasks, board, calendar, staffRows] = await Promise.all([
+    const [tasks, board, calendar, staffRows, statuses] = await Promise.all([
       // "Responsable: Yo" is Mis tareas: the viewer's own tasks, an admin's own admin tasks included.
       query.responsable === "yo" ? fetchMyTasksAction(base) : fetchTasksAction(base),
       loadBoard(),
       loadCalendar(),
       fetchAssignableStaffAction(tramo?.id ?? null),
+      loadStatuses(),
     ]);
     initial.tasks = tasks;
     if (board) initial.board = board;
     if (calendar) initial.calendar = calendar;
+    if (statuses) initial.statuses = statuses;
     staff = staffRows;
   } catch (err) {
     console.error("[tareas] load", err);

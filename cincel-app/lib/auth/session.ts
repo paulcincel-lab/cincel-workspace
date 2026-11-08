@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { cache } from "react";
 
 import { staffAccessRole } from "@/lib/auth/access-role";
 import { accessRecheckHours, isAccessCheckDue, recheckStaffAccess } from "@/lib/auth/access-recheck";
@@ -97,11 +98,25 @@ export async function createSession(
  * is gone.
  */
 export async function getSession(): Promise<Session | null> {
+  return readSession(findSessionForRequest);
+}
+
+/**
+ * One session lookup per token per server render: the layout, the page and
+ * every action and helper it awaits share the row instead of each querying
+ * it again. Outside a render (route handlers, Server Action requests) React's
+ * `cache` calls straight through.
+ */
+const findSessionForRequest = cache((token: string) => authRepository.findSessionByToken(token));
+
+async function readSession(
+  find: (token: string) => ReturnType<typeof authRepository.findSessionByToken>,
+): Promise<Session | null> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
-  const record = await authRepository.findSessionByToken(token);
+  const record = await find(token);
   if (!record) return null;
 
   return { id: record.id, expiresAt: record.expiresAt, user: record.user, staffAccess: record.staffAccess };
@@ -119,7 +134,7 @@ export async function getSession(): Promise<Session | null> {
  * `redirect()` throws; route handlers that turn a thrown helper into a 401
  * keep doing so.
  */
-async function getCheckedSession(): Promise<Session | null> {
+const getCheckedSession = cache(async (): Promise<Session | null> => {
   const session = await getSession();
   if (!session) return null;
 
@@ -140,10 +155,10 @@ async function getCheckedSession(): Promise<Session | null> {
     return session;
   }
   if (outcome.status === "revoked") redirect(SIGNOUT_REVOKED_PATH);
-  // Role and áreas may have changed.
-  if (outcome.status === "kept") return getSession();
+  // Role and áreas may have changed: read the row again, past the per-render cache.
+  if (outcome.status === "kept") return readSession(authRepository.findSessionByToken);
   return session;
-}
+});
 
 /**
  * Require an active session or throw. Use at the top of Server Actions.

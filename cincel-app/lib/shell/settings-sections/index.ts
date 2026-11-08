@@ -7,26 +7,13 @@ import type { ComponentType } from "react";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 
-import { notificacionesCanalesSection } from "./notificaciones/canales";
-import { notificacionesHorasSilencioSection } from "./notificaciones/horas-silencio";
-import { integracionesGmailSection } from "./integraciones/gmail";
-import { integracionesGoogleCalendarSection } from "./integraciones/google-calendar";
-import { integracionesGoogleDriveSection } from "./integraciones/google-drive";
-import { integracionesMondaySection } from "./integraciones/monday";
-import { aparienciaTemaSection } from "./apariencia/tema";
-import { aparienciaEstiloSection } from "./apariencia/estilo";
-import { aparienciaModoSection } from "./apariencia/modo";
-import { aparienciaDensidadSection } from "./apariencia/densidad";
-import { aparienciaTamanoTextoSection } from "./apariencia/tamano-texto";
-import { horarioControlSection } from "./horario/control";
-import { horarioReglasSection } from "./horario/reglas";
-import { horarioVistaPreviaSection } from "./horario/vista-previa";
-import { horarioHorasEquipoSection } from "./horario/horas-equipo";
-import { perfilFotoSection } from "./perfil/foto";
-import { perfilDatosSection } from "./perfil/datos";
-import { perfilHorasSemanaSection } from "./perfil/horas-semana";
-import { perfilContrasenaSection } from "./perfil/contrasena";
-import { generalEnlacesSection } from "./general/enlaces";
+import { APARIENCIA_SECTIONS } from "./apariencia";
+import { GENERAL_SECTIONS } from "./general";
+import { HORARIO_SECTIONS } from "./horario";
+import { INTEGRACIONES_SECTIONS } from "./integraciones";
+import { NOTIFICACIONES_SECTIONS } from "./notificaciones";
+import { PERFIL_SECTIONS } from "./perfil";
+import { visibleSettingsSections } from "./visible";
 
 export type SettingsPage = "perfil" | "apariencia" | "notificaciones" | "integraciones" | "general" | "horario";
 
@@ -39,30 +26,24 @@ export type SettingsSectionEntry = {
   Component: ComponentType;
 };
 
+/**
+ * Every section of every page. Pages import their own list from
+ * `./<page>` (and filter it with `./visible`) so a page bundle never carries
+ * the other pages' section components.
+ */
 export const SETTINGS_SECTIONS: readonly SettingsSectionEntry[] = [
-  notificacionesCanalesSection,
-  notificacionesHorasSilencioSection,
-  integracionesGmailSection,
-  integracionesGoogleCalendarSection,
-  integracionesGoogleDriveSection,
-  integracionesMondaySection,
-  aparienciaTemaSection,
-  aparienciaEstiloSection,
-  aparienciaModoSection,
-  aparienciaDensidadSection,
-  aparienciaTamanoTextoSection,
-  horarioControlSection,
-  horarioReglasSection,
-  horarioVistaPreviaSection,
-  horarioHorasEquipoSection,
-  perfilFotoSection,
-  perfilDatosSection,
-  perfilHorasSemanaSection,
-  perfilContrasenaSection,
-  generalEnlacesSection,
+  ...NOTIFICACIONES_SECTIONS,
+  ...INTEGRACIONES_SECTIONS,
+  ...APARIENCIA_SECTIONS,
+  ...HORARIO_SECTIONS,
+  ...PERFIL_SECTIONS,
+  ...GENERAL_SECTIONS,
 ];
 
 /** The visible sections of one page, in order. */
 export function settingsSectionsFor(page: SettingsPage, user: AuthenticatedUser): SettingsSectionEntry[] {
-  return SETTINGS_SECTIONS.filter((s) => s.page === page && s.visible(user)).sort((a, b) => a.order - b.order);
+  return visibleSettingsSections(
+    SETTINGS_SECTIONS.filter((s) => s.page === page),
+    user,
+  );
 }

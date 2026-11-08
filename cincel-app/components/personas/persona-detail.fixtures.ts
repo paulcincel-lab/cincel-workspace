@@ -1,4 +1,4 @@
-import type { PersonaDetail } from "@/lib/types/redesign";
+import type { PersonaActivityItem, PersonaDetail } from "@/lib/types/redesign";
 import type { AttentionItem } from "@/lib/types/widgets";
 
 /** Title of the admin-only task of the fixture (`kind = 'admin'` on the server). */
@@ -44,9 +44,27 @@ const adminTask: AttentionItem = {
   daysLate: null,
 };
 
+/** Activity text of the admin-only item of the fixture (an event on the admin task). */
+export const ADMIN_ACTIVITY_TEXT = `Comentó en “${ADMIN_TASK_TITLE}”`;
+
+/** "Actividad reciente" rows of frame `PersonaDetalle`. */
+const visibleActivity: PersonaActivityItem[] = [
+  { id: "a-1", text: "Movió “Instalación eléctrica” a 90%", at: "2026-11-07T16:12:00.000Z", when: "hoy 10:12", href: "/proyectos/pr-1" },
+  { id: "a-2", text: "Subió 3 fotos a la bitácora de Casa Lomas", at: "2026-11-06T23:40:00.000Z", when: "ayer 17:40", href: "/proyectos/pr-3" },
+  { id: "a-3", text: "Comentó en “Carpeta de proyecto terminado”", at: "2026-11-06T18:05:00.000Z", when: "ayer 12:05", href: "/tareas?tarea=t-3" },
+];
+
+const adminActivity: PersonaActivityItem = {
+  id: "a-admin",
+  text: ADMIN_ACTIVITY_TEXT,
+  at: "2026-11-06T15:00:00.000Z",
+  when: "ayer 9:00",
+  href: "/tareas?tarea=t-admin",
+};
+
 /**
  * `fetchPersonaDetailAction` output as the server returns it for one viewer:
- * the admin task only with `canSeeAdminData`, `weekHours` only for
+ * the admin task (and its activity row) only with `canSeeAdminData`, `weekHours` only for
  * `canViewTeamHours` or self (BE §7.11).
  */
 export function personaDetailFixture(viewer: { canSeeAdminData: boolean; canViewHours: boolean }): PersonaDetail {
@@ -106,5 +124,6 @@ export function personaDetailFixture(viewer: { canSeeAdminData: boolean; canView
         ]
       : null,
     availability: ["ocupado", "saturado", "saturado", "ocupado", "libre"],
+    recentActivity: viewer.canSeeAdminData ? [...visibleActivity, adminActivity] : visibleActivity,
   };
 }

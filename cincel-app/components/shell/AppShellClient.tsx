@@ -5,6 +5,7 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/shadcn/sidebar";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
+import { pageContentClass } from "@/lib/shell/page-padding";
 import { isSearchVisible } from "@/lib/shell/visibility";
 import type { TodayStatus } from "@/lib/types/redesign";
 import { BOTTOM_TABS_CONTENT_CLASS } from "@/lib/ui/mobile-nav";
@@ -61,9 +62,11 @@ export function AppShellClient({ children, nav: clientNav, session, today, slots
       />
       <SidebarInset id="contenido" className="min-w-0">
         <MobileTopBar session={session} today={today} />
-        <div className={BOTTOM_TABS_CONTENT_CLASS}>
-          <OfflineBanner />
-          {children}
+        <div className={`flex flex-1 flex-col ${BOTTOM_TABS_CONTENT_CLASS}`}>
+          <div data-slot="page-content" className={pageContentClass(pathname)}>
+            <OfflineBanner />
+            {children}
+          </div>
         </div>
       </SidebarInset>
       <BottomTabs activeKey={activeKey} items={tabs.items} more={tabs.more} />

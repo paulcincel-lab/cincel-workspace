@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 let pathname = "/inicio";
@@ -23,6 +23,12 @@ vi.mock("@/lib/actions/assistant-actions", () => ({
 
 import { AssistantLauncher, assistantEntryEnabled, openAssistant } from "../AssistantLauncher";
 import { IMPLEMENTED } from "@/lib/actions/assistant-actions.flags";
+
+// The launcher lazy-loads the sheet chunk on first open; load it up front so a
+// busy runner's first transform of that tree does not eat the per-test timeout.
+beforeAll(async () => {
+  await import("../AssistantSheet");
+}, 60_000);
 
 beforeEach(() => {
   pathname = "/inicio";

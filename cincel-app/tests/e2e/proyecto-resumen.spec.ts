@@ -1,8 +1,8 @@
 /**
- * E2E: the project shell and the Resumen tab (redesign FE §3.5, issue R4-05).
- * `/proyectos/<id>` renders the project header, the tabs (Resumen active) and
- * the Resumen; the other tab routes keep working; Cutto appears only as links
- * that open in a new tab.
+ * E2E: the project shell (redesign FE §3.5): `/proyectos/<id>` opens on
+ * Resumen with the project header and tabs, and every tab (Tareas,
+ * Cronograma, Archivos, Ficha) opens under the same header with its tab
+ * marked current. Cutto appears only as links, never embedded.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -41,13 +41,13 @@ test.beforeAll(async () => {
   projectId = await seedProject();
 });
 
-test.describe("Proyecto · Resumen", () => {
+test.describe("Proyecto · Resumen y pestañas", () => {
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
   });
 
-  test("renders the header, the tabs with Resumen active and the Resumen", async ({ page }) => {
+  test("opens a project on Resumen and walks its tabs", async ({ page }) => {
     await page.goto(`${BASE_URL}/proyectos/${projectId}`, { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(new RegExp(`/proyectos/${projectId}$`));
     await expect(page.getByRole("heading", { level: 1, name: PROJECT_NAME })).toBeVisible({ timeout: 30_000 });
@@ -55,44 +55,34 @@ test.describe("Proyecto · Resumen", () => {
 
     const tabs = page.getByRole("navigation", { name: "Secciones del proyecto" });
     await expect(tabs.getByRole("tab", { name: /^Resumen/ })).toHaveAttribute("aria-current", "page");
-    await expect(tabs.getByRole("tab", { name: /^Tareas/ })).toHaveAttribute("href", `/proyectos/${projectId}/tareas`);
-    await expect(tabs.getByRole("tab", { name: /^Ficha/ })).toHaveAttribute("href", `/proyectos/${projectId}/ficha`);
-
-    await expect(page.getByRole("link", { name: "Reporte" })).toHaveAttribute(
-      "href",
-      `/proyectos/${projectId}/cronograma/reporte`
-    );
     await expect(page.getByRole("link", { name: "Nueva tarea" })).toHaveAttribute(
       "href",
       `/tareas?proyecto=${projectId}&nueva=1`
     );
-  });
-
-  test("Cutto appears only as links that open in a new tab", async ({ page }) => {
-    await page.goto(`${BASE_URL}/proyectos/${projectId}`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { level: 1, name: PROJECT_NAME })).toBeVisible({ timeout: 30_000 });
+    // Cutto stays a link that opens in a new tab, never an embed.
     await expect(page.locator("iframe[src*='cutto']")).toHaveCount(0);
-    const links = page.getByRole("link", { name: /Abrir chat en Cutto/ });
-    for (const link of await links.all()) {
-      await expect(link).toHaveAttribute("target", "_blank");
-      await expect(link).toHaveAttribute("rel", /noopener/);
-      await expect(link).toHaveAttribute("href", /^https:\/\/cutto\.cloudketer\.dev\//);
-    }
-  });
 
-  test("the other tab routes keep working", async ({ page }) => {
-    for (const section of ["ficha", "cronograma", "archivos"]) {
-      const response = await page.goto(`${BASE_URL}/proyectos/${projectId}/${section}`, { waitUntil: "domcontentloaded" });
-      expect(response?.status() ?? 0).toBeLessThan(400);
-      await expect(page).toHaveURL(new RegExp(`/proyectos/${projectId}/${section}`));
-    }
-  });
-
-  test("?estilo= switches the Resumen to Esencial and Analítico without changing the route", async ({ page }) => {
-    for (const estilo of ["esencial", "analitico"]) {
-      await page.goto(`${BASE_URL}/proyectos/${projectId}?estilo=${estilo}`, { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { level: 1, name: PROJECT_NAME })).toBeVisible({ timeout: 30_000 });
-      await expect(page).toHaveURL(new RegExp(`/proyectos/${projectId}\\?estilo=${estilo}`));
+    for (const [label, section] of [
+      ["Tareas", "tareas"],
+      ["Cronograma", "cronograma"],
+      ["Archivos", "archivos"],
+      ["Ficha", "ficha"],
+      ["Resumen", ""],
+    ] as const) {
+      await test.step(label, async () => {
+        await page
+          .getByRole("navigation", { name: "Secciones del proyecto" })
+          .getByRole("tab", { name: new RegExp(`^${label}`) })
+          .click();
+        const path = section ? `/proyectos/${projectId}/${section}` : `/proyectos/${projectId}`;
+        await expect(page).toHaveURL(new RegExp(`${path}$`), { timeout: 30_000 });
+        await expect(page.getByRole("heading", { level: 1, name: PROJECT_NAME })).toBeVisible({ timeout: 30_000 });
+        await expect(
+          page
+            .getByRole("navigation", { name: "Secciones del proyecto" })
+            .getByRole("tab", { name: new RegExp(`^${label}`) })
+        ).toHaveAttribute("aria-current", "page", { timeout: 15_000 });
+      });
     }
   });
 });

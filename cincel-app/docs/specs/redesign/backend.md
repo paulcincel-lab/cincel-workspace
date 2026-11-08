@@ -153,7 +153,7 @@ export const assistantActionStatus = core.enum("assistant_action_status", [
 export const userPreferences = core.table("user_preferences", {
   staffId: uuid("staff_id").primaryKey().references(() => staff.id, { onDelete: "cascade" }),
   theme: themeId("theme"),                          // null = org theme
-  mode: colorMode("mode").notNull().default("system"),
+  mode: colorMode("mode").notNull().default("light"),
   style: presentationStyle("style"),                // null = org default style
   density: density("density").notNull().default("comoda"),
   textSize: numeric("text_size", { precision: 3, scale: 1, mode: "number" }).notNull().default(14),
@@ -939,7 +939,7 @@ KPI values come from the metrics helper (§8.0.1) over the existing dashboard so
 
 | Action | Input | Output | Auth | Errors | revalidatePath |
 |---|---|---|---|---|---|
-| `fetchPersonaDetailAction(staffId)` | | `PersonaDetail` | `team.canViewTeam`; `weekHours` only for `canViewTeamHours` or self; tasks without admin tasks unless `canSeeAdminData` | `NOT_FOUND` | |
+| `fetchPersonaDetailAction(staffId)` | | `PersonaDetail` | `team.canViewTeam`; `weekHours` only for `canViewTeamHours` or self; tasks and `recentActivity` without admin tasks (and, for `recentActivity`, without the admin-only project fields `clientId`, `origin`, `originStaffId`, `contractAmountMxn`) unless `canSeeAdminData` | `NOT_FOUND` | |
 | `fetchPeopleOverviewAction()` | | `PeopleOverviewRow[]` (active staff) | `team.canViewTeam` | | |
 
 ```ts
@@ -951,6 +951,14 @@ export type PersonaDetail = {      // FE §7.9 field names
   tasks: AttentionItem[];          // open assigned tasks, overdue first
   weekHours: { date: string; hours: number }[] | null;
   availability: Availability[];    // Mon–Fri
+  recentActivity: PersonaActivityItem[]; // last 10 of the person's history events on live tasks/projects, newest first
+};
+export type PersonaActivityItem = {
+  id: string;                      // history_events.id
+  text: string;                    // "Movió “Casa Lomas” a 90%", "Comentó en “Plano de acabados”", …
+  at: string;                      // ISO event_at
+  when: string;                    // "hoy 10:12" | "ayer 17:40" | "4 nov 9:30" (org time zone)
+  href: string;                    // /tareas?tarea=<id> | /proyectos/<id>
 };
 export type PeopleOverviewRow = {
   staffId: string; open: number; overdue: number; activeProjects: number;
@@ -959,6 +967,8 @@ export type PeopleOverviewRow = {
   availability: Availability[];    // Mon–Fri
 };
 ```
+
+`recentActivity`: `history_events` with `actor_id` = the person on `task` and `project` entities (live task on a live project, or live project), newest first; one edit that wrote several fields with the same sentence collapses into one row; at most 10 (`lib/people/activity.ts`, `peopleRepository.listRecentActivity`). Owner-only entities (notes, reminders, time entries, vacation requests) never appear.
 
 `availability`: `vacaciones` from approved requests; else open tasks due that day vs `capacity / 5` (≤ 60 % libre, ≤ 100 % ocupado, > 100 % saturado). Counts exclude admin tasks unless the viewer has `canSeeAdminData`.
 
@@ -1057,7 +1067,7 @@ resolveAppearance(org: OrgAppearance, user: UserPreferences | null): ResolvedApp
 1. `theme = org.allowUserOverride && user?.theme ? user.theme : org.baseTheme`.
 2. Tokens: if `theme === org.baseTheme`, `org.tokens`; else `THEME_PRESETS[theme]` (a user theme override never applies the org's token edits of another base).
 3. `style = org.allowUserOverride && user?.style ? user.style : org.styleDefault`; a `?estilo=` preview override is applied by the page, not here.
-4. `mode`, `density`, `textSize` from the user (defaults `system`, `comoda`, 14).
+4. `mode`, `density`, `textSize` from the user (defaults `light`, `comoda`, 14: a new user sees light Azul Cincel whatever the OS prefers).
 5. `redesignEnabled = org.redesignAvailable && (user?.redesignEnabled ?? org.redesignDefault)` — the kill switch is enforced here, server-side (review B3).
 6. `cssVars = { light: toCssVars(…, "light"), dark: toCssVars(…, "dark") }` (§8.2); `version = org.v`.
 

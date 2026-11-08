@@ -1,7 +1,17 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { bucketTaskTrend, taskTrendBuckets, TASK_TREND_TIME_ZONE } from "@/lib/dashboard/task-trend";
-import { DELTA_CAPTION, dailySeries, kpiFromDaily, weeklyCounts, type DailyPoint } from "@/lib/metrics/series";
+import {
+  DELTA_CAPTION,
+  DELTA_UNCHANGED,
+  dailySeries,
+  deltaLabel,
+  deltaTone,
+  formatSignedDelta,
+  kpiFromDaily,
+  weeklyCounts,
+  type DailyPoint,
+} from "@/lib/metrics/series";
 import type { KpiDatum } from "@/lib/types/widgets";
 
 function points(values: number[], start = "2026-10-01"): DailyPoint[] {
@@ -55,7 +65,7 @@ describe("kpiFromDaily", () => {
       label: "Vencidas",
       value: 35,
       series7: [29, 30, 31, 32, 33, 34, 35],
-      delta: { value: 7, good: false, caption: DELTA_CAPTION },
+      delta: { value: 7, good: false, caption: DELTA_CAPTION, label: "+7 vs. semana", tone: "bad" },
       avg30: 20.5,
       min30: 6,
       max30: 35,
@@ -65,7 +75,13 @@ describe("kpiFromDaily", () => {
 
   it("marks a rise as good when goodWhen is up", () => {
     const kpi = kpiFromDaily("k", "K", points([1, 1, 1, 1, 1, 1, 1, 1, 4]), { goodWhen: "up" });
-    expect(kpi.delta).toEqual({ value: 3, good: true, caption: "vs. semana pasada" });
+    expect(kpi.delta).toEqual({
+      value: 3,
+      good: true,
+      caption: "vs. semana pasada",
+      label: "+3 vs. semana",
+      tone: "good",
+    });
   });
 
   it("marks a drop as good when goodWhen is down and bad when up", () => {
@@ -74,14 +90,63 @@ describe("kpiFromDaily", () => {
       value: -4,
       good: true,
       caption: DELTA_CAPTION,
+      label: "−4 vs. semana",
+      tone: "good",
     });
-    expect(kpiFromDaily("k", "K", daily, { goodWhen: "up" }).delta?.good).toBe(false);
+    const up = kpiFromDaily("k", "K", daily, { goodWhen: "up" }).delta;
+    expect(up?.good).toBe(false);
+    expect(up?.tone).toBe("bad");
+    expect(up?.label).toBe("−4 vs. semana");
   });
 
   it("treats no change as good either way", () => {
     const daily = points([2, 2, 2, 2, 2, 2, 2, 2]);
     expect(kpiFromDaily("k", "K", daily, { goodWhen: "up" }).delta?.good).toBe(true);
     expect(kpiFromDaily("k", "K", daily, { goodWhen: "down" }).delta?.good).toBe(true);
+  });
+
+  it("labels a zero change \"sin cambio\" with a neutral tone", () => {
+    const daily = points([2, 2, 2, 2, 2, 2, 2, 2]);
+    for (const goodWhen of ["up", "down"] as const) {
+      const delta = kpiFromDaily("k", "K", daily, { goodWhen }).delta;
+      expect(delta?.label).toBe(DELTA_UNCHANGED);
+      expect(delta?.label).toBe("sin cambio");
+      expect(delta?.tone).toBe("neutral");
+    }
+  });
+
+  it("labels the chip over the month with deltaWindow mes, keeping the 7-day value", () => {
+    // 2026-10-28 … 2026-11-10: 4 on 31 Oct, 5 on 1–3 Nov, 6 from 4 Nov.
+    const values = [3, 3, 3, 4, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6];
+    const kpi = kpiFromDaily("p", "Proyectos activos", points(values, "2026-10-28"), {
+      goodWhen: "up",
+      deltaWindow: "mes",
+    });
+    expect(kpi.delta).toEqual({
+      value: 1, // 6 − 5 on 3 Nov, seven days earlier
+      good: true,
+      caption: DELTA_CAPTION,
+      label: "+2 este mes",
+      tone: "good",
+    });
+  });
+
+  it("compares with the oldest point when the series starts inside the month", () => {
+    const kpi = kpiFromDaily("p", "P", points([8, 8, 8, 8, 8, 8, 8, 7, 6], "2026-11-01"), {
+      goodWhen: "up",
+      deltaWindow: "mes",
+    });
+    expect(kpi.delta?.label).toBe("−2 este mes");
+    expect(kpi.delta?.tone).toBe("bad");
+  });
+
+  it("labels an unchanged month \"sin cambio\"", () => {
+    const kpi = kpiFromDaily("p", "P", points([5, 5, 5, 5, 5, 5, 6, 5, 5], "2026-10-30"), {
+      goodWhen: "up",
+      deltaWindow: "mes",
+    });
+    expect(kpi.delta?.label).toBe("sin cambio");
+    expect(kpi.delta?.tone).toBe("neutral");
   });
 
   it("uses the points there are with fewer than 30, and omits delta with fewer than 8", () => {
@@ -113,6 +178,30 @@ describe("kpiFromDaily", () => {
       min30: 0,
       max30: 0,
     });
+  });
+});
+
+describe("delta chip helpers", () => {
+  it("formats signed values in es-MX", () => {
+    expect(formatSignedDelta(3)).toBe("+3");
+    expect(formatSignedDelta(-2.5)).toBe("−2.5");
+    expect(formatSignedDelta(0)).toBe("0");
+  });
+
+  it("labels zero, positive and negative changes per window", () => {
+    expect(deltaLabel(0)).toBe("sin cambio");
+    expect(deltaLabel(0, "mes")).toBe("sin cambio");
+    expect(deltaLabel(4)).toBe("+4 vs. semana");
+    expect(deltaLabel(-1, "mes")).toBe("−1 este mes");
+  });
+
+  it("tones zero as neutral and the rest by goodWhen", () => {
+    expect(deltaTone(0, "up")).toBe("neutral");
+    expect(deltaTone(0, "down")).toBe("neutral");
+    expect(deltaTone(2, "up")).toBe("good");
+    expect(deltaTone(2, "down")).toBe("bad");
+    expect(deltaTone(-2, "up")).toBe("bad");
+    expect(deltaTone(-2, "down")).toBe("good");
   });
 });
 

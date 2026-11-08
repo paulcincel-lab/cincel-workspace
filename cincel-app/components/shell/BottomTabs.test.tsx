@@ -362,8 +362,10 @@ describe("AppShell mobile chrome", () => {
       </AppShell>,
     );
     expect(document.querySelector("[data-slot=mobile-top-bar]")).toBeTruthy();
-    const content = screen.getByText("Contenido").parentElement as HTMLElement;
-    expect(content.className).toBe(BOTTOM_TABS_CONTENT_CLASS);
+    // The tab-bar padding wraps the page-content column (which carries the page margins).
+    const pageContent = screen.getByText("Contenido").closest("[data-slot=page-content]") as HTMLElement;
+    const content = pageContent.parentElement as HTMLElement;
+    expect(content.className.split(" ")).toEqual(expect.arrayContaining(BOTTOM_TABS_CONTENT_CLASS.split(" ")));
   });
 
   it("leaves the page unpadded from 768 px up and renders no top bar", () => {

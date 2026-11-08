@@ -213,6 +213,10 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
       expect(kpi.series7).toHaveLength(7);
       expect(kpi.series7?.[6]).toBe(kpi.value);
       expect(kpi.delta?.caption).toBe("vs. semana pasada");
+      // The Visual chip always has text and a tone; every card has a context line.
+      expect(kpi.delta?.label).toMatch(/^(sin cambio|[+−]\d.* (vs\. semana|este mes))$/);
+      expect(["good", "bad", "neutral"]).toContain(kpi.delta?.tone);
+      expect(kpi.caption).toBeTruthy();
       if (kpi.key === "completadas_semana") expect(kpi.visibleIn).toEqual(["analitico"]);
       else expect(kpi.visibleIn).toBeUndefined();
     }

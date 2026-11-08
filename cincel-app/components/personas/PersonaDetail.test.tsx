@@ -23,8 +23,14 @@ vi.mock("@/lib/tramos/compat", () => ({
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
-import { HOURS_STAT_KEY, PersonaDetail, visibleStats } from "./PersonaDetail";
-import { ADMIN_TASK_TITLE, personaDetailFixture } from "./persona-detail.fixtures";
+import {
+  HOURS_STAT_KEY,
+  PersonaDetail,
+  RECENT_ACTIVITY_EMPTY,
+  RECENT_ACTIVITY_TITLE,
+  visibleStats,
+} from "./PersonaDetail";
+import { ADMIN_ACTIVITY_TEXT, ADMIN_TASK_TITLE, personaDetailFixture } from "./persona-detail.fixtures";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 
@@ -122,5 +128,46 @@ describe("PersonaDetail", () => {
     renderIn("visual", { canSeeAdminData: false, canViewHours: false });
     const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
     expect(hrefs).toContain("/tareas?vista=lista&responsable=s-paul");
+  });
+});
+
+describe("PersonaDetail · Actividad reciente", () => {
+  it.each<PresentationStyle>(["visual", "esencial"])("lists the activity rows with time and link (%s)", (style) => {
+    renderIn(style, { canSeeAdminData: false, canViewHours: false });
+    expect(screen.getByText(RECENT_ACTIVITY_TITLE)).toBeTruthy();
+    const rows = screen.getByTestId("recent-activity").querySelectorAll("li");
+    expect(rows).toHaveLength(3);
+    const first = screen.getByRole("link", { name: "Movió “Instalación eléctrica” a 90%" });
+    expect(first.getAttribute("href")).toBe("/proyectos/pr-1");
+    const time = rows[0]!.querySelector("time")!;
+    expect(time.textContent).toBe("hoy 10:12");
+    expect(time.getAttribute("datetime")).toBe("2026-11-07T16:12:00.000Z");
+  });
+
+  it.each<PresentationStyle>(["visual", "esencial"])("shows the admin-only row only when the server returned it (%s)", (style) => {
+    const { unmount } = renderIn(style, { canSeeAdminData: false, canViewHours: false });
+    expect(screen.queryByText(ADMIN_ACTIVITY_TEXT)).toBeNull();
+    unmount();
+    renderIn(style, { canSeeAdminData: true, canViewHours: false });
+    expect(screen.getByText(ADMIN_ACTIVITY_TEXT)).toBeTruthy();
+  });
+
+  it("shows the empty state without activity", () => {
+    const detail = personaDetailFixture({ canSeeAdminData: false, canViewHours: false });
+    detail.recentActivity = [];
+    render(
+      <StyleProvider style="visual" scope="staff">
+        <PersonaDetail detail={detail} />
+      </StyleProvider>,
+    );
+    expect(screen.getByText(RECENT_ACTIVITY_TITLE)).toBeTruthy();
+    expect(screen.getByText(RECENT_ACTIVITY_EMPTY)).toBeTruthy();
+    expect(screen.queryByTestId("recent-activity")).toBeNull();
+  });
+
+  it("has no activity card in Analítico (frame PersonaDetalleAnalitico)", () => {
+    renderIn("analitico", { canSeeAdminData: true, canViewHours: false });
+    expect(screen.queryByText(RECENT_ACTIVITY_TITLE)).toBeNull();
+    expect(screen.queryByText(ADMIN_ACTIVITY_TEXT)).toBeNull();
   });
 });

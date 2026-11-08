@@ -125,7 +125,7 @@ describe("TimeClock footnote", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
     render(<TimeClock initial={status({ requiredFrom: "2026-12-01" })} />);
-    expect(screen.getByText("Opcional hasta el 1 de diciembre")).toBeTruthy();
+    expect(screen.getByText("Opcional hasta el 1 dic 2026")).toBeTruthy();
   });
 
   it("shows nothing from requiredFrom on", () => {

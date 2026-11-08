@@ -168,6 +168,22 @@ describe("ListPage", () => {
     expect(screen.queryByTestId("widget-EntityCardGrid")).toBeNull();
   });
 
+  it("keeps an empty board's widget (its columns) and hands it the empty state and custom statuses", () => {
+    const customStatuses = [{ id: "cs-qa", name: "QA en revisión" }];
+    render(
+      <ListPage
+        header={{ title: "Tareas" }}
+        spec={{ kind: "board", board: emptyBoard, table: emptyTable, customStatuses }}
+        empty={{ title: "No hay tareas con estos filtros" }}
+      />,
+    );
+    expect(screen.queryByTestId("empty-state")).toBeNull();
+    expect(screen.getByTestId("widget-TaskBoardWidget")).toBeTruthy();
+    const call = widgetProps.calls.at(-1);
+    expect(call?.props.emptyState).toEqual({ title: "No hay tareas con estos filtros" });
+    expect(call?.props.customStatuses).toBe(customStatuses);
+  });
+
   it("renders the widget when there are records even if empty is given", () => {
     render(
       <ListPage

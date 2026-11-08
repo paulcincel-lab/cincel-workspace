@@ -15,6 +15,7 @@ import {
   weekAvailability,
   workWeek,
 } from "@/lib/people/aggregates";
+import { toRecentActivity } from "@/lib/people/activity";
 import * as peopleRepository from "@/lib/repositories/people-repository";
 import { loadStaffPositions, toStaff } from "@/lib/repositories/staff-repository";
 import { getTimeTrackingSettings, TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/settings";
@@ -85,13 +86,14 @@ export async function fetchPersonaDetailAction(staffId: string): Promise<Persona
   const includeAdmin = canSeeAdminData(user);
   const showHours = hoursVisibleIds(user, [staffId]).length > 0;
 
-  const [positionsByStaff, tasksByStaff, projectsByStaff, withPhoto, absences, hours] = await Promise.all([
+  const [positionsByStaff, tasksByStaff, projectsByStaff, withPhoto, absences, hours, activity] = await Promise.all([
     loadStaffPositions([staffId]),
     peopleRepository.listAssignedOpenTasks([staffId], { includeAdmin }),
     peopleRepository.listActiveProjectsByStaff([staffId]),
     peopleRepository.staffIdsWithPhoto([staffId]),
     absencesByStaff([staffId], days),
     hoursByStaff(showHours ? [staffId] : [], days[0]!),
+    peopleRepository.listRecentActivity(staffId, { includeAdmin }),
   ]);
 
   const positions = positionsByStaff.get(staffId) ?? { positions: [], candidatePhases: [] };
@@ -149,6 +151,12 @@ export async function fetchPersonaDetailAction(staffId: string): Promise<Persona
     tasks: toAttentionItems(openTasks, today, { id: row.id, name, initials }),
     weekHours: personHours ? personHours.days : null,
     availability,
+    recentActivity: toRecentActivity(activity.rows, {
+      includeAdmin,
+      now: new Date(),
+      timeZone: TIME_TRACKING_TIME_ZONE,
+      customStatusNames: activity.customStatusNames,
+    }),
   };
 }
 

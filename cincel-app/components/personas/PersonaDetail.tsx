@@ -6,6 +6,7 @@ import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
 import { buttonVariants } from "@/components/ui/shadcn/button";
+import { ActivityFeedWidget } from "@/components/widgets/ActivityFeedWidget";
 import { AttentionListWidget } from "@/components/widgets/AttentionListWidget";
 import { KpiWidget } from "@/components/widgets/KpiWidget";
 import { PeopleWidget } from "@/components/widgets/PeopleWidget";
@@ -33,6 +34,11 @@ export function visibleStats(detail: PersonaDetailData): KpiDatum[] {
   return detail.stats.filter((s) => s.key !== HOURS_STAT_KEY);
 }
 
+/** Title of the activity card (frames `PersonaDetalle`, `PersonaDetalleEsencial`). */
+export const RECENT_ACTIVITY_TITLE = "Actividad reciente";
+/** Shown when the person has no recent activity. */
+export const RECENT_ACTIVITY_EMPTY = "Sin actividad reciente";
+
 /** Full display name ("Nombre Apellido"). */
 function fullName(detail: PersonaDetailData): string {
   const last = detail.staff.lastName?.trim();
@@ -51,10 +57,11 @@ function headerDescription(person: PersonDatum): string | undefined {
  * Persona detalle (redesign FE §3.6, §4.7): header (avatar, puesto, tramo,
  * contact links incl. "Abrir chat en Cutto"), stats (`KpiWidget`), tareas asignadas
  * (`AttentionListWidget`), proyectos (`ProgressListWidget`) and the week's
- * availability as a single-row `PeopleWidget`. Replaces the content of the
+ * availability as a single-row `PeopleWidget`, then "Actividad reciente"
+ * (Visual and Esencial only, per the frames). Replaces the content of the
  * legacy `MemberProfileModal`. Every Visual / Esencial / Analítico difference
  * lives inside the widgets; this composition renders the same markup in every
- * style.
+ * style, except "Actividad reciente", which the Analítico frame leaves out.
  *
  * The server already filters the data (admin tasks only with
  * `canSeeAdminData`, hours only for `canViewTeamHours` or self); this
@@ -130,6 +137,12 @@ export function PersonaDetail({ detail }: PersonaDetailProps) {
           </WidgetCard>
         </div>
       </div>
+
+      <ActivityFeedWidget
+        title={RECENT_ACTIVITY_TITLE}
+        emptyTitle={RECENT_ACTIVITY_EMPTY}
+        items={detail.recentActivity}
+      />
     </div>
   );
 }

@@ -171,18 +171,20 @@ test.describe("Mis vacaciones — request, approve, balance", () => {
     const admin = await openPage(browser, (page) => loginAsAdmin(page, BASE_URL));
     await gotoMisVacaciones(admin);
     await expect(admin.getByRole("heading", { name: "Solicitudes del equipo" })).toBeVisible({ timeout: 30_000 });
-    const pendingRow = admin.getByRole("row").filter({ hasText: REQUESTER_NAME });
+    // Scoped to the section: the team balance table lists the requester too.
+    const teamRequests = admin.getByRole("region", { name: "Solicitudes del equipo" });
+    const pendingRow = teamRequests.getByRole("row").filter({ hasText: REQUESTER_NAME });
     await expect(pendingRow).toBeVisible({ timeout: 15_000 });
     await expect(pendingRow).toContainText(String(days));
 
-    await admin.getByRole("button", { name: `Aprobar solicitud de ${REQUESTER_NAME}` }).click();
+    await teamRequests.getByRole("button", { name: `Aprobar solicitud de ${REQUESTER_NAME}` }).click();
     const dialog = admin.getByRole("dialog", { name: "Aprobar solicitud" });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     await dialog.getByLabel("Nota (opcional)").fill("Aprobado E2E");
     await dialog.getByRole("button", { name: "Aprobar", exact: true }).click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
     await expect(admin.getByText("Solicitud aprobada").first()).toBeVisible({ timeout: 15_000 });
-    await expect(admin.getByRole("row").filter({ hasText: REQUESTER_NAME })).toHaveCount(0, { timeout: 15_000 });
+    await expect(teamRequests.getByRole("row").filter({ hasText: REQUESTER_NAME })).toHaveCount(0, { timeout: 15_000 });
 
     const adminId = await adminStaffId();
     await expect

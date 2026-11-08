@@ -3,8 +3,8 @@
  *
  * Portal clients have no `user_preferences` row and can't choose a theme, mode or style, so the portal
  * renders the org appearance on its own wrapper instead of on `<html>`: whatever a staff session in the same
- * browser has chosen never reaches the portal. The mode follows the OS (`system`, the default for a missing
- * preferences row).
+ * browser has chosen never reaches the portal. The mode follows the OS (`system`; staff without a
+ * preferences row start in `light`).
  */
 import type { OrgAppearance, StoredOrgAppearance } from "@/lib/types/redesign";
 import { StoredOrgAppearanceSchema, withoutRetiredOrgAppearanceKeys } from "@/lib/validation/redesign";
