@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { canSeeAdminData, resolveClientsCapabilities } from "@/lib/auth/permissions";
@@ -25,7 +25,7 @@ async function requireContactsCapabilities() {
 }
 
 function revalidateDirectorio() {
-  revalidatePath("/directorio");
+  revalidatePersonasScreen(["directorio"]);
 }
 
 export async function fetchContactsAction(

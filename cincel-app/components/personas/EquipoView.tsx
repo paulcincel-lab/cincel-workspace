@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { AvailabilityWeek } from "@/components/personas/AvailabilityWeek";
@@ -11,7 +10,7 @@ import { EmptyState } from "@/components/shell/EmptyState";
 import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Button } from "@/components/ui/shadcn/button";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { MEMBER_AVAILABILITY_OPTIONS } from "@/lib/equipo/availability-options";
 import { useMemberEditor } from "@/lib/equipo/use-member-editor";
@@ -39,7 +38,7 @@ export const PERSONAS_DESCRIPTION = "Equipo interno y directorio externo en un s
  */
 export function EquipoView({ people, emails, counts, positionOptions, canCreate }: EquipoViewProps) {
   const router = useRouter();
-  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const authenticatedUser = useSessionStore(selectCurrentUser);
   const editor = useMemberEditor({ authenticatedUser, onSaved: () => router.refresh() });
   const isAdministrator = authenticatedUser?.access === SYSTEM_ADMIN_ROLE;
 

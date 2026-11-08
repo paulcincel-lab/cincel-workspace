@@ -23,6 +23,7 @@ import {
   fetchNotesAction,
   updateNoteAction,
 } from "@/lib/actions/my-space-actions";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   clockInAction,
   clockOutAction,
@@ -225,7 +226,7 @@ const clock_in = defineTool({
   summarize: toolSummaries.clock_in,
   async run() {
     try {
-      const status = await clockInAction({ source: "assistant" });
+      const status = unwrapActionResult(await clockInAction({ source: "assistant" }));
       return { ok: true, today: todaySummary(status) };
     } catch (err) {
       return failure(err);
@@ -250,7 +251,7 @@ const pause_or_clock_out = defineTool({
   summarize: toolSummaries.pause_or_clock_out,
   async run(_ctx, input) {
     try {
-      const status = input.action === "pausa" ? await pauseWorkAction() : await clockOutAction();
+      const status = input.action === "pausa" ? unwrapActionResult(await pauseWorkAction()) : unwrapActionResult(await clockOutAction());
       return { ok: true, action: input.action, today: todaySummary(status) };
     } catch (err) {
       return failure(err);

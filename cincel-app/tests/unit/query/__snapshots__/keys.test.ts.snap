@@ -1,0 +1,499 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`qk > builds every key shape 1`] = `
+{
+  "ajustes.page(seg)": [
+    "ajustes",
+    "estatus",
+    {},
+  ],
+  "ajustes.page(seg, input)": [
+    "ajustes",
+    "horario",
+    {
+      "weekStart": "2026-11-02",
+    },
+  ],
+  "asistente.context": [
+    "asistente",
+    "context",
+    {
+      "projectId": "p1",
+    },
+  ],
+  "asistente.thread": [
+    "asistente",
+    "thread",
+    "a1",
+  ],
+  "asistente.threads": [
+    "asistente",
+    "threads",
+  ],
+  "biblioteca.links": [
+    "biblioteca",
+    "links",
+    null,
+  ],
+  "catalog.assignableStaff": [
+    "catalog",
+    "assignable-staff",
+    null,
+  ],
+  "catalog.contacts()": [
+    "catalog",
+    "contacts",
+    null,
+  ],
+  "catalog.contacts(type)": [
+    "catalog",
+    "contacts",
+    "cliente",
+  ],
+  "catalog.projectOptions": [
+    "catalog",
+    "project-options",
+  ],
+  "catalog.projectSpaces": [
+    "catalog",
+    "spaces",
+    "p1",
+  ],
+  "catalog.staff": [
+    "catalog",
+    "staff",
+  ],
+  "catalog.taskStatuses": [
+    "catalog",
+    "task-statuses",
+  ],
+  "catalog.tramos": [
+    "catalog",
+    "tramos",
+  ],
+  "catalog.workflows": [
+    "catalog",
+    "workflows",
+  ],
+  "contacts.detail": [
+    "contacts",
+    "c1",
+  ],
+  "contacts.history": [
+    "contacts",
+    "c1",
+    "history",
+  ],
+  "google.driveStatus": [
+    "google",
+    "drive-status",
+  ],
+  "importData": [
+    "import-data",
+    "project",
+    "p1",
+  ],
+  "inicio": [
+    "inicio",
+  ],
+  "me.checklists": [
+    "me",
+    "checklists",
+  ],
+  "me.gmail.all": [
+    "me",
+    "gmail",
+  ],
+  "me.gmail.status": [
+    "me",
+    "gmail",
+    "status",
+  ],
+  "me.gmail.thread": [
+    "me",
+    "gmail",
+    "thread",
+    "t1",
+  ],
+  "me.gmail.threads()": [
+    "me",
+    "gmail",
+    "threads",
+    {
+      "q": "",
+    },
+  ],
+  "me.gmail.threads(q)": [
+    "me",
+    "gmail",
+    "threads",
+    {
+      "q": "obra",
+    },
+  ],
+  "me.notes": [
+    "me",
+    "notes",
+  ],
+  "me.notificationPrefs": [
+    "me",
+    "notification-prefs",
+  ],
+  "me.notifications": [
+    "me",
+    "notifications",
+    {
+      "kinds": [
+        "task",
+      ],
+      "unreadOnly": true,
+    },
+  ],
+  "me.preferences": [
+    "me",
+    "preferences",
+  ],
+  "me.profile": [
+    "me",
+    "profile",
+  ],
+  "me.reminders": [
+    "me",
+    "reminders",
+    "today-tomorrow",
+  ],
+  "me.today": [
+    "me",
+    "today",
+  ],
+  "me.vacations": [
+    "me",
+    "vacations",
+  ],
+  "me.weekHours": [
+    "me",
+    "week-hours",
+  ],
+  "monday.choices": [
+    "monday",
+    "choices",
+  ],
+  "monday.history": [
+    "monday",
+    "history",
+  ],
+  "monday.run": [
+    "monday",
+    "run",
+    "r1",
+  ],
+  "org.general": [
+    "org",
+    "general",
+  ],
+  "personas.contacts": [
+    "personas",
+    "contacts",
+    "clientes",
+    null,
+  ],
+  "personas.counts": [
+    "personas",
+    "counts",
+  ],
+  "personas.detail": [
+    "personas",
+    "detail",
+    "s1",
+  ],
+  "personas.equipo": [
+    "personas",
+    "equipo",
+  ],
+  "portal.files": [
+    "portal",
+    "files",
+    "p1",
+    null,
+  ],
+  "portal.project": [
+    "portal",
+    "project",
+    "p1",
+    "resumen",
+  ],
+  "portal.projects": [
+    "portal",
+    "projects",
+  ],
+  "portal.uploads": [
+    "portal",
+    "uploads",
+    "p1",
+  ],
+  "proyectos.all": [
+    "proyectos",
+  ],
+  "proyectos.archivos(folder)": [
+    "proyectos",
+    "p1",
+    "archivos",
+    "f1",
+  ],
+  "proyectos.archivos(null)": [
+    "proyectos",
+    "p1",
+    "archivos",
+    "root",
+  ],
+  "proyectos.clientesActivity": [
+    "proyectos",
+    "p1",
+    "clientes",
+    "activity",
+  ],
+  "proyectos.cronograma": [
+    "proyectos",
+    "p1",
+    "cronograma",
+  ],
+  "proyectos.detail": [
+    "proyectos",
+    "p1",
+  ],
+  "proyectos.history": [
+    "proyectos",
+    "p1",
+    "history",
+  ],
+  "proyectos.list": [
+    "proyectos",
+    "list",
+  ],
+  "proyectos.resumen": [
+    "proyectos",
+    "p1",
+    "resumen",
+  ],
+  "proyectos.shell": [
+    "proyectos",
+    "p1",
+    "shell",
+  ],
+  "proyectos.tab": [
+    "proyectos",
+    "p1",
+    "ficha",
+  ],
+  "search()": [
+    "search",
+    "casa",
+    null,
+  ],
+  "search(types)": [
+    "search",
+    "casa",
+    [
+      "project",
+    ],
+  ],
+  "shell.badges": [
+    "shell",
+    "badges",
+  ],
+  "tareas.all": [
+    "tareas",
+  ],
+  "tareas.board(f)": [
+    "tareas",
+    "board",
+    {
+      "estado": "pendiente",
+      "proyecto": null,
+      "q": null,
+      "responsable": "yo",
+      "tramo": "diseno",
+    },
+  ],
+  "tareas.board(f, col)": [
+    "tareas",
+    "board",
+    {
+      "estado": "pendiente",
+      "proyecto": null,
+      "q": null,
+      "responsable": "yo",
+      "tramo": "diseno",
+    },
+    "en_proceso",
+  ],
+  "tareas.calendar": [
+    "tareas",
+    "calendar",
+    {
+      "estado": "pendiente",
+      "proyecto": null,
+      "q": null,
+      "responsable": "yo",
+      "tramo": "diseno",
+    },
+    "2026-11-01",
+    "2026-11-30",
+  ],
+  "tareas.facets": [
+    "tareas",
+    "facets",
+    {
+      "estado": "pendiente",
+      "proyecto": null,
+      "q": null,
+      "responsable": "yo",
+      "tramo": "diseno",
+    },
+  ],
+  "tareas.list": [
+    "tareas",
+    "list",
+    {
+      "estado": "pendiente",
+      "proyecto": null,
+      "q": null,
+      "responsable": "yo",
+      "tramo": "diseno",
+    },
+  ],
+  "tareas.page": [
+    "tareas",
+    "page",
+    {
+      "cal": "mes",
+      "estado": "pendiente",
+      "proyecto": null,
+      "q": null,
+      "responsable": "yo",
+      "tramo": "diseno",
+      "vista": "tablero",
+    },
+  ],
+  "tareas.startPreview": [
+    "tareas",
+    "start-preview",
+    "p1",
+    "w1",
+  ],
+  "tareas.startSlot": [
+    "tareas",
+    "start-slot",
+    null,
+  ],
+  "tasks.dependencies": [
+    "tasks",
+    "k1",
+    "dependencies",
+  ],
+  "tasks.detail": [
+    "tasks",
+    "k1",
+  ],
+  "tasks.options": [
+    "tasks",
+    "options",
+    "p1",
+    "plan",
+  ],
+  "tasks.subtasks": [
+    "tasks",
+    "k1",
+    "subtasks",
+  ],
+  "vacations.absences": [
+    "vacations",
+    "absences",
+    "2026-11",
+  ],
+  "vacations.pending": [
+    "vacations",
+    "pending",
+  ],
+  "vacations.settings": [
+    "vacations",
+    "settings",
+  ],
+}
+`;
+
+exports[`qk > covers every key of the factory 1`] = `
+[
+  "shell.badges",
+  "org.general",
+  "me.today",
+  "me.weekHours",
+  "me.preferences",
+  "me.profile",
+  "me.notifications",
+  "me.gmail.all",
+  "me.gmail.status",
+  "me.gmail.threads",
+  "me.gmail.thread",
+  "me.reminders",
+  "me.checklists",
+  "me.notes",
+  "me.vacations",
+  "me.notificationPrefs",
+  "inicio",
+  "tareas.all",
+  "tareas.page",
+  "tareas.list",
+  "tareas.facets",
+  "tareas.board",
+  "tareas.calendar",
+  "tareas.startSlot",
+  "tareas.startPreview",
+  "tasks.detail",
+  "tasks.subtasks",
+  "tasks.dependencies",
+  "tasks.options",
+  "importData",
+  "proyectos.all",
+  "proyectos.list",
+  "proyectos.detail",
+  "proyectos.shell",
+  "proyectos.resumen",
+  "proyectos.tab",
+  "proyectos.archivos",
+  "proyectos.cronograma",
+  "proyectos.history",
+  "proyectos.clientesActivity",
+  "personas.equipo",
+  "personas.counts",
+  "personas.contacts",
+  "personas.detail",
+  "contacts.detail",
+  "contacts.history",
+  "biblioteca.links",
+  "vacations.absences",
+  "vacations.pending",
+  "vacations.settings",
+  "asistente.threads",
+  "asistente.thread",
+  "asistente.context",
+  "ajustes.page",
+  "monday.run",
+  "monday.history",
+  "monday.choices",
+  "google.driveStatus",
+  "catalog.tramos",
+  "catalog.workflows",
+  "catalog.taskStatuses",
+  "catalog.staff",
+  "catalog.assignableStaff",
+  "catalog.projectOptions",
+  "catalog.projectSpaces",
+  "catalog.contacts",
+  "search",
+  "portal.projects",
+  "portal.project",
+  "portal.files",
+  "portal.uploads",
+]
+`;

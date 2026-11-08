@@ -5,7 +5,8 @@
  * `positions.canManagePositions`. Revalidates
  * `/configuracion/puestos` and `/equipo` (+ `/configuracion/google` on delete).
  */
-import { revalidatePath } from "next/cache";
+import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
+import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
 
 import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -27,8 +28,8 @@ async function requirePositionsManager(): Promise<void> {
 }
 
 function revalidatePositions(): void {
-  revalidatePath("/configuracion/puestos");
-  revalidatePath("/equipo");
+  revalidateAjustesScreen("puestos");
+  revalidatePersonasScreen(["equipo"]);
 }
 
 /** Live puestos by `sortOrder` (active and inactive), with phases, staffCount and googleManaged. */
@@ -61,7 +62,7 @@ export async function deletePositionAction(id: string): Promise<void> {
   await requirePositionsManager();
   await positionsRepository.softDeletePosition(parseInput(UuidSchema, id));
   revalidatePositions();
-  revalidatePath("/configuracion/google");
+  revalidateAjustesScreen("google");
 }
 
 /** Replaces the candidate fases (any tramo). Errors: FORBIDDEN, NOT_FOUND (unknown ids). */

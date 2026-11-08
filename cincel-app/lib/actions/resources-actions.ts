@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateBibliotecaScreen } from "@/lib/cache/screens/biblioteca";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveResourcesCapabilities } from "@/lib/auth/permissions";
@@ -23,7 +23,7 @@ function canWriteResources(caps: Awaited<ReturnType<typeof requireResourcesCapab
 }
 
 function revalidateRecursos() {
-  revalidatePath("/recursos");
+  revalidateBibliotecaScreen();
 }
 
 export async function fetchResourceLinksAction(

@@ -26,6 +26,7 @@ import "server-only";
 
 import { z } from "zod";
 
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import {
   addChecklistItemAction,
@@ -747,22 +748,24 @@ export const schedule_site_visit = defineTool({
 
       let task;
       try {
-        task = await createUserTaskAction({
-          projectId: project.id,
-          title: `Visita de obra ${localDate} ${localTimeOf(start, TIME_ZONE)}`,
-          notes: event.htmlLink ? `Evento de calendario: ${event.htmlLink}` : null,
-          workflowId,
-          managerId: people[0]?.id ?? null,
-          supportIds: people.slice(1).map((p) => p.id),
-          commitmentDate: localDate,
-        });
+        task = unwrapActionResult(
+          await createUserTaskAction({
+            projectId: project.id,
+            title: `Visita de obra ${localDate} ${localTimeOf(start, TIME_ZONE)}`,
+            notes: event.htmlLink ? `Evento de calendario: ${event.htmlLink}` : null,
+            workflowId,
+            managerId: people[0]?.id ?? null,
+            supportIds: people.slice(1).map((p) => p.id),
+            commitmentDate: localDate,
+          }),
+        );
       } catch (err) {
         // No task, no invitation: nothing is left half done.
         await deletePrimaryEvent(user.member.id, event.id).catch(() => undefined);
         throw err;
       }
       for (const item of checklist.items) {
-        await addChecklistItemAction(task.id, item);
+        unwrapActionResult(await addChecklistItemAction(task.id, item));
       }
 
       const summary = summarizeScheduleSiteVisit(input);

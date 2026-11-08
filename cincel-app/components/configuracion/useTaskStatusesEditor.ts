@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolveTaskStatusesCapabilities } from "@/lib/auth/permissions";
 import {
   createTaskStatusAction,
@@ -34,7 +34,7 @@ export type TaskStatusDraftDefaults = { closes?: boolean };
  */
 export function useTaskStatusesEditor(initialStatuses: TaskStatusOption[]) {
   const [statuses, setStatuses] = useState<TaskStatusOption[]>(initialStatuses);
-  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const authenticatedUser = useSessionStore(selectCurrentUser);
   const capabilities = useMemo(
     () => resolveTaskStatusesCapabilities(authenticatedUser),
     [authenticatedUser],

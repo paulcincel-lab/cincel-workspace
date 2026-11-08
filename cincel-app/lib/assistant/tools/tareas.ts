@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
 import { fetchGmailThreadAction } from "@/lib/actions/gmail-actions";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { fetchProjectAction } from "@/lib/actions/projects-actions";
 import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
@@ -139,7 +140,7 @@ export const update_task_status = defineTool({
     try {
       const base = baseStatusOf(input.status);
       if (base) {
-        updated = await setTaskStatusAction(task.id, base);
+        updated = unwrapActionResult(await setTaskStatusAction(task.id, base));
         label = taskStatusLabel(base);
       } else {
         const options = await fetchTaskStatusesAction();
@@ -151,7 +152,7 @@ export const update_task_status = defineTool({
             options.map((o) => o.name),
           );
         }
-        updated = await setTaskCustomStatusAction(task.id, option.id);
+        updated = unwrapActionResult(await setTaskCustomStatusAction(task.id, option.id));
         label = option.name;
       }
     } catch (err) {
@@ -196,7 +197,7 @@ export const reschedule_task = defineTool({
 
     let updated: TaskDetail;
     try {
-      updated = await updateTaskAction(task.id, { commitmentDate: input.dueDate });
+      updated = unwrapActionResult(await updateTaskAction(task.id, { commitmentDate: input.dueDate }));
     } catch (err) {
       return actionFailure(err);
     }
@@ -273,7 +274,7 @@ export const add_task_comment = defineTool({
     // instead of a second "vía asistente" row (BE §9.9).
     const body = [mentioned.map((n) => `@${n}`).join(" "), input.text].filter(Boolean).join(" ");
     try {
-      const event = await addTaskCommentAction(found.task.id, viaAsistente(body));
+      const event = unwrapActionResult(await addTaskCommentAction(found.task.id, viaAsistente(body)));
       return { ok: true as const, id: event.id, taskId: found.task.id, title: found.task.title, mentioned };
     } catch (err) {
       return actionFailure(err);
@@ -309,8 +310,8 @@ export const add_checklist_item = defineTool({
     }
 
     try {
-      let item = await addChecklistItemAction(task.id, input.item);
-      if (input.done) item = await updateChecklistItemAction(item.id, { completed: true });
+      let item = unwrapActionResult(await addChecklistItemAction(task.id, input.item));
+      if (input.done) item = unwrapActionResult(await updateChecklistItemAction(item.id, { completed: true }));
       const summary = `Checklist de ${quoted(task.title)}: + ${quoted(item.title)}${item.completed ? " (hecho)" : ""}`;
       await recordViaAsistente({ entity: "task", entityId: task.id, actorId: ctx.user.member.id, summary });
       return { ok: true as const, taskId: task.id, item: { id: item.id, title: item.title, done: item.completed } };
@@ -385,12 +386,14 @@ export const create_tasks_from_notes = defineTool({
     const created: Array<{ id: string; title: string }> = [];
     for (const title of titles) {
       try {
-        const task = await createUserTaskAction({
-          projectId: project.id,
-          title,
-          workflowId: project.currentWorkflow.id,
-          notes: subject ? `Desde el correo ${quoted(subject)}` : null,
-        });
+        const task = unwrapActionResult(
+          await createUserTaskAction({
+            projectId: project.id,
+            title,
+            workflowId: project.currentWorkflow.id,
+            notes: subject ? `Desde el correo ${quoted(subject)}` : null,
+          }),
+        );
         created.push({ id: task.id, title: task.title });
         await recordViaAsistente({
           entity: "task",
@@ -548,7 +551,7 @@ export const rebalance_workload = defineTool({
     const done: RebalanceMove[] = [];
     for (const move of plan.moves) {
       try {
-        await assignTaskAction(move.taskId, move.to.id);
+        unwrapActionResult(await assignTaskAction(move.taskId, move.to.id));
       } catch (err) {
         return { ...actionFailure(err), moved: done, pending: plan.moves.slice(done.length) };
       }

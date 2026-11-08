@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
@@ -40,7 +41,8 @@ const repo = vi.hoisted(() => ({
 vi.mock("@/lib/repositories/tasks-repository", () => repo);
 vi.mock("@/lib/repositories/task-dependencies-repository", () => ({}));
 
-import { setTaskCustomStatusAction, setTaskStatusAction, updateTaskAction } from "./tasks-actions";
+import * as tasksActionsModule from "./tasks-actions";
+const { setTaskCustomStatusAction, setTaskStatusAction, updateTaskAction } = unwrapActions(tasksActionsModule);
 
 function taskRow(id: string, workflowId: string | null = PRESALE) {
   return { id, projectId: PROJECT, workflowId, kind: "workflow", status: "completado", project: { id: PROJECT, name: "Casa", clientName: null } };

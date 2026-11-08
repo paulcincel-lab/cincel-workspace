@@ -9,6 +9,7 @@ import {
   hasDefaultSystemAdministratorAccess,
   normalizeSystemAccessRole,
 } from "@/lib/data/roles";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   fetchStaffDetailAction,
   createStaffAction,
@@ -275,7 +276,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
 
       const staffId =
         editingId ??
-        (
+        unwrapActionResult(
           await createStaffAction({
             name: staffInput.name,
             lastName: staffInput.lastName,
@@ -284,7 +285,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
             phone: staffInput.phone,
             capacity: staffInput.capacity,
             availability: staffInput.availability,
-          })
+          }),
         ).id;
 
       if (editingId !== null) {
@@ -301,22 +302,25 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
           setFormError(updated.error);
           return;
         }
+        unwrapActionResult(updated);
       }
 
-      await upsertStaffProfileAction(staffId, {
-        birthDate: draft.birthDate.trim() || null,
-        nationality: draft.nationality.trim() || null,
-        address: draft.address.trim() || null,
-        maritalStatus: draft.maritalStatus.trim() || null,
-        homePhone: draft.homePhone.trim() || null,
-        personalEmail: draft.personalEmail.trim() || null,
-        curp: draft.curp.trim() || null,
-        rfc: draft.rfc.trim() || null,
-        emergencyContactName: draft.emergencyContactName.trim() || null,
-        emergencyContactRelation: draft.emergencyContactRelation.trim() || null,
-        emergencyContactPhone: draft.emergencyContactPhone.trim() || null,
-        emergencyContactAddress: draft.emergencyContactAddress.trim() || null,
-      });
+      unwrapActionResult(
+        await upsertStaffProfileAction(staffId, {
+          birthDate: draft.birthDate.trim() || null,
+          nationality: draft.nationality.trim() || null,
+          address: draft.address.trim() || null,
+          maritalStatus: draft.maritalStatus.trim() || null,
+          homePhone: draft.homePhone.trim() || null,
+          personalEmail: draft.personalEmail.trim() || null,
+          curp: draft.curp.trim() || null,
+          rfc: draft.rfc.trim() || null,
+          emergencyContactName: draft.emergencyContactName.trim() || null,
+          emergencyContactRelation: draft.emergencyContactRelation.trim() || null,
+          emergencyContactPhone: draft.emergencyContactPhone.trim() || null,
+          emergencyContactAddress: draft.emergencyContactAddress.trim() || null,
+        }),
+      );
 
       if (!editingGoogleManaged) {
         const positionsResult = await setStaffPositionsAction(staffId, draft.positionIds);
@@ -324,13 +328,16 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
           setFormError(positionsResult.error);
           return;
         }
+        unwrapActionResult(positionsResult);
       }
 
       if (teamCapabilities.canChangeCollaboratorAccess && !editingGoogleManaged) {
-        await setStaffCredentialAction(staffId, {
-          enableAccess: draft.systemAccessEnabled,
-          temporaryPassword: shouldAssignTemporaryPassword ? tempPassword : undefined,
-        });
+        unwrapActionResult(
+          await setStaffCredentialAction(staffId, {
+            enableAccess: draft.systemAccessEnabled,
+            temporaryPassword: shouldAssignTemporaryPassword ? tempPassword : undefined,
+          }),
+        );
       }
 
       await onSaved();

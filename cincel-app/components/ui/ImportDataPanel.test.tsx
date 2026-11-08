@@ -9,6 +9,8 @@ import {
   within,
 } from "@testing-library/react";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { ContactDetail, ImportData } from "@/lib/types/core";
 
 const importActions = vi.hoisted(() => ({ getImportDataAction: vi.fn() }));
@@ -153,7 +155,7 @@ function TaskImportData({ taskId }: { taskId: string }) {
 }
 
 function renderTaskPanel() {
-  return render(<TaskImportData taskId={TASK_ID} />);
+  return renderWithQueryClient(<TaskImportData taskId={TASK_ID} />);
 }
 
 const contact = {
@@ -171,7 +173,7 @@ const contact = {
 } as unknown as ContactDetail;
 
 function renderContactSheet() {
-  return render(
+  return renderWithQueryClient(
     <ClientDetailSheet
       contact={contact}
       onClose={noop}
@@ -225,5 +227,79 @@ describe("Datos de monday in the task sheet and contact sheet", () => {
       expect(importActions.getImportDataAction).toHaveBeenCalled(),
     );
     expect(screen.queryByText("Datos de monday")).toBeNull();
+  });
+});
+
+/** Two consumers of the same row, as when a sheet re-mounts the panel. */
+function TwoTaskPanels({ taskId }: { taskId: string | null }) {
+  const first = useImportData("task", taskId);
+  const second = useImportData("task", taskId);
+  return (
+    <>
+      <ImportDataPanel importData={first} />
+      <ImportDataPanel importData={second} />
+    </>
+  );
+}
+
+describe("useImportData query", () => {
+  it("caches the load under qk.importData(entity, id)", async () => {
+    importActions.getImportDataAction.mockResolvedValue(fullData);
+    const { client } = renderTaskPanel();
+    await screen.findByRole("button", { name: "Datos de monday" });
+    expect(client.getQueryData(qk.importData("task", TASK_ID))).toEqual(
+      fullData,
+    );
+  });
+
+  it("issues one call for every consumer of the same row", async () => {
+    importActions.getImportDataAction.mockResolvedValue(fullData);
+    renderWithQueryClient(<TwoTaskPanels taskId={TASK_ID} />);
+    expect(
+      await screen.findAllByRole("button", { name: "Datos de monday" }),
+    ).toHaveLength(2);
+    expect(importActions.getImportDataAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses the cached data on a remount without calling the action again", async () => {
+    importActions.getImportDataAction.mockResolvedValue(fullData);
+    const client = createTestQueryClient();
+    const first = renderWithQueryClient(<TaskImportData taskId={TASK_ID} />, {
+      client,
+    });
+    await screen.findByRole("button", { name: "Datos de monday" });
+    first.unmount();
+    renderWithQueryClient(<TaskImportData taskId={TASK_ID} />, { client });
+    expect(screen.getByRole("button", { name: "Datos de monday" })).toBeTruthy();
+    expect(importActions.getImportDataAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not load without a row id", () => {
+    const { container, client } = renderWithQueryClient(
+      <TwoTaskPanels taskId={null} />,
+    );
+    expect(container.innerHTML).toBe("");
+    expect(importActions.getImportDataAction).not.toHaveBeenCalled();
+    expect(client.getQueryCache().getAll()).toHaveLength(1);
+    expect(client.getQueryCache().getAll()[0]?.state.fetchStatus).toBe("idle");
+  });
+
+  it("is side-effect free: only the read action is called, nothing else in the cache changes", async () => {
+    importActions.getImportDataAction.mockResolvedValue(fullData);
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const setData = vi.spyOn(client, "setQueryData");
+    renderWithQueryClient(<TaskImportData taskId={TASK_ID} />, { client });
+    await screen.findByRole("button", { name: "Datos de monday" });
+    expect(importActions.getImportDataAction).toHaveBeenCalledTimes(1);
+    expect(importActions.getImportDataAction).toHaveBeenCalledWith(
+      "task",
+      TASK_ID,
+    );
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(setData).not.toHaveBeenCalled();
+    expect(client.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+      qk.importData("task", TASK_ID),
+    ]);
   });
 });

@@ -23,11 +23,10 @@ export const fontMock = { Geist: fontFactory, Geist_Mono: fontFactory, Inter: fo
 
 export const passthroughDefaultMock = { default: Passthrough };
 export const hydratorMock = { default: () => null };
-export const sessionContextMock = { SessionAccessProvider: Passthrough };
 export const sessionMock = { getSessionAccess: vi.fn(async () => ({ user: null })) };
-export const generalSettingsMock = { buildDefaultGeneralSettings: () => ({}) };
+export const generalSettingsMock = { buildDefaultLoadedGeneralSettings: () => ({ settings: {}, hasCustom: false, savedAt: null }) };
 export const generalSettingsServerMock = { getGeneralSettings: vi.fn(async () => ({ settings: {} })) };
-export const useGeneralSettingsMock = { GeneralSettingsProvider: Passthrough };
+export const useGeneralSettingsMock = { GeneralSettingsSeed: Passthrough };
 export const cssMock = {};
 
 /** What `getResolvedAppearance` returns; tests set it. */

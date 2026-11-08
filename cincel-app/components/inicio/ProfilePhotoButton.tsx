@@ -5,6 +5,7 @@ import { useId, useRef, useState, type ChangeEvent } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
 import { Button } from "@/components/ui/shadcn/button";
+import { usePhotoUploadMutation } from "@/components/shell/photo-upload";
 import { actionErrorText } from "@/lib/errors";
 
 import { PHOTO_ACCEPT, PHOTO_MAX_BYTES, PHOTO_TYPES, reencodeToJpeg } from "./reencode-photo";
@@ -39,15 +40,33 @@ async function errorCodeOf(response: Response): Promise<string> {
 }
 
 /**
+ * Re-encode, check the size and POST to the photo route; resolves with the new
+ * URL and throws `Error(code)` (`""` when the route answers without one).
+ */
+async function uploadInicioPhoto(file: File): Promise<string> {
+  const jpeg = await reencodeToJpeg(file);
+  if (jpeg.size > PHOTO_MAX_BYTES) throw new Error("TOO_LARGE");
+  const form = new FormData();
+  form.append("file", jpeg, "foto.jpg");
+  const response = await fetch(PHOTO_ROUTE, { method: "POST", body: form });
+  if (!response.ok) throw new Error(await errorCodeOf(response));
+  const body = (await response.json()) as { url?: unknown };
+  if (typeof body.url !== "string" || !body.url) throw new Error("");
+  return body.url;
+}
+
+/**
  * Avatar 72 px with the camera button (redesign FE §3.2): re-encodes through
  * `<canvas>` to JPEG ≤ 1024 px (drops EXIF) and uploads to
- * `POST /api/staff/me/photo`. Errors show inline under the avatar.
+ * `POST /api/staff/me/photo`; the new URL also lands in `qk.me.profile()`
+ * (`usePhotoUploadMutation`). Errors show inline under the avatar.
  */
 export function ProfilePhotoButton({ photoUrl, initials, onChange }: ProfilePhotoButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const errorId = useId();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const uploadPhoto = usePhotoUploadMutation(uploadInicioPhoto);
 
   async function upload(file: File) {
     setError(null);
@@ -57,24 +76,7 @@ export function ProfilePhotoButton({ photoUrl, initials, onChange }: ProfilePhot
     }
     setPending(true);
     try {
-      const jpeg = await reencodeToJpeg(file);
-      if (jpeg.size > PHOTO_MAX_BYTES) {
-        setError(photoErrorText("TOO_LARGE"));
-        return;
-      }
-      const form = new FormData();
-      form.append("file", jpeg, "foto.jpg");
-      const response = await fetch(PHOTO_ROUTE, { method: "POST", body: form });
-      if (!response.ok) {
-        setError(photoErrorText(await errorCodeOf(response)));
-        return;
-      }
-      const body = (await response.json()) as { url?: unknown };
-      if (typeof body.url !== "string" || !body.url) {
-        setError(photoErrorText(""));
-        return;
-      }
-      onChange(body.url);
+      onChange(await uploadPhoto.mutateAsync(file));
     } catch (err) {
       setError(photoErrorText(err instanceof Error ? err.message : ""));
     } finally {

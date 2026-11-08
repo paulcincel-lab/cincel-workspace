@@ -28,6 +28,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/shadcn/dialog";
 import { searchWorkspaceAction } from "@/lib/actions/search-actions";
 import { IMPLEMENTED as SEARCH_IMPLEMENTED } from "@/lib/actions/search-actions.flags";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { clockInAction, fetchMyTodayAction } from "@/lib/actions/time-tracking-actions";
 import { IMPLEMENTED as TIME_TRACKING_IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
 import { actionErrorText } from "@/lib/errors";
@@ -222,7 +223,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     if (clockingIn) return;
     setClockingIn(true);
     try {
-      const status = await clockInAction({ source: "sidebar" });
+      const status = unwrapActionResult(await clockInAction({ source: "sidebar" }));
       setToday(status);
       const at = status.startedAt ? ` ${formatClockTime(new Date(status.startedAt))}` : "";
       toast.success(`Entrada registrada${at}`);

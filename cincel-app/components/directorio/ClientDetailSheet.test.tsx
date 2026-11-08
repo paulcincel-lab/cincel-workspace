@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
+// The sheet loads its "Datos de monday" through a query, so it renders under a QueryClientProvider.
+import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 
 import type { ContactDetail } from "@/lib/types/core";
 

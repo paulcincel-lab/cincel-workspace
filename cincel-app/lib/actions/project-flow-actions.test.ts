@@ -4,6 +4,7 @@
  * `parseInput` and the permission paths. Repositories and domain modules
  * are mocked; their own behaviour is covered by their tests.
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { revalidatePath } from "next/cache";
@@ -117,14 +118,8 @@ import {
   setPositionPhasesAction,
   updatePositionAction,
 } from "./positions-actions";
-import {
-  createProjectSpaceAction,
-  deleteProjectSpaceAction,
-  fetchProjectSpacesAction,
-  renameProjectSpaceAction,
-  reorderProjectSpacesAction,
-} from "./projects-actions";
-import { setStaffPositionsAction } from "./staff-actions";
+import * as projectsActionsModule from "./projects-actions";
+import * as staffActionsModule from "./staff-actions";
 import {
   fetchTramoBoardAction,
   previewStartTramoAction,
@@ -139,6 +134,15 @@ import {
   setWorkflowAutoStartAction,
   updateWorkflowPhaseAction,
 } from "./workflows-actions";
+
+const {
+  createProjectSpaceAction,
+  deleteProjectSpaceAction,
+  fetchProjectSpacesAction,
+  renameProjectSpaceAction,
+  reorderProjectSpacesAction,
+} = unwrapActions(projectsActionsModule);
+const { setStaffPositionsAction } = unwrapActions(staffActionsModule);
 
 const W = "11111111-1111-4111-8111-111111111111";
 const P = "22222222-2222-4222-8222-222222222222";
@@ -334,6 +338,46 @@ describe("espacios actions (§7.3)", () => {
     expect(revalidatePath).toHaveBeenCalledWith(`/proyectos/${P}/ficha`);
     await deleteProjectSpaceAction(S1);
     expect(spacesRepo.deleteSpace).toHaveBeenCalledWith(S1, "actor-1");
+  });
+});
+
+describe("ActionResult (user-facing mutations)", () => {
+  it("espacios writes return { ok: false, error } instead of throwing", async () => {
+    caps.canEditProjectGeneral = false;
+    await expect(projectsActionsModule.createProjectSpaceAction(P, "Cocina")).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^FORBIDDEN/),
+    });
+    await expect(projectsActionsModule.deleteProjectSpaceAction(S1)).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^FORBIDDEN/),
+    });
+    caps.canEditProjectGeneral = true;
+    await expect(projectsActionsModule.createProjectSpaceAction(P, "  ")).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^EMPTY/),
+    });
+  });
+
+  it("an espacio create returns { ok: true, data }", async () => {
+    spacesRepo.createSpace.mockResolvedValue({ id: S1, projectId: P });
+    await expect(projectsActionsModule.createProjectSpaceAction(P, "Cocina")).resolves.toEqual({
+      ok: true,
+      data: { id: S1, projectId: P },
+    });
+  });
+
+  it("setStaffPositionsAction returns the Google-managed refusal as the failed result", async () => {
+    staffRepo.staffExists.mockResolvedValue(true);
+    staffRepo.listStaffPositionIds.mockResolvedValue([F1]);
+    staffRepo.hasPositionGroupMappings.mockResolvedValue(true);
+    staffRepo.googleManagedStaffIds.mockResolvedValue(new Set([S1]));
+    await expect(staffActionsModule.setStaffPositionsAction(S1, [F1, P])).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
+    caps.canEditCollaborator = false;
+    await expect(staffActionsModule.setStaffPositionsAction(S1, [P])).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^FORBIDDEN/),
+    });
   });
 });
 

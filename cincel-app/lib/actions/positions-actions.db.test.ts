@@ -6,6 +6,7 @@
  * when TEST_DATABASE_URL points at a migrated database (`npm run db:migrate`).
  * Every row a test creates carries a per-run marker and is deleted afterwards.
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,7 +56,7 @@ describe.skipIf(!url)("puestos (test DB)", async () => {
   const repo = await import("@/lib/repositories/positions-repository");
   const staffRepo = await import("@/lib/repositories/staff-repository");
   const actions = await import("@/lib/actions/positions-actions");
-  const { setStaffPositionsAction } = await import("@/lib/actions/staff-actions");
+  const { setStaffPositionsAction } = unwrapActions(await import("@/lib/actions/staff-actions"));
   const { GOOGLE_MANAGED_REFUSAL } = await import("@/lib/types/workspace-access");
 
   const positionIds: string[] = [];

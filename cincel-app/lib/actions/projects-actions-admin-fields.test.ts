@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
@@ -30,8 +31,10 @@ vi.mock("@/lib/google/project-folders-app", () => folders);
 const repo = vi.hoisted(() => ({ createProject: vi.fn(), updateProject: vi.fn() }));
 vi.mock("@/lib/repositories/projects-repository", () => repo);
 
-import { archiveProjectAction, createProjectAction, updateProjectAction } from "./projects-actions";
+import * as projectsActionsModule from "./projects-actions";
 import type { ProjectCreateInput } from "@/lib/types/core";
+
+const { archiveProjectAction, createProjectAction, updateProjectAction } = unwrapActions(projectsActionsModule);
 
 async function runAfter() {
   for (const cb of afterCallbacks.splice(0)) await cb();

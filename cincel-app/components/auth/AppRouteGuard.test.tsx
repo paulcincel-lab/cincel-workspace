@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 
 import type { SessionAccess } from "@/lib/auth/session";
 
@@ -9,18 +9,15 @@ const nav = vi.hoisted(() => ({
   replace: vi.fn(),
   refresh: vi.fn(),
 }));
-const session = vi.hoisted(() => ({ value: { status: "guest", user: null } as SessionAccess }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => nav.pathname,
   useRouter: () => ({ replace: nav.replace, refresh: nav.refresh }),
 }));
 
-vi.mock("@/lib/auth/session-context", () => ({
-  useSessionAccess: () => session.value,
-}));
-
+import { resetSessionStoreForTests, useSessionStore } from "@/lib/stores/session-store";
 import AppRouteGuard from "./AppRouteGuard";
+import SessionHydrator from "./SessionHydrator";
 
 const assign = vi.fn();
 
@@ -30,7 +27,7 @@ function activeUser(access = "Colaborador"): SessionAccess["user"] {
 
 function renderAt(pathname: string, value: SessionAccess) {
   nav.pathname = pathname;
-  session.value = value;
+  useSessionStore.getState().setAccess(value);
   return render(
     <AppRouteGuard>
       <p>contenido</p>
@@ -39,6 +36,7 @@ function renderAt(pathname: string, value: SessionAccess) {
 }
 
 beforeEach(() => {
+  resetSessionStoreForTests();
   nav.replace.mockReset();
   nav.refresh.mockReset();
   assign.mockReset();
@@ -151,4 +149,31 @@ describe("AppRouteGuard", () => {
       expect(nav.replace).not.toHaveBeenCalled();
     },
   );
+
+  it("follows the session store: a guest that signs in is let through without a sign-out", () => {
+    renderAt("/login", { status: "guest", user: null });
+    expect(screen.getByText("contenido")).toBeTruthy();
+
+    act(() => useSessionStore.getState().setAccess({ status: "active", user: activeUser() }));
+    expect(nav.replace).toHaveBeenCalledWith("/dashboard");
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("does not sign out when the hydrator stores the new session in the same commit", () => {
+    // The guard renders with the previous (guest) session on a protected
+    // path; SessionHydrator's layout effect stores the new one before the
+    // guard's redirect effect, which re-checks the store and does nothing.
+    nav.pathname = "/dashboard";
+    render(
+      <>
+        <SessionHydrator value={{ status: "active", user: activeUser() }} />
+        <AppRouteGuard>
+          <p>contenido</p>
+        </AppRouteGuard>
+      </>,
+    );
+    expect(assign).not.toHaveBeenCalled();
+    expect(nav.replace).not.toHaveBeenCalled();
+    expect(screen.getByText("contenido")).toBeTruthy();
+  });
 });

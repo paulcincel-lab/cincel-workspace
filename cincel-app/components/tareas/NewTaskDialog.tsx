@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { toast } from "sonner";
+import { useId, useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 
 import { FormDialog } from "@/components/patterns/FormDialog";
@@ -13,8 +12,7 @@ import { Label } from "@/components/ui/shadcn/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { Textarea } from "@/components/ui/shadcn/textarea";
-import { fetchProjectsAction } from "@/lib/actions/projects-actions";
-import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
+import { fetchCatalogAssignableStaff, fetchCatalogProjectOptions } from "@/lib/actions/page-data/catalog-actions";
 import {
   createSubtaskAction,
   createUserTaskAction,
@@ -22,14 +20,22 @@ import {
   setTaskStatusAction,
 } from "@/lib/actions/tasks-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import { actionErrorText } from "@/lib/errors";
-import type { ProjectListItem, TaskPriority, WorkflowDetail } from "@/lib/types/core";
-import type { StaffOption } from "@/lib/types/redesign";
+import { STALE, qk } from "@/lib/query/keys";
+import { mutationErrorText, runAction, useActionMutation } from "@/lib/query/mutation";
+import type { CatalogProjectOption } from "@/lib/types/catalog";
+import type {
+  ProjectListItem,
+  SubtaskInput,
+  TaskDetail,
+  TaskPriority,
+  UserTaskInput,
+  WorkflowDetail,
+} from "@/lib/types/core";
 import {
   PRIORITY_OPTIONS,
   applyTemplate,
   hasErrors,
-  initialDraft,
+  draftFromDefaults,
   initialStatusTarget,
   resolvePhaseId,
   resolveProjectId,
@@ -43,7 +49,6 @@ import {
   type NewTaskDefaults,
   type NewTaskDraft,
 } from "./new-task-form";
-import { useNewTaskParam } from "./use-new-task-param";
 
 export type NewTaskDialogProps = {
   open: boolean;
@@ -57,67 +62,123 @@ const NO_MANAGER = "__none__";
 
 type ProjectChoice = Pick<ProjectListItem, "id" | "name" | "currentWorkflowId">;
 
-type Catalog = { projects: ProjectChoice[]; workflows: WorkflowDetail[] };
+/** The active projects, as the dialog's project choices (stable for `select` memoization). */
+function activeProjectChoices(rows: readonly CatalogProjectOption[]): ProjectChoice[] {
+  return rows
+    .filter((p) => p.status === "activo")
+    .map((p) => ({ id: p.id, name: p.name, currentWorkflowId: p.currentWorkflowId }));
+}
 
-function staffLabel(member: StaffOption): string {
-  return [member.name, member.lastName].filter(Boolean).join(" ");
+/** The active tramos in catalog order. */
+function activeWorkflowsInOrder(rows: readonly WorkflowDetail[]): WorkflowDetail[] {
+  return rows.filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/** Responsables suggested for the tramo first. */
+function suggestedFirst<T extends { suggested: boolean }>(list: readonly T[]): T[] {
+  return [...list].sort((a, b) => Number(b.suggested) - Number(a.suggested));
+}
+
+/**
+ * The tramo catalog with its fases and task templates (the Fase field and
+ * "Usar plantilla del tramo" need them). Kept under the `catalog.workflows`
+ * prefix, so every invalidation of `qk.catalog.workflows()` refreshes it.
+ */
+export const newTaskWorkflowsKey = () => [...qk.catalog.workflows(), "detail"] as const;
+
+/** Keys a created task (and its subtareas) makes stale (plan §3, `createUserTaskAction` / `createSubtaskAction`). */
+export function newTaskInvalidations(projectId: string, created?: { taskId: string; withSubtasks: boolean }) {
+  const keys: (readonly unknown[])[] = [
+    qk.tareas.all,
+    qk.proyectos.tab(projectId, "tareas"),
+    qk.proyectos.shell(projectId),
+    qk.proyectos.resumen(projectId),
+    qk.proyectos.list(),
+    qk.inicio(),
+    qk.shell.badges(),
+  ];
+  if (created?.withSubtasks) keys.push(qk.tasks.detail(created.taskId), qk.tasks.subtasks(created.taskId));
+  return keys;
+}
+
+type CreateTaskVars = { input: UserTaskInput; statusKey?: string; subtasks: SubtaskInput[] };
+type CreateTaskResult = { task: TaskDetail; partialError: unknown };
+
+/**
+ * `createUserTaskAction`, then the board column's status, then one
+ * `createSubtaskAction` per subtarea. Only the create can fail the call: once
+ * the task exists a failed status move or subtarea is reported, not retried,
+ * so a second "Crear tarea" can't duplicate the task.
+ */
+async function createTaskWithExtras({ input, statusKey, subtasks }: CreateTaskVars): Promise<CreateTaskResult> {
+  const task = await runAction(createUserTaskAction, input);
+  let partialError: unknown = null;
+  const target = initialStatusTarget(statusKey, task);
+  if (target) {
+    try {
+      if (target.kind === "custom") await runAction(() => setTaskCustomStatusAction(task.id, target.id), undefined);
+      else await runAction(() => setTaskStatusAction(task.id, target.status), undefined);
+    } catch (err) {
+      partialError = err;
+    }
+  }
+  for (const subtask of subtasks) {
+    try {
+      await runAction((v: SubtaskInput) => createSubtaskAction(task.id, v), subtask);
+    } catch (err) {
+      partialError ??= err;
+    }
+  }
+  return { task, partialError };
 }
 
 /**
  * New task dialog (redesign FE §3.4, frame `NuevaTarea`),
  * on `FormDialog`. Título, Proyecto, Tramo, Fase (the tramo's
  * catalog; hidden when it has none), Responsable, Fecha de entrega, Prioridad,
- * Descripción and Subtareas ("Usar plantilla del tramo"). "Crear tarea" calls
- * `createUserTaskAction`, then `createSubtaskAction` per subtarea, and
- * refreshes the open view.
+ * Descripción and Subtareas ("Usar plantilla del tramo"). The catalogs are
+ * shared queries (`catalog.projectOptions`, the `catalog.workflows` detail,
+ * `catalog.assignableStaff(workflowId)`), loaded while open and once per
+ * session. "Crear tarea" runs one `useActionMutation` (create → status →
+ * subtareas) that invalidates the views showing tasks.
  */
 export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogProps) {
-  const router = useRouter();
   const ids = useId();
-  const [draft, setDraft] = useState<NewTaskDraft>(() => initialDraft(defaults));
+  const [draft, setDraft] = useState<NewTaskDraft>(() => draftFromDefaults(defaults));
   const [tramoPicked, setTramoPicked] = useState(false);
   const [wasOpen, setWasOpen] = useState(open);
-  const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [staffList, setStaffList] = useState<StaffOption[]>([]);
   const [errors, setErrors] = useState<DraftErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
 
   // Each opening starts a fresh form from `defaults`.
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setDraft(initialDraft(defaults));
+      setDraft(draftFromDefaults(defaults));
       setTramoPicked(false);
       setErrors({});
       setSubmitError(null);
-      setPending(false);
     }
   }
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    Promise.all([fetchProjectsAction({ status: "activo" }), fetchWorkflowsAction()])
-      .then(([projects, workflows]) => {
-        if (cancelled) return;
-        setCatalog({
-          projects: projects.map((p) => ({ id: p.id, name: p.name, currentWorkflowId: p.currentWorkflowId })),
-          workflows: workflows.filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder),
-        });
-        setLoadError(null);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setLoadError(actionErrorText(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+  const projectsQuery = useQuery({
+    queryKey: qk.catalog.projectOptions(),
+    queryFn: () => runAction(fetchCatalogProjectOptions, {}),
+    staleTime: STALE.catalog,
+    enabled: open,
+    select: activeProjectChoices,
+  });
+  const workflowsQuery = useQuery({
+    queryKey: newTaskWorkflowsKey(),
+    queryFn: () => runAction(fetchWorkflowsAction, {}),
+    staleTime: STALE.catalog,
+    enabled: open,
+    select: activeWorkflowsInOrder,
+  });
+  const catalogReady = projectsQuery.data !== undefined && workflowsQuery.data !== undefined;
 
-  const projects = useMemo(() => catalog?.projects ?? [], [catalog]);
-  const workflows = useMemo(() => catalog?.workflows ?? [], [catalog]);
+  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
+  const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data]);
   const projectId = resolveProjectId(draft.projectId, projects);
   const project = projects.find((p) => p.id === projectId) ?? null;
   const workflowId = resolveWorkflowId(draft.workflowId, workflows, {
@@ -130,20 +191,27 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
   const templateTitles = tramoTemplateTitles(workflow, fases.length > 0 ? phaseId : null);
 
   // Responsables for the selected tramo, suggested first.
-  useEffect(() => {
-    if (!open || !catalog) return;
-    let cancelled = false;
-    fetchAssignableStaffAction(workflowId)
-      .then((list) => {
-        if (!cancelled) setStaffList([...list].sort((a, b) => Number(b.suggested) - Number(a.suggested)));
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setLoadError(actionErrorText(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, catalog, workflowId]);
+  const staffQuery = useQuery({
+    queryKey: qk.catalog.assignableStaff(workflowId),
+    queryFn: () => runAction(fetchCatalogAssignableStaff, { workflowId }),
+    staleTime: STALE.catalog,
+    enabled: open && catalogReady,
+    placeholderData: keepPreviousData,
+    select: suggestedFirst,
+  });
+  const staffList = useMemo(() => staffQuery.data ?? [], [staffQuery.data]);
+
+  const loadFailure = projectsQuery.error ?? workflowsQuery.error ?? staffQuery.error;
+  const loadError = open && loadFailure ? mutationErrorText(loadFailure) : null;
+
+  const create = useActionMutation(createTaskWithExtras, {
+    invalidate: (vars, data) =>
+      data ? newTaskInvalidations(vars.input.projectId, { taskId: data.task.id, withSubtasks: vars.subtasks.length > 0 }) : [],
+    successToast: "Tarea creada",
+    partialFailure: (data) => (data.partialError ? mutationErrorText(data.partialError) : null),
+    onFormError: setSubmitError,
+  });
+  const pending = create.isPending;
 
   const managerId = draft.managerId && staffList.some((s) => s.id === draft.managerId) ? draft.managerId : null;
 
@@ -157,45 +225,20 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
     setSubmitError(null);
     if (hasErrors(nextErrors)) return;
 
-    setPending(true);
-    let created: Awaited<ReturnType<typeof createUserTaskAction>>;
     try {
-      created = await createUserTaskAction(toUserTaskInput(resolved, fases));
-    } catch (err) {
-      setSubmitError(actionErrorText(err));
-      setPending(false);
+      await create.mutateAsync({
+        input: toUserTaskInput(resolved, fases),
+        statusKey: defaults?.status,
+        subtasks: toSubtaskInputs(resolved),
+      });
+    } catch {
+      // Shown in the form by `onFormError`.
       return;
     }
-
-    // The task exists now: a failed status move or subtarea is reported, not
-    // retried, so a second "Crear tarea" can't duplicate the task.
-    const taskId = created.id;
-    let subtaskError: unknown = null;
-    const target = initialStatusTarget(defaults?.status, created);
-    if (target) {
-      try {
-        if (target.kind === "custom") await setTaskCustomStatusAction(taskId, target.id);
-        else await setTaskStatusAction(taskId, target.status);
-      } catch (err) {
-        subtaskError = err;
-      }
-    }
-    for (const input of toSubtaskInputs(resolved)) {
-      try {
-        await createSubtaskAction(taskId, input);
-      } catch (err) {
-        subtaskError ??= err;
-      }
-    }
-
-    setPending(false);
-    toast.success("Tarea creada");
-    if (subtaskError) toast.error(actionErrorText(subtaskError));
     onOpenChange(false);
-    router.refresh();
   };
 
-  const loading = open && !catalog && !loadError;
+  const loading = open && !catalogReady && !loadError;
   const formError = submitError ?? errors.form ?? loadError;
   const titleErrorId = `${ids}-title-error`;
   const priorityLabelId = `${ids}-priority`;
@@ -242,7 +285,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField className="flex flex-col gap-2">
             <Label>Proyecto</Label>
-            {catalog && projects.length === 0 ? (
+            {catalogReady && projects.length === 0 ? (
               <p className="text-sm text-muted-foreground">No hay proyectos activos disponibles</p>
             ) : (
               <Select
@@ -251,7 +294,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
                 onValueChange={(v) =>
                   update({ projectId: (v as string) ?? "", ...(tramoPicked ? {} : { workflowId: null, phaseId: null }) })
                 }
-                disabled={!catalog}
+                disabled={!catalogReady}
               >
                 <SelectTrigger aria-label="Proyecto" className="w-full">
                   <SelectValue placeholder="Elige un proyecto" />
@@ -276,7 +319,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
                 setTramoPicked(true);
                 update({ workflowId: (v as string) || null, phaseId: null });
               }}
-              disabled={!catalog}
+              disabled={!catalogReady}
             >
               <SelectTrigger aria-label="Tramo" className="w-full">
                 <SelectValue placeholder="Elige un tramo" />
@@ -316,13 +359,13 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
           <FormField className="flex flex-col gap-2">
             <Label>Responsable</Label>
             <Select
-              items={{ [NO_MANAGER]: "Sin responsable", ...Object.fromEntries(staffList.map((s) => [s.id, staffLabel(s)])) }}
+              items={{ [NO_MANAGER]: "Sin responsable", ...Object.fromEntries(staffList.map((s) => [s.id, s.name])) }}
               value={managerId ?? NO_MANAGER}
               onValueChange={(v) => {
                 const next = v as string;
                 update({ managerId: next && next !== NO_MANAGER ? next : null });
               }}
-              disabled={!catalog}
+              disabled={!catalogReady}
             >
               <SelectTrigger aria-label="Responsable" className="w-full">
                 <SelectValue />
@@ -331,7 +374,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
                 <SelectItem value={NO_MANAGER}>Sin responsable</SelectItem>
                 {staffList.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {staffLabel(s)}
+                    {s.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -421,19 +464,4 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
       </div>
     </FormDialog>
   );
-}
-
-/**
- * `NewTaskDialog` driven by the URL: `?nueva=1` opens it and closing removes
- * the param. The view's `proyecto` and `tramo` filters prefill the form.
- */
-export function NewTaskDialogRoute({ defaults }: { defaults?: NewTaskDialogProps["defaults"] }) {
-  const { open, setOpen } = useNewTaskParam();
-  const searchParams = useSearchParams();
-  const fromUrl: NewTaskDialogProps["defaults"] = {
-    projectId: searchParams.get("proyecto") ?? undefined,
-    tramoKey: searchParams.get("tramo") ?? undefined,
-    ...defaults,
-  };
-  return <NewTaskDialog open={open} onOpenChange={setOpen} defaults={fromUrl} />;
 }

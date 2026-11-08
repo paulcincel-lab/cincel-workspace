@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { useStyle } from "@/components/shell/StyleProvider";
 import { Button } from "@/components/ui/shadcn/button";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { updateMyPreferencesAction } from "@/lib/actions/preferences-actions";
 import { IMPLEMENTED as PREFERENCES_IMPLEMENTED } from "@/lib/actions/preferences-actions.flags";
 import { actionErrorText } from "@/lib/errors";
@@ -62,7 +63,7 @@ export function EstiloSwitch(props: EstiloSwitchProps) {
     // Phase 1 stub guard: never call a write stub (FE §9, §20 Rule 1).
     if (!PREFERENCES_IMPLEMENTED.updateMyPreferencesAction) return;
     try {
-      await updateMyPreferencesAction({ style: next });
+      unwrapActionResult(await updateMyPreferencesAction({ style: next }));
     } catch (err) {
       ctx.setStyle(previous);
       toast.error(actionErrorText(err));

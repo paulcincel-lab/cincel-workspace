@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { BookOpen, Folder, House, Inbox, SlidersHorizontal, Sparkles, SquareCheck, Users } from "lucide-react";
 
 const state = vi.hoisted(() => ({
@@ -356,7 +357,7 @@ describe("AppShell mobile chrome", () => {
   it("renders the compact top bar and pads the page for the tabs below 768 px", () => {
     mockViewport(390);
     state.pathname = "/inicio";
-    render(
+    renderWithQueryClient(
       <AppShell appearance={appearance} session={session} nav={NAV} today={null}>
         <p>Contenido</p>
       </AppShell>,
@@ -370,7 +371,7 @@ describe("AppShell mobile chrome", () => {
 
   it("leaves the page unpadded from 768 px up and renders no top bar", () => {
     mockViewport(1280);
-    render(
+    renderWithQueryClient(
       <AppShell appearance={appearance} session={session} nav={NAV} today={null}>
         <p>Contenido</p>
       </AppShell>,

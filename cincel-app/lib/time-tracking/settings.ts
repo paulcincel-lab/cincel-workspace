@@ -6,6 +6,8 @@
  * read and the write load the repository lazily so a client component can
  * import `DEFAULT_TIME_TRACKING_SETTINGS` without pulling in the database.
  */
+import { cache } from "react";
+
 import { OFFICIAL_CINCEL_ROLES } from "@/lib/data/roles";
 import { addDays, localDate } from "@/lib/time-tracking/local-time";
 import type { TimeTrackingSettings } from "@/lib/types/redesign";
@@ -93,8 +95,8 @@ export function validateTimeTrackingSettings(
   return { ...parsed, workDays, exemptRoles };
 }
 
-/** The stored settings, or the defaults (also when the row can't be read). */
-export async function getTimeTrackingSettings(): Promise<TimeTrackingSettings> {
+/** The stored settings, or the defaults (also when the row can't be read). Per-request cache. */
+export const getTimeTrackingSettings = cache(async function getTimeTrackingSettings(): Promise<TimeTrackingSettings> {
   try {
     const { getAppSetting } = await import("@/lib/repositories/app-settings-repository");
     return parseStoredTimeTrackingSettings(await getAppSetting(TIME_TRACKING_SETTING_KEY)) ?? defaults();
@@ -102,7 +104,7 @@ export async function getTimeTrackingSettings(): Promise<TimeTrackingSettings> {
     console.error("[time-tracking] could not read the settings", error);
     return defaults();
   }
-}
+});
 
 /** Stores the full settings (no partial merge). */
 export async function writeTimeTrackingSettings(settings: TimeTrackingSettings): Promise<void> {

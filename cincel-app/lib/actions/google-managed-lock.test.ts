@@ -3,6 +3,7 @@
  * Role and puesto changes for Google-managed staff are refused by the server
  * actions themselves (BE §A.7, §A.11 #12), not only hidden in the UI.
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -31,7 +32,8 @@ vi.mock("@/lib/repositories/positions-repository", () => positionsRepo);
 
 import { GOOGLE_MANAGED_ERROR, GOOGLE_MANAGED_REFUSAL } from "@/lib/types/workspace-access";
 
-import { setStaffPositionsAction, updateStaffAction } from "./staff-actions";
+import * as staffActionsModule from "./staff-actions";
+const { setStaffPositionsAction, updateStaffAction } = unwrapActions(staffActionsModule);
 
 const GOOGLE = "00000000-0000-4000-8000-000000000001";
 const PASSWORD = "00000000-0000-4000-8000-000000000002";
@@ -66,6 +68,16 @@ describe("updateStaffAction", () => {
   it("leaves non-Google staff unaffected", async () => {
     await updateStaffAction(PASSWORD, { role: "Dirección" });
     expect(staffRepo.updateStaff).toHaveBeenCalledWith(PASSWORD, { role: "Dirección" }, "admin");
+  });
+});
+
+describe("ActionResult", () => {
+  it("updateStaffAction returns the refusal as the failed result and a save as { ok: true, data }", async () => {
+    await expect(staffActionsModule.updateStaffAction(GOOGLE, { role: "Dirección" })).resolves.toEqual(GOOGLE_MANAGED_REFUSAL);
+    await expect(staffActionsModule.updateStaffAction(PASSWORD, { role: "Dirección" })).resolves.toEqual({
+      ok: true,
+      data: { id: "x" },
+    });
   });
 });
 

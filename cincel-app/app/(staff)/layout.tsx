@@ -6,8 +6,7 @@ import { fetchMyTodayAction } from "@/lib/actions/time-tracking-actions";
 import { getSessionAccess } from "@/lib/auth/session";
 import { LOGIN_ROUTE } from "@/lib/auth/public-routes";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
-import { db } from "@/lib/db";
-import { findStaffPhoto } from "@/lib/repositories/preferences-repository";
+import { getStaffPhotoUrl } from "@/lib/profile-photo/photo-url";
 import type { TodayStatus } from "@/lib/types/redesign";
 import { buildNavModel, type NavModel, type NavSession } from "@/lib/ui/nav";
 import { getResolvedAppearance } from "@/lib/ui/preferences-server";
@@ -67,11 +66,10 @@ async function loadToday(): Promise<AppShellProps["today"]> {
   return today.enabled ? today : null;
 }
 
-/** `/api/staff/<id>/photo?v=<sha8>` (BE §7.2), or null when there is no photo. */
+/** `/api/staff/<id>/photo?v=<sha8>` (BE §7.2), or null when there is no photo. Sha-only, request-cached read. */
 async function loadPhotoUrl(staffId: string): Promise<string | null> {
   try {
-    const photo = await findStaffPhoto(db, staffId);
-    return photo ? `/api/staff/${staffId}/photo?v=${photo.sha256.slice(0, 8)}` : null;
+    return await getStaffPhotoUrl(staffId);
   } catch (error) {
     console.error("[staff-layout] profile photo lookup failed", error);
     return null;

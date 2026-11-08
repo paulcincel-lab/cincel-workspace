@@ -22,8 +22,7 @@ vi.mock("@/lib/ui/nav", () => ({ buildNavModel: async () => ({ items: [], tramos
 vi.mock("@/lib/actions/time-tracking-actions", () => ({
   fetchMyTodayAction: async () => ({ enabled: false }),
 }));
-vi.mock("@/lib/db", () => ({ db: {} }));
-vi.mock("@/lib/repositories/preferences-repository", () => ({ findStaffPhoto: async () => null }));
+vi.mock("@/lib/profile-photo/photo-url", () => ({ getStaffPhotoUrl: async () => null }));
 vi.mock("@/components/shell/AppShell", () => ({
   AppShell: ({ children }: { children: ReactNode }) => (
     <div>

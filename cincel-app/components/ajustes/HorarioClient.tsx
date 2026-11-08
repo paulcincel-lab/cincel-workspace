@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { HorarioControl, HorarioHorasEquipo, HorarioReglas, HorarioVistaPrevia } from "@/components/ajustes/HorarioSections";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { saveTimeTrackingSettingsAction } from "@/lib/actions/time-tracking-actions";
 import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
 import { actionErrorText } from "@/lib/errors";
@@ -83,7 +84,7 @@ export function HorarioClient({
     setSaving(true);
     setError(null);
     try {
-      const next = await saveTimeTrackingSettingsAction(draft);
+      const next = unwrapActionResult(await saveTimeTrackingSettingsAction(draft));
       setSaved(next);
       setDraft(next);
       toast.success("Cambios guardados");

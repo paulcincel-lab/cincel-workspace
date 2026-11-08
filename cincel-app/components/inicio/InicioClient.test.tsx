@@ -2,6 +2,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 
+// The photo button writes me.profile in the query cache; these tests render it without one.
+vi.mock("@/components/shell/photo-upload", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/shell/photo-upload")>()),
+  usePhotoUploadMutation: () => ({ mutateAsync: async () => "" }),
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => "/inicio",

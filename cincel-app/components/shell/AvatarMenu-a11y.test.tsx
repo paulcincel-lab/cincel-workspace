@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CSSProperties } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
@@ -32,6 +32,8 @@ vi.mock("@/lib/settings/use-general-settings", async () => {
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import type { ThemeId, TokenName } from "@/lib/types/redesign";
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 import { SidebarUserBlock } from "./SidebarUserBlock";
 
@@ -82,7 +84,7 @@ describe("AvatarMenu accessibility", () => {
   for (const theme of THEME_IDS) {
     for (const mode of MODES) {
       it(`has no serious or critical axe violations, closed and open (${theme}, ${mode})`, async () => {
-        render(
+        renderWithQueryClient(
           <aside
             aria-label="Barra lateral"
             data-theme={mode}
@@ -110,7 +112,7 @@ describe("AvatarMenu accessibility", () => {
   }
 
   it("is keyboard operable with a visible focus style", async () => {
-    render(<SidebarUserBlock session={session} />);
+    renderWithQueryClient(<SidebarUserBlock session={session} />);
     const button = trigger();
     expect(button.tagName).toBe("BUTTON");
     expect(button.className).toContain("focus-visible:");
@@ -134,7 +136,7 @@ describe("AvatarMenu accessibility", () => {
   });
 
   it("links the name to the profile page", () => {
-    render(<SidebarUserBlock session={session} />);
+    renderWithQueryClient(<SidebarUserBlock session={session} />);
     expect(screen.getByRole("link", { name: "Ana López" }).getAttribute("href")).toBe("/ajustes/perfil");
     expect(screen.getByText("Administrador")).toBeTruthy();
   });

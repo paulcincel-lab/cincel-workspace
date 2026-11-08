@@ -5,7 +5,7 @@ import { useState } from "react";
 import DrivePickerDialog from "@/components/recursos/DrivePickerDialog";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
-import { useDriveEnabled } from "@/lib/google/use-drive-enabled";
+import { useDriveStatus } from "@/lib/google/use-drive-status";
 import { TASK_LINK_KIND_LABEL, normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import type { TaskLinkInput, TaskLinkKind } from "@/lib/types/core";
 
@@ -29,7 +29,7 @@ export function DriveLinksEditor({ links, onAdd, onRemove }: Props) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
   const [showDrivePicker, setShowDrivePicker] = useState(false);
-  const driveEnabled = useDriveEnabled();
+  const { configured: driveEnabled } = useDriveStatus();
 
   const add = () => {
     if (!onAdd) return;

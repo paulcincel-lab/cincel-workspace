@@ -29,6 +29,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/shadcn/popover";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   addTaskDependencyAction,
   fetchTasksAction,
@@ -153,7 +154,7 @@ export default function TaskDependencies({
     setSaving(true);
     setError("");
     try {
-      await addTaskDependencyAction(taskId, dependsOnTaskId);
+      unwrapActionResult(await addTaskDependencyAction(taskId, dependsOnTaskId));
       await reload();
     } catch (err) {
       setError(
@@ -171,7 +172,7 @@ export default function TaskDependencies({
     setSaving(true);
     setError("");
     try {
-      await removeTaskDependencyAction(taskId, target.id);
+      unwrapActionResult(await removeTaskDependencyAction(taskId, target.id));
       await reload();
     } catch (err) {
       setError(

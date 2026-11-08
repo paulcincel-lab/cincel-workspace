@@ -18,6 +18,8 @@ export type TareasQuery = {
   estado: string | null;
   q: string | null;
   nueva?: boolean;
+  /** Calendar cursor (`?fecha=YYYY-MM-DD`): the day the Calendario view is anchored on; null = today. */
+  fecha?: string | null;
 };
 
 export const TAREAS_VISTAS: readonly TareasVista[] = ["tablero", "lista", "calendario"];
@@ -36,6 +38,7 @@ export const DEFAULT_TAREAS_QUERY: TareasQuery = {
   estado: null,
   q: null,
   nueva: false,
+  fecha: null,
 };
 
 /** Tramo keys (`workflows.key`): letters, digits, `_` and `-`. */
@@ -56,6 +59,18 @@ function id(value: string | null): string | null {
   return value !== null && ID_RE.test(value) ? value.toLowerCase() : null;
 }
 
+/** Calendar dates: `YYYY-MM-DD`. */
+const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** A real calendar day as `YYYY-MM-DD`, or null (`2026-02-30` is null). */
+function calendarDate(value: string | null): string | null {
+  const m = value === null ? null : DATE_RE.exec(value);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d ? value : null;
+}
+
 function searchText(value: string | null): string | null {
   const trimmed = value?.trim().slice(0, TAREAS_SEARCH_MAX).trim() ?? "";
   return trimmed === "" ? null : trimmed;
@@ -74,6 +89,7 @@ export function parseTareasQuery(sp: URLSearchParams): TareasQuery {
     estado: estado !== null && (TAREAS_ESTADOS as readonly string[]).includes(estado) ? estado : null,
     q: searchText(sp.get("q")),
     nueva: sp.get("nueva") === "1",
+    fecha: calendarDate(sp.get("fecha")),
   };
 }
 
@@ -89,6 +105,7 @@ export function toTareasSearch(q: Partial<TareasQuery>): string {
   const text = q.q?.trim();
   if (text) sp.set("q", text);
   if (q.nueva) sp.set("nueva", "1");
+  if (q.fecha) sp.set("fecha", q.fecha);
   const out = sp.toString();
   return out === "" ? "" : `?${out}`;
 }
@@ -113,9 +130,9 @@ export function hasTareasFilters(q: TareasQuery): boolean {
   return Boolean(q.tramo || q.responsable || q.proyecto || q.estado || q.q);
 }
 
-/** The query with every filter removed; the view and the calendar mode stay. */
+/** The query with every filter removed; the view, the calendar mode and the calendar date stay. */
 export function clearTareasFilters(q: TareasQuery): TareasQuery {
-  return { ...DEFAULT_TAREAS_QUERY, vista: q.vista, cal: q.cal };
+  return { ...DEFAULT_TAREAS_QUERY, vista: q.vista, cal: q.cal, fecha: q.fecha ?? null };
 }
 
 /** Local `YYYY-MM-DD` of a date. */

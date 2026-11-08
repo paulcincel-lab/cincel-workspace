@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserTaskInput } from "@/lib/types/core";
 
@@ -96,7 +97,8 @@ vi.mock("@/lib/repositories/tasks-repository", async (importOriginal) => ({
   ...repo,
 }));
 
-import {
+import * as tasksActionsModule from "./tasks-actions";
+const {
   assignTaskAction,
   createAdminTaskAction,
   createSubtaskAction,
@@ -110,7 +112,7 @@ import {
   setTaskStatusAction,
   setTaskSupportAction,
   updateTaskAction,
-} from "./tasks-actions";
+} = unwrapActions(tasksActionsModule);
 
 type Row = {
   id: string;

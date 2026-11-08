@@ -19,7 +19,6 @@ vi.mock("next/font/google", async () => (await import("./root-layout-mocks")).fo
 vi.mock("@/components/auth/AppRouteGuard", async () => (await import("./root-layout-mocks")).passthroughDefaultMock);
 vi.mock("@/components/auth/SessionHydrator", async () => (await import("./root-layout-mocks")).hydratorMock);
 vi.mock("@/components/providers/QueryProvider", async () => (await import("./root-layout-mocks")).passthroughDefaultMock);
-vi.mock("@/lib/auth/session-context", async () => (await import("./root-layout-mocks")).sessionContextMock);
 vi.mock("@/lib/auth/session", async () => (await import("./root-layout-mocks")).sessionMock);
 vi.mock("@/lib/settings/general-settings", async () => (await import("./root-layout-mocks")).generalSettingsMock);
 vi.mock("@/lib/settings/general-settings-server", async () => (await import("./root-layout-mocks")).generalSettingsServerMock);

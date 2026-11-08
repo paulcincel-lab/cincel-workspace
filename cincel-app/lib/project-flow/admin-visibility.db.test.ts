@@ -15,6 +15,7 @@
  * (`npm run db:migrate`). Every row a test creates carries a per-run marker
  * and is deleted afterwards.
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -143,8 +144,8 @@ describe.skipIf(!url)("admin visibility across every reader (test DB)", async ()
   const { NextRequest } = await import("next/server");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const tasksActions = await import("@/lib/actions/tasks-actions");
-  const projectsActions = await import("@/lib/actions/projects-actions");
+  const tasksActions = unwrapActions(await import("@/lib/actions/tasks-actions"));
+  const projectsActions = unwrapActions(await import("@/lib/actions/projects-actions"));
   const contactsActions = await import("@/lib/actions/contacts-actions");
   const importActions = await import("@/lib/actions/import-actions");
   const portalActions = await import("@/lib/actions/portal-actions");

@@ -9,6 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { setProjectCurrentTramoAction } from "@/lib/actions/projects-actions";
 import { fichaFlowErrorText } from "@/lib/proyectos/flow-error-text";
 import type { ProjectDetail, WorkflowRef } from "@/lib/types/core";
@@ -62,7 +63,7 @@ export function ProjectTramosCard({
     setPending(true);
     setError(null);
     try {
-      const updated = await setProjectCurrentTramoAction(project.id, workflowId);
+      const updated = unwrapActionResult(await setProjectCurrentTramoAction(project.id, workflowId));
       onChanged(updated);
       setAssignId(null);
     } catch (err) {

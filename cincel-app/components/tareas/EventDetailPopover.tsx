@@ -13,6 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Popover, PopoverContent } from "@/components/ui/shadcn/popover";
 import { Separator } from "@/components/ui/shadcn/separator";
 import { TramoBadge } from "@/components/v2/status/TramoBadge";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { deleteTaskAction } from "@/lib/actions/tasks-actions";
 import { toDate } from "@/lib/calendar/calendar-service";
 import { actionErrorText } from "@/lib/errors";
@@ -111,7 +112,7 @@ export function EventDetailPopover({ event, anchor, onClose }: EventDetailPopove
     setError(null);
     startTransition(async () => {
       try {
-        await deleteTaskAction(event.taskId);
+        unwrapActionResult(await deleteTaskAction(event.taskId));
         toast.success("Tarea eliminada");
         router.refresh();
         close();

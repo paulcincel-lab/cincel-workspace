@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
+
+import type { NewTaskDefaults } from "./new-task-form";
 
 /** The search param that opens `NewTaskDialog` (`/tareas?nueva=1`, FE §2.1). */
 export const NEW_TASK_PARAM = "nueva";
@@ -15,24 +19,56 @@ export function newTaskSearch(params: URLSearchParams, open: boolean): string {
   return search ? `?${search}` : "";
 }
 
+/** The form defaults a URL carries: the view's `proyecto` and `tramo` filters. */
+export function newTaskDefaultsFromSearch(params: URLSearchParams): NewTaskDefaults {
+  const defaults: NewTaskDefaults = {};
+  const projectId = params.get("proyecto");
+  const tramoKey = params.get("tramo");
+  if (projectId) defaults.projectId = projectId;
+  if (tramoKey) defaults.tramoKey = tramoKey;
+  return defaults;
+}
+
 /**
- * `?nueva=1` as the dialog's open state: opening adds the param, closing
- * removes it (`router.replace`, no scroll), keeping every other param, so the
- * view underneath stays as it was.
+ * The `?nueva=1` entry of `<NewTaskDialogHost/>`: opens the dialog with the
+ * URL's `proyecto`/`tramo` defaults and strips the param with
+ * `history.replaceState`, so neither step re-renders the page on the server.
+ * Every other param stays, so the view underneath is unchanged.
  */
-export function useNewTaskParam(): { open: boolean; setOpen(open: boolean): void } {
-  const router = useRouter();
+export function useNewTaskUrlEntry(): void {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const open = searchParams.get(NEW_TASK_PARAM) === "1";
+  // Keyed on the search string, not the `URLSearchParams` object, so a new
+  // object for the same URL does not reopen the dialog.
+  const search = searchParams.toString();
+  const requested = searchParams.get(NEW_TASK_PARAM) === "1";
+
+  useEffect(() => {
+    if (!requested) return;
+    const params = new URLSearchParams(search);
+    useNewTaskUi.getState().openNewTask(newTaskDefaultsFromSearch(params), "url");
+    window.history.replaceState(null, "", `${pathname}${newTaskSearch(params, false)}${window.location.hash}`);
+  }, [requested, pathname, search]);
+}
+
+/**
+ * @deprecated Transitional API of the Tareas screen's own `NewTaskDialog`
+ * mount (`TareasClient`), removed in Phase 4a. `<NewTaskDialogHost/>` owns
+ * the dialog now, so that mount stays closed (`open` is always false) and
+ * `setOpen(true)` opens the host with the current URL's `proyecto`/`tramo`
+ * defaults instead of writing `?nueva=1` (no server re-render).
+ */
+export function useNewTaskParam(): { open: boolean; setOpen(open: boolean): void } {
+  const searchParams = useSearchParams();
 
   const setOpen = useCallback(
     (next: boolean) => {
-      const params = new URLSearchParams(searchParams.toString());
-      router.replace(`${pathname}${newTaskSearch(params, next)}`, { scroll: false });
+      const { openNewTask, closeNewTask } = useNewTaskUi.getState();
+      if (next) openNewTask(newTaskDefaultsFromSearch(new URLSearchParams(searchParams.toString())), "tareas");
+      else closeNewTask();
     },
-    [router, pathname, searchParams]
+    [searchParams],
   );
 
-  return { open, setOpen };
+  return { open: false, setOpen };
 }

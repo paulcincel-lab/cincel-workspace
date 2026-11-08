@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
@@ -40,7 +41,8 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/tasks-repository", () => repo);
 
-import {
+import * as tasksActionsModule from "./tasks-actions";
+const {
   assignTaskAction,
   createAdminTaskAction,
   createSubtaskAction,
@@ -48,7 +50,7 @@ import {
   mergeTasksAction,
   setTaskSupportAction,
   updateTaskAction,
-} from "./tasks-actions";
+} = unwrapActions(tasksActionsModule);
 
 beforeEach(() => {
   vi.clearAllMocks();

@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
+import { NewTaskDialogHost } from "@/components/tareas/NewTaskDialogHost";
 import { SidebarInset, SidebarProvider } from "@/components/ui/shadcn/sidebar";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
 import { pageContentClass } from "@/lib/shell/page-padding";
@@ -18,6 +19,7 @@ import { CommandPalette } from "./CommandPalette";
 import { MobileTopBar } from "./MobileTopBar";
 import { OfflineBanner } from "./OfflineBanner";
 import { Sidebar } from "./Sidebar";
+import { UiStoresHydrator } from "./UiStoresHydrator";
 
 /** Client part of `AppShell`: active item, search and assistant open state. */
 export type AppShellClientProps = {
@@ -71,6 +73,8 @@ export function AppShellClient({ children, nav: clientNav, session, today, slots
       </SidebarInset>
       <BottomTabs activeKey={activeKey} items={tabs.items} more={tabs.more} />
       {showSearch ? <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} /> : null}
+      <NewTaskDialogHost />
+      <UiStoresHydrator />
     </SidebarProvider>
   );
 }

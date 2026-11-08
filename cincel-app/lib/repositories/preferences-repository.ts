@@ -3,6 +3,7 @@
  * Rows are keyed by the session staff id.
  */
 import { eq } from "drizzle-orm";
+import { cache } from "react";
 
 import { staffPhotos, userPreferences } from "@/lib/db/schema";
 import type { OwnerDb } from "@/lib/repositories/owner-scoped";
@@ -10,11 +11,18 @@ import type { OwnerDb } from "@/lib/repositories/owner-scoped";
 export type UserPreferencesRow = typeof userPreferences.$inferSelect;
 export type StaffPhotoRow = typeof staffPhotos.$inferSelect;
 
-/** The caller's row, or null (= all defaults). */
-export async function findUserPreferences(db: OwnerDb, staffId: string): Promise<UserPreferencesRow | null> {
+/**
+ * The caller's row, or null (= all defaults). Per-request cache, so
+ * `getResolvedAppearance` and `fetchMyPreferencesAction` share one read in a
+ * render (no cache inside a Server Action body, so a write is seen at once).
+ */
+export const findUserPreferences = cache(async function findUserPreferences(
+  db: OwnerDb,
+  staffId: string,
+): Promise<UserPreferencesRow | null> {
   const [row] = await db.select().from(userPreferences).where(eq(userPreferences.staffId, staffId)).limit(1);
   return row ?? null;
-}
+});
 
 /** Insert the caller's row or merge `values` into it; omitted columns keep their value (or default). */
 export async function upsertUserPreferences(

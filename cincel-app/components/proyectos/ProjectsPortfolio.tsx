@@ -11,6 +11,7 @@ import type { ProjectAdminValue } from "@/components/proyectos/ProjectAdminField
 import { Button } from "@/components/ui/shadcn/button";
 import { DistributionStripWidget } from "@/components/widgets/DistributionStripWidget";
 import { EntityCardFooter } from "@/components/widgets/EntityCardFooter";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { submitProjectCreateAction, updateProjectAction } from "@/lib/actions/projects-actions";
 import { actionErrorText } from "@/lib/errors";
 import type { ProjectCreateInput, ProjectListItem, WorkflowRef } from "@/lib/types/core";
@@ -129,7 +130,7 @@ export function ProjectsPortfolio({
     const id = result.project.id;
     if (canSeeAdminData && hasAdminValues(admin)) {
       try {
-        await updateProjectAction(id, admin);
+        unwrapActionResult(await updateProjectAction(id, admin));
       } catch (err) {
         // The project exists; the client and origin can be set from the ficha.
         toast.error(`Proyecto creado, pero no se guardaron el cliente y el origen. ${actionErrorText(err)}`);

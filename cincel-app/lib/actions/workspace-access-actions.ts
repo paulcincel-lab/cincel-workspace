@@ -1,6 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
+import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
+import { revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
 
 import { recheckStaffAccess } from "@/lib/auth/access-recheck";
 import { recordDirectoryError } from "@/lib/auth/directory-error-log";
@@ -28,9 +30,6 @@ import type {
  * rule `AppRouteGuard` applies to `/configuracion/*`.
  */
 
-const GOOGLE_SETTINGS_PATH = "/configuracion/google";
-const POSITIONS_SETTINGS_PATH = "/configuracion/puestos";
-const TEAM_PATH = "/equipo";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UNIQUE_VIOLATION = "23505";
@@ -61,8 +60,8 @@ function isUniqueViolation(err: unknown): boolean {
 
 /** Mappings show on Google and set the `googleManaged` flag on Puestos. */
 function revalidateMappingPaths(): void {
-  revalidatePath(GOOGLE_SETTINGS_PATH);
-  revalidatePath(POSITIONS_SETTINGS_PATH);
+  revalidateAjustesScreen("google");
+  revalidateAjustesScreen("puestos");
 }
 
 /** Shape checks that don't need Google; the group id comes later from `groups.get`. */
@@ -179,10 +178,10 @@ export async function recheckStaffAccessAction(staffId: string): Promise<Recheck
   const outcome = await recheckStaffAccess(staffId, { force: true });
   switch (outcome.status) {
     case "kept":
-      revalidatePath(TEAM_PATH);
+      revalidatePersonasScreen(["equipo"]);
       return { ok: true, allowed: true };
     case "revoked":
-      revalidatePath(TEAM_PATH);
+      revalidatePersonasScreen(["equipo"]);
       return { ok: true, allowed: false, reason: outcome.reason };
     case "error":
       return { ok: false, error: "directory_error" };
@@ -204,7 +203,7 @@ export async function getGoogleHealthAction(): Promise<GoogleHealth> {
 export async function ensureMissingProjectFoldersAction(): Promise<EnsureMissingProjectFoldersCounts> {
   if (!(await isAdministrator())) throw new Error("FORBIDDEN: ensure project folders");
   const counts = await ensureMissingProjectFolders();
-  revalidatePath(GOOGLE_SETTINGS_PATH);
-  revalidatePath("/proyectos");
+  revalidateAjustesScreen("google");
+  revalidateProyectosListScreen(["proyectos"]);
   return counts;
 }

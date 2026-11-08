@@ -26,6 +26,7 @@ import "server-only";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { addProjectCommentAction, fetchProjectAction, fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { fetchScheduleAction } from "@/lib/actions/schedule-actions";
 import { updateTaskAction } from "@/lib/actions/tasks-actions";
@@ -491,7 +492,7 @@ async function runSitePhotoLog(ctx: ToolRunContext, input: z.output<typeof siteP
       .map((p) => `${p.name} (${p.url})`)
       .join("; ")}`,
   );
-  await addProjectCommentAction(project.value.id, comment);
+  unwrapActionResult(await addProjectCommentAction(project.value.id, comment));
 
   const view = await fetchScheduleAction(project.value.id);
   let proposals: (RecordTableData & { title: string }) | null = null;
@@ -583,11 +584,13 @@ async function runScheduleFromTemplate(ctx: ToolRunContext, input: z.output<type
     for (const task of created) {
       if (!task.commitmentDate && !task.reviewDate && !task.deliveryDate) continue;
       try {
-        await updateTaskAction(task.id, {
-          commitmentDate: shift(task.commitmentDate, delta),
-          reviewDate: shift(task.reviewDate, delta),
-          deliveryDate: shift(task.deliveryDate, delta),
-        });
+        unwrapActionResult(
+          await updateTaskAction(task.id, {
+            commitmentDate: shift(task.commitmentDate, delta),
+            reviewDate: shift(task.reviewDate, delta),
+            deliveryDate: shift(task.deliveryDate, delta),
+          }),
+        );
         shifted += 1;
       } catch (err) {
         notShifted.push(`${task.id}: ${actionErrorText(err)}`);
@@ -599,7 +602,7 @@ async function runScheduleFromTemplate(ctx: ToolRunContext, input: z.output<type
   const summary = `Plantilla ${workflow.value.name} programada a partir del ${start}: ${result.createdCount} ${
     result.createdCount === 1 ? "tarea creada" : "tareas creadas"
   }`;
-  await addProjectCommentAction(project.id, viaAsistente(summary));
+  unwrapActionResult(await addProjectCommentAction(project.id, viaAsistente(summary)));
   for (const task of created) {
     await recordComment({
       entity: "task",

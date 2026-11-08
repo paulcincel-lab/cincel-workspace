@@ -6,6 +6,7 @@ import AppAvatar from "@/components/ui/AppAvatar";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   createSubtaskAction,
   listSubtasksAction,
@@ -63,7 +64,7 @@ export default function TaskSubtasks({ parentId, onOpenSubtask }: Props) {
     setAdding(true);
     setAddError("");
     try {
-      await createSubtaskAction(parentId, { title });
+      unwrapActionResult(await createSubtaskAction(parentId, { title }));
       setNewTitle("");
       setSubtasks(await listSubtasksAction(parentId));
     } catch (error) {

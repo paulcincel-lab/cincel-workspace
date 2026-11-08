@@ -6,7 +6,20 @@
  * longest side is at most 1024 px (this drops EXIF, including GPS), then sent
  * to `POST /api/staff/me/photo`. Failures throw `Error(CODE)` so the caller
  * shows `actionErrorText(err, "photo")`.
+ *
+ * `usePhotoUploadMutation` / `useRemovePhotoMutation` (plan §5 Phase 1b, S2)
+ * write the result into `qk.me.profile()` with `setQueryData`; the route and
+ * `removeMyPhotoAction` no longer revalidate the layout. Errors stay with the
+ * caller (`mutateAsync` rejects), so each screen keeps its own error copy.
  */
+
+import { useMutation, useQuery, useQueryClient, type QueryClient, type UseMutationResult } from "@tanstack/react-query";
+
+import { removeMyPhotoAction } from "@/lib/actions/profile-photo-actions";
+import { qk } from "@/lib/query/keys";
+import { runAction } from "@/lib/query/mutation";
+import { meProfileOptions } from "@/lib/query/options/me";
+import type { MyProfile } from "@/lib/types/shell";
 
 export const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp";
 export const PHOTO_MAX_SIDE = 1024;
@@ -81,4 +94,44 @@ export async function uploadMyPhoto(photo: Blob): Promise<string> {
 /** Re-encode then upload; the single entry point UI components call. */
 export async function changeMyPhoto(file: File): Promise<string> {
   return uploadMyPhoto(await reencodePhoto(file));
+}
+
+/**
+ * The caller's `me.profile`, seeded with `initial` (the layout's session or
+ * the page's own read) when the cache is still empty. Every avatar that
+ * reads it shows a new photo as soon as an upload or removal settles.
+ */
+export function useMyProfile(initial: MyProfile): MyProfile {
+  return useQuery(meProfileOptions(initial)).data ?? initial;
+}
+
+/** Writes the new photo URL into the cached `me.profile` (no-op when nothing is cached yet). */
+export function setMyProfilePhoto(qc: QueryClient, photoUrl: string | null): void {
+  qc.setQueryData<MyProfile>(qk.me.profile(), (current) => (current ? { ...current, photoUrl } : current));
+}
+
+/**
+ * Upload mutation: `mutateAsync(file)` resolves with the new URL and sets
+ * `me.profile.photoUrl`. `upload` defaults to `changeMyPhoto`; a screen with
+ * its own re-encode passes it so its behaviour stays the same.
+ */
+export function usePhotoUploadMutation(
+  upload: (file: File) => Promise<string> = changeMyPhoto,
+): UseMutationResult<string, Error, File> {
+  const qc = useQueryClient();
+  return useMutation<string, Error, File>({
+    mutationFn: (file) => upload(file),
+    onSuccess: (photoUrl) => setMyProfilePhoto(qc, photoUrl),
+  });
+}
+
+/** Remove mutation: runs `removeMyPhotoAction` and sets `me.profile.photoUrl` to null. */
+export function useRemovePhotoMutation(): UseMutationResult<void, Error, void> {
+  const qc = useQueryClient();
+  return useMutation<void, Error, void>({
+    mutationFn: async () => {
+      await runAction<void, unknown>(() => removeMyPhotoAction(), undefined);
+    },
+    onSuccess: () => setMyProfilePhoto(qc, null),
+  });
 }

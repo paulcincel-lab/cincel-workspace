@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { Input } from "@/components/ui/shadcn/input";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   createProjectSpaceAction,
   deleteProjectSpaceAction,
@@ -64,7 +65,7 @@ export function ProjectSpacesCard({ projectId, initialSpaces, canEdit }: Project
     setPending(true);
     setError(null);
     try {
-      const created = await createProjectSpaceAction(projectId, name);
+      const created = unwrapActionResult(await createProjectSpaceAction(projectId, name));
       setSpaces((rows) => [...rows, created]);
       setNewName("");
       setAdding(false);
@@ -80,7 +81,7 @@ export function ProjectSpacesCard({ projectId, initialSpaces, canEdit }: Project
     if (!name || name === space.name) return;
     setError(null);
     try {
-      const updated = await renameProjectSpaceAction(space.id, name);
+      const updated = unwrapActionResult(await renameProjectSpaceAction(space.id, name));
       setSpaces((rows) => rows.map((r) => (r.id === space.id ? { ...r, ...updated } : r)));
     } catch (err) {
       setError(fichaFlowErrorText(err));
@@ -99,7 +100,7 @@ export function ProjectSpacesCard({ projectId, initialSpaces, canEdit }: Project
     setSpaces(next);
     setError(null);
     try {
-      await reorderProjectSpacesAction(projectId, orderedIds);
+      unwrapActionResult(await reorderProjectSpacesAction(projectId, orderedIds));
     } catch (err) {
       setSpaces(previous);
       setError(fichaFlowErrorText(err));
@@ -112,7 +113,7 @@ export function ProjectSpacesCard({ projectId, initialSpaces, canEdit }: Project
     setPending(true);
     setError(null);
     try {
-      await deleteProjectSpaceAction(target.id);
+      unwrapActionResult(await deleteProjectSpaceAction(target.id));
       setSpaces((rows) => rows.filter((r) => r.id !== target.id));
       setToDelete(null);
     } catch (err) {

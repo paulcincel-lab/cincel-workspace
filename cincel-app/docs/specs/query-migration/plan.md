@@ -1038,6 +1038,15 @@ A phase is not done while any touched file still contains one of the patterns ab
 
 **Tests:** unit tests for `keys` (stable shapes), `mutation.ts` (all branches), `hydrate` (dehydrate/rehydrate), `countQueries`, the guard script and the cache-reset helper.
 
+**Final names (where they differ from or add to the list above):**
+- `lib/query/server.ts`: `getQueryClient`, `prefetch`; `lib/query/hydrate.tsx`: `<Hydrate qc>` plus `dehydrateQueries(qc)` (also used by the test helper).
+- `lib/query/mutation.ts`: `useActionMutation`, plus `runAction`, `mutationErrorText`, `isStrippedActionError` and `DEFAULT_STALE_CODES`.
+- Cache-reset helper: `lib/query/reset-client-state.ts` exports `resetClientState(queryClient)`, `registerUiStoreReset(reset)` (each UI store registers once, at module load), `resetUiStores()` (also run by `tests/setup/zustand-reset.ts`), and `setBrowserQueryClient` / `getBrowserQueryClient` (set by `QueryProvider`).
+- `lib/query/test-utils.tsx`: `createTestQueryClient()` takes no argument (retries are always off), `renderWithQueryClient`, `mockAction`, `hydrationRoundtrip(prefetchFn)`, and the viewer helpers `getTestViewer`, `asViewer`, `mockSessionModule`.
+- `tests/helpers/`: `countQueries(fn)` in `count-queries.ts`, plus `withRequestCache(fn)` in `react-request-cache.ts` for the React `cache()` tests.
+- `lib/cache/screens/*`: the helpers take an optional target list. `proyectos.ts` has four helpers instead of one, `revalidateProyectosListScreen`, `revalidateProyectoFichaScreen(id)`, `revalidateProyectoCronogramaScreen(id)` and `revalidateProyectoClientesScreen`. `biblioteca.ts` also has `revalidateVacacionesScreen`. Ajustes is `revalidateAjustesScreen(seg)`. All of them share `revalidateTargets` from `targets.ts`.
+- `lib/stores/session-store.ts`: `selectAuthenticatedUser`, plus `selectSessionStatus` and `sessionIdentityKey(access)`.
+
 ### Phase 1b: shared contracts (#954, one PR)
 
 **Owns:**
@@ -1063,6 +1072,14 @@ A phase is not done while any touched file still contains one of the patterns ab
 - `rg "SessionAccessContext|GeneralSettingsContext" components lib app` is empty.
 - Shell and project tab counts use `COUNT` queries: `countOpenTasksFor` equals the old `countOpenTasks(listMyTasks)` (DB test).
 - The slim projection returns the same rows as `listTasks` minus the large fields (DB test).
+
+**Final names** (the contracts in #954):
+- `lib/stores/new-task-store.ts`: `useNewTaskUi` with `openNewTask(defaults?, source?)` / `closeNewTask()`, plus `NEW_TASK_UI_INITIAL` and `resetNewTaskUi`.
+- `lib/stores/assistant-ui-store.ts`: `useAssistantUi`, the standalone `openAssistant(opts?)`, `ASSISTANT_UI_INITIAL` and `resetAssistantUi`.
+- `lib/stores/appearance-store.ts`: `createAppearanceStore`, `AppearanceStoreProvider`, `useAppearance(selector?)`; `useStyle()` stays as a selector.
+- Catalogs: `fetchCatalog{ProjectOptions,Workflows,TaskStatuses,Staff,AssignableStaff,ProjectSpaces,Contacts}` in `lib/actions/page-data/catalog-actions.ts`, with one `queryOptions` per `qk.catalog` key in `lib/query/options/catalog.ts`.
+- The slim task projection is `TaskListRow` in `lib/types/core.ts`, read by `listTaskRows(filters, viewer)` alongside `countOpenTasksFor` and `countProjectTasks`.
+- `meTodayOptions`, `meProfileOptions`, `orgGeneralOptions` (in `lib/query/options/org.ts`), `getProyectoShell`, `useDriveStatus`, and `ShellBadges` in `lib/types/shell.ts`.
 
 ### Phase 2: shell and sidebar (#936)
 

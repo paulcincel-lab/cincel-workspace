@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolvePortalCapabilities } from "@/lib/auth/permissions";
-import { useSessionStore } from "@/lib/stores/session-store";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 
 export type ProjectSection = "resumen" | "tareas" | "ficha" | "cronograma" | "archivos" | "clientes";
 
@@ -70,8 +69,8 @@ export function activeProjectSection(pathname: string | null): ProjectSection | 
 
 /** Whether the signed-in staff member has `portal.manageAccess` (re-read when the session store changes). */
 function useCanManagePortalAccess(): boolean {
-  const access = useSessionStore((state) => state.access);
-  return access.status === "active" && resolvePortalCapabilities(getCurrentAuthenticatedUser()).manageAccess;
+  const user = useSessionStore(selectCurrentUser);
+  return user !== null && resolvePortalCapabilities(user).manageAccess;
 }
 
 /**

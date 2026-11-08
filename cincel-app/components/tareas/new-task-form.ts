@@ -49,7 +49,7 @@ export type NewTaskDefaults = {
   status?: string;
 };
 
-export function initialDraft(defaults: NewTaskDefaults = {}): NewTaskDraft {
+export function draftFromDefaults(defaults: NewTaskDefaults = {}): NewTaskDraft {
   return {
     title: defaults.title ?? "",
     projectId: defaults.projectId ?? "",

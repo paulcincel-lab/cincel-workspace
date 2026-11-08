@@ -1,6 +1,9 @@
 "use server";
 
+import { toActionResult } from "@/lib/actions/action-result";
+import type { ActionResult } from "@/lib/types/schedule";
 import { revalidatePath } from "next/cache";
+import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
 
 import { canManageTimeTracking, canViewTeamHours } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -31,7 +34,8 @@ import { parseInput, TeamHoursInputSchema } from "@/lib/validation/redesign";
  * `app_settings('time_tracking')`; the clock state machine and its
  * transactions in `lib/time-tracking/{state,clock}.ts`. Every clock action
  * works on the session's own entries only (the staff id never comes from
- * input). Errors are `Error("CODE: detail")` for `actionErrorText`.
+ * input). Errors are `"CODE: detail"` for `actionErrorText`: thrown by the reads,
+ * returned as `{ ok: false, error }` by the writes (`ActionResult`).
  */
 
 type Caller = { staffId: string; role: string };
@@ -68,14 +72,20 @@ export async function fetchTimeTrackingSettingsAction(): Promise<TimeTrackingSet
  * dayStart; hoursPerDay ∉ 1–12; workDays empty or ∉ 0–6; unknown exempt role;
  * a changed `requiredFrom` earlier than tomorrow). Revalidates `/` (layout), `/ajustes/horario`.
  */
-export async function saveTimeTrackingSettingsAction(input: TimeTrackingSettings): Promise<TimeTrackingSettings> {
+export async function saveTimeTrackingSettingsAction(
+  ...args: Parameters<typeof saveTimeTrackingSettingsActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof saveTimeTrackingSettingsActionImpl>>>> {
+  return toActionResult(() => saveTimeTrackingSettingsActionImpl(...args));
+}
+
+async function saveTimeTrackingSettingsActionImpl(input: TimeTrackingSettings): Promise<TimeTrackingSettings> {
   const user = await requireCapabilityUser();
   if (!canManageTimeTracking(user)) throw new Error("FORBIDDEN: time tracking settings");
   const previous = await getTimeTrackingSettings();
   const settings = validateTimeTrackingSettings(input, previous, new Date());
   await writeTimeTrackingSettings(settings);
   revalidatePath("/", "layout");
-  revalidatePath("/ajustes/horario");
+  revalidateAjustesScreen("horario");
   return settings;
 }
 
@@ -87,7 +97,13 @@ export async function fetchMyTodayAction(): Promise<TodayStatus> {
 }
 
 /** off | done → on. Errors: `DISABLED` (off or exempt), `ALREADY_ON`. */
-export async function clockInAction(input: { source: TimeEntrySource }): Promise<TodayStatus> {
+export async function clockInAction(
+  ...args: Parameters<typeof clockInActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof clockInActionImpl>>>> {
+  return toActionResult(() => clockInActionImpl(...args));
+}
+
+async function clockInActionImpl(input: { source: TimeEntrySource }): Promise<TodayStatus> {
   const source = input?.source;
   if (!SOURCES.includes(source)) throw new Error("INVALID: source");
   const { caller, settings } = await requireTracking();
@@ -96,21 +112,39 @@ export async function clockInAction(input: { source: TimeEntrySource }): Promise
 }
 
 /** on → pausa. Errors: `NOT_ON`. */
-export async function pauseWorkAction(): Promise<TodayStatus> {
+export async function pauseWorkAction(
+  ...args: Parameters<typeof pauseWorkActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof pauseWorkActionImpl>>>> {
+  return toActionResult(() => pauseWorkActionImpl(...args));
+}
+
+async function pauseWorkActionImpl(): Promise<TodayStatus> {
   const { caller, settings } = await requireTracking();
   await pauseWork(db, caller.staffId, new Date());
   return statusOf(caller, settings, new Date());
 }
 
 /** pausa → on. Errors: `NOT_ON`. */
-export async function resumeWorkAction(): Promise<TodayStatus> {
+export async function resumeWorkAction(
+  ...args: Parameters<typeof resumeWorkActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof resumeWorkActionImpl>>>> {
+  return toActionResult(() => resumeWorkActionImpl(...args));
+}
+
+async function resumeWorkActionImpl(): Promise<TodayStatus> {
   const { caller, settings } = await requireTracking();
   await resumeWork(db, caller.staffId, new Date());
   return statusOf(caller, settings, new Date());
 }
 
 /** on | pausa → done (closes an open pause first). Errors: `NOT_ON`. */
-export async function clockOutAction(): Promise<TodayStatus> {
+export async function clockOutAction(
+  ...args: Parameters<typeof clockOutActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof clockOutActionImpl>>>> {
+  return toActionResult(() => clockOutActionImpl(...args));
+}
+
+async function clockOutActionImpl(): Promise<TodayStatus> {
   const { caller, settings } = await requireTracking();
   await clockOut(db, caller.staffId, new Date());
   return statusOf(caller, settings, new Date());

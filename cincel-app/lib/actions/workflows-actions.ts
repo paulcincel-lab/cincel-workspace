@@ -1,6 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
+import { revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
+import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 import { z } from "zod";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -26,8 +28,6 @@ import type {
   WorkflowTaskTemplateInput,
 } from "@/lib/types/core";
 
-const TRAMOS_PATH = "/configuracion/tramos";
-
 async function requireWorkflowsCapabilities() {
   return resolveWorkflowsCapabilities(await requireCapabilityUser());
 }
@@ -41,11 +41,11 @@ async function requireWorkflowsManager() {
 
 /** The tramos admin page (old and new route) and the Actividades layout (tabs, sidebar). */
 function revalidateTramos(options: { positions?: boolean; projects?: boolean } = {}) {
-  revalidatePath("/configuracion/tramos");
-  revalidatePath("/configuracion/workflows");
-  if (options.positions) revalidatePath("/configuracion/puestos");
-  if (options.projects) revalidatePath("/proyectos");
-  revalidatePath("/actividades", "layout");
+  revalidateAjustesScreen("tramos");
+  revalidateAjustesScreen("workflows");
+  if (options.positions) revalidateAjustesScreen("puestos");
+  if (options.projects) revalidateProyectosListScreen(["proyectos"]);
+  revalidateTareasScreen(["actividadesLayout"]);
 }
 
 /**
@@ -78,7 +78,7 @@ export async function createWorkflowAction(input: WorkflowInput): Promise<Workfl
     throw new Error("FORBIDDEN: workflow create");
   }
   const row = await workflowsRepository.createWorkflow(input, user.member.id);
-  revalidatePath("/configuracion/workflows");
+  revalidateAjustesScreen("workflows");
   return row;
 }
 
@@ -88,7 +88,7 @@ export async function updateWorkflowAction(id: string, patch: Partial<WorkflowIn
     throw new Error("FORBIDDEN: workflow edit");
   }
   const row = await workflowsRepository.updateWorkflow(id, patch, user.member.id);
-  revalidatePath("/configuracion/workflows");
+  revalidateAjustesScreen("workflows");
   return row;
 }
 
@@ -98,12 +98,12 @@ export async function deleteWorkflowAction(id: string): Promise<void> {
     throw new Error("FORBIDDEN: workflow delete");
   }
   await workflowsRepository.softDeleteWorkflow(id, user.member.id);
-  revalidatePath("/configuracion/workflows");
+  revalidateAjustesScreen("workflows");
 }
 
 function revalidateTemplates(layout: boolean) {
-  revalidatePath(TRAMOS_PATH);
-  if (layout) revalidatePath("/actividades", "layout");
+  revalidateAjustesScreen("tramos");
+  if (layout) revalidateTareasScreen(["actividadesLayout"]);
 }
 
 /** `phaseId` is required. Errors: FORBIDDEN, NOT_FOUND, EMPTY, INVALID, PHASE_MISMATCH, NAME_TAKEN. */

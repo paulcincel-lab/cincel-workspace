@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
+// The sheet loads its "Datos de monday" through a query, so it renders under a QueryClientProvider.
+import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
@@ -74,6 +76,11 @@ import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import type { ThemeId } from "@/lib/types/redesign";
 
 import { TaskSheet } from "./TaskSheet";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { seedSessionUser } from "@/tests/helpers/session-user";
+
+// The components read the signed-in user from the session store; seed it with the mocked user.
+beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
 const MODES = ["light", "dark"] as const;
 type Mode = (typeof MODES)[number];

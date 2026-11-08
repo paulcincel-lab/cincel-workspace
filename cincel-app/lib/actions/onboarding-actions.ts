@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
 
 import { getSessionAccess } from "@/lib/auth/session";
 import * as onboardingRepository from "@/lib/repositories/onboarding-repository";
@@ -20,6 +20,6 @@ export async function completeOnboardingAction(): Promise<{ ok: true } | { ok: f
   if (!staffId) return { ok: false, error: "forbidden" };
 
   await onboardingRepository.markOnboardingCompleted(staffId);
-  revalidatePath("/dashboard");
+  revalidateInicioScreen();
   return { ok: true };
 }

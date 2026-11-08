@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
@@ -73,11 +74,12 @@ vi.mock("@/lib/repositories/projects-repository", async (importOriginal) => ({
   ...repo,
 }));
 
-import {
+import * as projectsActionsModule from "./projects-actions";
+const {
   createProjectAction,
   setProjectCurrentTramoAction,
   updateProjectAction,
-} from "./projects-actions";
+} = unwrapActions(projectsActionsModule);
 
 function project() {
   return {

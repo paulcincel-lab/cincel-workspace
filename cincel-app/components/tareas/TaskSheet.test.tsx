@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+// The sheet loads its "Datos de monday" through a query, so it renders under a QueryClientProvider.
+import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 import { useState } from "react";
 
 const nav = vi.hoisted(() => ({
@@ -83,6 +85,11 @@ import {
   taskSheetSearch,
 } from "./TaskSheet";
 import { PHASES, SPACES, STAFF, makeTask, makeWorkflow } from "./task-sheet.fixtures";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { seedSessionUser } from "@/tests/helpers/session-user";
+
+// The components read the signed-in user from the session store; seed it with the mocked user.
+beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
 /** A real mouse press on a base-ui Select option: pointerdown, then click (base-ui ignores a bare click). */
 function pressOption(option: HTMLElement) {
@@ -117,8 +124,8 @@ beforeEach(() => {
   nav.replace.mockReset();
   nav.push.mockReset();
   vi.mocked(fetchTaskAction).mockReset().mockResolvedValue(makeTask());
-  vi.mocked(updateTaskAction).mockReset().mockResolvedValue(makeTask());
-  vi.mocked(setTaskStatusAction).mockReset().mockResolvedValue(makeTask());
+  vi.mocked(updateTaskAction).mockReset().mockResolvedValue({ ok: true, data: makeTask() });
+  vi.mocked(setTaskStatusAction).mockReset().mockResolvedValue({ ok: true, data: makeTask() });
   vi.mocked(addTaskCommentAction).mockReset();
   vi.mocked(fetchWorkflowsAction).mockReset().mockResolvedValue([makeWorkflow()]);
   vi.mocked(fetchAssignableStaffAction).mockReset().mockResolvedValue(STAFF as never);

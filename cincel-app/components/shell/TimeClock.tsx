@@ -4,6 +4,7 @@ import { Clock } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   clockInAction,
   clockOutAction,
@@ -215,12 +216,12 @@ export function TimeClock({ initial, variant = "card" }: TimeClockProps) {
       try {
         const result =
           action === "clockIn"
-            ? await clockInAction({ source: "sidebar" })
+            ? unwrapActionResult(await clockInAction({ source: "sidebar" }))
             : action === "pause"
-              ? await pauseWorkAction()
+              ? unwrapActionResult(await pauseWorkAction())
               : action === "resume"
-                ? await resumeWorkAction()
-                : await clockOutAction();
+                ? unwrapActionResult(await resumeWorkAction())
+                : unwrapActionResult(await clockOutAction());
         const done = Date.now();
         setSnapshot({ status: result, syncedAt: done });
         setNow(done);

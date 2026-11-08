@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import type { PageHeaderProps } from "@/components/shell/PageHeader";
 import { ListPage, type ListSpec } from "@/components/patterns/ListPage";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { setTaskCustomStatusAction, setTaskStatusAction } from "@/lib/actions/tasks-actions";
 import { parseStatusValue } from "@/lib/tasks/status-options";
 import type { TaskStatusOption } from "@/lib/types/core";
@@ -42,8 +43,8 @@ export type TareasTableroProps = {
  */
 export async function moveTaskToColumn(taskId: string, columnKey: string): Promise<void> {
   const target = parseStatusValue(columnKey);
-  if (target.kind === "custom") await setTaskCustomStatusAction(taskId, target.id);
-  else await setTaskStatusAction(taskId, target.status);
+  if (target.kind === "custom") unwrapActionResult(await setTaskCustomStatusAction(taskId, target.id));
+  else unwrapActionResult(await setTaskStatusAction(taskId, target.status));
 }
 
 /**

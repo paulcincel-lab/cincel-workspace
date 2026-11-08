@@ -5,6 +5,7 @@
  * check is the Server Action's job (`requireCapabilityUser()` + resolve
  * `<Module>Capabilities()`), exercised here on the tasks action.
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("@/lib/auth/session", () => ({
@@ -15,7 +16,8 @@ vi.mock("@/lib/auth/session", () => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { createUserTaskAction } from "@/lib/actions/tasks-actions";
+import * as tasksActionsModule from "@/lib/actions/tasks-actions";
+const { createUserTaskAction } = unwrapActions(tasksActionsModule);
 
 describe("actions — writes reject instead of falling back", () => {
   beforeEach(() => {

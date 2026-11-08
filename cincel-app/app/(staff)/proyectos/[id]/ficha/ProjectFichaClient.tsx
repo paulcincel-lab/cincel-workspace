@@ -35,8 +35,9 @@ import { groupFichaTasks, hasTasksWithoutTramo, NO_PHASE_LABEL } from "@/lib/pro
 import { hasImportData, ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   fetchProjectAction,
   updateProjectAction,
@@ -117,7 +118,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
   const [confirmClientChange, setConfirmClientChange] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const authenticatedUser = getCurrentAuthenticatedUser();
+  const authenticatedUser = useSessionStore(selectCurrentUser);
   const caps = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
   const isAdmin = canSeeAdminData(authenticatedUser);
 
@@ -241,7 +242,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
     try {
       // Client and origin are admin-only: non-admins never send those keys (FORBIDDEN otherwise).
       const patch = isAdmin ? { ...draft, ...projectAdminPatch(adminDraft) } : draft;
-      await updateProjectAction(project.id, patch);
+      unwrapActionResult(await updateProjectAction(project.id, patch));
       setIsEditing(false);
       // Refetch the project and its admin tasks: the backend already closed
       // "Asignar cliente y origen" when a client was set (RD-10).
@@ -263,7 +264,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
       ? project.members.filter((m) => m.id !== staffId).map((m) => ({ staffId: m.id, role: m.role }))
       : [...project.members.map((m) => ({ staffId: m.id, role: m.role })), { staffId, role: null }];
     try {
-      await setProjectMembersAction(project.id, next);
+      unwrapActionResult(await setProjectMembersAction(project.id, next));
       await reload();
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
@@ -277,7 +278,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
       ? project.contacts.filter((c) => c.id !== contactId).map((c) => ({ contactId: c.id, role: c.role }))
       : [...project.contacts.map((c) => ({ contactId: c.id, role: c.role })), { contactId, role: null }];
     try {
-      await setProjectContactsAction(project.id, next);
+      unwrapActionResult(await setProjectContactsAction(project.id, next));
       await reload();
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);
@@ -287,7 +288,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
   async function addLink(input: TaskLinkInput) {
     if (!project) return;
     try {
-      await addProjectLinkAction(project.id, input);
+      unwrapActionResult(await addProjectLinkAction(project.id, input));
       await reload();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "No se pudo agregar el enlace.");
@@ -297,7 +298,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
   async function removeLink(linkId: string) {
     if (!project) return;
     try {
-      await removeProjectLinkAction(project.id, linkId);
+      unwrapActionResult(await removeProjectLinkAction(project.id, linkId));
       await reload();
     } catch (err) {
       if (err instanceof RepositoryError) reportRepositoryError(err);

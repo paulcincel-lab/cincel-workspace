@@ -1,22 +1,26 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 import type { ReactNode } from "react";
 
-import { PROJECTS, STAFF, WORKFLOWS } from "./new-task-fixtures";
+import { CATALOG_STAFF, PROJECT_OPTIONS, WORKFLOWS } from "./new-task-fixtures";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }),
   usePathname: () => "/tareas",
   useSearchParams: () => new URLSearchParams("nueva=1"),
 }));
-vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectsAction: vi.fn(() => Promise.resolve(PROJECTS)) }));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogProjectOptions: vi.fn(() => Promise.resolve(PROJECT_OPTIONS)),
+  fetchCatalogAssignableStaff: vi.fn(() => Promise.resolve(CATALOG_STAFF)),
+}));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowsAction: vi.fn(() => Promise.resolve(WORKFLOWS)) }));
-vi.mock("@/lib/actions/staff-actions", () => ({ fetchAssignableStaffAction: vi.fn(() => Promise.resolve(STAFF)) }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   createUserTaskAction: vi.fn(() => Promise.reject(new Error("FORBIDDEN"))),
   createSubtaskAction: vi.fn(() => Promise.resolve({})),
+  setTaskStatusAction: vi.fn(() => Promise.resolve({})),
+  setTaskCustomStatusAction: vi.fn(() => Promise.resolve({})),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -50,6 +54,8 @@ vi.mock("@/components/patterns/FormDialog", () => ({
     ) : null,
 }));
 
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+
 import { NewTaskDialog } from "./NewTaskDialog";
 import { CONTRAST_PAIRS } from "@/lib/ui/contrast";
 import { THEME_IDS } from "@/lib/ui/themes";
@@ -82,7 +88,7 @@ async function seriousViolations(container: HTMLElement) {
 }
 
 async function renderReady() {
-  const view = render(<NewTaskDialog open onOpenChange={vi.fn()} />);
+  const view = renderWithQueryClient(<NewTaskDialog open onOpenChange={vi.fn()} />);
   await waitFor(() => expect(screen.queryByText("Cargando…")).toBeNull());
   await screen.findByRole("combobox", { name: "Fase" });
   return view;

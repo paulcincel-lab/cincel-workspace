@@ -1,6 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { toActionResult } from "@/lib/actions/action-result";
+import type { ActionResult } from "@/lib/types/schedule";
+import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
+import { revalidateProyectoFichaScreen, revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
+import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -33,16 +37,16 @@ async function requireProjectsCapabilities() {
 }
 
 function revalidateProyectos(id?: string) {
-  revalidatePath("/proyectos");
-  if (id) revalidatePath(`/proyectos/${id}/ficha`);
+  revalidateProyectosListScreen(["proyectos"]);
+  if (id) revalidateProyectoFichaScreen(id, ["ficha"]);
 }
 
 /** Changes that move a project between tramos also show on Actividades, Dashboard and Tablero (BE §7.3). */
 function revalidateProjectFlow(id: string) {
   revalidateProyectos(id);
-  revalidatePath("/actividades", "layout");
-  revalidatePath("/dashboard");
-  revalidatePath("/tablero");
+  revalidateTareasScreen(["actividadesLayout"]);
+  revalidateInicioScreen();
+  revalidateTareasScreen(["tablero"]);
 }
 
 export async function fetchProjectsAction(filters: ProjectFilters = {}): Promise<ProjectListItem[]> {
@@ -61,9 +65,9 @@ export async function fetchProjectAction(id: string): Promise<ProjectDetail | nu
 /** Create/update revalidation (BE §7.3): Proyectos, the ficha, Actividades layout, Dashboard and Tablero. */
 function revalidateProjectEdit(id: string) {
   revalidateProyectos(id);
-  revalidatePath("/actividades", "layout");
-  revalidatePath("/dashboard");
-  revalidatePath("/tablero");
+  revalidateTareasScreen(["actividadesLayout"]);
+  revalidateInicioScreen();
+  revalidateTareasScreen(["tablero"]);
 }
 
 /** Patch keys only administrators may send (BE §7.3). */
@@ -76,7 +80,13 @@ const viewerOf = (user: AuthenticatedUser): ViewerScope => ({ staffId: user.memb
  * a full `ProjectInput`; only `name` is read. `canCreateProject`. Errors:
  * FORBIDDEN, EMPTY, NAME_TAKEN.
  */
-export async function createProjectAction(input: ProjectCreateInput | ProjectInput): Promise<ProjectDetail> {
+export async function createProjectAction(
+  ...args: Parameters<typeof createProjectActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createProjectActionImpl>>>> {
+  return toActionResult(() => createProjectActionImpl(...args));
+}
+
+async function createProjectActionImpl(input: ProjectCreateInput | ProjectInput): Promise<ProjectDetail> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canCreateProject) {
     throw new Error("FORBIDDEN: project create");
@@ -101,7 +111,7 @@ export async function submitProjectCreateAction(
   input: ProjectCreateInput
 ): Promise<{ ok: true; project: ProjectDetail } | { ok: false; error: string }> {
   try {
-    return { ok: true, project: await createProjectAction(input) };
+    return { ok: true, project: await createProjectActionImpl(input) };
   } catch (err) {
     const code = actionErrorCode(err);
     if (CREATE_PROJECT_CODES.has(code)) return { ok: false, error: code };
@@ -114,6 +124,12 @@ export async function submitProjectCreateAction(
  * require an administrator. Errors: FORBIDDEN, NOT_FOUND, EMPTY, NAME_TAKEN.
  */
 export async function updateProjectAction(
+  ...args: Parameters<typeof updateProjectActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof updateProjectActionImpl>>>> {
+  return toActionResult(() => updateProjectActionImpl(...args));
+}
+
+async function updateProjectActionImpl(
   id: string,
   patch: Partial<ProjectInput>
 ): Promise<ProjectDetail> {
@@ -175,6 +191,12 @@ export async function deleteProjectAction(id: string): Promise<void> {
 }
 
 export async function setProjectMembersAction(
+  ...args: Parameters<typeof setProjectMembersActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setProjectMembersActionImpl>>>> {
+  return toActionResult(() => setProjectMembersActionImpl(...args));
+}
+
+async function setProjectMembersActionImpl(
   projectId: string,
   members: Array<{ staffId: string; role?: string | null }>
 ): Promise<void> {
@@ -187,6 +209,12 @@ export async function setProjectMembersAction(
 }
 
 export async function setProjectContactsAction(
+  ...args: Parameters<typeof setProjectContactsActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setProjectContactsActionImpl>>>> {
+  return toActionResult(() => setProjectContactsActionImpl(...args));
+}
+
+async function setProjectContactsActionImpl(
   projectId: string,
   contacts: Array<{ contactId: string; role?: string | null }>
 ): Promise<void> {
@@ -204,7 +232,13 @@ const PROJECT_LINK_ERROR_MESSAGES: Record<string, string> = {
   PROJECT_LINK_KIND_INVALID: "Elige si el enlace es interno o del cliente.",
 };
 
-export async function addProjectLinkAction(projectId: string, input: ProjectLinkInput): Promise<ProjectLink> {
+export async function addProjectLinkAction(
+  ...args: Parameters<typeof addProjectLinkActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof addProjectLinkActionImpl>>>> {
+  return toActionResult(() => addProjectLinkActionImpl(...args));
+}
+
+async function addProjectLinkActionImpl(projectId: string, input: ProjectLinkInput): Promise<ProjectLink> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canEditProtectedProjectData) {
     throw new Error("FORBIDDEN: project links edit");
@@ -219,7 +253,13 @@ export async function addProjectLinkAction(projectId: string, input: ProjectLink
   }
 }
 
-export async function removeProjectLinkAction(projectId: string, linkId: string): Promise<void> {
+export async function removeProjectLinkAction(
+  ...args: Parameters<typeof removeProjectLinkActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof removeProjectLinkActionImpl>>>> {
+  return toActionResult(() => removeProjectLinkActionImpl(...args));
+}
+
+async function removeProjectLinkActionImpl(projectId: string, linkId: string): Promise<void> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canEditProtectedProjectData) {
     throw new Error("FORBIDDEN: project links edit");
@@ -243,7 +283,13 @@ export async function fetchProjectHistoryAction(projectId: string): Promise<Hist
 const ADMIN_ONLY_HISTORY_FIELDS = new Set(["clientId", "origin", "originStaffId"]);
 
 /** Adds a comment to the project bitácora. Throws FORBIDDEN, EMPTY or NOT_FOUND. */
-export async function addProjectCommentAction(projectId: string, text: string): Promise<void> {
+export async function addProjectCommentAction(
+  ...args: Parameters<typeof addProjectCommentActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof addProjectCommentActionImpl>>>> {
+  return toActionResult(() => addProjectCommentActionImpl(...args));
+}
+
+async function addProjectCommentActionImpl(projectId: string, text: string): Promise<void> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canViewProjects) throw new Error("FORBIDDEN");
   const comment = (text ?? "").trim();
@@ -264,7 +310,13 @@ const isUuid = (value: unknown): value is string => typeof value === "string" &&
  * opens the stage through `startTramo` with `stageOnly` (no fases, no tasks).
  * Errors: FORBIDDEN, NOT_FOUND, NOT_STARTED.
  */
-export async function setProjectCurrentTramoAction(id: string, workflowId: string): Promise<ProjectDetail> {
+export async function setProjectCurrentTramoAction(
+  ...args: Parameters<typeof setProjectCurrentTramoActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setProjectCurrentTramoActionImpl>>>> {
+  return toActionResult(() => setProjectCurrentTramoActionImpl(...args));
+}
+
+async function setProjectCurrentTramoActionImpl(id: string, workflowId: string): Promise<ProjectDetail> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canChangeProjectStage) throw new Error("FORBIDDEN");
   if (!isUuid(id) || !isUuid(workflowId)) throw new Error("NOT_FOUND");
@@ -289,9 +341,9 @@ async function requireProjectEditor() {
 
 /** Espacios show on the ficha and filter the Actividades views. Without a project id, every ficha. */
 function revalidateSpaces(projectId?: string) {
-  if (projectId) revalidatePath(`/proyectos/${projectId}/ficha`);
-  else revalidatePath("/proyectos", "layout");
-  revalidatePath("/actividades", "layout");
+  if (projectId) revalidateProyectoFichaScreen(projectId, ["ficha"]);
+  else revalidateProyectosListScreen(["proyectosLayout"]);
+  revalidateTareasScreen(["actividadesLayout"]);
 }
 
 /** By `sortOrder`, with live task counts. `canViewProjects`. */
@@ -302,7 +354,13 @@ export async function fetchProjectSpacesAction(projectId: string): Promise<Proje
 }
 
 /** Appended last. `canEditProjectGeneral`. Errors: FORBIDDEN, NAME_TAKEN, EMPTY, NOT_FOUND. */
-export async function createProjectSpaceAction(projectId: string, name: string): Promise<ProjectSpace> {
+export async function createProjectSpaceAction(
+  ...args: Parameters<typeof createProjectSpaceActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createProjectSpaceActionImpl>>>> {
+  return toActionResult(() => createProjectSpaceActionImpl(...args));
+}
+
+async function createProjectSpaceActionImpl(projectId: string, name: string): Promise<ProjectSpace> {
   await requireProjectEditor();
   const id = parseInput(UuidSchema, projectId);
   const row = await projectSpacesRepository.createSpace(id, parseInput(ProjectSpaceNameSchema, name));
@@ -311,7 +369,13 @@ export async function createProjectSpaceAction(projectId: string, name: string):
 }
 
 /** Errors: FORBIDDEN, NAME_TAKEN, EMPTY, NOT_FOUND. */
-export async function renameProjectSpaceAction(id: string, name: string): Promise<ProjectSpace> {
+export async function renameProjectSpaceAction(
+  ...args: Parameters<typeof renameProjectSpaceActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof renameProjectSpaceActionImpl>>>> {
+  return toActionResult(() => renameProjectSpaceActionImpl(...args));
+}
+
+async function renameProjectSpaceActionImpl(id: string, name: string): Promise<ProjectSpace> {
   await requireProjectEditor();
   const spaceId = parseInput(UuidSchema, id);
   const row = await projectSpacesRepository.renameSpace(spaceId, parseInput(ProjectSpaceNameSchema, name));
@@ -320,7 +384,13 @@ export async function renameProjectSpaceAction(id: string, name: string): Promis
 }
 
 /** Errors: FORBIDDEN, NOT_FOUND. */
-export async function reorderProjectSpacesAction(projectId: string, orderedIds: string[]): Promise<void> {
+export async function reorderProjectSpacesAction(
+  ...args: Parameters<typeof reorderProjectSpacesActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderProjectSpacesActionImpl>>>> {
+  return toActionResult(() => reorderProjectSpacesActionImpl(...args));
+}
+
+async function reorderProjectSpacesActionImpl(projectId: string, orderedIds: string[]): Promise<void> {
   await requireProjectEditor();
   const id = parseInput(UuidSchema, projectId);
   await projectSpacesRepository.reorderSpaces(id, parseInput(OrderedIdsSchema, orderedIds));
@@ -328,7 +398,13 @@ export async function reorderProjectSpacesAction(projectId: string, orderedIds: 
 }
 
 /** Its tasks keep their fase and lose the espacio. Errors: FORBIDDEN, NOT_FOUND. */
-export async function deleteProjectSpaceAction(id: string): Promise<void> {
+export async function deleteProjectSpaceAction(
+  ...args: Parameters<typeof deleteProjectSpaceActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof deleteProjectSpaceActionImpl>>>> {
+  return toActionResult(() => deleteProjectSpaceActionImpl(...args));
+}
+
+async function deleteProjectSpaceActionImpl(id: string): Promise<void> {
   const user = await requireProjectEditor();
   await projectSpacesRepository.deleteSpace(parseInput(UuidSchema, id), user.member.id);
   revalidateSpaces();
