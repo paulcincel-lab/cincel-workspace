@@ -894,6 +894,8 @@ One action per segment, `getAjustes<Seg>PageData(z.object({}))`, under the key `
 
 ### 4.7 Zustand (UI-only state) vs TanStack (server state)
 
+The full UI-state inventory, the store designs (`useShellUi`, `useAssistantUi`, `useNewTaskUi`, `useTareasUi`, the dashboard store factory for Inicio/Proyectos/Personas, `usePresentationStyle`, `useRecentDocs`), the URL/Zustand/TanStack boundary, SSR and testing rules, and the Zustand work per phase are in [`zustand.md`](./zustand.md). That document supersedes the short list below where they differ.
+
 **Zustand**
 - **`useAssistantUi`**: `{open, mounted, context, threadId, openAssistant(ctx?), close()}`.
   - Replaces `AssistantLauncher` local state and the `OPEN_ASSISTANT_EVENT` window event (`components/asistente/AssistantLauncher.tsx:29-34,52-82`).
