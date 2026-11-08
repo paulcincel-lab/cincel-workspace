@@ -913,6 +913,22 @@ One action per segment, `getAjustes<Seg>PageData(z.object({}))`, under the key `
 
 Every phase is shippable on its own. Phase 1 blocks the rest. Phases 2–11 can run in parallel; their only shared files are `lib/query/keys.ts` (append-only per domain section) and the action files whose `revalidatePath` they own.
 
+### 5.0 Migration rule: switch fully, leave no old pattern behind
+
+Every file a phase touches ends the phase on the TanStack pattern only. While editing a component, hook or page, remove in the same PR:
+- `router.refresh()` after mutations → `useActionMutation` with targeted `invalidateQueries` / `setQueryData`;
+- `useEffect` / `useTransition` calls that load data through a server action or `fetch`, and hand-written `reload()` / `refetch()` / `loadX()` helpers → `useQuery` / `useSuspenseQuery` / `useInfiniteQuery`;
+- `initialData`/`initialX` props threaded from the RSC page into client state copies (`useState(initialX)`) → server `prefetch` + `HydrationBoundary` and reading the query;
+- custom polling (`setInterval`, focus/visibility listeners that refetch) → `refetchInterval` / `refetchOnWindowFocus` per query;
+- module-level stores, window events and `publish/subscribe` helpers that carry server data (for example `publishTodayStatus`, the Bandeja badge store) → the query cache;
+- `revalidatePath` calls that target the migrated screens (keep only `('/', 'layout')` for theme, settings and auth);
+- local `useState` copies of server data kept in sync by hand.
+
+UI-only state that is shared, dashboard-like or must survive navigation moves to the domain's Zustand store (see §4.7); shareable filters stay in the URL.
+
+A phase is not done while any touched file still contains one of the patterns above. Each phase PR lists the touched files and confirms with:
+`rg -n "router\.refresh\(|useEffect\([^)]*\b(fetch|load|refetch)|setInterval\(|revalidatePath\(" <touched files>` returning nothing (or only auth and `('/', 'layout')` cases).
+
 ### Phase 1: foundation (one PR)
 
 **Files:**
