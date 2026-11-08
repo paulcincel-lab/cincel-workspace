@@ -50,5 +50,16 @@
   "Redesign Phase 6: Ajustes, tema y Control de horario": "redesign:6",
   "Redesign Phase 7: Asistente en todas partes": "redesign:7",
   "Redesign Phase 8: Acceso y portal": "redesign:8",
-  "Redesign Phase 9: Cleanup": "redesign:9"
+  "Redesign Phase 9: Cleanup": "redesign:9",
+  "Query Migration Phase 1: Foundation": "query-migration:1",
+  "Query Migration Phase 2: Shell and Sidebar": "query-migration:2",
+  "Query Migration Phase 3: Inicio": "query-migration:3",
+  "Query Migration Phase 4: Tareas": "query-migration:4",
+  "Query Migration Phase 5: Proyectos": "query-migration:5",
+  "Query Migration Phase 6: Personas": "query-migration:6",
+  "Query Migration Phase 7: Mi espacio y Bandeja": "query-migration:7",
+  "Query Migration Phase 8: Biblioteca y Vacaciones": "query-migration:8",
+  "Query Migration Phase 9: Ajustes": "query-migration:9",
+  "Query Migration Phase 10: Asistente": "query-migration:10",
+  "Query Migration Phase 11: Portal": "query-migration:11"
 }
