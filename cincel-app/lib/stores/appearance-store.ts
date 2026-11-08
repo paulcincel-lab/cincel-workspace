@@ -18,7 +18,7 @@ import { updateMyPreferencesAction } from "@/lib/actions/preferences-actions";
 import { qk } from "@/lib/query/keys";
 import { mutationErrorText, runAction } from "@/lib/query/mutation";
 import { getBrowserQueryClient, registerUiStoreReset } from "@/lib/query/reset-client-state";
-import type { ColorMode, ResolvedAppearance, UserPreferences } from "@/lib/types/redesign";
+import type { ColorMode, PresentationStyle, ResolvedAppearance, UserPreferences } from "@/lib/types/redesign";
 import { appearanceStyleBlock } from "@/lib/ui/appearance-css";
 import { TEXT_SIZES, textSizeClass } from "@/lib/ui/text-size";
 
@@ -51,13 +51,31 @@ export type AppearanceState = {
   appearance: ResolvedAppearance;
   /** The organization fixes the presentation style (`allowUserOverride` false). */
   fixedByOrg: boolean;
+  /**
+   * True when `appearance.style` came from a page `?estilo=` override seeded
+   * by a nested `StyleProvider` (transitional until Phase 2 reads the URL).
+   */
+  isStyleOverridden: boolean;
+  /** Where the style is persisted: user preferences (staff) or the portal cookie. */
+  styleScope: StyleScope;
   /** Optimistic; one debounce for text size; persists with `updateMyPreferencesAction`, rolls back on error (toast). */
   setPreference(patch: Partial<UserPreferences>): Promise<void>;
   /** A new server-resolved appearance (a layout re-render, e.g. after an org theme save). */
   applyServer(appearance: ResolvedAppearance): void;
+  /**
+   * Shows another presentation style at once, without persisting it
+   * (`useStyle().setStyle`; `EstiloSwitch` persists it itself).
+   */
+  setStyle(style: PresentationStyle): void;
 };
 
-export type AppearanceStoreOptions = { fixedByOrg?: boolean };
+export type StyleScope = "staff" | "portal";
+
+export type AppearanceStoreOptions = {
+  fixedByOrg?: boolean;
+  isStyleOverridden?: boolean;
+  styleScope?: StyleScope;
+};
 
 function prefersDark(): boolean {
   return typeof window !== "undefined" && typeof window.matchMedia === "function"
@@ -189,6 +207,8 @@ export function createAppearanceStore(
   const store = createStore<AppearanceState>()(() => ({
     appearance: initial,
     fixedByOrg: options.fixedByOrg ?? false,
+    isStyleOverridden: options.isStyleOverridden ?? false,
+    styleScope: options.styleScope ?? "staff",
     setPreference(patch) {
       pendingPatch = { ...pendingPatch, ...patch };
       show(optimistic(shown, patch), false);
@@ -206,6 +226,11 @@ export function createAppearanceStore(
       committed = appearance;
       shown = appearance;
       set({ appearance });
+    },
+    setStyle(style) {
+      if (shown.style === style) return;
+      shown = { ...shown, style };
+      set({ appearance: shown });
     },
   }));
   set = store.setState;
@@ -234,6 +259,9 @@ const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : us
 export type AppearanceStoreProviderProps = {
   initial: ResolvedAppearance;
   fixedByOrg?: boolean;
+  /** Nested `StyleProvider` seeds only (see `AppearanceState.isStyleOverridden`). */
+  isStyleOverridden?: boolean;
+  styleScope?: StyleScope;
   children: ReactNode;
 };
 
@@ -242,20 +270,40 @@ export type AppearanceStoreProviderProps = {
  * server-resolved appearance. A new `initial` (`router.refresh`, an org
  * theme save) replaces the shown appearance, as the context did.
  */
-export function AppearanceStoreProvider({ initial, fixedByOrg, children }: AppearanceStoreProviderProps): JSX.Element {
-  const [store] = useState(() => createAppearanceStore(initial, { fixedByOrg }));
-  const seeded = useRef({ initial, fixedByOrg: fixedByOrg ?? false });
+export function AppearanceStoreProvider({
+  initial,
+  fixedByOrg,
+  isStyleOverridden,
+  styleScope,
+  children,
+}: AppearanceStoreProviderProps): JSX.Element {
+  const [store] = useState(() => createAppearanceStore(initial, { fixedByOrg, isStyleOverridden, styleScope }));
+  const seeded = useRef({
+    initial,
+    fixedByOrg: fixedByOrg ?? false,
+    isStyleOverridden: isStyleOverridden ?? false,
+    styleScope: styleScope ?? "staff",
+  });
 
   useIsomorphicLayoutEffect(() => {
-    const next = fixedByOrg ?? false;
-    if (seeded.current.fixedByOrg !== next) {
-      seeded.current.fixedByOrg = next;
-      store.setState({ fixedByOrg: next });
+    const flags = {
+      fixedByOrg: fixedByOrg ?? false,
+      isStyleOverridden: isStyleOverridden ?? false,
+      styleScope: styleScope ?? ("staff" as const),
+    };
+    const current = seeded.current;
+    if (
+      current.fixedByOrg !== flags.fixedByOrg ||
+      current.isStyleOverridden !== flags.isStyleOverridden ||
+      current.styleScope !== flags.styleScope
+    ) {
+      seeded.current = { ...current, ...flags };
+      store.setState(flags);
     }
     if (seeded.current.initial === initial) return;
     seeded.current.initial = initial;
     store.getState().applyServer(initial);
-  }, [store, initial, fixedByOrg]);
+  }, [store, initial, fixedByOrg, isStyleOverridden, styleScope]);
 
   // System mode: follow the OS while the page is open (the head script did the first paint).
   const mode = useStore(store, (s) => s.appearance.mode);

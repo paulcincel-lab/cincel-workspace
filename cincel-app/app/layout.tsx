@@ -11,7 +11,7 @@ import { getGeneralSettings } from "@/lib/settings/general-settings-server";
 import { GeneralSettingsSeed } from "@/lib/settings/use-general-settings";
 import type { ResolvedAppearance } from "@/lib/types/redesign";
 import { appearanceStyleBlock, SYSTEM_MODE_SCRIPT } from "@/lib/ui/appearance-css";
-import { getResolvedAppearance } from "@/lib/ui/preferences-server";
+import { getResolvedAppearance, getStoredOrgAppearance } from "@/lib/ui/preferences-server";
 import { APPEARANCE_BASE_CSS, textSizeClass } from "@/lib/ui/text-size";
 import "./globals.css";
 
@@ -77,7 +77,14 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [sessionAccess, appearance] = await Promise.all([getSessionAccess(), getResolvedAppearance()]);
+  // `getStoredOrgAppearance` is cached per request: `getResolvedAppearance` already read it.
+  const [sessionAccess, appearance, orgAppearance] = await Promise.all([
+    getSessionAccess(),
+    getResolvedAppearance(),
+    getStoredOrgAppearance(),
+  ]);
+  // The org fixes the presentation style when it allows no personal one (`useStyle().isFixed`).
+  const fixedByOrg = !orgAppearance.allowUserOverride;
   // Company details stay off pages rendered without a session (login, public routes).
   const generalSettings = sessionAccess.user ? await getGeneralSettings() : buildDefaultLoadedGeneralSettings();
 
@@ -103,7 +110,9 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         {/* The query cache wraps the appearance store provider and the Toaster, so both can read it. */}
         <QueryProvider>
-          <AppearanceStoreProvider initial={appearance}>{app}</AppearanceStoreProvider>
+          <AppearanceStoreProvider initial={appearance} fixedByOrg={fixedByOrg}>
+            {app}
+          </AppearanceStoreProvider>
           {/* The one Toaster (FE §3.1). */}
           <Toaster position="bottom-right" offset={72} />
         </QueryProvider>

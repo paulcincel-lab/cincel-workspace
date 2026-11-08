@@ -242,7 +242,7 @@ Two workflows, both on the self-hosted runners:
 
 | Job | What |
 |---|---|
-| `verify` | `npm run lint` + `npm run build` |
+| `verify` | `npm run lint` + `npm run build` with an unreachable `DATABASE_URL`, then the build log check below |
 | `unit-tests` | `npm run test:unit` (vitest). The database tests run only when the repository variable `TEST_DATABASE_URL` points at a long-lived, migrated test database; no containers are created |
 
 `.github/workflows/cincel-app-docker.yml` runs on every push to `main` that touches `cincel-app/**`:
@@ -250,6 +250,37 @@ Two workflows, both on the self-hosted runners:
 | Job | What |
 |---|---|
 | `build-and-push` | Builds and pushes the runtime and migrate images to `secrets.REGISTRY_URL`, then cuts a GitHub release |
+
+### Build log check
+
+`next build` exits 0 even when pages log error stacks during prerender, so the
+exit code alone hides regressions. Both the `verify` job and the Docker build
+stage therefore:
+
+1. run `npm run build` with `DATABASE_URL=postgres://build:build@127.0.0.1:9/build_unreachable`
+   (a closed local port: any database read at build time logs `ECONNREFUSED`)
+   and tee the output to a log;
+2. run `node scripts/check-build-log.mjs <log>`, which fails (exit 1) and
+   prints each offending line when the log contains any of `Error:`,
+   `ECONNREFUSED`, `Dynamic server usage`, `could not resolve`,
+   `could not read`, `deprecated` or `⚠`.
+
+Known, accepted notices are listed in `scripts/build-log-allowlist.json`, one
+entry per notice with `match` (a substring of the line), a one-line `reason`
+and the `issue` that accepted it. Keep it as small as possible; a PR that
+introduces a new accepted notice adds its entry with a reason in the same PR.
+Seeded entries:
+
+| Notice | Why it is accepted |
+|---|---|
+| `⚠ No build cache found.` | The self-hosted runners build without caches by design (#930) |
+
+To run the same check locally:
+
+```bash
+DATABASE_URL=postgres://build:build@127.0.0.1:9/build_unreachable npm run build 2>&1 | tee next-build.log
+node scripts/check-build-log.mjs next-build.log
+```
 
 ### Releases and versions
 

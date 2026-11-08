@@ -1,0 +1,7 @@
+[
+  {
+    "match": "⚠ No build cache found.",
+    "reason": "The self-hosted runners build without caches by design, so every CI build starts without .next/cache.",
+    "issue": "#930"
+  }
+]

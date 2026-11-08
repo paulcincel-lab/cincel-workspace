@@ -12,7 +12,6 @@ import { toClientNavModel } from "@/lib/ui/nav-client";
 import { AppShellClient } from "./AppShellClient";
 import { ClockInPrompt } from "./ClockInPrompt";
 import { SidebarSlotOutlet } from "./SidebarSlotOutlet";
-import { StyleProvider } from "./StyleProvider";
 
 /**
  * The new staff shell (redesign FE §3.1, §4.1): `Sidebar`, `AssistantButton`,
@@ -27,6 +26,7 @@ import { StyleProvider } from "./StyleProvider";
  */
 export type AppShellProps = {
   children: ReactNode;
+  /** Unused here: the shell style comes from the `useAppearance` store the root layout seeds. */
   appearance: ResolvedAppearance;
   session: { staffId: string; name: string; role: string; isAdmin: boolean; photoUrl: string | null };
   /** From `buildNavModel(session)` in `lib/ui/nav.ts`. */
@@ -50,9 +50,9 @@ export function renderSidebarSlots(session: AppShellProps["session"], today: Tod
   return slots;
 }
 
-export function AppShell({ children, appearance, session, nav, today, hideAssistant }: AppShellProps) {
+export function AppShell({ children, session, nav, today, hideAssistant }: AppShellProps) {
   return (
-    <StyleProvider style={appearance.style} scope="staff">
+    <>
       <AppShellClient
         nav={toClientNavModel(nav)}
         session={session}
@@ -68,6 +68,6 @@ export function AppShell({ children, appearance, session, nav, today, hideAssist
       {today ? (
         <ClockInPrompt status={today} requiredFrom={today.requiredFrom} now={new Date()} name={session.name} />
       ) : null}
-    </StyleProvider>
+    </>
   );
 }

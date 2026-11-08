@@ -132,7 +132,8 @@ export async function loadProjectResumen(projectId: string, user: AuthenticatedU
       portfolio: portfolio ? { ...portfolio, budgetSpentPct: isAdmin ? portfolio.budgetSpentPct : null } : null,
       tramoCatalog: tramos,
       taskStats,
-      schedule: schedule ? { tasks: schedule.data.tasks, payments: isAdmin ? schedule.data.payments : [] } : null,
+      // `fetchScheduleAction` already returns `payments: []` to non-admins (one source for the rule).
+      schedule: schedule ? { tasks: schedule.data.tasks, payments: schedule.data.payments } : null,
       files,
       spaces: spaces.map((space) => ({ id: space.id, name: space.name })),
       staff: staffInfo,
