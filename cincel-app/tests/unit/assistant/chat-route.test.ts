@@ -1,7 +1,9 @@
 /**
  * `POST /api/asistente/chat` with server threads (redesign BE §7.9, §8.10,
  * §16): approval round trip (request → approve / deny → result), thread
- * ownership 403, client history ignored, context dropping, legacy body.
+ * ownership 403, client history ignored, context dropping, legacy body, and
+ * the incremental saves of Query Migration Phase 10 (#944): only new or
+ * changed messages are written per turn, the audit in batches.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { tool, type ModelMessage, type UIMessage } from "ai";
@@ -15,8 +17,8 @@ const mocks = vi.hoisted(() => ({
   upsertOwnedThread: vi.fn(),
   loadThreadMessages: vi.fn(),
   saveThreadMessages: vi.fn(),
-  recordProposedAction: vi.fn(),
-  recordActionDecision: vi.fn(),
+  recordProposedActions: vi.fn(),
+  recordActionDecisions: vi.fn(),
   recordActionOutcome: vi.fn(),
   fetchProjectAction: vi.fn(),
   fetchTaskAction: vi.fn(),
@@ -59,8 +61,8 @@ vi.mock("@/lib/assistant/approvals", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/assistant/approvals")>();
   return {
     ...actual,
-    recordProposedAction: mocks.recordProposedAction,
-    recordActionDecision: mocks.recordActionDecision,
+    recordProposedActions: mocks.recordProposedActions,
+    recordActionDecisions: mocks.recordActionDecisions,
     recordActionOutcome: mocks.recordActionOutcome,
   };
 });
@@ -149,8 +151,10 @@ beforeEach(() => {
   mocks.upsertOwnedThread.mockResolvedValue({ created: true });
   mocks.loadThreadMessages.mockResolvedValue([]);
   mocks.saveThreadMessages.mockResolvedValue(undefined);
-  mocks.recordProposedAction.mockResolvedValue(true);
-  mocks.recordActionDecision.mockResolvedValue(true);
+  mocks.recordProposedActions.mockImplementation(async (_db: unknown, rows: { toolCallId: string }[]) => new Set(rows.map((r) => r.toolCallId)));
+  mocks.recordActionDecisions.mockImplementation(
+    async (_db: unknown, input: { decisions: { toolCallId: string }[] }) => new Set(input.decisions.map((d) => d.toolCallId)),
+  );
   mocks.recordActionOutcome.mockResolvedValue(true);
   mocks.fetchProjectAction.mockResolvedValue(null);
   mocks.fetchTaskAction.mockResolvedValue(null);
@@ -179,7 +183,7 @@ describe("POST /api/asistente/chat (server threads)", () => {
     expect(res.status).toBe(403);
     expect(mocks.loadThreadMessages).not.toHaveBeenCalled();
     expect(mocks.saveThreadMessages).not.toHaveBeenCalled();
-    expect(mocks.recordProposedAction).not.toHaveBeenCalled();
+    expect(mocks.recordProposedActions).not.toHaveBeenCalled();
     expect(mocks.streamText).not.toHaveBeenCalled();
   });
 
@@ -221,9 +225,10 @@ describe("POST /api/asistente/chat (server threads)", () => {
       context: { route: "/inicio" },
     });
 
+    // Only the new message is written; the stored one is unchanged.
     const saved = mocks.saveThreadMessages.mock.calls[0][2] as UIMessage[];
-    expect(saved.map((m) => m.id)).toEqual(["m-0", "m-user-2"]);
-    expect(saved[1].parts).toEqual([{ type: "text", text: "¿Qué sigue?" }]);
+    expect(saved.map((m) => m.id)).toEqual(["m-user-2"]);
+    expect(saved[0].parts).toEqual([{ type: "text", text: "¿Qué sigue?" }]);
     expect(JSON.stringify(lastStreamCall().messages)).not.toContain("m-forged");
     expect(lastResponseOptions().originalMessages.map((m) => m.id)).toEqual(["m-0", "m-user-2"]);
   });
@@ -270,18 +275,23 @@ describe("POST /api/asistente/chat (server threads)", () => {
 
     const requested = approvalRequested();
     await lastResponseOptions().onEnd({ messages: [userMessage, requested], responseMessage: requested });
-    expect(mocks.saveThreadMessages).toHaveBeenLastCalledWith({}, THREAD, [userMessage, requested]);
-    expect(mocks.recordProposedAction).toHaveBeenCalledWith(
-      {},
+    // The user's message was written before the model ran: the end writes only the response.
+    expect(mocks.saveThreadMessages).toHaveBeenLastCalledWith({}, THREAD, [requested], {
+      titleFrom: [userMessage, requested],
+    });
+    expect(mocks.recordProposedActions).toHaveBeenLastCalledWith({}, [
       expect.objectContaining({ threadId: THREAD, staffId: STAFF, toolCallId: "call-1", tool: "create_task" }),
-    );
+    ]);
 
     // Request 2: approvals[] only; the history comes from the database.
     mocks.loadThreadMessages.mockResolvedValue([userMessage, requested]);
-    mocks.recordActionDecision.mockClear();
+    mocks.recordActionDecisions.mockClear();
     await post({ id: THREAD, approvals: [{ toolCallId: "call-1", approved: true }], context: { route: "/inicio" } });
 
-    expect(mocks.recordActionDecision).toHaveBeenCalledWith({}, { threadId: THREAD, toolCallId: "call-1", approved: true });
+    expect(mocks.recordActionDecisions).toHaveBeenCalledWith({}, {
+      threadId: THREAD,
+      decisions: [{ toolCallId: "call-1", approved: true }],
+    });
     const second = lastStreamCall();
     const toolMessage = second.messages.at(-1)!;
     expect(toolMessage.role).toBe("tool");
@@ -306,7 +316,10 @@ describe("POST /api/asistente/chat (server threads)", () => {
 
     await post({ id: THREAD, approvals: [{ toolCallId: "call-1", approved: false }], context: { route: "/inicio" } });
 
-    expect(mocks.recordActionDecision).toHaveBeenCalledWith({}, { threadId: THREAD, toolCallId: "call-1", approved: false });
+    expect(mocks.recordActionDecisions).toHaveBeenCalledWith({}, {
+      threadId: THREAD,
+      decisions: [{ toolCallId: "call-1", approved: false }],
+    });
     const toolMessage = lastStreamCall().messages.at(-1)!;
     expect(toolMessage.role).toBe("tool");
     expect(JSON.stringify(toolMessage.content)).toContain('"type":"execution-denied"');
@@ -317,7 +330,7 @@ describe("POST /api/asistente/chat (server threads)", () => {
     mocks.loadThreadMessages.mockResolvedValue([userMessage]);
     const res = await post({ id: THREAD, approvals: [{ toolCallId: "forged", approved: true }], context: { route: "/" } });
     expect(res.status).toBe(400);
-    expect(mocks.recordActionDecision).not.toHaveBeenCalled();
+    expect(mocks.recordActionDecisions).not.toHaveBeenCalled();
     expect(mocks.streamText).not.toHaveBeenCalled();
   });
 
@@ -338,6 +351,78 @@ describe("POST /api/asistente/chat (server threads)", () => {
       expect.objectContaining({ msg: "assistant.action", trace_id: "trace-123", status: "confirmed", tool: "create_task" }),
     );
     info.mockRestore();
+  });
+
+  it("writes only new or changed messages per turn", async () => {
+    const history: UIMessage[] = [
+      { id: "m-0", role: "user", parts: [{ type: "text", text: "Hola" }] },
+      { id: "m-1", role: "assistant", parts: [{ type: "text", text: "¿Qué necesitas?" }] },
+    ];
+    // As read back from jsonb: same values, keys in another order.
+    mocks.loadThreadMessages.mockResolvedValue(
+      history.map((m) => ({ parts: m.parts.map((p) => Object.fromEntries(Object.entries(p).reverse())), role: m.role, id: m.id })),
+    );
+    const next: UIMessage = { id: "m-2", role: "user", parts: [{ type: "text", text: "Un resumen" }] };
+
+    await post({ id: THREAD, message: next, context: { route: "/inicio" } });
+
+    expect(mocks.saveThreadMessages).toHaveBeenCalledTimes(1);
+    const [, , before, beforeOpts] = mocks.saveThreadMessages.mock.calls[0];
+    expect((before as UIMessage[]).map((m) => m.id)).toEqual(["m-2"]);
+    expect((beforeOpts as { titleFrom: UIMessage[] }).titleFrom.map((m) => m.id)).toEqual(["m-0", "m-1", "m-2"]);
+
+    const response: UIMessage = { id: "m-3", role: "assistant", parts: [{ type: "text", text: "Listo." }] };
+    const { originalMessages, onEnd } = lastResponseOptions();
+    await onEnd({ messages: [...originalMessages, response], responseMessage: response });
+
+    expect(mocks.saveThreadMessages).toHaveBeenCalledTimes(2);
+    const [, , after] = mocks.saveThreadMessages.mock.calls[1];
+    expect((after as UIMessage[]).map((m) => m.id)).toEqual(["m-3"]);
+  });
+
+  it("writes an answered approval as a changed message, not the rest of the history", async () => {
+    mocks.loadThreadMessages.mockResolvedValue([userMessage, approvalRequested()]);
+
+    await post({ id: THREAD, approvals: [{ toolCallId: "call-1", approved: true }], context: { route: "/" } });
+
+    const [, , saved] = mocks.saveThreadMessages.mock.calls[0];
+    expect((saved as UIMessage[]).map((m) => m.id)).toEqual(["m-assistant-1"]);
+    expect(JSON.stringify(saved)).toContain('"state":"approval-responded"');
+  });
+
+  it("records the decisions of a turn in one batch", async () => {
+    const twoRequests: UIMessage = {
+      id: "m-assistant-1",
+      role: "assistant",
+      parts: [
+        { type: "tool-create_task", toolCallId: "call-1", state: "approval-requested", input: {}, approval: { id: "a1" } },
+        { type: "tool-create_task", toolCallId: "call-2", state: "approval-requested", input: {}, approval: { id: "a2" } },
+      ] as UIMessage["parts"],
+    };
+    mocks.loadThreadMessages.mockResolvedValue([userMessage, twoRequests]);
+
+    await post({
+      id: THREAD,
+      approvals: [
+        { toolCallId: "call-1", approved: true },
+        { toolCallId: "call-2", approved: false },
+      ],
+      context: { route: "/" },
+    });
+
+    expect(mocks.recordProposedActions).toHaveBeenCalledTimes(1);
+    expect((mocks.recordProposedActions.mock.calls[0][1] as { toolCallId: string }[]).map((r) => r.toolCallId)).toEqual([
+      "call-1",
+      "call-2",
+    ]);
+    expect(mocks.recordActionDecisions).toHaveBeenCalledTimes(1);
+    expect(mocks.recordActionDecisions).toHaveBeenCalledWith({}, {
+      threadId: THREAD,
+      decisions: [
+        { toolCallId: "call-1", approved: true },
+        { toolCallId: "call-2", approved: false },
+      ],
+    });
   });
 
   it("still answers a bare { messages } body statelessly", async () => {

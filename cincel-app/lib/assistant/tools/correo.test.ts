@@ -31,11 +31,15 @@ const gmail = vi.hoisted(() => ({
 vi.mock("@/lib/actions/gmail-actions", () => gmail);
 
 const projects = vi.hoisted(() => ({
-  fetchProjectsAction: vi.fn(),
+  listViewerProjects: vi.fn(),
   fetchProjectAction: vi.fn(),
   addProjectCommentAction: vi.fn(),
 }));
-vi.mock("@/lib/actions/projects-actions", () => projects);
+vi.mock("@/lib/actions/projects-actions", () => ({
+  fetchProjectAction: projects.fetchProjectAction,
+  addProjectCommentAction: projects.addProjectCommentAction,
+}));
+vi.mock("@/lib/assistant/reads", () => ({ listViewerProjects: projects.listViewerProjects }));
 
 const sendDraft = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/gmail/client", () => ({ sendDraft }));
@@ -132,7 +136,7 @@ beforeEach(() => {
   for (const key of Object.keys(flags) as (keyof typeof flags)[]) flags[key] = true;
   forgetOwnerMail();
   gmail.fetchGmailStatusAction.mockResolvedValue({ connected: true, scopeOk: true, lastSyncedAt: null, lastError: null });
-  projects.fetchProjectsAction.mockResolvedValue([]);
+  projects.listViewerProjects.mockResolvedValue([]);
 });
 
 describe("registration", () => {
@@ -303,7 +307,7 @@ describe("search_email", () => {
       threads: [thread({ projectId: PROJECT_ID }), thread({ id: "t-2", suggestedProjectId: "hidden" })],
       nextCursor: null,
     });
-    projects.fetchProjectsAction.mockResolvedValue([{ id: PROJECT_ID, name: "Casa Roble" }]);
+    projects.listViewerProjects.mockResolvedValue([{ id: PROJECT_ID, name: "Casa Roble" }]);
     const result = await runSearchEmail(ctx, { query: "cocina" });
     expect(gmail.fetchGmailThreadsAction).toHaveBeenCalledWith({ query: "cocina" });
     expect(result).toEqual({
@@ -429,7 +433,7 @@ describe("send_email", () => {
 
 describe("link_email_to_project", () => {
   it("links the thread and writes the history comment via the assistant", async () => {
-    projects.fetchProjectsAction.mockResolvedValue([{ id: PROJECT_ID, name: "Casa Roble" }]);
+    projects.listViewerProjects.mockResolvedValue([{ id: PROJECT_ID, name: "Casa Roble" }]);
     const result = await runLinkEmailToProject(ctx, { threadId: "t-1", project: "casa roble" });
     expect(gmail.linkGmailThreadToProjectAction).toHaveBeenCalledWith("t-1", PROJECT_ID);
     expect(projects.addProjectCommentAction).toHaveBeenCalledWith(
@@ -440,7 +444,7 @@ describe("link_email_to_project", () => {
   });
 
   it("asks back on an ambiguous project and links nothing", async () => {
-    projects.fetchProjectsAction.mockResolvedValue([
+    projects.listViewerProjects.mockResolvedValue([
       { id: "p1", name: "Casa Roble" },
       { id: "p2", name: "Casa Roble Anexo" },
       { id: "p3", name: "Casa Pino" },
@@ -467,7 +471,7 @@ describe("link_email_to_project", () => {
   });
 
   it("maps FORBIDDEN to Spanish copy", async () => {
-    projects.fetchProjectsAction.mockResolvedValue([{ id: PROJECT_ID, name: "Casa Roble" }]);
+    projects.listViewerProjects.mockResolvedValue([{ id: PROJECT_ID, name: "Casa Roble" }]);
     gmail.linkGmailThreadToProjectAction.mockRejectedValue(new Error("FORBIDDEN"));
     expect(await runLinkEmailToProject(ctx, { threadId: "t-1", project: "Casa Roble" })).toEqual({
       ok: false,

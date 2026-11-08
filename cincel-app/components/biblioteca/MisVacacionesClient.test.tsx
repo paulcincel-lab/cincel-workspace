@@ -1,17 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { VacationRequest } from "@/lib/types/redesign";
 import type { AgendaItem, KpiDatum, RecordTableData } from "@/lib/types/widgets";
 
 const actions = vi.hoisted(() => ({
-  fetchMyVacationsAction: vi.fn(),
   requestVacationAction: vi.fn(),
   cancelVacationRequestAction: vi.fn(),
-  fetchTeamAbsencesAction: vi.fn(),
 }));
+const pageData = vi.hoisted(() => ({ getBibliotecaPageData: vi.fn(), getMisVacacionesPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/biblioteca-actions", () => pageData);
 const flags = vi.hoisted(() => ({
   IMPLEMENTED: {
     fetchMyVacationsAction: true,
@@ -75,8 +75,11 @@ vi.mock("@/components/widgets/AgendaWidget", () => ({
 vi.mock("@/components/patterns/FormSheet", async () => ({ FormSheet: (await import("./form-shell.test-double")).FormShellDouble }));
 vi.mock("@/components/patterns/FormDialog", async () => ({ FormDialog: (await import("./form-shell.test-double")).FormShellDouble }));
 
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import type { MisVacacionesPageData } from "@/lib/loaders/biblioteca";
+
 import { MisVacacionesClient } from "./MisVacacionesClient";
-import { ABSENCES, BALANCE, DOCUMENTS, PENDING_FUTURE, REQUESTS } from "./vacaciones.fixtures";
+import { DOCUMENTS, PENDING_FUTURE, REQUESTS, misVacacionesData, seededVacacionesClient } from "./vacaciones.fixtures";
 
 const CREATED: VacationRequest = {
   id: "new",
@@ -87,17 +90,11 @@ const CREATED: VacationRequest = {
   status: "pendiente",
 };
 
-function renderPage(overrides: Partial<Parameters<typeof MisVacacionesClient>[0]> = {}) {
-  return render(
-    <MisVacacionesClient
-      mine={{ balance: BALANCE, requests: REQUESTS }}
-      month="2026-11"
-      absences={ABSENCES}
-      documents={DOCUMENTS}
-      year={2026}
-      {...overrides}
-    />,
-  );
+/** The client part of the page, its queries seeded as the server page leaves them. */
+function renderPage(overrides: Partial<MisVacacionesPageData> = {}) {
+  return renderWithQueryClient(<MisVacacionesClient month="2026-11" year={2026} />, {
+    client: seededVacacionesClient(overrides),
+  });
 }
 
 beforeEach(() => {
@@ -105,7 +102,6 @@ beforeEach(() => {
   for (const key of Object.keys(flags.IMPLEMENTED) as (keyof typeof flags.IMPLEMENTED)[]) {
     flags.IMPLEMENTED[key] = true;
   }
-  actions.fetchTeamAbsencesAction.mockResolvedValue(ABSENCES);
 });
 
 afterEach(() => {
@@ -125,12 +121,11 @@ describe("MisVacacionesClient", () => {
     expect(link.getAttribute("href")).toBe(DOCUMENTS[0].url);
   });
 
-  it("reloads the balance after a request", async () => {
-    actions.requestVacationAction.mockResolvedValue(CREATED);
-    actions.fetchMyVacationsAction.mockResolvedValue({
-      balance: { entitled: 20, taken: 6, pending: 7, available: 7 },
-      requests: [CREATED, ...REQUESTS],
-    });
+  it("refetches the balance after a request with one page-data call, no hand-written reload", async () => {
+    actions.requestVacationAction.mockResolvedValue({ ok: true, data: CREATED });
+    pageData.getMisVacacionesPageData.mockResolvedValue(
+      misVacacionesData({ mine: { balance: { entitled: 20, taken: 6, pending: 7, available: 7 }, requests: [CREATED, ...REQUESTS] } }),
+    );
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /Nueva solicitud/ }));
@@ -141,15 +136,21 @@ describe("MisVacacionesClient", () => {
     await waitFor(() => expect(within(screen.getByTestId("kpi-disponibles")).getByText("7 de 20")).toBeTruthy());
     expect(within(screen.getByTestId("kpi-pendientes")).getByText("7")).toBeTruthy();
     expect(screen.getByTestId("new")).toBeTruthy();
-    expect(actions.fetchTeamAbsencesAction).toHaveBeenCalledWith({ month: "2026-11" });
+    // me.vacations, the absences and the pending list refetch through one shared call.
+    expect(pageData.getMisVacacionesPageData).toHaveBeenCalledTimes(1);
+    expect(pageData.getMisVacacionesPageData).toHaveBeenCalledWith({ month: "2026-11" });
   });
 
-  it("reloads the balance after a cancel", async () => {
-    actions.cancelVacationRequestAction.mockResolvedValue(undefined);
-    actions.fetchMyVacationsAction.mockResolvedValue({
-      balance: { entitled: 20, taken: 6, pending: 0, available: 14 },
-      requests: REQUESTS.map((r) => (r.id === PENDING_FUTURE.id ? { ...r, status: "cancelada" as const } : r)),
-    });
+  it("refetches the balance after a cancel", async () => {
+    actions.cancelVacationRequestAction.mockResolvedValue({ ok: true, data: null });
+    pageData.getMisVacacionesPageData.mockResolvedValue(
+      misVacacionesData({
+        mine: {
+          balance: { entitled: 20, taken: 6, pending: 0, available: 14 },
+          requests: REQUESTS.map((r) => (r.id === PENDING_FUTURE.id ? { ...r, status: "cancelada" as const } : r)),
+        },
+      }),
+    );
     renderPage();
 
     fireEvent.click(within(screen.getByTestId(PENDING_FUTURE.id)).getByRole("button", { name: /Cancelar/ }));

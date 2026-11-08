@@ -4,8 +4,9 @@
  * session's staff id, so another person's row is `FORBIDDEN` and a missing
  * (or archived) one `NOT_FOUND`; there is no admin bypass. A linked
  * `projectId` must be a live project the caller can see, otherwise `INVALID`.
- * The actions in `lib/actions/my-space-actions.ts` call these with the
- * session user and revalidate `/mi-espacio`.
+ * The actions in `lib/actions/my-space-actions.ts` and the Mi espacio loader
+ * call these with the session user. Mi espacio reads bounded pages
+ * (`listNotesPage`, `listChecklistsPage`).
  */
 import "server-only";
 
@@ -20,6 +21,7 @@ import type { ChecklistRow, NoteRow } from "@/lib/repositories/my-space-reposito
 import * as itemsRepository from "@/lib/repositories/notes-checklists-repository";
 import type { ChecklistItemRow } from "@/lib/repositories/notes-checklists-repository";
 import { projectExists } from "@/lib/repositories/projects-repository";
+import type { MySpaceListPage } from "@/lib/types/mi-espacio";
 import type { Checklist, ChecklistItem, Note } from "@/lib/types/redesign";
 import {
   ChecklistInputSchema,
@@ -30,6 +32,30 @@ import {
   parseInput,
 } from "@/lib/validation/redesign";
 import { UuidSchema } from "@/lib/validation/project-flow";
+
+// ── Pages ───────────────────────────────────────────────────────────────────
+
+/** Notes per page of Mi espacio ("Ver más" loads the next one). */
+export const NOTES_PAGE_SIZE = 24;
+/** Checklists per page of Mi espacio. */
+export const CHECKLISTS_PAGE_SIZE = 10;
+
+/** One bounded page; `nextCursor` is the offset of the next page, null after the last one. */
+export type MySpacePage<T> = MySpaceListPage<T>;
+
+/** Offset of a page cursor (digits only; the owner-scoped list refuses anything else as `INVALID`). */
+function pageOffset(cursor: string | null | undefined): number {
+  return cursor && /^\d{1,9}$/.test(cursor) ? Number(cursor) : 0;
+}
+
+/** Rows of a `limit: size + 1` read → the page and the cursor after it. */
+function pageOf<R, T>(rows: R[], size: number, cursor: string | null | undefined, map: (rows: R[]) => T[]): MySpacePage<T> {
+  const page = rows.slice(0, size);
+  return {
+    items: map(page),
+    nextCursor: rows.length > size ? String(pageOffset(cursor) + size) : null,
+  };
+}
 
 // ── DTOs ────────────────────────────────────────────────────────────────────
 
@@ -93,6 +119,22 @@ export async function listNotes(user: AuthenticatedUser): Promise<Note[]> {
   return rows.filter((row) => !row.deletedAt).map(toNote);
 }
 
+const NOTE_ORDER = [desc(notes.pinned), desc(notes.updatedAt), desc(notes.createdAt), desc(notes.id)];
+
+/** One page of live notes in the `listNotes` order. Errors: `INVALID` (cursor). */
+export async function listNotesPage(
+  user: AuthenticatedUser,
+  input: { cursor?: string | null } = {},
+): Promise<MySpacePage<Note>> {
+  const rows = await notesRepository.list(db, user.member.id, {
+    where: isNull(notes.deletedAt),
+    orderBy: NOTE_ORDER,
+    limit: NOTES_PAGE_SIZE + 1,
+    cursor: input.cursor ?? undefined,
+  });
+  return pageOf(rows, NOTES_PAGE_SIZE, input.cursor, (page) => page.map(toNote));
+}
+
 export async function createNote(user: AuthenticatedUser, input: unknown): Promise<Note> {
   const data = parseInput(NoteInputSchema, input);
   if (data.projectId) await assertProjectVisible(user, data.projectId);
@@ -144,10 +186,14 @@ export async function listChecklists(user: AuthenticatedUser): Promise<Checklist
     where: isNull(checklists.deletedAt),
     orderBy: [desc(checklists.createdAt), asc(checklists.title)],
   });
-  const live = rows.filter((row) => !row.deletedAt);
+  return withItems(rows.filter((row) => !row.deletedAt));
+}
+
+/** Checklists with their items, by checklist. */
+async function withItems(rows: ChecklistRow[]): Promise<Checklist[]> {
   const items = await itemsRepository.listChecklistItems(
     db,
-    live.map((row) => row.id),
+    rows.map((row) => row.id),
   );
   const byChecklist = new Map<string, ChecklistItemRow[]>();
   for (const item of items) {
@@ -155,7 +201,23 @@ export async function listChecklists(user: AuthenticatedUser): Promise<Checklist
     list.push(item);
     byChecklist.set(item.checklistId, list);
   }
-  return live.map((row) => toChecklist(row, byChecklist.get(row.id) ?? []));
+  return rows.map((row) => toChecklist(row, byChecklist.get(row.id) ?? []));
+}
+
+/** One page of live checklists in the `listChecklists` order, with their items. Errors: `INVALID` (cursor). */
+export async function listChecklistsPage(
+  user: AuthenticatedUser,
+  input: { cursor?: string | null } = {},
+): Promise<MySpacePage<Checklist>> {
+  const rows = await checklistsRepository.list(db, user.member.id, {
+    where: isNull(checklists.deletedAt),
+    orderBy: [desc(checklists.createdAt), asc(checklists.title), desc(checklists.id)],
+    limit: CHECKLISTS_PAGE_SIZE + 1,
+    cursor: input.cursor ?? undefined,
+  });
+  const page = rows.slice(0, CHECKLISTS_PAGE_SIZE);
+  const { nextCursor } = pageOf(rows, CHECKLISTS_PAGE_SIZE, input.cursor, (r) => r);
+  return { items: await withItems(page), nextCursor };
 }
 
 /** Creates the checklist and its optional initial items (in order) in one transaction. */

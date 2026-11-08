@@ -5,6 +5,7 @@
  * server clock leaks in. Pure and client-safe.
  */
 import { localIsoDate, TASK_TREND_TIME_ZONE } from "@/lib/dashboard/task-trend";
+import { zonedHourMinute } from "@/lib/dates/zoned-formatters";
 
 /** Time zone of every local-day comparison (reuses the dashboard trend constant). */
 export const TIME_TRACKING_TIME_ZONE = TASK_TREND_TIME_ZONE;
@@ -16,16 +17,13 @@ export function localDate(at: Date): string {
   return localIsoDate(at, TIME_TRACKING_TIME_ZONE);
 }
 
-/** The local wall-clock time of `at` as `HH:MM` (00:00–23:59). */
+/**
+ * The local wall-clock time of `at` as `HH:MM` (00:00–23:59). Uses the
+ * cached formatter of `lib/dates/zoned-formatters.ts`: the team-hours report
+ * calls this per entry.
+ */
 export function localHourMinute(at: Date): string {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TIME_TRACKING_TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(at);
-  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
-  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  const [hour = "0", minute = "00"] = zonedHourMinute(at, TIME_TRACKING_TIME_ZONE).split(":");
   return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
 }
 

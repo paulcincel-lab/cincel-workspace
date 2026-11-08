@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { queryOptions, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
+import { driveStatusOptions } from "@/lib/google/use-drive-status";
+import { STALE, qk } from "@/lib/query/keys";
 
 export type DriveBrowserEntry = {
   id: string;
@@ -17,7 +20,50 @@ export type DriveBrowserEntry = {
 };
 
 type Crumb = { id: string; name: string };
-type AccountStatus = { hasDriveGrant: boolean };
+
+/** One listing of `GET /api/google/drive/list`: route errors are data, so they show inline and never retry. */
+export type DriveListResult =
+  | { kind: "ok"; entries: DriveBrowserEntry[] }
+  | { kind: "needs_consent" }
+  | { kind: "error"; message: string };
+
+/** Search debounce, as before. */
+export const DRIVE_SEARCH_DEBOUNCE_MS = 350;
+
+/** Reads one folder (or a search inside it). Side-effect free: one GET. */
+export async function fetchDriveList(folderId: string | null, query: string): Promise<DriveListResult> {
+  try {
+    const params = new URLSearchParams();
+    if (folderId) params.set("folderId", folderId);
+    if (query) params.set("q", query);
+    const res = await fetch(`/api/google/drive/list?${params}`);
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 403 && body?.error === "needs_consent") return { kind: "needs_consent" };
+    if (!res.ok) return { kind: "error", message: body?.error ?? `Error ${res.status}` };
+    return { kind: "ok", entries: body?.entries ?? [] };
+  } catch {
+    return { kind: "error", message: "No se pudo contactar el servidor." };
+  }
+}
+
+/** `qk.google.driveList(folderId, q)`, 30 s stale. */
+export function driveListOptions(folderId: string | null, query: string) {
+  return queryOptions<DriveListResult>({
+    queryKey: qk.google.driveList(folderId, query),
+    queryFn: () => fetchDriveList(folderId, query),
+    staleTime: STALE.screen,
+  });
+}
+
+/** `value`, `delayMs` after its last change (immediately when it becomes empty). */
+function useDebounced(value: string, delayMs: number): string {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), value ? delayMs : 0);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 type Props = {
   /** Only loads while true (a closed sheet shouldn't fetch). */
@@ -60,93 +106,40 @@ export default function DriveBrowser({
   onNavigate,
 }: Props) {
   const [path, setPath] = useState<Crumb[]>([]);
-  const [entries, setEntries] = useState<DriveBrowserEntry[]>([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [account, setAccount] = useState<AccountStatus | null>(null);
-  const [needsConsent, setNeedsConsent] = useState(false);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const query = useDebounced(search.trim(), DRIVE_SEARCH_DEBOUNCE_MS);
 
-  const currentFolderId = path.length > 0 ? path[path.length - 1].id : rootFolderId;
+  const currentFolderId = path.length > 0 ? path[path.length - 1].id : (rootFolderId ?? null);
 
-  const loadAccountStatus = useCallback(async () => {
-    try {
-      const res = await fetch("/api/google/drive/status");
-      if (!res.ok) {
-        setAccount(null);
-        return;
-      }
-      const body = await res.json().catch(() => ({}));
-      setAccount({ hasDriveGrant: Boolean(body?.hasDriveGrant) });
-    } catch {
-      setAccount(null);
-    }
-  }, []);
+  const status = useQuery({ ...driveStatusOptions(), enabled: active });
+  const listing = useQuery({ ...driveListOptions(currentFolderId, query), enabled: active });
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (active) void loadAccountStatus();
-  }, [active, loadAccountStatus]);
+  const loading = listing.isPending && listing.fetchStatus !== "idle";
+  const result = listing.data;
+  const entries = result?.kind === "ok" ? result.entries : [];
+  const error = result?.kind === "error" ? result.message : null;
+  const needsConsent = result?.kind === "needs_consent";
 
   const connectGoogleDrive = () => {
     window.location.href = driveConsentUrl(`${window.location.pathname}${window.location.search}`);
   };
 
-  const load = useCallback(
-    async (folderId: string | undefined, query: string) => {
-      setLoading(true);
-      setError(null);
-      onNavigate?.();
-      try {
-        const params = new URLSearchParams();
-        if (folderId) params.set("folderId", folderId);
-        if (query.trim()) params.set("q", query.trim());
-        const res = await fetch(`/api/google/drive/list?${params}`);
-        const body = await res.json().catch(() => ({}));
-        if (res.status === 403 && body?.error === "needs_consent") {
-          setEntries([]);
-          setNeedsConsent(true);
-          return;
-        }
-        if (!res.ok) {
-          setEntries([]);
-          setError(body.error ?? `Error ${res.status}`);
-          return;
-        }
-        setNeedsConsent(false);
-        setEntries(body.entries ?? []);
-      } catch {
-        setEntries([]);
-        setError("No se pudo contactar el servidor.");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [onNavigate]
-  );
-
-  // (re)load when activated or when the folder / debounced search changes
-  useEffect(() => {
-    if (!active) return;
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => void load(currentFolderId, search), search ? 350 : 0);
-    return () => {
-      if (searchTimer.current) clearTimeout(searchTimer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, currentFolderId, search]);
-
   const openFolder = (entry: DriveBrowserEntry) => {
     setSearch("");
     setPath((p) => [...p, { id: entry.id, name: entry.name }]);
+    onNavigate?.();
   };
   const goToCrumb = (index: number) => {
     setSearch("");
     setPath((p) => (index < 0 ? [] : p.slice(0, index + 1)));
+    onNavigate?.();
+  };
+  const changeSearch = (value: string) => {
+    setSearch(value);
+    onNavigate?.();
   };
 
-  if (needsConsent || account?.hasDriveGrant === false) {
+  if (needsConsent || status.data?.hasDriveGrant === false) {
     return (
       <div className="flex min-h-0 flex-1 flex-col p-4">
         <Alert>
@@ -182,7 +175,7 @@ export default function DriveBrowser({
         <Input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => changeSearch(e.target.value)}
           placeholder="Buscar por nombre…"
         />
       </div>

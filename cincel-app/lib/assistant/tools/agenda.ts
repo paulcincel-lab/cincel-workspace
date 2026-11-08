@@ -33,12 +33,12 @@ import {
   createUserTaskAction,
   fetchCalendarAction,
   fetchTaskAction,
-  fetchTasksAction,
 } from "@/lib/actions/tasks-actions";
 import { fetchTimeTrackingSettingsAction } from "@/lib/actions/time-tracking-actions";
 import { IMPLEMENTED as TIME_TRACKING } from "@/lib/actions/time-tracking-actions.flags";
 import { IMPLEMENTED as VACATIONS } from "@/lib/actions/vacations-actions.flags";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
+import { listViewerTasks } from "@/lib/assistant/reads";
 import {
   addDaysToDate,
   eachDate,
@@ -693,7 +693,7 @@ type ChecklistResult = { ok: true; items: string[] } | { ok: false; error: strin
 
 async function siteVisitChecklist(projectId: string, template: string | undefined): Promise<ChecklistResult> {
   if (!template) return { ok: true, items: [...DEFAULT_SITE_VISIT_CHECKLIST] };
-  const tasks = await fetchTasksAction({ projectId, search: template, archived: false });
+  const tasks = await listViewerTasks({ projectId, search: template, archived: false });
   const resolved = byNameIlike(
     tasks.map((t) => ({ id: t.id, name: t.title })),
     template,

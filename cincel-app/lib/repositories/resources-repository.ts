@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
@@ -65,15 +65,32 @@ function toResourceLink(r: JoinedRow): ResourceLink {
   };
 }
 
+/**
+ * Live resource links, filtered in SQL:
+ * - `section`: one section or a list of them (an empty list matches nothing);
+ * - `personalForId`: only the personal links of that person;
+ * - `viewerId`: shared links plus the viewer's own personal links
+ *   (`personal_for_id IS NULL OR = viewer`), so another person's personal
+ *   links never leave the database.
+ */
 export async function listResourceLinks(
-  options: { section?: ResourceSection; personalForId?: string | null } = {}
+  options: {
+    section?: ResourceSection | readonly ResourceSection[];
+    personalForId?: string | null;
+    viewerId?: string;
+  } = {}
 ): Promise<ResourceLink[]> {
+  const sections = options.section === undefined ? null : typeof options.section === "string" ? [options.section] : options.section;
+  if (sections && sections.length === 0) return [];
   const rows = await baseQuery()
     .where(
       and(
         isNull(resourceLinks.deletedAt),
-        options.section ? eq(resourceLinks.section, options.section) : undefined,
-        options.personalForId ? eq(resourceLinks.personalForId, options.personalForId) : undefined
+        sections ? (sections.length === 1 ? eq(resourceLinks.section, sections[0]) : inArray(resourceLinks.section, [...sections])) : undefined,
+        options.personalForId ? eq(resourceLinks.personalForId, options.personalForId) : undefined,
+        options.viewerId
+          ? or(isNull(resourceLinks.personalForId), eq(resourceLinks.personalForId, options.viewerId))
+          : undefined
       )
     )
     .orderBy(asc(resourceLinks.section), asc(resourceLinks.sortOrder), asc(resourceLinks.title));

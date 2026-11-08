@@ -166,15 +166,17 @@ const create_note = defineTool({
         if (!existing) return failure(new Error("NOT_FOUND"));
         const addition = (input.append ?? "").trim();
         const body = existing.body.trim() ? `${existing.body}\n${addition}` : addition;
-        const note = await updateNoteAction(existing.id, { body });
+        const note = unwrapActionResult(await updateNoteAction(existing.id, { body }));
         return { ok: true, appended: true, note: { id: note.id, title: note.title }, url: `/mi-espacio/notas/${note.id}` };
       }
-      const note = await createNoteAction({
-        title: input.title?.trim() || undefined,
-        body: input.body ?? undefined,
-        pinned: input.pinned,
-        color: input.color,
-      });
+      const note = unwrapActionResult(
+        await createNoteAction({
+          title: input.title?.trim() || undefined,
+          body: input.body ?? undefined,
+          pinned: input.pinned,
+          color: input.color,
+        }),
+      );
       return { ok: true, appended: false, note: { id: note.id, title: note.title }, url: `/mi-espacio/notas/${note.id}` };
     } catch (err) {
       return failure(err);
@@ -200,7 +202,7 @@ const create_checklist = defineTool({
   summarize: toolSummaries.create_checklist,
   async run(_ctx, input) {
     try {
-      const checklist = await createChecklistAction({ title: input.title, items: input.items });
+      const checklist = unwrapActionResult(await createChecklistAction({ title: input.title, items: input.items }));
       return {
         ok: true,
         checklist: { id: checklist.id, title: checklist.title, items: checklist.items.length },

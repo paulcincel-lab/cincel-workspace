@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import TeamMultiSelect from "@/components/ui/TeamMultiSelect";
+import { formatMediumDateTime } from "@/lib/dates/zoned-formatters";
 import { DEFAULT_SYSTEM_ACCESS_ROLE, SYSTEM_ACCESS_ROLES, normalizeSystemAccessRole } from "@/lib/data/roles";
 import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { TeamAvailability } from "@/lib/data/team";
@@ -29,10 +30,7 @@ function formatDateTime(value: string | null | undefined): string {
     return "Sin registro";
   }
 
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatMediumDateTime(new Date(value));
 }
 
 interface MemberEditorDrawerProps {
@@ -55,7 +53,8 @@ interface MemberEditorDrawerProps {
   googleManaged?: boolean;
   /** Administrador viewing a Google-managed member: shows **Revisar acceso ahora**. */
   canRecheckAccess?: boolean;
-  onAccessChecked?: () => void | Promise<void>;
+  /** The save is in flight: **Guardar** is disabled. */
+  saving?: boolean;
   /** Google-linked member (#657): shows "Entra con Google" instead of the password controls. */
   googleAccess?: GoogleAccessState | null;
 }
@@ -77,7 +76,7 @@ export function MemberEditorDrawer({
   canManagePositions = false,
   googleManaged = false,
   canRecheckAccess = false,
-  onAccessChecked,
+  saving = false,
   googleAccess = null,
 }: MemberEditorDrawerProps) {
   const canSave = editingId === null ? teamCapabilities.canCreateCollaborator : teamCapabilities.canEditCollaborator;
@@ -301,7 +300,7 @@ export function MemberEditorDrawer({
 
             {editingId !== null && googleManaged && canRecheckAccess ? (
               <div className="mt-4">
-                <RecheckAccessButton staffId={editingId} onChecked={onAccessChecked} />
+                <RecheckAccessButton staffId={editingId} />
               </div>
             ) : null}
 
@@ -554,10 +553,10 @@ export function MemberEditorDrawer({
           <Button
             type="button"
             onClick={onSave}
-            disabled={!canSave}
+            disabled={!canSave || saving}
             title={canSave ? "" : "No tienes permiso para guardar cambios"}
           >
-            Guardar
+            {saving ? "Guardando…" : "Guardar"}
           </Button>
         </SheetFooter>
       </SheetContent>

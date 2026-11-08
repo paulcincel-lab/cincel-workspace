@@ -1,76 +1,39 @@
 import { redirect } from "next/navigation";
 
-import { MondayImportHistory, MondayLastImport } from "@/components/ajustes/MondayImportSections";
-import { MondayImportWizard } from "@/components/configuracion/monday-import/MondayImportWizard";
-import { SettingsSection } from "@/components/patterns/SettingsSection";
-import {
-  getMondayImportChoicesAction,
-  getMondayImportHistoryAction,
-  getMondayImportStatusAction,
-  openMondayImportRunAction,
-} from "@/lib/actions/monday-import-actions";
+import { AjustesMondayScreen } from "@/components/ajustes/AjustesMondayScreen";
 import { requireSettingsAdminPage } from "@/lib/auth/settings-admin-page";
-import type { MondayImportHistoryEntry } from "@/lib/monday-import/history";
+import { loadAjustesMonday, type AjustesMondayPageData } from "@/lib/loaders/ajustes-monday";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
-import type { MondayImportChoices, MondayImportRunState } from "@/lib/types/monday-import";
+import { Hydrate } from "@/lib/query/hydrate";
+import { qk } from "@/lib/query/keys";
+import { ajustesMondayOptions } from "@/lib/query/options/ajustes";
+import { seedMondayQueries } from "@/lib/query/options/monday";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 export const dynamic = "force-dynamic";
 
-const HISTORY_ERROR = "No se pudo cargar el historial de importaciones. Recarga la página.";
-
 /**
  * Ajustes › Importar de monday (redesign FE §3.8, frame `AjustesMonday`): the
- * existing import wizard (#672) between "Última importación" and "Historial".
+ * import wizard (#672) between "Última importación" and "Historial".
  * Administrador only and never the bootstrap admin (today's rule), checked by
- * the segment layout, here and again by every action. Opening the page resumes
- * the latest import (or starts one), as before.
+ * the segment layout, here and again by every action. The page only reads:
+ * status, the latest run's state, the choices and the history come from one
+ * loader into `ajustes.page('monday')`, which also seeds `monday.run(id)`,
+ * `monday.choices()` and `monday.history()`. Opening a run is the wizard's
+ * "Iniciar / Continuar importación" button (#966).
  */
 export default async function AjustesMondayPage() {
   const user = await requireSettingsAdminPage();
   if (isBootstrapAdminEmail(user.email)) redirect("/ajustes/permisos");
 
-  let run: MondayImportRunState | null = null;
-  let choices: MondayImportChoices | null = null;
-  let hasServerToken = false;
-  let loadError: string | null = null;
-  let history: MondayImportHistoryEntry[] = [];
-  let historyError: string | null = null;
-  try {
-    const [status, opened, choiceResult] = await Promise.all([
-      getMondayImportStatusAction(),
-      openMondayImportRunAction(false),
-      getMondayImportChoicesAction(),
-    ]);
-    if (status.ok) hasServerToken = status.hasServerToken;
-    if (opened.ok) run = opened.run;
-    else loadError = opened.error;
-    if (choiceResult.ok) choices = choiceResult.choices;
-    else loadError ??= choiceResult.error;
-  } catch {
-    loadError = "No se pudo cargar la importación. Recarga la página.";
-  }
-  try {
-    const result = await getMondayImportHistoryAction();
-    if (result.ok) history = result.history;
-    else historyError = result.error;
-  } catch {
-    historyError = HISTORY_ERROR;
-  }
-
-  const latest = history[0] ?? null;
+  const qc = getQueryClient();
+  await prefetch(qc, ajustesMondayOptions(), () => loadAjustesMonday(user));
+  const data = qc.getQueryData<AjustesMondayPageData>(qk.ajustes.page("monday"));
+  if (data) seedMondayQueries(qc, data);
 
   return (
-    <>
-      {latest ? <MondayLastImport entry={latest} /> : null}
-      <SettingsSection title="Importar de monday" description="Trae tableros, grupos y personas de monday a Cincel.">
-        <MondayImportWizard
-          initialRun={run}
-          initialChoices={choices}
-          hasServerToken={hasServerToken}
-          loadError={loadError}
-        />
-      </SettingsSection>
-      {history.length > 0 || historyError ? <MondayImportHistory history={history} error={historyError} /> : null}
-    </>
+    <Hydrate qc={qc}>
+      <AjustesMondayScreen />
+    </Hydrate>
   );
 }

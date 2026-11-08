@@ -1,8 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import axe from "axe-core";
+import type { ReactElement } from "react";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
 import { THEME_IDS } from "@/lib/ui/themes";
 
@@ -13,8 +17,10 @@ const actions = vi.hoisted(() => ({
   ensureMissingProjectFoldersAction: vi.fn(),
 }));
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
+const pageData = vi.hoisted(() => ({ getAjustesGooglePageData: vi.fn() }));
 
 vi.mock("@/lib/actions/workspace-access-actions", () => actions);
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
@@ -48,6 +54,20 @@ const MAPPING: GroupMapping = {
   rank: 70,
 };
 
+type GooglePage = { mappings: GroupMapping[]; positions: { id: string; name: string }[]; health: GoogleHealth | null };
+
+let client: QueryClient;
+
+function render(ui: ReactElement) {
+  return renderWithQueryClient(ui, { client });
+}
+
+/** Ajustes › Google as the page hydrates it: `qk.ajustes.page('google')` seeded, no fetch on mount. */
+function renderSettings(page: GooglePage) {
+  client.setQueryData(qk.ajustes.page("google"), page);
+  return render(<GoogleSettings />);
+}
+
 async function seriousViolations(container: HTMLElement) {
   // Color contrast needs real layout/rendering, which happy-dom doesn't provide.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
@@ -65,6 +85,7 @@ function applyTheme(theme: string, mode: "light" | "dark") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  client = createTestQueryClient();
 });
 
 afterEach(() => {
@@ -77,7 +98,7 @@ afterEach(() => {
 
 describe("Ajustes › Google", () => {
   it("renders Estado, Grupos de Google and Carpetas de proyectos as settings sections, one heading each", () => {
-    render(<GoogleSettings mappings={[MAPPING]} positions={[]} health={HEALTH} />);
+    renderSettings({ mappings: [MAPPING], positions: [], health: HEALTH });
 
     expect(screen.getByText("Los roles y las áreas se administran en grupos de Google Workspace.")).toBeTruthy();
 
@@ -99,7 +120,7 @@ describe("Ajustes › Google", () => {
   });
 
   it("keeps the Estado error state when the health could not be loaded", () => {
-    render(<GoogleSettings mappings={[]} positions={[]} health={null} />);
+    renderSettings({ mappings: [], positions: [], health: null });
     const estado = screen.getByRole("region", { name: "Estado" });
     expect(within(estado).getByText("No se pudo cargar el estado de Google.")).toBeTruthy();
     // Health unknown: the backfill button stays enabled, as before.
@@ -110,7 +131,7 @@ describe("Ajustes › Google", () => {
   });
 
   it("disables the backfill without a Shared Drive", () => {
-    render(<GoogleSettings mappings={[]} positions={[]} health={{ ...HEALTH, sharedDriveId: null }} />);
+    renderSettings({ mappings: [], positions: [], health: { ...HEALTH, sharedDriveId: null } });
     const button = within(screen.getByRole("region", { name: "Carpetas de proyectos" })).getByRole("button", {
       name: "Crear carpetas faltantes",
     });
@@ -119,15 +140,41 @@ describe("Ajustes › Google", () => {
 
   it("runs the same backfill action as before", async () => {
     actions.ensureMissingProjectFoldersAction.mockResolvedValue({ created: 2, skipped: 0, failed: 0 });
-    render(<GoogleSettings mappings={[]} positions={[]} health={HEALTH} />);
+    renderSettings({ mappings: [], positions: [], health: HEALTH });
     fireEvent.click(screen.getByRole("button", { name: "Crear carpetas faltantes" }));
     await waitFor(() => expect(screen.getByText("2 creadas")).toBeTruthy());
     expect(actions.ensureMissingProjectFoldersAction).toHaveBeenCalledTimes(1);
-    expect(router.refresh).toHaveBeenCalled();
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("makes no client call on mount: the page data is hydrated", () => {
+    renderSettings({ mappings: [MAPPING], positions: [], health: HEALTH });
+    expect(screen.getByText("cincel-direccion@example.test")).toBeTruthy();
+    expect(pageData.getAjustesGooglePageData).not.toHaveBeenCalled();
+  });
+
+  it("deleting a mapping invalidates Google, Puestos and the staff catalog; the list refetches once, no refresh", async () => {
+    actions.deleteGroupMappingAction.mockResolvedValue({ ok: true });
+    pageData.getAjustesGooglePageData.mockResolvedValue({ mappings: [], positions: [], health: HEALTH });
+    renderSettings({ mappings: [MAPPING], positions: [], health: HEALTH });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+
+    const row = screen.getByText(MAPPING.groupEmail).closest("tr") as HTMLElement;
+    fireEvent.click(within(row).getByLabelText("Acciones"));
+    fireEvent.click(await screen.findByText("Eliminar"));
+    fireEvent.click(await screen.findByRole("button", { name: "Eliminar" }));
+
+    await waitFor(() => expect(actions.deleteGroupMappingAction).toHaveBeenCalledWith(MAPPING.id));
+    await waitFor(() => expect(screen.getByText("No hay grupos asignados.")).toBeTruthy());
+    for (const queryKey of [qk.ajustes.page("google"), qk.ajustes.page("puestos"), qk.catalog.staff()]) {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey });
+    }
+    expect(pageData.getAjustesGooglePageData).toHaveBeenCalledTimes(1);
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 
   it("opens the same group sheet from Agregar grupo", async () => {
-    render(<GoogleSettings mappings={[]} positions={[]} health={HEALTH} />);
+    renderSettings({ mappings: [], positions: [], health: HEALTH });
     fireEvent.click(screen.getByRole("button", { name: "Agregar grupo" }));
     await waitFor(() => expect(screen.getByText("El grupo se busca en Google Workspace al guardar.")).toBeTruthy());
   });
@@ -136,9 +183,7 @@ describe("Ajustes › Google", () => {
     for (const theme of THEME_IDS) {
       for (const mode of ["light", "dark"] as const) {
         applyTheme(theme, mode);
-        const { container, unmount } = render(
-          <GoogleSettings mappings={[MAPPING]} positions={[]} health={HEALTH} />,
-        );
+        const { container, unmount } = renderSettings({ mappings: [MAPPING], positions: [], health: HEALTH });
         expect(await seriousViolations(container)).toEqual([]);
         unmount();
       }

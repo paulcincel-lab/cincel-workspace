@@ -1,8 +1,8 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { useRecentDocuments } from "@/components/biblioteca/use-recent-documents";
 import { recentDocumentsToShow } from "@/components/recursos/resources-model";
 import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -14,15 +14,12 @@ import {
   recurso,
   shortDate,
 } from "@/lib/biblioteca/catalog";
+import { bibliotecaLinksOptions } from "@/lib/query/options/biblioteca";
+import { useRecentDocs } from "@/lib/stores/recent-docs-store";
 import type { ResourceLink, ResourceSection } from "@/lib/types/resource";
 import type { EntityCard, RecordTableData } from "@/lib/types/widgets";
 
-export type BibliotecaIndexProps = {
-  /** The viewer's visible resource links (filtered on the server). */
-  links: ResourceLink[];
-  /** False when the viewer can't see Empresa (`enterprise.canView`). */
-  showEmpresa?: boolean;
-};
+const NO_LINKS: ResourceLink[] = [];
 
 function sectionName(section: ResourceSection): string {
   return section === "empresa" ? "Empresa" : (recurso(section)?.title ?? section);
@@ -38,14 +35,18 @@ const RECENT_COLUMNS: RecordTableData["columns"] = [
  * `/biblioteca` index (redesign FE §3.7, frames `Biblioteca`,
  * `BibliotecaEsencial`, `BibliotecaAnalitico`): evolves the Recursos
  * workspace overview onto `EntityCardGrid`. Groups "Abiertos recientemente"
- * (the workspace's localStorage list, unchanged), Empresa and Recursos; each
+ * (`useRecentDocs`, the workspace's stored list), Empresa and Recursos; each
  * card carries its count and last update and the Analítico catalog table
  * (Sección, Documentos, Actualizado). The widget renders each style; no views
- * or downloads columns (RD-7).
+ * or downloads columns (RD-7). The links come from `biblioteca.links(null)`
+ * (prefetched by the page; Empresa only with `enterprise.canView`).
  */
-export function BibliotecaIndex({ links, showEmpresa = true }: BibliotecaIndexProps) {
+export function BibliotecaIndex() {
+  const { data } = useQuery(bibliotecaLinksOptions(null));
+  const links = data?.links ?? NO_LINKS;
+  const showEmpresa = data?.capabilities.enterprise.canView ?? false;
   const [query, setQuery] = useState("");
-  const recentStored = useRecentDocuments();
+  const recentStored = useRecentDocs((state) => state.docs);
 
   const groups = useMemo(() => buildBibliotecaGroups(links, { showEmpresa, query }), [links, showEmpresa, query]);
 

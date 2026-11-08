@@ -133,13 +133,13 @@ describe("saveTimeTrackingSettingsAction", () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("saves for an admin and revalidates the layout and /ajustes/horario", async () => {
+  it("saves for an admin and revalidates only the layout (Horario reads through TanStack Query)", async () => {
     currentUser.value = ADMIN;
     const next = settings({ enabled: true, requiredFrom: "2026-11-01", hoursPerDay: 7, exemptRoles: ["Dirección"] });
     await expect(saveTimeTrackingSettingsAction(next)).resolves.toEqual(next);
     expect(JSON.parse(settingsRow.value!)).toEqual({ version: 1, data: next });
     expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
-    expect(revalidatePath).toHaveBeenCalledWith("/ajustes/horario");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/ajustes/horario");
   });
 
   it("rejects every INVALID rule", async () => {

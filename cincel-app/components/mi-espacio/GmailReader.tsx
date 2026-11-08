@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronLeftIcon, ImageIcon, LinkIcon, ListChecksIcon, ReplyIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -12,15 +13,11 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
-import {
-  createTaskFromGmailThreadAction,
-  fetchGmailThreadAction,
-  linkGmailThreadToProjectAction,
-} from "@/lib/actions/gmail-actions";
 import { IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
-import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
-import type { GmailAttachment, GmailMessage, GmailThreadSummary } from "@/lib/types/redesign";
+import { catalogOptions } from "@/lib/query/options/catalog";
+import { meGmailThreadOptions } from "@/lib/query/options/mi-espacio";
+import type { GmailThreadView } from "@/lib/types/mi-espacio";
 
 import { GmailDraftSheet } from "./GmailDraftSheet";
 import {
@@ -34,11 +31,9 @@ import {
   senderInitials,
   senderName,
 } from "./gmail-format";
+import { useCreateTaskFromGmailThread, useLinkGmailThread, useMarkGmailThreadRead } from "./use-gmail-mutations";
 
 export type GmailReaderProps = { threadId: string; onClose(): void };
-
-type ThreadData = { thread: GmailThreadSummary; messages: GmailMessage[]; attachments: GmailAttachment[] };
-type ProjectOption = { id: string; name: string };
 
 /** Sandbox flags of the body iframe: links may open in a new tab; never `allow-scripts` or `allow-same-origin`. */
 export const EMAIL_IFRAME_SANDBOX = "allow-popups allow-popups-to-escape-sandbox";
@@ -51,29 +46,25 @@ export const LINK_NOTE = "El asunto del correo quedará en la bitácora del proy
  * sanitized body in `<iframe sandbox srcdoc>` with remote images blocked until
  * "Mostrar imágenes", attachments as download links, and the actions
  * Responder (`GmailDraftSheet`), Crear tarea and Vincular a proyecto.
+ *
+ * Reading is the side-effect-free query `me.gmail.thread(id)` (reopening
+ * within its stale time makes no call); a thread that opens unread sends one
+ * `markGmailThreadReadAction`. Nothing here re-renders the route.
  */
 export function GmailReader({ threadId, onClose }: GmailReaderProps) {
-  const [result, setResult] = useState<{ threadId: string; data: ThreadData | null; error: unknown } | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const query = useQuery({ ...meGmailThreadOptions(threadId), retry: false });
+  const { mutate: markRead } = useMarkGmailThreadRead();
 
+  // Once per opened thread: the optimistic patch makes `unread` false right away.
+  const marked = useRef(new Set<string>());
+  const unread = query.data?.thread.unread === true;
   useEffect(() => {
-    let cancelled = false;
-    fetchGmailThreadAction(threadId).then(
-      (data) => {
-        if (!cancelled) setResult({ threadId, data, error: null });
-      },
-      (error: unknown) => {
-        if (!cancelled) setResult({ threadId, data: null, error });
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [threadId, attempt]);
+    if (!unread || !IMPLEMENTED.fetchGmailThreadAction || marked.current.has(threadId)) return;
+    marked.current.add(threadId);
+    markRead(threadId);
+  }, [unread, threadId, markRead]);
 
-  const current = result && result.threadId === threadId ? result : null;
-
-  if (!current) {
+  if (query.isPending) {
     return (
       <section aria-label="Correo abierto" aria-busy="true" className="flex flex-col gap-4 p-4">
         <BackButton onClose={onClose} />
@@ -82,23 +73,16 @@ export function GmailReader({ threadId, onClose }: GmailReaderProps) {
     );
   }
 
-  if (!current.data) {
-    const code = actionErrorCode(current.error);
+  if (query.isError) {
+    const code = actionErrorCode(query.error);
     return (
       <section aria-label="Correo abierto" className="flex flex-col gap-4 p-4">
         <BackButton onClose={onClose} />
         <ErrorState
           title="No se pudo abrir el correo."
-          description={actionErrorText(current.error, "gmail")}
+          description={actionErrorText(query.error, "gmail")}
           code={code || undefined}
-          onRetry={
-            code === "NOT_CONNECTED" || code === "SCOPE_MISSING"
-              ? undefined
-              : () => {
-                  setResult(null);
-                  setAttempt((n) => n + 1);
-                }
-          }
+          onRetry={code === "NOT_CONNECTED" || code === "SCOPE_MISSING" ? undefined : () => void query.refetch()}
         />
         {code === "NOT_CONNECTED" || code === "SCOPE_MISSING" ? (
           <a href="/ajustes/integraciones" className="text-sm text-primary underline-offset-4 hover:underline">
@@ -109,7 +93,7 @@ export function GmailReader({ threadId, onClose }: GmailReaderProps) {
     );
   }
 
-  return <ThreadView key={threadId} data={current.data} onClose={onClose} />;
+  return <ThreadView key={threadId} data={query.data} onClose={onClose} />;
 }
 
 function BackButton({ onClose }: { onClose(): void }) {
@@ -120,7 +104,7 @@ function BackButton({ onClose }: { onClose(): void }) {
   );
 }
 
-function ThreadView({ data, onClose }: { data: ThreadData; onClose(): void }) {
+function ThreadView({ data, onClose }: { data: GmailThreadView; onClose(): void }) {
   const { thread, messages, attachments } = data;
   const pickerId = useId();
   const canReply = IMPLEMENTED.createGmailDraftAction;
@@ -129,29 +113,20 @@ function ThreadView({ data, onClose }: { data: ThreadData; onClose(): void }) {
   const needsProjects = canTask || canLink;
 
   const [showImages, setShowImages] = useState(false);
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
-  const [linkedId, setLinkedId] = useState<string | null>(thread.projectId);
   const [pickedId, setPickedId] = useState<string | null>(thread.projectId ?? thread.suggestedProjectId);
-  const [pending, setPending] = useState<"task" | "link" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draftOpen, setDraftOpen] = useState(false);
   const replyButtonRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!needsProjects) return;
-    let cancelled = false;
-    fetchProjectsAction().then(
-      (rows) => {
-        if (!cancelled) setProjects(rows.map((p) => ({ id: p.id, name: p.name })));
-      },
-      () => {
-        if (!cancelled) setProjects([]);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [needsProjects]);
+  // Project names for the picker and chips: the shared light catalog, loaded once.
+  const projectsQuery = useQuery({ ...catalogOptions.projectOptions(), enabled: needsProjects });
+  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
+  // The link lives in the cache (`me.gmail.thread(id)`), patched by the mutations.
+  const linkedId = thread.projectId;
+
+  const taskMutation = useCreateTaskFromGmailThread({ onFormError: setError });
+  const linkMutation = useLinkGmailThread({ onFormError: setError });
+  const pending = taskMutation.isPending ? "task" : linkMutation.isPending ? "link" : null;
 
   const projectName = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
   const suggested =
@@ -171,34 +146,24 @@ function ThreadView({ data, onClose }: { data: ThreadData; onClose(): void }) {
   const lastMessage = messages[messages.length - 1];
   const replyTo = senderEmail(lastMessage?.from ?? thread.from);
 
-  async function handleCreateTask() {
+  function handleCreateTask() {
     if (!picked) return;
-    setPending("task");
     setError(null);
-    try {
-      await createTaskFromGmailThreadAction(thread.id, { projectId: picked });
-      setLinkedId(picked);
-      toast.success(`Tarea creada en ${projectName.get(picked) ?? "el proyecto"}`);
-    } catch (err) {
-      setError(actionErrorText(err, "gmail"));
-    } finally {
-      setPending(null);
-    }
+    const name = projectName.get(picked) ?? "el proyecto";
+    taskMutation.mutate(
+      { threadId: thread.id, projectId: picked, previousProjectId: linkedId },
+      { onSuccess: () => toast.success(`Tarea creada en ${name}`) },
+    );
   }
 
-  async function handleLink() {
+  function handleLink() {
     if (!picked) return;
-    setPending("link");
     setError(null);
-    try {
-      await linkGmailThreadToProjectAction(thread.id, picked);
-      setLinkedId(picked);
-      toast.success(`Correo vinculado a ${projectName.get(picked) ?? "el proyecto"}`);
-    } catch (err) {
-      setError(actionErrorText(err, "gmail"));
-    } finally {
-      setPending(null);
-    }
+    const name = projectName.get(picked) ?? "el proyecto";
+    linkMutation.mutate(
+      { threadId: thread.id, projectId: picked, previousProjectId: linkedId },
+      { onSuccess: () => toast.success(`Correo vinculado a ${name}`) },
+    );
   }
 
   function handleDraftOpenChange(open: boolean) {
@@ -353,7 +318,7 @@ function ThreadView({ data, onClose }: { data: ThreadData; onClose(): void }) {
                 type="button"
                 variant="outline"
                 disabled={!picked || pending !== null}
-                onClick={() => void handleCreateTask()}
+                onClick={handleCreateTask}
               >
                 <ListChecksIcon aria-hidden="true" strokeWidth={1.9} />
                 Crear tarea
@@ -364,7 +329,7 @@ function ThreadView({ data, onClose }: { data: ThreadData; onClose(): void }) {
                 type="button"
                 variant="outline"
                 disabled={!picked || picked === linkedId || pending !== null}
-                onClick={() => void handleLink()}
+                onClick={handleLink}
               >
                 <LinkIcon aria-hidden="true" strokeWidth={1.9} />
                 Vincular a proyecto

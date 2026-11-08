@@ -13,6 +13,7 @@ import {
   workspaceGroupMappings,
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/auth/password";
+import type { FlowExecutor } from "@/lib/project-flow/db";
 import { recordChanges } from "@/lib/repositories/history-repository";
 import type {
   EmergencyContact,
@@ -55,9 +56,9 @@ export function toStaff(row: StaffRow): Staff {
 }
 
 /** Which of `ids` are Google-managed (`google_sub` set, not deleted). */
-export async function googleManagedStaffIds(ids: string[]): Promise<Set<string>> {
+export async function googleManagedStaffIds(ids: string[], executor: FlowExecutor = db): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
-  const rows = await db
+  const rows = await executor
     .select({ id: staff.id })
     .from(staff)
     .where(and(inArray(staff.id, ids), isNotNull(staff.googleSub), isNull(staff.deletedAt)));
@@ -65,8 +66,11 @@ export async function googleManagedStaffIds(ids: string[]): Promise<Set<string>>
 }
 
 /** Current role and Google lock of one staff member, or null when not found. */
-export async function getStaffRoleLock(id: string): Promise<{ role: string | null; googleManaged: boolean } | null> {
-  const [row] = await db
+export async function getStaffRoleLock(
+  id: string,
+  executor: FlowExecutor = db
+): Promise<{ role: string | null; googleManaged: boolean } | null> {
+  const [row] = await executor
     .select({ role: staff.role, googleSub: staff.googleSub })
     .from(staff)
     .where(and(eq(staff.id, id), isNull(staff.deletedAt)))
@@ -146,7 +150,7 @@ const STAFF_TRACKED_FIELDS = [
 ] as const;
 
 /** Manual order first (#452); members never placed go last, alphabetically. */
-const STAFF_ORDER = [sql`${staff.sortOrder} is null`, asc(staff.sortOrder), asc(staff.name)];
+export const STAFF_ORDER = [sql`${staff.sortOrder} is null`, asc(staff.sortOrder), asc(staff.name)];
 
 export async function listStaff(options: { includeInactive?: boolean } = {}): Promise<Staff[]> {
   const rows = await db
@@ -229,8 +233,8 @@ export async function liveActiveStaffIds(ids: string[]): Promise<Set<string>> {
 }
 
 /** True when the staff member exists and isn't deleted. */
-export async function staffExists(id: string): Promise<boolean> {
-  const [row] = await db
+export async function staffExists(id: string, executor: FlowExecutor = db): Promise<boolean> {
+  const [row] = await executor
     .select({ id: staff.id })
     .from(staff)
     .where(and(eq(staff.id, id), isNull(staff.deletedAt)))
@@ -239,8 +243,12 @@ export async function staffExists(id: string): Promise<boolean> {
 }
 
 /** Ids of the person's live puestos, optionally only one source ('manual' | 'workspace'). */
-export async function listStaffPositionIds(staffId: string, source?: "manual" | "workspace"): Promise<string[]> {
-  const rows = await db
+export async function listStaffPositionIds(
+  staffId: string,
+  source?: "manual" | "workspace",
+  executor: FlowExecutor = db
+): Promise<string[]> {
+  const rows = await executor
     .select({ positionId: staffPositions.positionId })
     .from(staffPositions)
     .innerJoin(positions, eq(positions.id, staffPositions.positionId))
@@ -255,8 +263,8 @@ export async function listStaffPositionIds(staffId: string, source?: "manual" | 
 }
 
 /** True when some Google group maps to a live puesto (Workspace then manages puestos). */
-export async function hasPositionGroupMappings(): Promise<boolean> {
-  const [row] = await db
+export async function hasPositionGroupMappings(executor: FlowExecutor = db): Promise<boolean> {
+  const [row] = await executor
     .select({ id: workspaceGroupMappings.id })
     .from(workspaceGroupMappings)
     .innerJoin(positions, eq(positions.id, workspaceGroupMappings.positionId))
@@ -328,25 +336,29 @@ function toStaffValues(input: StaffInput) {
   };
 }
 
-export async function createStaff(input: StaffInput, actorId: string): Promise<Staff> {
-  const [row] = await db.insert(staff).values(toStaffValues(input)).returning();
-  await recordChanges({
-    entity: "staff",
-    entityId: row.id,
-    actorId,
-    before: { name: null },
-    after: { name: row.name },
-    fields: ["name"],
-  });
+export async function createStaff(input: StaffInput, actorId: string, executor: FlowExecutor = db): Promise<Staff> {
+  const [row] = await executor.insert(staff).values(toStaffValues(input)).returning();
+  await recordChanges(
+    {
+      entity: "staff",
+      entityId: row.id,
+      actorId,
+      before: { name: null },
+      after: { name: row.name },
+      fields: ["name"],
+    },
+    executor
+  );
   return toStaff(row);
 }
 
 export async function updateStaff(
   id: string,
   patch: Partial<StaffInput>,
-  actorId: string
+  actorId: string,
+  executor: FlowExecutor = db
 ): Promise<Staff> {
-  const [before] = await db
+  const [before] = await executor
     .select()
     .from(staff)
     .where(and(eq(staff.id, id), isNull(staff.deletedAt)))
@@ -365,15 +377,18 @@ export async function updateStaff(
     active: patch.active ?? before.active,
   });
 
-  const [after] = await db.update(staff).set(merged).where(eq(staff.id, id)).returning();
-  await recordChanges({
-    entity: "staff",
-    entityId: id,
-    actorId,
-    before,
-    after,
-    fields: STAFF_TRACKED_FIELDS,
-  });
+  const [after] = await executor.update(staff).set(merged).where(eq(staff.id, id)).returning();
+  await recordChanges(
+    {
+      entity: "staff",
+      entityId: id,
+      actorId,
+      before,
+      after,
+      fields: STAFF_TRACKED_FIELDS,
+    },
+    executor
+  );
   return toStaff(after);
 }
 
@@ -401,7 +416,8 @@ export async function softDeleteStaff(id: string, actorId: string): Promise<void
 
 export async function upsertStaffProfile(
   staffId: string,
-  profile: Partial<StaffProfile>
+  profile: Partial<StaffProfile>,
+  executor: FlowExecutor = db
 ): Promise<StaffProfile> {
   const values = {
     staffId,
@@ -420,7 +436,7 @@ export async function upsertStaffProfile(
     // Only written when sent, so an Equipo save never clears the person's own signature.
     ...(profile.emailSignature !== undefined ? { emailSignature: clean(profile.emailSignature) } : {}),
   };
-  const [row] = await db
+  const [row] = await executor
     .insert(staffProfiles)
     .values(values)
     .onConflictDoUpdate({ target: staffProfiles.staffId, set: values })
@@ -449,7 +465,8 @@ export async function setStaffEmailSignature(staffId: string, signature: string 
  */
 export async function setStaffCredential(
   staffId: string,
-  options: { enableAccess: boolean; temporaryPassword?: string }
+  options: { enableAccess: boolean; temporaryPassword?: string },
+  executor: FlowExecutor = db
 ): Promise<void> {
   if (options.temporaryPassword) {
     const { hash, salt } = await hashPassword(options.temporaryPassword);
@@ -460,13 +477,13 @@ export async function setStaffCredential(
       mustChangePassword: true,
       passwordUpdatedAt: new Date(),
     };
-    await db
+    await executor
       .insert(authCredentials)
       .values({ staffId, ...values })
       .onConflictDoUpdate({ target: authCredentials.staffId, set: values });
     return;
   }
-  await db
+  await executor
     .update(authCredentials)
     .set({ enabled: options.enableAccess })
     .where(eq(authCredentials.staffId, staffId));

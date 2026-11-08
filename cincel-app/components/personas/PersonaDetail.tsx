@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Mail, MessageCircle, Phone } from "lucide-react";
 
 import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
@@ -13,6 +14,7 @@ import { PeopleWidget } from "@/components/widgets/PeopleWidget";
 import { ProgressListWidget } from "@/components/widgets/ProgressListWidget";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
 import { cuttoLinks } from "@/lib/integrations/cutto-links";
+import { personasDetailOptions } from "@/lib/query/options/personas";
 import { tramoLabel } from "@/lib/tramos/compat";
 import type { PersonaDetail as PersonaDetailData } from "@/lib/types/redesign";
 import type { KpiDatum, PersonDatum } from "@/lib/types/widgets";
@@ -145,4 +147,14 @@ export function PersonaDetail({ detail }: PersonaDetailProps) {
       />
     </div>
   );
+}
+
+/**
+ * `/personas/equipo/[id]` on the client (Query Migration 6):
+ * `personas.detail(staffId)`, prefetched by the page and hydrated.
+ */
+export function PersonaDetailScreen({ staffId }: { staffId: string }) {
+  const { data } = useQuery(personasDetailOptions(staffId));
+  if (!data) return null;
+  return <PersonaDetail detail={data} />;
 }

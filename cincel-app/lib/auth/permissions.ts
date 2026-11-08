@@ -1,8 +1,12 @@
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { SYSTEM_ACCESS_ROLES, isAdministratorRole, type SystemAccessRole } from "@/lib/data/roles";
 import type { ResourceSection } from "@/lib/types/resource";
-import { readStorage } from "@/lib/repositories/browser-state-repository";
 
+/**
+ * The browser key of the old custom permissions matrix (#950). Nothing reads
+ * it any more: the resolvers below return the default permissions, as the
+ * server enforces them. Ajustes › Permisos removes the stored value once.
+ */
 export const PERMISSIONS_CUSTOM_STORAGE_KEY = "cincel.permissions.custom.v1";
 
 export type DashboardDataScope = "global" | "managed_projects" | "assigned_tasks";
@@ -785,15 +789,6 @@ const PORTAL_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, PortalCapabilities> 
   ])
 ) as Record<SystemAccessRole, PortalCapabilities>;
 
-type StoredModulePermissionsState = Record<string, unknown>;
-
-type StoredRolePermissionsState = Record<string, StoredModulePermissionsState>;
-
-type StoredPermissionsState = {
-  version: 1;
-  roles: Record<string, StoredRolePermissionsState>;
-};
-
 function taskBelongsToViewer(task: DashboardTaskShape, viewerId: string): boolean {
   if (!viewerId) {
     return false;
@@ -820,77 +815,6 @@ function resolveAccess(user: AuthenticatedUser | null): SystemAccessRole {
 
 function canExportByRole(access: SystemAccessRole): boolean {
   return access === "Administrador" || access === "Dirección";
-}
-
-function readCustomPermissionsPayload(): StoredPermissionsState | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const stored = readStorage(PERMISSIONS_CUSTOM_STORAGE_KEY);
-
-  if (!stored) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as StoredPermissionsState;
-
-    if (parsed.version !== 1 || !parsed.roles || typeof parsed.roles !== "object") {
-      return null;
-    }
-
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function readRoleModuleOverrides(role: SystemAccessRole, moduleId: string): StoredModulePermissionsState | null {
-  const payload = readCustomPermissionsPayload();
-
-  if (!payload) {
-    return null;
-  }
-
-  const roleState = payload.roles[role];
-
-  if (!roleState || typeof roleState !== "object") {
-    return null;
-  }
-
-  const moduleState = roleState[moduleId];
-
-  if (moduleState && typeof moduleState === "object") {
-    return moduleState;
-  }
-
-  return null;
-}
-
-function readBooleanOverride(moduleState: StoredModulePermissionsState | null, key: string, fallback: boolean): boolean {
-  const value = moduleState?.[key];
-  return typeof value === "boolean" ? value : fallback;
-}
-
-function readEnumOverride<TValue extends string>({
-  moduleState,
-  key,
-  allowed,
-  fallback,
-}: {
-  moduleState: StoredModulePermissionsState | null;
-  key: string;
-  allowed: readonly TValue[];
-  fallback: TValue;
-}): TValue {
-  const value = moduleState?.[key];
-
-  if (typeof value !== "string") {
-    return fallback;
-  }
-
-  return allowed.includes(value as TValue) ? (value as TValue) : fallback;
 }
 
 export function resolveDashboardCapabilitiesFromDefaults(user: AuthenticatedUser | null): DashboardCapabilities {
@@ -939,128 +863,27 @@ export function resolveWorkflowsCapabilitiesFromDefaults(user: AuthenticatedUser
 }
 
 export function resolveDashboardCapabilities(user: AuthenticatedUser | null): DashboardCapabilities {
-  const access = resolveAccess(user);
-  const defaults = resolveDashboardCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "dashboard");
-
-  if (!moduleOverrides) {
-    return defaults;
-  }
-
-  return {
-    dataScope: readEnumOverride({
-      moduleState: moduleOverrides,
-      key: "dataScope",
-      allowed: ["global", "managed_projects", "assigned_tasks"],
-      fallback: defaults.dataScope,
-    }),
-    sections: {
-      showProjectAssignments: readBooleanOverride(moduleOverrides, "showProjectAssignments", defaults.sections.showProjectAssignments),
-      showProjectRisk: readBooleanOverride(moduleOverrides, "showProjectRisk", defaults.sections.showProjectRisk),
-      showTeamWorkload: readBooleanOverride(moduleOverrides, "showTeamWorkload", defaults.sections.showTeamWorkload),
-    },
-  };
+  return resolveDashboardCapabilitiesFromDefaults(user);
 }
 
 export function resolveCalendarCapabilities(user: AuthenticatedUser | null): CalendarCapabilities {
-  const access = resolveAccess(user);
-  const defaults = resolveCalendarCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "calendar");
-
-  if (!moduleOverrides) {
-    return defaults;
-  }
-
-  return {
-    canViewCalendar: readBooleanOverride(moduleOverrides, "canViewCalendar", defaults.canViewCalendar),
-    canViewDailyAgenda: readBooleanOverride(moduleOverrides, "canViewDailyAgenda", defaults.canViewDailyAgenda),
-    canViewTeamCalendar: readBooleanOverride(moduleOverrides, "canViewTeamCalendar", defaults.canViewTeamCalendar),
-  };
+  return resolveCalendarCapabilitiesFromDefaults(user);
 }
 
 export function resolveActivitiesCapabilities(user: AuthenticatedUser | null): ActivitiesCapabilities {
   const access = resolveAccess(user);
   const defaults = resolveActivitiesCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "activities");
-
-  if (!moduleOverrides) {
-    return {
-      ...defaults,
-      canExportData: defaults.canExportData && canExportByRole(access),
-    };
-  }
-
-  return {
-    canViewActivities: readBooleanOverride(moduleOverrides, "canViewActivities", defaults.canViewActivities),
-    canCreateActivity: readBooleanOverride(moduleOverrides, "canCreateActivity", defaults.canCreateActivity),
-    canChangeResponsible: readBooleanOverride(moduleOverrides, "canChangeResponsible", defaults.canChangeResponsible),
-    canDeleteActivity: readBooleanOverride(moduleOverrides, "canDeleteActivity", defaults.canDeleteActivity),
-    canReorderPhases: readBooleanOverride(moduleOverrides, "canReorderPhases", defaults.canReorderPhases),
-    canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
-    statusScope: readEnumOverride({
-      moduleState: moduleOverrides,
-      key: "statusScope",
-      allowed: ["all", "assigned_or_participant", "none"],
-      fallback: defaults.statusScope,
-    }),
-  };
+  return { ...defaults, canExportData: defaults.canExportData && canExportByRole(access) };
 }
 
 export function resolveProjectsCapabilities(user: AuthenticatedUser | null): ProjectsCapabilities {
   const access = resolveAccess(user);
   const defaults = resolveProjectsCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "projects");
-
-  if (!moduleOverrides) {
-    return {
-      ...defaults,
-      canExportData: defaults.canExportData && canExportByRole(access),
-    };
-  }
-
-  return {
-    canViewProjects: readBooleanOverride(moduleOverrides, "canViewProjects", defaults.canViewProjects),
-    canCreateProject: readBooleanOverride(moduleOverrides, "canCreateProject", defaults.canCreateProject),
-    canEditProjectGeneral: readBooleanOverride(moduleOverrides, "canEditProjectGeneral", defaults.canEditProjectGeneral),
-    canChangeProjectStage: readBooleanOverride(moduleOverrides, "canChangeProjectStage", defaults.canChangeProjectStage),
-    canArchiveProject: readBooleanOverride(moduleOverrides, "canArchiveProject", defaults.canArchiveProject),
-    canDeleteProject: readBooleanOverride(moduleOverrides, "canDeleteProject", defaults.canDeleteProject),
-    canEditProtectedProjectData: readBooleanOverride(moduleOverrides, "canEditProtectedProjectData", defaults.canEditProtectedProjectData),
-    canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
-  };
+  return { ...defaults, canExportData: defaults.canExportData && canExportByRole(access) };
 }
 
 export function resolveResourcesCapabilities(user: AuthenticatedUser | null): ResourcesCapabilities {
-  const access = resolveAccess(user);
-  const defaults = resolveResourcesCapabilitiesFromDefaults(user);
-  const resourcesOverrides = readRoleModuleOverrides(access, "resources");
-  const enterpriseOverrides = readRoleModuleOverrides(access, "enterprise");
-
-  if (!resourcesOverrides && !enterpriseOverrides) {
-    return defaults;
-  }
-
-  return {
-    canViewResources: readBooleanOverride(resourcesOverrides, "canViewResources", defaults.canViewResources),
-    canManageFavoritesSection: readBooleanOverride(resourcesOverrides, "canManageFavoritesSection", defaults.canManageFavoritesSection),
-    enterprise: {
-      canView: readBooleanOverride(enterpriseOverrides, "enterprise.canView", defaults.enterprise.canView),
-      canCreate: readBooleanOverride(enterpriseOverrides, "enterprise.canCreate", defaults.enterprise.canCreate),
-      canEdit: readBooleanOverride(enterpriseOverrides, "enterprise.canEdit", defaults.enterprise.canEdit),
-      canDelete: readBooleanOverride(enterpriseOverrides, "enterprise.canDelete", defaults.enterprise.canDelete),
-      canCreateCategory: readBooleanOverride(enterpriseOverrides, "enterprise.canCreateCategory", defaults.enterprise.canCreateCategory),
-    },
-    corporate: {
-      canCreate: readBooleanOverride(resourcesOverrides, "corporate.canCreate", defaults.corporate.canCreate),
-      canDelete: readBooleanOverride(resourcesOverrides, "corporate.canDelete", defaults.corporate.canDelete),
-      editScope: readEnumOverride({
-        moduleState: resourcesOverrides,
-        key: "corporate.editScope",
-        allowed: ["all", "owned_or_personal", "none"],
-        fallback: defaults.corporate.editScope,
-      }),
-    },
-  };
+  return resolveResourcesCapabilitiesFromDefaults(user);
 }
 
 export function canViewResourceSection({
@@ -1094,49 +917,13 @@ export function canCreateResourceCategoryInSection({
 export function resolveClientsCapabilities(user: AuthenticatedUser | null): ClientsCapabilities {
   const access = resolveAccess(user);
   const defaults = resolveClientsCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "clients");
-
-  if (!moduleOverrides) {
-    return {
-      ...defaults,
-      canExportData: defaults.canExportData && canExportByRole(access),
-    };
-  }
-
-  return {
-    canViewClients: readBooleanOverride(moduleOverrides, "canViewClients", defaults.canViewClients),
-    canCreateClient: readBooleanOverride(moduleOverrides, "canCreateClient", defaults.canCreateClient),
-    canEditClient: readBooleanOverride(moduleOverrides, "canEditClient", defaults.canEditClient),
-    canDeleteClient: readBooleanOverride(moduleOverrides, "canDeleteClient", defaults.canDeleteClient),
-    canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
-  };
+  return { ...defaults, canExportData: defaults.canExportData && canExportByRole(access) };
 }
 
 export function resolveTeamCapabilities(user: AuthenticatedUser | null): TeamCapabilities {
   const access = resolveAccess(user);
   const defaults = resolveTeamCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "team");
-
-  if (!moduleOverrides) {
-    return {
-      ...defaults,
-      canExportData: defaults.canExportData && canExportByRole(access),
-    };
-  }
-
-  return {
-    canViewTeam: readBooleanOverride(moduleOverrides, "canViewTeam", defaults.canViewTeam),
-    canCreateCollaborator: readBooleanOverride(moduleOverrides, "canCreateCollaborator", defaults.canCreateCollaborator),
-    canEditCollaborator: readBooleanOverride(moduleOverrides, "canEditCollaborator", defaults.canEditCollaborator),
-    canChangeCollaboratorAccess: readBooleanOverride(
-      moduleOverrides,
-      "canChangeCollaboratorAccess",
-      defaults.canChangeCollaboratorAccess
-    ),
-    canToggleCollaboratorActive: readBooleanOverride(moduleOverrides, "canToggleCollaboratorActive", defaults.canToggleCollaboratorActive),
-    canDeleteCollaborator: readBooleanOverride(moduleOverrides, "canDeleteCollaborator", defaults.canDeleteCollaborator),
-    canExportData: readBooleanOverride(moduleOverrides, "canExportData", defaults.canExportData) && canExportByRole(access),
-  };
+  return { ...defaults, canExportData: defaults.canExportData && canExportByRole(access) };
 }
 
 export function resolveTaskStatusesCapabilitiesFromDefaults(
@@ -1146,47 +933,16 @@ export function resolveTaskStatusesCapabilitiesFromDefaults(
 }
 
 export function resolveTaskStatusesCapabilities(user: AuthenticatedUser | null): TaskStatusesCapabilities {
-  const access = resolveAccess(user);
-  const defaults = resolveTaskStatusesCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "taskStatuses");
-
-  if (!moduleOverrides) return defaults;
-
-  return {
-    canViewTaskStatuses: readBooleanOverride(moduleOverrides, "canViewTaskStatuses", defaults.canViewTaskStatuses),
-    canManageTaskStatuses: readBooleanOverride(
-      moduleOverrides,
-      "canManageTaskStatuses",
-      defaults.canManageTaskStatuses
-    ),
-  };
+  return resolveTaskStatusesCapabilitiesFromDefaults(user);
 }
 
 /** Puestos capabilities. */
 export function resolvePositionsCapabilities(user: AuthenticatedUser | null): PositionsCapabilities {
-  const access = resolveAccess(user);
-  const defaults = resolvePositionsCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "positions");
-
-  if (!moduleOverrides) return defaults;
-
-  return {
-    canViewPositions: readBooleanOverride(moduleOverrides, "canViewPositions", defaults.canViewPositions),
-    canManagePositions: readBooleanOverride(moduleOverrides, "canManagePositions", defaults.canManagePositions),
-  };
+  return resolvePositionsCapabilitiesFromDefaults(user);
 }
 
 export function resolveWorkflowsCapabilities(user: AuthenticatedUser | null): WorkflowsCapabilities {
-  const access = resolveAccess(user);
-  const defaults = resolveWorkflowsCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "workflows");
-
-  if (!moduleOverrides) return defaults;
-
-  return {
-    canViewWorkflows: readBooleanOverride(moduleOverrides, "canViewWorkflows", defaults.canViewWorkflows),
-    canManageWorkflows: readBooleanOverride(moduleOverrides, "canManageWorkflows", defaults.canManageWorkflows),
-  };
+  return resolveWorkflowsCapabilitiesFromDefaults(user);
 }
 
 export function resolvePortalCapabilitiesFromDefaults(user: AuthenticatedUser | null): PortalCapabilities {
@@ -1194,16 +950,7 @@ export function resolvePortalCapabilitiesFromDefaults(user: AuthenticatedUser | 
 }
 
 export function resolvePortalCapabilities(user: AuthenticatedUser | null): PortalCapabilities {
-  const access = resolveAccess(user);
-  const defaults = resolvePortalCapabilitiesFromDefaults(user);
-  const moduleOverrides = readRoleModuleOverrides(access, "portal");
-
-  if (!moduleOverrides) return defaults;
-
-  return {
-    manageAccess: readBooleanOverride(moduleOverrides, "manageAccess", defaults.manageAccess),
-    disableUsers: readBooleanOverride(moduleOverrides, "disableUsers", defaults.disableUsers),
-  };
+  return resolvePortalCapabilitiesFromDefaults(user);
 }
 
 export function isCorporateResourcesSection(section: ResourceSection): boolean {

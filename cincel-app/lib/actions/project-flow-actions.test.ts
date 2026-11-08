@@ -110,25 +110,11 @@ vi.mock("@/lib/repositories/projects-repository", () => ({}));
 
 import { GOOGLE_MANAGED_REFUSAL } from "@/lib/types/workspace-access";
 
-import {
-  createPositionAction,
-  deletePositionAction,
-  fetchPositionsAction,
-  reorderPositionsAction,
-  setPositionPhasesAction,
-  updatePositionAction,
-} from "./positions-actions";
+import * as positionsActionsModule from "./positions-actions";
 import * as projectsActionsModule from "./projects-actions";
 import * as staffActionsModule from "./staff-actions";
 import * as tramoStartActionsModule from "./tramo-start-actions";
-import {
-  createWorkflowPhaseAction,
-  fetchTramosNavAction,
-  fetchWorkflowsAction,
-  reorderWorkflowPhasesAction,
-  setWorkflowAutoStartAction,
-  updateWorkflowPhaseAction,
-} from "./workflows-actions";
+import * as workflowsActionsModule from "./workflows-actions";
 
 const {
   createProjectSpaceAction,
@@ -140,6 +126,22 @@ const {
 const { setStaffPositionsAction } = unwrapActions(staffActionsModule);
 const { fetchTramoBoardAction, previewStartTramoAction, startTramoAction, undoStartTramoAction } =
   unwrapActions(tramoStartActionsModule);
+const {
+  createPositionAction,
+  deletePositionAction,
+  fetchPositionsAction,
+  reorderPositionsAction,
+  setPositionPhasesAction,
+  updatePositionAction,
+} = unwrapActions(positionsActionsModule);
+const {
+  createWorkflowPhaseAction,
+  fetchTramosNavAction,
+  fetchWorkflowsAction,
+  reorderWorkflowPhasesAction,
+  setWorkflowAutoStartAction,
+  updateWorkflowPhaseAction,
+} = unwrapActions(workflowsActionsModule);
 
 const W = "11111111-1111-4111-8111-111111111111";
 const P = "22222222-2222-4222-8222-222222222222";
@@ -179,14 +181,12 @@ describe("workflows-actions (§7.1)", () => {
     await expect(fetchTramosNavAction()).resolves.toHaveLength(1);
   });
 
-  it("creates a fase with a trimmed name and revalidates tramos and puestos, not the Actividades layout stub", async () => {
+  it("creates a fase with a trimmed name and revalidates nothing", async () => {
     phasesRepo.createPhase.mockResolvedValue({ id: F1 });
     await createWorkflowPhaseAction(W, { name: "  Cobro " });
     expect(phasesRepo.createPhase).toHaveBeenCalledWith(W, { name: "Cobro" }, "actor-1");
-    expect(revalidatePath).toHaveBeenCalledWith("/configuracion/tramos");
-    expect(revalidatePath).toHaveBeenCalledWith("/configuracion/puestos");
-    // Tareas reads `qk.tareas.*` (Phase 4): the Actividades layout stub is not revalidated.
-    expect(revalidatePath).not.toHaveBeenCalledWith("/actividades", "layout");
+    // Ajustes › Tramos and Puestos read through TanStack Query; Tareas reads `qk.tareas.*` (Phase 4).
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("rejects blank, long and malformed fase input", async () => {
@@ -249,19 +249,18 @@ describe("positions-actions (§7.2)", () => {
     await expect(reorderPositionsAction(Array.from({ length: 501 }, () => P))).rejects.toThrow("INVALID");
   });
 
-  it("creates, dedupes fases and revalidates Google on delete", async () => {
+  it("creates, dedupes fases and deletes without revalidating Google (it reads through TanStack Query)", async () => {
     positionsRepo.createPosition.mockResolvedValue({ id: P });
     await createPositionAction({ name: " Residente " });
     expect(positionsRepo.createPosition).toHaveBeenCalledWith({ name: "Residente" });
-    expect(revalidatePath).toHaveBeenCalledWith("/configuracion/puestos");
-    expect(revalidatePath).toHaveBeenCalledWith("/equipo");
+    expect(revalidatePath).not.toHaveBeenCalled();
 
     await setPositionPhasesAction(P, [F1, F2, F1]);
     expect(positionsRepo.setPositionPhases).toHaveBeenCalledWith(P, [F1, F2]);
 
     await deletePositionAction(P);
     expect(positionsRepo.softDeletePosition).toHaveBeenCalledWith(P);
-    expect(revalidatePath).toHaveBeenCalledWith("/configuracion/google");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/configuracion/google");
   });
 });
 
@@ -302,7 +301,7 @@ describe("setStaffPositionsAction (§7.2)", () => {
   it("dedupes the ids; the repository replaces only the manual rows", async () => {
     await setStaffPositionsAction(S1, [F1, P, P]);
     expect(positionsRepo.setStaffPositions).toHaveBeenCalledWith(S1, [F1, P]);
-    expect(revalidatePath).toHaveBeenCalledWith("/configuracion/puestos");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/configuracion/puestos");
   });
 });
 

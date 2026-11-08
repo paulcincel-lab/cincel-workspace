@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import axe from "axe-core";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 const mocks = vi.hoisted(() => ({
   toggle: vi.fn(),
@@ -14,7 +15,15 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/actions/my-space-actions", () => ({
   toggleChecklistItemAction: mocks.toggle,
   addChecklistItemAction: mocks.add,
+  fetchRemindersAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
+  getMiEspacioPageData: vi.fn(),
+  fetchMiEspacioNotesPage: vi.fn(),
+  fetchMiEspacioChecklistsPage: vi.fn(),
+}));
+vi.mock("@/lib/actions/gmail-actions", () => ({}));
+vi.mock("@/lib/actions/notifications-actions", () => ({}));
 vi.mock("@/lib/actions/my-space-actions.flags", () => ({ IMPLEMENTED: mocks.flags }));
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn() } }));
 
@@ -58,6 +67,9 @@ vi.mock("@/components/widgets/RecordTable", async () => {
 });
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { qk } from "@/lib/query/keys";
+import { meChecklistsOptions, type ChecklistsData } from "@/lib/query/options/mi-espacio";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { THEME_IDS } from "@/lib/ui/themes";
 import type { Checklist, PresentationStyle } from "@/lib/types/redesign";
 
@@ -75,19 +87,27 @@ const CHECKLIST: Checklist = {
   ],
 };
 
-function Harness({ style = "visual", onChange }: { style?: PresentationStyle; onChange?: (c: Checklist) => void }) {
-  const [checklist, setChecklist] = useState(CHECKLIST);
-  return (
+/** The card as Mi espacio renders it: the checklist row of the `me.checklists` query. */
+function CachedCard() {
+  const { data } = useInfiniteQuery({ ...meChecklistsOptions(), enabled: false });
+  const checklist = data?.pages[0]?.items[0];
+  return checklist ? <ChecklistCard checklist={checklist} /> : null;
+}
+
+function renderCard(style: PresentationStyle = "visual") {
+  const client = createTestQueryClient();
+  client.setQueryData<ChecklistsData>(qk.me.checklists(), {
+    pages: [{ items: [CHECKLIST], nextCursor: null }],
+    pageParams: [null],
+  });
+  const result = renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
-      <ChecklistCard
-        checklist={checklist}
-        onChange={(c) => {
-          setChecklist(c);
-          onChange?.(c);
-        }}
-      />
-    </StyleProvider>
+      <CachedCard />
+    </StyleProvider>,
+    { client },
   );
+  const cached = () => client.getQueryData<ChecklistsData>(qk.me.checklists())!.pages[0]!.items[0]!;
+  return { ...result, cached };
 }
 
 function deferred<T>() {
@@ -137,7 +157,7 @@ describe("checklistProgress", () => {
 
 describe("ChecklistCard", () => {
   it("shows the title, the n/m counter, the progress bar and every item", () => {
-    render(<Harness />);
+    renderCard();
     expect(screen.getByRole("heading", { name: CHECKLIST.title })).toBeTruthy();
     expect(screen.getByText("2/4 completados")).toBeTruthy();
     expect(progressValue()).toBe("50");
@@ -145,40 +165,54 @@ describe("ChecklistCard", () => {
     expect(isChecked(box("Fotos de instalaciones"))).toBe(false);
   });
 
-  it("updates the counter and the bar optimistically, then keeps the saved item", async () => {
-    const call = deferred<Checklist["items"][number]>();
+  it("patches me.checklists optimistically with one action call, then keeps the saved item", async () => {
+    const call = deferred<{ ok: true; data: Checklist["items"][number] }>();
     mocks.toggle.mockReturnValue(call.promise);
-    const onChange = vi.fn();
-    render(<Harness onChange={onChange} />);
+    const { cached } = renderCard();
 
     fireEvent.click(box("Fotos de instalaciones"));
+    await waitFor(() => expect(isChecked(box("Fotos de instalaciones"))).toBe(true));
+    expect(mocks.toggle).toHaveBeenCalledTimes(1);
     expect(mocks.toggle).toHaveBeenCalledWith("i3", true);
-    expect(isChecked(box("Fotos de instalaciones"))).toBe(true);
     expect(screen.getByText("3/4 completados")).toBeTruthy();
     expect(progressValue()).toBe("75");
+    expect(cached().items.find((i) => i.id === "i3")?.done).toBe(true);
 
-    await act(async () => call.resolve({ id: "i3", text: "Fotos de instalaciones", done: true, sortOrder: 2 }));
-    expect(isChecked(box("Fotos de instalaciones"))).toBe(true);
-    expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ items: expect.arrayContaining([expect.objectContaining({ id: "i3", done: true })]) }),
+    await act(async () =>
+      call.resolve({ ok: true, data: { id: "i3", text: "Fotos de instalaciones", done: true, sortOrder: 2 } }),
     );
+    expect(isChecked(box("Fotos de instalaciones"))).toBe(true);
+    expect(cached().items.find((i) => i.id === "i3")?.done).toBe(true);
+    expect(mocks.toggle).toHaveBeenCalledTimes(1);
     expect(mocks.toastError).not.toHaveBeenCalled();
   });
 
   it("rolls back a failed toggle and shows an error toast", async () => {
     mocks.toggle.mockRejectedValue(new Error("FORBIDDEN"));
-    render(<Harness />);
+    const { cached } = renderCard();
 
     fireEvent.click(box("Llevar planos impresos"));
     await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción."));
     expect(isChecked(box("Llevar planos impresos"))).toBe(true);
     expect(screen.getByText("2/4 completados")).toBeTruthy();
     expect(progressValue()).toBe("50");
+    expect(cached().items.find((i) => i.id === "i1")?.done).toBe(true);
+  });
+
+  it("rolls back an { ok: false } result with its error copy", async () => {
+    mocks.toggle.mockResolvedValue({ ok: false, error: "NOT_FOUND" });
+    const { cached } = renderCard();
+
+    fireEvent.click(box("Fotos de instalaciones"));
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("Ya no existe. Recarga la página."));
+    expect(isChecked(box("Fotos de instalaciones"))).toBe(false);
+    expect(cached().items.find((i) => i.id === "i3")?.done).toBe(false);
+    expect(mocks.toggle).toHaveBeenCalledTimes(1);
   });
 
   it("toggles an item with Space", async () => {
     mocks.toggle.mockResolvedValue({ id: "i4", text: "Firmar bitácora", done: true, sortOrder: 3 });
-    render(<Harness />);
+    renderCard();
     const el = box("Firmar bitácora");
     el.focus();
     fireEvent.keyDown(el, { key: " ", code: "Space" });
@@ -188,7 +222,7 @@ describe("ChecklistCard", () => {
 
   it("adds an item at the end when Enter is pressed", async () => {
     mocks.add.mockResolvedValue({ id: "i5", text: "Revisar niveles", done: false, sortOrder: 4 });
-    render(<Harness />);
+    renderCard();
     const input = screen.getByRole("textbox", { name: "Nuevo punto" });
     fireEvent.change(input, { target: { value: "  Revisar niveles  " } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -202,7 +236,7 @@ describe("ChecklistCard", () => {
   });
 
   it("shows the INVALID copy for an empty item and calls nothing", () => {
-    render(<Harness />);
+    renderCard();
     const input = screen.getByRole("textbox", { name: "Nuevo punto" });
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.click(screen.getByRole("button", { name: "Agregar" }));
@@ -215,7 +249,7 @@ describe("ChecklistCard", () => {
 
   it("shows the action error under the input when adding fails", async () => {
     mocks.add.mockRejectedValue(new Error("NOT_FOUND"));
-    render(<Harness />);
+    renderCard();
     const input = screen.getByRole("textbox", { name: "Nuevo punto" });
     fireEvent.change(input, { target: { value: "Otro punto" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -226,7 +260,7 @@ describe("ChecklistCard", () => {
   it("hides the add input and disables toggles while the actions are not implemented", () => {
     mocks.flags.toggleChecklistItemAction = false;
     mocks.flags.addChecklistItemAction = false;
-    render(<Harness />);
+    renderCard();
     expect(screen.queryByRole("textbox", { name: "Nuevo punto" })).toBeNull();
     const el = box("Fotos de instalaciones");
     expect(el.getAttribute("aria-disabled") === "true" || el.hasAttribute("data-disabled")).toBe(true);
@@ -237,21 +271,21 @@ describe("ChecklistCard", () => {
 
 describe("ChecklistCard styles", () => {
   it("Visual: counter and progress bar", () => {
-    render(<Harness style="visual" />);
+    renderCard("visual");
     expect(screen.getByText("2/4 completados")).toBeTruthy();
     expect(screen.getByRole("progressbar")).toBeTruthy();
     expect(screen.queryByRole("columnheader", { name: "Hechos" })).toBeNull();
   });
 
   it("Esencial: text list with checkboxes, no progress bar", () => {
-    render(<Harness style="esencial" />);
+    renderCard("esencial");
     expect(screen.getByText("2/4 completados")).toBeTruthy();
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.getAllByRole("checkbox")).toHaveLength(4);
   });
 
   it("Analítico: table with Lista, Hechos, Total and %", () => {
-    render(<Harness style="analitico" />);
+    renderCard("analitico");
     for (const label of ["Lista", "Hechos", "Total", "%"]) {
       expect(screen.getByRole("columnheader", { name: label })).toBeTruthy();
     }
@@ -272,7 +306,7 @@ describe("ChecklistCard a11y", () => {
           document.documentElement.setAttribute("data-theme", mode);
           document.documentElement.dataset.themeId = theme;
           document.documentElement.classList.toggle("dark", mode === "dark");
-          render(<Harness style={style} />);
+          renderCard(style);
           // happy-dom computes no styles; token contrast is covered by lib/ui/contrast.ts.
           const results = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
           const blocking = results.violations

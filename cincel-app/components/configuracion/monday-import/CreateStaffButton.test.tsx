@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 /** "Crear integrante" (project flow §4.8): suggested puesto with its reason, changeable before creating. */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 const createMondayStaffAction = vi.fn();
 const suggestMondayPositionAction = vi.fn();
@@ -56,7 +58,7 @@ afterEach(() => {
 });
 
 function renderButton(onCreated = vi.fn()) {
-  render(
+  renderWithQueryClient(
     <CreateStaffButton runId="run-1" user={{ id: "7", name: "Luis Prueba" }} positions={POSITIONS} onCreated={onCreated} />,
   );
   return onCreated;

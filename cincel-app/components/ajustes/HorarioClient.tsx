@@ -1,27 +1,24 @@
 "use client";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { useState, type FormEvent, type ReactNode } from "react";
 
 import { HorarioControl, HorarioHorasEquipo, HorarioReglas, HorarioVistaPrevia } from "@/components/ajustes/HorarioSections";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
-import { unwrapActionResult } from "@/lib/actions/action-result";
 import { saveTimeTrackingSettingsAction } from "@/lib/actions/time-tracking-actions";
-import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
-import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { ajustesHorarioOptions, type AjustesHorarioPageData } from "@/lib/query/options/ajustes";
+import { HorarioFormStoreProvider, useHorarioForm, useHorarioFormApi } from "@/lib/stores/ajustes/horario-form-store";
 import { localDate } from "@/lib/time-tracking/local-time";
-import type { TeamHoursRow, TimeTrackingSettings } from "@/lib/types/redesign";
+import type { TimeTrackingSettings } from "@/lib/types/redesign";
 
-import { HorarioContext, type HorarioContextValue } from "./horario-context";
+import { useHorario } from "./horario-context";
 
 export type HorarioClientProps = {
-  settings: TimeTrackingSettings;
-  canManage: boolean;
-  canViewReport: boolean;
+  /** The Monday the report opens on; the page hydrated `qk.ajustes.page('horario', { weekStart })`. */
   weekStart: string;
-  rows: TeamHoursRow[];
   /** The viewer's first name, for the prompt preview ("Buenos días, {name}"). */
   viewerName?: string;
   /** The visible sections (`settingsSectionsFor("horario", user)`); the default set when omitted. */
@@ -39,61 +36,45 @@ function sameSettings(a: TimeTrackingSettings, b: TimeTrackingSettings): boolean
  * summary of the rules: no switch, no save. "Guardar cambios" appears only
  * while `saveTimeTrackingSettingsAction` is implemented. Settings ignore the
  * presentation style; only the report changes with it.
+ *
+ * The saved settings and the report are `qk.ajustes.page('horario', {
+ * weekStart })`, hydrated by the page; the draft and the shown week live in a
+ * page-scoped store that resets on unmount.
  */
-export function HorarioClient({
-  settings,
-  canManage,
-  canViewReport,
-  weekStart,
-  rows,
-  viewerName = "",
-  children,
-}: HorarioClientProps) {
-  const router = useRouter();
-  const [saved, setSaved] = useState<TimeTrackingSettings>(settings);
-  const [draft, setDraft] = useState<TimeTrackingSettings>(settings);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function HorarioClient({ weekStart, viewerName = "", children }: HorarioClientProps) {
+  const { data } = useSuspenseQuery(ajustesHorarioOptions(weekStart));
   const [today] = useState(() => localDate(new Date()));
+  return (
+    <HorarioFormStoreProvider initial={{ draft: data.settings, weekStart, today, viewerName }}>
+      <HorarioForm>{children}</HorarioForm>
+    </HorarioFormStoreProvider>
+  );
+}
 
-  const editable = canManage && IMPLEMENTED.saveTimeTrackingSettingsAction;
+function HorarioForm({ children }: { children?: ReactNode }) {
+  const { saved, draft, editable } = useHorario();
+  const form = useHorarioFormApi();
+  const error = useHorarioForm((s) => s.errors.form ?? null);
   const dirty = !sameSettings(saved, draft);
 
-  const value = useMemo<HorarioContextValue>(
-    () => ({
-      saved,
-      draft: editable ? draft : saved,
-      update: (patch) => {
-        setError(null);
-        setDraft((current) => ({ ...current, ...patch }));
-      },
-      canManage,
-      canViewReport,
-      editable,
-      weekStart,
-      rows,
-      today,
-      viewerName,
-    }),
-    [saved, draft, editable, canManage, canViewReport, weekStart, rows, today, viewerName],
-  );
+  // Saving keeps the root layout revalidation (the TimeClock gate is server-rendered).
+  const save = useActionMutation(saveTimeTrackingSettingsAction, {
+    setData: (qc, next) => {
+      qc.setQueriesData<AjustesHorarioPageData>({ queryKey: qk.ajustes.page("horario") }, (page) =>
+        page ? { ...page, settings: next } : page,
+      );
+      form.getState().replace(next);
+    },
+    invalidate: [qk.ajustes.page("horario"), qk.me.today()],
+    onFormError: (text) => form.getState().setError("form", text),
+    successToast: "Cambios guardados",
+  });
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editable || saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const next = unwrapActionResult(await saveTimeTrackingSettingsAction(draft));
-      setSaved(next);
-      setDraft(next);
-      toast.success("Cambios guardados");
-      router.refresh();
-    } catch (err) {
-      setError(actionErrorText(err));
-    } finally {
-      setSaving(false);
-    }
+    if (!editable || save.isPending) return;
+    form.getState().setError("form", null);
+    save.mutate(draft);
   }
 
   const sections = children ?? (
@@ -106,24 +87,22 @@ export function HorarioClient({
   );
 
   return (
-    <HorarioContext.Provider value={value}>
-      <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {sections}
-        {editable ? (
-          <div className="flex flex-col gap-3">
-            {error ? (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
-            <div className="flex justify-end">
-              <Button type="submit" size="lg" disabled={saving || !dirty}>
-                {saving ? "Guardando…" : "Guardar cambios"}
-              </Button>
-            </div>
+    <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-4">
+      {sections}
+      {editable ? (
+        <div className="flex flex-col gap-3">
+          {error ? (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+          <div className="flex justify-end">
+            <Button type="submit" size="lg" disabled={save.isPending || !dirty}>
+              {save.isPending ? "Guardando…" : "Guardar cambios"}
+            </Button>
           </div>
-        ) : null}
-      </form>
-    </HorarioContext.Provider>
+        </div>
+      ) : null}
+    </form>
   );
 }

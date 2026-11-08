@@ -1,26 +1,30 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 
-import { PERMISSIONS_CUSTOM_STORAGE_KEY } from "@/lib/auth/permissions";
-import { buildDefaultPermissionsState } from "@/lib/auth/permissionsState";
-import type { Staff } from "@/lib/types/core";
+import { buildDefaultPermissionsState, getEnabledModuleNames } from "@/lib/auth/permissionsState";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { AjustesPermisosPageData, PermisosStaffRow } from "@/lib/types/ajustes-catalogs";
 import { THEME_IDS } from "@/lib/ui/themes";
 
-const staffActions = vi.hoisted(() => ({ fetchStaffAction: vi.fn(async () => [] as unknown[]) }));
-vi.mock("@/lib/actions/staff-actions", () => staffActions);
+const pageData = vi.hoisted(() => ({ getAjustesPermisosPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
 
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 vi.mock("@/components/patterns/SettingsRow", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
 import { PermisosSettings, peopleSummary } from "./PermisosSettings";
 
-function member(id: string, name: string, role: string): Staff {
-  return { id, name, role, email: `${id}@example.test`, active: true } as unknown as Staff;
+/** The browser key the removed editor wrote (#950). */
+const LEGACY_MATRIX_KEY = "cincel.permissions.custom.v1";
+
+function member(id: string, name: string, access: PermisosStaffRow["access"]): PermisosStaffRow {
+  return { id, name, lastName: null, active: true, access };
 }
 
-const STAFF: Staff[] = [
+const STAFF: PermisosStaffRow[] = [
   member("a1", "Alejandro", "Administrador"),
   member("c1", "María", "Colaborador"),
   member("c2", "Luis", "Colaborador"),
@@ -45,11 +49,15 @@ function applyTheme(theme: string, mode: "light" | "dark") {
   root.classList.toggle("dark", mode === "dark");
 }
 
+/** Renders the page under a client hydrated with the page data, as the page's prefetch leaves it. */
 function renderPage() {
-  return render(<PermisosSettings initialStaff={STAFF} defaultPermissions={DEFAULTS} />);
+  const client = createTestQueryClient();
+  const data: AjustesPermisosPageData = { staff: STAFF, defaultPermissions: DEFAULTS };
+  client.setQueryData(qk.ajustes.page("permisos"), data);
+  return renderWithQueryClient(<PermisosSettings />, { client });
 }
 
-describe("Ajustes › Permisos", () => {
+describe("Ajustes › Permisos (read-only, #950)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
@@ -57,6 +65,7 @@ describe("Ajustes › Permisos", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     const root = document.documentElement;
     root.removeAttribute("data-theme-id");
     root.removeAttribute("data-theme");
@@ -73,53 +82,41 @@ describe("Ajustes › Permisos", () => {
     }
   }
 
-  it("lists every access with its people and opens the editor on Dirección", () => {
+  it("lists every access with its people and its default modules", () => {
     renderPage();
 
     const people = screen.getByRole("region", { name: "Personas por acceso" });
     expect(within(people).getByRole("group", { name: "Administrador" })).toBeTruthy();
     expect(within(people).getByText(/María, Luis, Sofía y 1 más/)).toBeTruthy();
     expect(within(people).getByText("4 personas")).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Permisos de Dirección" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Configurar Dirección" }).getAttribute("aria-pressed")).toBe("true");
-    // Administrador keeps full access and can't be edited.
-    expect(screen.getByRole("button", { name: "Configurar Administrador" }).hasAttribute("disabled")).toBe(true);
+    const firstModule = getEnabledModuleNames(DEFAULTS["Colaborador"])[0];
+    if (firstModule) expect(within(people).getAllByText(new RegExp(`Módulos: .*${firstModule}`)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Cada rol usa los permisos por defecto/)).toBeTruthy();
   });
 
-  it("switches the editor to another access", () => {
+  it("has no editor: no Configurar, Guardar cambios, Restaurar or permission controls", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Configurar Colaborador" }));
-
-    expect(screen.getByRole("region", { name: "Permisos de Colaborador" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Configurar Colaborador" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: /Configurar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Guardar cambios" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restaurar permisos por defecto" })).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("region", { name: /^Permisos de / })).toBeNull();
   });
 
-  it("saves to the same browser storage as before and restores the defaults", () => {
+  it("removes the browser-only matrix once on mount", () => {
+    window.localStorage.setItem(LEGACY_MATRIX_KEY, JSON.stringify({ version: 1, roles: {} }));
     renderPage();
-    const save = screen.getByRole("button", { name: "Guardar cambios" });
-    expect(save.hasAttribute("disabled")).toBe(true);
-
-    const toggle = screen.getByRole("switch", { name: "Ver asignaciones de proyecto" });
-    const before = toggle.getAttribute("aria-checked") === "true";
-    fireEvent.click(toggle);
-    expect(save.hasAttribute("disabled")).toBe(false);
-    fireEvent.click(save);
-
-    const stored = JSON.parse(window.localStorage.getItem(PERMISSIONS_CUSTOM_STORAGE_KEY) ?? "null");
-    expect(stored.version).toBe(1);
-    expect(stored.roles["Dirección"].dashboard.showProjectAssignments).toBe(!before);
-    expect(screen.getByText("Fuente actual: configuración personalizada.")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar permisos por defecto" }));
-    expect(window.localStorage.getItem(PERMISSIONS_CUSTOM_STORAGE_KEY)).toBeNull();
-    expect(screen.getByText("Fuente actual: valores por defecto.")).toBeTruthy();
+    expect(window.localStorage.getItem(LEGACY_MATRIX_KEY)).toBeNull();
   });
 
-  it("names every permission control", () => {
+  it("registers no focus or storage listener and makes no call on mount", () => {
+    const add = vi.spyOn(window, "addEventListener");
     renderPage();
-    expect(screen.getByRole("combobox", { name: "Alcance de datos" })).toBeTruthy();
-    expect(screen.getByRole("switch", { name: "Ver riesgo de proyecto" })).toBeTruthy();
-    expect(screen.getByRole("switch", { name: "Ver carga del equipo" })).toBeTruthy();
+    const events = add.mock.calls.map((call) => call[0]);
+    expect(events).not.toContain("focus");
+    expect(events).not.toContain("storage");
+    expect(pageData.getAjustesPermisosPageData).not.toHaveBeenCalled();
   });
 });
 

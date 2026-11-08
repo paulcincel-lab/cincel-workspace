@@ -1,5 +1,7 @@
 "use client";
 
+import { useSuspenseQuery } from "@tanstack/react-query";
+
 import { GOOGLE_GROUPS_DESCRIPTION, GOOGLE_GROUPS_TITLE, GoogleGroupMappings } from "@/components/configuracion/GoogleGroupMappings";
 import { GOOGLE_HEALTH_DESCRIPTION, GOOGLE_HEALTH_TITLE, GoogleHealthStatus } from "@/components/configuracion/GoogleHealthStatus";
 import {
@@ -9,22 +11,19 @@ import {
 } from "@/components/configuracion/ProjectFoldersBackfill";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
-import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
-
-export type GoogleSettingsProps = {
-  mappings: GroupMapping[];
-  positions: { id: string; name: string }[];
-  /** Null when `getGoogleHealthAction()` failed. */
-  health: GoogleHealth | null;
-};
+import { ajustesGoogleOptions } from "@/lib/query/options/ajustes";
 
 /**
  * Ajustes › Google (redesign FE §3.8): the existing Google settings (Estado,
  * Grupos de Google, Carpetas de proyectos) as `SettingsSection`s. Same
- * components, data and actions as Configuración → Google; only the frame
- * changes.
+ * components and actions as Configuración → Google; only the frame changes.
+ *
+ * Mappings, puestos and Estado are `qk.ajustes.page('google')`, hydrated by
+ * the page; the mapping and folder mutations invalidate it, so the lists
+ * update without a route refresh. `health` is null when its read failed.
  */
-export function GoogleSettings({ mappings, positions, health }: GoogleSettingsProps) {
+export function GoogleSettings() {
+  const { mappings, positions, health } = useSuspenseQuery(ajustesGoogleOptions()).data;
   return (
     <>
       <Alert>

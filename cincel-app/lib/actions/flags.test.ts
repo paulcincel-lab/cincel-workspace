@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 const ACTIONS_DIR = __dirname;
 
-/** The 62 actions of BE §7 / FE §7, by actions file. */
+/** The 62 actions of BE §7 / FE §7, by actions file, plus `markGmailThreadReadAction` (Query Migration #941). */
 const REDESIGN_ACTIONS: Record<string, readonly string[]> = {
   preferences: ["fetchMyPreferencesAction", "updateMyPreferencesAction"],
   "org-appearance": ["fetchOrgAppearanceAction", "saveOrgAppearanceAction", "resetOrgAppearanceAction"],
@@ -46,6 +46,7 @@ const REDESIGN_ACTIONS: Record<string, readonly string[]> = {
     "fetchGmailStatusAction",
     "fetchGmailThreadsAction",
     "fetchGmailThreadAction",
+    "markGmailThreadReadAction",
     "syncGmailAction",
     "linkGmailThreadToProjectAction",
     "createGmailDraftAction",
@@ -103,8 +104,8 @@ function exportedNames(mod: Module): string[] {
 }
 
 describe("redesign action flags", () => {
-  it("lists the 62 actions of the contract", () => {
-    expect(Object.values(REDESIGN_ACTIONS).flat()).toHaveLength(62);
+  it("lists the 63 actions of the contract", () => {
+    expect(Object.values(REDESIGN_ACTIONS).flat()).toHaveLength(63);
   });
 
   for (const [domain, names] of Object.entries(REDESIGN_ACTIONS)) {

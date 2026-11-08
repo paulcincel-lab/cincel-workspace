@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,7 @@ vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({
     fetchMyWeekHoursAction: true,
   },
 }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({ getAjustesHorarioPageData: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/horario"));
@@ -29,6 +30,8 @@ vi.mock("@/components/widgets/RecordTable", () => import("@/tests/unit/fixtures/
 
 import { HorarioClient } from "./HorarioClient";
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 import { SETTINGS, TEAM_ROWS, WEEK } from "@/tests/unit/fixtures/horario";
@@ -42,20 +45,21 @@ afterEach(() => {
 });
 
 function renderPage(canManage: boolean, style: PresentationStyle) {
-  render(
+  const client = createTestQueryClient();
+  client.setQueryData(qk.ajustes.page("horario", { weekStart: WEEK }), {
+    settings: SETTINGS,
+    rows: TEAM_ROWS,
+    canManage,
+    canViewReport: true,
+  });
+  renderWithQueryClient(
     <main>
       <h1>Ajustes</h1>
       <StyleProvider style={style} scope="staff">
-        <HorarioClient
-          settings={SETTINGS}
-          canManage={canManage}
-          canViewReport
-          weekStart={WEEK}
-          rows={TEAM_ROWS}
-          viewerName="Ana"
-        />
+        <HorarioClient weekStart={WEEK} viewerName="Ana" />
       </StyleProvider>
     </main>,
+    { client },
   );
 }
 

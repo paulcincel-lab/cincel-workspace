@@ -2,7 +2,6 @@
 
 import { CalendarPlus } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { FormSheet } from "@/components/patterns/FormSheet";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
@@ -14,7 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { requestVacationAction } from "@/lib/actions/vacations-actions";
 import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { VACATIONS_ABSENCES_PREFIX } from "@/lib/query/options/biblioteca";
 import type { VacationBalance, VacationKind, VacationRequest } from "@/lib/types/redesign";
+import type { MyVacations } from "@/lib/vacations/reads";
 
 import {
   VACATION_KIND_LABEL,
@@ -24,7 +27,7 @@ import {
   workDaysBetween,
 } from "./vacation-format";
 
-export type VacationFormProps = { balance: VacationBalance; onSubmitted(r: VacationRequest): void };
+export type VacationFormProps = { balance: VacationBalance };
 
 type Draft = { from: string; to: string; kind: VacationKind; comment: string };
 
@@ -36,12 +39,24 @@ const EMPTY: Draft = { from: "", to: "", kind: "vacaciones", comment: "" };
  * (`INVALID`, `OVERLAP`) show inline through `actionErrorText`. A request
  * longer than the available balance is allowed (the approver decides) and
  * shows a warning. The trigger button opens the sheet; forms ignore the style.
+ * On success the request shows in the history at once and `me.vacations`,
+ * `vacations.absences` and `vacations.pending` refetch.
  */
-export function VacationForm({ balance, onSubmitted }: VacationFormProps) {
+export function VacationForm({ balance }: VacationFormProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(EMPTY);
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const request = useActionMutation(requestVacationAction, {
+    setData: (client, created: VacationRequest) =>
+      client.setQueryData<MyVacations | null>(qk.me.vacations(), (current) =>
+        current ? { ...current, requests: [created, ...current.requests.filter((r) => r.id !== created.id)] } : current,
+      ),
+    invalidate: [qk.me.vacations(), VACATIONS_ABSENCES_PREFIX, qk.vacations.pending()],
+    successToast: "Solicitud enviada",
+    onFormError: setError,
+  });
+  const pending = request.isPending;
 
   const rangeValid = isIsoDay(draft.from) && isIsoDay(draft.to) && draft.to >= draft.from;
   const days = workDaysBetween(draft.from, draft.to);
@@ -61,25 +76,16 @@ export function VacationForm({ balance, onSubmitted }: VacationFormProps) {
       setError(actionErrorText("INVALID"));
       return;
     }
-    setPending(true);
     setError(null);
+    const comment = draft.comment.trim();
     try {
-      const comment = draft.comment.trim();
-      const created = await requestVacationAction({
-        from: draft.from,
-        to: draft.to,
-        kind: draft.kind,
-        ...(comment ? { comment } : {}),
-      });
-      onSubmitted(created);
-      toast.success("Solicitud enviada");
-      setOpen(false);
-      setDraft(EMPTY);
-    } catch (err) {
-      setError(actionErrorText(err));
-    } finally {
-      setPending(false);
+      await request.mutateAsync({ from: draft.from, to: draft.to, kind: draft.kind, ...(comment ? { comment } : {}) });
+    } catch {
+      // The error shows inline (onFormError).
+      return;
     }
+    setOpen(false);
+    setDraft(EMPTY);
   }
 
   return (

@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { useState } from "react";
 
 import { BoardsStep } from "./BoardsStep";
@@ -90,7 +92,7 @@ afterEach(() => {
 
 describe("BoardsStep board cards (#685)", () => {
   it("names each checkbox after its board and shows its checked state", () => {
-    render(<Harness initial={["b1"]} onChange={() => {}} />);
+    renderWithQueryClient(<Harness initial={["b1"]} onChange={() => {}} />);
 
     const ruiz = screen.getByRole("checkbox", { name: "Importar Casa Ruiz" });
     const gomez = screen.getByRole("checkbox", { name: "Importar Depto Gómez" });
@@ -99,7 +101,7 @@ describe("BoardsStep board cards (#685)", () => {
   });
 
   it("keeps the plain checkbox inside a flex wrapper, without size overrides", () => {
-    render(<Harness initial={[]} onChange={() => {}} />);
+    renderWithQueryClient(<Harness initial={[]} onChange={() => {}} />);
 
     const box = screen.getByRole("checkbox", { name: "Importar Casa Ruiz" });
     expect(box.className).toContain("size-4");
@@ -109,7 +111,7 @@ describe("BoardsStep board cards (#685)", () => {
 
   it("toggles the board from the checkbox", () => {
     const onChange = vi.fn();
-    render(<Harness initial={[]} onChange={onChange} />);
+    renderWithQueryClient(<Harness initial={[]} onChange={onChange} />);
 
     const box = screen.getByRole("checkbox", { name: "Importar Casa Ruiz" });
     fireEvent.click(box);
@@ -119,7 +121,7 @@ describe("BoardsStep board cards (#685)", () => {
 
   it("toggles the board from anywhere on its card", () => {
     const onChange = vi.fn();
-    render(<Harness initial={["b2"]} onChange={onChange} />);
+    renderWithQueryClient(<Harness initial={["b2"]} onChange={onChange} />);
 
     fireEvent.click(screen.getByText("Depto Gómez"));
     expect(onChange).toHaveBeenLastCalledWith([]);
@@ -132,7 +134,7 @@ describe("BoardsStep board cards (#685)", () => {
 
   it("selects nothing by default; Seleccionar todos and Ninguno act on the visible cards", () => {
     const onChange = vi.fn();
-    render(<Harness initial={[]} onChange={onChange} />);
+    renderWithQueryClient(<Harness initial={[]} onChange={onChange} />);
 
     for (const name of ["Casa Ruiz", "Depto Gómez", "Clientes"])
       expect(screen.getByRole("checkbox", { name: `Importar ${name}` }).getAttribute("aria-checked")).toBe("false");
@@ -148,7 +150,7 @@ describe("BoardsStep board cards (#685)", () => {
   });
 
   it("shows each board's workspace, item count and «mapear» before the export, with its mapping closed", () => {
-    render(<Harness initial={[]} onChange={() => {}} />);
+    renderWithQueryClient(<Harness initial={[]} onChange={() => {}} />);
 
     const card = screen.getByRole("group", { name: "Casa Ruiz" });
     expect(card.textContent).toContain("Obras");
@@ -158,7 +160,7 @@ describe("BoardsStep board cards (#685)", () => {
   });
 
   it("filters the cards by workspace", () => {
-    render(<Harness initial={[]} onChange={() => {}} />);
+    renderWithQueryClient(<Harness initial={[]} onChange={() => {}} />);
 
     expect(screen.getByRole("combobox", { name: "Espacio de trabajo" })).toBeTruthy();
     fireEvent.change(screen.getByRole("searchbox", { name: "Buscar tableros" }), { target: { value: "zzz" } });

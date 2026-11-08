@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithApprovalResponses, type UIMessage } from "ai";
 
+import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { AssistantMessageParts } from "@/components/asistente/AssistantMessageParts";
 import { AssistantContextStore, createAssistantChatTransport } from "@/components/asistente/assistant-transport";
+import type { AssistantTurn } from "@/components/asistente/use-asistente-cache";
 import type { AssistantContext } from "@/lib/types/redesign";
 
 /**
@@ -20,8 +22,8 @@ export type AssistantChatProps = {
   context?: AssistantContext;
   /** A starter prompt placed in the composer without sending; a new `nonce` re-applies the same text. */
   draft?: { text: string; nonce: number };
-  /** Called after each finished turn (the page refreshes its history). */
-  onTurnFinished?(threadId: string): void;
+  /** Called after each finished turn with the final message (the page updates `qk.asistente.*` and the tool keys). */
+  onTurnFinished?(turn: AssistantTurn): void;
 };
 
 const EXAMPLE_QUESTIONS = [
@@ -46,7 +48,6 @@ export function AssistantChat({ thread, context, draft, onTurnFinished }: Assist
   const threadId = thread.id;
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [initialMessages] = useState<UIMessage[]>(() => thread.messages);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [contextStore] = useState(() => new AssistantContextStore(context ?? { route: "/asistente" }));
@@ -62,9 +63,10 @@ export function AssistantChat({ thread, context, draft, onTurnFinished }: Assist
   const { messages, sendMessage, status, addToolApprovalResponse } = useChat({
     id: threadId,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-    onFinish: () => onTurnFinishedRef.current?.(threadId),
+    onFinish: ({ message, messages }) => onTurnFinishedRef.current?.({ threadId, message, messages }),
     transport,
-    messages: initialMessages,
+    // Read once, when the chat is created; `key` on the page remounts it per thread.
+    messages: thread.messages,
     onError: (err) => {
       console.error("Assistant chat error:", err);
       setError(
@@ -117,9 +119,9 @@ export function AssistantChat({ thread, context, draft, onTurnFinished }: Assist
   return (
     <div className="flex h-full w-full flex-col gap-4">
       {error ? (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-sm">

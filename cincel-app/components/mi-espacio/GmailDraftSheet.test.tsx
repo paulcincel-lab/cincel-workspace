@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 
 import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 const actions = vi.hoisted(() => ({
@@ -50,7 +52,9 @@ const EXPIRES = "2026-11-07T18:10:00.000Z";
 
 function renderSheet(props: Partial<Parameters<typeof GmailDraftSheet>[0]> = {}) {
   const onOpenChange = vi.fn();
-  render(
+  const client = createTestQueryClient();
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  renderWithQueryClient(
     <GmailDraftSheet
       open
       replyToThreadId="th-1"
@@ -59,8 +63,9 @@ function renderSheet(props: Partial<Parameters<typeof GmailDraftSheet>[0]> = {})
       onOpenChange={onOpenChange}
       {...props}
     />,
+    { client },
   );
-  return { onOpenChange };
+  return { onOpenChange, invalidate };
 }
 
 function sheetDialog() {
@@ -141,6 +146,18 @@ describe("GmailDraftSheet", () => {
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Enviar" }));
     await waitFor(() => expect(actions.sendGmailDraftAction).toHaveBeenCalledWith("d-1", "tok-1"));
+  });
+
+  it("a sent reply refreshes the thread and the Bandeja list", async () => {
+    const { invalidate } = renderSheet();
+    fireEvent.click(within(sheetDialog()).getByRole("button", { name: "Enviar" }));
+    const dialog = await waitFor(() => confirmDialog());
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+      qk.me.gmail.thread("th-1"),
+      qk.me.gmail.threads(),
+    ]);
   });
 
   it("cancelling the confirmation sends nothing and returns focus to Enviar", async () => {

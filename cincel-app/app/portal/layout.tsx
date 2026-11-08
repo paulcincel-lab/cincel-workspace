@@ -27,7 +27,12 @@ export const metadata: Metadata = { title: "Portal de clientes · Cincel" };
  *
  * The presentation style comes from the `cincel-portal-style` cookie (org default when missing or invalid,
  * FE §3.11) and wraps the shell in `StyleProvider scope="portal"`; a signed-in client gets
- * `EstiloSwitch scope="portal"` in the top bar on the pages that have the three styles.
+ * `EstiloSwitch scope="portal"` in the top bar on the pages that have the three styles. When the organization
+ * fixed the style (`allowUserOverride: false`), `fixedByOrg` reaches the provider: the cookie is ignored
+ * (`getPortalPresentation`) and `PortalStyleSwitch` renders nothing.
+ *
+ * The session lookup here (`getPortalUser`, cached per request) is the one that slides the session expiry;
+ * the portal query functions only read.
  */
 export default async function PortalLayout({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
@@ -40,7 +45,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   // Organization theme only (FE §3.11): portal clients have no theme or mode override; only the style.
   return (
     <PortalAppearance appearance={appearance}>
-      <StyleProvider style={presentation.style} scope="portal">
+      <StyleProvider style={presentation.style} scope="portal" fixedByOrg={presentation.fixedByOrg}>
         <PortalShell
           clientName={user?.name ?? null}
           styleSwitch={

@@ -124,6 +124,46 @@ test.describe("Apariencia — B18 dark-scheme run", () => {
   });
 });
 
+test.describe("Apariencia — changes apply without a reload", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await loginAsAdmin(page, BASE_URL);
+  });
+
+  test.afterEach(async () => {
+    await setAdminPreferences(null);
+  });
+
+  test("mode, density and style chosen in Ajustes › Apariencia reach <html> and the next page", async ({ page }) => {
+    await setAdminPreferences({ mode: "light" });
+    await page.goto(`${BASE_URL}/ajustes/apariencia`, { waitUntil: "load" });
+    await expect(page.getByRole("radio", { name: "Oscuro" })).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole("radio", { name: "Oscuro" }).click();
+    await expect.poll(async () => (await htmlState(page)).dataTheme).toBe("dark");
+    expect((await htmlState(page)).dark).toBe(true);
+
+    await page.getByRole("radio", { name: "Compacta" }).click();
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.getAttribute("data-density")))
+      .toBe("compacta");
+
+    const analitico = page.getByRole("radio", { name: "Analítico" });
+    if (await analitico.isEnabled()) {
+      await analitico.click();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.getAttribute("data-style")))
+        .toBe("analitico");
+      // Client navigation: the next page reads the same store, no reload.
+      await page.getByRole("link", { name: "Inicio" }).first().click();
+      await page.waitForURL(/\/inicio/);
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.getAttribute("data-style")))
+        .toBe("analitico");
+    }
+  });
+});
+
 test.describe("Apariencia — default mode before sign-in", () => {
   test("the login page renders light on a dark OS", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });

@@ -84,6 +84,12 @@ exports[`qk > builds every key shape 1`] = `
     "c1",
     "history",
   ],
+  "google.driveList": [
+    "google",
+    "drive-list",
+    "f1",
+    "",
+  ],
   "google.driveStatus": [
     "google",
     "drive-status",
@@ -157,6 +163,11 @@ exports[`qk > builds every key shape 1`] = `
     "me",
     "profile",
   ],
+  "me.reminderParse": [
+    "me",
+    "reminder-parse",
+    "mañana 9am",
+  ],
   "me.reminders": [
     "me",
     "reminders",
@@ -182,9 +193,35 @@ exports[`qk > builds every key shape 1`] = `
     "monday",
     "history",
   ],
+  "monday.imported": [
+    "monday",
+    "imported",
+    "r1",
+  ],
+  "monday.options": [
+    "monday",
+    "options",
+    "r1",
+  ],
+  "monday.positionSuggestion": [
+    "monday",
+    "position-suggestion",
+    "r1",
+    "u1",
+  ],
+  "monday.rollbackCheck": [
+    "monday",
+    "rollback-check",
+    "r1",
+  ],
   "monday.run": [
     "monday",
     "run",
+    "r1",
+  ],
+  "monday.source": [
+    "monday",
+    "source",
     "r1",
   ],
   "org.general": [
@@ -209,6 +246,10 @@ exports[`qk > builds every key shape 1`] = `
   "personas.equipo": [
     "personas",
     "equipo",
+  ],
+  "personas.positions": [
+    "personas",
+    "positions",
   ],
   "portal.files": [
     "portal",
@@ -441,6 +482,7 @@ exports[`qk > covers every key of the factory 1`] = `
   "me.gmail.threads",
   "me.gmail.thread",
   "me.reminders",
+  "me.reminderParse",
   "me.checklists",
   "me.notes",
   "me.vacations",
@@ -474,6 +516,7 @@ exports[`qk > covers every key of the factory 1`] = `
   "personas.counts",
   "personas.contacts",
   "personas.detail",
+  "personas.positions",
   "contacts.detail",
   "contacts.history",
   "biblioteca.links",
@@ -487,7 +530,13 @@ exports[`qk > covers every key of the factory 1`] = `
   "monday.run",
   "monday.history",
   "monday.choices",
+  "monday.source",
+  "monday.options",
+  "monday.imported",
+  "monday.rollbackCheck",
+  "monday.positionSuggestion",
   "google.driveStatus",
+  "google.driveList",
   "catalog.tramos",
   "catalog.workflows",
   "catalog.taskStatuses",

@@ -1,18 +1,21 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import { resetAssistantUi } from "@/lib/stores/assistant-ui-store";
 import axe from "axe-core";
 
-vi.mock("@/lib/actions/projects-actions", () => ({
-  fetchProjectAction: async () => ({ id: "p1", name: "Casa Roble" }),
+const PROJECT = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+vi.mock("@/lib/actions/page-data/asistente-actions", () => ({
+  lookupAssistantContextAction: async () => ({ id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", label: "Casa Roble" }),
+  fetchAssistantThreadAction: async () => null,
+  getAsistentePageData: async () => null,
 }));
-vi.mock("@/lib/actions/tasks-actions", () => ({ fetchTaskAction: async () => null }));
-vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffDetailAction: async () => null }));
 vi.mock("@/lib/actions/assistant-actions", () => ({
   fetchAssistantThreadsAction: async () => [],
-  fetchAssistantThreadAction: async () => {
-    throw new Error("NOT_FOUND");
-  },
+  deleteAssistantThreadAction: async () => ({ ok: true, data: undefined }),
 }));
 
 import { AssistantButton } from "../AssistantButton";
@@ -38,6 +41,7 @@ function applyTheme(themeId: string, mode: "light" | "dark") {
 const fetchMock = vi.fn();
 
 beforeEach(() => {
+  resetAssistantUi();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   Element.prototype.scrollIntoView = vi.fn();
@@ -62,11 +66,11 @@ describe("assistant accessibility", () => {
         fetchMock.mockResolvedValueOnce(
           uiMessageStream(approvalRequest("a1", "create_note", { title: "Compras de obra" })),
         );
-        render(
+        renderWithQueryClient(
           <AssistantSheet
             open
             onOpenChange={vi.fn()}
-            context={{ route: "/proyectos/p1", projectId: "p1" }}
+            context={{ route: `/proyectos/${PROJECT}`, projectId: PROJECT }}
           />,
         );
         expect(await screen.findByText("Viendo: Casa Roble")).toBeTruthy();

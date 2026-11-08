@@ -1,15 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import axe from "axe-core";
 import type { ReactNode } from "react";
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { documentToc, empresaDoc, empresaDocLinks } from "@/lib/biblioteca/catalog";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 
-import { bibliotecaFixture } from "./biblioteca.fixtures";
+import { bibliotecaFixture, seededBibliotecaClient } from "./biblioteca.fixtures";
 import { BibliotecaIndex } from "./BibliotecaIndex";
 import { BibliotecaSection } from "./BibliotecaSection";
 import { DocumentReader } from "./DocumentReader";
@@ -22,6 +24,10 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/actions/resources-actions", () => ({
   createResourceLinkAction: vi.fn(),
   deleteResourceLinkAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/biblioteca-actions", () => ({
+  getBibliotecaPageData: vi.fn(),
+  getMisVacacionesPageData: vi.fn(),
 }));
 vi.mock("@/lib/actions/preferences-actions", () => ({
   fetchMyPreferencesAction: vi.fn(),
@@ -59,20 +65,21 @@ const links = bibliotecaFixture();
 const manual = empresaDoc("manual-de-la-empresa")!;
 const parts = empresaDocLinks(links, manual.slug);
 
-const SCREENS: { name: string; node: () => ReactNode }[] = [
-  { name: "index", node: () => <BibliotecaIndex links={links} /> },
+const SCREENS: { name: string; client: () => QueryClient; node: () => ReactNode }[] = [
+  { name: "index", client: () => seededBibliotecaClient(null, links), node: () => <BibliotecaIndex /> },
   {
     name: "sección",
-    node: () => <BibliotecaSection section="formatos-obra" links={links} viewerId="staff-ana" canManageFavorites driveEnabled />,
+    client: () => seededBibliotecaClient("formatos-obra", links, { driveEnabled: true }),
+    node: () => <BibliotecaSection section="formatos-obra" />,
   },
   {
     name: "documento",
+    client: () => seededBibliotecaClient("empresa", links, { driveEnabled: true }),
     node: () => (
       <DocumentReader
         doc={parts[0]}
         toc={documentToc(parts, manual)}
         companyDoc={{ slug: manual.slug, title: manual.title, description: manual.description }}
-        driveEnabled
       />
     ),
   },
@@ -89,7 +96,9 @@ describe("Biblioteca accessibility", () => {
       it(`has no serious or critical axe violations (${theme}, ${mode}, every style)`, async () => {
         for (const style of STYLES) {
           for (const screen of SCREENS) {
-            const { container, unmount } = render(themed(theme, mode, style, screen.node()));
+            const { container, unmount } = renderWithQueryClient(themed(theme, mode, style, screen.node()), {
+              client: screen.client(),
+            });
             expect({ screen: screen.name, style, violations: await seriousViolations(container) }).toEqual({
               screen: screen.name,
               style,

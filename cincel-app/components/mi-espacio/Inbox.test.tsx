@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -15,21 +15,36 @@ import type { GmailThreadSummary, NotificationItem, PresentationStyle } from "@/
 const mocks = vi.hoisted(() => ({
   fetchNotifications: vi.fn(),
   markRead: vi.fn(),
+  fetchStatus: vi.fn(),
   fetchThreads: vi.fn(),
   linkThread: vi.fn(),
   createTask: vi.fn(),
   fetchProjects: vi.fn(),
+  fetchProjectOptions: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   push: vi.fn(),
+  refresh: vi.fn(),
   style: { current: "visual" as PresentationStyle },
+  /** Re-renders `useSearchParams` readers after `history.replaceState`, as the App Router does. */
+  urlListeners: new Set<() => void>(),
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mocks.push, replace: vi.fn(), refresh: vi.fn() }),
-  usePathname: () => "/mi-espacio",
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock("next/navigation", async () => {
+  const React = await import("react");
+  const subscribe = (listener: () => void) => {
+    mocks.urlListeners.add(listener);
+    return () => mocks.urlListeners.delete(listener);
+  };
+  return {
+    useRouter: () => ({ push: mocks.push, replace: vi.fn(), refresh: mocks.refresh }),
+    usePathname: () => "/mi-espacio",
+    useSearchParams: () => {
+      const search = React.useSyncExternalStore(subscribe, () => window.location.search);
+      return new URLSearchParams(search);
+    },
+  };
+});
 // Plain anchors: clicks run the handlers without a router navigation.
 vi.mock("next/link", () => ({
   default: (props: { href: string; children?: ReactNode; onClick?: (e: MouseEvent<HTMLAnchorElement>) => void } & Record<string, unknown>) => {
@@ -55,11 +70,30 @@ vi.mock("@/lib/actions/notifications-actions", () => ({
   markNotificationsReadAction: mocks.markRead,
 }));
 vi.mock("@/lib/actions/gmail-actions", () => ({
+  fetchGmailStatusAction: mocks.fetchStatus,
   fetchGmailThreadsAction: mocks.fetchThreads,
+  fetchGmailThreadAction: vi.fn(),
+  markGmailThreadReadAction: vi.fn(),
   linkGmailThreadToProjectAction: mocks.linkThread,
   createTaskFromGmailThreadAction: mocks.createTask,
 }));
+// The full portfolio must never load for name chips.
 vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectsAction: mocks.fetchProjects }));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogProjectOptions: mocks.fetchProjectOptions,
+  fetchCatalogWorkflows: vi.fn(),
+  fetchCatalogTaskStatuses: vi.fn(),
+  fetchCatalogStaff: vi.fn(),
+  fetchCatalogAssignableStaff: vi.fn(),
+  fetchCatalogProjectSpaces: vi.fn(),
+  fetchCatalogContacts: vi.fn(),
+}));
+vi.mock("@/lib/actions/my-space-actions", () => ({ fetchRemindersAction: vi.fn() }));
+vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
+  getMiEspacioPageData: vi.fn(),
+  fetchMiEspacioNotesPage: vi.fn(),
+  fetchMiEspacioChecklistsPage: vi.fn(),
+}));
 // The owning phase flips these; the Bandeja behavior is tested with them on.
 vi.mock("@/lib/actions/notifications-actions.flags", () => ({
   IMPLEMENTED: new Proxy({} as Record<string, boolean>, { get: () => true }),
@@ -114,11 +148,16 @@ vi.mock("@/components/widgets/RecordTable", () => ({
   },
 }));
 
+import type { QueryClient } from "@tanstack/react-query";
+
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { Inbox, INBOX_POLL_MS, type InboxProps } from "@/components/mi-espacio/Inbox";
-import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import type { InboxTab } from "@/lib/my-space/inbox";
 import { qk } from "@/lib/query/keys";
-import { createTestQueryClient } from "@/lib/query/test-utils";
+import { seedMiEspacio, type NotificationsData } from "@/lib/query/options/mi-espacio";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { MiEspacioGmail } from "@/lib/types/mi-espacio";
+import type { NotificationsPage } from "@/lib/types/redesign";
 import type { ShellBadges } from "@/lib/types/shell";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
@@ -173,7 +212,10 @@ const T_READ: GmailThreadSummary = {
 
 const CONNECTED = { connected: true, scopeOk: true, lastSyncedAt: minutesAgo(5), lastError: null };
 
-function baseProps(over: Partial<InboxProps> = {}): InboxProps {
+/** What the page seeds: the Bandeja's first pages, the URL tab and the sidebar badge. */
+type Seed = { notifications: NotificationsPage; gmail: MiEspacioGmail; tab: InboxTab };
+
+function baseSeed(over: Partial<Seed> = {}): Seed {
   return {
     notifications: { items: [N_ASSIGN, N_MENTION, N_READ], nextCursor: null, unreadCount: 2 },
     gmail: { status: CONNECTED, threads: [T_UNREAD, T_READ], nextCursor: null },
@@ -182,51 +224,80 @@ function baseProps(over: Partial<InboxProps> = {}): InboxProps {
   };
 }
 
-/** The cache the shell hydrates; the Inbox patches its `shell.badges` unread count. */
-let client: QueryClient = createTestQueryClient();
-
-/** The Mi espacio badge's unread count, as the sidebar reads it. */
-function readBandejaUnread(): number | undefined {
-  return client.getQueryData<ShellBadges>(qk.shell.badges())?.bandeja.unreadCount;
+function setTab(tab: InboxTab) {
+  window.history.replaceState(null, "", tab === "todo" ? "/mi-espacio" : `/mi-espacio?bandeja=${tab}`);
 }
 
-function withClient(ui: ReactNode) {
-  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+function seededClient(seed: Seed): QueryClient {
+  const client = createTestQueryClient();
+  seedMiEspacio(client, {
+    notifications: seed.notifications,
+    gmail: seed.gmail,
+    reminders: [],
+    checklists: [],
+    checklistsCursor: null,
+    notes: [],
+    notesCursor: null,
+  });
+  client.setQueryData<ShellBadges>(qk.shell.badges(), {
+    tareasOpen: 4,
+    bandeja: { unreadCount: seed.notifications.unreadCount },
+  });
+  return client;
 }
 
-function renderInbox(over: Partial<InboxProps> = {}, style: PresentationStyle = "visual") {
+function renderInbox(over: Partial<Seed> = {}, style: PresentationStyle = "visual", props: InboxProps = {}) {
   mocks.style.current = style;
-  return render(
-    withClient(
-      <StyleProvider style={style} scope="staff">
-        <Inbox {...baseProps(over)} />
-      </StyleProvider>,
-    ),
+  const seed = baseSeed(over);
+  setTab(seed.tab);
+  const client = seededClient(seed);
+  const view = renderWithQueryClient(
+    <StyleProvider style={style} scope="staff">
+      <Inbox {...props} />
+    </StyleProvider>,
+    { client },
   );
+  const badge = () => client.getQueryData<ShellBadges>(qk.shell.badges())?.bandeja.unreadCount;
+  return { ...view, client, badge };
+}
+
+/** TanStack Query delivers a fetched result to React on a scheduler timer: let 1 ms of the fake clock run it. */
+async function flushQueryNotify() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
+  });
 }
 
 function setVisibility(state: "visible" | "hidden") {
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
-  document.dispatchEvent(new Event("visibilitychange"));
+  // TanStack's focus manager listens on window.
+  window.dispatchEvent(new Event("visibilitychange"));
 }
 
+const realReplaceState = window.history.replaceState.bind(window.history);
+
 beforeEach(() => {
-  mocks.fetchProjects.mockResolvedValue([
-    { id: "p1", name: "Casa Lomas", status: "activo" },
-    { id: "p2", name: "Depto Roma", status: "activo" },
+  mocks.fetchProjectOptions.mockResolvedValue([
+    { id: "p1", name: "Casa Lomas", status: "activo", currentWorkflowId: null },
+    { id: "p2", name: "Depto Roma", status: "activo", currentWorkflowId: null },
   ]);
-  mocks.fetchNotifications.mockResolvedValue({ items: [], nextCursor: null, unreadCount: 2 });
+  mocks.fetchNotifications.mockResolvedValue({ items: [N_ASSIGN, N_MENTION, N_READ], nextCursor: null, unreadCount: 2 });
+  mocks.fetchStatus.mockResolvedValue(CONNECTED);
+  mocks.fetchThreads.mockResolvedValue({ threads: [T_UNREAD, T_READ], nextCursor: null });
   mocks.markRead.mockResolvedValue({ unreadCount: 1 });
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
-  client = createTestQueryClient();
-  client.setQueryData<ShellBadges>(qk.shell.badges(), { tareasOpen: 0, bandeja: { unreadCount: 2, dueReminders: [] } });
+  window.history.replaceState = (...args: Parameters<History["replaceState"]>) => {
+    realReplaceState(...args);
+    for (const listener of mocks.urlListeners) listener();
+  };
 });
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.clearAllMocks();
-  client.clear();
+  window.history.replaceState = realReplaceState;
+  realReplaceState(null, "", "/mi-espacio");
 });
 
 describe("Inbox tabs and counts", () => {
@@ -250,18 +321,37 @@ describe("Inbox tabs and counts", () => {
     expect(ids).toEqual(["row-n:n1", "row-g:t1", "row-n:n2", "row-n:n3", "row-g:t2"]);
   });
 
-  it("Menciones lists only mention notifications", () => {
+  it("Menciones (from ?bandeja=menciones) lists only mention notifications", () => {
     renderInbox({ tab: "menciones" });
     expect(screen.getByText("Luis te mencionó en Cocina")).toBeTruthy();
     expect(screen.queryByText("Te asignaron Plano eléctrico")).toBeNull();
     expect(screen.queryByText("Cotización Casa Lomas")).toBeNull();
   });
 
-  it("clicking a tab filters the rows", () => {
+  it("clicking a tab only changes the URL (no navigation, no refresh) and the rows follow it", () => {
     renderInbox();
     fireEvent.click(within(screen.getByRole("navigation")).getByText("Notificaciones"));
+    expect(window.location.search).toBe("?bandeja=notificaciones");
     expect(screen.queryByText("Cotización Casa Lomas")).toBeNull();
     expect(screen.getByText("Te asignaron Plano eléctrico")).toBeTruthy();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+
+    fireEvent.click(within(screen.getByRole("navigation")).getByText("Todo"));
+    expect(window.location.search).toBe("");
+    expect(screen.getByText("Cotización Casa Lomas")).toBeTruthy();
+  });
+
+  it("the tab is the URL only: a URL change outside the tabs moves the active tab", () => {
+    renderInbox();
+    act(() => window.history.replaceState(null, "", "/mi-espacio?bandeja=menciones"));
+    const nav = screen.getByRole("navigation", { name: "Pestañas de la bandeja" });
+    expect(within(nav).getByText("Menciones").closest("a")?.getAttribute("aria-current")).toBe("page");
+    expect(screen.queryByText("Te asignaron Plano eléctrico")).toBeNull();
+    // No local copy of the tab is kept.
+    const src = readFileSync(join(__dirname, "Inbox.tsx"), "utf8");
+    expect(src).not.toMatch(/useState<InboxTab>/);
+    expect(src).not.toMatch(/props\.tab/);
   });
 
   it("the Gmail tab shows Conectar Gmail when Gmail is not connected", () => {
@@ -284,6 +374,7 @@ describe("Gmail status chip and footer", () => {
   });
 
   it("links to Ajustes › Integraciones when not connected", () => {
+    mocks.fetchStatus.mockResolvedValue({ connected: false, scopeOk: false, lastSyncedAt: null, lastError: null });
     renderInbox({ gmail: null });
     const links = screen.getAllByRole("link", { name: "Conectar Gmail" });
     expect(links[0].getAttribute("href")).toBe("/ajustes/integraciones");
@@ -301,19 +392,30 @@ describe("Gmail status chip and footer", () => {
 });
 
 describe("Inbox mark read", () => {
-  it("clicking a notification marks it read, drops the unread weight and updates the badge", async () => {
-    renderInbox();
+  it("clicking a notification marks it read, drops the unread weight and patches shell.badges", async () => {
+    const { badge } = renderInbox();
     const link = screen.getByRole("link", { name: /Te asignaron Plano eléctrico/ });
     expect(link.getAttribute("href")).toBe("/tareas?tarea=n1");
     expect(link.className).toContain("font-semibold");
 
     fireEvent.click(link);
 
-    expect(mocks.markRead).toHaveBeenCalledWith(["n1"]);
-    await waitFor(() => expect(readBandejaUnread()).toBe(1));
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith(["n1"]));
+    expect(mocks.markRead).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(badge()).toBe(1));
     const after = screen.getByRole("link", { name: /Te asignaron Plano eléctrico/ });
     expect(after.className).not.toContain("font-semibold");
     expect(screen.getByTestId("inbox-count-notificaciones").textContent).toContain("1");
+  });
+
+  it("writes the server's unread count from the result into the Bandeja and the badge", async () => {
+    mocks.markRead.mockResolvedValue({ ok: true, data: { unreadCount: 0 } });
+    const { badge, client } = renderInbox();
+    fireEvent.click(screen.getByRole("link", { name: /Te asignaron Plano eléctrico/ }));
+    await waitFor(() => expect(badge()).toBe(0));
+    const pages = client.getQueryData<NotificationsData>(qk.me.notifications({}))!.pages;
+    expect(pages.every((p) => p.unreadCount === 0)).toBe(true);
+    expect(screen.queryByTestId("inbox-count-notificaciones")).toBeNull();
   });
 
   it("does not call the action again for a read notification", () => {
@@ -324,29 +426,36 @@ describe("Inbox mark read", () => {
 
   it("rolls back and shows the error copy when marking fails", async () => {
     mocks.markRead.mockRejectedValueOnce(new Error("FORBIDDEN"));
-    renderInbox();
+    const view = renderInbox();
     fireEvent.click(screen.getByRole("link", { name: /Te asignaron Plano eléctrico/ }));
     await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción."));
     expect(screen.getByRole("link", { name: /Te asignaron Plano eléctrico/ }).className).toContain("font-semibold");
-    expect(readBandejaUnread()).toBe(2);
+    expect(view.badge()).toBe(2);
+    expect(screen.getByTestId("inbox-count-notificaciones").textContent).toContain("2");
   });
 });
 
-describe("Inbox polling", () => {
-  it("polls every 60 s while visible, pauses when hidden and updates the sidebar badge", async () => {
+describe("Inbox refresh (me.notifications refetchInterval)", () => {
+  it("has no setInterval of its own", () => {
+    const src = readFileSync(join(__dirname, "Inbox.tsx"), "utf8");
+    expect(src).not.toMatch(/setInterval|visibilitychange|publishBandejaUnread|fetchProjectsAction/);
+  });
+
+  it("refetches every 60 s while visible, pauses when hidden and patches shell.badges", async () => {
     vi.useFakeTimers();
     const fresh = notification({ id: "n9", title: "Recordatorio: llamar a Juanma", kind: "recordatorio", createdAt: new Date().toISOString() });
-    mocks.fetchNotifications.mockResolvedValue({ items: [N_ASSIGN, N_MENTION, fresh], nextCursor: null, unreadCount: 3 });
-    renderInbox();
+    mocks.fetchNotifications.mockResolvedValue({ items: [fresh, N_ASSIGN, N_MENTION, N_READ], nextCursor: null, unreadCount: 3 });
+    const { badge } = renderInbox();
 
     expect(mocks.fetchNotifications).not.toHaveBeenCalled();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(INBOX_POLL_MS);
     });
+    await flushQueryNotify();
     expect(mocks.fetchNotifications).toHaveBeenCalledTimes(1);
-    expect(mocks.fetchNotifications).toHaveBeenCalledWith({ unreadOnly: true });
+    expect(mocks.fetchNotifications).toHaveBeenCalledWith({});
     expect(screen.getByText("Recordatorio: llamar a Juanma")).toBeTruthy();
-    expect(readBandejaUnread()).toBe(3);
+    expect(badge()).toBe(3);
     expect(screen.getByTestId("inbox-count-notificaciones").textContent).toContain("3");
 
     await act(async () => {
@@ -367,7 +476,7 @@ describe("Inbox polling", () => {
     expect(mocks.fetchNotifications).toHaveBeenCalledTimes(3);
   });
 
-  it("does not start polling while the document is hidden", async () => {
+  it("does not refetch while the document is hidden", async () => {
     vi.useFakeTimers();
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
     renderInbox();
@@ -377,13 +486,18 @@ describe("Inbox polling", () => {
     expect(mocks.fetchNotifications).not.toHaveBeenCalled();
   });
 
-  it("marks loaded rows read when a complete unread page no longer has them", async () => {
+  it("a refetch shows rows read elsewhere as read", async () => {
     vi.useFakeTimers();
-    mocks.fetchNotifications.mockResolvedValue({ items: [N_MENTION], nextCursor: null, unreadCount: 1 });
+    mocks.fetchNotifications.mockResolvedValue({
+      items: [{ ...N_ASSIGN, readAt: new Date().toISOString() }, N_MENTION, N_READ],
+      nextCursor: null,
+      unreadCount: 1,
+    });
     renderInbox();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(INBOX_POLL_MS);
     });
+    await flushQueryNotify();
     expect(screen.getByRole("link", { name: /Te asignaron Plano eléctrico/ }).className).not.toContain("font-semibold");
   });
 });
@@ -404,7 +518,11 @@ describe("Inbox load more", () => {
     await waitFor(() => expect(screen.getByText("Correo viejo")).toBeTruthy());
     expect(mocks.fetchNotifications).toHaveBeenCalledWith({ cursor: "c1" });
     expect(mocks.fetchThreads).toHaveBeenCalledWith({ cursor: "g1" });
+    expect(mocks.fetchNotifications).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchThreads).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Aviso viejo")).toBeTruthy();
+    // The earlier page stays; the new one appends after it.
+    expect(screen.getByText("Te asignaron Plano eléctrico")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Cargar más" })).toBeNull();
   });
 });
@@ -412,20 +530,12 @@ describe("Inbox load more", () => {
 describe("Inbox Gmail rows", () => {
   it("opens the reader for a Gmail row", () => {
     const onOpenThread = vi.fn();
-    mocks.style.current = "visual";
-    render(
-      withClient(
-        <StyleProvider style="visual" scope="staff">
-          <Inbox {...baseProps()} onOpenThread={onOpenThread} />
-        </StyleProvider>,
-      ),
-    );
+    renderInbox({}, "visual", { onOpenThread });
     fireEvent.click(screen.getByRole("button", { name: /Cotización Casa Lomas/ }));
     expect(onOpenThread).toHaveBeenCalledWith("t1");
   });
 
   it("without a handler, opening a thread sets ?correo= on the URL", () => {
-    window.history.replaceState(null, "", "/mi-espacio");
     renderInbox();
     fireEvent.click(screen.getByRole("button", { name: /Cotización Casa Lomas/ }));
     expect(window.location.search).toBe("?correo=t1");
@@ -439,10 +549,15 @@ describe("Inbox Gmail rows", () => {
     expect(within(row).getByRole("button", { name: "Vincular a proyecto" })).toBeTruthy();
     // Notification rows have no Gmail actions.
     expect(within(screen.getByTestId("row-n:n1")).queryByRole("button", { name: "Crear tarea" })).toBeNull();
+    // Names come from the light catalog, loaded once.
+    expect(mocks.fetchProjectOptions).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchProjects).not.toHaveBeenCalled();
   });
 
   it("linking shows the bitácora note first, then links to the chosen project", async () => {
     mocks.linkThread.mockResolvedValueOnce(undefined);
+    // The refetch after the link returns the server's linked thread.
+    mocks.fetchThreads.mockResolvedValue({ threads: [{ ...T_UNREAD, projectId: "p1" }, T_READ], nextCursor: null });
     renderInbox();
     const row = screen.getByTestId("row-g:t1");
     fireEvent.click(within(row).getByRole("button", { name: "Vincular a proyecto" }));

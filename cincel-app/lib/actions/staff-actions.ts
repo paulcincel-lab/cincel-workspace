@@ -3,20 +3,26 @@
 import { toActionResult } from "@/lib/actions/action-result";
 import type { ActionResult } from "@/lib/types/schedule";
 import { revalidatePath } from "next/cache";
-import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
-import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
+import { db } from "@/lib/db/client";
+import { MemberEditorInputSchema, type MemberEditorInput } from "@/lib/equipo/member-input";
 import {
   canViewSensitiveStaffData,
   resolvePositionsCapabilities,
   resolveTeamCapabilities,
 } from "@/lib/auth/permissions";
+import type { FlowExecutor } from "@/lib/project-flow/db";
 import { flowError } from "@/lib/project-flow/errors";
 import * as positionsRepository from "@/lib/repositories/positions-repository";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
-import { GOOGLE_MANAGED_REFUSAL, isGoogleManagedRefusal, type GoogleManagedRefusal } from "@/lib/types/workspace-access";
+import {
+  GOOGLE_MANAGED_ERROR,
+  GOOGLE_MANAGED_REFUSAL,
+  isGoogleManagedRefusal,
+  type GoogleManagedRefusal,
+} from "@/lib/types/workspace-access";
 import { UuidArraySchema, UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
 const normalizeRole = (role: string | null | undefined) => role?.trim() || null;
@@ -27,9 +33,13 @@ const normalizeRole = (role: string | null | undefined) => role?.trim() || null;
  * current value back (a full form save) is not a change. The refusal is
  * returned, not thrown, so the client can show its message.
  */
-async function isRoleLocked(staffId: string, patch: Partial<StaffInput>): Promise<boolean> {
+async function isRoleLocked(
+  staffId: string,
+  patch: Partial<StaffInput>,
+  executor: FlowExecutor = db
+): Promise<boolean> {
   if (patch.role === undefined) return false;
-  const lock = await staffRepository.getStaffRoleLock(staffId);
+  const lock = await staffRepository.getStaffRoleLock(staffId, executor);
   return Boolean(lock?.googleManaged && normalizeRole(patch.role) !== normalizeRole(lock.role));
 }
 
@@ -89,7 +99,6 @@ async function createStaffActionImpl(input: StaffInput): Promise<Staff> {
     throw new Error("FORBIDDEN: staff create");
   }
   const row = await staffRepository.createStaff(input, user.member.id);
-  revalidatePersonasScreen(["equipo"]);
   return row;
 }
 
@@ -142,7 +151,6 @@ async function updateStaffActionImpl(
   if (ownEdit) assertOwnStaffPatch(patch);
   if (await isRoleLocked(id, patch)) return GOOGLE_MANAGED_REFUSAL;
   const row = await staffRepository.updateStaff(id, patch, user.member.id);
-  revalidatePersonasScreen(["equipo"]);
   // The name shows in the shell (avatar menu) on every page.
   if (ownEdit) revalidatePath("/", "layout");
   return row;
@@ -154,7 +162,6 @@ export async function setStaffActiveAction(id: string, active: boolean): Promise
     throw new Error("FORBIDDEN: staff toggle active");
   }
   const row = await staffRepository.setStaffActive(id, active, user.member.id);
-  revalidatePersonasScreen(["equipo"]);
   return row;
 }
 
@@ -164,7 +171,6 @@ export async function deleteStaffAction(id: string): Promise<void> {
     throw new Error("FORBIDDEN: staff delete");
   }
   await staffRepository.softDeleteStaff(id, user.member.id);
-  revalidatePersonasScreen(["equipo"]);
 }
 
 export async function upsertStaffProfileAction(
@@ -183,15 +189,14 @@ async function upsertStaffProfileActionImpl(
     if (signature !== null && (typeof signature !== "string" || signature.length > OWN_SIGNATURE_MAX)) {
       throw new Error("INVALID: emailSignature");
     }
+    // No revalidation: Ajustes › Perfil writes the result into `qk.ajustes.page('perfil')`.
     const row = await staffRepository.setStaffEmailSignature(staffId, signature ?? null);
-    revalidateAjustesScreen("perfil");
     return row;
   }
   if (!resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff profile edit");
   }
   const row = await staffRepository.upsertStaffProfile(staffId, profile);
-  revalidatePersonasScreen(["equipo"]);
   return row;
 }
 
@@ -210,7 +215,6 @@ async function setStaffCredentialActionImpl(
     throw new Error("FORBIDDEN: staff access");
   }
   await staffRepository.setStaffCredential(staffId, options);
-  revalidatePersonasScreen(["equipo"]);
 }
 
 /**
@@ -223,7 +227,6 @@ export async function reorderStaffAction(orderedIds: string[]): Promise<void> {
     throw new Error("FORBIDDEN: staff reorder");
   }
   await staffRepository.reorderStaff(orderedIds);
-  revalidatePersonasScreen(["equipo"]);
 }
 
 /**
@@ -256,6 +259,87 @@ async function setStaffPositionsActionImpl(
   }
   // The repository replaces only the manual rows; puestos held from Workspace stay.
   await positionsRepository.setStaffPositions(id, wanted);
-  revalidatePersonasScreen(["equipo"]);
-  revalidateAjustesScreen("puestos");
+}
+
+/**
+ * True when Workspace manages this person's puestos (BE §7.2) and `wanted`
+ * differs from the puestos Workspace gave them.
+ */
+async function isPositionsLocked(staffId: string, wanted: string[], executor: FlowExecutor): Promise<boolean> {
+  if (!(await staffRepository.googleManagedStaffIds([staffId], executor)).has(staffId)) return false;
+  if (!(await staffRepository.hasPositionGroupMappings(executor))) return false;
+  const workspace = new Set(await staffRepository.listStaffPositionIds(staffId, "workspace", executor));
+  return workspace.size !== wanted.length || wanted.some((p) => !workspace.has(p));
+}
+
+/**
+ * The collaborator editor's save (Query Migration 6): create or update the
+ * person, their profile, their manual puestos and their system access in
+ * **one** transaction, so a failure in any step leaves nothing saved.
+ *
+ * Auth: `team.canCreateCollaborator` to create, `team.canEditCollaborator` to
+ * edit, plus `team.canChangeCollaboratorAccess` when `credential` is sent.
+ * A role or puestos change on a Google-managed person fails with the
+ * `GOOGLE_MANAGED_REFUSAL` copy. Returns the saved `StaffDetail`. Errors:
+ * FORBIDDEN, INVALID, NOT_FOUND (unknown staff or puesto).
+ *
+ * Revalidation: only the shell (`'/', 'layout'`) when the viewer renamed
+ * themself; the Personas caches are invalidated by the caller's mutation.
+ */
+export async function saveMemberAction(input: MemberEditorInput): Promise<ActionResult<StaffDetail>> {
+  return toActionResult(() => saveMemberActionImpl(input));
+}
+
+async function saveMemberActionImpl(input: MemberEditorInput): Promise<StaffDetail> {
+  const user = await requireCapabilityUser();
+  const caps = resolveTeamCapabilities(user);
+  const parsed = parseInput(MemberEditorInputSchema, input);
+  if (parsed.staffId === null && !caps.canCreateCollaborator) throw new Error("FORBIDDEN: staff create");
+  if (parsed.staffId !== null && !caps.canEditCollaborator) throw new Error("FORBIDDEN: staff edit");
+  if (parsed.credential && !caps.canChangeCollaboratorAccess) throw new Error("FORBIDDEN: staff access");
+
+  const fields: StaffInput = {
+    name: parsed.staff.name,
+    lastName: parsed.staff.lastName,
+    ...(parsed.staff.role !== undefined ? { role: parsed.staff.role } : {}),
+    email: parsed.staff.email,
+    phone: parsed.staff.phone,
+    capacity: parsed.staff.capacity,
+    availability: parsed.staff.availability,
+  };
+
+  let renamedSelf = false;
+  const staffId = await db.transaction(async (tx) => {
+    let id: string;
+    if (parsed.staffId === null) {
+      id = (await staffRepository.createStaff(fields, user.member.id, tx)).id;
+    } else {
+      id = parsed.staffId;
+      const before = await staffRepository.getStaffRoleLock(id, tx);
+      if (!before) throw new Error("NOT_FOUND: staff");
+      if (await isRoleLocked(id, fields, tx)) throw new Error(GOOGLE_MANAGED_ERROR);
+      await staffRepository.updateStaff(id, fields, user.member.id, tx);
+      renamedSelf = id === user.member.id;
+    }
+
+    await staffRepository.upsertStaffProfile(id, parsed.profile, tx);
+
+    if (parsed.positionIds) {
+      const wanted = [...new Set(parsed.positionIds)];
+      if (!(await staffRepository.staffExists(id, tx))) throw flowError("NOT_FOUND", "staff");
+      if (await isPositionsLocked(id, wanted, tx)) throw new Error(GOOGLE_MANAGED_ERROR);
+      await positionsRepository.setStaffPositions(id, wanted, tx);
+    }
+
+    if (parsed.credential) {
+      await staffRepository.setStaffCredential(id, parsed.credential, tx);
+    }
+    return id;
+  });
+
+  // The viewer's own name shows in the shell (avatar menu) on every page.
+  if (renamedSelf) revalidatePath("/", "layout");
+  const saved = await staffRepository.getStaff(staffId);
+  if (!saved) throw new Error("NOT_FOUND: staff");
+  return saved;
 }

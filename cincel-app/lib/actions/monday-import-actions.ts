@@ -45,7 +45,6 @@
  * never in storage. It is never stored, logged or returned. Files excluded with Drive not configured is
  * allowed: apply ends the batch without Drive and the folders stay pending for the backfill.
  */
-import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
 import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
 import { z } from "zod";
 
@@ -399,7 +398,6 @@ export async function saveMondayStatusMapAction(
     const statusMap: MondayStatusMap = parse(MondayStatusMapSchema, entries, "statusMap");
     if (!(await statusMapStatusesExist(db, statusMap))) throw new WizardError("STATUS_NOT_FOUND");
     await saveStatusMap(db, statusMap);
-    revalidateAjustesScreen("importar-monday");
     return { statusMap };
   });
 }

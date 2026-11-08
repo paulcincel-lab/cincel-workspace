@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
@@ -35,7 +34,15 @@ import {
   updateGroupMappingAction,
 } from "@/lib/actions/workspace-access-actions";
 import { OFFICIAL_CINCEL_ROLES } from "@/lib/data/roles";
-import type { GroupMapping, GroupMappingError, GroupMappingKind } from "@/lib/types/workspace-access";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import type {
+  GroupMapping,
+  GroupMappingError,
+  GroupMappingInput,
+  GroupMappingKind,
+  GroupMappingResult,
+} from "@/lib/types/workspace-access";
 
 export const GROUP_MAPPING_ERROR_MESSAGES: Record<GroupMappingError, string> = {
   group_not_found: "El grupo no existe",
@@ -46,6 +53,32 @@ export const GROUP_MAPPING_ERROR_MESSAGES: Record<GroupMappingError, string> = {
 };
 
 const KIND_LABELS: Record<GroupMappingKind, string> = { role: "Rol", position: "Puesto" };
+
+/**
+ * What a mapping change touches (plan §3, Google): the Google page itself,
+ * Puestos (`googleManaged`) and the staff catalog (roles from groups).
+ */
+export const GROUP_MAPPING_INVALIDATIONS = [qk.ajustes.page("google"), qk.ajustes.page("puestos"), qk.catalog.staff()];
+
+/**
+ * The copy of a failed mapping mutation: the action's `{ ok: false, error }`
+ * code (thrown by `useActionMutation`) or, for anything else (a stripped
+ * production error), `fallback`.
+ */
+export function groupMappingErrorText(err: unknown, fallback: string): string {
+  const code = err instanceof Error ? err.message : "";
+  return Object.hasOwn(GROUP_MAPPING_ERROR_MESSAGES, code)
+    ? GROUP_MAPPING_ERROR_MESSAGES[code as GroupMappingError]
+    : fallback;
+}
+
+/** Create or update one mapping; the result's failure codes keep their own copy. */
+async function saveGroupMapping(vars: { id: string | null; input: GroupMappingInput }): Promise<GroupMappingResult> {
+  return vars.id ? updateGroupMappingAction(vars.id, vars.input) : createGroupMappingAction(vars.input);
+}
+
+/** The copy is shown by the caller (`onError` of `mutate`), never as a toast. */
+const SILENT = () => undefined;
 
 type PositionOption = { id: string; name: string };
 
@@ -84,8 +117,15 @@ export const GOOGLE_GROUPS_DESCRIPTION = "Qué grupo de Google Workspace da cada
 
 /** Configuración → Google, section 2 "Grupos de Google" (FE §2.5). */
 export function GoogleGroupMappings({ mappings, positions, bare = false }: GoogleGroupMappingsProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const saveMutation = useActionMutation(saveGroupMapping, {
+    invalidate: GROUP_MAPPING_INVALIDATIONS,
+    onFormError: SILENT,
+  });
+  const deleteMutation = useActionMutation(deleteGroupMappingAction, {
+    invalidate: GROUP_MAPPING_INVALIDATIONS,
+    onFormError: SILENT,
+  });
+  const isPending = saveMutation.isPending || deleteMutation.isPending;
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<GroupMapping | null>(null);
   const [draft, setDraft] = useState<MappingDraft>(EMPTY_DRAFT);
@@ -120,41 +160,25 @@ export function GoogleGroupMappings({ mappings, positions, bare = false }: Googl
             rank: 0,
           };
     setFormError("");
-    startTransition(async () => {
-      try {
-        const result = editing
-          ? await updateGroupMappingAction(editing.id, input)
-          : await createGroupMappingAction(input);
-        if (!result.ok) {
-          setFormError(GROUP_MAPPING_ERROR_MESSAGES[result.error]);
-          return;
-        }
-        setSheetOpen(false);
-        setEditing(null);
-        router.refresh();
-      } catch {
-        setFormError("No se pudo guardar el grupo.");
-      }
-    });
+    saveMutation.mutate(
+      { id: editing?.id ?? null, input },
+      {
+        onSuccess: () => {
+          setSheetOpen(false);
+          setEditing(null);
+        },
+        onError: (err) => setFormError(groupMappingErrorText(err, "No se pudo guardar el grupo.")),
+      },
+    );
   }
 
   function confirmDelete() {
     const target = deleting;
     if (!target) return;
     setListError("");
-    startTransition(async () => {
-      try {
-        const result = await deleteGroupMappingAction(target.id);
-        if (!result.ok) {
-          setListError(GROUP_MAPPING_ERROR_MESSAGES[result.error]);
-        } else {
-          router.refresh();
-        }
-      } catch {
-        setListError("No se pudo eliminar el grupo.");
-      } finally {
-        setDeleting(null);
-      }
+    deleteMutation.mutate(target.id, {
+      onError: (err) => setListError(groupMappingErrorText(err, "No se pudo eliminar el grupo.")),
+      onSettled: () => setDeleting(null),
     });
   }
 

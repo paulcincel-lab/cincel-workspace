@@ -8,7 +8,7 @@ const h = vi.hoisted(() => ({
   client: null as unknown,
   canCreateActivity: true,
   fetchStaffAction: vi.fn(),
-  fetchProjectsAction: vi.fn(),
+  listViewerProjects: vi.fn(),
   fetchProjectAction: vi.fn(),
   createUserTaskAction: vi.fn(),
 }));
@@ -26,8 +26,8 @@ vi.mock("@/lib/auth/permissions", () => ({
   resolveActivitiesCapabilities: () => ({ canCreateActivity: h.canCreateActivity }),
 }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffAction: h.fetchStaffAction }));
+vi.mock("@/lib/assistant/reads", () => ({ listViewerProjects: h.listViewerProjects }));
 vi.mock("@/lib/actions/projects-actions", () => ({
-  fetchProjectsAction: h.fetchProjectsAction,
   fetchProjectAction: h.fetchProjectAction,
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({ createUserTaskAction: h.createUserTaskAction }));
@@ -125,7 +125,7 @@ beforeEach(() => {
   h.client = null;
   h.canCreateActivity = true;
   h.fetchStaffAction.mockReset().mockResolvedValue(STAFF);
-  h.fetchProjectsAction.mockReset().mockResolvedValue([PROJECT]);
+  h.listViewerProjects.mockReset().mockResolvedValue([PROJECT]);
   h.fetchProjectAction.mockReset().mockResolvedValue(PROJECT);
   h.createUserTaskAction
     .mockReset()

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { PositionEditorDrawer, type PositionDraft } from "@/components/configuracion/PositionEditorDrawer";
@@ -18,18 +19,20 @@ import {
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   createPositionAction,
   deletePositionAction,
-  fetchPositionsAction,
   reorderPositionsAction,
   setPositionPhasesAction,
   updatePositionAction,
 } from "@/lib/actions/positions-actions";
-import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { ajustesPuestosOptions, type AjustesPuestosPageData } from "@/lib/query/options/ajustes";
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
-import type { Position, WorkflowDetail } from "@/lib/types/core";
+import type { Position } from "@/lib/types/core";
 
 const ERROR_COPY: Record<string, string> = {
   FORBIDDEN: "No tienes permiso para realizar esta acción.",
@@ -50,14 +53,57 @@ function integrantesLabel(count: number): string {
   return count === 1 ? "1 integrante lo perderá." : `${count} integrantes lo perderán.`;
 }
 
-interface PuestosClientProps {
-  initialPositions: Position[];
-  initialWorkflows: WorkflowDetail[];
+/**
+ * What a puesto change makes stale (plan §3, Positions): this page, the
+ * Personas team view (puestos per person), the assignee pickers (suggested
+ * staff per tramo) and Ajustes › Google (the puestos a mapping can use).
+ */
+export const POSITION_INVALIDATIONS = [
+  qk.ajustes.page("puestos"),
+  qk.personas.equipo(),
+  ["catalog", "assignable-staff"],
+  qk.ajustes.page("google"),
+] as const;
+
+/** Reorders the cached puestos to `orderedIds` and returns the previous page data for the rollback. */
+export async function reorderCachedPositions(
+  qc: QueryClient,
+  orderedIds: string[],
+): Promise<AjustesPuestosPageData | undefined> {
+  const key = qk.ajustes.page("puestos");
+  await qc.cancelQueries({ queryKey: key });
+  const previous = qc.getQueryData<AjustesPuestosPageData>(key);
+  if (previous) {
+    const byId = new Map(previous.positions.map((position) => [position.id, position]));
+    const positions = orderedIds.map((id) => byId.get(id)).filter((p): p is Position => Boolean(p));
+    qc.setQueryData<AjustesPuestosPageData>(key, { ...previous, positions });
+  }
+  return previous;
 }
 
-export function PuestosClient({ initialPositions, initialWorkflows }: PuestosClientProps) {
-  const [positions, setPositions] = useState<Position[]>(initialPositions);
-  const [workflows, setWorkflows] = useState<WorkflowDetail[]>(initialWorkflows);
+type SaveVars = {
+  /** The puesto being edited, or null for a new one. */
+  id: string | null;
+  name: string;
+  phaseIds: string[];
+  /** Called with the saved puesto before its fases are saved. */
+  onSaved: (saved: Position) => void;
+};
+
+/** Create or rename, then replace the candidate fases: two POSTs in sequence (the fases need the id). */
+async function savePosition({ id, name, phaseIds, onSaved }: SaveVars) {
+  const saved = unwrapActionResult(id ? await updatePositionAction(id, { name }) : await createPositionAction({ name }));
+  onSaved(saved);
+  return setPositionPhasesAction(saved.id, phaseIds);
+}
+
+/**
+ * Ajustes › Puestos. Reads `qk.ajustes.page('puestos')`, hydrated by the
+ * page (no fetch on mount). Every write invalidates `POSITION_INVALIDATIONS`;
+ * a reorder is optimistic on the cache and rolls back with a toast.
+ */
+export function PuestosClient() {
+  const { positions, workflows } = useSuspenseQuery(ajustesPuestosOptions()).data;
   const authenticatedUser = useSessionStore(selectCurrentUser);
   const canManage = useMemo(
     () => resolvePositionsCapabilities(authenticatedUser).canManagePositions,
@@ -67,27 +113,31 @@ export function PuestosClient({ initialPositions, initialWorkflows }: PuestosCli
   const [showEditor, setShowEditor] = useState(false);
   const [editing, setEditing] = useState<Position | null>(null);
   const [formError, setFormError] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
 
   const [deleting, setDeleting] = useState<Position | null>(null);
   const [deleteError, setDeleteError] = useState("");
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [pageError, setPageError] = useState("");
 
-  async function refresh() {
-    try {
-      const [positionRows, workflowRows] = await Promise.all([fetchPositionsAction(), fetchWorkflowsAction()]);
-      setPositions(positionRows);
-      setWorkflows(workflowRows);
-    } catch (error) {
-      setPageError(positionErrorText(error, "No se pudieron cargar los puestos."));
-    }
-  }
+  const saveMutation = useActionMutation(savePosition, {
+    invalidate: POSITION_INVALIDATIONS,
+    // The drawer shows the error inline with the puestos copy (`save()`).
+    onFormError: () => undefined,
+  });
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh();
-  }, []);
+  const deleteMutation = useActionMutation((id: string) => deletePositionAction(id), {
+    invalidate: POSITION_INVALIDATIONS,
+    onFormError: () => undefined,
+  });
+
+  const reorderMutation = useActionMutation((orderedIds: string[]) => reorderPositionsAction(orderedIds), {
+    optimistic: {
+      onMutate: (qc, orderedIds) => reorderCachedPositions(qc, orderedIds),
+      rollback: (qc, previous) => {
+        if (previous) qc.setQueryData(qk.ajustes.page("puestos"), previous);
+      },
+    },
+    invalidate: POSITION_INVALIDATIONS,
+    errorContext: { entity: "position" },
+  });
 
   function openNew() {
     setEditing(null);
@@ -113,21 +163,18 @@ export function PuestosClient({ initialPositions, initialWorkflows }: PuestosCli
       return;
     }
 
-    setIsSaving(true);
     setFormError("");
     try {
-      const saved = editing
-        ? await updatePositionAction(editing.id, { name })
-        : await createPositionAction({ name });
-      // Keep the saved puesto as the one being edited, so a failed fase save retries an update, not a second create.
-      setEditing(saved);
-      await setPositionPhasesAction(saved.id, draft.phaseIds);
-      await refresh();
+      await saveMutation.mutateAsync({
+        id: editing?.id ?? null,
+        name,
+        phaseIds: draft.phaseIds,
+        // Keep the saved puesto as the one being edited, so a failed fase save retries an update, not a second create.
+        onSaved: setEditing,
+      });
       closeEditor();
     } catch (error) {
       setFormError(positionErrorText(error, "No se pudo guardar el puesto."));
-    } finally {
-      setIsSaving(false);
     }
   }
 
@@ -138,28 +185,17 @@ export function PuestosClient({ initialPositions, initialWorkflows }: PuestosCli
 
   async function confirmDelete() {
     if (!deleting) return;
-    setIsDeleting(true);
     setDeleteError("");
     try {
-      await deletePositionAction(deleting.id);
+      await deleteMutation.mutateAsync(deleting.id);
       setDeleting(null);
-      await refresh();
     } catch (error) {
       setDeleteError(positionErrorText(error, "No se pudo eliminar el puesto."));
-    } finally {
-      setIsDeleting(false);
     }
   }
 
-  async function reorder(orderedIds: string[]) {
-    const byId = new Map(positions.map((position) => [position.id, position]));
-    setPositions(orderedIds.map((id) => byId.get(id)).filter((p): p is Position => Boolean(p)));
-    try {
-      await reorderPositionsAction(orderedIds);
-    } catch (error) {
-      setPageError(positionErrorText(error, "No se pudo cambiar el orden."));
-    }
-    await refresh();
+  function reorder(orderedIds: string[]) {
+    reorderMutation.mutate(orderedIds);
   }
 
   const columns = useMemo<ColumnDef<Position, unknown>[]>(
@@ -226,19 +262,13 @@ export function PuestosClient({ initialPositions, initialWorkflows }: PuestosCli
         </div>
       </section>
 
-      {pageError ? (
-        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {pageError}
-        </div>
-      ) : null}
-
       <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <DataTable
           columns={columns}
           data={positions}
           getRowId={(row) => row.id}
           onRowClick={canManage ? (row) => openEdit(row) : undefined}
-          onReorderRows={canManage ? (ids) => void reorder(ids) : undefined}
+          onReorderRows={canManage ? reorder : undefined}
           emptyMessage="Aún no hay puestos."
         />
       </section>
@@ -249,7 +279,7 @@ export function PuestosClient({ initialPositions, initialWorkflows }: PuestosCli
         position={editing}
         workflows={workflows}
         canManage={canManage}
-        isSaving={isSaving}
+        isSaving={saveMutation.isPending}
         formError={formError}
         onSave={(draft) => void save(draft)}
       />
@@ -271,7 +301,7 @@ export function PuestosClient({ initialPositions, initialWorkflows }: PuestosCli
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              disabled={isDeleting}
+              disabled={deleteMutation.isPending}
               onClick={() => void confirmDelete()}
             >
               Eliminar

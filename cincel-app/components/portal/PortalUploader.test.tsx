@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { MAX_UPLOAD_BYTES, UPLOAD_ALLOWED_EXTENSIONS } from "@/lib/portal/upload-validation";
 import type { PortalUploadDTO } from "@/lib/types/portal";
 
@@ -155,7 +157,7 @@ describe("PortalUploader", () => {
   }
 
   it("sets accept from the allowlist and shows the empty Mis envíos", async () => {
-    render(<PortalUploader projectId="p1" createXhr={createXhr} />);
+    renderWithQueryClient(<PortalUploader projectId="p1" createXhr={createXhr} />);
 
     expect(input().accept).toBe(PORTAL_UPLOAD_ACCEPT);
     expect(await screen.findByText(PORTAL_UPLOADS_EMPTY)).toBeTruthy();
@@ -163,7 +165,7 @@ describe("PortalUploader", () => {
   });
 
   it("rejects disallowed and oversized files without a request", async () => {
-    render(<PortalUploader projectId="p1" createXhr={createXhr} />);
+    renderWithQueryClient(<PortalUploader projectId="p1" createXhr={createXhr} />);
 
     fireEvent.change(input(), { target: { files: [file("a.exe"), file("b.pdf", PORTAL_UPLOAD_MAX_BYTES + 1)] } });
 
@@ -173,7 +175,7 @@ describe("PortalUploader", () => {
   });
 
   it("shows progress, then success, then the new upload in Mis envíos", async () => {
-    render(<PortalUploader projectId="p1" createXhr={createXhr} />);
+    renderWithQueryClient(<PortalUploader projectId="p1" createXhr={createXhr} />);
     await screen.findByText(PORTAL_UPLOADS_EMPTY);
 
     fireEvent.change(input(), { target: { files: [file("plano.pdf", 2048)] } });
@@ -196,8 +198,41 @@ describe("PortalUploader", () => {
     expect(list.textContent).toContain("03-11-2026");
   });
 
+  it("reads Mis envíos into portal.uploads(id) and invalidates it when each upload finishes", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse(200, [upload()]));
+    const { client } = renderWithQueryClient(<PortalUploader projectId="p1" createXhr={createXhr} />);
+    await screen.findByRole("list", { name: "Mis envíos" });
+    expect(client.getQueryData(qk.portal.uploads("p1"))).toEqual([upload()]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    fireEvent.change(input(), { target: { files: [file("a.pdf"), file("b.pdf")] } });
+    expect(invalidate).not.toHaveBeenCalled();
+
+    fetchMock.mockImplementation(async () => jsonResponse(200, [upload({ id: "u2", fileName: "a.pdf" }), upload()]));
+    act(() => FakeXhr.instances[0].respond(201, upload({ id: "u2", fileName: "a.pdf" })));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+    expect(invalidate).toHaveBeenLastCalledWith({ queryKey: qk.portal.uploads("p1") });
+    await waitFor(() => expect(screen.getByRole("list", { name: "Mis envíos" }).textContent).toContain("a.pdf"));
+    // One XHR POST, then one uploads GET; no manual reload.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    act(() => FakeXhr.instances[1].respond(415, {}));
+    expect(await screen.findByText(PORTAL_UPLOAD_MESSAGES.unsupported)).toBeTruthy();
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("follows the 401 of the Mis envíos request", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse(401, { redirect: "/portal/login" }));
+    const onUnauthorized = vi.fn();
+    renderWithQueryClient(<PortalUploader projectId="p1" createXhr={createXhr} onUnauthorized={onUnauthorized} />);
+
+    await waitFor(() => expect(onUnauthorized).toHaveBeenCalledWith("/portal/login"));
+    expect(screen.queryByText(/No pudimos cargar tus envíos/)).toBeNull();
+  });
+
   it("keeps one request and one error per file", async () => {
-    render(<PortalUploader projectId="p1" createXhr={createXhr} />);
+    renderWithQueryClient(<PortalUploader projectId="p1" createXhr={createXhr} />);
 
     fireEvent.change(input(), { target: { files: [file("a.pdf"), file("b.pdf"), file("c.pdf")] } });
     expect(FakeXhr.instances).toHaveLength(3);
@@ -214,7 +249,7 @@ describe("PortalUploader", () => {
   });
 
   it("uploads dropped files", async () => {
-    render(<PortalUploader projectId="p1" createXhr={createXhr} />);
+    renderWithQueryClient(<PortalUploader projectId="p1" createXhr={createXhr} />);
 
     fireEvent.drop(screen.getByTestId("portal-drop-zone"), { dataTransfer: { files: [file("foto.png")] } });
 
@@ -224,7 +259,7 @@ describe("PortalUploader", () => {
 
   it("redirects to the portal sign-in on 401", async () => {
     const onUnauthorized = vi.fn();
-    render(<PortalUploader projectId="p1" createXhr={createXhr} onUnauthorized={onUnauthorized} />);
+    renderWithQueryClient(<PortalUploader projectId="p1" createXhr={createXhr} onUnauthorized={onUnauthorized} />);
 
     fireEvent.change(input(), { target: { files: [file("a.pdf")] } });
     act(() => FakeXhr.instances[0].respond(401, { redirect: "/portal/login" }));

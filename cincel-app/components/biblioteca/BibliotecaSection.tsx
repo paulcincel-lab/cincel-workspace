@@ -1,14 +1,13 @@
 "use client";
 
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { Star } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { notifyRecentDocumentsChanged } from "@/components/biblioteca/use-recent-documents";
 import { FiltersBar } from "@/components/patterns/FiltersBar";
 import { ListPage } from "@/components/patterns/ListPage";
 import type { DriveBrowserEntry } from "@/components/recursos/DriveBrowser";
 import { DriveFilePreviewSheet, ResourcePreview } from "@/components/recursos/ResourcePreview";
-import { rememberRecentDocument } from "@/components/recursos/resources-model";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { createResourceLinkAction, deleteResourceLinkAction } from "@/lib/actions/resources-actions";
@@ -20,29 +19,78 @@ import {
   recurso,
   resourceDownload,
   sectionTable,
+  type BibliotecaSectionSlug,
   type TipoFilter,
   type TramoFilter,
 } from "@/lib/biblioteca/catalog";
-import { actionErrorText } from "@/lib/errors";
-import type { ResourceLink, ResourceSection } from "@/lib/types/resource";
+import type { BibliotecaData } from "@/lib/biblioteca/load";
+import { useDriveStatus } from "@/lib/google/use-drive-status";
+import { useActionMutation } from "@/lib/query/mutation";
+import { BIBLIOTECA_LINKS_PREFIX, bibliotecaLinksOptions } from "@/lib/query/options/biblioteca";
+import { useRecentDocs } from "@/lib/stores/recent-docs-store";
+import type { ResourceLink, ResourceLinkInput, ResourceSection } from "@/lib/types/resource";
+import type { ActionResult } from "@/lib/types/schedule";
 
 export type BibliotecaSectionProps = {
-  section: ResourceSection;
-  /**
-   * The viewer's visible resource links (filtered on the server); the section
-   * shows its own rows and reads the viewer's "Mis favoritos" from the rest.
-   */
-  links: ResourceLink[];
-  /** The viewer (owner of the favorites they mark). */
-  viewerId?: string | null;
-  /** `resources.canManageFavoritesSection`; without it the star is read-only. */
-  canManageFavorites?: boolean;
-  /** Drive integration configured (in-app preview and download). */
-  driveEnabled?: boolean;
+  section: BibliotecaSectionSlug;
   /** Active filters from the URL (`?tipo=`, `?tramo=`). */
   tipo?: TipoFilter | null;
   tramo?: TramoFilter | null;
 };
+
+const NO_LINKS: ResourceLink[] = [];
+
+/** Id of the favorite shown while its create call runs. */
+export function optimisticFavoriteId(link: ResourceLink): string {
+  return `optimistic:${link.id}`;
+}
+
+/** The viewer's "Mis favoritos" link pointing at `link` (the create input). */
+export function favoriteInput(link: ResourceLink, viewerId: string): ResourceLinkInput {
+  return {
+    title: link.title,
+    section: "mis-favoritos",
+    linkType: link.linkType,
+    appliesTo: link.appliesTo,
+    url: link.url,
+    ownerId: viewerId,
+    personalForId: viewerId,
+    drive: link.drive
+      ? {
+          googleFileId: link.drive.googleFileId,
+          fileName: link.drive.fileName,
+          mimeType: link.drive.mimeType,
+          iconLink: link.drive.iconLink,
+          thumbnailLink: link.drive.thumbnailLink,
+          webViewLink: link.drive.webViewLink,
+          syncedAt: link.drive.syncedAt,
+        }
+      : null,
+  };
+}
+
+function optimisticFavorite(link: ResourceLink, viewerId: string): ResourceLink {
+  const viewer = { id: viewerId, name: "" };
+  return {
+    ...link,
+    id: optimisticFavoriteId(link),
+    templateKey: null,
+    section: "mis-favoritos",
+    subsection: null,
+    owner: viewer,
+    personalFor: viewer,
+    sortOrder: 0,
+  };
+}
+
+type ToggleFavorite = { link: ResourceLink; current: ResourceLink | null; viewerId: string };
+type ToggleSnapshot = { previous: BibliotecaData | undefined };
+
+function patchLinks(client: QueryClient, section: BibliotecaSectionSlug, update: (links: ResourceLink[]) => ResourceLink[]): void {
+  client.setQueryData<BibliotecaData>(bibliotecaLinksOptions(section).queryKey, (old) =>
+    old ? { ...old, links: update(old.links) } : old,
+  );
+}
 
 function filterHref(section: ResourceSection, next: { tipo: TipoFilter | null; tramo: TramoFilter | null }): string {
   const params = new URLSearchParams();
@@ -57,25 +105,53 @@ function filterHref(section: ResourceSection, next: { tipo: TipoFilter | null; t
  * variants): evolves the Recursos workspace section view onto `ListPage` +
  * `RecordTable`. Breadcrumb, filters (tipo, tramo, search), and per row the
  * favorite toggle (a "Mis favoritos" link of the viewer, created or removed
- * with the existing resource actions), open (the workspace viewer in a sheet)
- * and download (Drive files through the app, as in the workspace). No views or
- * downloads columns (RD-7).
+ * with the resource actions, optimistic on `biblioteca.links(section)`), open
+ * (the workspace viewer in a sheet) and download (Drive files through the
+ * app, as in the workspace). No views or downloads columns (RD-7). The rows
+ * come from `biblioteca.links(section)` (this section plus the viewer's
+ * favorites, prefetched by the page); Drive from `useDriveStatus()`.
  */
-export function BibliotecaSection({
-  section,
-  links,
-  viewerId = null,
-  canManageFavorites = false,
-  driveEnabled = false,
-  tipo = null,
-  tramo = null,
-}: BibliotecaSectionProps) {
-  const [items, setItems] = useState<ResourceLink[]>(links);
+export function BibliotecaSection({ section, tipo = null, tramo = null }: BibliotecaSectionProps) {
+  const { data } = useQuery(bibliotecaLinksOptions(section));
+  const items = data?.links ?? NO_LINKS;
+  const viewerId = data?.viewerId ?? null;
+  const canManageFavorites = data?.capabilities.canManageFavoritesSection ?? false;
+  const { configured: driveEnabled } = useDriveStatus();
+  const remember = useRecentDocs((state) => state.remember);
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState<ResourceLink | null>(null);
   const [drivePreview, setDrivePreview] = useState<DriveBrowserEntry | null>(null);
-  const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const toggle = useActionMutation<ToggleFavorite, ResourceLink | void, ToggleSnapshot>(
+    async ({ link, current, viewerId: owner }): Promise<ActionResult<ResourceLink | void>> =>
+      current ? deleteResourceLinkAction(current.id) : createResourceLinkAction(favoriteInput(link, owner)),
+    {
+      optimistic: {
+        onMutate: async (client, { link, current, viewerId: owner }) => {
+          const queryKey = bibliotecaLinksOptions(section).queryKey;
+          await client.cancelQueries({ queryKey });
+          const previous = client.getQueryData<BibliotecaData>(queryKey);
+          patchLinks(client, section, (list) =>
+            current ? list.filter((item) => item.id !== current.id) : [...list, optimisticFavorite(link, owner)],
+          );
+          return { previous };
+        },
+        rollback: (client, { previous }) => {
+          if (previous) client.setQueryData(bibliotecaLinksOptions(section).queryKey, previous);
+        },
+      },
+      setData: (client, created, { link }) => {
+        if (created) {
+          const tempId = optimisticFavoriteId(link);
+          patchLinks(client, section, (list) => list.map((item) => (item.id === tempId ? created : item)));
+        }
+        // Every other Biblioteca screen refetches on its next visit; this one is already exact.
+        void client.invalidateQueries({ queryKey: BIBLIOTECA_LINKS_PREFIX, refetchType: "none" });
+      },
+      onFormError: setError,
+    },
+  );
 
   const meta = recurso(section);
   const label = meta?.title ?? section;
@@ -90,48 +166,14 @@ export function BibliotecaSection({
   const table = useMemo(() => sectionTable(rows, favoriteIds), [rows, favoriteIds]);
 
   const openLink = (link: ResourceLink) => {
-    rememberRecentDocument(link);
-    notifyRecentDocumentsChanged();
+    remember(link);
     setPreview(link);
   };
 
-  const toggleFavorite = async (link: ResourceLink) => {
-    if (!canFavorite || pendingId) return;
+  const toggleFavorite = (link: ResourceLink) => {
+    if (!canFavorite || viewerId === null || toggle.isPending) return;
     setError(null);
-    setPendingId(link.id);
-    const current = favoriteFor(link, items);
-    try {
-      if (current) {
-        await deleteResourceLinkAction(current.id);
-        setItems((list) => list.filter((item) => item.id !== current.id));
-      } else {
-        const created = await createResourceLinkAction({
-          title: link.title,
-          section: "mis-favoritos",
-          linkType: link.linkType,
-          appliesTo: link.appliesTo,
-          url: link.url,
-          ownerId: viewerId,
-          personalForId: viewerId,
-          drive: link.drive
-            ? {
-                googleFileId: link.drive.googleFileId,
-                fileName: link.drive.fileName,
-                mimeType: link.drive.mimeType,
-                iconLink: link.drive.iconLink,
-                thumbnailLink: link.drive.thumbnailLink,
-                webViewLink: link.drive.webViewLink,
-                syncedAt: link.drive.syncedAt,
-              }
-            : null,
-        });
-        setItems((list) => [...list, created]);
-      }
-    } catch (err) {
-      setError(actionErrorText(err));
-    } finally {
-      setPendingId(null);
-    }
+    toggle.mutate({ link, current: favoriteFor(link, items), viewerId });
   };
 
   const renderCell = (columnKey: string, row: Record<string, unknown>) => {
@@ -154,8 +196,8 @@ export function BibliotecaSection({
           size="icon"
           aria-pressed={isFavorite}
           aria-label={isFavorite ? `Quitar ${link.title} de favoritos` : `Marcar ${link.title} como favorito`}
-          disabled={pendingId !== null}
-          onClick={() => void toggleFavorite(link)}
+          disabled={toggle.isPending}
+          onClick={() => toggleFavorite(link)}
         >
           <Star aria-hidden="true" fill={isFavorite ? "currentColor" : "none"} />
         </Button>
@@ -257,7 +299,6 @@ export function BibliotecaSection({
           </div>
           <ResourcePreview
             link={preview}
-            driveEnabled={driveEnabled}
             title={label}
             unavailableReason={
               preview?.linkType === "web"

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 let pathname = "/inicio";
 let search = new URLSearchParams();
@@ -9,20 +9,22 @@ vi.mock("next/navigation", () => ({
   usePathname: () => pathname,
   useSearchParams: () => search,
 }));
-vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectAction: async () => null }));
-vi.mock("@/lib/actions/tasks-actions", () => ({
-  fetchTaskAction: async (id: string) => (id === "t1" ? { id: "t1", title: "Planos de fachada" } : null),
+const TASK = "12121212-3434-4565-8787-909090909090";
+
+vi.mock("@/lib/actions/page-data/asistente-actions", () => ({
+  lookupAssistantContextAction: async (input: { taskId?: string }) =>
+    input.taskId === "12121212-3434-4565-8787-909090909090" ? { id: input.taskId, label: "Planos de fachada" } : null,
+  fetchAssistantThreadAction: async () => null,
+  getAsistentePageData: async () => null,
 }));
-vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffDetailAction: async () => null }));
 vi.mock("@/lib/actions/assistant-actions", () => ({
   fetchAssistantThreadsAction: async () => [],
-  fetchAssistantThreadAction: async () => {
-    throw new Error("NOT_FOUND");
-  },
+  deleteAssistantThreadAction: async () => ({ ok: true, data: undefined }),
 }));
 
 import { AssistantLauncher, assistantEntryEnabled } from "../AssistantLauncher";
-import { openAssistant, useAssistantUi } from "@/lib/stores/assistant-ui-store";
+import { renderWithQueryClient as render } from "@/lib/query/test-utils";
+import { openAssistant, resetAssistantUi, useAssistantUi } from "@/lib/stores/assistant-ui-store";
 import { IMPLEMENTED } from "@/lib/actions/assistant-actions.flags";
 
 // The launcher lazy-loads the sheet chunk on first open; load it up front so a
@@ -32,6 +34,7 @@ beforeAll(async () => {
 }, 60_000);
 
 beforeEach(() => {
+  resetAssistantUi();
   pathname = "/inicio";
   search = new URLSearchParams();
   Element.prototype.scrollIntoView = vi.fn();
@@ -135,7 +138,7 @@ describe("AssistantLauncher", () => {
 
   it("passes the route context: /tareas?tarea=<id> shows the confirmed task", async () => {
     pathname = "/tareas";
-    search = new URLSearchParams({ tarea: "t1" });
+    search = new URLSearchParams({ tarea: TASK });
     render(<AssistantLauncher enabled />);
     fireEvent.click(screen.getByRole("button", { name: /Pregúntale a Cincel/ }));
     expect(await screen.findByText("Viendo: Planos de fachada")).toBeTruthy();

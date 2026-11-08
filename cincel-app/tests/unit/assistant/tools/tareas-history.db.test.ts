@@ -26,8 +26,6 @@ vi.mock("@/lib/repositories/browser-state-repository", () => ({
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   fetchTaskAction: actions.fetchTaskAction,
-  fetchTasksAction: vi.fn(),
-  fetchMyTasksAction: vi.fn(),
   setTaskStatusAction: vi.fn(),
   setTaskCustomStatusAction: vi.fn(),
   updateTaskAction: actions.updateTaskAction,
@@ -38,6 +36,7 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   assignTaskAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectAction: vi.fn() }));
+vi.mock("@/lib/assistant/reads", () => ({ listViewerTasks: vi.fn(), listViewerMyTasks: vi.fn() }));
 vi.mock("@/lib/actions/schedule-actions", () => ({ fetchScheduleAction: vi.fn() }));
 vi.mock("@/lib/actions/search-actions", () => ({ searchWorkspaceAction: vi.fn() }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchAssignableStaffAction: vi.fn() }));

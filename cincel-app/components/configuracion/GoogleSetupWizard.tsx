@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, TriangleAlert } from "lucide-react";
 
-import { GoogleGroupMappings, GROUP_MAPPING_ERROR_MESSAGES } from "@/components/configuracion/GoogleGroupMappings";
+import {
+  GoogleGroupMappings,
+  GROUP_MAPPING_INVALIDATIONS,
+  groupMappingErrorText,
+} from "@/components/configuracion/GoogleGroupMappings";
 import { WizardStepper } from "@/components/configuracion/WizardStepper";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -17,6 +22,9 @@ import { Label } from "@/components/ui/shadcn/label";
 import { completeOnboardingAction } from "@/lib/actions/onboarding-actions";
 import { createGroupMappingAction } from "@/lib/actions/workspace-access-actions";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { ajustesGoogleOptions } from "@/lib/query/options/ajustes";
 import {
   ADMIN_GROUP_RANK,
   GOOGLE_SETUP_STEPS,
@@ -32,13 +40,6 @@ import {
   type GoogleSetupStepId,
 } from "@/lib/onboarding/google-setup-steps";
 import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
-
-export type GoogleSetupWizardProps = {
-  /** Null when `getGoogleHealthAction()` failed. */
-  health: GoogleHealth | null;
-  mappings: GroupMapping[];
-  positions: { id: string; name: string }[];
-};
 
 function ReviewStep({ health }: { health: GoogleHealth | null }) {
   return (
@@ -78,10 +79,14 @@ function ReviewStep({ health }: { health: GoogleHealth | null }) {
 }
 
 function AdminGroupStep({ mappings, domain }: { mappings: GroupMapping[]; domain: string | null }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [groupEmail, setGroupEmail] = useState("");
   const [error, setError] = useState("");
+  // The new mapping reaches `mappings` through the `ajustes.page('google')` refetch.
+  const create = useActionMutation(createGroupMappingAction, {
+    invalidate: GROUP_MAPPING_INVALIDATIONS,
+    onFormError: () => undefined,
+  });
+  const isPending = create.isPending;
   const adminGroup = findAdminGroup(mappings);
 
   if (adminGroup) {
@@ -98,24 +103,10 @@ function AdminGroupStep({ mappings, domain }: { mappings: GroupMapping[]; domain
 
   function save() {
     setError("");
-    startTransition(async () => {
-      try {
-        const result = await createGroupMappingAction({
-          groupEmail,
-          kind: "role",
-          role: SYSTEM_ADMIN_ROLE,
-          positionId: null,
-          rank: ADMIN_GROUP_RANK,
-        });
-        if (!result.ok) {
-          setError(GROUP_MAPPING_ERROR_MESSAGES[result.error]);
-          return;
-        }
-        router.refresh();
-      } catch {
-        setError("No se pudo guardar el grupo.");
-      }
-    });
+    create.mutate(
+      { groupEmail, kind: "role", role: SYSTEM_ADMIN_ROLE, positionId: null, rank: ADMIN_GROUP_RANK },
+      { onError: (err) => setError(groupMappingErrorText(err, "No se pudo guardar el grupo.")) },
+    );
   }
 
   return (
@@ -179,29 +170,34 @@ const STEP_DESCRIPTIONS: Record<GoogleSetupStepId, string> = {
 /**
  * First-login wizard of the bootstrap admin (#671): only sets up the Google groups so others can sign in with
  * Google. "Omitir por ahora" and finishing both mark it completed for this staff member.
+ *
+ * Health, mappings and puestos are `qk.ajustes.page('google')` (hydrated by the page); the mapping
+ * mutations invalidate it, so the steps see a new group without a route refresh.
  */
-export function GoogleSetupWizard({ health, mappings, positions }: GoogleSetupWizardProps) {
+export function GoogleSetupWizard() {
   const router = useRouter();
-  const [step, setStep] = useState<GoogleSetupStepId>(() => initialStep({ health, mappings }));
-  const [isPending, startTransition] = useTransition();
+  const { health, mappings, positions } = useSuspenseQuery(ajustesGoogleOptions()).data;
+  // The step the wizard opens on; later data changes never move it.
+  const [step, setStep] = useState<GoogleSetupStepId>(() => {
+    const opening = initialStep({ health, mappings });
+    return opening;
+  });
   const [error, setError] = useState("");
+  const onboarding = useActionMutation(completeOnboardingAction, {
+    invalidate: [qk.inicio()],
+    onFormError: () => undefined,
+  });
+  const isPending = onboarding.isPending;
   const domain = health?.workspaceDomain ?? null;
   const state = { health, mappings };
   const current = GOOGLE_SETUP_STEPS[stepIndex(step)];
 
   function complete(then: () => void) {
     setError("");
-    startTransition(async () => {
-      try {
-        const result = await completeOnboardingAction();
-        if (!result.ok) {
-          setError("No tienes permiso.");
-          return;
-        }
-        then();
-      } catch {
-        setError("No se pudo guardar. Intenta de nuevo.");
-      }
+    onboarding.mutate(undefined, {
+      onSuccess: () => then(),
+      onError: (err) =>
+        setError(err instanceof Error && err.message === "forbidden" ? "No tienes permiso." : "No se pudo guardar. Intenta de nuevo."),
     });
   }
 

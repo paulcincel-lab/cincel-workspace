@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -10,8 +10,11 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
 import { ChoiceSelect, type Choice } from "@/components/configuracion/monday-import/ChoiceSelect";
+import { useMondayMutation } from "@/components/configuracion/monday-import/monday-mutations";
 import { saveMondayStatusMapAction } from "@/lib/actions/monday-import-actions";
 import { createTaskStatusAction } from "@/lib/actions/task-statuses-actions";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
 import {
   STATUS_MAP_PRIORITY_LABELS,
   isMissingCustomStatus,
@@ -22,6 +25,7 @@ import {
   type StatusMapRow,
 } from "@/lib/monday-import/status-map";
 import { BASE_STATUS_LABELS, decodeStatusTarget, encodeStatusTarget } from "@/lib/monday-import/wizard-steps";
+import type { TaskStatusInput, TaskStatusOption } from "@/lib/types/core";
 import type { MondayImportChoices, MondayStatusMap } from "@/lib/types/monday-import";
 
 /** Same cadence as the wizard's draft saves. */
@@ -42,6 +46,17 @@ export type CreatedStatus = { id: string; name: string; closes: boolean; countsA
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+/** A new status shows on every screen that lists them (the Estatus list of Ajustes, #964). */
+const STATUS_CREATED_KEYS = [
+  qk.catalog.taskStatuses(),
+  qk.ajustes.page("estatus"),
+  qk.tareas.all,
+  ["tasks"],
+  qk.monday.choices(),
+  qk.inicio(),
+  qk.proyectos.list(),
+] as const;
+
 /** One monday label; "Crear estatus…" opens an inline form that creates it in Configuración → Estatus. */
 function StatusMapRowView({
   row,
@@ -61,7 +76,11 @@ function StatusMapRowView({
   const [closes, setCloses] = useState(row.isDone);
   const [countsAsCompleted, setCountsAsCompleted] = useState(row.isDone);
   const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
+  const createStatus = useActionMutation<TaskStatusInput, TaskStatusOption>(
+    (input) => createTaskStatusAction(input),
+    { invalidate: STATUS_CREATED_KEYS, onFormError: () => {} },
+  );
+  const isPending = createStatus.isPending;
   const errorId = `status-map-create-error-${row.key.replace(/\s+/g, "-")}`;
 
   function create() {
@@ -70,9 +89,9 @@ function StatusMapRowView({
       setError("Escribe el nombre del estatus.");
       return;
     }
-    startTransition(async () => {
+    void (async () => {
       try {
-        const created = await createTaskStatusAction({
+        const created = await createStatus.mutateAsync({
           name: name.trim(),
           closes,
           countsAsCompleted: closes && countsAsCompleted,
@@ -88,7 +107,7 @@ function StatusMapRowView({
       } catch {
         setError("No se pudo crear el estatus. Revisa que el nombre no exista ya.");
       }
-    });
+    })();
   }
 
   return (
@@ -179,7 +198,7 @@ function StatusMapRowView({
 /**
  * The firm-wide monday status map (FE §4.6 item 5): one row per monday label with its Cincel status and priority.
  * Optimistic: each change is saved with `saveMondayStatusMapAction`, debounced, and the local value is kept when
- * the save fails.
+ * the save fails. A save writes the map into `monday.choices` and refetches it.
  */
 export function StatusMapTable({
   labels,
@@ -208,6 +227,18 @@ export function StatusMapTable({
   useEffect(() => {
     onSavedRef.current = onSaved;
   }, [onSaved]);
+  const saveMap = useMondayMutation((next: MondayStatusMap) => saveMondayStatusMapAction(next), {
+    setData: (qc, result) =>
+      qc.setQueryData<MondayImportChoices>(qk.monday.choices(), (current) =>
+        current ? { ...current, statusMap: result.statusMap } : current,
+      ),
+    invalidate: [qk.monday.choices()],
+  });
+  // The unmount flush below runs after the component is gone: it keeps the latest `mutate`.
+  const flushRef = useRef(saveMap.mutate);
+  useEffect(() => {
+    flushRef.current = saveMap.mutate;
+  }, [saveMap.mutate]);
 
   const rows = statusMapRows(labels, map, choices.statuses);
   const statusChoices: Choice[] = [
@@ -220,23 +251,24 @@ export function StatusMapTable({
     pending.current = null;
     setSaveState("saving");
     setError("");
-    let result: Awaited<ReturnType<typeof saveMondayStatusMapAction>>;
+    let saved: MondayStatusMap | null = null;
+    let failure = "";
     try {
-      result = await saveMondayStatusMapAction(next);
-    } catch {
-      result = { ok: false, error: SAVE_ERROR };
+      saved = (await saveMap.mutateAsync(next)).statusMap;
+    } catch (err) {
+      failure = err instanceof Error ? err.message : "";
     }
     // A newer change is on its way: its answer decides what the line says.
     if (id !== sequence.current || pending.current) return;
-    if (result.ok) {
+    if (saved) {
       setSaveState("saved");
       setNotFound(false);
-      onSavedRef.current?.(result.statusMap);
+      onSavedRef.current?.(saved);
       return;
     }
     setSaveState("error");
-    setNotFound(result.error === "STATUS_NOT_FOUND");
-    setError(result.error === "STATUS_NOT_FOUND" ? STATUS_NOT_FOUND_ERROR : SAVE_ERROR);
+    setNotFound(failure === "STATUS_NOT_FOUND");
+    setError(failure === "STATUS_NOT_FOUND" ? STATUS_NOT_FOUND_ERROR : SAVE_ERROR);
   }
 
   function schedule(next: MondayStatusMap) {
@@ -255,7 +287,7 @@ export function StatusMapTable({
     () => () => {
       if (timer.current) clearTimeout(timer.current);
       const next = pending.current;
-      if (next) void saveMondayStatusMapAction(next).catch(() => undefined);
+      if (next) flushRef.current(next);
     },
     [],
   );

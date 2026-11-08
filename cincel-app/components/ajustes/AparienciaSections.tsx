@@ -1,5 +1,6 @@
 "use client";
 
+import { useSuspenseQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useId, type CSSProperties } from "react";
 import { LayoutGrid, Table2, TextAlignStart, type LucideIcon } from "lucide-react";
@@ -10,25 +11,51 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { buttonVariants } from "@/components/ui/shadcn/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import { Slider } from "@/components/ui/shadcn/slider";
-import type { ColorMode, Density, OrgAppearance, PresentationStyle, ThemeId, TokenName } from "@/lib/types/redesign";
+import { ajustesAparienciaOptions, type AjustesAparienciaPageData } from "@/lib/query/options/ajustes";
+import { OVERRIDE_LOCKED_COPY, useAppearance, type AparienciaSectionKey } from "@/lib/stores/appearance-store";
+import type {
+  ColorMode,
+  Density,
+  OrgAppearance,
+  PresentationStyle,
+  TextSize,
+  ThemeId,
+  TokenName,
+} from "@/lib/types/redesign";
 import { THEME_IDS, THEME_LABELS, THEME_PRESETS } from "@/lib/ui/themes";
 import { cn } from "@/lib/utils";
 
-import {
-  OVERRIDE_LOCKED_COPY,
-  useApariencia,
-  type AparienciaSectionKey,
-} from "./apariencia-context";
-
 /**
- * The six sections of Ajustes › Apariencia (redesign FE §3.8). Each reads the
- * page state from `AparienciaClient` and is registered in
- * `lib/shell/settings-sections/apariencia/*`.
+ * The sections of Ajustes › Apariencia (redesign FE §3.8), registered in
+ * `lib/shell/settings-sections/apariencia/*`. The caller's preferences,
+ * errors and the override lock come from the `useAppearance` store (one
+ * primitive selector per field); the org appearance and the admin flag from
+ * the hydrated `qk.ajustes.page('apariencia')`. Every change goes through
+ * `setPreference(patch, { section })`: optimistic, rolled back on error, and
+ * the text size is debounced once, in the store.
  */
 
 export const TEXT_SIZE_MIN = 13;
 export const TEXT_SIZE_MAX = 16;
 export const TEXT_SIZE_STEP = 0.5;
+
+/** Snap a slider value to the allowed text sizes (13–16, step 0.5). */
+export function toTextSize(value: number): TextSize {
+  const clamped = Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, value));
+  return (Math.round(clamped / TEXT_SIZE_STEP) * TEXT_SIZE_STEP) as TextSize;
+}
+
+/** The hydrated Apariencia page data (org appearance, admin flag, org override policy). */
+export function useAparienciaPageData(): AjustesAparienciaPageData {
+  return useSuspenseQuery(ajustesAparienciaOptions()).data;
+}
+
+/** Personal theme and style allowed: the org allows them and the server did not answer `OVERRIDE_DISABLED`. */
+export function useOverridesAllowed(): boolean {
+  const { overridesAllowed } = useAparienciaPageData();
+  const allowedByStore = useAppearance((s) => s.overridesAllowed);
+  return overridesAllowed && allowedByStore;
+}
 
 const STYLE_OPTIONS: { value: PresentationStyle; label: string; description: string; icon: LucideIcon }[] = [
   { value: "visual", label: "Visual", description: "Gráficas grandes, donas, anillos y color por tramo.", icon: LayoutGrid },
@@ -65,8 +92,7 @@ const SEGMENT_CLASS =
   "flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background has-data-[checked]:border-primary";
 
 function SectionError({ section }: { section: AparienciaSectionKey }) {
-  const { errors } = useApariencia();
-  const message = errors[section];
+  const message = useAppearance((s) => s.errors[section]);
   return (
     <p role="status" aria-live="polite" className="text-sm text-destructive empty:hidden">
       {message ?? ""}
@@ -133,9 +159,12 @@ function ThemeMiniPreview({ tokens }: { tokens: OrgAppearance["tokens"] }) {
 }
 
 export function AparienciaTemaSection() {
-  const { preferences, org, isAdmin, overridesAllowed, change } = useApariencia();
+  const { org, isAdmin } = useAparienciaPageData();
+  const overridesAllowed = useOverridesAllowed();
+  const ownTheme = useAppearance((s) => s.preferences.theme);
+  const setPreference = useAppearance((s) => s.setPreference);
   const noteId = useId();
-  const selected: ThemeId = overridesAllowed ? (preferences.theme ?? org.baseTheme) : org.baseTheme;
+  const selected: ThemeId = overridesAllowed ? (ownTheme ?? org.baseTheme) : org.baseTheme;
   const orgName = THEME_LABELS[org.baseTheme];
 
   return (
@@ -149,7 +178,7 @@ export function AparienciaTemaSection() {
           onValueChange={(value) => {
             const theme = value as ThemeId;
             // Picking the org's theme follows the org (null), so a later org change reaches this user.
-            void change("tema", { theme: theme === org.baseTheme ? null : theme });
+            void setPreference({ theme: theme === org.baseTheme ? null : theme }, { section: "tema" });
           }}
           className="grid gap-3 sm:grid-cols-3"
         >
@@ -190,9 +219,12 @@ export function AparienciaTemaSection() {
 // ── Estilo de presentación ──────────────────────────────────────────────────
 
 export function AparienciaEstiloSection() {
-  const { preferences, org, overridesAllowed, change } = useApariencia();
+  const { org } = useAparienciaPageData();
+  const overridesAllowed = useOverridesAllowed();
+  const ownStyle = useAppearance((s) => s.preferences.style);
+  const setPreference = useAppearance((s) => s.setPreference);
   const noteId = useId();
-  const selected: PresentationStyle = overridesAllowed ? (preferences.style ?? org.styleDefault) : org.styleDefault;
+  const selected: PresentationStyle = overridesAllowed ? (ownStyle ?? org.styleDefault) : org.styleDefault;
 
   return (
     <SettingsSection
@@ -207,7 +239,7 @@ export function AparienciaEstiloSection() {
           disabled={!overridesAllowed}
           onValueChange={(value) => {
             const next = value as PresentationStyle;
-            void change("estilo", { style: next === org.styleDefault ? null : next });
+            void setPreference({ style: next === org.styleDefault ? null : next }, { section: "estilo" });
           }}
           className="grid gap-3 sm:grid-cols-3"
         >
@@ -277,15 +309,16 @@ function SegmentedRadio<T extends string>({
 }
 
 export function AparienciaModoSection() {
-  const { preferences, change } = useApariencia();
+  const mode = useAppearance((s) => s.preferences.mode);
+  const setPreference = useAppearance((s) => s.setPreference);
   return (
     <SettingsSection title="Modo" description="Sistema sigue la configuración de tu dispositivo.">
       <div className="flex flex-col gap-2">
         <SegmentedRadio
           label="Modo"
-          value={preferences.mode}
+          value={mode}
           options={MODE_OPTIONS}
-          onChange={(mode) => void change("modo", { mode })}
+          onChange={(next) => void setPreference({ mode: next }, { section: "modo" })}
         />
         <SectionError section="modo" />
       </div>
@@ -294,15 +327,16 @@ export function AparienciaModoSection() {
 }
 
 export function AparienciaDensidadSection() {
-  const { preferences, change } = useApariencia();
+  const density = useAppearance((s) => s.preferences.density);
+  const setPreference = useAppearance((s) => s.setPreference);
   return (
     <SettingsSection title="Densidad" description="Compacta muestra más filas en la misma pantalla.">
       <div className="flex flex-col gap-2">
         <SegmentedRadio
           label="Densidad"
-          value={preferences.density}
+          value={density}
           options={DENSITY_OPTIONS}
-          onChange={(density) => void change("densidad", { density })}
+          onChange={(next) => void setPreference({ density: next }, { section: "densidad" })}
         />
         <SectionError section="densidad" />
       </div>
@@ -317,7 +351,13 @@ function formatSize(size: number): string {
 }
 
 export function AparienciaTamanoTextoSection() {
-  const { textSize, changeTextSize } = useApariencia();
+  const textSize = useAppearance((s) => s.preferences.textSize);
+  const setPreference = useAppearance((s) => s.setPreference);
+  // The store applies each value at once and saves after `TEXT_SIZE_DEBOUNCE_MS` (the only debounce).
+  const changeTextSize = (value: number) => {
+    const size = toTextSize(value);
+    if (size !== textSize) void setPreference({ textSize: size }, { section: "tamano-texto" });
+  };
   return (
     <SettingsSection title="Tamaño de texto">
       <div className="flex flex-col gap-2">

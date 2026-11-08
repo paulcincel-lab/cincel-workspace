@@ -1,10 +1,9 @@
 "use server";
 
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
-import { revalidateMiEspacioScreen } from "@/lib/cache/screens/mi-espacio";
 import { revalidateProyectoFichaScreen } from "@/lib/cache/screens/proyectos";
 
+import { toActionResult } from "@/lib/actions/action-result";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveActivitiesCapabilities, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -17,72 +16,38 @@ import { confirmTokenSecret, issueConfirmToken, verifyConfirmToken } from "@/lib
 import { sanitizeEmailHtml } from "@/lib/gmail/sanitize";
 import { syncGmail } from "@/lib/gmail/sync";
 import { formatAddress, parseGmailThread, type ParsedGmailThread } from "@/lib/gmail/thread-view";
+import { gmailStatusOf, listGmailThreadsPage, toThreadSummary, type GmailThreadsPage } from "@/lib/gmail/threads-page";
 import * as gmailRepository from "@/lib/repositories/gmail-repository";
 import type { GmailThreadRow } from "@/lib/repositories/gmail-repository";
 import { createUserTask } from "@/lib/repositories/tasks-repository";
 import type {
-  GmailAttachment,
   GmailDraft,
   GmailMessage,
   GmailStatus,
   GmailThreadSummary,
 } from "@/lib/types/redesign";
-import {
-  GmailDraftInputSchema,
-  GmailTaskInputSchema,
-  GmailThreadsQuerySchema,
-  parseInput,
-} from "@/lib/validation/redesign";
+import type { GmailThreadView } from "@/lib/types/mi-espacio";
+import type { ActionResult } from "@/lib/types/schedule";
+import { GmailDraftInputSchema, GmailTaskInputSchema, parseInput } from "@/lib/validation/redesign";
 
 /**
  * Gmail read + draft (redesign BE §7.6). Owner-only: every call works on the
  * caller's own mailbox (their own Google token, `users/me`) and the caller's
  * own `gmail_threads` rows; nobody else's Gmail data is ever returned,
  * including to administrators (BE §9.8).
+ *
+ * Mi espacio reads the mailbox through TanStack Query (`me.gmail.*`) and its
+ * mutations update that cache, so nothing here revalidates `/mi-espacio`.
+ * Reads have no side effects: opening a thread is `fetchGmailThreadAction`
+ * (read-only) plus `markGmailThreadReadAction`.
  */
 
-/** Threads per page of `fetchGmailThreadsAction`. */
-const THREADS_PAGE_SIZE = 30;
 /** Minimum gap between two manual syncs. */
 const SYNC_MIN_INTERVAL_MS = 30 * 1000;
 const NO_SUBJECT = "(sin asunto)";
 
-function revalidateMiEspacio() {
-  revalidateMiEspacioScreen(["miEspacioLayout"]);
-}
-
 function revalidateProject(projectId: string) {
   revalidateProyectoFichaScreen(projectId, ["projectLayout"]);
-}
-
-function toSummary(row: GmailThreadRow): GmailThreadSummary {
-  return {
-    id: row.id,
-    subject: row.subject,
-    from: formatAddress({ name: row.fromName, email: row.fromEmail }),
-    snippet: row.snippet,
-    receivedAt: row.receivedAt.toISOString(),
-    unread: row.unread,
-    projectId: row.projectId,
-    suggestedProjectId: row.suggestedProjectId,
-  };
-}
-
-function encodeCursor(row: GmailThreadRow): string {
-  return Buffer.from(JSON.stringify([row.receivedAt.toISOString(), row.id])).toString("base64url");
-}
-
-function decodeCursor(cursor: string): gmailRepository.GmailThreadsCursor {
-  try {
-    const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-    if (Array.isArray(value) && value.length === 2 && typeof value[0] === "string" && typeof value[1] === "string") {
-      const receivedAt = new Date(value[0]);
-      if (!Number.isNaN(receivedAt.getTime())) return { receivedAt, id: value[1] };
-    }
-  } catch {
-    // falls through to INVALID
-  }
-  throw new Error("INVALID: cursor");
 }
 
 function requireThreadId(id: unknown): string {
@@ -158,8 +123,10 @@ async function linkThread(
   return { previousProjectId };
 }
 
+/** The summary of a live read; `unread` is the cached flag (else Gmail's label), which mark-read clears. */
 function threadSummaryFrom(parsed: ParsedGmailThread, cached: GmailThreadRow | null): GmailThreadSummary {
-  if (cached) return { ...toSummary(cached), unread: false };
+  const unreadInGmail = parsed.messages.some((m) => m.labelIds.includes("UNREAD"));
+  if (cached) return toThreadSummary(cached);
   const first = parsed.messages[0]!;
   const last = parsed.messages[parsed.messages.length - 1]!;
   return {
@@ -168,7 +135,7 @@ function threadSummaryFrom(parsed: ParsedGmailThread, cached: GmailThreadRow | n
     from: last.from,
     snippet: last.snippet,
     receivedAt: last.date,
-    unread: false,
+    unread: unreadInGmail,
     projectId: null,
     suggestedProjectId: null,
   };
@@ -183,47 +150,24 @@ function gmailWebLink(email: string, threadId: string): string {
 
 export async function fetchGmailStatusAction(): Promise<GmailStatus> {
   const user = await requireCapabilityUser();
-  const access = await loadGmailAccess(db, user.member.id);
-  return {
-    connected: access.connected,
-    scopeOk: access.scopeOk,
-    lastSyncedAt: access.account?.lastSyncedAt?.toISOString() ?? null,
-    lastError: access.account?.lastError ?? null,
-  };
+  return gmailStatusOf(await loadGmailAccess(db, user.member.id));
 }
 
 /** Cached threads (ILIKE subject/from/snippet; page 30). Errors: `NOT_CONNECTED`, `SCOPE_MISSING`. */
-export async function fetchGmailThreadsAction(input: {
-  query?: string;
-  cursor?: string;
-}): Promise<{ threads: GmailThreadSummary[]; nextCursor: string | null }> {
+export async function fetchGmailThreadsAction(input: { query?: string; cursor?: string }): Promise<GmailThreadsPage> {
   const user = await requireCapabilityUser();
-  const parsed = parseInput(GmailThreadsQuerySchema, input ?? {});
   const access = await loadGmailAccess(db, user.member.id);
   assertGmailAccess(access, { read: true });
-
-  const rows = await gmailRepository.listGmailThreads(db, user.member.id, {
-    query: parsed.query,
-    cursor: parsed.cursor ? decodeCursor(parsed.cursor) : null,
-    limit: THREADS_PAGE_SIZE + 1,
-  });
-  const page = rows.slice(0, THREADS_PAGE_SIZE);
-  return {
-    threads: page.map(toSummary),
-    nextCursor: rows.length > THREADS_PAGE_SIZE ? encodeCursor(page[page.length - 1]!) : null,
-  };
+  return listGmailThreadsPage(user.member.id, input);
 }
 
 /**
- * One thread read live (marks it read; `html` sanitized). Errors: `NOT_FOUND`,
- * `NOT_CONNECTED`, `SCOPE_MISSING`. Gmail only lets a grant with label
- * access (`gmail.modify`) change labels; with read-only access the call
- * would fail and flag the account, so the thread is then marked read in the
- * cache only.
+ * One thread read live (`html` sanitized). Read-only: it writes nothing,
+ * neither in Gmail nor in the cache, and revalidates nothing; opening an
+ * unread thread also calls `markGmailThreadReadAction`. Errors: `NOT_FOUND`,
+ * `NOT_CONNECTED`, `SCOPE_MISSING`.
  */
-export async function fetchGmailThreadAction(
-  id: string,
-): Promise<{ thread: GmailThreadSummary; messages: GmailMessage[]; attachments: GmailAttachment[] }> {
+export async function fetchGmailThreadAction(id: string): Promise<GmailThreadView> {
   const user = await requireCapabilityUser();
   const staffId = user.member.id;
   const threadId = requireThreadId(id);
@@ -233,10 +177,6 @@ export async function fetchGmailThreadAction(
   const api = await gmailClient(staffId);
   const parsed = parseGmailThread(await api.getThread(threadId, "full"));
   const cached = await gmailRepository.findGmailThread(db, staffId, parsed.id);
-
-  const unreadInGmail = parsed.messages.some((m) => m.labelIds.includes("UNREAD"));
-  if (unreadInGmail && access.canModify) await api.markThreadRead(parsed.id);
-  if (cached?.unread) await gmailRepository.markGmailThreadRead(db, staffId, parsed.id);
 
   const messages: GmailMessage[] = parsed.messages.map((m) => ({
     id: m.id,
@@ -248,12 +188,49 @@ export async function fetchGmailThreadAction(
     text: m.text,
   }));
   const attachments = parsed.messages.flatMap((m) => m.attachments);
-  if (cached?.unread) revalidateMiEspacio();
   return { thread: threadSummaryFrom(parsed, cached), messages, attachments };
 }
 
-/** Errors: `NOT_CONNECTED`, `RATE_LIMITED` (< 30 s since last, or backoff). Revalidates `/mi-espacio`. */
-export async function syncGmailAction(): Promise<{ synced: number }> {
+/**
+ * Marks one of the caller's threads read: the cached row, and in Gmail when
+ * the grant allows label changes (`gmail.modify`; with read-only access Gmail
+ * would refuse the call and flag the account, so only the cache changes).
+ * The client patches `unread: false` into `me.gmail.*`. Errors (as
+ * `{ ok: false }`): `NOT_FOUND`, `NOT_CONNECTED`, `SCOPE_MISSING`.
+ */
+export async function markGmailThreadReadAction(
+  ...args: Parameters<typeof markGmailThreadReadActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof markGmailThreadReadActionImpl>>>> {
+  return toActionResult(() => markGmailThreadReadActionImpl(...args));
+}
+
+async function markGmailThreadReadActionImpl(id: string): Promise<void> {
+  const user = await requireCapabilityUser();
+  const staffId = user.member.id;
+  const threadId = requireThreadId(id);
+  const access = await loadGmailAccess(db, staffId);
+  assertGmailAccess(access, { read: true });
+
+  if (access.canModify) {
+    const api = await gmailClient(staffId);
+    await api.markThreadRead(threadId);
+  }
+  const cached = await gmailRepository.findGmailThread(db, staffId, threadId);
+  if (cached?.unread) await gmailRepository.markGmailThreadRead(db, staffId, threadId);
+}
+
+/**
+ * Errors (`{ ok: false }`): `NOT_CONNECTED`, `SCOPE_MISSING`, `RATE_LIMITED`
+ * (< 30 s since last, or backoff). Ajustes › Integraciones invalidates
+ * `me.gmail` and its page data.
+ */
+export async function syncGmailAction(
+  ...args: Parameters<typeof syncGmailActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof syncGmailActionImpl>>>> {
+  return toActionResult(() => syncGmailActionImpl(...args));
+}
+
+async function syncGmailActionImpl(): Promise<{ synced: number }> {
   const user = await requireCapabilityUser();
   const staffId = user.member.id;
   const access = await loadGmailAccess(db, staffId);
@@ -267,31 +244,42 @@ export async function syncGmailAction(): Promise<{ synced: number }> {
   if (account?.nextSyncAfter && account.nextSyncAfter.getTime() > now) throw new Error("RATE_LIMITED");
 
   const result = await syncGmail(db, staffId);
-  revalidateMiEspacio();
   return { synced: result.synced };
 }
 
 /**
  * Link (or unlink with `null`) a thread to a project; a link writes the
- * subject to the project history. Errors: `NOT_FOUND`, `FORBIDDEN`.
- * Revalidates `/mi-espacio`, `/proyectos/[id]`.
+ * subject to the project history. Errors (as `{ ok: false }`): `NOT_FOUND`,
+ * `FORBIDDEN`. Revalidates `/proyectos/[id]`; the client refreshes `me.gmail`.
  */
-export async function linkGmailThreadToProjectAction(threadId: string, projectId: string | null): Promise<void> {
+export async function linkGmailThreadToProjectAction(
+  ...args: Parameters<typeof linkGmailThreadToProjectActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof linkGmailThreadToProjectActionImpl>>>> {
+  return toActionResult(() => linkGmailThreadToProjectActionImpl(...args));
+}
+
+async function linkGmailThreadToProjectActionImpl(threadId: string, projectId: string | null): Promise<void> {
   const user = await requireCapabilityUser();
   const id = requireThreadId(threadId);
   const target = projectId === null ? null : parseInput(GmailTaskInputSchema.shape.projectId, projectId);
 
   const { previousProjectId } = await linkThread(user, id, target);
-  revalidateMiEspacio();
   if (target) revalidateProject(target);
   if (previousProjectId && previousProjectId !== target) revalidateProject(previousProjectId);
 }
 
 /**
  * Create or (with `draftId`) update a draft; returns a 10-minute confirm
- * token. Errors: `INVALID`, `NOT_CONNECTED`, `SCOPE_MISSING`, `NOT_FOUND`.
+ * token. Errors (as `{ ok: false }`): `INVALID`, `NOT_CONNECTED`,
+ * `SCOPE_MISSING`, `NOT_FOUND`.
  */
-export async function createGmailDraftAction(input: {
+export async function createGmailDraftAction(
+  ...args: Parameters<typeof createGmailDraftActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createGmailDraftActionImpl>>>> {
+  return toActionResult(() => createGmailDraftActionImpl(...args));
+}
+
+async function createGmailDraftActionImpl(input: {
   to: string[];
   subject: string;
   body: string;
@@ -332,8 +320,14 @@ export async function createGmailDraftAction(input: {
   return { draftId: draft.id, confirmToken, expiresAt: expiresAt.toISOString() };
 }
 
-/** Errors: `CONFIRM_REQUIRED`, `EXPIRED`, `NOT_CONNECTED`. Revalidates `/mi-espacio`. */
-export async function sendGmailDraftAction(draftId: string, confirmToken: string): Promise<{ messageId: string }> {
+/** Errors (as `{ ok: false }`): `CONFIRM_REQUIRED`, `EXPIRED`, `NOT_CONNECTED`. */
+export async function sendGmailDraftAction(
+  ...args: Parameters<typeof sendGmailDraftActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof sendGmailDraftActionImpl>>>> {
+  return toActionResult(() => sendGmailDraftActionImpl(...args));
+}
+
+async function sendGmailDraftActionImpl(draftId: string, confirmToken: string): Promise<{ messageId: string }> {
   const user = await requireCapabilityUser();
   const staffId = user.member.id;
   if (typeof draftId !== "string" || !draftId.trim()) throw new Error("CONFIRM_REQUIRED");
@@ -342,16 +336,21 @@ export async function sendGmailDraftAction(draftId: string, confirmToken: string
 
   verifyConfirmToken(confirmTokenSecret(), staffId, draftId, typeof confirmToken === "string" ? confirmToken : null);
   const sent = await sendDraft(staffId, draftId);
-  revalidateMiEspacio();
   return { messageId: sent.messageId };
 }
 
 /**
  * Task from a thread (title defaults to the subject; also links the thread).
  * Auth: owner + `activities.canCreateActivity` + project visible.
- * Errors: `NOT_FOUND`, `FORBIDDEN`, `NOT_CONNECTED`.
+ * Errors (as `{ ok: false }`): `NOT_FOUND`, `FORBIDDEN`, `NOT_CONNECTED`.
  */
 export async function createTaskFromGmailThreadAction(
+  ...args: Parameters<typeof createTaskFromGmailThreadActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createTaskFromGmailThreadActionImpl>>>> {
+  return toActionResult(() => createTaskFromGmailThreadActionImpl(...args));
+}
+
+async function createTaskFromGmailThreadActionImpl(
   threadId: string,
   input: { projectId: string; title?: string },
 ): Promise<{ taskId: string }> {
@@ -389,7 +388,6 @@ export async function createTaskFromGmailThreadAction(
   );
   const { previousProjectId } = await linkThread(user, thread.id, project.id);
 
-  revalidateMiEspacio();
   revalidateProject(project.id);
   if (previousProjectId && previousProjectId !== project.id) revalidateProject(previousProjectId);
   return { taskId: task.id };
@@ -397,15 +395,20 @@ export async function createTaskFromGmailThreadAction(
 
 /**
  * Stop sync, delete the caller's cached threads, set `disconnected_at`. The
- * shared Google token is not revoked. Revalidates `/mi-espacio`, `/ajustes/integraciones`.
+ * shared Google token is not revoked. No revalidation: Ajustes ›
+ * Integraciones invalidates `me.gmail` and its page data.
  */
-export async function disconnectGmailAction(): Promise<void> {
+export async function disconnectGmailAction(
+  ...args: Parameters<typeof disconnectGmailActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof disconnectGmailActionImpl>>>> {
+  return toActionResult(() => disconnectGmailActionImpl(...args));
+}
+
+async function disconnectGmailActionImpl(): Promise<void> {
   const user = await requireCapabilityUser();
   const staffId = user.member.id;
   await db.transaction(async (tx) => {
     await gmailRepository.deleteGmailThreads(tx, staffId);
     await gmailRepository.markGmailDisconnected(tx, staffId, new Date());
   });
-  revalidateMiEspacio();
-  revalidateAjustesScreen("integraciones");
 }

@@ -27,7 +27,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 import { unwrapActionResult } from "@/lib/actions/action-result";
-import { addProjectCommentAction, fetchProjectAction, fetchProjectsAction } from "@/lib/actions/projects-actions";
+import { addProjectCommentAction, fetchProjectAction } from "@/lib/actions/projects-actions";
+import { listViewerProjects } from "@/lib/assistant/reads";
 import { fetchScheduleAction } from "@/lib/actions/schedule-actions";
 import { updateTaskAction } from "@/lib/actions/tasks-actions";
 import { previewStartTramoAction, startTramoAction } from "@/lib/actions/tramo-start-actions";
@@ -144,7 +145,7 @@ type ProjectRef = { id: string; name: string };
 async function resolveProjectRef(ctx: ToolRunContext, name: string | undefined): Promise<{ ok: true; value: ProjectRef } | ToolFailure> {
   const query = name?.trim();
   if (query) {
-    const rows = await fetchProjectsAction({ search: query });
+    const rows = await listViewerProjects({ search: query });
     const picked = pickByName(rows, query, "el proyecto");
     return picked.ok ? { ok: true, value: { id: picked.value.id, name: picked.value.name } } : picked;
   }

@@ -1,8 +1,8 @@
 "use server";
 
-import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
 import { z } from "zod";
 
+import { toActionResult } from "@/lib/actions/action-result";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
@@ -25,6 +25,7 @@ import type {
   WorkflowTaskTemplate,
   WorkflowTaskTemplateInput,
 } from "@/lib/types/core";
+import type { ActionResult } from "@/lib/types/schedule";
 
 async function requireWorkflowsCapabilities() {
   return resolveWorkflowsCapabilities(await requireCapabilityUser());
@@ -35,13 +36,6 @@ async function requireWorkflowsManager() {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) throw flowError(FLOW_ERROR.FORBIDDEN);
   return user;
-}
-
-/** The tramos admin pages. */
-function revalidateTramos(options: { positions?: boolean; projects?: boolean } = {}) {
-  revalidateAjustesScreen("tramos");
-  revalidateAjustesScreen("workflows");
-  if (options.positions) revalidateAjustesScreen("puestos");
 }
 
 /**
@@ -73,9 +67,7 @@ export async function createWorkflowAction(input: WorkflowInput): Promise<Workfl
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
     throw new Error("FORBIDDEN: workflow create");
   }
-  const row = await workflowsRepository.createWorkflow(input, user.member.id);
-  revalidateAjustesScreen("workflows");
-  return row;
+  return workflowsRepository.createWorkflow(input, user.member.id);
 }
 
 export async function updateWorkflowAction(id: string, patch: Partial<WorkflowInput>): Promise<Workflow> {
@@ -83,9 +75,7 @@ export async function updateWorkflowAction(id: string, patch: Partial<WorkflowIn
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
     throw new Error("FORBIDDEN: workflow edit");
   }
-  const row = await workflowsRepository.updateWorkflow(id, patch, user.member.id);
-  revalidateAjustesScreen("workflows");
-  return row;
+  return workflowsRepository.updateWorkflow(id, patch, user.member.id);
 }
 
 export async function deleteWorkflowAction(id: string): Promise<void> {
@@ -94,15 +84,16 @@ export async function deleteWorkflowAction(id: string): Promise<void> {
     throw new Error("FORBIDDEN: workflow delete");
   }
   await workflowsRepository.softDeleteWorkflow(id, user.member.id);
-  revalidateAjustesScreen("workflows");
-}
-
-function revalidateTemplates() {
-  revalidateAjustesScreen("tramos");
 }
 
 /** `phaseId` is required. Errors: FORBIDDEN, NOT_FOUND, EMPTY, INVALID, PHASE_MISMATCH, NAME_TAKEN. */
 export async function createTemplateAction(
+  ...args: Parameters<typeof createTemplateActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createTemplateActionImpl>>>> {
+  return toActionResult(() => createTemplateActionImpl(...args));
+}
+
+async function createTemplateActionImpl(
   workflowId: string,
   input: WorkflowTaskTemplateInput
 ): Promise<WorkflowTaskTemplate> {
@@ -113,7 +104,6 @@ export async function createTemplateAction(
   const id = parseInput(UuidSchema, workflowId);
   const parsed = parseInput(WorkflowTaskTemplateInputSchema, input);
   const row = await workflowsRepository.createTemplate(id, parsed, user.member.id);
-  revalidateTemplates();
   return row;
 }
 
@@ -122,6 +112,12 @@ export async function createTemplateAction(
  * Errors: FORBIDDEN, NOT_FOUND, EMPTY, INVALID, PHASE_MISMATCH, NAME_TAKEN.
  */
 export async function updateTemplateAction(
+  ...args: Parameters<typeof updateTemplateActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof updateTemplateActionImpl>>>> {
+  return toActionResult(() => updateTemplateActionImpl(...args));
+}
+
+async function updateTemplateActionImpl(
   id: string,
   patch: Partial<WorkflowTaskTemplateInput>
 ): Promise<WorkflowTaskTemplate> {
@@ -132,27 +128,36 @@ export async function updateTemplateAction(
   const templateId = parseInput(UuidSchema, id);
   const parsed = parseInput(WorkflowTaskTemplateInputSchema.partial(), patch);
   const row = await workflowsRepository.updateTemplate(templateId, parsed, user.member.id);
-  revalidateTemplates();
   return row;
 }
 
-export async function deactivateTemplateAction(id: string): Promise<WorkflowTaskTemplate> {
+export async function deactivateTemplateAction(
+  ...args: Parameters<typeof deactivateTemplateActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof deactivateTemplateActionImpl>>>> {
+  return toActionResult(() => deactivateTemplateActionImpl(...args));
+}
+
+async function deactivateTemplateActionImpl(id: string): Promise<WorkflowTaskTemplate> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
     throw new Error("FORBIDDEN: template deactivate");
   }
   const row = await workflowsRepository.deactivateTemplate(id, user.member.id);
-  revalidateTemplates();
   return row;
 }
 
-export async function reorderTemplatesAction(workflowId: string, orderedIds: string[]): Promise<void> {
+export async function reorderTemplatesAction(
+  ...args: Parameters<typeof reorderTemplatesActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderTemplatesActionImpl>>>> {
+  return toActionResult(() => reorderTemplatesActionImpl(...args));
+}
+
+async function reorderTemplatesActionImpl(workflowId: string, orderedIds: string[]): Promise<void> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
     throw new Error("FORBIDDEN: template reorder");
   }
   await workflowsRepository.reorderTemplates(workflowId, orderedIds);
-  revalidateTemplates();
 }
 
 // ── Tramos y fases (project flow BE §7.1) ───────────────────────────────────
@@ -164,17 +169,28 @@ export async function fetchTramosNavAction(): Promise<WorkflowRef[]> {
 }
 
 /** `canManageWorkflows`. Appended last. Errors: FORBIDDEN, NOT_FOUND, NAME_TAKEN, EMPTY. */
-export async function createWorkflowPhaseAction(workflowId: string, input: WorkflowPhaseInput): Promise<WorkflowPhase> {
+export async function createWorkflowPhaseAction(
+  ...args: Parameters<typeof createWorkflowPhaseActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createWorkflowPhaseActionImpl>>>> {
+  return toActionResult(() => createWorkflowPhaseActionImpl(...args));
+}
+
+async function createWorkflowPhaseActionImpl(workflowId: string, input: WorkflowPhaseInput): Promise<WorkflowPhase> {
   const user = await requireWorkflowsManager();
   const id = parseInput(UuidSchema, workflowId);
   const values = parseInput(WorkflowPhaseInputSchema, input);
   const row = await workflowPhasesRepository.createPhase(id, values, user.member.id);
-  revalidateTramos({ positions: true });
   return row;
 }
 
 /** Rename, activate/deactivate. Errors: FORBIDDEN, NOT_FOUND, NAME_TAKEN, EMPTY. */
 export async function updateWorkflowPhaseAction(
+  ...args: Parameters<typeof updateWorkflowPhaseActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof updateWorkflowPhaseActionImpl>>>> {
+  return toActionResult(() => updateWorkflowPhaseActionImpl(...args));
+}
+
+async function updateWorkflowPhaseActionImpl(
   id: string,
   patch: Partial<WorkflowPhaseInput>
 ): Promise<WorkflowPhase> {
@@ -182,17 +198,21 @@ export async function updateWorkflowPhaseAction(
   const phaseId = parseInput(UuidSchema, id);
   const values = parseInput(WorkflowPhaseInputSchema.partial(), patch);
   const row = await workflowPhasesRepository.updatePhase(phaseId, values, user.member.id);
-  revalidateTramos({ positions: true });
   return row;
 }
 
 /** `orderedIds` must be exactly the tramo's fase ids. Errors: FORBIDDEN, NOT_FOUND. */
-export async function reorderWorkflowPhasesAction(workflowId: string, orderedIds: string[]): Promise<void> {
+export async function reorderWorkflowPhasesAction(
+  ...args: Parameters<typeof reorderWorkflowPhasesActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderWorkflowPhasesActionImpl>>>> {
+  return toActionResult(() => reorderWorkflowPhasesActionImpl(...args));
+}
+
+async function reorderWorkflowPhasesActionImpl(workflowId: string, orderedIds: string[]): Promise<void> {
   await requireWorkflowsManager();
   const id = parseInput(UuidSchema, workflowId);
   const ids = parseInput(OrderedIdsSchema, orderedIds);
   await workflowPhasesRepository.reorderPhases(id, ids);
-  revalidateTramos({ positions: true });
 }
 
 /**
@@ -200,11 +220,16 @@ export async function reorderWorkflowPhasesAction(workflowId: string, orderedIds
  * first active tramo and `on_ready` for the others, `false` stores `manual`.
  * Errors: FORBIDDEN, NOT_FOUND.
  */
-export async function setWorkflowAutoStartAction(workflowId: string, autoStart: boolean): Promise<Workflow> {
+export async function setWorkflowAutoStartAction(
+  ...args: Parameters<typeof setWorkflowAutoStartActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setWorkflowAutoStartActionImpl>>>> {
+  return toActionResult(() => setWorkflowAutoStartActionImpl(...args));
+}
+
+async function setWorkflowAutoStartActionImpl(workflowId: string, autoStart: boolean): Promise<Workflow> {
   const user = await requireWorkflowsManager();
   const id = parseInput(UuidSchema, workflowId);
   const enabled = parseInput(z.boolean(), autoStart);
   const row = await workflowsRepository.setWorkflowAutoStart(id, enabled, user.member.id);
-  revalidateTramos({ projects: true });
   return row;
 }

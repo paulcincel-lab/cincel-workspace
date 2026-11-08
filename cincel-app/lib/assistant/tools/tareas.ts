@@ -24,7 +24,6 @@ import {
   addTaskCommentAction,
   assignTaskAction,
   createUserTaskAction,
-  fetchTasksAction,
   setTaskCustomStatusAction,
   setTaskStatusAction,
   updateChecklistItemAction,
@@ -32,6 +31,7 @@ import {
 } from "@/lib/actions/tasks-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { defineTool, type DefinedTool } from "@/lib/assistant/define-tool";
+import { listViewerTasks } from "@/lib/assistant/reads";
 import { extractTaskTitles, MAX_TASKS_FROM_NOTES } from "@/lib/assistant/notes-to-tasks";
 import { resolveStaff } from "@/lib/assistant/resolvers";
 import { formatDueDate, taskStatusLabel, toolSummaries } from "@/lib/assistant/tool-summaries";
@@ -540,7 +540,7 @@ export const rebalance_workload = defineTool({
     }
 
     const [tasks, staff] = await Promise.all([
-      fetchTasksAction({ status: OPEN_STATUSES, ...(workflow ? { workflowId: workflow.id } : {}) }),
+      listViewerTasks({ status: OPEN_STATUSES, ...(workflow ? { workflowId: workflow.id } : {}) }),
       fetchAssignableStaffAction(workflow?.id ?? null),
     ]);
     const people = staff

@@ -1,3 +1,4 @@
+import { formatMediumDateTime } from "@/lib/dates/zoned-formatters";
 import type { RecheckStaffAccessResult } from "@/lib/types/workspace-access";
 
 /** Tooltip of the "Google Workspace" badge on role and área fields (FE §2.6). */
@@ -49,5 +50,5 @@ export function recheckResultMessage(result: RecheckStaffAccessResult): RecheckM
 /** "Último acceso" in the Equipo list. */
 export function formatLastLogin(value: string | null | undefined): string {
   if (!value) return "Nunca";
-  return new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return formatMediumDateTime(new Date(value));
 }

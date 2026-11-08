@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Download, Upload, X } from "lucide-react";
 
@@ -11,17 +12,13 @@ import { BoardsStep, type ExportChoice } from "@/components/configuracion/monday
 import { ConnectStep } from "@/components/configuracion/monday-import/ConnectStep";
 import { EquivalenciasStep } from "@/components/configuracion/monday-import/EquivalenciasStep";
 import { ImportStep } from "@/components/configuracion/monday-import/ImportStep";
+import { mondayErrorText, useMondayMutation } from "@/components/configuracion/monday-import/monday-mutations";
 import { OptionsStep } from "@/components/configuracion/monday-import/OptionsStep";
 import { PeopleStep } from "@/components/configuracion/monday-import/PeopleStep";
 import { PreviewStep } from "@/components/configuracion/monday-import/PreviewStep";
 import { WizardStepper } from "@/components/configuracion/WizardStepper";
 import {
-  checkMondayRollbackAction,
   downloadMondayMappingAction,
-  getMondayExportSourceAction,
-  getMondayImportedProjectsAction,
-  getMondayImportOptionsAction,
-  getMondayImportRunAction,
   openMondayImportRunAction,
   previewMondayImportAction,
   saveMondayImportStepAction,
@@ -46,25 +43,33 @@ import {
   stepIndex,
   validateMapping,
 } from "@/lib/monday-import/wizard-steps";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import {
+  isMondayRunBusy,
+  mondayChoicesOptions,
+  mondayImportedProjectsOptions,
+  mondayImportOptionsOptions,
+  mondayRollbackCheckOptions,
+  mondayRunOptions,
+  mondaySourceOptions,
+} from "@/lib/query/options/monday";
+import { readJsonStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 import type {
   MappingInput,
   MondayConnection,
-  MondayExportSource,
   MondayImportChoices,
-  MondayImportedProject,
+  MondayImportJob,
+  MondayImportJobKind,
   MondayImportOptionsInfo,
   MondayImportRunState,
   MondayImportStep,
-  MondayPreview,
-  MondayRollbackCheck,
 } from "@/lib/types/monday-import";
 import type { CreatedStaff } from "@/scripts/monday/created-staff";
 
-const POLL_MS = 2000;
-const UNEXPECTED = "Algo salió mal. Intenta de nuevo.";
 /** Steps that edit the draft: leaving one saves it. */
 const DRAFT_STEPS: MondayImportStep[] = ["tableros", "equivalencias", "personas", "opciones"];
-/** Where the ✕ goes; the run stays on the server and opening the page again resumes it. */
+/** Where the ✕ goes; the run stays on the server and "Continuar importación" resumes it. */
 const CLOSE_HREF = "/configuracion";
 
 /** Boards whose card was opened, per run, in this browser only (a convenience: «mapear» until opened). */
@@ -72,11 +77,9 @@ function reviewedKey(runId: string): string {
   return `monday-import:reviewed:${runId}`;
 }
 
-function readReviewed(runId: string | null): string[] {
-  if (!runId) return [];
+function readReviewed(runId: string): string[] {
   try {
-    const raw = window.localStorage.getItem(reviewedKey(runId));
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    const parsed = readJsonStorage<unknown>(reviewedKey(runId), []);
     return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
   } catch {
     return [];
@@ -85,19 +88,11 @@ function readReviewed(runId: string | null): string[] {
 
 function writeReviewed(runId: string, ids: string[]): void {
   try {
-    window.localStorage.setItem(reviewedKey(runId), JSON.stringify(ids));
+    writeStorage(reviewedKey(runId), JSON.stringify(ids));
   } catch {
     // Without storage the chips just start at «mapear» again next time.
   }
 }
-
-export type MondayImportWizardProps = {
-  initialRun: MondayImportRunState | null;
-  initialChoices: MondayImportChoices | null;
-  hasServerToken: boolean;
-  /** Load error of the page (no run could be opened). */
-  loadError: string | null;
-};
 
 function IssueList({ issues }: { issues: string[] }) {
   if (issues.length === 0) return null;
@@ -118,72 +113,255 @@ function IssueList({ issues }: { issues: string[] }) {
   );
 }
 
+/** "Vista previa" (Paso 6): computed on demand, never cached (no invalidation). */
+function usePreviewMutation() {
+  return useMondayMutation((runId: string) => previewMondayImportAction(runId));
+}
+
+type PreviewMutation = ReturnType<typeof usePreviewMutation>;
+
+/** The run the button opened and the step the wizard starts at. */
+type OpenedRun = { run: MondayImportRunState; step: MondayImportStep };
+
+/** Writes a job a start action returned into the run's cache entry, so the poll starts. */
+function withJob(kind: MondayImportJobKind, job: MondayImportJob) {
+  return (current: MondayImportRunState | undefined) =>
+    current ? { ...current, jobs: { ...current.jobs, [kind]: job } } : current;
+}
+
+export type MondayImportWizardProps = {
+  /** The latest run, read only from the page data; null when there is none. */
+  latestRun: MondayImportRunState | null;
+  hasServerToken: boolean;
+  /** Load error of the page data (the run state or the choices could not be read). */
+  loadError: string | null;
+};
+
 /**
- * Importar de monday (#672): the CLI's export → init → plan → apply → rollback as a resumable wizard. The draft
+ * Importar de monday (#672): the CLI's export → init → plan → apply → rollback as a resumable wizard. The page only
+ * reads the latest run; "Iniciar importación" / "Continuar importación" creates or resumes it (#966). The draft
  * mapping.json lives on the server; the monday token only in this component's state.
  */
-export function MondayImportWizard({
-  initialRun,
-  initialChoices,
-  hasServerToken,
-  loadError,
-}: MondayImportWizardProps) {
-  const router = useRouter();
-  const [run, setRun] = useState<MondayImportRunState | null>(initialRun);
-  const [step, setStep] = useState<MondayImportStep>(() => initialStep(initialRun));
+export function MondayImportWizard({ latestRun, hasServerToken, loadError }: MondayImportWizardProps) {
+  const [opened, setOpened] = useState<OpenedRun | null>(null);
   const [token, setToken] = useState("");
   const [connection, setConnection] = useState<MondayConnection | null>(null);
-  const [selectedBoardIds, setSelectedBoardIds] = useState<string[]>(initialRun?.boardIds ?? []);
-  const [exportChoice, setExportChoice] = useState<ExportChoice>(
-    initialRun?.exportOptions ?? { updates: true, files: true },
+  const [openError, setOpenError] = useState("");
+  const preview = usePreviewMutation();
+  const openRun = useMondayMutation((fresh: boolean) => openMondayImportRunAction(fresh), {
+    setData: (qc, result) => qc.setQueryData(qk.monday.run(result.run.runId), result.run),
+    invalidate: [qk.ajustes.page("monday")],
+  });
+
+  /** Opens a run (`fresh` = a new one) and shows the wizard at `stepFor(run)`. Throws on failure. */
+  async function open(fresh: boolean, stepFor: (run: MondayImportRunState) => MondayImportStep) {
+    const { run } = await openRun.mutateAsync(fresh);
+    preview.reset();
+    const step = stepFor(run);
+    setOpened({ run, step });
+    if (step === "vista_previa") preview.mutate(run.runId);
+  }
+
+  async function startOrContinue() {
+    setOpenError("");
+    try {
+      // With a saved run the button resumes it; with none it starts a new one.
+      await open(latestRun === null, initialStep);
+    } catch (err) {
+      setOpenError(mondayErrorText(err, "No se pudo abrir la importación. Intenta de nuevo."));
+    }
+  }
+
+  if (!opened) {
+    const resumeStep = latestRun ? MONDAY_IMPORT_STEPS[stepIndex(initialStep(latestRun))] : null;
+    return (
+      <div className="space-y-4">
+        {loadError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{loadError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {resumeStep ? (
+          <p className="text-sm text-muted-foreground">
+            Tienes una importación guardada. Paso actual: <span className="font-medium text-foreground">{resumeStep.label}</span>.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">Conecta tu cuenta de monday y elige qué tableros traer a Cincel.</p>
+        )}
+        <Button disabled={openRun.isPending} onClick={() => void startOrContinue()}>
+          {latestRun ? "Continuar importación" : "Iniciar importación"}
+        </Button>
+        {openError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{openError}</AlertDescription>
+          </Alert>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <MondayRunWizard
+      key={opened.run.runId}
+      opened={opened}
+      hasServerToken={hasServerToken}
+      token={token}
+      onTokenChange={setToken}
+      connection={connection}
+      onConnected={setConnection}
+      preview={preview}
+      startingOver={openRun.isPending}
+      onStartOver={() => open(true, () => (connection ? "tableros" : "conectar"))}
+    />
   );
-  const [mapping, setMapping] = useState<MappingInput | null>(initialRun?.mapping ?? null);
-  const [source, setSource] = useState<MondayExportSource | null>(null);
-  const [choices, setChoices] = useState<MondayImportChoices | null>(initialChoices);
-  const [optionsInfo, setOptionsInfo] = useState<MondayImportOptionsInfo | null>(null);
-  const [optionsError, setOptionsError] = useState("");
-  const [preview, setPreview] = useState<MondayPreview | null>(null);
-  const [previewError, setPreviewError] = useState("");
-  // null until the applied run's projects load, so Importar shows a loading state instead of "no projects".
-  const [projects, setProjects] = useState<MondayImportedProject[] | null>(null);
-  const [rollbackCheck, setRollbackCheck] = useState<MondayRollbackCheck | null>(null);
+}
+
+/**
+ * One opened run. The run state is `monday.run(id)` (polled every 2 s while a job runs); the draft being edited,
+ * the step and the other wizard choices are this component's state, seeded once from the opened run.
+ */
+function MondayRunWizard({
+  opened,
+  hasServerToken,
+  token,
+  onTokenChange,
+  connection,
+  onConnected,
+  preview,
+  startingOver,
+  onStartOver,
+}: {
+  opened: OpenedRun;
+  hasServerToken: boolean;
+  token: string;
+  onTokenChange: (token: string) => void;
+  connection: MondayConnection | null;
+  onConnected: (connection: MondayConnection) => void;
+  preview: PreviewMutation;
+  startingOver: boolean;
+  onStartOver: () => Promise<void>;
+}) {
+  const router = useRouter();
+  const qc = useQueryClient();
+  const runId = opened.run.runId;
+  const runKey = qk.monday.run(runId);
+
+  // The open button already wrote the run into the cache: no refetch on mount, only the poll.
+  const runQuery = useQuery({ ...mondayRunOptions(runId), refetchOnMount: false });
+  const run = runQuery.data ?? opened.run;
+  const choices = useQuery(mondayChoicesOptions()).data ?? null;
+
+  const [step, setStep] = useState<MondayImportStep>(opened.step);
+  const [selectedBoardIds, setSelectedBoardIds] = useState<string[]>(opened.run.boardIds);
+  const [exportChoice, setExportChoice] = useState<ExportChoice>(
+    opened.run.exportOptions ?? { updates: true, files: true },
+  );
+  const [mapping, setMapping] = useState<MappingInput | null>(opened.run.mapping);
+  const [previewSaveError, setPreviewSaveError] = useState("");
   const [issues, setIssues] = useState<string[]>([]);
-  const [error, setError] = useState(loadError ?? "");
+  const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   /** Board Equivalencias opens on ("Corregir" in Vista previa). */
   const [focusBoardId, setFocusBoardId] = useState<string | null>(null);
   const [focusPersonId, setFocusPersonId] = useState<string | null>(null);
-  const [reviewed, setReviewed] = useState<string[]>([]);
-  const [isPending, startTransition] = useTransition();
+  // Mounted only after the button is clicked, so browser storage is readable here.
+  const [reviewed, setReviewed] = useState<string[]>(() => readReviewed(runId));
   const fileInput = useRef<HTMLInputElement>(null);
-  const runId = run?.runId ?? null;
-  const anyJobRunning = Boolean(run && Object.values(run.jobs).some((job) => isJobRunning(job)));
+  const anyJobRunning = isMondayRunBusy(run);
 
-  // --- Loading -------------------------------------------------------------------------------------------------
+  // The poll brought a new run state: when the export finished (or a draft appeared), take init's draft.
+  const [seenRun, setSeenRun] = useState(run);
+  if (seenRun !== run) {
+    setSeenRun(run);
+    const exportFinished = isJobRunning(seenRun.jobs.export) && run.jobs.export?.status === "succeeded";
+    if (exportFinished || (!mapping && run.mapping)) {
+      setMapping(run.mapping);
+      setSelectedBoardIds(run.boardIds);
+    }
+  }
 
-  const loadSource = useCallback(async (id: string) => {
-    const result = await getMondayExportSourceAction(id);
-    if (result.ok) setSource(result.source);
-    else setError(result.error);
-  }, []);
+  // --- Reads ---------------------------------------------------------------------------------------------------
 
-  const loadResult = useCallback(async (id: string) => {
-    const [projectsResult, checkResult] = await Promise.all([
-      getMondayImportedProjectsAction(id),
-      checkMondayRollbackAction(id),
-    ]);
-    setProjects(projectsResult.ok ? projectsResult.projects : []);
-    setRollbackCheck(checkResult.ok ? checkResult.check : null);
-  }, []);
+  const sourceQuery = useQuery({ ...mondaySourceOptions(runId), enabled: run.exported });
+  const source = sourceQuery.data ?? null;
 
-  useEffect(() => {
-    // Browser storage is only readable after hydration.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setReviewed(readReviewed(runId));
-  }, [runId]);
+  const resultReady = Boolean(run.batchId) && !isJobRunning(run.jobs.apply) && !isJobRunning(run.jobs.rollback);
+  const projectsQuery = useQuery({ ...mondayImportedProjectsOptions(runId), enabled: resultReady });
+  // null while the applied run's projects load, so Importar shows a loading state instead of "no projects".
+  const projects = projectsQuery.data ?? (resultReady && !projectsQuery.isError ? null : []);
+  const rollbackCheck = useQuery({ ...mondayRollbackCheckOptions(runId), enabled: resultReady }).data ?? null;
+
+  const optionsQuery = useQuery({ ...mondayImportOptionsOptions(runId), enabled: step === "opciones" });
+  const optionsInfo = optionsQuery.data ?? null;
+  const optionsError = step === "opciones" && optionsQuery.error ? mondayErrorText(optionsQuery.error) : "";
+  // A draft that still asks for what can't be imported (files without Drive) is turned off once the options
+  // arrive, so it is saved that way on Siguiente instead of blocking Vista previa.
+  const [clampedWith, setClampedWith] = useState<MondayImportOptionsInfo | null>(null);
+  if (optionsInfo && optionsInfo !== clampedWith) {
+    setClampedWith(optionsInfo);
+    if (mapping) setMapping(clampOptions(mapping, optionsInfo));
+  }
+
+  // --- Writes --------------------------------------------------------------------------------------------------
+
+  const saveDraftMutation = useMondayMutation(
+    (vars: { mapping: MappingInput; step?: MondayImportStep }) =>
+      saveMondayMappingDraftAction(runId, vars.mapping, vars.step),
+    {
+      setData: (client, _result, vars) =>
+        client.setQueryData<MondayImportRunState>(runKey, (current) =>
+          current ? { ...current, mapping: vars.mapping, step: vars.step ?? current.step } : current,
+        ),
+    },
+  );
+  const saveStepMutation = useMondayMutation((target: MondayImportStep) => saveMondayImportStepAction(runId, target), {
+    setData: (client, _result, target) =>
+      client.setQueryData<MondayImportRunState>(runKey, (current) => (current ? { ...current, step: target } : current)),
+  });
+  const exportMutation = useMondayMutation(
+    (input: { token: string | null; boardIds: string[]; updates: boolean; files: boolean }) =>
+      startMondayExportAction(runId, input.token, { boardIds: input.boardIds, updates: input.updates, files: input.files }),
+    { setData: (client, result) => client.setQueryData<MondayImportRunState>(runKey, withJob("export", result.job)) },
+  );
+  const applyMutation = useMondayMutation((id: string) => startMondayApplyAction(id), {
+    setData: (client, result) => client.setQueryData<MondayImportRunState>(runKey, withJob("apply", result.job)),
+  });
+  const rollbackMutation = useMondayMutation((id: string) => startMondayRollbackAction(id), {
+    setData: (client, result) => client.setQueryData<MondayImportRunState>(runKey, withJob("rollback", result.job)),
+  });
+  const downloadMutation = useMondayMutation((id: string) => downloadMondayMappingAction(id));
+  // A clean upload replaces the draft: `upload` then reads the run into `monday.run(id)`.
+  const uploadMutation = useMondayMutation((text: string) => uploadMondayMappingAction(runId, text));
+  const completeMutation = useActionMutation(() => completeOnboardingAction(), {
+    invalidate: [qk.inicio()],
+    onFormError: () => {},
+  });
+
+  const isPending =
+    startingOver ||
+    preview.isPending ||
+    [
+      saveDraftMutation,
+      saveStepMutation,
+      exportMutation,
+      applyMutation,
+      rollbackMutation,
+      downloadMutation,
+      uploadMutation,
+      completeMutation,
+    ].some((mutation) => mutation.isPending);
+
+  /** Adds to the cached choices what a nested step just created, so its select lists it at once. */
+  function patchChoices(patch: (current: MondayImportChoices) => MondayImportChoices) {
+    qc.setQueryData<MondayImportChoices>(qk.monday.choices(), (current) => (current ? patch(current) : current));
+  }
+
+  const addStatus = (status: MondayImportChoices["statuses"][number]) =>
+    patchChoices((current) => ({ ...current, statuses: [...current.statuses, status] }));
+  const addStaff = (member: MondayImportChoices["staff"][number]) =>
+    patchChoices((current) => ({ ...current, staff: [...current.staff, member] }));
 
   function markReviewed(boardId: string) {
-    if (!runId) return;
     setReviewed((current) => {
       if (current.includes(boardId)) return current;
       const next = [...current, boardId];
@@ -192,354 +370,200 @@ export function MondayImportWizard({
     });
   }
 
-  const runRef = useRef(run);
-  const mappingRef = useRef(mapping);
-  useEffect(() => {
-    runRef.current = run;
-    mappingRef.current = mapping;
-  }, [run, mapping]);
-
-  /** Applies a polled run state; picks up the draft init wrote when the export finished. */
-  const applyRun = useCallback(
-    (next: MondayImportRunState) => {
-      const previous = runRef.current;
-      setRun(next);
-      const exportFinished = isJobRunning(previous?.jobs.export) && next.jobs.export?.status === "succeeded";
-      if (exportFinished || (!mappingRef.current && next.mapping)) {
-        setMapping(next.mapping);
-        setSelectedBoardIds(next.boardIds);
-        if (next.exported) void loadSource(next.runId);
-      }
-      const jobFinished =
-        (isJobRunning(previous?.jobs.apply) && !isJobRunning(next.jobs.apply)) ||
-        (isJobRunning(previous?.jobs.rollback) && !isJobRunning(next.jobs.rollback));
-      if (jobFinished && next.batchId) void loadResult(next.runId);
-    },
-    [loadResult, loadSource],
-  );
-
-  useEffect(() => {
-    // Only on the first render with a run: later loads come from applyRun.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (runId && run?.exported && !source) void loadSource(runId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (runId && run?.batchStatus === "applied") void loadResult(runId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId]);
-
-  // Poll every ~2 s while a background job runs.
-  useEffect(() => {
-    if (!runId || !anyJobRunning) return;
-    const timer = window.setInterval(async () => {
-      try {
-        const result = await getMondayImportRunAction(runId);
-        if (result.ok) applyRun(result.run);
-      } catch {
-        // A missed poll is retried on the next tick.
-      }
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [runId, anyJobRunning, applyRun]);
-
-  useEffect(() => {
-    if (step !== "opciones" || !runId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOptionsError("");
-    getMondayImportOptionsAction(runId)
-      .then((result) => {
-        if (!result.ok) return setOptionsError(result.error);
-        setOptionsInfo(result.options);
-        // A draft that still asks for what can't be imported (files without Drive) is turned off here, so it is
-        // saved that way on Siguiente instead of blocking Vista previa.
-        setMapping((current) => (current ? clampOptions(current, result.options) : current));
-      })
-      .catch(() => setOptionsError(UNEXPECTED));
-  }, [step, runId]);
-
   function refreshPreview() {
-    if (!runId) return;
-    setPreviewError("");
-    startTransition(async () => {
-      try {
-        const result = await previewMondayImportAction(runId);
-        if (result.ok) setPreview(result.preview);
-        else setPreviewError(result.error);
-      } catch {
-        setPreviewError(UNEXPECTED);
-      }
-    });
+    setPreviewSaveError("");
+    preview.mutate(runId);
   }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (step === "vista_previa") refreshPreview();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
-  // --- Actions -------------------------------------------------------------------------------------------------
 
   function editMapping(next: MappingInput) {
     setMapping(next);
-    setPreview(null);
+    preview.reset();
     if (issues.length > 0) setIssues(validateMapping(next));
   }
 
   /** "Crear integrante" on a Vista previa warning (#689): maps the person as Personas does, saves and recalculates. */
-  function staffCreatedInPreview(mondayUserId: string, member: CreatedStaff) {
-    if (!runId || !mapping) return;
+  async function staffCreatedInPreview(mondayUserId: string, member: CreatedStaff) {
+    if (!mapping) return;
     const next = setPerson(mapping, mondayUserId, { action: "staff", staffId: member.id, created: true });
-    setChoices((current) => (current ? { ...current, staff: [...current.staff, member] } : current));
+    addStaff(member);
     editMapping(next);
-    setPreviewError("");
-    startTransition(async () => {
-      try {
-        const saved = await saveMondayMappingDraftAction(runId, next);
-        if (!saved.ok) {
-          setPreviewError(saved.error);
-          return;
-        }
-        const result = await previewMondayImportAction(runId);
-        if (result.ok) setPreview(result.preview);
-        else setPreviewError(result.error);
-      } catch {
-        setPreviewError(UNEXPECTED);
-      }
-    });
+    setPreviewSaveError("");
+    try {
+      await saveDraftMutation.mutateAsync({ mapping: next });
+    } catch (err) {
+      setPreviewSaveError(mondayErrorText(err));
+      return;
+    }
+    preview.mutate(runId);
   }
 
+  /** Saves the draft (with the step to resume at); the issues found, or null when the save failed. */
   async function saveDraft(target: MondayImportStep): Promise<string[] | null> {
-    if (!runId || !mapping) return [];
-    const result = await saveMondayMappingDraftAction(runId, mapping, target);
-    if (!result.ok) {
-      setError(result.error);
+    if (!mapping) return [];
+    try {
+      return (await saveDraftMutation.mutateAsync({ mapping, step: target })).issues;
+    } catch (err) {
+      setError(mondayErrorText(err));
       return null;
     }
-    return result.issues;
   }
 
-  function goTo(target: MondayImportStep, boardId: string | null = null, personId: string | null = null) {
+  async function goTo(target: MondayImportStep, boardId: string | null = null, personId: string | null = null) {
     setError("");
     setNotice("");
-    startTransition(async () => {
-      try {
-        if (DRAFT_STEPS.includes(step) && mapping) {
-          const found = await saveDraft(target);
-          if (found === null) return;
-          const forward = stepIndex(target) > stepIndex(step);
-          const validates = step !== "tableros";
-          if (forward && validates && found.length > 0) {
-            setIssues(found);
-            return;
-          }
-          setIssues(forward && validates ? found : []);
-        } else if (runId) {
-          const result = await saveMondayImportStepAction(runId, target);
-          if (!result.ok) {
-            setError(result.error);
-            return;
-          }
-        }
-        setFocusBoardId(boardId);
-        setFocusPersonId(personId);
-        setStep(target);
-      } catch {
-        setError(UNEXPECTED);
+    if (DRAFT_STEPS.includes(step) && mapping) {
+      const found = await saveDraft(target);
+      if (found === null) return;
+      const forward = stepIndex(target) > stepIndex(step);
+      const validates = step !== "tableros";
+      if (forward && validates && found.length > 0) {
+        setIssues(found);
+        return;
       }
-    });
+      setIssues(forward && validates ? found : []);
+    } else {
+      try {
+        await saveStepMutation.mutateAsync(target);
+      } catch (err) {
+        setError(mondayErrorText(err));
+        return;
+      }
+    }
+    setFocusBoardId(boardId);
+    setFocusPersonId(personId);
+    setStep(target);
+    if (target === "vista_previa") refreshPreview();
   }
 
-  function startExport() {
-    if (!runId) return;
+  async function startExport() {
     setError("");
-    startTransition(async () => {
-      try {
-        const result = await startMondayExportAction(runId, token.trim() || null, {
-          boardIds: selectedBoardIds,
-          updates: exportChoice.updates,
-          files: exportChoice.files,
-        });
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setRun((previous) => (previous ? { ...previous, jobs: { ...previous.jobs, export: result.job } } : previous));
-      } catch {
-        setError(UNEXPECTED);
-      }
-    });
+    try {
+      await exportMutation.mutateAsync({
+        token: token.trim() || null,
+        boardIds: selectedBoardIds,
+        updates: exportChoice.updates,
+        files: exportChoice.files,
+      });
+    } catch (err) {
+      setError(mondayErrorText(err));
+    }
   }
 
-  function startApply() {
-    if (!runId) return;
+  async function startApply() {
     setError("");
-    startTransition(async () => {
-      try {
-        const result = await startMondayApplyAction(runId);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setRun((previous) => (previous ? { ...previous, jobs: { ...previous.jobs, apply: result.job } } : previous));
-      } catch {
-        setError(UNEXPECTED);
-      }
-    });
+    try {
+      await applyMutation.mutateAsync(runId);
+    } catch (err) {
+      setError(mondayErrorText(err));
+    }
   }
 
-  function startRollback() {
-    if (!runId) return;
+  async function startRollback() {
     setError("");
-    startTransition(async () => {
-      try {
-        const result = await startMondayRollbackAction(runId);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setRun((previous) => (previous ? { ...previous, jobs: { ...previous.jobs, rollback: result.job } } : previous));
-      } catch {
-        setError(UNEXPECTED);
-      }
-    });
+    try {
+      await rollbackMutation.mutateAsync(runId);
+    } catch (err) {
+      setError(mondayErrorText(err));
+    }
   }
 
-  function startOver() {
+  async function startOver() {
     setError("");
-    startTransition(async () => {
-      try {
-        const result = await openMondayImportRunAction(true);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setRun(result.run);
-        setMapping(null);
-        setSource(null);
-        setPreview(null);
-        setProjects([]);
-        setRollbackCheck(null);
-        setIssues([]);
-        setSelectedBoardIds([]);
-        setStep(connection ? "tableros" : "conectar");
-      } catch {
-        setError(UNEXPECTED);
-      }
-    });
+    try {
+      await onStartOver();
+    } catch (err) {
+      setError(mondayErrorText(err));
+    }
   }
 
-  /** ✕: saves the draft (if this step edits it) and leaves; the run is resumed when the page opens again. */
-  function close() {
+  /** ✕: saves the draft (if this step edits it) and leaves; "Continuar importación" resumes the run later. */
+  async function close() {
     setError("");
-    startTransition(async () => {
-      try {
-        if (DRAFT_STEPS.includes(step) && mapping && runId && !run?.batchId) {
-          const saved = await saveDraft(step);
-          if (saved === null) return;
-        }
-        router.push(CLOSE_HREF);
-      } catch {
-        setError(UNEXPECTED);
-      }
-    });
+    if (DRAFT_STEPS.includes(step) && mapping && !run.batchId) {
+      const saved = await saveDraft(step);
+      if (saved === null) return;
+    }
+    router.push(CLOSE_HREF);
   }
 
-  function complete() {
+  async function complete() {
     setError("");
-    startTransition(async () => {
-      try {
-        const result = await completeOnboardingAction();
-        if (!result.ok) {
-          setError("No tienes permiso.");
-          return;
-        }
-        router.replace("/inicio");
-      } catch {
-        setError("No se pudo guardar. Intenta de nuevo.");
-      }
-    });
+    try {
+      await completeMutation.mutateAsync(undefined);
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message === "forbidden" ? "No tienes permiso." : "No se pudo guardar. Intenta de nuevo.",
+      );
+      return;
+    }
+    router.replace("/inicio");
   }
 
-  function download() {
-    if (!runId) return;
+  async function download() {
     setError("");
-    startTransition(async () => {
-      try {
-        if (mapping) {
-          const saved = await saveDraft(step);
-          if (saved === null) return;
-        }
-        const result = await downloadMondayMappingAction(runId);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        const url = URL.createObjectURL(new Blob([result.content], { type: "application/json" }));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = result.fileName;
-        link.click();
-        URL.revokeObjectURL(url);
-      } catch {
-        setError(UNEXPECTED);
-      }
-    });
+    if (mapping) {
+      const saved = await saveDraft(step);
+      if (saved === null) return;
+    }
+    try {
+      const result = await downloadMutation.mutateAsync(runId);
+      const url = URL.createObjectURL(new Blob([result.content], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(mondayErrorText(err));
+    }
   }
 
-  function upload(file: File) {
-    if (!runId) return;
+  async function upload(file: File) {
     setError("");
     setNotice("");
-    startTransition(async () => {
-      try {
-        const result = await uploadMondayMappingAction(runId, await file.text());
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        if (result.issues.length > 0) {
-          setIssues(result.issues);
-          return;
-        }
-        const fresh = await getMondayImportRunAction(runId);
-        if (fresh.ok) {
-          setRun(fresh.run);
-          setMapping(fresh.run.mapping);
-        }
-        setIssues([]);
-        setPreview(null);
-        setNotice("Se cargó mapping.json.");
-      } catch {
-        setError(UNEXPECTED);
+    try {
+      const result = await uploadMutation.mutateAsync(await file.text());
+      if (result.issues.length > 0) {
+        setIssues(result.issues);
+        return;
       }
-    });
+      // The upload replaced the draft on the server: read the run again and edit that draft.
+      const fresh = await qc.fetchQuery({ ...mondayRunOptions(runId), staleTime: 0 });
+      setMapping(fresh.mapping);
+      setIssues([]);
+      preview.reset();
+      setNotice("Se cargó mapping.json.");
+    } catch (err) {
+      setError(mondayErrorText(err));
+    }
   }
 
   // --- Render --------------------------------------------------------------------------------------------------
 
   const current = MONDAY_IMPORT_STEPS[stepIndex(step)];
-  const state = { connection, run, selectedBoardIds, mapping, preview };
+  const previewData = preview.data?.preview ?? null;
+  const previewError = previewSaveError || (preview.error ? mondayErrorText(preview.error) : "");
+  const state = { connection, run, selectedBoardIds, mapping, preview: previewData };
   const needsData = step === "equivalencias" || step === "personas";
   const ready = Boolean(mapping && source && choices);
-  const finished = run?.batchStatus === "applied" || run?.batchStatus === "rolled_back";
+  const finished = run.batchStatus === "applied" || run.batchStatus === "rolled_back";
   const cards = useMemo(
-    () => buildBoardCards({ connection, mapping, source, preview, reviewed: new Set(reviewed) }),
-    [connection, mapping, source, preview, reviewed],
+    () => buildBoardCards({ connection, mapping, source, preview: previewData, reviewed: new Set(reviewed) }),
+    [connection, mapping, source, previewData, reviewed],
   );
   const totals = selectionTotals(cards, selectedBoardIds);
-  const exportRunning = isJobRunning(run?.jobs.export);
-  const mustExport = needsExport(Boolean(run?.exported), run?.boardIds ?? [], selectedBoardIds);
+  const exportRunning = isJobRunning(run.jobs.export);
+  const mustExport = needsExport(Boolean(run.exported), run.boardIds ?? [], selectedBoardIds);
   const importBoards = (mapping?.boards ?? [])
     .filter((board) => board.strategy !== "skip")
     .map((board) => ({ id: board.mondayBoardId, name: board.name }));
+  const readError = sourceQuery.error ? mondayErrorText(sourceQuery.error) : "";
+  const shownError = error || readError;
 
   /** "Importar n tableros": exports the picked boards when they aren't the exported ones, else goes on to map them. */
   function importSelected() {
-    if (mustExport) startExport();
-    else goTo(nextStep("tableros"));
+    if (mustExport) void startExport();
+    else void goTo(nextStep("tableros"));
   }
 
   const closeButton = (
@@ -549,7 +573,7 @@ export function MondayImportWizard({
       aria-label="Cerrar"
       title="Cerrar (la importación se guarda)"
       disabled={isPending}
-      onClick={close}
+      onClick={() => void close()}
     >
       <X aria-hidden="true" />
     </Button>
@@ -564,30 +588,15 @@ export function MondayImportWizard({
           <h1 className="min-w-0 truncate text-lg font-semibold text-foreground">Importar de monday</h1>
           {closeButton}
         </div>
-        {run ? (
-          <WizardStepper
-            steps={MONDAY_IMPORT_STEPS}
-            current={step}
-            canJump={(target) => !isPending && canJumpTo(target, step, state)}
-            onJump={(target) => goTo(target)}
-          />
-        ) : null}
+        <WizardStepper
+          steps={MONDAY_IMPORT_STEPS}
+          current={step}
+          canJump={(target) => !isPending && canJumpTo(target, step, state)}
+          onJump={(target) => void goTo(target)}
+        />
       </div>
     </header>
   );
-
-  if (!run) {
-    return (
-      <div className="flex min-h-screen flex-col bg-background">
-        {topBar}
-        <div className="mx-auto w-full max-w-3xl px-4 py-6">
-          <Alert variant="destructive">
-            <AlertDescription>{error || "No se pudo abrir la importación. Recarga la página."}</AlertDescription>
-          </Alert>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -602,7 +611,7 @@ export function MondayImportWizard({
         </div>
         {mapping && !finished ? (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" disabled={isPending} onClick={download}>
+            <Button variant="outline" size="sm" disabled={isPending} onClick={() => void download()}>
               <Download data-icon="inline-start" aria-hidden="true" />
               Descargar mapping.json
             </Button>
@@ -619,7 +628,7 @@ export function MondayImportWizard({
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 event.target.value = "";
-                if (file) upload(file);
+                if (file) void upload(file);
               }}
             />
           </div>
@@ -630,10 +639,10 @@ export function MondayImportWizard({
           {step === "conectar" ? (
             <ConnectStep
               token={token}
-              onTokenChange={setToken}
+              onTokenChange={onTokenChange}
               hasServerToken={hasServerToken}
               connection={connection}
-              onConnected={setConnection}
+              onConnected={onConnected}
             />
           ) : null}
           {step === "tableros" ? (
@@ -644,7 +653,7 @@ export function MondayImportWizard({
               onSelectedChange={setSelectedBoardIds}
               exportChoice={exportChoice}
               onExportChoiceChange={setExportChoice}
-              onStartExport={startExport}
+              onStartExport={() => void startExport()}
               isPending={isPending}
               mapping={mapping}
               onMappingChange={editMapping}
@@ -652,15 +661,8 @@ export function MondayImportWizard({
               source={source}
               choices={choices}
               onBoardOpened={markReviewed}
-              onStatusCreated={(status) =>
-                setChoices((previous) => (previous ? { ...previous, statuses: [...previous.statuses, status] } : previous))
-              }
-              onStatusMapSaved={(statusMap) =>
-                setChoices((previous) => (previous ? { ...previous, statusMap } : previous))
-              }
-              onStaffCreated={(member) =>
-                setChoices((previous) => (previous ? { ...previous, staff: [...previous.staff, member] } : previous))
-              }
+              onStatusCreated={addStatus}
+              onStaffCreated={addStaff}
             />
           ) : null}
           {needsData && !ready ? <p className="text-sm text-muted-foreground">Cargando equivalencias…</p> : null}
@@ -671,12 +673,7 @@ export function MondayImportWizard({
               choices={choices}
               initialBoardId={focusBoardId}
               onMappingChange={editMapping}
-              onStatusCreated={(status) =>
-                setChoices((previous) => (previous ? { ...previous, statuses: [...previous.statuses, status] } : previous))
-              }
-              onStatusMapSaved={(statusMap) =>
-                setChoices((previous) => (previous ? { ...previous, statusMap } : previous))
-              }
+              onStatusCreated={addStatus}
             />
           ) : null}
           {step === "personas" && mapping && source && choices ? (
@@ -686,9 +683,7 @@ export function MondayImportWizard({
               choices={choices}
               runId={runId}
               onMappingChange={editMapping}
-              onStaffCreated={(member) =>
-                setChoices((current) => (current ? { ...current, staff: [...current.staff, member] } : current))
-              }
+              onStaffCreated={addStaff}
               focusPersonId={focusPersonId}
             />
           ) : null}
@@ -697,14 +692,14 @@ export function MondayImportWizard({
           ) : null}
           {step === "vista_previa" ? (
             <PreviewStep
-              preview={preview}
+              preview={previewData}
               error={previewError}
               isPending={isPending}
               onRefresh={refreshPreview}
-              onFix={(target, boardId, personId) => goTo(target, boardId, personId ?? null)}
+              onFix={(target, boardId, personId) => void goTo(target, boardId, personId ?? null)}
               runId={runId}
               positions={choices?.positions ?? []}
-              onStaffCreated={staffCreatedInPreview}
+              onStaffCreated={(mondayUserId, member) => void staffCreatedInPreview(mondayUserId, member)}
             />
           ) : null}
           {step === "importar" ? (
@@ -713,11 +708,11 @@ export function MondayImportWizard({
               projects={projects}
               rollbackCheck={rollbackCheck}
               isPending={isPending}
-              error={error}
-              onStartApply={startApply}
-              onStartRollback={startRollback}
-              onFinish={complete}
-              onStartNew={startOver}
+              error={shownError}
+              onStartApply={() => void startApply()}
+              onStartRollback={() => void startRollback()}
+              onFinish={() => void complete()}
+              onStartNew={() => void startOver()}
               boards={importBoards}
             />
           ) : null}
@@ -729,9 +724,9 @@ export function MondayImportWizard({
             <AlertDescription>{notice}</AlertDescription>
           </Alert>
         ) : null}
-        {error && step !== "importar" ? (
+        {shownError && step !== "importar" ? (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{shownError}</AlertDescription>
           </Alert>
         ) : null}
       </div>
@@ -740,7 +735,7 @@ export function MondayImportWizard({
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3 md:px-6">
           <div className="flex flex-wrap items-center gap-2">
             {finished ? null : (
-              <Button variant="ghost" disabled={isPending} onClick={complete}>
+              <Button variant="ghost" disabled={isPending} onClick={() => void complete()}>
                 Omitir por ahora
               </Button>
             )}
@@ -755,12 +750,12 @@ export function MondayImportWizard({
           ) : null}
           <div className="flex flex-wrap gap-2">
             {step !== "conectar" && step !== "importar" ? (
-              <Button variant="outline" disabled={isPending || anyJobRunning} onClick={() => goTo(previousStep(step))}>
+              <Button variant="outline" disabled={isPending || anyJobRunning} onClick={() => void goTo(previousStep(step))}>
                 Atrás
               </Button>
             ) : null}
             {step === "importar" && !run.batchId && !anyJobRunning ? (
-              <Button variant="outline" disabled={isPending} onClick={() => goTo("vista_previa")}>
+              <Button variant="outline" disabled={isPending} onClick={() => void goTo("vista_previa")}>
                 Atrás
               </Button>
             ) : null}
@@ -768,7 +763,7 @@ export function MondayImportWizard({
               <Button
                 disabled={isPending || anyJobRunning || !canAdvance(step, state)}
                 aria-describedby={issues.length > 0 ? "monday-mapping-issues" : undefined}
-                onClick={() => goTo(nextStep(step))}
+                onClick={() => void goTo(nextStep(step))}
               >
                 {step === "vista_previa" ? "Continuar a importar" : "Siguiente"}
               </Button>

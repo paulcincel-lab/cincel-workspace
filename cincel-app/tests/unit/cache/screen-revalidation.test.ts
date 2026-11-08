@@ -11,12 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const revalidatePath = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ revalidatePath }));
 
-import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
-import { revalidateAsistenteScreen } from "@/lib/cache/screens/asistente";
-import { revalidateBibliotecaScreen, revalidateVacacionesScreen } from "@/lib/cache/screens/biblioteca";
 import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
-import { revalidateMiEspacioScreen } from "@/lib/cache/screens/mi-espacio";
-import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
 import { revalidateProyectoFichaScreen } from "@/lib/cache/screens/proyectos";
 
 const calls = () => revalidatePath.mock.calls;
@@ -29,49 +24,16 @@ describe("screen revalidation helpers: the full screen", () => {
     ["revalidateInicioScreen()", () => revalidateInicioScreen(), []],
     // The ficha target went in 5b (#960): the ficha is the `qk.proyectos.tab(id,'ficha')` query.
     ["revalidateProyectoFichaScreen(id)", () => revalidateProyectoFichaScreen("p1"), [["/proyectos/p1", "layout"]]],
-    ["revalidateMiEspacioScreen()", () => revalidateMiEspacioScreen(), [["/mi-espacio"], ["/mi-espacio", "layout"]]],
-    ["revalidatePersonasScreen()", () => revalidatePersonasScreen(), [["/personas"], ["/equipo"], ["/directorio"]]],
-    ["revalidateVacacionesScreen()", () => revalidateVacacionesScreen(), [["/biblioteca/vacaciones"]]],
-    ["revalidateBibliotecaScreen()", () => revalidateBibliotecaScreen(), [["/recursos"]]],
-    ["revalidateAsistenteScreen()", () => revalidateAsistenteScreen(), [["/asistente"]]],
   ])("%s", (_name, run, expected) => {
     run();
     expect(calls()).toEqual(expected);
-  });
-
-  it.each([
-    ["perfil", "/ajustes/perfil"],
-    ["horario", "/ajustes/horario"],
-    ["integraciones", "/ajustes/integraciones"],
-    ["notificaciones", "/ajustes/notificaciones"],
-    ["puestos", "/configuracion/puestos"],
-    ["estatus", "/configuracion/estatus"],
-    ["tramos", "/configuracion/tramos"],
-    ["workflows", "/configuracion/workflows"],
-    ["google", "/configuracion/google"],
-    ["importar-monday", "/configuracion/importar-monday"],
-  ] as const)("revalidateAjustesScreen(%s)", (seg, path) => {
-    revalidateAjustesScreen(seg);
-    expect(calls()).toEqual([[path]]);
   });
 });
 
 describe("screen revalidation helpers: the targets an action names, in its order", () => {
   it("single targets", () => {
     revalidateProyectoFichaScreen("p2", ["projectLayout"]);
-    revalidateMiEspacioScreen(["miEspacioLayout"]);
-    revalidateMiEspacioScreen(["miEspacio"]);
-    revalidatePersonasScreen(["equipo"]);
-    revalidatePersonasScreen(["directorio"]);
-    revalidatePersonasScreen(["personas"]);
-    expect(calls()).toEqual([
-      ["/proyectos/p2", "layout"],
-      ["/mi-espacio", "layout"],
-      ["/mi-espacio"],
-      ["/equipo"],
-      ["/directorio"],
-      ["/personas"],
-    ]);
+    expect(calls()).toEqual([["/proyectos/p2", "layout"]]);
   });
 });
 
@@ -79,9 +41,9 @@ describe("screen revalidation helpers: the targets an action names, in its order
 describe("no revalidatePath outside the helpers", () => {
   const ROOT = join(__dirname, "../../..");
   const CALL = /\brevalidatePath\(\s*([^)]*)\)/g;
-  /** `('/', 'layout')` stays inline (keep-list); the correo tool's call has no effect and goes in Phase 10. */
+  /** `('/', 'layout')` stays inline (keep-list). */
   const ALLOWED_ARGS = /^"\/",\s*"layout"$/;
-  const ALLOWED_FILES = new Set(["lib/assistant/tools/correo.ts"]);
+  const ALLOWED_FILES = new Set<string>();
 
   function sources(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {

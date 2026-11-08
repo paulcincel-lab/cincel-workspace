@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 
 vi.mock("@/components/patterns/SettingsSection", async () => ({
   SettingsSection: (await import("./general-settings-test-utils")).TestSettingsSection,
@@ -16,6 +17,7 @@ const actions = vi.hoisted(() => ({
   saveGeneralSettingsAction: vi.fn(),
   restoreGeneralSettingsAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({ getAjustesGeneralPageData: vi.fn() }));
 vi.mock("@/lib/actions/app-settings-actions", () => actions);
 
 import { AjustesGeneralClient } from "./AjustesGeneralClient";
@@ -26,15 +28,27 @@ import {
   formatGeneralSettingsSavedAt,
   type LoadedGeneralSettings,
 } from "@/lib/settings/general-settings";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { CONTACT_EMAIL_ERROR, HTTPS_URL_ERROR } from "@/lib/settings/header-links";
 
 const SAVED_AT = "2026-11-04T16:30:00.000Z";
 
+let client: QueryClient;
+
+/**
+ * The page as it hydrates: `qk.org.general()` seeded by the root layout and
+ * the capability flags by the page (`qk.ajustes.page('general')`).
+ */
 function renderPage(general: LoadedGeneralSettings = buildDefaultLoadedGeneralSettings()) {
-  return render(
-    <AjustesGeneralClient general={general} canManage canManageAppearance={false}>
+  client = createTestQueryClient();
+  client.setQueryData(qk.org.general(), general);
+  client.setQueryData(qk.ajustes.page("general"), { canManage: true, canManageAppearance: false });
+  return renderWithQueryClient(
+    <AjustesGeneralClient>
       <GeneralLinksSection />
     </AjustesGeneralClient>,
+    { client },
   );
 }
 
@@ -79,7 +93,26 @@ describe("Ajustes › General", () => {
 
     await waitFor(() => expect(screen.getByText(formatGeneralSettingsSavedAt(SAVED_AT))).toBeTruthy());
     expect(actions.saveGeneralSettingsAction.mock.calls[0][0].company.tradeName).toBe("Cincel Studio");
-    expect(refresh).toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("writes the saved settings into qk.org.general(), so every useGeneralSettings() reader updates", async () => {
+    actions.saveGeneralSettingsAction.mockResolvedValue({ savedAt: SAVED_AT });
+    renderPage();
+
+    fireEvent.change(field("Nombre comercial"), { target: { value: "Cincel Studio" } });
+    fireEvent.click(saveButton());
+
+    await waitFor(() =>
+      expect(client.getQueryData<LoadedGeneralSettings>(qk.org.general())).toMatchObject({
+        hasCustom: true,
+        savedAt: SAVED_AT,
+        settings: { company: { tradeName: "Cincel Studio" } },
+      }),
+    );
+    // Saved: the draft equals the cache again, so the button is off.
+    await waitFor(() => expect(saveButton().hasAttribute("disabled")).toBe(true));
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("validates the link fields inline and blocks the save while one is wrong", () => {
@@ -124,6 +157,8 @@ describe("Ajustes › General", () => {
     expect(field("Correo").value).toBe("");
     expect(field("Sitio web").value).toBe(buildDefaultGeneralSettings().company.website);
     expect(screen.queryByText(/^Guardado /)).toBeNull();
+    expect(client.getQueryData(qk.org.general())).toEqual(buildDefaultLoadedGeneralSettings());
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("shows the error copy when the save fails", async () => {

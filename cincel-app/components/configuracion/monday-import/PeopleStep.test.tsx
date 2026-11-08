@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 /** Personas (#689): "Crear integrante", the email-then-name suggestion and the "Eliminados en monday" group. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 const createMondayStaffAction = vi.fn();
 const suggestMondayPositionAction = vi.fn();
@@ -74,7 +76,7 @@ describe("PeopleStep (#689)", () => {
     });
     const onMappingChange = vi.fn();
     const onStaffCreated = vi.fn();
-    render(
+    renderWithQueryClient(
       <PeopleStep
         mapping={mapping}
         source={source}
@@ -98,7 +100,7 @@ describe("PeopleStep (#689)", () => {
       error: "Ya hay un integrante con ese correo: Ana Prueba. Elígelo en la lista.",
     });
     const onMappingChange = vi.fn();
-    render(
+    renderWithQueryClient(
       <PeopleStep mapping={mapping} source={source} choices={choices} runId="run-1" onMappingChange={onMappingChange} />,
     );
     const row = document.getElementById("persona-1")!;
@@ -108,12 +110,12 @@ describe("PeopleStep (#689)", () => {
   });
 
   it("suggests staff by name when the email differs", () => {
-    render(<PeopleStep mapping={mapping} source={source} choices={choices} runId="run-1" onMappingChange={vi.fn()} />);
+    renderWithQueryClient(<PeopleStep mapping={mapping} source={source} choices={choices} runId="run-1" onMappingChange={vi.fn()} />);
     expect(within(document.getElementById("persona-2")!).getByText("Sugerido por nombre: Beto Ejemplo")).toBeTruthy();
   });
 
   it("lists deleted users and bots last under Eliminados en monday, without Crear integrante", () => {
-    render(<PeopleStep mapping={mapping} source={source} choices={choices} runId="run-1" onMappingChange={vi.fn()} />);
+    renderWithQueryClient(<PeopleStep mapping={mapping} source={source} choices={choices} runId="run-1" onMappingChange={vi.fn()} />);
     const rows = screen.getAllByRole("row");
     const header = rows.findIndex((r) => r.textContent?.includes("Eliminados en monday"));
     expect(header).toBeGreaterThan(rows.findIndex((r) => r.id === "persona-2"));
@@ -128,7 +130,7 @@ describe("PeopleStep (#689)", () => {
   it("keeps a created staff member selectable before the choices reload", () => {
     const created = { action: "staff" as const, staffId: NEW_ID, created: true };
     const mapped: MappingInput = { ...mapping, people: { ...mapping.people, "1": created } };
-    render(<PeopleStep mapping={mapped} source={source} choices={choices} runId="run-1" onMappingChange={vi.fn()} />);
+    renderWithQueryClient(<PeopleStep mapping={mapped} source={source} choices={choices} runId="run-1" onMappingChange={vi.fn()} />);
     const row = document.getElementById("persona-1")!;
     expect(within(row).getByText("Integrante nuevo")).toBeTruthy();
     expect(within(row).queryByRole("button", { name: "Crear integrante" })).toBeNull();
@@ -142,7 +144,7 @@ describe("PeopleStep (#689)", () => {
       scrolled.push(this.id);
     };
     try {
-      render(
+      renderWithQueryClient(
         <PeopleStep
           mapping={mapping}
           source={source}

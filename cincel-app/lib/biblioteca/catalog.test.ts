@@ -1,9 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { bibliotecaFixture, makeLink } from "@/components/biblioteca/biblioteca.fixtures";
+import { bibliotecaFixture, makeLink, resourcesCapabilities } from "@/components/biblioteca/biblioteca.fixtures";
 import {
+  BIBLIOTECA_SECTIONS,
   EMPRESA_DOCS,
+  bibliotecaQuerySections,
+  canViewBibliotecaSection,
   SECTION_TABLE_COLUMNS,
   buildBibliotecaGroups,
   documentToc,
@@ -155,5 +158,33 @@ describe("biblioteca catalog", () => {
     expect(shortDate("2026-11-04T16:00:00.000Z")).toBe("4 nov");
     expect(shortDate(null)).toBe("");
     expect(shortDate("nope")).toBe("");
+  });
+});
+
+describe("biblioteca page-data sections", () => {
+  const all = resourcesCapabilities();
+  const noEmpresa = resourcesCapabilities({ canViewEmpresa: false });
+  const noResources = { ...all, canViewResources: false };
+
+  it("reads only the section plus the viewer's favorites for a Recursos section", () => {
+    expect(bibliotecaQuerySections("formacion", all)).toEqual(["formacion", "mis-favoritos"]);
+    expect(bibliotecaQuerySections("mis-favoritos", all)).toEqual(["mis-favoritos"]);
+    expect(bibliotecaQuerySections("mis-vacaciones", all)).toEqual(["mis-vacaciones"]);
+    expect(bibliotecaQuerySections("empresa", all)).toEqual(["empresa"]);
+  });
+
+  it("reads every visible section for the index, Empresa only with enterprise.canView", () => {
+    expect(bibliotecaQuerySections(null, all)).toEqual([...BIBLIOTECA_SECTIONS, "empresa"]);
+    expect(bibliotecaQuerySections(null, noEmpresa)).toEqual([...BIBLIOTECA_SECTIONS]);
+    expect(bibliotecaQuerySections(null, noResources)).toEqual(["empresa"]);
+    expect(bibliotecaQuerySections("formacion", noResources)).toEqual([]);
+  });
+
+  it("gates each section by its capability; Mis vacaciones is always readable", () => {
+    expect(canViewBibliotecaSection(all, "formacion")).toBe(true);
+    expect(canViewBibliotecaSection(noResources, "formacion")).toBe(false);
+    expect(canViewBibliotecaSection(noEmpresa, "empresa")).toBe(false);
+    expect(canViewBibliotecaSection(noResources, "mis-vacaciones")).toBe(true);
+    expect(canViewBibliotecaSection({ ...noEmpresa, canViewResources: false }, null)).toBe(false);
   });
 });

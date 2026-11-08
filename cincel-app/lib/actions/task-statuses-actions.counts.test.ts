@@ -41,7 +41,11 @@ vi.mock("@/lib/repositories/task-statuses-repository", async (importOriginal) =>
   ...repo,
 }));
 
-import { createTaskStatusAction, updateTaskStatusAction } from "./task-statuses-actions";
+import { unwrapActions } from "@/tests/helpers/action-result";
+
+import * as taskStatusesActionsModule from "./task-statuses-actions";
+
+const { createTaskStatusAction, updateTaskStatusAction } = unwrapActions(taskStatusesActionsModule);
 
 beforeEach(() => {
   vi.clearAllMocks();

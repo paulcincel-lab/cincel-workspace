@@ -190,9 +190,10 @@ async function resolveProject(
   name: string | undefined,
   context: AssistantContext,
 ): Promise<{ ok: true; project: ResolvedProject } | ToolFailure> {
-  const { fetchProjectAction, fetchProjectsAction } = await import("@/lib/actions/projects-actions");
+  const { fetchProjectAction } = await import("@/lib/actions/projects-actions");
+  const { listViewerProjects } = await import("@/lib/assistant/reads");
   if (name?.trim()) {
-    const found = byName(await fetchProjectsAction({ search: name.trim() }), name);
+    const found = byName(await listViewerProjects({ search: name.trim() }), name);
     if (!found.ok) return found;
     const p = found.value;
     return { ok: true, project: { id: p.id, name: p.name, currentWorkflowId: p.currentWorkflow?.id ?? null } };

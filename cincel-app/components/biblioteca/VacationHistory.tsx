@@ -2,7 +2,6 @@
 
 import { CalendarDays } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { FormDialog } from "@/components/patterns/FormDialog";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -11,8 +10,11 @@ import { RecordTable } from "@/components/widgets/RecordTable";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
 import { cancelVacationRequestAction } from "@/lib/actions/vacations-actions";
 import { IMPLEMENTED } from "@/lib/actions/vacations-actions.flags";
-import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { VACATIONS_ABSENCES_PREFIX } from "@/lib/query/options/biblioteca";
 import type { VacationRequest } from "@/lib/types/redesign";
+import type { MyVacations } from "@/lib/vacations/reads";
 
 import {
   VACATION_STATUS_BADGE,
@@ -23,19 +25,33 @@ import {
   todayIso,
 } from "./vacation-format";
 
-export type VacationHistoryProps = { requests: VacationRequest[]; onCancelled(id: string): void };
+export type VacationHistoryProps = { requests: VacationRequest[] };
 
 /**
  * Vacation history with status chips and cancel (redesign FE §3.7) on
  * `RecordTable`. "Cancelar" shows for a pending request or an approved one
  * that starts in the future, and only once `cancelVacationRequestAction` is
  * implemented; it asks for confirmation in a `FormDialog`, where `STARTED`,
- * `NOT_FOUND` and `FORBIDDEN` show through `actionErrorText`.
+ * `NOT_FOUND` and `FORBIDDEN` show through `actionErrorText`. A cancel marks
+ * the row at once and refetches `me.vacations`, `vacations.absences` and
+ * `vacations.pending`.
  */
-export function VacationHistory({ requests, onCancelled }: VacationHistoryProps) {
+export function VacationHistory({ requests }: VacationHistoryProps) {
   const [target, setTarget] = useState<VacationRequest | null>(null);
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const cancel = useActionMutation(cancelVacationRequestAction, {
+    setData: (client, _done, id: string) =>
+      client.setQueryData<MyVacations | null>(qk.me.vacations(), (current) =>
+        current
+          ? { ...current, requests: current.requests.map((r) => (r.id === id ? { ...r, status: "cancelada" as const } : r)) }
+          : current,
+      ),
+    invalidate: [qk.me.vacations(), VACATIONS_ABSENCES_PREFIX, qk.vacations.pending()],
+    successToast: "Solicitud cancelada",
+    onFormError: setError,
+  });
+  const pending = cancel.isPending;
 
   const cancelEnabled = IMPLEMENTED.cancelVacationRequestAction;
   const today = todayIso();
@@ -50,18 +66,14 @@ export function VacationHistory({ requests, onCancelled }: VacationHistoryProps)
 
   async function confirmCancel() {
     if (!target) return;
-    setPending(true);
     setError(null);
     try {
-      await cancelVacationRequestAction(target.id);
-      onCancelled(target.id);
-      toast.success("Solicitud cancelada");
-      setTarget(null);
-    } catch (err) {
-      setError(actionErrorText(err));
-    } finally {
-      setPending(false);
+      await cancel.mutateAsync(target.id);
+    } catch {
+      // The error shows in the dialog (onFormError).
+      return;
     }
+    setTarget(null);
   }
 
   return (

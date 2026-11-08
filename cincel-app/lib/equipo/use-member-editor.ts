@@ -9,34 +9,39 @@ import {
   hasDefaultSystemAdministratorAccess,
   normalizeSystemAccessRole,
 } from "@/lib/data/roles";
-import { unwrapActionResult } from "@/lib/actions/action-result";
-import {
-  fetchStaffDetailAction,
-  createStaffAction,
-  updateStaffAction,
-  upsertStaffProfileAction,
-  setStaffCredentialAction,
-  setStaffPositionsAction,
-} from "@/lib/actions/staff-actions";
-import { RepositoryError, reportRepositoryError } from "@/lib/errors";
+import { fetchStaffDetailAction, saveMemberAction } from "@/lib/actions/staff-actions";
+import { actionErrorCode } from "@/lib/errors";
 import type { GoogleAccessState } from "@/lib/equipo/google-access";
+import type { MemberEditorInput } from "@/lib/equipo/member-input";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
-import type { Staff } from "@/lib/types/core";
-import { isGoogleManagedRefusal } from "@/lib/types/workspace-access";
+import { qk } from "@/lib/query/keys";
+import { mutationErrorText, useActionMutation } from "@/lib/query/mutation";
+import type { Staff, StaffDetail } from "@/lib/types/core";
+import { GOOGLE_MANAGED_ERROR } from "@/lib/types/workspace-access";
 
 /**
  * Collaborator create/edit — draft state, validation, and credential
  * assignment (temporary password + system access toggle) — used by
- * app/(staff)/equipo/EquipoClient.tsx.
+ * Personas · Equipo (`components/personas/EquipoView.tsx`).
  *
  * `staff.role` holds the system access role only, edited through the
- * drawer's "Acceso" dropdown (`draft.access`). Job positions are puestos,
- * saved separately with setStaffPositionsAction (project flow RD-9).
+ * drawer's "Acceso" dropdown (`draft.access`). Job positions are puestos
+ * (project flow RD-9).
  *
- * The actual privileged write (setStaffCredentialAction) re-checks
- * capabilities server-side regardless of what a caller sends — this hook is
- * UI state/validation/gating only, not the security boundary.
+ * A save is **one** mutation (`saveMemberAction`, Query Migration 6): the
+ * person, profile, puestos and access in one POST and one transaction, so a
+ * failure saves nothing. The action re-checks every capability server-side
+ * regardless of what a caller sends — this hook is UI state/validation/gating
+ * only, not the security boundary.
  */
+
+/** The form copy for a failed save: the Google refusal as is, otherwise the action error copy. */
+export function memberSaveErrorText(err: unknown): string {
+  if (err instanceof Error && err.message === GOOGLE_MANAGED_ERROR) return GOOGLE_MANAGED_ERROR;
+  // No code (a stripped production error, a network failure): the editor's own copy.
+  if (actionErrorCode(err) === "") return "No se pudo guardar el colaborador.";
+  return mutationErrorText(err);
+}
 
 export const emptyMemberDraft: MemberDraft = {
   name: "",
@@ -66,8 +71,8 @@ export const emptyMemberDraft: MemberDraft = {
 
 interface UseMemberEditorArgs {
   authenticatedUser: AuthenticatedUser | null;
-  /** Called after a create/edit save with a fresh full staff list. */
-  onSaved: () => void | Promise<void>;
+  /** Called after a successful save, once the editor closes. */
+  onSaved?: (saved: StaffDetail) => void;
 }
 
 export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorArgs) {
@@ -77,7 +82,25 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
   const [editorAccessState, setEditorAccessState] = useState<AccessPreviewState | null>(null);
   const [draft, setDraft] = useState<MemberDraft>(emptyMemberDraft);
   const [formError, setFormError] = useState("");
-  const [saving, setSaving] = useState(false);
+
+  const ownId = authenticatedUser?.member.id ?? null;
+  const save = useActionMutation(saveMemberAction, {
+    invalidate: (vars: MemberEditorInput, saved) => {
+      const id = saved?.id ?? vars.staffId;
+      return [
+        qk.personas.equipo(),
+        qk.personas.counts(),
+        ...(id ? [qk.personas.detail(id)] : []),
+        qk.catalog.staff(),
+        // Every `catalog.assignableStaff(workflowId)` list.
+        qk.catalog.assignableStaff(null).slice(0, 2),
+        qk.ajustes.page("permisos"),
+        ...(id && id === ownId ? [qk.me.profile()] : []),
+      ];
+    },
+    // The error shows in the drawer (memberSaveErrorText), not as a toast.
+    onFormError: () => undefined,
+  });
 
   const teamCapabilities: TeamCapabilities = useMemo(
     () => resolveTeamCapabilities(authenticatedUser),
@@ -210,7 +233,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     setShowEditor(false);
   };
 
-  const saveMember = async () => {
+  const saveMember = () => {
     if (editingId === null && !teamCapabilities.canCreateCollaborator) return;
     if (editingId !== null && !teamCapabilities.canEditCollaborator) return;
 
@@ -262,98 +285,50 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     }
 
     setFormError("");
-    setSaving(true);
-    try {
-      const staffInput = {
+    const input: MemberEditorInput = {
+      staffId: editingId,
+      staff: {
         name,
         lastName: lastName || null,
-        role: draft.access, // staff.role is the access role — see module comment
+        // staff.role is the access role — see module comment. Workspace sets it for Google-managed staff.
+        ...(editingGoogleManaged ? {} : { role: draft.access }),
         email: normalizedEmail,
         phone: draft.phone.trim() || null,
         capacity: draft.capacity,
         availability: draft.availability,
-      };
+      },
+      profile: {
+        birthDate: draft.birthDate.trim() || null,
+        nationality: draft.nationality.trim() || null,
+        address: draft.address.trim() || null,
+        maritalStatus: draft.maritalStatus.trim() || null,
+        homePhone: draft.homePhone.trim() || null,
+        personalEmail: draft.personalEmail.trim() || null,
+        curp: draft.curp.trim() || null,
+        rfc: draft.rfc.trim() || null,
+        emergencyContactName: draft.emergencyContactName.trim() || null,
+        emergencyContactRelation: draft.emergencyContactRelation.trim() || null,
+        emergencyContactPhone: draft.emergencyContactPhone.trim() || null,
+        emergencyContactAddress: draft.emergencyContactAddress.trim() || null,
+      },
+      ...(editingGoogleManaged ? {} : { positionIds: draft.positionIds }),
+      ...(teamCapabilities.canChangeCollaboratorAccess && !editingGoogleManaged
+        ? {
+            credential: {
+              enableAccess: draft.systemAccessEnabled,
+              ...(shouldAssignTemporaryPassword ? { temporaryPassword: tempPassword } : {}),
+            },
+          }
+        : {}),
+    };
 
-      const staffId =
-        editingId ??
-        unwrapActionResult(
-          await createStaffAction({
-            name: staffInput.name,
-            lastName: staffInput.lastName,
-            role: staffInput.role,
-            email: staffInput.email,
-            phone: staffInput.phone,
-            capacity: staffInput.capacity,
-            availability: staffInput.availability,
-          }),
-        ).id;
-
-      if (editingId !== null) {
-        const updated = await updateStaffAction(editingId, {
-          name: staffInput.name,
-          lastName: staffInput.lastName,
-          ...(editingGoogleManaged ? {} : { role: staffInput.role }),
-          email: staffInput.email,
-          phone: staffInput.phone,
-          capacity: staffInput.capacity,
-          availability: staffInput.availability,
-        });
-        if (isGoogleManagedRefusal(updated)) {
-          setFormError(updated.error);
-          return;
-        }
-        unwrapActionResult(updated);
-      }
-
-      unwrapActionResult(
-        await upsertStaffProfileAction(staffId, {
-          birthDate: draft.birthDate.trim() || null,
-          nationality: draft.nationality.trim() || null,
-          address: draft.address.trim() || null,
-          maritalStatus: draft.maritalStatus.trim() || null,
-          homePhone: draft.homePhone.trim() || null,
-          personalEmail: draft.personalEmail.trim() || null,
-          curp: draft.curp.trim() || null,
-          rfc: draft.rfc.trim() || null,
-          emergencyContactName: draft.emergencyContactName.trim() || null,
-          emergencyContactRelation: draft.emergencyContactRelation.trim() || null,
-          emergencyContactPhone: draft.emergencyContactPhone.trim() || null,
-          emergencyContactAddress: draft.emergencyContactAddress.trim() || null,
-        }),
-      );
-
-      if (!editingGoogleManaged) {
-        const positionsResult = await setStaffPositionsAction(staffId, draft.positionIds);
-        if (isGoogleManagedRefusal(positionsResult)) {
-          setFormError(positionsResult.error);
-          return;
-        }
-        unwrapActionResult(positionsResult);
-      }
-
-      if (teamCapabilities.canChangeCollaboratorAccess && !editingGoogleManaged) {
-        unwrapActionResult(
-          await setStaffCredentialAction(staffId, {
-            enableAccess: draft.systemAccessEnabled,
-            temporaryPassword: shouldAssignTemporaryPassword ? tempPassword : undefined,
-          }),
-        );
-      }
-
-      await onSaved();
-      setShowEditor(false);
-    } catch (err) {
-      if (err instanceof RepositoryError) {
-        reportRepositoryError(err);
-        setFormError(err.message);
-      } else if (err instanceof Error) {
-        setFormError(err.message);
-      } else {
-        setFormError("No se pudo guardar el colaborador.");
-      }
-    } finally {
-      setSaving(false);
-    }
+    save.mutate(input, {
+      onSuccess: (saved) => {
+        setShowEditor(false);
+        onSaved?.(saved);
+      },
+      onError: (err) => setFormError(memberSaveErrorText(err)),
+    });
   };
 
   return {
@@ -365,7 +340,7 @@ export function useMemberEditor({ authenticatedUser, onSaved }: UseMemberEditorA
     draft,
     setDraft: setDraft as Dispatch<SetStateAction<MemberDraft>>,
     formError,
-    saving,
+    saving: save.isPending,
     isEditingSelfProtectedAdmin,
     editingGoogleManaged,
     editingGoogleAccess,

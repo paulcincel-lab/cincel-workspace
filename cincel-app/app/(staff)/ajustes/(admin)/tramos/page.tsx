@@ -1,28 +1,32 @@
 import { TramosClient } from "./TramosClient";
-import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { requireSettingsAdminPage } from "@/lib/auth/settings-admin-page";
+import { requireCapabilityUser } from "@/lib/auth/session";
+import { loadAjustesTramos } from "@/lib/loaders/ajustes";
+import { Hydrate } from "@/lib/query/hydrate";
+import { qk } from "@/lib/query/keys";
+import { ajustesTramosOptions, seedAjustesCatalogs, type AjustesTramosPageData } from "@/lib/query/options/ajustes";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Ajustes › Tramos y fases (redesign FE §3.8, §21.2): Project Flow's "Tramos y
- * fases" page rendered inside Ajustes, unchanged (same client, data and
- * actions). Administrador only (today's rule), checked by the segment layout
- * and here.
+ * fases" page rendered inside Ajustes. Administrador only (today's rule),
+ * checked by the segment layout and here. Prefetches
+ * `qk.ajustes.page('tramos')` (and seeds `catalog.workflows`), so the client
+ * makes no call on mount.
  */
 export default async function AjustesTramosPage() {
   await requireSettingsAdminPage();
+  const user = await requireCapabilityUser();
+  const qc = getQueryClient();
+  await prefetch(qc, ajustesTramosOptions(), () => loadAjustesTramos(user));
+  const data = qc.getQueryData<AjustesTramosPageData>(qk.ajustes.page("tramos"));
+  if (data) seedAjustesCatalogs(qc, { seg: "tramos", data });
 
-  let initialWorkflows: Awaited<ReturnType<typeof fetchWorkflowsAction>> = [];
-  try {
-    initialWorkflows = await fetchWorkflowsAction({
-      includeInactive: true,
-      includeInactiveTemplates: true,
-      includeInactivePhases: true,
-    });
-  } catch {
-    // The client falls back to hydrating itself, like the legacy page.
-  }
-
-  return <TramosClient initialWorkflows={initialWorkflows} />;
+  return (
+    <Hydrate qc={qc}>
+      <TramosClient />
+    </Hydrate>
+  );
 }

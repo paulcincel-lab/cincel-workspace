@@ -1,46 +1,55 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { AuthenticatedUser } from "@/lib/auth/auth-service";
+
 const flags = vi.hoisted(() => ({ IMPLEMENTED: { fetchPersonaDetailAction: true, fetchPeopleOverviewAction: true } }));
-const fetchPersonaDetailAction = vi.hoisted(() => vi.fn());
+const loadPersonasDetail = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/actions/people-actions.flags", () => flags);
-vi.mock("@/lib/actions/people-actions", () => ({ fetchPersonaDetailAction }));
+vi.mock("@/lib/loaders/personas", () => ({ loadPersonasDetail }));
 
 import { personaDetailFixture } from "@/components/personas/persona-detail.fixtures";
 
 import { loadPersonaDetail } from "./load-persona-detail";
 
+const USER = { member: { id: "s-viewer" }, email: "", access: "Colaborador" } as unknown as AuthenticatedUser;
+
 beforeEach(() => {
-  fetchPersonaDetailAction.mockReset();
+  loadPersonasDetail.mockReset();
   (flags.IMPLEMENTED as { fetchPersonaDetailAction: boolean }).fetchPersonaDetailAction = true;
 });
 
 describe("loadPersonaDetail", () => {
-  it("returns the detail from fetchPersonaDetailAction", async () => {
+  it("returns the detail from the personas.detail loader for the viewer", async () => {
     const detail = personaDetailFixture({ canSeeAdminData: false, canViewHours: false });
-    fetchPersonaDetailAction.mockResolvedValue(detail);
-    await expect(loadPersonaDetail("s-paul")).resolves.toBe(detail);
-    expect(fetchPersonaDetailAction).toHaveBeenCalledWith("s-paul");
+    loadPersonasDetail.mockResolvedValue(detail);
+    await expect(loadPersonaDetail(USER, "s-paul")).resolves.toBe(detail);
+    expect(loadPersonasDetail).toHaveBeenCalledWith(USER, { staffId: "s-paul" });
+  });
+
+  it("passes the loader's null (unknown person) through", async () => {
+    loadPersonasDetail.mockResolvedValue(null);
+    await expect(loadPersonaDetail(USER, "missing")).resolves.toBeNull();
   });
 
   it("maps NOT_FOUND to the not-found state", async () => {
-    fetchPersonaDetailAction.mockRejectedValue(new Error("NOT_FOUND"));
-    await expect(loadPersonaDetail("missing")).resolves.toBeNull();
+    loadPersonasDetail.mockRejectedValue(new Error("NOT_FOUND"));
+    await expect(loadPersonaDetail(USER, "missing")).resolves.toBeNull();
   });
 
   it("maps FORBIDDEN to the not-found state", async () => {
-    fetchPersonaDetailAction.mockRejectedValue(new Error("FORBIDDEN"));
-    await expect(loadPersonaDetail("s-paul")).resolves.toBeNull();
+    loadPersonasDetail.mockRejectedValue(new Error("FORBIDDEN"));
+    await expect(loadPersonaDetail(USER, "s-paul")).resolves.toBeNull();
   });
 
   it("lets other errors reach the error boundary", async () => {
-    fetchPersonaDetailAction.mockRejectedValue(new Error("boom"));
-    await expect(loadPersonaDetail("s-paul")).rejects.toThrow("boom");
+    loadPersonasDetail.mockRejectedValue(new Error("boom"));
+    await expect(loadPersonaDetail(USER, "s-paul")).rejects.toThrow("boom");
   });
 
-  it("never calls the action while its IMPLEMENTED flag is false", async () => {
+  it("never calls the loader while its IMPLEMENTED flag is false", async () => {
     (flags.IMPLEMENTED as { fetchPersonaDetailAction: boolean }).fetchPersonaDetailAction = false;
-    await expect(loadPersonaDetail("s-paul")).resolves.toBeNull();
-    expect(fetchPersonaDetailAction).not.toHaveBeenCalled();
+    await expect(loadPersonaDetail(USER, "s-paul")).resolves.toBeNull();
+    expect(loadPersonasDetail).not.toHaveBeenCalled();
   });
 });

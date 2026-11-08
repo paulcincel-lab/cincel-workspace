@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import type { Query } from "@tanstack/react-query";
 
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { ensureMissingProjectFoldersAction } from "@/lib/actions/workspace-access-actions";
 import type { EnsureMissingProjectFoldersCounts } from "@/lib/google/project-folders-app";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
 
 /** "12 creadas, 1 con error" plus omitidas when any project was skipped. */
 export function projectFoldersSummary(counts: EnsureMissingProjectFoldersCounts): string {
@@ -14,6 +15,11 @@ export function projectFoldersSummary(counts: EnsureMissingProjectFoldersCounts)
   if (counts.skipped > 0) parts.push(`${counts.skipped} ${counts.skipped === 1 ? "omitida" : "omitidas"}`);
   if (counts.failed > 0) parts.push(`${counts.failed} con error`);
   return parts.join(", ");
+}
+
+/** Every cached project file listing: `qk.proyectos.archivos(id, folder)` = `["proyectos", id, "archivos", …]`. */
+export function isProjectArchivosQuery(query: Pick<Query, "queryKey">): boolean {
+  return query.queryKey[0] === "proyectos" && query.queryKey[2] === "archivos";
 }
 
 export const PROJECT_FOLDERS_TITLE = "Carpetas de proyectos";
@@ -33,22 +39,21 @@ export type ProjectFoldersBackfillProps = {
  * Without a Shared Drive there is nowhere to create folders, so the button stays disabled with a hint.
  */
 export function ProjectFoldersBackfill({ sharedDriveConfigured = true, bare = false }: ProjectFoldersBackfillProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [counts, setCounts] = useState<EnsureMissingProjectFoldersCounts | null>(null);
-  const [error, setError] = useState(false);
+  // New folders show on Ajustes › Google (Estado) and in every project's Archivos.
+  const backfill = useActionMutation(ensureMissingProjectFoldersAction, {
+    invalidate: [qk.ajustes.page("google")],
+    setData: (qc) => {
+      void qc.invalidateQueries({ predicate: isProjectArchivosQuery });
+    },
+    // The error copy is the Alert below.
+    onFormError: () => undefined,
+  });
+  const isPending = backfill.isPending;
+  const counts: EnsureMissingProjectFoldersCounts | null = backfill.isError ? null : (backfill.data ?? null);
+  const error = backfill.isError;
 
   function run() {
-    setError(false);
-    startTransition(async () => {
-      try {
-        setCounts(await ensureMissingProjectFoldersAction());
-        router.refresh();
-      } catch {
-        setCounts(null);
-        setError(true);
-      }
-    });
+    backfill.mutate(undefined);
   }
 
   const Wrapper = bare ? "div" : "section";

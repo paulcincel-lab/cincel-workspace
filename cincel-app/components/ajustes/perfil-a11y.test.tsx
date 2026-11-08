@@ -11,6 +11,13 @@ vi.mock("@/lib/actions/profile-photo-actions", () => ({ removeMyPhotoAction: vi.
 vi.mock("@/lib/actions/staff-actions", () => ({ updateStaffAction: vi.fn(), upsertStaffProfileAction: vi.fn() }));
 vi.mock("@/lib/auth/auth-actions", () => ({ changePasswordAction: vi.fn() }));
 vi.mock("@/lib/profile-photo/reencode", () => ({ reencodePhoto: vi.fn(), uploadMyPhoto: vi.fn() }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
+  getAjustesAparienciaPageData: vi.fn(),
+  getAjustesNotificacionesPageData: vi.fn(),
+  getAjustesPerfilPageData: vi.fn(),
+  getAjustesIntegracionesPageData: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/me-actions", () => ({ fetchMyProfileAction: vi.fn() }));
 
 // Contract-shaped stand-ins for the shared patterns (FE §4.11).
 vi.mock("@/components/patterns/SettingsSection", () => ({
@@ -33,7 +40,10 @@ vi.mock("@/components/patterns/SettingsRow", () => ({
   ),
 }));
 
-import { renderWithQueryClient } from "@/lib/query/test-utils";
+import { qk } from "@/lib/query/keys";
+import type { AjustesPerfilPageData } from "@/lib/query/options/ajustes";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { MyProfile } from "@/lib/types/shell";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 import { PerfilClient, PerfilContrasena, PerfilDatos, PerfilFoto, PerfilHorasSemana, type PerfilData } from "./PerfilClient";
@@ -45,9 +55,20 @@ const DATA: PerfilData = {
   email: "ana@cincel.mx",
   puesto: "Diseñadora",
   emailSignature: "",
-  photoUrl: "/api/staff/00000000-0000-0000-0000-0000000000aa/photo?v=abcdef12",
   week: { days: [], total: 12, target: 40 },
 };
+
+/** The hydrated caches the Perfil page hands its client. */
+function hydratedClient() {
+  const client = createTestQueryClient();
+  client.setQueryData<AjustesPerfilPageData>(qk.ajustes.page("perfil"), { profile: DATA });
+  client.setQueryData<MyProfile>(qk.me.profile(), {
+    id: DATA.staffId,
+    name: DATA.name,
+    photoUrl: "/api/staff/00000000-0000-0000-0000-0000000000aa/photo?v=abcdef12",
+  });
+  return client;
+}
 
 async function seriousViolations(container: HTMLElement) {
   // Color contrast needs real layout and rendering, which happy-dom doesn't provide; the token pairs are
@@ -76,13 +97,14 @@ describe("Ajustes › Perfil accessibility", () => {
         const { container } = renderWithQueryClient(
           <main>
             <h1>Ajustes</h1>
-            <PerfilClient initial={DATA}>
+            <PerfilClient>
               <PerfilFoto />
               <PerfilDatos />
               <PerfilHorasSemana />
               <PerfilContrasena />
             </PerfilClient>
           </main>,
+          { client: hydratedClient() },
         );
         expect(await seriousViolations(container)).toEqual([]);
       });
@@ -91,11 +113,12 @@ describe("Ajustes › Perfil accessibility", () => {
 
   it("labels every field and ties the hints to their inputs", () => {
     const { container, getByLabelText } = renderWithQueryClient(
-      <PerfilClient initial={DATA}>
+      <PerfilClient>
         <PerfilFoto />
         <PerfilDatos />
         <PerfilContrasena />
       </PerfilClient>,
+      { client: hydratedClient() },
     );
     const labelTargets = new Set(Array.from(container.querySelectorAll("label")).map((label) => label.htmlFor));
     for (const input of Array.from(container.querySelectorAll("input:not([type=file]), textarea"))) {

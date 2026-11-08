@@ -63,3 +63,30 @@ export function cachedDateTimeFormat(locale: string, options: Intl.DateTimeForma
   }
   return formatter;
 }
+
+const hourMinuteFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function hourMinuteFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = hourMinuteFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "numeric", minute: "2-digit", hourCycle: "h23" });
+    hourMinuteFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
+/** Hour (0–23, no leading zero) and two-digit minute of `at` in `timeZone`, as `H:mm`. */
+export function zonedHourMinute(at: Date, timeZone: string): string {
+  const parts = hourMinuteFormatter(timeZone).formatToParts(at);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
+}
+
+/** One es-MX "medium date, short time" formatter in the viewer's time zone ("3 nov 2026, 12:00"). */
+const mediumDateTimeFormatter = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
+
+/** `at` as an es-MX medium date and short time, in the viewer's time zone. */
+export function formatMediumDateTime(at: Date): string {
+  return mediumDateTimeFormatter.format(at);
+}

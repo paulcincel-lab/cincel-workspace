@@ -6,74 +6,74 @@ const m = vi.hoisted(() => ({
     throw new Error("NEXT_NOT_FOUND");
   }),
   canViewTeam: true,
-  fetchStaffAction: vi.fn(),
-  fetchPeopleOverviewAction: vi.fn(),
-  fetchContactsAction: vi.fn(),
+  user: { member: { id: "s-viewer" }, email: "", access: "Colaborador" },
+  loadPersonasEquipo: vi.fn(),
+  loadPersonasCounts: vi.fn(),
+  client: null as unknown,
 }));
 
 vi.mock("next/navigation", () => ({ notFound: m.notFound }));
-vi.mock("@/lib/auth/session", () => ({ requireCapabilityUser: vi.fn(async () => ({ access: "Colaborador" })) }));
-vi.mock("@/lib/auth/permissions", () => ({ resolveTeamCapabilities: () => ({ canViewTeam: m.canViewTeam, canCreateCollaborator: true }) }));
-vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffAction: m.fetchStaffAction }));
-vi.mock("@/lib/actions/people-actions", () => ({ fetchPeopleOverviewAction: m.fetchPeopleOverviewAction }));
-vi.mock("@/lib/actions/contacts-actions", () => ({ fetchContactsAction: m.fetchContactsAction }));
-vi.mock("@/lib/actions/positions-actions", () => ({ fetchPositionsAction: vi.fn(async () => []) }));
-vi.mock("@/lib/tramos/compat", () => ({
-  listTramos: vi.fn(async () => [
-    { id: "w2", key: "diseno", name: "Diseño", sortOrder: 1 },
-    { id: "w3", key: "construccion", name: "Construcción", sortOrder: 2 },
-  ]),
+vi.mock("@/lib/auth/session", () => ({ requireCapabilityUser: vi.fn(async () => m.user) }));
+vi.mock("@/lib/auth/permissions", () => ({ resolveTeamCapabilities: () => ({ canViewTeam: m.canViewTeam }) }));
+vi.mock("@/lib/loaders/personas", () => ({
+  loadPersonasEquipo: m.loadPersonasEquipo,
+  loadPersonasCounts: m.loadPersonasCounts,
 }));
-vi.mock("@/components/personas/EquipoView", () => ({ EquipoView: () => null }));
+// One request-scoped client per test (React `cache` does not memoize outside a server render).
+vi.mock("@/lib/query/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/query/server")>()),
+  getQueryClient: () => m.client,
+}));
+vi.mock("@/components/personas/EquipoView", () => ({ PersonasEquipoScreen: () => null }));
 
-import { EquipoView, type EquipoViewProps } from "@/components/personas/EquipoView";
-import { EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_STAFF } from "@/components/personas/fixtures/equipo";
+import { PersonasEquipoScreen } from "@/components/personas/EquipoView";
+import { Hydrate } from "@/lib/query/hydrate";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient } from "@/lib/query/test-utils";
 
 import PersonasEquipoPage from "./page";
 
 const run = () => PersonasEquipoPage();
+const client = () => m.client as ReturnType<typeof createTestQueryClient>;
+
+const EQUIPO = {
+  people: [{ id: "s1" }, { id: "s2" }, { id: "s3" }],
+  emails: { s1: "ana@cincel.mx" },
+  canCreate: true,
+};
+const COUNTS = { equipo: 3, clientes: 1, contratistas: 1, proveedores: 2 };
 
 beforeEach(() => {
   m.notFound.mockClear();
   m.canViewTeam = true;
-  m.fetchStaffAction.mockReset().mockResolvedValue(EQUIPO_STAFF);
-  m.fetchPeopleOverviewAction.mockReset().mockResolvedValue(EQUIPO_OVERVIEW_NO_HOURS);
-  m.fetchContactsAction.mockReset().mockResolvedValue([
-    { type: "cliente", providerProfile: null },
-    { type: "proveedor", providerProfile: { subtype: "contratista" } },
-    { type: "proveedor", providerProfile: { subtype: "tienda" } },
-  ]);
+  m.client = createTestQueryClient();
+  m.loadPersonasEquipo.mockReset().mockResolvedValue(EQUIPO);
+  m.loadPersonasCounts.mockReset().mockResolvedValue(COUNTS);
 });
 
 describe("/personas", () => {
   it("is not found without team.canViewTeam", async () => {
     m.canViewTeam = false;
     await expect(run()).rejects.toThrow("NEXT_NOT_FOUND");
-    expect(m.fetchStaffAction).not.toHaveBeenCalled();
+    expect(m.loadPersonasEquipo).not.toHaveBeenCalled();
   });
 
-  it("passes the joined people, emails and tab counts to the view", async () => {
-    const element = (await run()) as ReactElement<EquipoViewProps>;
-    expect(element.type).toBe(EquipoView);
-    const { people, emails, counts } = element.props;
-    expect(people.map((p) => p.name)).toEqual(["Ana Ruiz", "Bruno Soto", "Carla Méndez"]);
-    expect(people.map((p) => p.open)).toEqual([6, 2, 0]);
-    expect(people.every((p) => p.weekHours === null)).toBe(true);
-    expect(people.map((p) => p.tramo)).toEqual(["diseno", "construccion", null]);
-    expect(emails[EQUIPO_STAFF[0].id]).toBe("ana@cincel.mx");
-    expect(counts).toEqual({ equipo: 3, clientes: 1, contratistas: 1, proveedores: 2 });
-    expect(element.props.canCreate).toBe(true);
+  it("prefetches personas.equipo and personas.counts for the viewer and renders the screen under Hydrate", async () => {
+    const element = (await run()) as ReactElement<{ children: ReactElement }>;
+    expect(element.type).toBe(Hydrate);
+    expect(element.props.children.type).toBe(PersonasEquipoScreen);
+    expect(m.loadPersonasEquipo).toHaveBeenCalledWith(m.user);
+    expect(client().getQueryData(qk.personas.equipo())).toEqual(EQUIPO);
+    expect(client().getQueryData(qk.personas.counts())).toEqual(COUNTS);
   });
 
-  it("still renders the team when the overview action fails or returns nothing", async () => {
-    m.fetchPeopleOverviewAction.mockRejectedValue(new Error("boom"));
-    const element = (await run()) as ReactElement<EquipoViewProps>;
-    expect(element.props.people).toHaveLength(3);
-    expect(element.props.people.every((p) => p.open === 0 && p.weekHours === null)).toBe(true);
+  it("hands the counts loader the active team it just listed (no second COUNT)", async () => {
+    await run();
+    expect(m.loadPersonasCounts).toHaveBeenCalledWith(m.user, { activeStaff: 3 });
   });
 
-  it("renders the view with no style wrapper (useStyle reads ?estilo= from the URL)", async () => {
+  it("renders the screen with no style wrapper (useStyle reads ?estilo= from the URL)", async () => {
     const element = (await run()) as ReactElement;
-    expect(element.type).toBe(EquipoView);
+    expect(element.type).toBe(Hydrate);
   });
 });

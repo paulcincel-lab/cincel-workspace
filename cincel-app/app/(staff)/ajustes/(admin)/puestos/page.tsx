@@ -1,26 +1,31 @@
 import { PuestosClient } from "./PuestosClient";
-import { fetchPositionsAction } from "@/lib/actions/positions-actions";
-import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { requireSettingsAdminPage } from "@/lib/auth/settings-admin-page";
-import type { Position, WorkflowDetail } from "@/lib/types/core";
+import { requireCapabilityUser } from "@/lib/auth/session";
+import { loadAjustesPuestos } from "@/lib/loaders/ajustes";
+import { Hydrate } from "@/lib/query/hydrate";
+import { qk } from "@/lib/query/keys";
+import { ajustesPuestosOptions, seedAjustesCatalogs, type AjustesPuestosPageData } from "@/lib/query/options/ajustes";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Ajustes › Puestos (redesign FE §3.8, §21.2): Project Flow's "Puestos" page
- * rendered inside Ajustes, unchanged (same client, data and actions).
- * Administrador only (today's rule), checked by the segment layout and here.
+ * rendered inside Ajustes. Administrador only (today's rule), checked by the
+ * segment layout and here. Prefetches `qk.ajustes.page('puestos')` (and seeds
+ * `catalog.workflows`), so the client makes no call on mount.
  */
 export default async function AjustesPuestosPage() {
   await requireSettingsAdminPage();
+  const user = await requireCapabilityUser();
+  const qc = getQueryClient();
+  await prefetch(qc, ajustesPuestosOptions(), () => loadAjustesPuestos(user));
+  const data = qc.getQueryData<AjustesPuestosPageData>(qk.ajustes.page("puestos"));
+  if (data) seedAjustesCatalogs(qc, { seg: "puestos", data });
 
-  let initialPositions: Position[] = [];
-  let initialWorkflows: WorkflowDetail[] = [];
-  try {
-    [initialPositions, initialWorkflows] = await Promise.all([fetchPositionsAction(), fetchWorkflowsAction()]);
-  } catch {
-    // The client falls back to hydrating itself, like the legacy page.
-  }
-
-  return <PuestosClient initialPositions={initialPositions} initialWorkflows={initialWorkflows} />;
+  return (
+    <Hydrate qc={qc}>
+      <PuestosClient />
+    </Hydrate>
+  );
 }

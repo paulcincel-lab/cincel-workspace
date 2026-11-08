@@ -23,20 +23,22 @@ vi.mock("@/lib/actions/contacts-actions", () => ({
   mergeContactsAction: (...args: unknown[]) => mergeContactsActionMock(...args),
 }));
 
-const fetchTasksActionMock = vi.fn();
+const listViewerTasksMock = vi.fn();
 const mergeTasksActionMock = vi.fn();
 vi.mock("@/lib/actions/tasks-actions", () => ({
-  fetchTasksAction: (...args: unknown[]) => fetchTasksActionMock(...args),
   createUserTaskAction: vi.fn(),
   assignTaskAction: vi.fn(),
   mergeTasksAction: (...args: unknown[]) => mergeTasksActionMock(...args),
 }));
 
-const fetchProjectsActionMock = vi.fn();
+const listViewerProjectsMock = vi.fn();
 vi.mock("@/lib/actions/projects-actions", () => ({
-  fetchProjectsAction: (...args: unknown[]) => fetchProjectsActionMock(...args),
   createProjectAction: vi.fn(),
   deleteProjectAction: vi.fn(),
+}));
+vi.mock("@/lib/assistant/reads", () => ({
+  listViewerProjects: (...args: unknown[]) => listViewerProjectsMock(...args),
+  listViewerTasks: (...args: unknown[]) => listViewerTasksMock(...args),
 }));
 
 vi.mock("@/lib/actions/tramo-start-actions", () => ({
@@ -442,11 +444,11 @@ describe("merge_duplicate_activities", () => {
   const ctx = { toolCallId: "t", messages: [] } as never;
 
   beforeEach(() => {
-    fetchProjectsActionMock.mockResolvedValue([{ id: "proj-1", name: "Casa Roma" }]);
+    listViewerProjectsMock.mockResolvedValue([{ id: "proj-1", name: "Casa Roma" }]);
   });
 
   it("returns ok:false when the project can't be resolved", async () => {
-    fetchProjectsActionMock.mockResolvedValue([]);
+    listViewerProjectsMock.mockResolvedValue([]);
 
     const out = await merge_duplicate_activities.execute!(
       { projectName: "No existe", descriptionContains: "Renders" },
@@ -458,7 +460,7 @@ describe("merge_duplicate_activities", () => {
   });
 
   it("returns ok:false when fewer than 2 tasks match", async () => {
-    fetchTasksActionMock.mockResolvedValue([
+    listViewerTasksMock.mockResolvedValue([
       { id: "t1", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-01T00:00:00Z" },
     ]);
 
@@ -472,7 +474,7 @@ describe("merge_duplicate_activities", () => {
   });
 
   it("errors when matches span more than one distinct title", async () => {
-    fetchTasksActionMock.mockResolvedValue([
+    listViewerTasksMock.mockResolvedValue([
       { id: "t1", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-01T00:00:00Z" },
       { id: "t2", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-02T00:00:00Z" },
       { id: "t3", title: "Revisar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-01T00:00:00Z" },
@@ -489,7 +491,7 @@ describe("merge_duplicate_activities", () => {
   });
 
   it("keeps the oldest task and merges the rest with the exact same title", async () => {
-    fetchTasksActionMock.mockResolvedValue([
+    listViewerTasksMock.mockResolvedValue([
       { id: "t-new", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-03-01T00:00:00Z" },
       { id: "t-old", title: "Enviar renders", project: { id: "proj-1", name: "Casa Roma" }, createdAt: "2024-01-01T00:00:00Z" },
     ]);
@@ -500,7 +502,7 @@ describe("merge_duplicate_activities", () => {
       ctx
     );
 
-    expect(fetchTasksActionMock).toHaveBeenCalledWith({
+    expect(listViewerTasksMock).toHaveBeenCalledWith({
       search: "Enviar renders",
       projectId: "proj-1",
       workflowId: undefined,

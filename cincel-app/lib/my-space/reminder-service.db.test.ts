@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { lockReminders } from "@/tests/setup/reminders-lock";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -52,7 +53,7 @@ describe.skipIf(!url)("reminder actions, owner-only (test DB)", async () => {
   const { eq, inArray, isNull } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const actions = await import("@/lib/actions/my-space-actions");
+  const actions = unwrapActions(await import("@/lib/actions/my-space-actions"));
 
   let owner = "";
   let other = "";

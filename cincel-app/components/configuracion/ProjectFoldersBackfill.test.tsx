@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
+import type { ReactElement } from "react";
+
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 
 const actions = vi.hoisted(() => ({ ensureMissingProjectFoldersAction: vi.fn() }));
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
@@ -8,7 +13,14 @@ const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("@/lib/actions/workspace-access-actions", () => actions);
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
-import { ProjectFoldersBackfill, projectFoldersSummary } from "./ProjectFoldersBackfill";
+import { isProjectArchivosQuery, ProjectFoldersBackfill, projectFoldersSummary } from "./ProjectFoldersBackfill";
+
+let client: QueryClient;
+
+function render(ui: ReactElement) {
+  client = createTestQueryClient();
+  return renderWithQueryClient(ui, { client });
+}
 
 describe("projectFoldersSummary", () => {
   it("formats created and failed like the spec example", () => {
@@ -46,11 +58,40 @@ describe("ProjectFoldersBackfill", () => {
     resolve({ created: 12, skipped: 2, failed: 1 });
     expect(await screen.findByText("12 creadas, 2 omitidas, 1 con error")).toBeTruthy();
     expect(actions.ensureMissingProjectFoldersAction).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+    expect(router.refresh).not.toHaveBeenCalled();
     // The label switches back once the transition settles, which can lag the summary text.
     await waitFor(() =>
       expect((screen.getByRole("button", { name: "Crear carpetas faltantes" }) as HTMLButtonElement).disabled).toBe(false)
     );
+  });
+
+  it("invalidates ajustes.page('google') and every project's archivos listing, nothing else", async () => {
+    actions.ensureMissingProjectFoldersAction.mockResolvedValue({ created: 1, skipped: 0, failed: 0 });
+    render(<ProjectFoldersBackfill />);
+    const seeded = {
+      google: qk.ajustes.page("google"),
+      archivosRoot: qk.proyectos.archivos("p1", null),
+      archivosFolder: qk.proyectos.archivos("p2", "f1"),
+      shell: qk.proyectos.shell("p1"),
+      puestos: qk.ajustes.page("puestos"),
+    };
+    for (const key of Object.values(seeded)) client.setQueryData(key, { seeded: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Crear carpetas faltantes" }));
+    expect(await screen.findByText("1 creada")).toBeTruthy();
+
+    await waitFor(() => expect(client.getQueryState(seeded.google)?.isInvalidated).toBe(true));
+    expect(client.getQueryState(seeded.archivosRoot)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(seeded.archivosFolder)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(seeded.shell)?.isInvalidated).toBe(false);
+    expect(client.getQueryState(seeded.puestos)?.isInvalidated).toBe(false);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("matches only ['proyectos', id, 'archivos', …] keys", () => {
+    expect(isProjectArchivosQuery({ queryKey: qk.proyectos.archivos("p1", null) })).toBe(true);
+    expect(isProjectArchivosQuery({ queryKey: qk.proyectos.tab("p1", "tareas") })).toBe(false);
+    expect(isProjectArchivosQuery({ queryKey: qk.portal.files("p1", null) })).toBe(false);
   });
 
   it("disables the button with a hint when no Shared Drive is configured", () => {

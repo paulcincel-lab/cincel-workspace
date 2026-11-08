@@ -1,10 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+
+import { qk } from "@/lib/query/keys";
+import { setBrowserQueryClient } from "@/lib/query/reset-client-state";
+import { createTestQueryClient } from "@/lib/query/test-utils";
 
 import PortalShell, { PORTAL_SIGN_OUT_URL } from "./PortalShell";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setBrowserQueryClient(null);
+});
 
 describe("PortalShell", () => {
   it("shows the logo, the client name and Salir pointing at the logout route", () => {
@@ -34,5 +41,30 @@ describe("PortalShell", () => {
     expect(main.className).toContain("w-full");
     expect(main.className).toContain("px-4");
     expect(screen.getByText(/Un nombre de cliente/).className).toContain("truncate");
+  });
+});
+
+describe("PortalShell logout", () => {
+  it("clears the whole query cache on Salir: client B never sees client A's projects", () => {
+    const client = createTestQueryClient();
+    setBrowserQueryClient(client);
+    // Client A's cache.
+    client.setQueryData(qk.portal.projects(), { projects: [{ id: "pa" }] });
+    client.setQueryData(qk.portal.project("pa", "resumen"), { project: { id: "pa" } });
+    client.setQueryData(qk.portal.uploads("pa"), [{ id: "u1" }]);
+
+    render(<PortalShell clientName="Cliente A">x</PortalShell>);
+    const salir = screen.getByRole("link", { name: "Salir" });
+    // The anchor still navigates to the logout route; only the default navigation is stopped in the test.
+    salir.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(salir);
+
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
+    cleanup();
+
+    // Client B signs in in the same tab: the cache starts empty.
+    render(<PortalShell clientName="Cliente B">y</PortalShell>);
+    expect(client.getQueryData(qk.portal.projects())).toBeUndefined();
+    expect(client.getQueryData(qk.portal.project("pa", "resumen"))).toBeUndefined();
   });
 });

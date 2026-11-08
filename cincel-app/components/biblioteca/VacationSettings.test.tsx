@@ -1,19 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({
-  refresh: vi.fn(),
   save: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   flags: { saveVacationSettingsAction: true } as Record<string, boolean>,
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: mocks.refresh }),
-  usePathname: () => "/biblioteca/vacaciones",
-  useSearchParams: () => new URLSearchParams(),
+vi.mock("@/lib/actions/page-data/biblioteca-actions", () => ({
+  getBibliotecaPageData: vi.fn(),
+  getMisVacacionesPageData: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
 vi.mock("@/lib/actions/vacations-actions", () => ({ saveVacationSettingsAction: mocks.save }));
@@ -26,16 +24,22 @@ vi.mock("@/components/patterns/SettingsRow", async () => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 import { VACATION_DAYS_ERROR, VacationSettings, parseVacationSettingsDraft } from "./VacationSettings";
-import { ANA_ID, LUIS_ID, vacationSettingsFixture } from "./vacation-deciders.fixtures";
+import { ANA_ID, LUIS_ID, seededDeciderClient } from "./vacation-deciders.fixtures";
 
 function renderSettings(canDecide = true) {
-  return render(
+  const client = seededDeciderClient();
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  const view = renderWithQueryClient(
     <StyleProvider style="visual" scope="staff">
-      <VacationSettings initial={vacationSettingsFixture()} canDecide={canDecide} />
+      <VacationSettings month="2026-11" canDecide={canDecide} />
     </StyleProvider>,
+    { client },
   );
+  return { ...view, invalidate };
 }
 
 async function clickSave() {
@@ -47,7 +51,6 @@ async function clickSave() {
 beforeEach(() => {
   mocks.flags.saveVacationSettingsAction = true;
   mocks.save.mockReset();
-  mocks.refresh.mockReset();
   mocks.toastSuccess.mockReset();
   mocks.toastError.mockReset();
 });
@@ -109,13 +112,16 @@ describe("VacationSettings", () => {
 
   it("persists the default and the overrides, clearing one to null", async () => {
     mocks.save.mockImplementation(async (input: { daysPerYear: number; overrides: { staffId: string; days: number | null }[] }) => ({
-      daysPerYear: input.daysPerYear,
-      overrides: [
-        { staffId: ANA_ID, name: "Ana Torres", days: null },
-        { staffId: LUIS_ID, name: "Luis Méndez", days: 20 },
-      ],
+      ok: true,
+      data: {
+        daysPerYear: input.daysPerYear,
+        overrides: [
+          { staffId: ANA_ID, name: "Ana Torres", days: null },
+          { staffId: LUIS_ID, name: "Luis Méndez", days: 20 },
+        ],
+      },
     }));
-    renderSettings();
+    const { client, invalidate } = renderSettings();
     fireEvent.change(screen.getByLabelText("Días por año"), { target: { value: "14" } });
     fireEvent.change(screen.getByLabelText("Días de Ana Torres"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Días de Luis Méndez"), { target: { value: "20" } });
@@ -127,21 +133,23 @@ describe("VacationSettings", () => {
         { staffId: LUIS_ID, days: 20 },
       ],
     });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("Días de vacaciones guardados");
-    expect(mocks.refresh).toHaveBeenCalled();
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("Días de vacaciones guardados"));
+    // The saved view goes into vacations.settings; the viewer's own balance refetches.
+    expect(client.getQueryData(qk.vacations.settings())).toMatchObject({ daysPerYear: 14 });
+    await waitFor(() => expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([qk.me.vacations()]));
     expect((screen.getByLabelText("Días de Luis Méndez") as HTMLInputElement).value).toBe("20");
     expect((screen.getByLabelText("Días de Ana Torres") as HTMLInputElement).placeholder).toBe("14");
   });
 
   it("shows the action error inline on FORBIDDEN or INVALID", async () => {
-    mocks.save.mockRejectedValueOnce(new Error("FORBIDDEN"));
+    mocks.save.mockResolvedValueOnce({ ok: false, error: "FORBIDDEN" });
     renderSettings();
     await clickSave();
-    expect(screen.getByText("No tienes permiso para realizar esta acción.")).toBeTruthy();
+    expect(await screen.findByText("No tienes permiso para realizar esta acción.")).toBeTruthy();
 
     mocks.save.mockRejectedValueOnce(new Error("INVALID"));
     await clickSave();
-    expect(screen.getByText("Faltan datos o no son válidos. Revisa el formulario e intenta de nuevo.")).toBeTruthy();
+    expect(await screen.findByText("Faltan datos o no son válidos. Revisa el formulario e intenta de nuevo.")).toBeTruthy();
   });
 
   it("is read-only while saveVacationSettingsAction is not implemented", () => {

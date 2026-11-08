@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useId, useState } from "react";
 
 import { ChecklistAddItemInput, ChecklistItemRow } from "@/components/tareas/ChecklistItemRow";
 import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
@@ -10,10 +9,19 @@ import { RecordTable } from "@/components/widgets/RecordTable";
 import { addChecklistItemAction, toggleChecklistItemAction } from "@/lib/actions/my-space-actions";
 import { IMPLEMENTED } from "@/lib/actions/my-space-actions.flags";
 import { actionErrorText } from "@/lib/errors";
+import { useActionMutation } from "@/lib/query/mutation";
+import {
+  restoreSnapshot,
+  snapshotChecklists,
+  updateCachedChecklist,
+  type ChecklistsData,
+  type Snapshot,
+} from "@/lib/query/options/mi-espacio";
 import type { Checklist, ChecklistItem } from "@/lib/types/redesign";
 import type { RecordTableData } from "@/lib/types/widgets";
 
-export type ChecklistCardProps = { checklist: Checklist; onChange(c: Checklist): void };
+/** `checklist` is the row of the `me.checklists` query; the card's writes patch that query. */
+export type ChecklistCardProps = { checklist: Checklist };
 
 /** Done / total / whole percent of a checklist. */
 export function checklistProgress(checklist: Checklist): { done: number; total: number; pct: number } {
@@ -59,71 +67,59 @@ function itemsTable(checklist: Checklist): RecordTableData {
 /**
  * One checklist (redesign FE §3.3, §4.4): title, n/m, progress, checkbox items
  * and the add-item input. Rows are the task checklist rows
- * (`ChecklistItemRow`, `ChecklistProgressCell`); toggles are optimistic and
- * roll back with an error toast.
+ * (`ChecklistItemRow`, `ChecklistProgressCell`). A toggle is one POST: it
+ * patches `me.checklists` at once and rolls back with the error toast; no
+ * route re-render.
  */
-export function ChecklistCard({ checklist, onChange }: ChecklistCardProps) {
+export function ChecklistCard({ checklist: current }: ChecklistCardProps) {
   const headingId = useId();
   const inputId = useId();
   const canToggle = IMPLEMENTED.toggleChecklistItemAction;
   const canAdd = IMPLEMENTED.addChecklistItemAction;
-
-  // Local copy so the card updates before the parent echoes `onChange`; a new
-  // `checklist` prop replaces it.
-  const [current, setCurrent] = useState(checklist);
-  const [source, setSource] = useState(checklist);
-  if (checklist !== source) {
-    setSource(checklist);
-    setCurrent(checklist);
-  }
-  const latest = useRef(checklist);
-  useEffect(() => {
-    latest.current = checklist;
-  }, [checklist]);
+  const checklistId = current.id;
 
   const [draft, setDraft] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
 
-  const commit = (next: Checklist) => {
-    latest.current = next;
-    setCurrent(next);
-    onChange(next);
-  };
+  const toggleMutation = useActionMutation<{ itemId: string; done: boolean }, ChecklistItem, Snapshot<ChecklistsData>>(
+    ({ itemId, done }) => toggleChecklistItemAction(itemId, done),
+    {
+      optimistic: {
+        async onMutate(qc, { itemId, done }) {
+          const snap = await snapshotChecklists(qc);
+          updateCachedChecklist(qc, checklistId, (c) => withItem(c, itemId, { done }));
+          return snap;
+        },
+        rollback: restoreSnapshot,
+      },
+      setData: (qc, saved, { itemId }) => updateCachedChecklist(qc, checklistId, (c) => withItem(c, itemId, saved)),
+    },
+  );
 
-  const toggle = async (itemId: string) => {
+  const addMutation = useActionMutation<string, ChecklistItem>((text) => addChecklistItemAction(checklistId, text), {
+    setData: (qc, item) => {
+      updateCachedChecklist(qc, checklistId, (c) => ({ ...c, items: [...c.items.filter((i) => i.id !== item.id), item] }));
+      setDraft("");
+    },
+    onFormError: setAddError,
+  });
+
+  const toggle = (itemId: string) => {
     if (!canToggle) return;
-    const item = latest.current.items.find((i) => i.id === itemId);
+    const item = current.items.find((i) => i.id === itemId);
     if (!item) return;
-    const done = !item.done;
-    commit(withItem(latest.current, itemId, { done }));
-    try {
-      const saved = await toggleChecklistItemAction(itemId, done);
-      commit(withItem(latest.current, itemId, saved));
-    } catch (err) {
-      commit(withItem(latest.current, itemId, { done: !done }));
-      toast.error(actionErrorText(err));
-    }
+    toggleMutation.mutate({ itemId, done: !item.done });
   };
 
-  const add = async () => {
-    if (!canAdd || adding) return;
+  const add = () => {
+    if (!canAdd || addMutation.isPending) return;
     const text = draft.trim();
     if (!text) {
       setAddError(actionErrorText("INVALID"));
       return;
     }
-    setAdding(true);
     setAddError(null);
-    try {
-      const item = await addChecklistItemAction(latest.current.id, text);
-      commit({ ...latest.current, items: [...latest.current.items, item] });
-      setDraft("");
-    } catch (err) {
-      setAddError(actionErrorText(err));
-    } finally {
-      setAdding(false);
-    }
+    addMutation.mutate(text);
   };
 
   const { done, total, pct } = checklistProgress(current);
@@ -157,7 +153,7 @@ export function ChecklistCard({ checklist, onChange }: ChecklistCardProps) {
               label={String(row.punto)}
               checked={row.done === true}
               disabled={!canToggle}
-              onToggle={() => void toggle(String(row.id))}
+              onToggle={() => toggle(String(row.id))}
             />
           ) : undefined
         }
@@ -170,7 +166,7 @@ export function ChecklistCard({ checklist, onChange }: ChecklistCardProps) {
             setDraft(value);
             if (addError) setAddError(null);
           }}
-          onSubmit={() => void add()}
+          onSubmit={add}
           error={addError}
         />
       ) : null}

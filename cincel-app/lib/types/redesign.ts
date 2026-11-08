@@ -209,6 +209,23 @@ export type DayHours = { date: string; hours: number };
 
 export type WeekHours = { days: DayHours[]; total: number; target: number };
 
+/**
+ * Ajustes › Perfil page data (`qk.ajustes.page('perfil')`): the caller's own
+ * profile only. The photo is not here: it comes from `qk.me.profile()`.
+ */
+export type PerfilData = {
+  staffId: string;
+  name: string;
+  phone: string;
+  /** Read-only: from Google. */
+  email: string;
+  /** Read-only: the person's puestos in Equipo ("" = none). */
+  puesto: string;
+  emailSignature: string;
+  /** null = time tracking off for this person (only shown when tracking is enabled for them). */
+  week: WeekHours | null;
+};
+
 export type TeamHoursRow = {
   staffId: string;
   name: string;

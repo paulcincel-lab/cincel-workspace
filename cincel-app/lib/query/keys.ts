@@ -53,6 +53,8 @@ export const qk = {
       thread: (id: string) => ["me", "gmail", "thread", id] as const,
     },
     reminders: (range: "today-tomorrow") => ["me", "reminders", range] as const,
+    /** The reminder dialog's natural-language parse of one text. */
+    reminderParse: (text: string) => ["me", "reminder-parse", text] as const,
     checklists: () => ["me", "checklists"] as const,
     notes: () => ["me", "notes"] as const,
     vacations: () => ["me", "vacations"] as const,
@@ -96,6 +98,8 @@ export const qk = {
     counts: () => ["personas", "counts"] as const,
     contacts: (tab: PersonasContactsTab, tipo: string | null) => ["personas", "contacts", tab, tipo] as const,
     detail: (staffId: string) => ["personas", "detail", staffId] as const,
+    /** The puestos catalog the collaborator editor reads when it opens. */
+    positions: () => ["personas", "positions"] as const,
   },
   contacts: {
     detail: (id: string) => ["contacts", id] as const,
@@ -117,8 +121,19 @@ export const qk = {
     run: (id: string) => ["monday", "run", id] as const,
     history: () => ["monday", "history"] as const,
     choices: () => ["monday", "choices"] as const,
+    /** Run-scoped reads of the import wizard. */
+    source: (runId: string) => ["monday", "source", runId] as const,
+    options: (runId: string) => ["monday", "options", runId] as const,
+    imported: (runId: string) => ["monday", "imported", runId] as const,
+    rollbackCheck: (runId: string) => ["monday", "rollback-check", runId] as const,
+    positionSuggestion: (runId: string, mondayUserId: string) =>
+      ["monday", "position-suggestion", runId, mondayUserId] as const,
   },
-  google: { driveStatus: () => ["google", "drive-status"] as const },
+  google: {
+    driveStatus: () => ["google", "drive-status"] as const,
+    /** One Drive browser listing: a folder (null = the server's root) or a search. */
+    driveList: (folderId: string | null, q: string) => ["google", "drive-list", folderId, q] as const,
+  },
   catalog: {
     tramos: () => ["catalog", "tramos"] as const,
     workflows: () => ["catalog", "workflows"] as const,

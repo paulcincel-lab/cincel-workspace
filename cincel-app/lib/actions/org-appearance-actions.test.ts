@@ -30,7 +30,15 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/org-appearance-repository", () => repo);
 
-import { resetOrgAppearanceAction, saveOrgAppearanceAction } from "./org-appearance-actions";
+import { unwrapActionResult } from "./action-result";
+import {
+  resetOrgAppearanceAction as resetOrgAppearanceResult,
+  saveOrgAppearanceAction as saveOrgAppearanceResult,
+} from "./org-appearance-actions";
+
+/** The actions return `ActionResult`; unwrapped, a failure throws its code as before. */
+const saveOrgAppearanceAction = async (input: OrgAppearance) => unwrapActionResult(await saveOrgAppearanceResult(input));
+const resetOrgAppearanceAction = async (base: ThemeId) => unwrapActionResult(await resetOrgAppearanceResult(base));
 
 function clone(theme: ThemeId = "azul"): OrgAppearance {
   return structuredClone(THEME_PRESETS[theme]);
@@ -116,6 +124,32 @@ describe("saveOrgAppearanceAction", () => {
 
     await saveOrgAppearanceAction(edit);
     expect(store.value?.v).toBe(3);
+  });
+});
+
+describe("ActionResult (production strips thrown action errors)", () => {
+  it("returns the codes as { ok: false, error } instead of throwing", async () => {
+    currentUser.value = COLLABORATOR;
+    await expect(saveOrgAppearanceResult(clone())).resolves.toEqual({
+      ok: false,
+      error: expect.stringMatching(/^FORBIDDEN/),
+    });
+    await expect(resetOrgAppearanceResult("grafito")).resolves.toEqual({
+      ok: false,
+      error: expect.stringMatching(/^FORBIDDEN/),
+    });
+
+    currentUser.value = ADMIN;
+    const edit = clone();
+    edit.tokens["muted-foreground"].light = "#c0c0c0";
+    await expect(saveOrgAppearanceResult(edit)).resolves.toEqual({
+      ok: false,
+      error: expect.stringMatching(LOW_CONTRAST_FORMAT),
+    });
+  });
+
+  it("wraps a successful save as { ok: true, data }", async () => {
+    await expect(saveOrgAppearanceResult(clone("calido"))).resolves.toEqual({ ok: true, data: THEME_PRESETS.calido });
   });
 });
 

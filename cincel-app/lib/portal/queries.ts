@@ -15,7 +15,8 @@ import {
 } from "@/lib/db/schema";
 import type { PortalProjectDTO, PortalScheduleDTO, PortalTramoDTO } from "@/lib/types/portal";
 
-import { toPortalProjectDTO, toPortalScheduleDTO, toPortalTramosDTO } from "./dto";
+import { toPortalProjectDTO, toPortalScheduleDTO, toPortalTramosDTO, type PortalScheduleTaskRow } from "./dto";
+import type { PortalProjectAccess } from "./session-store";
 
 /**
  * The portal's read layer (BE §B.4.3). Portal pages and routes read data only
@@ -25,9 +26,11 @@ import { toPortalProjectDTO, toPortalScheduleDTO, toPortalTramosDTO } from "./dt
  *
  * A project is visible to a portal user only with an active (not revoked)
  * `project_portal_access` row, while the project is not soft-deleted and not
- * `cancelado`. Callers still run requirePortalUser() / requireProjectAccess()
- * first; the same conditions are repeated here so a query can never return a
- * project the user has no access to.
+ * `cancelado`. `listPortalProjects` applies those conditions itself. The
+ * per-project reads take the `PortalProjectAccess` that `requireProjectAccess`
+ * returned (Query Migration Phase 11): visibility is checked once per request
+ * and these reads don't repeat it. A `PortalProjectAccess` only comes from that
+ * check, so a caller can't reach a project without it.
  */
 
 const manager = alias(staff, "manager");
@@ -41,59 +44,58 @@ function visibleTo(portalUserId: string): SQL {
   ) as SQL;
 }
 
-function selectPortalProjects(where: SQL) {
-  return db
-    .select({
-      id: projects.id,
-      name: projects.name,
-      code: projects.code,
-      addressStreet: projects.addressStreet,
-      addressCity: projects.addressCity,
-      addressState: projects.addressState,
-      status: projects.status,
-      progress: projects.progress,
-      startDate: projects.startDate,
-      endDate: projects.endDate,
-      managerName: manager.name,
-      managerLastName: manager.lastName,
-      managerEmail: manager.email,
-    })
-    .from(projectPortalAccess)
-    .innerJoin(projects, eq(projects.id, projectPortalAccess.projectId))
-    .leftJoin(manager, and(eq(manager.id, projects.managerId), isNull(manager.deletedAt)))
-    .where(where);
-}
+/** The columns `toPortalProjectDTO` reads. */
+const PROJECT_COLUMNS = {
+  id: projects.id,
+  name: projects.name,
+  code: projects.code,
+  addressStreet: projects.addressStreet,
+  addressCity: projects.addressCity,
+  addressState: projects.addressState,
+  status: projects.status,
+  progress: projects.progress,
+  startDate: projects.startDate,
+  endDate: projects.endDate,
+  managerName: manager.name,
+  managerLastName: manager.lastName,
+  managerEmail: manager.email,
+};
+
+const managerJoin = and(eq(manager.id, projects.managerId), isNull(manager.deletedAt));
 
 /** The projects a portal user can see, by name. */
 export async function listPortalProjects(portalUserId: string): Promise<PortalProjectDTO[]> {
-  const rows = await selectPortalProjects(visibleTo(portalUserId)).orderBy(asc(projects.name));
+  const rows = await db
+    .select(PROJECT_COLUMNS)
+    .from(projectPortalAccess)
+    .innerJoin(projects, eq(projects.id, projectPortalAccess.projectId))
+    .leftJoin(manager, managerJoin)
+    .where(visibleTo(portalUserId))
+    .orderBy(asc(projects.name));
   return rows.map(toPortalProjectDTO);
 }
 
-/** One project, or null when the portal user has no active access to it. */
-export async function getPortalProject(portalUserId: string, projectId: string): Promise<PortalProjectDTO | null> {
-  const [row] = await selectPortalProjects(and(visibleTo(portalUserId), eq(projects.id, projectId)) as SQL).limit(1);
+/** The project of a checked access (one query, no visibility join). Null only if it vanished meanwhile. */
+export async function getPortalProject(access: PortalProjectAccess): Promise<PortalProjectDTO | null> {
+  const [row] = await db
+    .select(PROJECT_COLUMNS)
+    .from(projects)
+    .leftJoin(manager, managerJoin)
+    .where(eq(projects.id, access.projectId))
+    .limit(1);
   return row ? toPortalProjectDTO(row) : null;
 }
 
 /**
  * The project's schedule per `planta` / `seccion`, or null when the project
- * has no schedule or the portal user has no access to it. Only the columns
- * the section summary needs are read: no `tarea`, `responsable`, flags,
- * payment rows, imprevistos or adicionales.
+ * has no schedule. One query: the schedule row left-joined with its tasks.
+ * Only the columns the section summary needs are read: no `tarea`,
+ * `responsable`, flags, payment rows, imprevistos or adicionales.
  */
-export async function getPortalSchedule(portalUserId: string, projectId: string): Promise<PortalScheduleDTO> {
-  const [schedule] = await db
-    .select({ id: projectSchedules.id })
-    .from(projectSchedules)
-    .innerJoin(projects, eq(projects.id, projectSchedules.projectId))
-    .innerJoin(projectPortalAccess, eq(projectPortalAccess.projectId, projects.id))
-    .where(and(visibleTo(portalUserId), eq(projects.id, projectId)))
-    .limit(1);
-  if (!schedule) return null;
-
-  const tasks = await db
+export async function getPortalSchedule(access: PortalProjectAccess): Promise<PortalScheduleDTO> {
+  const rows = await db
     .select({
+      scheduleId: projectSchedules.id,
       planta: scheduleTasks.planta,
       seccion: scheduleTasks.seccion,
       seccionOrder: scheduleTasks.seccionOrder,
@@ -102,26 +104,29 @@ export async function getPortalSchedule(portalUserId: string, projectId: string)
       fin: scheduleTasks.fin,
       status: scheduleTasks.status,
     })
-    .from(scheduleTasks)
-    .where(eq(scheduleTasks.scheduleId, schedule.id))
+    .from(projectSchedules)
+    .leftJoin(scheduleTasks, eq(scheduleTasks.scheduleId, projectSchedules.id))
+    .where(eq(projectSchedules.projectId, access.projectId))
     .orderBy(asc(scheduleTasks.sortOrder));
+  if (rows.length === 0) return null;
+
+  const tasks: PortalScheduleTaskRow[] = [];
+  for (const row of rows) {
+    // A schedule without tasks comes back as one row of nulls (left join).
+    if (row.planta === null || row.seccion === null || row.seccionOrder === null || row.sortOrder === null ||
+      row.inicio === null || row.fin === null || row.status === null) continue;
+    tasks.push({ planta: row.planta, seccion: row.seccion, seccionOrder: row.seccionOrder, sortOrder: row.sortOrder,
+      inicio: row.inicio, fin: row.fin, status: row.status });
+  }
   return toPortalScheduleDTO(tasks);
 }
 
 /**
- * The tramo catalog with the project's state in each (FE §3.11 `PhaseStepper`), or an empty list when the
- * portal user has no access to the project. Reads only the tramo key, name, order and the project's stage
+ * The tramo catalog with the project's state in each (FE §3.11 `PhaseStepper`). One query: the project's
+ * current tramo comes with the access row. Reads only the tramo key, name, order and the project's stage
  * dates; nothing about tasks or staff.
  */
-export async function getPortalProjectTramos(portalUserId: string, projectId: string): Promise<PortalTramoDTO[]> {
-  const [project] = await db
-    .select({ currentWorkflowId: projects.currentWorkflowId })
-    .from(projectPortalAccess)
-    .innerJoin(projects, eq(projects.id, projectPortalAccess.projectId))
-    .where(and(visibleTo(portalUserId), eq(projects.id, projectId)))
-    .limit(1);
-  if (!project) return [];
-
+export async function getPortalProjectTramos(access: PortalProjectAccess): Promise<PortalTramoDTO[]> {
   const rows = await db
     .select({
       id: workflows.id,
@@ -133,8 +138,11 @@ export async function getPortalProjectTramos(portalUserId: string, projectId: st
       closedAt: projectStages.closedAt,
     })
     .from(workflows)
-    .leftJoin(projectStages, and(eq(projectStages.workflowId, workflows.id), eq(projectStages.projectId, projectId)))
+    .leftJoin(
+      projectStages,
+      and(eq(projectStages.workflowId, workflows.id), eq(projectStages.projectId, access.projectId))
+    )
     .where(isNull(workflows.deletedAt))
     .orderBy(asc(workflows.sortOrder), asc(workflows.name));
-  return toPortalTramosDTO(rows, project.currentWorkflowId);
+  return toPortalTramosDTO(rows, access.currentWorkflowId);
 }

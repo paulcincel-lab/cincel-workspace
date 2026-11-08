@@ -22,3 +22,9 @@ export function portalProjectTabHref(projectId: string, tab: PortalProjectTab): 
   const base = `/portal/proyectos/${encodeURIComponent(projectId)}`;
   return tab === "resumen" ? base : `${base}?tab=${tab}`;
 }
+
+/** The Archivos tab opened on one folder (`?folder=`); null is the project's client folder. */
+export function portalProjectFolderHref(projectId: string, folderId: string | null): string {
+  const href = portalProjectTabHref(projectId, "archivos");
+  return folderId ? `${href}&folder=${encodeURIComponent(folderId)}` : href;
+}

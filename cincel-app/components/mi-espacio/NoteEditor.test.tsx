@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 
 import type { FormSheetProps } from "@/components/patterns/FormSheet";
-import type { NewTaskDialogProps } from "@/components/tareas/NewTaskDialog";
 import type { Note } from "@/lib/types/redesign";
 
 const actions = vi.hoisted(() => ({
@@ -16,7 +15,14 @@ const actions = vi.hoisted(() => ({
 const flags = vi.hoisted(() => ({ value: {} as Record<string, boolean> }));
 const toastMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/actions/my-space-actions", () => actions);
+vi.mock("@/lib/actions/my-space-actions", () => ({ ...actions, fetchRemindersAction: vi.fn() }));
+vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
+  getMiEspacioPageData: vi.fn(),
+  fetchMiEspacioNotesPage: vi.fn(),
+  fetchMiEspacioChecklistsPage: vi.fn(),
+}));
+vi.mock("@/lib/actions/gmail-actions", () => ({}));
+vi.mock("@/lib/actions/notifications-actions", () => ({}));
 vi.mock("@/lib/actions/my-space-actions.flags", () => ({
   IMPLEMENTED: new Proxy({} as Record<string, boolean>, { get: (_t, key: string) => flags.value[key] ?? true }),
 }));
@@ -47,17 +53,12 @@ vi.mock("@/components/patterns/FormSheet", () => ({
     ) : null,
 }));
 
-vi.mock("@/components/tareas/NewTaskDialog", () => ({
-  NewTaskDialog: (props: NewTaskDialogProps) =>
-    props.open ? (
-      <div role="dialog" aria-label="Nueva tarea" data-defaults={JSON.stringify(props.defaults)}>
-        Nueva tarea
-      </div>
-    ) : null,
-}));
-
 import { NoteEditor, type NoteEditorProps } from "@/components/mi-espacio/NoteEditor";
 import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import type { NotesData } from "@/lib/query/options/mi-espacio";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { resetNewTaskUi, useNewTaskUi } from "@/lib/stores/new-task-store";
 import { NOTE_BODY_MAX, NOTE_UNDO_MS, applyMarkdown } from "@/lib/my-space/note-ui";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 
@@ -78,10 +79,12 @@ function renderEditor(props: Partial<NoteEditorProps> = {}) {
     onOpenChange: vi.fn(),
     onSaved: vi.fn(),
     onArchived: vi.fn(),
-    onRestored: vi.fn(),
   };
-  render(<NoteEditor note={null} open {...handlers} {...props} />);
-  return handlers;
+  const client = createTestQueryClient();
+  client.setQueryData<NotesData>(qk.me.notes(), { pages: [{ items: [NOTE], nextCursor: null }], pageParams: [null] });
+  renderWithQueryClient(<NoteEditor note={null} open {...handlers} {...props} />, { client });
+  const cachedNotes = () => client.getQueryData<NotesData>(qk.me.notes())?.pages.flatMap((p) => p.items) ?? [];
+  return { ...handlers, client, cachedNotes };
 }
 
 function body(): HTMLTextAreaElement {
@@ -92,6 +95,7 @@ beforeEach(() => {
   flags.value = {};
   for (const fn of Object.values(actions)) fn.mockReset();
   toastMock.mockReset();
+  resetNewTaskUi();
 });
 
 afterEach(() => {
@@ -115,6 +119,7 @@ describe("NoteEditor", () => {
     expect(actions.createNoteAction).toHaveBeenCalledWith({ title: "Compras", body: "Cemento", color: "amber", pinned: true });
     expect(toastMock).toHaveBeenCalledWith("Nota guardada");
     expect(h.onOpenChange).toHaveBeenCalledWith(false);
+    expect(h.cachedNotes()[0]).toEqual(saved);
   });
 
   it("edits an existing note through updateNoteAction", async () => {
@@ -135,6 +140,20 @@ describe("NoteEditor", () => {
       pinned: false,
     });
     expect(toastMock).toHaveBeenCalledWith("Nota guardada");
+    expect(h.cachedNotes()).toEqual([saved]);
+  });
+
+  it("patches me.notes before the server answers and rolls the edit back on error", async () => {
+    let fail!: (err: unknown) => void;
+    actions.updateNoteAction.mockReturnValue(new Promise((_res, rej) => (fail = rej)));
+    const h = renderEditor({ note: NOTE });
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Proveedores CDMX" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(h.cachedNotes()[0]?.title).toBe("Proveedores CDMX"));
+    fail(new Error("FORBIDDEN"));
+    expect((await screen.findByRole("alert")).textContent).toBe("No tienes permiso para realizar esta acción.");
+    expect(h.cachedNotes()[0]?.title).toBe("Proveedores");
+    expect(h.onSaved).not.toHaveBeenCalled();
   });
 
   it("shows the INVALID copy inline for an empty note and for a 20 001-character body", async () => {
@@ -206,6 +225,7 @@ describe("NoteEditor", () => {
     const h = renderEditor({ note: NOTE });
     fireEvent.click(screen.getByRole("button", { name: "Archivar" }));
     await waitFor(() => expect(h.onArchived).toHaveBeenCalledWith(NOTE));
+    expect(h.cachedNotes()).toEqual([]);
     expect(actions.archiveNoteAction).toHaveBeenCalledWith("n1");
     expect(h.onOpenChange).toHaveBeenCalledWith(false);
     const [message, options] = toastMock.mock.calls[0] as [string, { duration: number; action: { label: string; onClick(): void } }];
@@ -214,19 +234,29 @@ describe("NoteEditor", () => {
     expect(NOTE_UNDO_MS).toBe(10_000);
     expect(options.action.label).toBe("Deshacer");
     options.action.onClick();
-    await waitFor(() => expect(h.onRestored).toHaveBeenCalledWith(NOTE));
+    await waitFor(() => expect(h.cachedNotes()).toEqual([NOTE]));
     expect(actions.restoreNoteAction).toHaveBeenCalledWith("n1");
   });
 
-  it("Convertir en tarea opens NewTaskDialog prefilled with the note text", () => {
+  it("puts an archived note back when the archive fails", async () => {
+    actions.archiveNoteAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
+    const h = renderEditor({ note: NOTE });
+    fireEvent.click(screen.getByRole("button", { name: "Archivar" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("No tienes permiso para realizar esta acción.");
+    expect(h.cachedNotes()).toEqual([NOTE]);
+    expect(h.onArchived).not.toHaveBeenCalled();
+  });
+
+  it("Convertir en tarea opens the shared new-task dialog with the note text (source nota)", () => {
     renderEditor({ note: NOTE, canConvertToTask: true });
     fireEvent.click(screen.getByRole("button", { name: "Convertir en tarea" }));
-    const dialog = screen.getByRole("dialog", { name: "Nueva tarea" });
-    expect(JSON.parse(dialog.getAttribute("data-defaults") ?? "{}")).toEqual({
-      title: "Proveedores",
-      description: "Llamar a Juanma\nPedir muestras",
-      projectId: "p1",
+    expect(useNewTaskUi.getState()).toMatchObject({
+      open: true,
+      source: "nota",
+      defaults: { title: "Proveedores", description: "Llamar a Juanma\nPedir muestras", projectId: "p1" },
     });
+    // No dialog of its own: the host in the app shell renders it.
+    expect(screen.queryByRole("dialog", { name: "Nueva tarea" })).toBeNull();
   });
 
   it("has no Convertir en tarea while that flag is off", () => {

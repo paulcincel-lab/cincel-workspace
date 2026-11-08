@@ -1,23 +1,19 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({
-  refresh: vi.fn(),
   decide: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   flags: { decideVacationAction: true } as Record<string, boolean>,
+  pageData: { getBibliotecaPageData: vi.fn(), getMisVacacionesPageData: vi.fn() },
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: mocks.refresh }),
-  usePathname: () => "/biblioteca/vacaciones",
-  useSearchParams: () => new URLSearchParams(),
-}));
 vi.mock("sonner", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
 vi.mock("@/lib/actions/vacations-actions", () => ({ decideVacationAction: mocks.decide }));
 vi.mock("@/lib/actions/vacations-actions.flags", () => ({ IMPLEMENTED: mocks.flags }));
+vi.mock("@/lib/actions/page-data/biblioteca-actions", () => mocks.pageData);
 vi.mock("@/components/patterns/FormDialog", async () => ({
   FormDialog: (await import("./vacation-deciders.fixtures")).patternMocks.FormDialog,
 }));
@@ -26,35 +22,51 @@ vi.mock("@/components/shell/EmptyState", async () => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
-import { TeamRequests, teamRequestsTable } from "./TeamRequests";
-import { pendingRequestsFixture, VIEWER_ID } from "./vacation-deciders.fixtures";
+import { TeamRequests, decisionInvalidations, teamRequestsTable, type TeamRequestRow } from "./TeamRequests";
+import { ANA_ID, pendingRequestsFixture, seededDeciderClient, VIEWER_ID } from "./vacation-deciders.fixtures";
+import { misVacacionesData } from "./vacaciones.fixtures";
 
-function renderRequests(props: Partial<Parameters<typeof TeamRequests>[0]> = {}) {
-  return render(
+function renderRequests(options: { canDecide?: boolean; requests?: TeamRequestRow[] } = {}) {
+  const client = seededDeciderClient({ requests: options.requests });
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  const view = renderWithQueryClient(
     <StyleProvider style="visual" scope="staff">
-      <TeamRequests requests={pendingRequestsFixture()} viewerStaffId={VIEWER_ID} canDecide {...props} />
+      <TeamRequests month="2026-11" viewerStaffId={VIEWER_ID} canDecide={options.canDecide ?? true} />
     </StyleProvider>,
+    { client },
   );
+  return { ...view, invalidate };
 }
 
-async function decide(name: string, decision: "Aprobar" | "Rechazar", note?: string) {
+function openDecision(name: string, decision: "Aprobar" | "Rechazar", note?: string) {
   fireEvent.click(screen.getByRole("button", { name: `${decision} solicitud de ${name}` }));
   const dialog = screen.getByRole("dialog");
   if (note !== undefined) {
     fireEvent.change(within(dialog).getByLabelText("Nota (opcional)"), { target: { value: note } });
   }
+  return dialog;
+}
+
+async function decide(name: string, decision: "Aprobar" | "Rechazar", note?: string) {
+  const dialog = openDecision(name, decision, note);
   await act(async () => {
     fireEvent.click(within(dialog).getByRole("button", { name: decision }));
   });
 }
 
+function invalidatedKeys(invalidate: ReturnType<typeof renderRequests>["invalidate"]) {
+  return invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+}
+
 beforeEach(() => {
   mocks.flags.decideVacationAction = true;
   mocks.decide.mockReset();
-  mocks.refresh.mockReset();
   mocks.toastSuccess.mockReset();
   mocks.toastError.mockReset();
+  mocks.pageData.getMisVacacionesPageData.mockReset();
 });
 
 afterEach(() => cleanup());
@@ -108,43 +120,72 @@ describe("TeamRequests own rows", () => {
 });
 
 describe("TeamRequests decide", () => {
-  it("approves with a note, removes the row and refreshes", async () => {
-    mocks.decide.mockResolvedValue({ id: "req-ana", status: "aprobada" });
-    renderRequests();
+  it("approves with a note, removes the row and invalidates absences, Personas and Inicio", async () => {
+    mocks.decide.mockResolvedValue({ ok: true, data: { id: "req-ana", status: "aprobada" } });
+    const { invalidate } = renderRequests();
     await decide("Ana Torres", "Aprobar", "  Disfruta  ");
     expect(mocks.decide).toHaveBeenCalledWith("req-ana", "aprobada", "Disfruta");
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("Solicitud aprobada");
-    expect(mocks.refresh).toHaveBeenCalled();
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("Solicitud aprobada"));
     expect(screen.queryByText("Ana Torres")).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() =>
+      expect(invalidatedKeys(invalidate)).toEqual([
+        ["vacations", "absences"],
+        qk.personas.equipo(),
+        qk.personas.detail(ANA_ID),
+        qk.inicio(),
+      ]),
+    );
   });
 
-  it("rejects without a note", async () => {
-    mocks.decide.mockResolvedValue({ id: "req-luis", status: "rechazada" });
-    renderRequests();
-    await decide("Luis Méndez", "Rechazar");
+  it("names the requester's Personas detail in the invalidation list", () => {
+    const [request] = pendingRequestsFixture();
+    expect(decisionInvalidations({ request, decision: "aprobada" })).toEqual([
+      ["vacations", "absences"],
+      ["personas", "equipo"],
+      ["personas", "detail", ANA_ID],
+      ["inicio"],
+    ]);
+  });
+
+  it("removes the row before the server answers (optimistic vacations.pending)", async () => {
+    let resolve!: (value: unknown) => void;
+    mocks.decide.mockReturnValue(new Promise((r) => (resolve = r)));
+    const { client } = renderRequests();
+    const dialog = openDecision("Luis Méndez", "Rechazar");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Rechazar" }));
+    // The dialog still names the request; the table row is gone.
+    await waitFor(() => expect(screen.queryByText("Luis Méndez")).toBeNull());
+    expect(client.getQueryData<TeamRequestRow[]>(qk.vacations.pending())?.map((r) => r.id)).not.toContain("req-luis");
+    await act(async () => resolve({ ok: true, data: { id: "req-luis", status: "rechazada" } }));
     expect(mocks.decide).toHaveBeenCalledWith("req-luis", "rechazada", undefined);
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("Solicitud rechazada");
-    expect(screen.queryByText("Luis Méndez")).toBeNull();
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("Solicitud rechazada"));
   });
 
-  it("shows an error toast on FORBIDDEN and keeps the row", async () => {
-    mocks.decide.mockRejectedValue(new Error("FORBIDDEN"));
-    renderRequests();
+  it("shows an error toast on FORBIDDEN and puts the row back", async () => {
+    mocks.decide.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
+    const { client } = renderRequests();
     await decide("Ana Torres", "Aprobar");
-    expect(mocks.toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción.");
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción."));
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(screen.getByText("Ana Torres")).toBeTruthy();
+    expect(client.getQueryData<TeamRequestRow[]>(qk.vacations.pending())?.map((r) => r.id)).toContain("req-ana");
+    expect(mocks.pageData.getMisVacacionesPageData).not.toHaveBeenCalled();
   });
 
-  it("shows an error toast on INVALID and reloads the stale list", async () => {
-    mocks.decide.mockRejectedValue(new Error("INVALID: not pendiente"));
-    renderRequests();
-    await decide("Ana Torres", "Rechazar", "No hay cobertura");
-    expect(mocks.toastError).toHaveBeenCalledWith(
-      "Faltan datos o no son válidos. Revisa el formulario e intenta de nuevo.",
+  it("shows an error toast on INVALID and refetches the stale pending list", async () => {
+    mocks.decide.mockResolvedValue({ ok: false, error: "INVALID: not pendiente" });
+    mocks.pageData.getMisVacacionesPageData.mockResolvedValue(
+      misVacacionesData({ deciders: { viewerStaffId: VIEWER_ID, requests: [], settings: null } }),
     );
-    expect(mocks.refresh).toHaveBeenCalled();
+    const { invalidate } = renderRequests();
+    await decide("Ana Torres", "Rechazar", "No hay cobertura");
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith("Faltan datos o no son válidos. Revisa el formulario e intenta de nuevo."),
+    );
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toContainEqual(qk.vacations.pending()));
+    await waitFor(() => expect(mocks.pageData.getMisVacacionesPageData).toHaveBeenCalledWith({ month: "2026-11" }));
+    await waitFor(() => expect(screen.getByText("No hay solicitudes pendientes")).toBeTruthy());
   });
 
   it("offers no decide buttons while decideVacationAction is not implemented", () => {

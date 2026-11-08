@@ -4,6 +4,7 @@
  * sección and documento screens render. Pure and client-safe; the pages load
  * the links with the existing resource actions.
  */
+import type { ResourcesCapabilities } from "@/lib/auth/permissions";
 import { canPreviewInline, driveContentUrl, getDriveId, hasDriveUrl } from "@/lib/google/drive-url";
 import type { ResourceAppliesTo, ResourceLink, ResourceLinkType, ResourceSection } from "@/lib/types/resource";
 import type { PresentationStyle } from "@/lib/types/redesign";
@@ -65,6 +66,52 @@ export function recurso(section: ResourceSection): BibliotecaRecurso | null {
 
 export function empresaDocHref(slug: EmpresaDocSlug, linkId?: string): string {
   return linkId ? `/biblioteca/empresa/${slug}?parte=${encodeURIComponent(linkId)}` : `/biblioteca/empresa/${slug}`;
+}
+
+// ── Page data (Query Migration Phase 8) ────────────────────────────────────
+
+/** The Recursos sections `getBibliotecaPageData` reads: the `[seccion]` slugs plus `mis-vacaciones`. */
+export const BIBLIOTECA_SECTIONS = [
+  "formacion",
+  "formatos-obra",
+  "plantillas-diseno",
+  "mis-documentos",
+  "mis-favoritos",
+  "mis-vacaciones",
+] as const satisfies readonly Exclude<ResourceSection, "empresa">[];
+
+/** The `section` of `qk.biblioteca.links(section)`: a Recursos section, `empresa`, or null for the index. */
+export type BibliotecaLinksSection = (typeof BIBLIOTECA_SECTIONS)[number] | "empresa";
+
+/**
+ * Whether the viewer may read `biblioteca.links(section)`: Empresa with
+ * `enterprise.canView`, the index with either capability, Mis vacaciones
+ * always (its documents are empty without `canViewResources`, as the page
+ * always was), and every other section with `canViewResources`.
+ */
+export function canViewBibliotecaSection(capabilities: ResourcesCapabilities, section: BibliotecaLinksSection | null): boolean {
+  if (section === null) return capabilities.canViewResources || capabilities.enterprise.canView;
+  if (section === "empresa") return capabilities.enterprise.canView;
+  if (section === "mis-vacaciones") return true;
+  return capabilities.canViewResources;
+}
+
+/**
+ * The sections the SQL read of `biblioteca.links(section)` covers: the index
+ * reads every section it may see; a Recursos section reads its own rows plus
+ * the viewer's "Mis favoritos" (the star of each row); Empresa and Mis
+ * vacaciones only their own.
+ */
+export function bibliotecaQuerySections(
+  section: BibliotecaLinksSection | null,
+  capabilities: ResourcesCapabilities,
+): ResourceSection[] {
+  const recursos: ResourceSection[] = capabilities.canViewResources ? [...BIBLIOTECA_SECTIONS] : [];
+  if (section === null) return capabilities.enterprise.canView ? [...recursos, "empresa"] : recursos;
+  if (section === "empresa") return capabilities.enterprise.canView ? ["empresa"] : [];
+  if (!capabilities.canViewResources) return [];
+  if (section === "mis-favoritos" || section === "mis-vacaciones") return [section];
+  return [section, "mis-favoritos"];
 }
 
 // ── Visibility (server side) ────────────────────────────────────────────────

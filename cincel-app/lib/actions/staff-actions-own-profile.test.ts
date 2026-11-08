@@ -90,7 +90,8 @@ describe("upsertStaffProfileAction (own firma de correo)", () => {
     await expect(upsertStaffProfileAction(SELF, { emailSignature: "Ana\nCincel" })).resolves.toEqual({ emailSignature: "Ana\nCincel" });
     expect(staffRepo.setStaffEmailSignature).toHaveBeenCalledWith(SELF, "Ana\nCincel");
     expect(staffRepo.upsertStaffProfile).not.toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith("/ajustes/perfil");
+    // Ajustes › Perfil writes the result into its query: no route revalidation.
+    expect(revalidatePath).not.toHaveBeenCalledWith("/ajustes/perfil");
   });
 
   it("clears the signature with null", async () => {

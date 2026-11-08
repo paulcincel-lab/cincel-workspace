@@ -41,14 +41,27 @@ export function pendingApprovalResponses(message: UIMessage | undefined): Assist
   return out;
 }
 
+/**
+ * The context as sent: the route and the three entity ids, nothing else, so
+ * a caller's context override can never carry profile or other fields.
+ */
+export function requestContext(context: AssistantContext): AssistantContext {
+  const out: AssistantContext = { route: typeof context.route === "string" ? context.route : "" };
+  if (typeof context.projectId === "string") out.projectId = context.projectId;
+  if (typeof context.taskId === "string") out.taskId = context.taskId;
+  if (typeof context.personId === "string") out.personId = context.personId;
+  return out;
+}
+
 export function buildAssistantChatRequestBody(input: {
   id: string;
   messages: UIMessage[];
   context: AssistantContext;
 }): AssistantChatRequestBody {
+  const context = requestContext(input.context);
   const last = input.messages[input.messages.length - 1];
   if (last && last.role === "assistant") {
-    return { id: input.id, approvals: pendingApprovalResponses(last), context: input.context };
+    return { id: input.id, approvals: pendingApprovalResponses(last), context };
   }
-  return last ? { id: input.id, message: last, context: input.context } : { id: input.id, context: input.context };
+  return last ? { id: input.id, message: last, context } : { id: input.id, context };
 }

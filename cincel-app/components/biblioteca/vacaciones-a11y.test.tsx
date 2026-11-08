@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import axe from "axe-core";
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
@@ -8,12 +8,14 @@ import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 const actions = vi.hoisted(() => ({
-  fetchMyVacationsAction: vi.fn(),
   requestVacationAction: vi.fn(),
   cancelVacationRequestAction: vi.fn(),
-  fetchTeamAbsencesAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/vacations-actions", () => actions);
+vi.mock("@/lib/actions/page-data/biblioteca-actions", () => ({
+  getBibliotecaPageData: vi.fn(),
+  getMisVacacionesPageData: vi.fn(),
+}));
 vi.mock("@/lib/actions/vacations-actions.flags", () => ({
   IMPLEMENTED: {
     fetchMyVacationsAction: true,
@@ -27,8 +29,10 @@ vi.mock("@/lib/actions/vacations-actions.flags", () => ({
   },
 }));
 
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+
 import { MisVacacionesClient } from "./MisVacacionesClient";
-import { ABSENCES, BALANCE, DOCUMENTS, REQUESTS } from "./vacaciones.fixtures";
+import { seededVacacionesClient } from "./vacaciones.fixtures";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
@@ -50,18 +54,13 @@ function applyTheme(theme: ThemeId, mode: (typeof MODES)[number]) {
 }
 
 function renderPage(style: PresentationStyle) {
-  return render(
+  return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
       <main>
-        <MisVacacionesClient
-          mine={{ balance: BALANCE, requests: REQUESTS }}
-          month="2026-11"
-          absences={ABSENCES}
-          documents={DOCUMENTS}
-          year={2026}
-        />
+        <MisVacacionesClient month="2026-11" year={2026} />
       </main>
     </StyleProvider>,
+    { client: seededVacacionesClient() },
   );
 }
 

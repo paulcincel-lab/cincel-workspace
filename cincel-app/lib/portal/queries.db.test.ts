@@ -20,6 +20,15 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
   const { getPortalProject, getPortalSchedule, listPortalProjects } = await import("./queries");
+  const { findPortalProjectAccess } = await import("./session-store");
+  const { loadPortalProjectData } = await import("@/lib/loaders/portal");
+
+  const asUser = (id: string) => ({ id, name: "Cliente", email: "x@example.com", contactId: "c" });
+  async function access(portalUserId: string, projectId: string) {
+    const row = await findPortalProjectAccess(portalUserId, projectId);
+    if (!row) throw new Error("expected access");
+    return row;
+  }
 
   const ids = { staff: [] as string[], contacts: [] as string[], projects: [] as string[], users: [] as string[] };
   let clientUserId = "";
@@ -113,16 +122,19 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
 
   it("does not show another user's project", async () => {
     expect((await listPortalProjects(otherUserId)).map((x) => x.id)).toEqual([p.other]);
-    expect(await getPortalProject(clientUserId, p.other)).toBeNull();
+    expect(await findPortalProjectAccess(clientUserId, p.other)).toBeNull();
+    expect(await loadPortalProjectData(asUser(clientUserId), { id: p.other, tab: "resumen" })).toBeNull();
   });
 
   it("returns null for revoked, cancelado and deleted projects", async () => {
-    for (const id of [p.revoked, p.cancelado, p.deleted]) expect(await getPortalProject(clientUserId, id)).toBeNull();
-    expect((await getPortalProject(clientUserId, p.granted))?.id).toBe(p.granted);
+    for (const id of [p.revoked, p.cancelado, p.deleted]) {
+      expect(await loadPortalProjectData(asUser(clientUserId), { id, tab: "cronograma" })).toBeNull();
+    }
+    expect((await getPortalProject(await access(clientUserId, p.granted)))?.id).toBe(p.granted);
   });
 
   it("returns the schedule per seccion with no tarea, responsable or coordinator", async () => {
-    const schedule = await getPortalSchedule(clientUserId, p.granted);
+    const schedule = await getPortalSchedule(await access(clientUserId, p.granted));
     expect(schedule?.sections.map((s) => [s.seccion, s.progressPct])).toEqual([["Preliminares", 50], ["Acabados", 0]]);
     const json = JSON.stringify([schedule, await listPortalProjects(clientUserId)]);
     expect(json).not.toContain(`Tarea ${run}`);
@@ -131,8 +143,8 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
     expect(json).not.toMatch(/"(tarea|responsable)"/);
   });
 
-  it("returns null schedule without access or without a schedule", async () => {
-    expect(await getPortalSchedule(otherUserId, p.granted)).toBeNull();
-    expect(await getPortalSchedule(otherUserId, p.other)).toBeNull();
+  it("returns no schedule without access, and a null schedule without one", async () => {
+    expect(await loadPortalProjectData(asUser(otherUserId), { id: p.granted, tab: "cronograma" })).toBeNull();
+    expect(await getPortalSchedule(await access(otherUserId, p.other))).toBeNull();
   });
 });

@@ -11,7 +11,7 @@ import { getGeneralSettings } from "@/lib/settings/general-settings-server";
 import { GeneralSettingsSeed } from "@/lib/settings/use-general-settings";
 import type { ResolvedAppearance } from "@/lib/types/redesign";
 import { appearanceStyleBlock, SYSTEM_MODE_SCRIPT } from "@/lib/ui/appearance-css";
-import { getResolvedAppearance, getStoredOrgAppearance } from "@/lib/ui/preferences-server";
+import { getMyPreferences, getResolvedAppearance, getStoredOrgAppearance } from "@/lib/ui/preferences-server";
 import { APPEARANCE_BASE_CSS, textSizeClass } from "@/lib/ui/text-size";
 import "./globals.css";
 
@@ -78,10 +78,12 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // `getStoredOrgAppearance` is cached per request: `getResolvedAppearance` already read it.
-  const [sessionAccess, appearance, orgAppearance] = await Promise.all([
+  // `getMyPreferences` shares the preferences row `getResolvedAppearance` reads (per-request cache).
+  const [sessionAccess, appearance, orgAppearance, preferences] = await Promise.all([
     getSessionAccess(),
     getResolvedAppearance(),
     getStoredOrgAppearance(),
+    getMyPreferences(),
   ]);
   // The org fixes the presentation style when it allows no personal one (`useStyle().isFixed`).
   const fixedByOrg = !orgAppearance.allowUserOverride;
@@ -110,7 +112,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         {/* The query cache wraps the appearance store provider and the Toaster, so both can read it. */}
         <QueryProvider>
-          <AppearanceStoreProvider initial={appearance} fixedByOrg={fixedByOrg}>
+          <AppearanceStoreProvider initial={appearance} preferences={preferences} fixedByOrg={fixedByOrg}>
             {app}
           </AppearanceStoreProvider>
           {/* The one Toaster (FE §3.1). */}

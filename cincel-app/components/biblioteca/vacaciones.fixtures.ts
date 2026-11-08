@@ -3,8 +3,15 @@
  * `fetchMyVacationsAction` / `fetchTeamAbsencesAction` (redesign FE §7.9).
  * Far-past and far-future dates keep "started / future" stable over time.
  */
-import type { TeamAbsence, VacationBalance, VacationRequest } from "@/lib/types/redesign";
+import type { QueryClient } from "@tanstack/react-query";
 
+import type { MisVacacionesPageData } from "@/lib/loaders/biblioteca";
+import { seedMisVacaciones } from "@/lib/query/options/biblioteca";
+import { createTestQueryClient } from "@/lib/query/test-utils";
+import type { TeamAbsence, VacationBalance, VacationRequest } from "@/lib/types/redesign";
+import type { ResourceLink } from "@/lib/types/resource";
+
+import { bibliotecaData, makeLink } from "./biblioteca.fixtures";
 import type { VacationDocument } from "./VacationDocuments";
 
 export const BALANCE: VacationBalance = { entitled: 20, taken: 6, pending: 5, available: 9 };
@@ -57,3 +64,28 @@ export const ABSENCES: TeamAbsence[] = [
 export const DOCUMENTS: VacationDocument[] = [
   { id: "doc-1", title: "Formato de solicitud de vacaciones", url: "https://drive.google.com/file/d/abc/view", updatedAt: "2026-10-01T12:00:00.000Z" },
 ];
+
+/** The `resource_links` rows behind `DOCUMENTS` (section `mis-vacaciones`). */
+export const DOCUMENT_LINKS: ResourceLink[] = DOCUMENTS.map((doc) =>
+  makeLink({ id: doc.id, title: doc.title, url: doc.url, section: "mis-vacaciones", updatedAt: doc.updatedAt }),
+);
+
+/** A `getMisVacacionesPageData` bundle (a non-decider unless `deciders` is given). */
+export function misVacacionesData(overrides: Partial<MisVacacionesPageData> = {}): MisVacacionesPageData {
+  return {
+    mine: { balance: BALANCE, requests: REQUESTS },
+    month: "2026-11",
+    absences: ABSENCES,
+    library: bibliotecaData(DOCUMENT_LINKS, { viewerId: "me" }),
+    year: 2026,
+    deciders: null,
+    ...overrides,
+  };
+}
+
+/** A test client seeded as the Mis vacaciones page leaves it. */
+export function seededVacacionesClient(overrides: Partial<MisVacacionesPageData> = {}): QueryClient {
+  const client = createTestQueryClient();
+  seedMisVacaciones(client, misVacacionesData(overrides));
+  return client;
+}

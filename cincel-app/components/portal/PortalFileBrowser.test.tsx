@@ -1,6 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 import type { PortalFileDTO, PortalFolderDTO } from "@/lib/types/portal";
 
@@ -56,6 +60,16 @@ function json(body: unknown, status = 200): Response {
 
 const fetchMock = vi.fn();
 
+/** The page keeps the folder in the URL; here a parent holds it the same way. */
+function Harness({ start = null }: { start?: string | null }) {
+  const [folderId, setFolderId] = useState<string | null>(start);
+  return <PortalFileBrowser projectId={PID} folderId={folderId} onOpenFolder={setFolderId} />;
+}
+
+function renderBrowser(start: string | null = null) {
+  return renderWithQueryClient(<Harness start={start} />);
+}
+
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
@@ -90,7 +104,7 @@ describe("PortalFileBrowser helpers", () => {
 describe("PortalFileBrowser", () => {
   it("lists the client folder with Descargar always, Ver only where previewable and a PDF badge for Google files", async () => {
     fetchMock.mockResolvedValueOnce(json(root));
-    render(<PortalFileBrowser projectId={PID} />);
+    renderBrowser();
 
     expect(await screen.findByText("Plano.pdf")).toBeTruthy();
     expect(fetchMock.mock.calls[0][0]).toBe(`/api/portal/projects/${PID}/files`);
@@ -114,7 +128,7 @@ describe("PortalFileBrowser", () => {
 
   it("navigates into a folder and back through the breadcrumbs", async () => {
     fetchMock.mockResolvedValueOnce(json(root)).mockResolvedValueOnce(json(renders)).mockResolvedValueOnce(json(root));
-    render(<PortalFileBrowser projectId={PID} />);
+    renderBrowser();
 
     fireEvent.click(await screen.findByRole("button", { name: /Renders/ }));
     expect(await screen.findByText("Sala.png")).toBeTruthy();
@@ -132,7 +146,7 @@ describe("PortalFileBrowser", () => {
       if (init.signal) signals.push(init.signal);
       return signals.length === 1 ? Promise.resolve(json(root)) : new Promise<Response>(() => {});
     });
-    render(<PortalFileBrowser projectId={PID} />);
+    renderBrowser();
 
     fireEvent.click(await screen.findByRole("button", { name: /Renders/ }));
     await waitFor(() => expect(signals).toHaveLength(2));
@@ -150,7 +164,7 @@ describe("PortalFileBrowser", () => {
       if (init.signal) signals.push(init.signal);
       return new Promise<Response>(() => {});
     });
-    const { unmount } = render(<PortalFileBrowser projectId={PID} initialFolderId="a" />);
+    const { unmount } = renderBrowser("a");
     await waitFor(() => expect(signals).toHaveLength(1));
 
     unmount();
@@ -159,24 +173,24 @@ describe("PortalFileBrowser", () => {
 
   it("shows the pending message while the project's folders aren't ready", async () => {
     fetchMock.mockResolvedValueOnce(json({ pending: true }));
-    render(<PortalFileBrowser projectId={PID} />);
+    renderBrowser();
 
     expect(await screen.findByText(PORTAL_FILES_PENDING)).toBeTruthy();
   });
 
   it("shows the empty, not-found and error states", async () => {
     fetchMock.mockResolvedValueOnce(json({ ...root, items: [] }));
-    const { unmount } = render(<PortalFileBrowser projectId={PID} />);
+    const { unmount } = renderBrowser();
     expect(await screen.findByText(PORTAL_FILES_EMPTY)).toBeTruthy();
     unmount();
 
     fetchMock.mockResolvedValueOnce(json({ error: "not_found" }, 404));
-    const second = render(<PortalFileBrowser projectId={PID} initialFolderId="x" />);
+    const second = renderBrowser("x");
     expect(await screen.findByText(PORTAL_FILES_NOT_FOUND)).toBeTruthy();
     second.unmount();
 
     fetchMock.mockResolvedValueOnce(json({ error: "drive_unavailable" }, 503)).mockResolvedValueOnce(json(root));
-    render(<PortalFileBrowser projectId={PID} />);
+    renderBrowser();
     expect(await screen.findByText(PORTAL_FILES_ERROR)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Plano.pdf")).toBeTruthy();
@@ -186,7 +200,7 @@ describe("PortalFileBrowser", () => {
     fetchMock
       .mockResolvedValueOnce(json(root))
       .mockResolvedValueOnce(json({ error: "export_too_large", message: "x" }, 422));
-    render(<PortalFileBrowser projectId={PID} />);
+    renderBrowser();
 
     fireEvent.click(await screen.findByRole("button", { name: "Descargar Memoria" }));
     expect(await screen.findByText(PORTAL_EXPORT_TOO_LARGE)).toBeTruthy();
@@ -202,7 +216,7 @@ describe("PortalFileBrowser", () => {
     fetchMock
       .mockResolvedValueOnce(json(root))
       .mockResolvedValueOnce(new Response(new Blob(["%PDF"], { type: "application/pdf" }), { status: 200 }));
-    render(<PortalFileBrowser projectId={PID} />);
+    renderBrowser();
 
     const button = await screen.findByRole("button", { name: "Descargar Memoria" });
     await act(async () => {
@@ -219,16 +233,27 @@ describe("PortalFileBrowser", () => {
   it("follows the 401 redirect to the portal login", async () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
     fetchMock.mockResolvedValueOnce(json({ redirect: "/portal/login" }, 401));
-    render(<PortalFileBrowser projectId={PID} />);
+    renderBrowser();
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/portal/login"));
     assign.mockRestore();
   });
 
+  it("caches each folder under portal.files(id, folder): reopening one needs no request", async () => {
+    fetchMock.mockResolvedValueOnce(json(root)).mockResolvedValueOnce(json(renders));
+    const { client } = renderBrowser();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Renders/ }));
+    expect(await screen.findByText("Sala.png")).toBeTruthy();
+    expect(client.getQueryData(qk.portal.files(PID, null))).toEqual({ status: "ok", folder: root });
+    expect(client.getQueryData(qk.portal.files(PID, "d1"))).toEqual({ status: "ok", folder: renders });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("stacks each row below sm so it works at 360 px", async () => {
     window.innerWidth = 360;
     fetchMock.mockResolvedValueOnce(json(root));
-    render(<PortalFileBrowser projectId={PID} />);
+    renderBrowser();
 
     await screen.findByText("Plano.pdf");
     const row = screen.getByText("Plano.pdf").closest("li");

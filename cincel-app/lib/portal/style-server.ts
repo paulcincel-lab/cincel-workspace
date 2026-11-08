@@ -2,30 +2,20 @@ import "server-only";
 
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { eq } from "drizzle-orm";
 
-import { db } from "@/lib/db/client";
-import { appSettings } from "@/lib/db/schema";
-import { ORG_APPEARANCE_SETTING_KEY, parseStoredOrgAppearance } from "@/lib/portal/appearance-scope";
 import type { OrgAppearance, PresentationStyle } from "@/lib/types/redesign";
-import { DEFAULT_ORG_APPEARANCE } from "@/lib/ui/themes";
+import { getStoredOrgAppearance } from "@/lib/ui/preferences-server";
 
 import { PORTAL_STYLE_COOKIE, resolvePortalStyle } from "./style";
 
-/** The org's style policy: default style and whether a client may pick another one. Azul defaults on error. */
+/**
+ * The org's style policy: default style and whether a client may pick another one. Read from the per-request
+ * cached `appearance.theme` row (`getStoredOrgAppearance`, shared with the root layout and
+ * `getPortalAppearance`: one read per request); Azul defaults on a DB error.
+ */
 export const getPortalStylePolicy = cache(async (): Promise<Pick<OrgAppearance, "styleDefault" | "allowUserOverride">> => {
-  try {
-    const [row] = await db
-      .select({ value: appSettings.value })
-      .from(appSettings)
-      .where(eq(appSettings.key, ORG_APPEARANCE_SETTING_KEY))
-      .limit(1);
-    const org = parseStoredOrgAppearance(row?.value ?? null) ?? DEFAULT_ORG_APPEARANCE;
-    return { styleDefault: org.styleDefault, allowUserOverride: org.allowUserOverride };
-  } catch (error) {
-    console.error("[portal] could not read the organization style", error);
-    return { styleDefault: DEFAULT_ORG_APPEARANCE.styleDefault, allowUserOverride: DEFAULT_ORG_APPEARANCE.allowUserOverride };
-  }
+  const org = await getStoredOrgAppearance();
+  return { styleDefault: org.styleDefault, allowUserOverride: org.allowUserOverride };
 });
 
 export type PortalPresentation = {

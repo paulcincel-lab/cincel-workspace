@@ -148,22 +148,20 @@ describe("workspace-access-actions (group mappings)", () => {
       });
     });
 
-    it("checks the puesto exists and revalidates Google and Puestos", async () => {
+    it("checks the puesto exists and revalidates nothing (Google and Puestos read through TanStack Query)", async () => {
       await createGroupMappingAction({
         groupEmail: "cincel-puesto-diseno@example.test",
         kind: "position",
         positionId: POSITION_ID,
       });
       expect(positionExists).toHaveBeenCalledWith(POSITION_ID);
-      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/google");
-      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/puestos");
+      expect(revalidatePath).not.toHaveBeenCalled();
     });
 
-    it("revalidates Google and Puestos on delete", async () => {
+    it("revalidates nothing on delete (the caller invalidates ajustes.page('google'))", async () => {
       await expect(deleteGroupMappingAction(MAPPING_ID)).resolves.toEqual({ ok: true });
       expect(repo.deleteGroupMapping).toHaveBeenCalledWith(MAPPING_ID);
-      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/google");
-      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/puestos");
+      expect(revalidatePath).not.toHaveBeenCalled();
     });
 
     it("updates a mapping, excluding itself from the duplicate check", async () => {

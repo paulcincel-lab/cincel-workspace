@@ -12,10 +12,10 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/shell/EmptyState";
@@ -28,26 +28,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
-import {
-  createTaskFromGmailThreadAction,
-  fetchGmailThreadsAction,
-  linkGmailThreadToProjectAction,
-} from "@/lib/actions/gmail-actions";
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
-import { fetchNotificationsAction, markNotificationsReadAction } from "@/lib/actions/notifications-actions";
+import { markNotificationsReadAction } from "@/lib/actions/notifications-actions";
 import { IMPLEMENTED as NOTIFICATIONS_IMPLEMENTED } from "@/lib/actions/notifications-actions.flags";
-import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { actionErrorText } from "@/lib/errors";
 import {
   INBOX_TABS,
-  appendUnique,
+  INBOX_TAB_PARAM,
   formatInboxDateTime,
   formatInboxTime,
   gmailSyncLabel,
   inboxCounts,
   inboxRows,
   inboxTabSearch,
-  mergeNotifications,
+  parseInboxTab,
   rowOrigin,
   rowSender,
   rowSnippet,
@@ -55,16 +49,29 @@ import {
   type InboxRow,
   type InboxTab,
 } from "@/lib/my-space/inbox";
-import { setShellBadgesUnread } from "@/lib/query/options/shell";
-import type { GmailStatus, GmailThreadSummary, NotificationItem, NotificationKind } from "@/lib/types/redesign";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { catalogOptions } from "@/lib/query/options/catalog";
+import {
+  ME_NOTIFICATIONS_REFETCH_MS,
+  markCachedNotificationsRead,
+  meGmailStatusOptions,
+  meGmailThreadsOptions,
+  meNotificationsOptions,
+  restoreSnapshot,
+  snapshotNotifications,
+  type NotificationsData,
+  type Snapshot,
+} from "@/lib/query/options/mi-espacio";
+import type { CatalogProjectOption } from "@/lib/types/catalog";
+import type { GmailThreadSummary, NotificationItem, NotificationKind } from "@/lib/types/redesign";
+import type { ShellBadges } from "@/lib/types/shell";
 import type { RecordTableData } from "@/lib/types/widgets";
 
 import { THREAD_PARAM, replaceMiEspacioParam } from "./search-params";
+import { useCreateTaskFromGmailThread, useLinkGmailThread } from "./use-gmail-mutations";
 
 export type InboxProps = {
-  notifications: { items: NotificationItem[]; nextCursor: string | null; unreadCount: number };
-  gmail: { status: GmailStatus; threads: GmailThreadSummary[]; nextCursor: string | null } | null;
-  tab: "todo" | "gmail" | "notificaciones" | "menciones";
   /**
    * Opens the Gmail reading pane. Without it, a Gmail row sets `?correo=<id>`
    * on the current URL (`THREAD_PARAM`), which `MiEspacioClient` reads.
@@ -72,8 +79,8 @@ export type InboxProps = {
   onOpenThread?(threadId: string): void;
 };
 
-/** Bandeja poll interval while the document is visible (FE §6). */
-export const INBOX_POLL_MS = 60_000;
+/** Bandeja refresh interval while the page is mounted and visible (FE §6): `me.notifications`' `refetchInterval`. */
+export const INBOX_POLL_MS = ME_NOTIFICATIONS_REFETCH_MS;
 
 const INTEGRATIONS_HREF = "/ajustes/integraciones";
 
@@ -118,180 +125,102 @@ const INBOX_COLUMNS: RecordTableData["columns"] = [
   { key: "estado", label: "Estado", hideOn: ["visual", "esencial"] },
 ];
 
-type ProjectOption = { id: string; name: string; status: string };
+type ProjectOption = Pick<CatalogProjectOption, "id" | "name" | "status">;
 type Panel = { threadId: string; mode: "link" | "task" };
+type MarkReadSnapshot = { list: Snapshot<NotificationsData>; badges: ShellBadges | undefined };
+
+/** Every item of the loaded pages, without repeats (a refetch can shift rows between pages). */
+function uniqueById<T extends { id: string }>(lists: readonly T[][]): T[] {
+  const seen = new Set<string>();
+  return lists.flat().filter((x) => (seen.has(x.id) ? false : (seen.add(x.id), true)));
+}
+
+/** A plain left click (no modifier): the tab switches in place; other clicks keep the link's default. */
+function isPlainClick(event: MouseEvent<HTMLAnchorElement>): boolean {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
 
 /**
  * Bandeja (redesign FE §3.3, §4.4, §6): Cincel notifications and the person's
  * Gmail threads in one list with tabs Todo / Gmail / Notificaciones /
- * Menciones; opening a notification marks it read; a 60 s poll runs while the
- * document is visible and keeps the sidebar badge fresh; Gmail rows offer
- * "Crear tarea" and "Vincular a proyecto". Every presentation style renders
- * through `RecordTable`.
+ * Menciones. The tab is the URL only (`?bandeja=`). The lists are the
+ * `me.notifications` and `me.gmail.threads` infinite queries; notifications
+ * refetch every 60 s while the page is visible and each fetch updates the
+ * sidebar badge (`shell.badges`). Opening a notification marks it read
+ * (optimistic, with the server's count after). Gmail rows offer "Crear
+ * tarea" and "Vincular a proyecto". Every presentation style renders through
+ * `RecordTable`.
  */
-export function Inbox(props: InboxProps) {
+export function Inbox({ onOpenThread }: InboxProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
-  const { onOpenThread } = props;
 
-  const [tab, setTab] = useState<InboxTab>(props.tab);
-  const [items, setItems] = useState(props.notifications.items);
-  const [nextCursor, setNextCursor] = useState(props.notifications.nextCursor);
-  const [unreadCount, setUnreadCount] = useState(props.notifications.unreadCount);
-  const [threads, setThreads] = useState<GmailThreadSummary[]>(props.gmail?.threads ?? []);
-  const [gmailCursor, setGmailCursor] = useState<string | null>(props.gmail?.nextCursor ?? null);
-  const [now, setNow] = useState(() => new Date());
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [projects, setProjects] = useState<ProjectOption[] | null>(null);
+  const tab = parseInboxTab(searchParams?.get(INBOX_TAB_PARAM));
   const [panel, setPanel] = useState<Panel | null>(null);
 
-  // A server refresh (revalidatePath, navigation) hands new data: start from it
-  // (state adjusted during render, React's pattern for props that reset state).
-  const server = {
-    tab: props.tab,
-    items: props.notifications.items,
-    cursor: props.notifications.nextCursor,
-    unread: props.notifications.unreadCount,
-    threads: props.gmail?.threads,
-    gmailCursor: props.gmail?.nextCursor ?? null,
-  };
-  const [synced, setSynced] = useState(server);
-  if (synced.tab !== server.tab) {
-    setSynced((s) => ({ ...s, tab: server.tab }));
-    setTab(server.tab);
-  }
-  if (synced.items !== server.items || synced.cursor !== server.cursor || synced.unread !== server.unread) {
-    setSynced((s) => ({ ...s, items: server.items, cursor: server.cursor, unread: server.unread }));
-    setItems(server.items);
-    setNextCursor(server.cursor);
-    setUnreadCount(server.unread);
-  }
-  if (synced.threads !== server.threads || synced.gmailCursor !== server.gmailCursor) {
-    setSynced((s) => ({ ...s, threads: server.threads, gmailCursor: server.gmailCursor }));
-    setThreads(server.threads ?? []);
-    setGmailCursor(server.gmailCursor);
-  }
-
-  const status = props.gmail?.status ?? null;
+  const notificationsQuery = useInfiniteQuery({ ...meNotificationsOptions(), enabled: CAN_POLL });
+  const statusQuery = useQuery({ ...meGmailStatusOptions(), enabled: GMAIL_ON });
+  const status = statusQuery.data ?? null;
   const gmailConnected = GMAIL_ON && status !== null && status.connected && status.scopeOk;
+  const threadsQuery = useInfiniteQuery({ ...meGmailThreadsOptions(), enabled: gmailConnected });
+
+  const notificationPages = notificationsQuery.data?.pages;
+  const items = useMemo(() => uniqueById((notificationPages ?? []).map((p) => p.items)), [notificationPages]);
+  const unreadCount = notificationPages?.[0]?.unreadCount ?? 0;
+  const threadPages = threadsQuery.data?.pages;
+  const threads = useMemo(() => uniqueById((threadPages ?? []).map((p) => p.threads)), [threadPages]);
   const visibleThreads = useMemo(() => (gmailConnected ? threads : []), [gmailConnected, threads]);
 
-  // The Mi espacio badge reads `shell.badges`: the Bandeja's own count patches it at once.
-  const setUnread = useCallback(
-    (count: number) => {
-      setUnreadCount(count);
-      setShellBadgesUnread(queryClient, count);
-    },
-    [queryClient],
-  );
+  // Relative times ("hace 5 min") move on with every refresh of the list.
+  const [mountedAt] = useState(() => Date.now());
+  const now = new Date(Math.max(mountedAt, notificationsQuery.dataUpdatedAt));
 
-  // 60 s poll, only while the document is visible (FE §6).
-  useEffect(() => {
-    if (!CAN_POLL) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
-
-    const poll = async () => {
-      try {
-        const page = await fetchNotificationsAction({ unreadOnly: true });
-        if (cancelled) return;
-        const polledIds = new Set(page.items.map((n) => n.id));
-        const readAt = new Date().toISOString();
-        setItems((current) => {
-          // A complete unread page means every other loaded unread row was read elsewhere.
-          const base =
-            page.nextCursor === null
-              ? current.map((n) => (n.readAt === null && !polledIds.has(n.id) ? { ...n, readAt } : n))
-              : current;
-          return mergeNotifications(base, page.items);
-        });
-        setUnread(page.unreadCount);
-        setNow(new Date());
-      } catch {
-        // Keep the current list; the next tick retries.
-      }
-    };
-    const start = () => {
-      if (timer === null) timer = setInterval(() => void poll(), INBOX_POLL_MS);
-    };
-    const stop = () => {
-      if (timer !== null) clearInterval(timer);
-      timer = null;
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void poll();
-        start();
-      } else {
-        stop();
-      }
-    };
-
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      cancelled = true;
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [setUnread]);
-
-  // Project names for the suggested / linked chips and the picker (loaded once, on demand).
+  // Project names for the suggested / linked chips and the picker: the shared light catalog, loaded once.
   const needsProjects =
     (CAN_LINK || CAN_CREATE_TASK) &&
     (panel !== null || visibleThreads.some((t) => t.projectId !== null || t.suggestedProjectId !== null));
-  useEffect(() => {
-    if (!needsProjects || projects !== null) return;
-    let cancelled = false;
-    fetchProjectsAction({})
-      .then((list) => {
-        if (!cancelled) setProjects(list.map((p) => ({ id: p.id, name: p.name, status: p.status })));
-      })
-      .catch(() => {
-        if (!cancelled) setProjects([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [needsProjects, projects]);
+  const projectsQuery = useQuery({ ...catalogOptions.projectOptions(), enabled: needsProjects });
+  const projects: ProjectOption[] | null = projectsQuery.data ?? (projectsQuery.isError ? [] : null);
 
   const projectName = useCallback(
     (id: string | null) => (id ? (projects?.find((p) => p.id === id)?.name ?? null) : null),
     [projects],
   );
 
+  // Optimistic: the row and both counters drop at once; the server's count replaces it, an error rolls back.
+  const markReadMutation = useActionMutation<string[], { unreadCount: number }, MarkReadSnapshot>(
+    markNotificationsReadAction,
+    {
+      optimistic: {
+        async onMutate(qc, ids) {
+          const list = await snapshotNotifications(qc);
+          const badges = qc.getQueryData<ShellBadges>(qk.shell.badges());
+          markCachedNotificationsRead(qc, ids, (count) => count - ids.length);
+          return { list, badges };
+        },
+        rollback(qc, snap) {
+          restoreSnapshot(qc, snap.list);
+          if (snap.badges) qc.setQueryData(qk.shell.badges(), snap.badges);
+        },
+      },
+      setData: (qc, { unreadCount: count }, ids) => markCachedNotificationsRead(qc, ids, count),
+    },
+  );
+  const { mutate: markReadIds } = markReadMutation;
+
   const markRead = useCallback(
     (item: NotificationItem) => {
       if (item.readAt !== null || !CAN_MARK_READ) return;
-      const readAt = new Date().toISOString();
-      setItems((current) => current.map((n) => (n.id === item.id ? { ...n, readAt } : n)));
-      setUnreadCount((count) => {
-        const next = Math.max(0, count - 1);
-        setShellBadgesUnread(queryClient, next);
-        return next;
-      });
-      markNotificationsReadAction([item.id])
-        .then((result) => setUnread(result.unreadCount))
-        .catch((err: unknown) => {
-          setItems((current) => current.map((n) => (n.id === item.id ? { ...n, readAt: null } : n)));
-          setUnreadCount((count) => {
-            const next = count + 1;
-            setShellBadgesUnread(queryClient, next);
-            return next;
-          });
-          toast.error(actionErrorText(err));
-        });
+      markReadIds([item.id]);
     },
-    [queryClient, setUnread],
+    [markReadIds],
   );
 
   const openThread = useCallback(
     (thread: GmailThreadSummary) => {
       if (!CAN_OPEN_THREAD) return;
-      // Reading the thread marks it read on the server (fetchGmailThreadAction).
-      setThreads((current) => current.map((t) => (t.id === thread.id ? { ...t, unread: false } : t)));
+      // The reading pane marks an unread thread read (`markGmailThreadReadAction`).
       if (onOpenThread) onOpenThread(thread.id);
       else replaceMiEspacioParam(THREAD_PARAM, thread.id);
     },
@@ -306,34 +235,24 @@ export function Inbox(props: InboxProps) {
   const rowByKey = new Map(rows.map((r) => [r.key, r]));
 
   const showGmailConnect = activeTab === "gmail" && !gmailConnected;
-  const canLoadNotifications = activeTab !== "gmail" && nextCursor !== null && CAN_POLL;
-  const canLoadThreads = (activeTab === "todo" || activeTab === "gmail") && gmailConnected && gmailCursor !== null;
+  const canLoadNotifications = activeTab !== "gmail" && CAN_POLL && notificationsQuery.hasNextPage;
+  const canLoadThreads = (activeTab === "todo" || activeTab === "gmail") && gmailConnected && threadsQuery.hasNextPage;
+  const loadingMore = notificationsQuery.isFetchingNextPage || threadsQuery.isFetchingNextPage;
 
   async function loadMore() {
-    setLoadingMore(true);
-    try {
-      if (canLoadNotifications && nextCursor) {
-        try {
-          const page = await fetchNotificationsAction({ cursor: nextCursor });
-          setItems((current) => appendUnique(current, page.items));
-          setNextCursor(page.nextCursor);
-          setUnread(page.unreadCount);
-        } catch (err) {
-          toast.error(actionErrorText(err));
-        }
-      }
-      if (canLoadThreads && gmailCursor) {
-        try {
-          const page = await fetchGmailThreadsAction({ cursor: gmailCursor });
-          setThreads((current) => appendUnique(current, page.threads));
-          setGmailCursor(page.nextCursor);
-        } catch (err) {
-          toast.error(gmailErrorText(err));
-        }
-      }
-    } finally {
-      setLoadingMore(false);
-    }
+    const [notificationsResult, threadsResult] = await Promise.all([
+      canLoadNotifications ? notificationsQuery.fetchNextPage() : null,
+      canLoadThreads ? threadsQuery.fetchNextPage() : null,
+    ]);
+    if (notificationsResult?.isError) toast.error(actionErrorText(notificationsResult.error));
+    if (threadsResult?.isError) toast.error(gmailErrorText(threadsResult.error));
+  }
+
+  function selectTab(event: MouseEvent<HTMLAnchorElement>, key: InboxTab) {
+    if (!isPlainClick(event)) return;
+    // URL only, without a navigation (no server round trip): `useSearchParams` follows `replaceState`.
+    event.preventDefault();
+    replaceMiEspacioParam(INBOX_TAB_PARAM, key === "todo" ? null : key);
   }
 
   const tabHref = (key: InboxTab) => `${pathname ?? ""}${inboxTabSearch(searchParams?.toString() ?? "", key)}`;
@@ -414,7 +333,7 @@ export function Inbox(props: InboxProps) {
                       href={tabHref(t.key)}
                       scroll={false}
                       aria-current={t.key === activeTab ? "page" : undefined}
-                      onClick={() => setTab(t.key)}
+                      onClick={(event) => selectTab(event, t.key)}
                     />
                   }
                 >
@@ -469,9 +388,6 @@ export function Inbox(props: InboxProps) {
             thread={panelThread}
             projects={projects}
             onClose={() => setPanel(null)}
-            onLinked={(projectId) =>
-              setThreads((current) => current.map((t) => (t.id === panelThread.id ? { ...t, projectId } : t)))
-            }
             onOpenTask={(taskId) => router.push(`/tareas?tarea=${encodeURIComponent(taskId)}`)}
           />
         ) : null}
@@ -648,21 +564,22 @@ function ThreadPanel({
   thread,
   projects,
   onClose,
-  onLinked,
   onOpenTask,
 }: {
   mode: "link" | "task";
   thread: GmailThreadSummary;
   projects: ProjectOption[] | null;
   onClose(): void;
-  onLinked(projectId: string | null): void;
   onOpenTask(taskId: string): void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [projectId, setProjectId] = useState<string | null>(thread.projectId ?? thread.suggestedProjectId);
   const [title, setTitle] = useState(thread.subject);
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Both write the thread's project into `me.gmail` and refresh the projects they touch.
+  const linkMutation = useLinkGmailThread({ onFormError: setError });
+  const taskMutation = useCreateTaskFromGmailThread({ onFormError: setError });
+  const pending = linkMutation.isPending || taskMutation.isPending;
 
   useEffect(() => {
     ref.current?.focus();
@@ -674,44 +591,45 @@ function ThreadPanel({
   const heading = mode === "link" ? "Vincular a proyecto" : "Crear tarea";
   const fieldId = `inbox-${mode}-${thread.id}`;
 
-  async function submit() {
+  function submit() {
     if (!projectId) return;
-    setPending(true);
     setError(null);
-    try {
-      if (mode === "link") {
-        await linkGmailThreadToProjectAction(thread.id, projectId);
-        onLinked(projectId);
-        toast.success(`Correo vinculado a ${nameOf(projectId)}`);
-      } else {
-        const { taskId } = await createTaskFromGmailThreadAction(thread.id, {
-          projectId,
-          title: title.trim() || undefined,
-        });
-        onLinked(projectId);
-        toast.success("Tarea creada", { action: { label: "Abrir", onClick: () => onOpenTask(taskId) } });
-      }
-      onClose();
-    } catch (err) {
-      setError(gmailErrorText(err));
-    } finally {
-      setPending(false);
+    const previousProjectId = thread.projectId;
+    if (mode === "link") {
+      const name = nameOf(projectId);
+      linkMutation.mutate(
+        { threadId: thread.id, projectId, previousProjectId },
+        {
+          onSuccess: () => {
+            toast.success(`Correo vinculado a ${name}`);
+            onClose();
+          },
+        },
+      );
+      return;
     }
+    taskMutation.mutate(
+      { threadId: thread.id, projectId, title: title.trim() || undefined, previousProjectId },
+      {
+        onSuccess: ({ taskId }) => {
+          toast.success("Tarea creada", { action: { label: "Abrir", onClick: () => onOpenTask(taskId) } });
+          onClose();
+        },
+      },
+    );
   }
 
-  async function unlink() {
-    setPending(true);
+  function unlink() {
     setError(null);
-    try {
-      await linkGmailThreadToProjectAction(thread.id, null);
-      onLinked(null);
-      toast.success("Vínculo quitado");
-      onClose();
-    } catch (err) {
-      setError(gmailErrorText(err));
-    } finally {
-      setPending(false);
-    }
+    linkMutation.mutate(
+      { threadId: thread.id, projectId: null, previousProjectId: thread.projectId },
+      {
+        onSuccess: () => {
+          toast.success("Vínculo quitado");
+          onClose();
+        },
+      },
+    );
   }
 
   return (
@@ -767,11 +685,11 @@ function ThreadPanel({
           Cancelar
         </Button>
         {mode === "link" && thread.projectId ? (
-          <Button variant="outline" size="sm" onClick={() => void unlink()} disabled={pending}>
+          <Button variant="outline" size="sm" onClick={unlink} disabled={pending}>
             Quitar vínculo
           </Button>
         ) : null}
-        <Button size="sm" onClick={() => void submit()} disabled={pending || !projectId}>
+        <Button size="sm" onClick={submit} disabled={pending || !projectId || projects === null}>
           {mode === "link" ? "Vincular" : "Crear tarea"}
         </Button>
       </div>

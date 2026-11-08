@@ -4,7 +4,9 @@
  * code with counts and sample details with tramo, fase and espacio (project flow §4.9).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 const createMondayStaffAction = vi.fn();
 const suggestMondayPositionAction = vi.fn();
@@ -121,7 +123,7 @@ const unmatched: MondayPreview = {
 describe("PreviewStep", () => {
   it("lists each problem with its board and a Corregir link to its step", () => {
     const onFix = vi.fn();
-    render(<PreviewStep preview={preview} error="" isPending={false} onRefresh={() => {}} onFix={onFix} />);
+    renderWithQueryClient(<PreviewStep preview={preview} error="" isPending={false} onRefresh={() => {}} onFix={onFix} />);
 
     const blocking = screen.getByText("Corrige esto antes de importar").closest("[role=alert]") as HTMLElement;
     expect(within(blocking).getByText(/Proyectos:/)).toBeTruthy();
@@ -150,7 +152,7 @@ describe("PreviewStep", () => {
         warning("SOMETHING_ELSE", "Otro aviso del plan."),
       ],
     };
-    render(<PreviewStep preview={grouped} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
+    renderWithQueryClient(<PreviewStep preview={grouped} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
 
     for (const title of [
       "Tareas sin fase (2)",
@@ -186,7 +188,7 @@ describe("PreviewStep", () => {
       ],
     };
     const onFix = vi.fn();
-    render(<PreviewStep preview={taken} error="" isPending={false} onRefresh={() => {}} onFix={onFix} />);
+    renderWithQueryClient(<PreviewStep preview={taken} error="" isPending={false} onRefresh={() => {}} onFix={onFix} />);
 
     const blocking = screen.getByText("Corrige esto antes de importar").closest("[role=alert]") as HTMLElement;
     expect(within(blocking).getByText("Proyectos con nombre repetido (2)")).toBeTruthy();
@@ -211,7 +213,7 @@ describe("PreviewStep", () => {
         },
       ],
     };
-    render(<PreviewStep preview={withSamples} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
+    renderWithQueryClient(<PreviewStep preview={withSamples} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
     expect(screen.getByText(/Tramo · Fase: Diseño · Ejecutivo · Espacio: Depto 201/)).toBeTruthy();
     expect(screen.getByText("1. Muros")).toBeTruthy();
     expect(screen.getByText("Tarea: Muros")).toBeTruthy();
@@ -233,7 +235,7 @@ describe("PreviewStep", () => {
 
   it("opens an unmatched person's row of Personas (#689)", () => {
     const onFix = vi.fn();
-    render(<PreviewStep preview={unmatched} error="" isPending={false} onRefresh={() => {}} onFix={onFix} />);
+    renderWithQueryClient(<PreviewStep preview={unmatched} error="" isPending={false} onRefresh={() => {}} onFix={onFix} />);
     openGroup("Personas sin equivalente (1)");
     fireEvent.click(screen.getByRole("button", { name: "Corregir" }));
     expect(onFix).toHaveBeenCalledWith("personas", "b1", "7");
@@ -251,7 +253,7 @@ describe("PreviewStep", () => {
       },
     });
     const onStaffCreated = vi.fn();
-    render(
+    renderWithQueryClient(
       <PreviewStep
         preview={unmatched}
         positions={[{ id: "pos-1", name: "Proyectista ejecutivo" }]}
@@ -273,7 +275,7 @@ describe("PreviewStep", () => {
   });
 
   it("offers Crear integrante only on unmatched people with a run", () => {
-    render(
+    renderWithQueryClient(
       <PreviewStep
         preview={preview}
         error=""
@@ -290,7 +292,7 @@ describe("PreviewStep", () => {
   });
 
   it("shows no English plan text", () => {
-    render(<PreviewStep preview={preview} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
+    renderWithQueryClient(<PreviewStep preview={preview} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
     expect(screen.queryByText(/has no client/)).toBeNull();
   });
 });

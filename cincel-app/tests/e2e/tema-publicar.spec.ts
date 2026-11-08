@@ -76,6 +76,13 @@ test.describe("Tema de la organización — publicar para todos", () => {
       await expect(page.getByText(/cumple 4\.5:1/).first()).toBeVisible();
       await expect(publish).toBeEnabled();
       const before = await readSettingData<OrgAppearanceData>(THEME_KEY);
+      // Publishing is one action POST (its response carries the layout re-render) and no `router.refresh()`.
+      let actionPosts = 0;
+      let rscRequests = 0;
+      page.on("request", (request) => {
+        if (request.method() === "POST" && request.headers()["next-action"]) actionPosts += 1;
+        else if (request.url().includes("_rsc=")) rscRequests += 1;
+      });
       await publish.click();
 
       await expect
@@ -85,6 +92,13 @@ test.describe("Tema de la organización — publicar para todos", () => {
       // The cookie version is bumped so every viewer re-reads the theme.
       expect(after?.v).toBeGreaterThan(before?.v ?? 0);
       expect(after?.tokens?.primary?.light?.toLowerCase()).toBe(CALIDO_PRIMARY_LIGHT);
+
+      // The admin's own page follows at once, without a reload.
+      await expect.poll(() => themeId(page), { timeout: 15_000 }).toBe("calido");
+      await expect.poll(() => appearanceBlock(page)).toContain(CALIDO_PRIMARY_LIGHT);
+      await page.waitForLoadState("networkidle");
+      expect(actionPosts, "action POSTs of the publish").toBe(1);
+      expect(rscRequests, "_rsc requests after the publish").toBe(0);
 
       // Second user, next page load: the new org theme.
       await otherPage.reload({ waitUntil: "domcontentloaded" });

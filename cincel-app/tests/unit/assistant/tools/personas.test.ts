@@ -21,7 +21,7 @@ const h = vi.hoisted(() => ({
   fetchPersonaDetailAction: vi.fn(),
   invitePortalClientAction: vi.fn(),
   listInvitablePortalContactsAction: vi.fn(),
-  fetchProjectsAction: vi.fn(),
+  listViewerProjects: vi.fn(),
   fetchProjectAction: vi.fn(),
   fetchStaffAction: vi.fn(),
   getAppOrigin: vi.fn(() => "https://app.cincel.example"),
@@ -47,8 +47,8 @@ vi.mock("@/lib/actions/portal-actions", () => ({ invitePortalClientAction: h.inv
 vi.mock("@/lib/actions/portal-contacts-actions", () => ({
   listInvitablePortalContactsAction: h.listInvitablePortalContactsAction,
 }));
+vi.mock("@/lib/assistant/reads", () => ({ listViewerProjects: h.listViewerProjects }));
 vi.mock("@/lib/actions/projects-actions", () => ({
-  fetchProjectsAction: h.fetchProjectsAction,
   fetchProjectAction: h.fetchProjectAction,
 }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffAction: h.fetchStaffAction }));
@@ -143,7 +143,7 @@ beforeEach(() => {
   h.loadOwnerMail.mockResolvedValue(false);
   h.getAppOrigin.mockReturnValue("https://app.cincel.example");
   h.sendMail.mockResolvedValue({ sent: true });
-  h.fetchProjectsAction.mockResolvedValue([PROJECT]);
+  h.listViewerProjects.mockResolvedValue([PROJECT]);
   h.fetchProjectAction.mockResolvedValue(PROJECT);
 });
 
@@ -264,7 +264,7 @@ describe("get_person", () => {
     });
 
     const out = (await run("get_person", { name: "luis perez" })) as Record<string, unknown>;
-    expect(h.fetchPersonaDetailAction).toHaveBeenCalledWith("s-2");
+    expect(h.fetchPersonaDetailAction).toHaveBeenCalledWith({ staffId: "s-2" });
     expect(out).toMatchObject({
       ok: true,
       person: { name: "Luis Pérez", puesto: "Residente", positions: ["Residente"] },
@@ -290,6 +290,13 @@ describe("get_person", () => {
   it("maps NOT_FOUND from the action to Spanish copy", async () => {
     h.fetchStaffAction.mockResolvedValue([staff]);
     h.fetchPersonaDetailAction.mockRejectedValue(new Error("NOT_FOUND"));
+    const out = await run("get_person", { name: "Luis" });
+    expect(out).toEqual({ ok: false, error: "NOT_FOUND", message: "No encontré ese registro o ya no está disponible para ti." });
+  });
+
+  it("maps a null detail (unknown person) to the same NOT_FOUND copy", async () => {
+    h.fetchStaffAction.mockResolvedValue([staff]);
+    h.fetchPersonaDetailAction.mockResolvedValue(null);
     const out = await run("get_person", { name: "Luis" });
     expect(out).toEqual({ ok: false, error: "NOT_FOUND", message: "No encontré ese registro o ya no está disponible para ti." });
   });

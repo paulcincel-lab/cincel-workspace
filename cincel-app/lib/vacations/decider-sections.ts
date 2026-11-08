@@ -1,10 +1,10 @@
 import "server-only";
 
-import { fetchPendingVacationRequestsAction, fetchVacationSettingsAction } from "@/lib/actions/vacations-actions";
 import { IMPLEMENTED } from "@/lib/actions/vacations-actions.flags";
-import { requireCapabilityUser } from "@/lib/auth/session";
-import { actionErrorCode } from "@/lib/errors";
+import type { AuthenticatedUser } from "@/lib/auth/auth-service";
+import { canDecideVacations } from "@/lib/auth/permissions";
 import type { PendingVacationRequest, VacationSettingsView } from "@/lib/types/redesign";
+import { readPendingVacationRequests, readVacationSettings } from "@/lib/vacations/reads";
 
 export type VacationDeciderData = {
   viewerStaffId: string;
@@ -15,35 +15,20 @@ export type VacationDeciderData = {
 };
 
 /**
- * Server loader of the deciders' part of Mis vacaciones (redesign FE §3.7):
- * "Solicitudes del equipo" and "Días de vacaciones". Returns null when the
- * viewer may not decide vacations (`canDecideVacations`, enforced by the
- * actions with `FORBIDDEN`) or while the pending-requests read is not
- * implemented, so the page renders nothing for them. Other errors reach the
- * error boundary.
+ * The deciders' part of Mis vacaciones (redesign FE §3.7): "Solicitudes del
+ * equipo" and "Días de vacaciones", read for `user` in one parallel wave.
+ * Null when the viewer may not decide vacations (`canDecideVacations`) or
+ * while the pending-requests read is not implemented: no pending requests of
+ * others and no settings ever reach a non-decider's page. Other errors reach
+ * the error boundary.
  */
-export async function loadVacationDeciderData(): Promise<VacationDeciderData | null> {
-  if (!IMPLEMENTED.fetchPendingVacationRequestsAction) return null;
-  const user = await requireCapabilityUser();
+export async function loadVacationDeciderData(user: AuthenticatedUser): Promise<VacationDeciderData | null> {
+  if (!IMPLEMENTED.fetchPendingVacationRequestsAction || !canDecideVacations(user)) return null;
   const viewerStaffId = user.member.id;
-
-  let requests: PendingVacationRequest[];
-  try {
-    requests = await fetchPendingVacationRequestsAction();
-  } catch (err) {
-    if (actionErrorCode(err) === "FORBIDDEN") return null;
-    throw err;
-  }
-
-  let settings: VacationSettingsView | null = null;
-  if (IMPLEMENTED.fetchVacationSettingsAction) {
-    try {
-      settings = await fetchVacationSettingsAction();
-    } catch (err) {
-      if (actionErrorCode(err) !== "FORBIDDEN") throw err;
-    }
-  }
-
+  const [requests, settings] = await Promise.all([
+    readPendingVacationRequests(user),
+    IMPLEMENTED.fetchVacationSettingsAction ? readVacationSettings(user) : Promise.resolve(null),
+  ]);
   return {
     viewerStaffId,
     requests: requests.filter((request) => request.staffId !== viewerStaffId),

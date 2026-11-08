@@ -3,14 +3,18 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type * as ReactTypes from "react";
 import axe from "axe-core";
 
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 const actions = vi.hoisted(() => ({
+  fetchGmailStatusAction: vi.fn(),
+  fetchGmailThreadsAction: vi.fn(),
   fetchGmailThreadAction: vi.fn(),
+  markGmailThreadReadAction: vi.fn(),
   linkGmailThreadToProjectAction: vi.fn(),
   createTaskFromGmailThreadAction: vi.fn(),
   createGmailDraftAction: vi.fn(),
@@ -18,8 +22,24 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/gmail-actions", () => actions);
 
-const projectActions = vi.hoisted(() => ({ fetchProjectsAction: vi.fn() }));
-vi.mock("@/lib/actions/projects-actions", () => projectActions);
+// Project names come from the light catalog (`catalog.projectOptions`), never the full portfolio.
+const catalog = vi.hoisted(() => ({
+  fetchCatalogProjectOptions: vi.fn(),
+  fetchCatalogWorkflows: vi.fn(),
+  fetchCatalogTaskStatuses: vi.fn(),
+  fetchCatalogStaff: vi.fn(),
+  fetchCatalogAssignableStaff: vi.fn(),
+  fetchCatalogProjectSpaces: vi.fn(),
+  fetchCatalogContacts: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => catalog);
+vi.mock("@/lib/actions/my-space-actions", () => ({ fetchRemindersAction: vi.fn() }));
+vi.mock("@/lib/actions/notifications-actions", () => ({ fetchNotificationsAction: vi.fn() }));
+vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
+  getMiEspacioPageData: vi.fn(),
+  fetchMiEspacioNotesPage: vi.fn(),
+  fetchMiEspacioChecklistsPage: vi.fn(),
+}));
 
 const flags = vi.hoisted(() => ({
   IMPLEMENTED: {
@@ -124,8 +144,8 @@ function threadData() {
 }
 
 const PROJECTS = [
-  { id: "p-ens", name: "Ensenada" },
-  { id: "p-plz", name: "Platzi" },
+  { id: "p-ens", name: "Ensenada", status: "activo", currentWorkflowId: null },
+  { id: "p-plz", name: "Platzi", status: "activo", currentWorkflowId: null },
 ];
 
 beforeEach(() => {
@@ -134,8 +154,9 @@ beforeEach(() => {
   actions.fetchGmailThreadAction.mockResolvedValue(threadData());
   actions.linkGmailThreadToProjectAction.mockResolvedValue(undefined);
   actions.createTaskFromGmailThreadAction.mockResolvedValue({ taskId: "task-1" });
-  projectActions.fetchProjectsAction.mockReset();
-  projectActions.fetchProjectsAction.mockResolvedValue(PROJECTS);
+  actions.markGmailThreadReadAction.mockResolvedValue({ ok: true, data: undefined });
+  catalog.fetchCatalogProjectOptions.mockReset();
+  catalog.fetchCatalogProjectOptions.mockResolvedValue(PROJECTS);
 });
 
 afterEach(() => {
@@ -145,11 +166,16 @@ afterEach(() => {
   document.documentElement.classList.remove("dark");
 });
 
-async function renderReader() {
+async function renderReader(client = createTestQueryClient()) {
   const onClose = vi.fn();
-  render(<GmailReader threadId="th-1" onClose={onClose} />);
+  const view = renderWithQueryClient(<GmailReader threadId="th-1" onClose={onClose} />, { client });
   await screen.findByRole("heading", { name: "Cambios en la planta baja" });
-  return { onClose };
+  return { onClose, ...view, client };
+}
+
+function unreadThread() {
+  const data = threadData();
+  return { ...data, thread: { ...data.thread, unread: true } };
 }
 
 function bodyFrame(): HTMLIFrameElement {
@@ -160,10 +186,55 @@ describe("GmailReader", () => {
   it("loads the thread and shows its headers", async () => {
     await renderReader();
     expect(actions.fetchGmailThreadAction).toHaveBeenCalledWith("th-1");
+    expect(actions.fetchGmailThreadAction).toHaveBeenCalledTimes(1);
     const article = screen.getByRole("article", { name: "Mensaje de Juanma Ensenada" });
     expect(article.textContent).toContain("para Alejandro Riofrio");
     expect(article.querySelector("time")?.getAttribute("dateTime")).toBe("2026-11-06T16:42:00.000Z");
     expect(article.querySelector("time")?.textContent).toBe(article.querySelector("time")?.textContent?.toLowerCase());
+  });
+
+  it("an unread thread sends exactly one markGmailThreadReadAction and shows as read in the cache", async () => {
+    actions.fetchGmailThreadAction.mockResolvedValue(unreadThread());
+    const { client, rerender } = await renderReader();
+    await waitFor(() => expect(actions.markGmailThreadReadAction).toHaveBeenCalledTimes(1));
+    expect(actions.markGmailThreadReadAction).toHaveBeenCalledWith("th-1");
+    const cached = client.getQueryData<{ thread: { unread: boolean } }>(["me", "gmail", "thread", "th-1"]);
+    expect(cached?.thread.unread).toBe(false);
+
+    rerender(<GmailReader threadId="th-1" onClose={vi.fn()} />);
+    await Promise.resolve();
+    expect(actions.markGmailThreadReadAction).toHaveBeenCalledTimes(1);
+    expect(actions.fetchGmailThreadAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("a thread already read sends no mark-read", async () => {
+    await renderReader();
+    await Promise.resolve();
+    expect(actions.markGmailThreadReadAction).not.toHaveBeenCalled();
+  });
+
+  it("puts the unread mark back when mark-read fails, without an error toast", async () => {
+    const { toast } = await import("sonner");
+    vi.mocked(toast.error).mockClear();
+    actions.fetchGmailThreadAction.mockResolvedValue(unreadThread());
+    actions.markGmailThreadReadAction.mockResolvedValue({ ok: false, error: "NOT_CONNECTED" });
+    const { client } = await renderReader();
+    await waitFor(() => expect(actions.markGmailThreadReadAction).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(client.getQueryData<{ thread: { unread: boolean } }>(["me", "gmail", "thread", "th-1"])?.thread.unread).toBe(
+        true,
+      ),
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("reopening within the stale time makes no call", async () => {
+    const client = createTestQueryClient();
+    await renderReader(client);
+    cleanup();
+    await renderReader(client);
+    expect(actions.fetchGmailThreadAction).toHaveBeenCalledTimes(1);
+    expect(catalog.fetchCatalogProjectOptions).toHaveBeenCalledTimes(1);
   });
 
   it("renders the body only inside a sandboxed iframe without scripts or same-origin", async () => {
@@ -222,9 +293,25 @@ describe("GmailReader", () => {
     expect(LINK_NOTE).toBe("El asunto del correo quedará en la bitácora del proyecto.");
     expect((screen.getByRole("combobox", { name: "Proyecto" }) as HTMLSelectElement).value).toBe("p-ens");
 
+    // After the link the server's thread carries the project (the refetch after invalidation).
+    const linked = threadData();
+    actions.fetchGmailThreadAction.mockResolvedValue({ ...linked, thread: { ...linked.thread, projectId: "p-ens" } });
     fireEvent.click(screen.getByRole("button", { name: "Vincular a proyecto" }));
     await waitFor(() => expect(actions.linkGmailThreadToProjectAction).toHaveBeenCalledWith("th-1", "p-ens"));
     await waitFor(() => expect(screen.getByText("Vinculado a Ensenada.")).toBeTruthy());
+  });
+
+  it("a link refreshes me.gmail and the project's detail and history", async () => {
+    const { client } = await renderReader();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Sugerido: Ensenada" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Vincular a proyecto" }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(3));
+    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+      ["me", "gmail"],
+      ["proyectos", "p-ens"],
+      ["proyectos", "p-ens", "history"],
+    ]);
   });
 
   it("creates a task in the picked project", async () => {
@@ -236,6 +323,23 @@ describe("GmailReader", () => {
       expect(actions.createTaskFromGmailThreadAction).toHaveBeenCalledWith("th-1", { projectId: "p-plz" }),
     );
     expect(actions.linkGmailThreadToProjectAction).not.toHaveBeenCalled();
+  });
+
+  it("a task from mail also refreshes tareas, inicio and the sidebar badges", async () => {
+    const { client } = await renderReader();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Proyecto" })).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "Proyecto" }), { target: { value: "p-plz" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(6));
+    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+      ["me", "gmail"],
+      ["proyectos", "p-plz"],
+      ["proyectos", "p-plz", "history"],
+      ["tareas"],
+      ["inicio"],
+      ["shell", "badges"],
+    ]);
   });
 
   it("shows the action error inline", async () => {
@@ -275,7 +379,7 @@ describe("GmailReader", () => {
     expect(screen.queryByRole("button", { name: "Responder" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Crear tarea" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Vincular a proyecto" })).toBeNull();
-    expect(projectActions.fetchProjectsAction).not.toHaveBeenCalled();
+    expect(catalog.fetchCatalogProjectOptions).not.toHaveBeenCalled();
     // Reading still works.
     expect(bodyFrame()).toBeTruthy();
   });

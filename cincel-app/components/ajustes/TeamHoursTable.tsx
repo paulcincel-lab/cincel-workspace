@@ -19,6 +19,8 @@ export type TeamHoursTableProps = {
   style: PresentationStyle;
   /** `TimeTrackingSettings.requiredFrom`: days before it are trial days ("prueba"). */
   requiredFrom?: string | null;
+  /** Another week's rows are loading; the shown ones are the previous week's. */
+  loading?: boolean;
 };
 
 const ONLY_ANALITICO: PresentationStyle[] = ["visual", "esencial"];
@@ -142,13 +144,14 @@ export function buildTeamHoursTable(rows: TeamHoursRow[], requiredFrom: string |
 /**
  * "Horas del equipo" (redesign FE §3.8, §4.8) on `RecordTable`. The style
  * comes in as a prop and reaches the widget through `StyleProvider`, so this
- * component writes no per-style markup.
+ * component writes no per-style markup. While another week loads, the
+ * previous rows stay (marked `aria-busy`).
  */
-export function TeamHoursTable({ weekStart, rows, style, requiredFrom = null }: TeamHoursTableProps) {
+export function TeamHoursTable({ weekStart, rows, style, requiredFrom = null, loading = false }: TeamHoursTableProps) {
   const data = buildTeamHoursTable(rows, requiredFrom);
   const anyTrial = reportDates(rows).some((date) => isTrialDay(date, requiredFrom));
   return (
-    <div className="flex flex-col gap-2" data-week={weekStart}>
+    <div className="flex flex-col gap-2" data-week={weekStart} aria-busy={loading || undefined}>
       <StyleProvider key={style} style={style} scope="staff">
         <RecordTable data={data} emptyState={{ ...TEAM_HOURS_EMPTY }} />
       </StyleProvider>

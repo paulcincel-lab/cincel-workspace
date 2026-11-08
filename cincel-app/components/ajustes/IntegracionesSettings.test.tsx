@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { flags, syncGmailAction, disconnectGmailAction, fetchGmailStatusAction, toastSuccess } = vi.hoisted(() => ({
+const { flags, syncGmailAction, disconnectGmailAction, fetchGmailStatusAction, toastSuccess, pageData } = vi.hoisted(() => ({
   flags: {
     fetchGmailStatusAction: true,
     fetchGmailThreadsAction: true,
@@ -20,11 +20,18 @@ const { flags, syncGmailAction, disconnectGmailAction, fetchGmailStatusAction, t
   disconnectGmailAction: vi.fn(),
   fetchGmailStatusAction: vi.fn(),
   toastSuccess: vi.fn(),
+  pageData: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/gmail-actions.flags", () => ({ IMPLEMENTED: flags }));
 vi.mock("@/lib/actions/gmail-actions", () => ({ syncGmailAction, disconnectGmailAction, fetchGmailStatusAction }));
 vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: vi.fn() } }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
+  getAjustesAparienciaPageData: vi.fn(),
+  getAjustesNotificacionesPageData: vi.fn(),
+  getAjustesPerfilPageData: vi.fn(),
+  getAjustesIntegracionesPageData: pageData,
+}));
 
 // The existing Calendar controls are reused as is; a stand-in keeps their server actions out of this test.
 vi.mock("@/components/calendario/CalendarFeedDialog", () => ({
@@ -113,6 +120,10 @@ import {
 } from "@/components/ajustes/IntegracionesClient";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import type { AjustesIntegracionesPageData } from "@/lib/query/options/ajustes";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { resetSessionStoreForTests, useSessionStore } from "@/lib/stores/session-store";
 import { integracionesGmailSection } from "@/lib/shell/settings-sections/integraciones/gmail";
 import { integracionesGoogleCalendarSection } from "@/lib/shell/settings-sections/integraciones/google-calendar";
 import { integracionesGoogleDriveSection } from "@/lib/shell/settings-sections/integraciones/google-drive";
@@ -132,25 +143,45 @@ const CONNECTED: GmailStatus = {
 };
 const NOT_CONNECTED: GmailStatus = { connected: false, scopeOk: false, lastSyncedAt: null, lastError: null };
 
+/** The page's client: `qk.ajustes.page('integraciones')` hydrated, the session email in the session store. */
 function renderPage({
   gmail = CONNECTED,
   drive = { configured: true, hasDriveGrant: true },
-  googleConfigured,
   withMonday = true,
 }: {
   gmail?: GmailStatus;
   drive?: DriveIntegrationStatus;
-  googleConfigured?: boolean;
   withMonday?: boolean;
 } = {}) {
-  return render(
-    <IntegracionesClient gmail={gmail} accountEmail="ana@cincel.mx" drive={drive} googleConfigured={googleConfigured}>
+  useSessionStore.setState({
+    access: {
+      status: "active",
+      user: {
+        id: "staff-1",
+        name: "Ana",
+        email: "ana@cincel.mx",
+        role: "Colaborador",
+        area: null,
+        active: true,
+        mustChangePassword: false,
+        googleLinked: true,
+        access: "Colaborador",
+      },
+    },
+  });
+  const client = createTestQueryClient();
+  client.setQueryData<AjustesIntegracionesPageData>(qk.ajustes.page("integraciones"), { gmail, drive });
+  // A refetch after a mutation answers the same statuses unless a test says otherwise.
+  pageData.mockImplementation(async () => ({ gmail, drive }));
+  return renderWithQueryClient(
+    <IntegracionesClient>
       <IntegracionesGmail />
       <IntegracionesGoogleCalendar />
       <IntegracionesGoogleDrive />
       <IntegracionesCutto />
       {withMonday ? <IntegracionesMonday /> : null}
     </IntegracionesClient>,
+    { client },
   );
 }
 
@@ -182,10 +213,12 @@ beforeEach(() => {
   disconnectGmailAction.mockReset();
   fetchGmailStatusAction.mockReset();
   toastSuccess.mockReset();
+  pageData.mockReset();
 });
 
 afterEach(() => {
   cleanup();
+  resetSessionStoreForTests();
   vi.useRealTimers();
   document.body.innerHTML = "";
   document.documentElement.removeAttribute("data-theme-id");
@@ -277,40 +310,65 @@ describe("Sincronizar ahora", () => {
     expect(screen.getByRole("alert").textContent).toBe(RATE_LIMITED_COPY);
   });
 
-  it("syncs and refreshes the status after the cooldown", async () => {
+  it("syncs, then refreshes the status through the page query (one refetch)", async () => {
     vi.useFakeTimers({ now: Date.parse(CONNECTED.lastSyncedAt!) + 60_000, toFake: ["Date"] });
-    syncGmailAction.mockResolvedValue({ synced: 3 });
-    fetchGmailStatusAction.mockResolvedValue({ ...CONNECTED, lastSyncedAt: "2026-11-06T15:03:00.000Z" });
+    syncGmailAction.mockResolvedValue({ ok: true, data: { synced: 3 } });
     renderPage();
+    pageData.mockResolvedValue({
+      gmail: { ...CONNECTED, lastSyncedAt: "2026-11-06T15:03:00.000Z" },
+      drive: { configured: true, hasDriveGrant: true },
+    });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Sincronizar ahora" }));
     });
     expect(syncGmailAction).toHaveBeenCalledTimes(1);
-    expect(fetchGmailStatusAction).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/Última sincronización:/).textContent).toContain(formatSyncedAt("2026-11-06T15:03:00.000Z"));
-    expect(toastSuccess).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByText(/Última sincronización:/).textContent).toContain(formatSyncedAt("2026-11-06T15:03:00.000Z")),
+    );
+    expect(pageData).toHaveBeenCalledTimes(1);
+    expect(fetchGmailStatusAction).not.toHaveBeenCalled();
+    expect(toastSuccess).toHaveBeenCalledWith("Gmail sincronizado.");
+  });
+
+  it("a sync invalidates ajustes.page('integraciones') and the me.gmail caches", async () => {
+    vi.useFakeTimers({ now: Date.parse(CONNECTED.lastSyncedAt!) + 60_000, toFake: ["Date"] });
+    syncGmailAction.mockResolvedValue({ ok: true, data: { synced: 1 } });
+    const { client } = renderPage();
+    client.setQueryData(qk.me.gmail.threads(), { threads: [], nextCursor: null });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sincronizar ahora" }));
+    });
+    await waitFor(() => expect(client.getQueryState(qk.me.gmail.threads())?.isInvalidated).toBe(true));
+    await waitFor(() => expect(pageData).toHaveBeenCalledTimes(1));
+  });
+
+  it("makes no client page-data call on mount (the data is hydrated)", () => {
+    renderPage();
+    expect(pageData).not.toHaveBeenCalled();
+    expect(fetchGmailStatusAction).not.toHaveBeenCalled();
   });
 
   it("shows the server RATE_LIMITED copy", async () => {
     vi.useFakeTimers({ now: Date.parse(CONNECTED.lastSyncedAt!) + 60_000, toFake: ["Date"] });
-    syncGmailAction.mockRejectedValue(new Error("RATE_LIMITED"));
+    syncGmailAction.mockResolvedValue({ ok: false, error: "RATE_LIMITED" });
     renderPage();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Sincronizar ahora" }));
     });
-    expect(screen.getByRole("alert").textContent).toBe(RATE_LIMITED_COPY);
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe(RATE_LIMITED_COPY));
   });
 
-  it("NOT_CONNECTED from the server flips the card to not connected", async () => {
+  it("NOT_CONNECTED from the server: the refetched status flips the card to not connected", async () => {
     vi.useFakeTimers({ now: Date.parse(CONNECTED.lastSyncedAt!) + 60_000, toFake: ["Date"] });
-    syncGmailAction.mockRejectedValue(new Error("NOT_CONNECTED"));
+    syncGmailAction.mockResolvedValue({ ok: false, error: "NOT_CONNECTED" });
     renderPage();
+    pageData.mockResolvedValue({ gmail: NOT_CONNECTED, drive: { configured: true, hasDriveGrant: true } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Sincronizar ahora" }));
     });
     const gmail = card("Gmail");
+    await waitFor(() => expect(within(gmail).getByRole("link", { name: "Conectar" })).toBeTruthy());
     expect(within(gmail).getByText(NOT_CONNECTED_COPY)).toBeTruthy();
-    expect(within(gmail).getByRole("link", { name: "Conectar" })).toBeTruthy();
   });
 });
 
@@ -344,41 +402,46 @@ describe("Desconectar", () => {
   });
 
   it("confirming calls disconnectGmailAction once and the card shows not connected", async () => {
-    disconnectGmailAction.mockResolvedValue(undefined);
+    disconnectGmailAction.mockResolvedValue({ ok: true, data: undefined });
     renderPage();
+    pageData.mockResolvedValue({ gmail: NOT_CONNECTED, drive: { configured: true, hasDriveGrant: true } });
     fireEvent.click(screen.getByRole("button", { name: "Desconectar" }));
     const dialog = screen.getByRole("dialog");
     await act(async () => {
       fireEvent.click(within(dialog).getByRole("button", { name: "Desconectar" }));
     });
     expect(disconnectGmailAction).toHaveBeenCalledTimes(1);
-    expect(disconnectGmailAction).toHaveBeenCalledWith();
+    expect(disconnectGmailAction).toHaveBeenCalledWith(undefined);
     expect(screen.queryByRole("dialog")).toBeNull();
     const gmail = card("Gmail");
-    expect(within(gmail).getByText("No conectado")).toBeTruthy();
+    await waitFor(() => expect(within(gmail).getByText("No conectado")).toBeTruthy());
     expect(within(gmail).getByRole("link", { name: "Conectar" })).toBeTruthy();
   });
 
   it("Calendar and Drive keep working after disconnecting Gmail", async () => {
-    disconnectGmailAction.mockResolvedValue(undefined);
+    disconnectGmailAction.mockResolvedValue({ ok: true, data: undefined });
     renderPage();
+    pageData.mockResolvedValue({ gmail: NOT_CONNECTED, drive: { configured: true, hasDriveGrant: true } });
     fireEvent.click(screen.getByRole("button", { name: "Desconectar" }));
     await act(async () => {
       fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Desconectar" }));
     });
+    await waitFor(() => expect(within(card("Gmail")).getByText("No conectado")).toBeTruthy());
     expect(within(card("Google Calendar")).getByRole("region", { name: "Sincronización directa" })).toBeTruthy();
     expect(within(card("Google Drive")).getByText("Conectado")).toBeTruthy();
   });
 
   it("an error stays in the dialog", async () => {
-    disconnectGmailAction.mockRejectedValue(new Error("FORBIDDEN"));
+    disconnectGmailAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Desconectar" }));
     await act(async () => {
       fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Desconectar" }));
     });
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByRole("alert").textContent).toBe("No tienes permiso para realizar esta acción.");
+    await waitFor(() =>
+      expect(within(dialog).getByRole("alert").textContent).toBe("No tienes permiso para realizar esta acción."),
+    );
     expect(within(card("Gmail")).getByText("Conectado")).toBeTruthy();
   });
 });

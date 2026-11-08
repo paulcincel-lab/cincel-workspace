@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { unwrapActions } from "@/tests/helpers/action-result";
+
 const ACTOR = "33333333-3333-4333-8333-333333333333";
 const WORKFLOW = "44444444-4444-4444-8444-444444444444";
 const PHASE = "55555555-5555-4555-8555-555555555555";
@@ -27,12 +29,10 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/workflows-repository", () => repo);
 
-import {
-  createTemplateAction,
-  deactivateTemplateAction,
-  fetchWorkflowsAction,
-  updateTemplateAction,
-} from "./workflows-actions";
+import * as workflowsActionsModule from "./workflows-actions";
+
+const { createTemplateAction, deactivateTemplateAction, fetchWorkflowsAction, updateTemplateAction } =
+  unwrapActions(workflowsActionsModule);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -87,13 +87,12 @@ describe("createTemplateAction", () => {
     await expect(createTemplateAction(WORKFLOW, { phaseId: PHASE, title: "   " })).rejects.toThrow("EMPTY");
   });
 
-  it("creates with the parsed input and revalidates tramos, not the Actividades layout stub", async () => {
+  it("creates with the parsed input and revalidates nothing", async () => {
     caps.canManage = true;
     await createTemplateAction(WORKFLOW, { phaseId: PHASE, title: "  Planos  " });
     expect(repo.createTemplate).toHaveBeenCalledWith(WORKFLOW, { phaseId: PHASE, title: "Planos" }, ACTOR);
-    expect(revalidatePath).toHaveBeenCalledWith("/configuracion/tramos");
-    // Tareas reads `qk.tareas.*` (Phase 4): the Actividades layout stub is not revalidated.
-    expect(revalidatePath).not.toHaveBeenCalledWith("/actividades", "layout");
+    // Ajustes › Tramos reads through TanStack Query; Tareas reads `qk.tareas.*` (Phase 4).
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it.each(["PHASE_MISMATCH", "NAME_TAKEN"])("passes %s through from the repository", async (code) => {
@@ -132,9 +131,9 @@ describe("updateTemplateAction", () => {
 });
 
 describe("deactivateTemplateAction", () => {
-  it("revalidates the tramos page", async () => {
+  it("revalidates nothing: Ajustes › Tramos reads through TanStack Query", async () => {
     caps.canManage = true;
     await deactivateTemplateAction(TEMPLATE);
-    expect(revalidatePath).toHaveBeenCalledWith("/configuracion/tramos");
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

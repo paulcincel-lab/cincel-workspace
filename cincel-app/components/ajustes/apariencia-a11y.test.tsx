@@ -1,19 +1,26 @@
 // @vitest-environment happy-dom
 import type { ReactNode } from "react";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { qk } from "@/lib/query/keys";
+import type { AjustesAparienciaPageData } from "@/lib/query/options/ajustes";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { AppearanceStoreProvider } from "@/lib/stores/appearance-store";
 import type { OrgAppearance, ThemeId, UserPreferences } from "@/lib/types/redesign";
-import { DEFAULT_USER_PREFERENCES } from "@/lib/ui/preferences";
+import { DEFAULT_USER_PREFERENCES, resolveAppearance } from "@/lib/ui/preferences";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 
-vi.mock("@/components/shell/AppearanceProvider", () => ({
-  useAppearance: () => ({ appearance: null, setPreference: vi.fn().mockResolvedValue(undefined) }),
+vi.mock("@/lib/actions/preferences-actions", () => ({
+  updateMyPreferencesAction: vi.fn(async () => new Promise(() => {})),
+  fetchMyPreferencesAction: vi.fn(),
 }));
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
+  getAjustesAparienciaPageData: vi.fn(),
+  getAjustesNotificacionesPageData: vi.fn(),
+  getAjustesPerfilPageData: vi.fn(),
+  getAjustesIntegracionesPageData: vi.fn(),
 }));
 
 vi.mock("@/components/patterns/SettingsSection", () => ({
@@ -38,6 +45,23 @@ vi.mock("@/components/patterns/SettingsRow", () => ({
 import { AparienciaClient } from "./AparienciaClient";
 
 const PREFS: UserPreferences = { ...DEFAULT_USER_PREFERENCES };
+
+/** Apariencia with its hydrated page data and a seeded `useAppearance` store. */
+function render(ui: { preferences: UserPreferences; org: OrgAppearance; isAdmin: boolean }, wrapInMain = true) {
+  const client = createTestQueryClient();
+  client.setQueryData<AjustesAparienciaPageData>(qk.ajustes.page("apariencia"), {
+    org: ui.org,
+    isAdmin: ui.isAdmin,
+    overridesAllowed: ui.org.allowUserOverride,
+  });
+  const appearance = resolveAppearance({ ...ui.org, v: 1 }, ui.preferences);
+  const tree = (
+    <AppearanceStoreProvider initial={appearance} preferences={ui.preferences} fixedByOrg={!ui.org.allowUserOverride}>
+      <AparienciaClient />
+    </AppearanceStoreProvider>
+  );
+  return renderWithQueryClient(wrapInMain ? <main>{tree}</main> : tree, { client });
+}
 
 async function seriousViolations(container: HTMLElement) {
   // Color contrast needs real layout and rendering, which happy-dom doesn't provide;
@@ -68,11 +92,7 @@ describe("Ajustes › Apariencia accessibility", () => {
       it(`has no serious axe violations in ${theme} ${mode}`, async () => {
         setHtmlAppearance(theme, mode);
         const org: OrgAppearance = { ...THEME_PRESETS[theme], allowUserOverride: true };
-        const { container } = render(
-          <main>
-            <AparienciaClient preferences={{ ...PREFS, mode }} org={org} isAdmin />
-          </main>,
-        );
+        const { container } = render({ preferences: { ...PREFS, mode }, org, isAdmin: true });
         expect(await seriousViolations(container)).toEqual([]);
       });
     }
@@ -81,18 +101,15 @@ describe("Ajustes › Apariencia accessibility", () => {
   it("has no serious axe violations with overrides and the new design turned off", async () => {
     setHtmlAppearance("azul", "light");
     const org: OrgAppearance = { ...THEME_PRESETS.azul, allowUserOverride: false };
-    const { container } = render(
-      <main>
-        <AparienciaClient preferences={PREFS} org={org} isAdmin={false} />
-      </main>,
-    );
+    const { container } = render({ preferences: PREFS, org, isAdmin: false });
     expect(await seriousViolations(container)).toEqual([]);
   });
 
   it("names every radio group and control", () => {
     setHtmlAppearance("azul", "light");
     const { getByRole } = render(
-      <AparienciaClient preferences={PREFS} org={{ ...THEME_PRESETS.azul, allowUserOverride: true }} isAdmin={false} />,
+      { preferences: PREFS, org: { ...THEME_PRESETS.azul, allowUserOverride: true }, isAdmin: false },
+      false,
     );
     for (const name of ["Tema", "Estilo de presentación", "Modo", "Densidad"]) {
       expect(getByRole("radiogroup", { name })).toBeTruthy();

@@ -1,21 +1,29 @@
 import { EstatusSettings } from "@/components/ajustes/EstatusSettings";
-import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
+import { requireCapabilityUser } from "@/lib/auth/session";
+import { loadAjustesEstatus } from "@/lib/loaders/ajustes";
+import { Hydrate } from "@/lib/query/hydrate";
+import { ajustesEstatusOptions, seedAjustesCatalogs, type AjustesEstatusPageData } from "@/lib/query/options/ajustes";
+import { getQueryClient, prefetch } from "@/lib/query/server";
+import { qk } from "@/lib/query/keys";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Ajustes › Estatus (redesign FE §3.8): the existing custom task statuses
- * editor, restyled. The segment layout guards it; the Ajustes layout renders
- * the header and `AjustesNav`.
+ * Ajustes › Estatus (redesign FE §3.8): the custom task statuses editor. The
+ * segment layout guards it; the Ajustes layout renders the header and
+ * `AjustesNav`. Prefetches `qk.ajustes.page('estatus')` (and seeds
+ * `catalog.taskStatuses`), so the client makes no call on mount.
  */
 export default async function AjustesEstatusPage() {
+  const user = await requireCapabilityUser();
+  const qc = getQueryClient();
+  await prefetch(qc, ajustesEstatusOptions(), () => loadAjustesEstatus(user));
+  const data = qc.getQueryData<AjustesEstatusPageData>(qk.ajustes.page("estatus"));
+  if (data) seedAjustesCatalogs(qc, { seg: "estatus", data });
 
-  let initialStatuses: Awaited<ReturnType<typeof fetchTaskStatusesAction>> = [];
-  try {
-    initialStatuses = await fetchTaskStatusesAction();
-  } catch {
-    // The client hydrates itself on mount, like the legacy page.
-  }
-
-  return <EstatusSettings initialStatuses={initialStatuses} />;
+  return (
+    <Hydrate qc={qc}>
+      <EstatusSettings />
+    </Hydrate>
+  );
 }

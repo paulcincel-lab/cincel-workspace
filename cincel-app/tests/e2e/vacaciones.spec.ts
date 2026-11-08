@@ -8,10 +8,14 @@
  * so the balance is deterministic; global-cleanup removes it (its requests,
  * preferences and profile cascade with it).
  *
+ * Query Migration Phase 8 (#942): the request and the decision update the
+ * page through the query cache, so neither triggers an RSC request
+ * (`_rsc` / `RSC: 1`); only server-action POSTs go out.
+ *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { randomBytes, scryptSync } from "node:crypto";
-import { test, expect, type Browser, type Page } from "@playwright/test";
+import { test, expect, type Browser, type Page, type Request } from "@playwright/test";
 import postgres from "postgres";
 import { e2eAdminEmail, loginAs, loginAsAdmin } from "./helpers/seed-auth";
 import { clearAppearanceCookie } from "./helpers/redesign";
@@ -121,6 +125,22 @@ async function openPage(browser: Browser, login: (page: Page) => Promise<void>):
   return page;
 }
 
+/** Counts RSC requests (`_rsc` or `RSC: 1`) and server-action POSTs from now on. */
+function watchRequests(page: Page): { rsc: () => number; actions: () => number; stop: () => void } {
+  let rsc = 0;
+  let actions = 0;
+  const onRequest = (request: Request) => {
+    const headers = request.headers();
+    if (headers["next-action"]) {
+      actions += 1;
+      return;
+    }
+    if (new URL(request.url()).searchParams.has("_rsc") || headers["rsc"] === "1") rsc += 1;
+  };
+  page.on("request", onRequest);
+  return { rsc: () => rsc, actions: () => actions, stop: () => page.off("request", onRequest) };
+}
+
 async function gotoMisVacaciones(page: Page): Promise<void> {
   await page.goto(`${BASE_URL}/biblioteca/vacaciones`, { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Mis vacaciones", level: 1 })).toBeVisible({ timeout: 30_000 });
@@ -156,6 +176,7 @@ test.describe("Mis vacaciones — request, approve, balance", () => {
     await sheet.getByLabel("Hasta").fill(range.to);
     await sheet.getByLabel("Comentario").fill(COMMENT);
     await expect(sheet).toContainText(`${days} días hábiles`);
+    const requestTraffic = watchRequests(requester);
     await sheet.getByRole("button", { name: "Enviar solicitud" }).click();
     await expect(sheet).toBeHidden({ timeout: 15_000 });
 
@@ -166,6 +187,10 @@ test.describe("Mis vacaciones — request, approve, balance", () => {
     await expect
       .poll(async () => (await requesterRequests()).map((r) => [r.status, r.days, r.from, r.to]))
       .toEqual([["pendiente", days, range.from, range.to]]);
+    // The balance refreshed from the query cache: server actions only, no RSC re-render.
+    expect(requestTraffic.actions()).toBeGreaterThanOrEqual(1);
+    expect(requestTraffic.rsc()).toBe(0);
+    requestTraffic.stop();
 
     // --- Administrator: approve from "Solicitudes del equipo" ---
     const admin = await openPage(browser, (page) => loginAsAdmin(page, BASE_URL));
@@ -181,10 +206,15 @@ test.describe("Mis vacaciones — request, approve, balance", () => {
     const dialog = admin.getByRole("dialog", { name: "Aprobar solicitud" });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     await dialog.getByLabel("Nota (opcional)").fill("Aprobado E2E");
+    const decideTraffic = watchRequests(admin);
     await dialog.getByRole("button", { name: "Aprobar", exact: true }).click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
     await expect(admin.getByText("Solicitud aprobada").first()).toBeVisible({ timeout: 15_000 });
     await expect(teamRequests.getByRole("row").filter({ hasText: REQUESTER_NAME })).toHaveCount(0, { timeout: 15_000 });
+    // The decision POST goes out; the row left through the optimistic cache update, with no RSC request.
+    expect(decideTraffic.actions()).toBeGreaterThanOrEqual(1);
+    expect(decideTraffic.rsc()).toBe(0);
+    decideTraffic.stop();
 
     const adminId = await adminStaffId();
     await expect

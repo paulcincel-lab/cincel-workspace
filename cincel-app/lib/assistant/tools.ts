@@ -10,9 +10,10 @@ import {
   resolveProjectsCapabilities,
 } from "@/lib/auth/permissions";
 import { unwrapActionResult } from "@/lib/actions/action-result";
-import { fetchProjectsAction, createProjectAction, deleteProjectAction } from "@/lib/actions/projects-actions";
+import { createProjectAction, deleteProjectAction } from "@/lib/actions/projects-actions";
 import { startTramoAction } from "@/lib/actions/tramo-start-actions";
-import { fetchTasksAction, createUserTaskAction, assignTaskAction, mergeTasksAction } from "@/lib/actions/tasks-actions";
+import { createUserTaskAction, assignTaskAction, mergeTasksAction } from "@/lib/actions/tasks-actions";
+import { listViewerProjects, listViewerTasks } from "@/lib/assistant/reads";
 import { fetchContactsAction, createContactAction, mergeContactsAction } from "@/lib/actions/contacts-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
@@ -69,12 +70,12 @@ export const list_projects = tool({
     status: z.string().optional(),
   }),
   execute: async ({ activeOnly, stage, status }) => {
-    const projects = await fetchProjectsAction({});
+    const projects = await listViewerProjects({});
 
     // Per-project overdue / blocked open-task counts for the risk score.
     // projectId is a real FK now, so no name-snapshot fallback is needed.
     const today = new Date().toISOString().slice(0, 10);
-    const openTasks = await fetchTasksAction({ status: ["pendiente", "en_proceso", "bloqueado"] });
+    const openTasks = await listViewerTasks({ status: ["pendiente", "en_proceso", "bloqueado"] });
     const byProject = new Map<string, { overdue: number; blocked: number }>();
     for (const t of openTasks) {
       const cur = byProject.get(t.projectId) ?? { overdue: 0, blocked: 0 };
@@ -149,7 +150,7 @@ export const list_activities_due = tool({
     const end = new Date(today.getTime() + withinDays * 86_400_000).toISOString().slice(0, 10);
     const start = today.toISOString().slice(0, 10);
 
-    const rows = await fetchTasksAction({
+    const rows = await listViewerTasks({
       projectId,
       managerId,
       status: onlyBlocked ? "bloqueado" : ["pendiente", "en_proceso", "bloqueado"],
@@ -179,7 +180,7 @@ export const team_workload_summary = tool({
   inputSchema: z.object({}),
   execute: async () => {
     const members = await fetchStaffAction();
-    const openTasks = await fetchTasksAction({ status: ["pendiente", "en_proceso", "bloqueado"] });
+    const openTasks = await listViewerTasks({ status: ["pendiente", "en_proceso", "bloqueado"] });
 
     const byManager = new Map<string, number>();
     for (const t of openTasks) {
@@ -347,7 +348,7 @@ export const assign_task = tool({
       workflowId = resolved.value.id;
     }
 
-    const matches = await fetchTasksAction({ search: descriptionContains, projectId, workflowId });
+    const matches = await listViewerTasks({ search: descriptionContains, projectId, workflowId });
     if (matches.length === 0) {
       return { ok: false as const, error: `No se encontró ninguna tarea que contenga "${descriptionContains}".` };
     }
@@ -395,16 +396,18 @@ export const create_client = tool({
     contactPhone: z.string().optional(),
   }),
   execute: async ({ name, kind, phone, acquisitionChannel, contactName, contactEmail, contactPhone }) => {
-    const contact = await createContactAction({
-      type: "cliente",
-      kind: CLIENT_KIND_MAP[kind],
-      name,
-      phone,
-      acquisitionChannel,
-      people: contactName
-        ? [{ name: contactName, email: contactEmail ?? null, phone: contactPhone ?? null, isPrimary: true, role: null }]
-        : undefined,
-    });
+    const contact = unwrapActionResult(
+      await createContactAction({
+        type: "cliente",
+        kind: CLIENT_KIND_MAP[kind],
+        name,
+        phone,
+        acquisitionChannel,
+        people: contactName
+          ? [{ name: contactName, email: contactEmail ?? null, phone: contactPhone ?? null, isPrimary: true, role: null }]
+          : undefined,
+      }),
+    );
     return { ok: true as const, id: contact.id, name: contact.name, kind: contact.kind };
   },
 });
@@ -455,16 +458,18 @@ export const onboard_client = tool({
       managerId = managerResolved.value.id;
     }
 
-    const contact = await createContactAction({
-      type: "cliente",
-      kind: CLIENT_KIND_MAP[kind],
-      name,
-      phone,
-      acquisitionChannel,
-      people: contactName
-        ? [{ name: contactName, email: contactEmail ?? null, phone: contactPhone ?? null, isPrimary: true, role: null }]
-        : undefined,
-    });
+    const contact = unwrapActionResult(
+      await createContactAction({
+        type: "cliente",
+        kind: CLIENT_KIND_MAP[kind],
+        name,
+        phone,
+        acquisitionChannel,
+        people: contactName
+          ? [{ name: contactName, email: contactEmail ?? null, phone: contactPhone ?? null, isPrimary: true, role: null }]
+          : undefined,
+      }),
+    );
 
     const project = unwrapActionResult(
       await createProjectAction({
@@ -507,7 +512,7 @@ export const onboard_client = tool({
       project: { id: project.id, name: project.name },
       workflow: workflowResolved.value.name,
       // Counts the auto-started tasks too, which the start above skips.
-      tasksCreated: (await fetchTasksAction({ projectId: project.id })).length,
+      tasksCreated: (await listViewerTasks({ projectId: project.id })).length,
     };
   },
 });
@@ -579,7 +584,7 @@ export const find_duplicates = tool({
       .filter(([, ids]) => ids.length > 1)
       .map(([name, ids]) => ({ name, count: ids.length }));
 
-    const tasks = await fetchTasksAction({});
+    const tasks = await listViewerTasks({});
     const taskGroups = new Map<string, { project: string; workflow: string | null; title: string; count: number }>();
     for (const t of tasks) {
       const key = `${t.projectId}::${t.workflowId ?? ""}::${t.title.trim().toLowerCase()}`;
@@ -680,7 +685,7 @@ export const merge_duplicate_activities = tool({
       workflowId = resolvedWorkflow.value.id;
     }
 
-    const matches = await fetchTasksAction({
+    const matches = await listViewerTasks({
       search: descriptionContains,
       projectId: resolved.value.id,
       workflowId,

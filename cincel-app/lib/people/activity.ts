@@ -4,6 +4,7 @@
  * No I/O; `fetchPersonaDetailAction` feeds it the rows of
  * `peopleRepository.listRecentActivity`.
  */
+import { zonedHourMinute } from "@/lib/dates/zoned-formatters";
 import { addIsoDays, localIsoDate } from "@/lib/people/aggregates";
 import { BASE_STATUS_LABEL } from "@/lib/tasks/status-options";
 import type { TaskStatus } from "@/lib/types/core";
@@ -115,15 +116,7 @@ export function activityText(row: ActivityEventRow, customStatusNames: ReadonlyM
 export function activityWhen(at: Date, now: Date, timeZone: string): string {
   const day = localIsoDate(at, timeZone);
   const today = localIsoDate(now, timeZone);
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    hour: "numeric",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(at);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
-  const time = `${hour}:${minute}`;
+  const time = zonedHourMinute(at, timeZone);
   if (day === today) return `hoy ${time}`;
   if (day === addIsoDays(today, -1)) return `ayer ${time}`;
   const [, month, date] = day.split("-").map(Number);

@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   uploadMyPhoto: vi.fn(),
   refresh: vi.fn(),
   toastSuccess: vi.fn(),
+  getAjustesPerfilPageData: vi.fn(),
+  fetchMyProfileAction: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh, push: vi.fn(), replace: vi.fn() }) }));
@@ -25,6 +27,13 @@ vi.mock("@/lib/actions/staff-actions", () => ({
 }));
 vi.mock("@/lib/auth/auth-actions", () => ({ changePasswordAction: mocks.changePasswordAction }));
 vi.mock("@/lib/profile-photo/reencode", () => ({ reencodePhoto: mocks.reencodePhoto, uploadMyPhoto: mocks.uploadMyPhoto }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
+  getAjustesAparienciaPageData: vi.fn(),
+  getAjustesNotificacionesPageData: vi.fn(),
+  getAjustesPerfilPageData: mocks.getAjustesPerfilPageData,
+  getAjustesIntegracionesPageData: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/me-actions", () => ({ fetchMyProfileAction: mocks.fetchMyProfileAction }));
 
 // Contract-shaped stand-ins for the shared patterns (FE §4.11), so this test covers the page content on its own.
 vi.mock("@/components/patterns/SettingsSection", () => ({
@@ -48,8 +57,10 @@ vi.mock("@/components/patterns/SettingsRow", () => ({
 }));
 
 import { qk } from "@/lib/query/keys";
+import type { AjustesPerfilPageData } from "@/lib/query/options/ajustes";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { MyProfile } from "@/lib/types/shell";
+import { GOOGLE_MANAGED_REFUSAL } from "@/lib/types/workspace-access";
 
 import {
   PerfilClient,
@@ -70,13 +81,24 @@ const BASE: PerfilData = {
   email: "ana@cincel.mx",
   puesto: "Diseñadora",
   emailSignature: "Ana Ruiz\nCincel",
-  photoUrl: null,
   week: null,
 };
 
-function renderPerfil(patch: Partial<PerfilData> = {}, client = createTestQueryClient()) {
+/**
+ * Perfil as the page renders it: `qk.ajustes.page('perfil')` and
+ * `qk.me.profile()` hydrated (`photoUrl` is the cached photo).
+ */
+function renderPerfil(
+  patch: Partial<PerfilData> & { photoUrl?: string | null } = {},
+  client = createTestQueryClient(),
+) {
+  const { photoUrl = null, ...profile } = patch;
+  client.setQueryData<AjustesPerfilPageData>(qk.ajustes.page("perfil"), { profile: { ...BASE, ...profile } });
+  if (client.getQueryData(qk.me.profile()) === undefined) {
+    client.setQueryData<MyProfile>(qk.me.profile(), { id: BASE.staffId, name: BASE.name, photoUrl });
+  }
   return renderWithQueryClient(
-    <PerfilClient initial={{ ...BASE, ...patch }}>
+    <PerfilClient>
       <PerfilFoto />
       <PerfilDatos />
       <PerfilHorasSemana />
@@ -112,14 +134,14 @@ afterEach(() => {
 });
 
 describe("Perfil photo", () => {
-  it("re-encodes the picked file, uploads it and refreshes the shell", async () => {
+  it("re-encodes the picked file and uploads it, with no router refresh", async () => {
     renderPerfil();
     const file = pickFile();
     await waitFor(() => expect(mocks.uploadMyPhoto).toHaveBeenCalledTimes(1));
     expect(mocks.reencodePhoto).toHaveBeenCalledWith(file);
     expect(mocks.uploadMyPhoto).toHaveBeenCalledWith(await mocks.reencodePhoto.mock.results[0].value);
-    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("Foto actualizada");
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("Foto actualizada"));
+    expect(mocks.refresh).not.toHaveBeenCalled();
     // The new photo can be removed right away.
     expect(screen.getByRole("button", { name: "Quitar" })).toBeTruthy();
   });
@@ -151,7 +173,7 @@ describe("Perfil photo", () => {
     });
     expect(mocks.removeMyPhotoAction).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Quitar" })).toBeNull());
-    expect(mocks.refresh).toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it("writes the uploaded photo into me.profile", async () => {
@@ -181,6 +203,36 @@ describe("Perfil photo", () => {
     mocks.photoFlags.removeMyPhotoAction = false;
     renderPerfil({ photoUrl: "/api/staff/x/photo?v=1" });
     expect(screen.queryByRole("button", { name: "Quitar" })).toBeNull();
+  });
+});
+
+describe("Perfil hydration and drafts", () => {
+  it("makes no client page-data or profile call on mount (the data is hydrated)", () => {
+    renderPerfil({ photoUrl: "/api/staff/x/photo?v=1" });
+    expect(mocks.getAjustesPerfilPageData).not.toHaveBeenCalled();
+    expect(mocks.fetchMyProfileAction).not.toHaveBeenCalled();
+    // The cached photo shows at once: it can be removed.
+    expect(screen.getByRole("button", { name: "Quitar" })).toBeTruthy();
+  });
+
+  it("a photo change elsewhere (me.profile) shows here without a refresh", async () => {
+    const client = seededClient(null);
+    renderPerfil({}, client);
+    expect(screen.queryByRole("button", { name: "Quitar" })).toBeNull();
+    act(() => {
+      client.setQueryData<MyProfile>(qk.me.profile(), { id: BASE.staffId, name: BASE.name, photoUrl: "/api/staff/x/photo?v=2" });
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Quitar" })).toBeTruthy());
+  });
+
+  it("leaving the page and coming back drops an unsaved draft", () => {
+    const client = createTestQueryClient();
+    const first = renderPerfil({}, client);
+    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Borrador" } });
+    first.unmount();
+
+    renderPerfil({}, client);
+    expect((screen.getByLabelText("Nombre") as HTMLInputElement).value).toBe("Ana Ruiz");
   });
 });
 
@@ -241,7 +293,45 @@ describe("Perfil fields", () => {
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("Perfil guardado"));
     expect(mocks.updateStaffAction).toHaveBeenCalledWith(BASE.staffId, { name: "Ana María Ruiz", phone: "5500000000" });
     expect(mocks.upsertStaffProfileAction).toHaveBeenCalledWith(BASE.staffId, { emailSignature: "Ana María" });
-    expect(mocks.refresh).toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("writes the save into qk.ajustes.page('perfil') and invalidates the profile, Equipo and the staff catalog", async () => {
+    mocks.updateStaffAction.mockResolvedValue({ ok: true, data: { id: BASE.staffId, name: "Ana María", phone: "" } });
+    const client = createTestQueryClient();
+    for (const key of [qk.personas.equipo(), qk.personas.detail(BASE.staffId), qk.catalog.staff()]) {
+      client.setQueryData(key, []);
+    }
+    renderPerfil({}, client);
+
+    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Ana María" } });
+    fireEvent.change(screen.getByLabelText("Teléfono"), { target: { value: "" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    });
+
+    await waitFor(() =>
+      expect(client.getQueryData<AjustesPerfilPageData>(qk.ajustes.page("perfil"))?.profile).toMatchObject({
+        name: "Ana María",
+        phone: "",
+      }),
+    );
+    for (const key of [qk.me.profile(), qk.personas.equipo(), qk.personas.detail(BASE.staffId), qk.catalog.staff()]) {
+      await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true));
+    }
+    // Saved: nothing left to save.
+    expect((screen.getByRole("button", { name: "Guardar cambios" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("refuses a Google-managed person's name change with the FORBIDDEN copy", async () => {
+    mocks.updateStaffAction.mockResolvedValue(GOOGLE_MANAGED_REFUSAL);
+    renderPerfil();
+    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Otra" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    });
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
   });
 
   it("only calls the action of what changed", async () => {

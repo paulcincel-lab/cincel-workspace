@@ -1,18 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { AuthenticatedUser, TeamMember } from "@/lib/auth/auth-service";
 import type { SystemAccessRole } from "@/lib/data/roles";
 
-const readStorageMock = vi.hoisted(() => vi.fn<(key: string) => string | null>(() => null));
-
-vi.mock("@/lib/repositories/browser-state-repository", () => ({
-  readStorage: readStorageMock,
-  writeStorage: vi.fn(),
-  removeStorage: vi.fn(),
-  readJsonStorage: vi.fn().mockReturnValue(null),
-}));
-
 import {
-  PERMISSIONS_CUSTOM_STORAGE_KEY,
   resolvePositionsCapabilities,
   resolvePositionsCapabilitiesFromDefaults,
 } from "@/lib/auth/permissions";
@@ -41,15 +31,15 @@ function makeUser(role: SystemAccessRole): AuthenticatedUser {
   return { member, email: "test@cincel.mx", access: role };
 }
 
+/** The old browser-only matrix (#950), written the way the removed editor saved it. */
+const LEGACY_MATRIX_KEY = "cincel.permissions.custom.v1";
+
 function storeOverrides(roles: Record<string, Record<string, unknown>>) {
-  readStorageMock.mockImplementation((key) =>
-    key === PERMISSIONS_CUSTOM_STORAGE_KEY ? JSON.stringify({ version: 1, roles }) : null
-  );
+  window.localStorage.setItem(LEGACY_MATRIX_KEY, JSON.stringify({ version: 1, roles }));
 }
 
-beforeEach(() => {
-  readStorageMock.mockReset();
-  readStorageMock.mockReturnValue(null);
+afterEach(() => {
+  window.localStorage.clear();
 });
 
 describe("positions capability", () => {
@@ -69,9 +59,9 @@ describe("positions capability", () => {
 });
 
 describe("stored role configs", () => {
-  it("a stored positions module overrides the defaults", () => {
+  it("a stored positions module is ignored: the client resolves the defaults, as the server does", () => {
     storeOverrides({ Colaborador: { positions: { canViewPositions: true, canManagePositions: true } } });
-    expect(resolvePositionsCapabilities(makeUser("Colaborador")).canManagePositions).toBe(true);
+    expect(resolvePositionsCapabilities(makeUser("Colaborador")).canManagePositions).toBe(false);
   });
 
   it("without stored overrides the defaults apply", () => {

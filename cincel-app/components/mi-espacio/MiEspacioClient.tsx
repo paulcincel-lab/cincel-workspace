@@ -1,9 +1,9 @@
 "use client";
 
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Bell, Lock } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useId, useState, type Dispatch, type SetStateAction } from "react";
-import { toast } from "sonner";
+import { useEffect, useId, useMemo } from "react";
 
 import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -12,32 +12,28 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
-import { fetchChecklistsAction, fetchNotesAction, fetchRemindersAction } from "@/lib/actions/my-space-actions";
 import { IMPLEMENTED } from "@/lib/actions/my-space-actions.flags";
 import { IMPLEMENTED as NOTIFICATIONS_IMPLEMENTED } from "@/lib/actions/notifications-actions.flags";
 import { actionErrorText } from "@/lib/errors";
-import { INBOX_TAB_PARAM, parseInboxTab } from "@/lib/my-space/inbox";
-import { sortNotes, upsertNote } from "@/lib/my-space/note-ui";
+import { sortNotes } from "@/lib/my-space/note-ui";
 import { formatReminderWhen, remindersForTodayAndTomorrow } from "@/lib/my-space/reminder-time";
-import { todayTomorrowRange } from "@/lib/my-space/today-tomorrow";
-import type { Checklist, Note, NotificationsPage, Reminder } from "@/lib/types/redesign";
+import {
+  flattenPages,
+  meChecklistsOptions,
+  meNotesOptions,
+  meRemindersOptions,
+} from "@/lib/query/options/mi-espacio";
 
 import { ChecklistCard } from "./ChecklistCard";
 import { GmailReader } from "./GmailReader";
-import { Inbox, type InboxProps } from "./Inbox";
+import { Inbox } from "./Inbox";
 import { NoteEditor } from "./NoteEditor";
 import { NotesGrid } from "./NotesGrid";
-import { QuickCapture, type QuickCaptureProps } from "./QuickCapture";
+import { QuickCapture } from "./QuickCapture";
 import { NEW_NOTE, NOTE_PARAM, THREAD_PARAM, replaceMiEspacioParam } from "./search-params";
 
 export type MiEspacioClientProps = {
-  notifications: NotificationsPage;
-  gmail: InboxProps["gmail"];
-  /** Today and tomorrow. */
-  reminders: Reminder[];
-  checklists: Checklist[];
-  notes: Note[];
-  /** `?nota=<id>` (or "nueva") opens `NoteEditor`. */
+  /** `?nota=<id>` (or "nueva") on the first render; afterwards the URL is read. */
   noteParam: string | null;
 };
 
@@ -45,28 +41,15 @@ export const MI_ESPACIO_TITLE = "Mi espacio";
 export const MI_ESPACIO_DESCRIPTION = "Tu bandeja, notas, checklists y recordatorios.";
 export const MI_ESPACIO_PRIVATE_CHIP = "Solo tú lo ves";
 
-function upsert<T extends { id: string }>(list: T[], item: T): T[] {
-  return list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [item, ...list];
-}
-
-/** Local copy of a server list; a new prop (after `router.refresh()`) replaces it. */
-function useSyncedList<T>(initial: T[]): [T[], Dispatch<SetStateAction<T[]>>] {
-  const [list, setList] = useState(initial);
-  const [source, setSource] = useState(initial);
-  if (initial !== source) {
-    setSource(initial);
-    setList(initial);
-  }
-  return [list, setList];
-}
-
 /**
  * /mi-espacio client (redesign FE §3.3, §5): header, quick capture, the
  * Bandeja (left), Recordatorios and Checklists (right), the notes grid below,
- * and the editors opened by `?nota=` / `?correo=`. Every section exists only
- * while its read action is implemented (FE §9 stubs rule). The three
- * presentation styles are rendered by the widgets inside each section; this
- * component never branches on the style.
+ * and the editors opened by `?nota=` / `?correo=`. Every list reads its query
+ * (`me.*`, seeded by the page); mutations patch those queries, so nothing
+ * here keeps a copy of server data. Every section exists only while its read
+ * action is implemented (FE §9 stubs rule). The three presentation styles
+ * are rendered by the widgets inside each section; this component never
+ * branches on the style.
  */
 export function MiEspacioClient(props: MiEspacioClientProps) {
   const searchParams = useSearchParams();
@@ -74,36 +57,35 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
   const remindersHeadingId = useId();
   const checklistsHeadingId = useId();
 
-  const [notes, setNotes] = useSyncedList(props.notes);
-  const [checklists, setChecklists] = useSyncedList(props.checklists);
-  const [reminders, setReminders] = useSyncedList(props.reminders);
+  const notesQuery = useInfiniteQuery({ ...meNotesOptions(), enabled: IMPLEMENTED.fetchNotesAction });
+  const checklistsQuery = useInfiniteQuery({ ...meChecklistsOptions(), enabled: IMPLEMENTED.fetchChecklistsAction });
+  const remindersQuery = useQuery({ ...meRemindersOptions(), enabled: IMPLEMENTED.fetchRemindersAction });
+
+  const notes = useMemo(() => sortNotes(flattenPages(notesQuery.data?.pages)), [notesQuery.data]);
+  const checklists = useMemo(() => flattenPages(checklistsQuery.data?.pages), [checklistsQuery.data]);
+  const reminders = remindersQuery.data ?? [];
 
   const showInbox = NOTIFICATIONS_IMPLEMENTED.fetchNotificationsAction || GMAIL_IMPLEMENTED.fetchGmailStatusAction;
   const showReminders = IMPLEMENTED.fetchRemindersAction;
   const showChecklists = IMPLEMENTED.fetchChecklistsAction;
   const showNotes = IMPLEMENTED.fetchNotesAction;
 
-  const tab = parseInboxTab(searchParams?.get(INBOX_TAB_PARAM));
   const threadId = GMAIL_IMPLEMENTED.fetchGmailThreadAction ? (searchParams?.get(THREAD_PARAM) ?? null) : null;
 
   // `?nota=<id>` | `?nota=nueva` → NoteEditor; an id that is not one of my live notes → NOT_FOUND copy.
   const noteParam = showNotes ? (searchParams ? searchParams.get(NOTE_PARAM) : props.noteParam) : null;
   const isNewNote = noteParam === NEW_NOTE && IMPLEMENTED.createNoteAction;
   const editingNote = noteParam && noteParam !== NEW_NOTE ? (notes.find((n) => n.id === noteParam) ?? null) : null;
-  const noteNotFound = noteParam !== null && noteParam !== NEW_NOTE && editingNote === null;
+  // A deep link to an older note: load the next pages until it shows up or the list ends.
+  const seekingNote =
+    noteParam !== null && noteParam !== NEW_NOTE && editingNote === null && (notesQuery.hasNextPage ?? false);
+  const { fetchNextPage: fetchMoreNotes, isFetchingNextPage: fetchingMoreNotes } = notesQuery;
+  useEffect(() => {
+    if (seekingNote && !fetchingMoreNotes) void fetchMoreNotes();
+  }, [seekingNote, fetchingMoreNotes, fetchMoreNotes]);
+  const noteNotFound =
+    noteParam !== null && noteParam !== NEW_NOTE && editingNote === null && !seekingNote && !notesQuery.isPending;
   const editorOpen = isNewNote || (editingNote !== null && IMPLEMENTED.updateNoteAction);
-
-  const onCreated: QuickCaptureProps["onCreated"] = async (kind) => {
-    try {
-      if (kind === "nota" && IMPLEMENTED.fetchNotesAction) setNotes(sortNotes(await fetchNotesAction()));
-      if (kind === "checklist" && IMPLEMENTED.fetchChecklistsAction) setChecklists(await fetchChecklistsAction());
-      if (kind === "recordatorio" && IMPLEMENTED.fetchRemindersAction) {
-        setReminders(await fetchRemindersAction(todayTomorrowRange(new Date())));
-      }
-    } catch (err) {
-      toast.error(actionErrorText(err));
-    }
-  };
 
   const closeNote = () => replaceMiEspacioParam(NOTE_PARAM, null);
 
@@ -124,7 +106,7 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
         actions={<EstiloSwitch />}
       />
 
-      <QuickCapture onCreated={onCreated} />
+      <QuickCapture />
 
       {noteNotFound ? (
         <Alert variant="destructive">
@@ -140,7 +122,7 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
       <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-start">
         {showInbox ? (
           <div className="flex min-w-0 flex-col gap-4 md:flex-[999_1_560px]">
-            <Inbox notifications={props.notifications} gmail={props.gmail} tab={tab} />
+            <Inbox />
             {threadId ? (
               <GmailReader threadId={threadId} onClose={() => replaceMiEspacioParam(THREAD_PARAM, null)} />
             ) : null}
@@ -188,14 +170,14 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
                   {checklists.length === 0 ? (
                     <p className="text-sm text-muted-foreground">Aún no tienes checklists.</p>
                   ) : (
-                    checklists.map((checklist) => (
-                      <ChecklistCard
-                        key={checklist.id}
-                        checklist={checklist}
-                        onChange={(next) => setChecklists((current) => upsert(current, next))}
-                      />
-                    ))
+                    checklists.map((checklist) => <ChecklistCard key={checklist.id} checklist={checklist} />)
                   )}
+                  {checklistsQuery.hasNextPage ? (
+                    <MoreButton
+                      pending={checklistsQuery.isFetchingNextPage}
+                      onClick={() => void checklistsQuery.fetchNextPage()}
+                    />
+                  ) : null}
                 </CardContent>
               </Card>
             ) : null}
@@ -213,6 +195,9 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
             onOpen={(note) => replaceMiEspacioParam(NOTE_PARAM, note.id)}
             onNew={IMPLEMENTED.createNoteAction ? () => replaceMiEspacioParam(NOTE_PARAM, NEW_NOTE) : undefined}
           />
+          {notesQuery.hasNextPage ? (
+            <MoreButton pending={notesQuery.isFetchingNextPage} onClick={() => void notesQuery.fetchNextPage()} />
+          ) : null}
         </section>
       ) : null}
 
@@ -224,16 +209,22 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
             if (!open) closeNote();
           }}
           onSaved={(note) => {
-            setNotes((current) => upsertNote(current, note));
             if (isNewNote) replaceMiEspacioParam(NOTE_PARAM, note.id);
           }}
-          onArchived={(note) => {
-            setNotes((current) => current.filter((n) => n.id !== note.id));
-            closeNote();
-          }}
-          onRestored={(note) => setNotes((current) => upsertNote(current, note))}
+          onArchived={closeNote}
         />
       ) : null}
+    </div>
+  );
+}
+
+/** "Ver más": the next bounded page of notes or checklists. */
+function MoreButton({ pending, onClick }: { pending: boolean; onClick(): void }) {
+  return (
+    <div className="flex justify-center">
+      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={onClick}>
+        {pending ? "Cargando…" : "Ver más"}
+      </Button>
     </div>
   );
 }

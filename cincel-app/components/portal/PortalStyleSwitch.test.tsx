@@ -12,6 +12,8 @@ vi.mock("@/components/shell/EstiloSwitch", () => ({
   EstiloSwitch: ({ scope }: { scope?: string }) => <div data-testid="estilo" data-scope={scope} />,
 }));
 
+import { StyleProvider } from "@/components/shell/StyleProvider";
+
 import PortalStyleSwitch, { isPortalStyledPage } from "./PortalStyleSwitch";
 
 describe("PortalStyleSwitch", () => {
@@ -39,5 +41,27 @@ describe("PortalStyleSwitch", () => {
     nav.pathname = "/portal";
     render(<PortalStyleSwitch />);
     expect(screen.queryByTestId("estilo")).toBeNull();
+  });
+
+  it("renders nothing when the organization fixed the style, even on Resumen", () => {
+    nav.pathname = "/portal/proyectos/p1";
+    nav.tab = null;
+    render(
+      <StyleProvider style="visual" scope="portal" fixedByOrg>
+        <PortalStyleSwitch />
+      </StyleProvider>,
+    );
+    expect(screen.queryByTestId("estilo")).toBeNull();
+  });
+
+  it("renders the switch when the client may choose", () => {
+    nav.pathname = "/portal/proyectos/p1";
+    nav.tab = null;
+    render(
+      <StyleProvider style="visual" scope="portal" fixedByOrg={false}>
+        <PortalStyleSwitch />
+      </StyleProvider>,
+    );
+    expect(screen.getByTestId("estilo")).toBeTruthy();
   });
 });

@@ -130,4 +130,39 @@ describe.skipIf(!url)("assistant approval audit (test DB)", async () => {
       }),
     ).toBe(true);
   });
+
+  it("records a turn's proposals and decisions in batches (Phase 10, #944)", async () => {
+    const row = (toolCallId: string) => ({
+      threadId,
+      staffId,
+      toolCallId,
+      tool: "create_task",
+      input: {},
+      summary: `Lote ${toolCallId}`,
+    });
+    const created = await approvals.recordProposedActions(db, [row("batch-1"), row("batch-2"), row("batch-3")]);
+    expect([...created].sort()).toEqual(["batch-1", "batch-2", "batch-3"]);
+    // Repeats are no-ops.
+    expect([...(await approvals.recordProposedActions(db, [row("batch-1"), row("batch-4")]))]).toEqual(["batch-4"]);
+    expect((await approvals.recordProposedActions(db, [])).size).toBe(0);
+
+    const changed = await approvals.recordActionDecisions(db, {
+      threadId,
+      decisions: [
+        { toolCallId: "batch-1", approved: true },
+        { toolCallId: "batch-2", approved: false },
+        { toolCallId: "batch-3", approved: true },
+        { toolCallId: "unknown", approved: true },
+      ],
+    });
+    expect([...changed].sort()).toEqual(["batch-1", "batch-2", "batch-3"]);
+    expect((await action("batch-1"))[0].status).toBe("confirmed");
+    expect((await action("batch-2"))[0].status).toBe("cancelled");
+    expect((await action("batch-3"))[0].status).toBe("confirmed");
+
+    // Only `proposed` rows change.
+    const again = await approvals.recordActionDecisions(db, { threadId, decisions: [{ toolCallId: "batch-1", approved: false }] });
+    expect(again.size).toBe(0);
+    expect((await action("batch-1"))[0].status).toBe("confirmed");
+  });
 });

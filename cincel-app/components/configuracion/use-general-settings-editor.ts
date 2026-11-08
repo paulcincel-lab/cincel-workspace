@@ -1,11 +1,14 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 
 import { restoreGeneralSettingsAction, saveGeneralSettingsAction } from "@/lib/actions/app-settings-actions";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { orgGeneralOptions } from "@/lib/query/options/org";
 import {
-  buildDefaultGeneralSettings,
+  buildDefaultLoadedGeneralSettings,
   clearLegacyGeneralSettings,
   GENERAL_SETTINGS_LOGO_MAX_BYTES,
   type GeneralSettings,
@@ -13,6 +16,12 @@ import {
   readLegacyGeneralSettings,
 } from "@/lib/settings/general-settings";
 import { type HeaderLinkErrors, headerLinkErrors } from "@/lib/settings/header-links";
+import { useGeneralForm, useGeneralFormApi, type LogoScope } from "@/lib/stores/ajustes/general-form-store";
+
+export type { LogoScope } from "@/lib/stores/ajustes/general-form-store";
+
+const SAVE_ERROR = "No se pudo guardar la configuración. Intenta de nuevo.";
+const RESTORE_ERROR = "No se pudo restaurar la configuración. Intenta de nuevo.";
 
 function loadImageAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -34,29 +43,46 @@ function loadImageAsDataUrl(file: File): Promise<string> {
   });
 }
 
-export type LogoScope = "company" | "appearance";
+/**
+ * The saved general settings (`qk.org.general()`), seeded by the root layout;
+ * never fetched on mount. Defaults until the seed is there.
+ */
+export function useSavedGeneralSettings(): LoadedGeneralSettings {
+  const { data } = useQuery({
+    ...orgGeneralOptions(),
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  return useMemo(() => data ?? buildDefaultLoadedGeneralSettings(), [data]);
+}
+
+/** The avatar-menu link errors of a draft (Ajustes › General validates them before saving). */
+export function generalLinkErrors(settings: GeneralSettings, headerLinks: boolean): HeaderLinkErrors {
+  return headerLinks ? headerLinkErrors(settings.company) : {};
+}
 
 export type GeneralSettingsEditorOptions = {
-  general: LoadedGeneralSettings;
   canManage: boolean;
   /** Ajustes › General only: validate the avatar-menu link fields before saving. */
   headerLinks?: boolean;
 };
 
-/** State and actions of the General settings editor of Ajustes › General. */
-export function useGeneralSettingsEditor({ general, canManage, headerLinks = false }: GeneralSettingsEditorOptions) {
-  const router = useRouter();
-  const defaultSettings = useMemo(() => buildDefaultGeneralSettings(), []);
-
-  const [settings, setSettings] = useState<GeneralSettings>(general.settings);
-  const [hasCustomConfig, setHasCustomConfig] = useState<boolean>(general.hasCustom);
-  // What's stored now — "Guardar cambios" enables on any difference from it.
-  const [savedSettings, setSavedSettings] = useState<GeneralSettings>(general.settings);
-  const [savedAt, setSavedAt] = useState<string | null>(general.savedAt);
-  const [error, setError] = useState<string | null>(null);
-  const [logoError, setLogoError] = useState<{ scope: LogoScope; message: string } | null>(null);
-  const [pickedUpLegacy, setPickedUpLegacy] = useState(false);
-  const [pending, startTransition] = useTransition();
+/**
+ * State and actions of the General settings editor of Ajustes › General. The
+ * draft and errors live in the page's `GeneralFormStoreProvider`; the saved
+ * settings are `qk.org.general()`. Save and restore write the result back with
+ * `setQueryData`, so every `useGeneralSettings()` reader updates at once; the
+ * actions also revalidate the root layout for its server-rendered parts.
+ */
+export function useGeneralSettingsEditor({ canManage, headerLinks = false }: GeneralSettingsEditorOptions) {
+  const general = useSavedGeneralSettings();
+  const form = useGeneralFormApi();
+  const settings = useGeneralForm((s) => s.settings);
+  const error = useGeneralForm((s) => s.error);
+  const logoError = useGeneralForm((s) => s.logoError);
+  const pickedUpLegacy = useGeneralForm((s) => s.pickedUpLegacy);
+  const defaultSettings = useMemo(() => buildDefaultLoadedGeneralSettings().settings, []);
 
   // One-time pickup: a value saved in this browser before the settings moved to the server.
   useEffect(() => {
@@ -67,9 +93,8 @@ export function useGeneralSettingsEditor({ general, canManage, headerLinks = fal
     if (!canManage) return;
     const legacy = readLegacyGeneralSettings();
     if (legacy && JSON.stringify(legacy) !== JSON.stringify(general.settings)) {
-      // Browser storage is only readable after mount.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSettings((current) => ({
+      const current = form.getState().settings;
+      form.getState().pickUpLegacy({
         ...legacy,
         // The old browser value predates the link fields; keep the server ones.
         company: {
@@ -77,46 +102,37 @@ export function useGeneralSettingsEditor({ general, canManage, headerLinks = fal
           instagramUrl: current.company.instagramUrl,
           contactEmail: current.company.contactEmail,
         },
-      }));
-      setPickedUpLegacy(true);
+      });
     }
-  }, [canManage, general.hasCustom, general.settings]);
+  }, [canManage, form, general.hasCustom, general.settings]);
 
-  const isDirty = useMemo(() => JSON.stringify(settings) !== JSON.stringify(savedSettings), [savedSettings, settings]);
+  const save = useActionMutation(saveGeneralSettingsAction, {
+    setData: (qc, result, next) => {
+      qc.setQueryData<LoadedGeneralSettings>(qk.org.general(), {
+        settings: next as GeneralSettings,
+        hasCustom: true,
+        savedAt: result.savedAt,
+      });
+      form.getState().replace(next as GeneralSettings);
+      clearLegacyGeneralSettings();
+    },
+    onFormError: () => form.getState().setError(SAVE_ERROR),
+  });
 
-  const linkErrors: HeaderLinkErrors = useMemo(
-    () => (headerLinks ? headerLinkErrors(settings.company) : {}),
-    [headerLinks, settings.company],
-  );
+  const restore = useActionMutation(restoreGeneralSettingsAction, {
+    setData: (qc) => {
+      qc.setQueryData<LoadedGeneralSettings>(qk.org.general(), buildDefaultLoadedGeneralSettings());
+      form.getState().replace(defaultSettings);
+    },
+    onFormError: () => form.getState().setError(RESTORE_ERROR),
+  });
+
+  const isDirty = useMemo(() => JSON.stringify(settings) !== JSON.stringify(general.settings), [general.settings, settings]);
+
+  const linkErrors: HeaderLinkErrors = useMemo(() => generalLinkErrors(settings, headerLinks), [headerLinks, settings]);
   const hasLinkErrors = Object.keys(linkErrors).length > 0;
 
-  const updateCompanyField = <TKey extends keyof GeneralSettings["company"]>(
-    key: TKey,
-    value: GeneralSettings["company"][TKey],
-  ) => {
-    setSettings((current) => ({ ...current, company: { ...current.company, [key]: value } }));
-  };
-
-  const updateRegionalField = <TKey extends keyof GeneralSettings["regional"]>(
-    key: TKey,
-    value: GeneralSettings["regional"][TKey],
-  ) => {
-    setSettings((current) => ({ ...current, regional: { ...current.regional, [key]: value } }));
-  };
-
-  const updateAppearanceField = <TKey extends keyof GeneralSettings["appearance"]>(
-    key: TKey,
-    value: GeneralSettings["appearance"][TKey],
-  ) => {
-    setSettings((current) => ({ ...current, appearance: { ...current.appearance, [key]: value } }));
-  };
-
-  const updateSystemField = <TKey extends keyof GeneralSettings["system"]>(
-    key: TKey,
-    value: GeneralSettings["system"][TKey],
-  ) => {
-    setSettings((current) => ({ ...current, system: { ...current.system, [key]: value } }));
-  };
+  const { setCompanyField, setRegionalField, setAppearanceField, setSystemField, setLogoError } = form.getState();
 
   const handleLogoUpload = async (scope: LogoScope, field: "logoUrl" | "systemLogoUrl", file: File | null) => {
     setLogoError(null);
@@ -139,12 +155,12 @@ export function useGeneralSettingsEditor({ general, canManage, headerLinks = fal
       const dataUrl = await loadImageAsDataUrl(file);
 
       if (scope === "company" && field === "logoUrl") {
-        updateCompanyField("logoUrl", dataUrl);
+        setCompanyField("logoUrl", dataUrl);
         return;
       }
 
       if (scope === "appearance" && field === "systemLogoUrl") {
-        updateAppearanceField("systemLogoUrl", dataUrl);
+        setAppearanceField("systemLogoUrl", dataUrl);
       }
     } catch {
       setLogoError({ scope, message: "No se pudo cargar la imagen. Intenta de nuevo." });
@@ -169,57 +185,31 @@ export function useGeneralSettingsEditor({ general, canManage, headerLinks = fal
 
   const saveChanges = () => {
     if (hasLinkErrors) return;
-    setError(null);
-    const next = toSave();
-    startTransition(async () => {
-      try {
-        const result = await saveGeneralSettingsAction(next);
-        setSavedAt(result.savedAt);
-        setSettings(next);
-        setSavedSettings(next);
-        setHasCustomConfig(true);
-        setPickedUpLegacy(false);
-        clearLegacyGeneralSettings();
-        router.refresh();
-      } catch {
-        setError("No se pudo guardar la configuración. Intenta de nuevo.");
-      }
-    });
+    form.getState().setError(null);
+    save.mutate(toSave());
   };
 
   const restoreDefaults = () => {
-    setError(null);
-    startTransition(async () => {
-      try {
-        await restoreGeneralSettingsAction();
-        setSettings(defaultSettings);
-        setSavedSettings(defaultSettings);
-        setHasCustomConfig(false);
-        setSavedAt(null);
-        setPickedUpLegacy(false);
-        router.refresh();
-      } catch {
-        setError("No se pudo restaurar la configuración. Intenta de nuevo.");
-      }
-    });
+    form.getState().setError(null);
+    restore.mutate(undefined);
   };
 
   return {
     settings,
-    savedAt,
-    hasCustomConfig,
+    savedAt: general.savedAt,
+    hasCustomConfig: general.hasCustom,
     isDirty,
-    pending,
+    pending: save.isPending || restore.isPending,
     error,
     logoError,
     pickedUpLegacy,
     linkErrors,
     hasLinkErrors,
     canManage,
-    updateCompanyField,
-    updateRegionalField,
-    updateAppearanceField,
-    updateSystemField,
+    updateCompanyField: setCompanyField,
+    updateRegionalField: setRegionalField,
+    updateAppearanceField: setAppearanceField,
+    updateSystemField: setSystemField,
     handleLogoUpload,
     saveChanges,
     restoreDefaults,

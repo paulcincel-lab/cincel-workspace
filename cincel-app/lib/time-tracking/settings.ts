@@ -2,35 +2,23 @@
  * Control de horario settings (redesign BE §3.12, §7.7): `app_settings('time_tracking')`,
  * versioned `{ version: 1, data }` like `general_settings`.
  *
- * The defaults, the parser and the validation are pure and client-safe; the
- * read and the write load the repository lazily so a client component can
- * import `DEFAULT_TIME_TRACKING_SETTINGS` without pulling in the database.
+ * The parser and the validation are pure; the read and the write load the
+ * repository lazily. Client components import the defaults from
+ * `settings-defaults.ts`: a bundler still follows the lazy `import()` here.
  */
 import { cache } from "react";
 
 import { OFFICIAL_CINCEL_ROLES } from "@/lib/data/roles";
 import { addDays, localDate } from "@/lib/time-tracking/local-time";
+import { DEFAULT_TIME_TRACKING_SETTINGS } from "@/lib/time-tracking/settings-defaults";
 import type { TimeTrackingSettings } from "@/lib/types/redesign";
 import { TimeTrackingSettingsSchema, versionedSetting } from "@/lib/validation/redesign";
 
 export { TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/local-time";
 
-export const TIME_TRACKING_SETTING_KEY = "time_tracking";
+export { DEFAULT_TIME_TRACKING_SETTINGS };
 
-/** The seeded value (BE §4); also the fallback when the row is missing or unreadable. */
-export const DEFAULT_TIME_TRACKING_SETTINGS: TimeTrackingSettings = {
-  enabled: false,
-  requiredFrom: null,
-  dayStart: "09:00",
-  dayEnd: "18:00",
-  hoursPerDay: 8,
-  lateToleranceMin: 15,
-  workDays: [1, 2, 3, 4, 5],
-  promptAtLogin: true,
-  autoCloseAt: "20:00",
-  lunchMinutes: 60,
-  exemptRoles: [],
-};
+export const TIME_TRACKING_SETTING_KEY = "time_tracking";
 
 const StoredTimeTrackingSettingsSchema = versionedSetting(TimeTrackingSettingsSchema);
 

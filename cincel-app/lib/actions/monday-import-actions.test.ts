@@ -169,11 +169,11 @@ describe("project flow monday actions", () => {
   });
 
   describe("saveMondayStatusMapAction", () => {
-    it("saves the whole map and revalidates the wizard", async () => {
+    it("saves the whole map and revalidates no route (the wizard updates monday.choices)", async () => {
       const result = await saveMondayStatusMapAction(statusMap);
       expect(result).toEqual({ ok: true, statusMap });
       expect(service.saveStatusMap).toHaveBeenCalledWith(expect.anything(), statusMap);
-      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/importar-monday");
+      expect(revalidatePath).not.toHaveBeenCalled();
     });
 
     it("fills a missing priority with null", async () => {

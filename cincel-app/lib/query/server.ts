@@ -31,7 +31,7 @@ export function prefetch<TData>(
   options: { queryKey: QueryKey; staleTime?: FetchQueryOptions<TData, Error, TData, QueryKey>["staleTime"] },
   loader: () => Promise<NoInfer<TData>>,
 ): Promise<void> {
-  return qc.prefetchQuery({
+  return qc.prefetchQuery<TData, Error, TData, QueryKey>({
     queryKey: options.queryKey,
     queryFn: loader,
     ...(options.staleTime !== undefined ? { staleTime: options.staleTime } : {}),

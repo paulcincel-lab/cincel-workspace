@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import axe from "axe-core";
 
 vi.mock("@/components/patterns/SettingsSection", async () => ({
@@ -10,6 +10,7 @@ vi.mock("@/components/patterns/SettingsRow", async () => ({
   SettingsRow: (await import("./general-settings-test-utils")).TestSettingsRow,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({ getAjustesGeneralPageData: vi.fn() }));
 vi.mock("@/lib/actions/app-settings-actions", () => ({
   saveGeneralSettingsAction: vi.fn(),
   restoreGeneralSettingsAction: vi.fn(),
@@ -17,6 +18,8 @@ vi.mock("@/lib/actions/app-settings-actions", () => ({
 
 import { AjustesGeneralClient } from "./AjustesGeneralClient";
 import { GeneralLinksSection } from "./GeneralLinksSection";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { buildDefaultLoadedGeneralSettings } from "@/lib/settings/general-settings";
 import { THEME_IDS } from "@/lib/ui/themes";
 
@@ -27,10 +30,14 @@ async function seriousViolations(container: HTMLElement) {
 }
 
 function renderPage() {
-  return render(
-    <AjustesGeneralClient general={buildDefaultLoadedGeneralSettings()} canManage canManageAppearance>
+  const client = createTestQueryClient();
+  client.setQueryData(qk.org.general(), buildDefaultLoadedGeneralSettings());
+  client.setQueryData(qk.ajustes.page("general"), { canManage: true, canManageAppearance: true });
+  return renderWithQueryClient(
+    <AjustesGeneralClient>
       <GeneralLinksSection />
     </AjustesGeneralClient>,
+    { client },
   );
 }
 

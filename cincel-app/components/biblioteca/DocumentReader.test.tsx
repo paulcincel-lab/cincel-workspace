@@ -1,12 +1,16 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 
-import type { AssistantSheetProps } from "@/components/asistente/AssistantSheet";
 import { documentToc, empresaDoc, empresaDocLinks } from "@/lib/biblioteca/catalog";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
 
-import { bibliotecaFixture } from "./biblioteca.fixtures";
-import { DocumentReader } from "./DocumentReader";
+import { bibliotecaFixture, seededBibliotecaClient } from "./biblioteca.fixtures";
+import { DocumentReader, EmpresaDocument } from "./DocumentReader";
 
 const flags = vi.hoisted(() => ({
   IMPLEMENTED: {
@@ -19,12 +23,9 @@ const flags = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/assistant-actions.flags", () => flags);
 
-const sheet = vi.hoisted(() => ({ renders: [] as AssistantSheetProps[] }));
-vi.mock("@/components/asistente/AssistantSheet", () => ({
-  AssistantSheet: (props: AssistantSheetProps) => {
-    sheet.renders.push(props);
-    return props.open ? <div role="dialog" aria-label="Asistente">{props.context.route}</div> : null;
-  },
+vi.mock("@/lib/actions/page-data/biblioteca-actions", () => ({
+  getBibliotecaPageData: vi.fn(),
+  getMisVacacionesPageData: vi.fn(),
 }));
 
 // The workspace viewer embeds Drive iframes; the reader only needs to hand it the part.
@@ -42,20 +43,18 @@ const parts = empresaDocLinks(bibliotecaFixture(), "manual-de-la-empresa");
 const toc = documentToc(parts, doc);
 
 function renderReader(partIndex = 1, driveEnabled = false) {
-  return render(
+  return renderWithQueryClient(
     <DocumentReader
       doc={parts[partIndex]}
       toc={toc}
       companyDoc={{ slug: doc.slug, title: doc.title, description: doc.description }}
-      driveEnabled={driveEnabled}
     />,
+    { client: seededBibliotecaClient("empresa", parts, { driveEnabled }) },
   );
 }
 
 describe("DocumentReader", () => {
   beforeEach(() => {
-    window.localStorage.clear();
-    sheet.renders = [];
     setAssistantFlags(false);
   });
   afterEach(() => cleanup());
@@ -84,7 +83,7 @@ describe("DocumentReader", () => {
     expect(details.getByText("Todo el equipo")).toBeTruthy();
   });
 
-  it("offers 'Descargar PDF' only when the Drive integration is configured", () => {
+  it("offers 'Descargar PDF' only when the Drive status says it is configured", () => {
     renderReader(0, false);
     expect(screen.queryByRole("link", { name: /Descargar/ })).toBeNull();
     cleanup();
@@ -94,10 +93,9 @@ describe("DocumentReader", () => {
     expect(downloads[0].getAttribute("href")).toBe("/api/google/drive/file/docmanual1/content");
   });
 
-  it("hides 'Preguntar al asistente…' and never mounts the sheet while the assistant flags are off", () => {
+  it("hides 'Preguntar al asistente…' while the assistant flags are off", () => {
     renderReader(1);
     expect(screen.queryByRole("button", { name: "Preguntar al asistente sobre este documento" })).toBeNull();
-    expect(sheet.renders).toEqual([]);
   });
 
   it("stays hidden while any assistant flag is still off", () => {
@@ -105,16 +103,30 @@ describe("DocumentReader", () => {
     flags.IMPLEMENTED.fetchAssistantActionsAction = false;
     renderReader(1);
     expect(screen.queryByRole("button", { name: "Preguntar al asistente sobre este documento" })).toBeNull();
-    expect(sheet.renders).toEqual([]);
   });
 
-  it("opens the assistant sheet with the document in context when the flags are on", () => {
+  it("opens the shared assistant sheet with the document's route as context", () => {
+    setAssistantFlags(true);
+    const openAssistant = vi.spyOn(useAssistantUi.getState(), "openAssistant");
+    renderReader(1);
+    fireEvent.click(screen.getByRole("button", { name: "Preguntar al asistente sobre este documento" }));
+    expect(openAssistant).toHaveBeenCalledWith({ context: { route: "/biblioteca/empresa/manual-de-la-empresa?parte=manual-2" } });
+    openAssistant.mockRestore();
+  });
+
+  it("puts the store in the open state with the route override", () => {
     setAssistantFlags(true);
     renderReader(1);
     fireEvent.click(screen.getByRole("button", { name: "Preguntar al asistente sobre este documento" }));
-    const dialog = screen.getByRole("dialog", { name: "Asistente" });
-    expect(dialog.textContent).toBe("/biblioteca/empresa/manual-de-la-empresa?parte=manual-2");
-    expect(sheet.renders.at(-1)?.context).toEqual({ route: "/biblioteca/empresa/manual-de-la-empresa?parte=manual-2" });
+    expect(useAssistantUi.getState()).toMatchObject({
+      open: true,
+      contextOverride: { route: "/biblioteca/empresa/manual-de-la-empresa?parte=manual-2" },
+    });
+  });
+
+  it("mounts no assistant sheet of its own (no AssistantSheet import)", () => {
+    const source = readFileSync(join(__dirname, "DocumentReader.tsx"), "utf8");
+    expect(source).not.toMatch(/AssistantSheet|@ai-sdk\/react|react-markdown|recharts/);
   });
 
   it("remembers the part in the existing recent-documents key", () => {
@@ -125,5 +137,23 @@ describe("DocumentReader", () => {
       section: "empresa",
       href: "/biblioteca/empresa/manual-de-la-empresa?parte=manual-2",
     });
+  });
+});
+
+describe("EmpresaDocument", () => {
+  afterEach(() => cleanup());
+
+  it("reads the document's parts from biblioteca.links('empresa') and shows ?parte=", () => {
+    renderWithQueryClient(<EmpresaDocument slug="manual-de-la-empresa" parte="manual-2" />, {
+      client: seededBibliotecaClient("empresa", bibliotecaFixture()),
+    });
+    expect(screen.getByRole("heading", { level: 2, name: "Cómo abrimos un proyecto" })).toBeTruthy();
+  });
+
+  it("shows the empty state when Dirección added no part yet", () => {
+    renderWithQueryClient(<EmpresaDocument slug="book" parte={null} />, {
+      client: seededBibliotecaClient("empresa", []),
+    });
+    expect(screen.getByText("Aún no hay documentos en Book")).toBeTruthy();
   });
 });
