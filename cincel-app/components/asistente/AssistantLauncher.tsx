@@ -1,11 +1,12 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { AssistantButton } from "@/components/asistente/AssistantButton";
 import { IMPLEMENTED } from "@/lib/actions/assistant-actions.flags";
 import { assistantContextFromRoute, isAssistantPage } from "@/lib/assistant/page-context";
+import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
 
 /** Stub phase (FE §9): the entry point stays hidden until the assistant thread actions are implemented. */
 export function assistantEntryEnabled(flags: Record<string, boolean> = IMPLEMENTED): boolean {
@@ -25,13 +26,6 @@ export function preloadAssistantSheet(): void {
   void loadAssistantSheet();
 }
 
-/** Event other entry points (e.g. the command palette's "Preguntar al asistente") dispatch to open the sheet. */
-export const OPEN_ASSISTANT_EVENT = "cincel:open-assistant";
-
-export function openAssistant(): void {
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(OPEN_ASSISTANT_EVENT));
-}
-
 export type AssistantLauncherProps = {
   /** True on /asistente (the shell passes `hideAssistant`). */
   hidden?: boolean;
@@ -43,14 +37,16 @@ export type AssistantLauncherProps = {
  * Mounts the floating `AssistantButton` and the `AssistantSheet` on every
  * staff page except `/asistente`; ⌘J / Ctrl+J toggles the sheet. The page
  * context comes from the route; Escape closes and focus returns to the
- * button. Mounted once by `AppShell`.
+ * button. Mounted once by `AppShell`. Open state lives in `useAssistantUi`,
+ * so other surfaces open the same sheet with `openAssistant()`.
  */
 export function AssistantLauncher({ hidden = false, enabled = assistantEntryEnabled() }: AssistantLauncherProps) {
   const pathname = usePathname() ?? "/";
   const searchParams = useSearchParams();
-  const [open, setOpen] = useState(false);
+  const open = useAssistantUi((s) => s.open);
   // Stays true after the first open so the sheet keeps its state and close animation.
-  const [sheetMounted, setSheetMounted] = useState(false);
+  const sheetMounted = useAssistantUi((s) => s.mounted);
+  const setOpen = useAssistantUi((s) => s.setOpen);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const tarea = searchParams?.get("tarea") ?? null;
@@ -62,37 +58,27 @@ export function AssistantLauncher({ hidden = false, enabled = assistantEntryEnab
   const active = enabled && !hidden && !isAssistantPage(pathname);
 
   useEffect(() => {
+    const { setAvailable } = useAssistantUi.getState();
+    setAvailable(active);
+    return () => setAvailable(false);
+  }, [active]);
+
+  useEffect(() => {
     if (!active) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "j" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
       event.preventDefault();
-      setSheetMounted(true);
-      setOpen((prev) => !prev);
-    };
-    const onOpenEvent = () => {
-      setSheetMounted(true);
-      setOpen(true);
+      useAssistantUi.getState().toggle();
     };
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener(OPEN_ASSISTANT_EVENT, onOpenEvent);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener(OPEN_ASSISTANT_EVENT, onOpenEvent);
-    };
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [active]);
 
   if (!active) return null;
 
   return (
     <>
-      <AssistantButton
-        ref={buttonRef}
-        onOpen={() => {
-          setSheetMounted(true);
-          setOpen(true);
-        }}
-        onIntent={preloadAssistantSheet}
-      />
+      <AssistantButton ref={buttonRef} onOpen={() => setOpen(true)} onIntent={preloadAssistantSheet} />
       {sheetMounted ? (
         <Suspense fallback={null}>
           <AssistantSheet open={open} onOpenChange={setOpen} context={context} finalFocus={buttonRef} />

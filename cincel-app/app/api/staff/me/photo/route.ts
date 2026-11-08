@@ -2,10 +2,10 @@
  * POST /api/staff/me/photo (redesign BE §7.2, §8.11): `multipart/form-data`
  * field `file` (≤ 2 MB, jpeg / png / webp by magic bytes), metadata stripped,
  * stored in `staff_photos`; `200 { url }`, 401, `413 TOO_LARGE`,
- * `415 INVALID_TYPE`, `429 RATE_LIMITED`; revalidates the root layout.
+ * `415 INVALID_TYPE`, `429 RATE_LIMITED`. No layout revalidation: the client
+ * writes the new URL into `qk.me.profile()` (`components/shell/photo-upload.ts`).
  */
 import { fileTypeFromBuffer } from "file-type";
-import { revalidatePath } from "next/cache";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { getSessionAccess } from "@/lib/auth/session";
@@ -72,7 +72,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const sha256 = photoSha256(bytes);
   await upsertStaffPhoto(db, staffId, { mime, bytes, sha256 });
-  revalidatePath("/", "layout");
 
   return NextResponse.json({ url: staffPhotoUrl(staffId, sha256) });
 }

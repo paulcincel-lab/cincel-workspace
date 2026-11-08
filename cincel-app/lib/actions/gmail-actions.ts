@@ -1,7 +1,10 @@
 "use server";
 
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
+import { revalidateMiEspacioScreen } from "@/lib/cache/screens/mi-espacio";
+import { revalidateProyectoFichaScreen } from "@/lib/cache/screens/proyectos";
+import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveActivitiesCapabilities, resolveProjectsCapabilities } from "@/lib/auth/permissions";
@@ -46,11 +49,11 @@ const SYNC_MIN_INTERVAL_MS = 30 * 1000;
 const NO_SUBJECT = "(sin asunto)";
 
 function revalidateMiEspacio() {
-  revalidatePath("/mi-espacio", "layout");
+  revalidateMiEspacioScreen(["miEspacioLayout"]);
 }
 
 function revalidateProject(projectId: string) {
-  revalidatePath(`/proyectos/${projectId}`, "layout");
+  revalidateProyectoFichaScreen(projectId, ["projectLayout"]);
 }
 
 function toSummary(row: GmailThreadRow): GmailThreadSummary {
@@ -388,7 +391,7 @@ export async function createTaskFromGmailThreadAction(
   const { previousProjectId } = await linkThread(user, thread.id, project.id);
 
   revalidateMiEspacio();
-  revalidatePath("/tareas");
+  revalidateTareasScreen(["tareas"]);
   revalidateProject(project.id);
   if (previousProjectId && previousProjectId !== project.id) revalidateProject(previousProjectId);
   return { taskId: task.id };
@@ -406,5 +409,5 @@ export async function disconnectGmailAction(): Promise<void> {
     await gmailRepository.markGmailDisconnected(tx, staffId, new Date());
   });
   revalidateMiEspacio();
-  revalidatePath("/ajustes/integraciones");
+  revalidateAjustesScreen("integraciones");
 }

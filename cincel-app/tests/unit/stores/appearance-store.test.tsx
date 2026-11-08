@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 /**
- * AppearanceProvider + useAppearance (redesign FE §4.1): attributes, classes
- * and the `<style id="appearance">` block only; optimistic with rollback and
- * an error toast; text size debounced 300 ms.
+ * `useAppearance` store (#954, zustand.md §2.6; redesign FE §4.1): the same
+ * behaviour as the `AppearanceProvider` context it replaces. Attributes,
+ * classes and the `<style id="appearance">` block only; optimistic with
+ * rollback and an error toast; text size debounced 300 ms.
  */
 import { Component, useEffect, type ReactNode } from "react";
+import { QueryClient } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,11 +16,14 @@ import { appearanceStyleBlock } from "@/lib/ui/appearance-css";
 import { resolveAppearance } from "@/lib/ui/preferences";
 import { THEME_PRESETS } from "@/lib/ui/themes";
 
+import { qk } from "@/lib/query/keys";
+import { resetUiStores, setBrowserQueryClient } from "@/lib/query/reset-client-state";
 import {
-  AppearanceProvider,
+  AppearanceStoreProvider as AppearanceProvider,
+  createAppearanceStore,
   TEXT_SIZE_DEBOUNCE_MS,
   useAppearance,
-} from "../AppearanceProvider";
+} from "@/lib/stores/appearance-store";
 
 const mocks = vi.hoisted(() => ({
   update: vi.fn(),
@@ -102,7 +107,7 @@ function prepareDocument(initial: ResolvedAppearance) {
 const root = () => document.documentElement;
 const styleBlock = () => document.getElementById("appearance")?.textContent ?? "";
 
-describe("AppearanceProvider", () => {
+describe("useAppearance store", () => {
   beforeEach(() => {
     mocks.update.mockReset();
     mocks.toastError.mockReset();
@@ -121,7 +126,7 @@ describe("AppearanceProvider", () => {
         <Probe />
       </Boundary>,
     );
-    expect(screen.getByRole("alert").textContent).toMatch(/AppearanceProvider/);
+    expect(screen.getByRole("alert").textContent).toMatch(/AppearanceStoreProvider/);
     spy.mockRestore();
   });
 
@@ -311,5 +316,152 @@ describe("AppearanceProvider", () => {
     expect(mocks.update).not.toHaveBeenCalled();
     expect(window.localStorage.getItem("cincel.theme")).toBe("dark");
     getItem.mockRestore();
+  });
+
+  it("re-renders a selector only when its slice changes", async () => {
+    const initial = resolved();
+    prepareDocument(initial);
+    mocks.update.mockResolvedValue({ preferences: {} as UserPreferences, appearance: resolved({ density: "compacta" }) });
+    const onRender = vi.fn();
+    function ModeProbe() {
+      const mode = useAppearance((s) => s.appearance.mode);
+      onRender();
+      return <p data-testid="mode">{mode}</p>;
+    }
+    render(
+      <AppearanceProvider initial={initial}>
+        <Probe />
+        <ModeProbe />
+      </AppearanceProvider>,
+    );
+    const before = onRender.mock.calls.length;
+    await act(async () => {
+      await setPreference({ density: "compacta" });
+    });
+    expect(onRender).toHaveBeenCalledTimes(before);
+    expect(screen.getByTestId("mode").textContent).toBe("light");
+  });
+
+  it("does not write the document when the store is created", () => {
+    const initial = resolved({ mode: "dark", density: "compacta" });
+    prepareDocument(resolved());
+    createAppearanceStore(initial);
+    expect(root().getAttribute("data-theme")).toBe("light");
+    expect(root().getAttribute("data-density")).toBeNull();
+    expect(root().classList.contains("dark")).toBe(false);
+  });
+
+  it("a new server appearance replaces the shown one", () => {
+    const initial = resolved();
+    prepareDocument(initial);
+    const view = render(
+      <AppearanceProvider initial={initial}>
+        <Probe />
+      </AppearanceProvider>,
+    );
+    act(() => {
+      view.rerender(
+        <AppearanceProvider initial={resolved({ mode: "dark" }, "grafito")}>
+          <Probe />
+        </AppearanceProvider>,
+      );
+    });
+    expect(screen.getByTestId("probe").textContent).toBe("grafito/dark/14");
+  });
+
+  it("exposes fixedByOrg from the provider (false by default)", () => {
+    const initial = resolved();
+    prepareDocument(initial);
+    function FixedProbe() {
+      return <p data-testid="fixed">{String(useAppearance((s) => s.fixedByOrg))}</p>;
+    }
+    const view = render(
+      <AppearanceProvider initial={initial}>
+        <FixedProbe />
+      </AppearanceProvider>,
+    );
+    expect(screen.getByTestId("fixed").textContent).toBe("false");
+    view.unmount();
+    render(
+      <AppearanceProvider initial={initial} fixedByOrg>
+        <FixedProbe />
+      </AppearanceProvider>,
+    );
+    expect(screen.getByTestId("fixed").textContent).toBe("true");
+  });
+
+  it("accepts an ActionResult from the action and rolls back on { ok: false }", async () => {
+    const initial = resolved();
+    prepareDocument(initial);
+    const next = resolved({ mode: "dark" });
+    mocks.update.mockResolvedValueOnce({ ok: true, data: { preferences: {} as UserPreferences, appearance: next } });
+    render(
+      <AppearanceProvider initial={initial}>
+        <Probe />
+      </AppearanceProvider>,
+    );
+    await act(async () => {
+      await setPreference({ mode: "dark" });
+    });
+    expect(screen.getByTestId("probe").textContent).toBe("azul/dark/14");
+
+    mocks.update.mockResolvedValueOnce({ ok: false, error: "OVERRIDE_DISABLED" });
+    await act(async () => {
+      await setPreference({ theme: "calido" });
+    });
+    expect(screen.getByTestId("probe").textContent).toBe("azul/dark/14");
+    expect(root().getAttribute("data-theme-id")).toBe("azul");
+    expect(mocks.toastError).toHaveBeenCalledWith(actionErrorText(new Error("OVERRIDE_DISABLED")));
+  });
+
+  it("writes the saved preferences into the query cache", async () => {
+    const queryClient = new QueryClient();
+    setBrowserQueryClient(queryClient);
+    try {
+      const initial = resolved();
+      prepareDocument(initial);
+      const preferences = { mode: "dark" } as UserPreferences;
+      mocks.update.mockResolvedValue({ preferences, appearance: resolved({ mode: "dark" }) });
+      render(
+        <AppearanceProvider initial={initial}>
+          <Probe />
+        </AppearanceProvider>,
+      );
+      await act(async () => {
+        await setPreference({ mode: "dark" });
+      });
+      expect(queryClient.getQueryData(qk.me.preferences())).toBe(preferences);
+    } finally {
+      setBrowserQueryClient(null);
+      queryClient.clear();
+    }
+  });
+
+  it("resetClientState drops a queued text-size save and shows the confirmed appearance", async () => {
+    vi.useFakeTimers();
+    const initial = resolved();
+    prepareDocument(initial);
+    render(
+      <AppearanceProvider initial={initial}>
+        <Probe />
+      </AppearanceProvider>,
+    );
+    let done: Promise<void> = Promise.resolve();
+    act(() => {
+      done = setPreference({ textSize: 16 });
+    });
+    expect(root().classList.contains("text-size-16")).toBe(true);
+
+    act(() => {
+      resetUiStores();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(TEXT_SIZE_DEBOUNCE_MS * 2);
+      await done;
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(root().classList.contains("text-size-16")).toBe(false);
+    expect(root().classList.contains("text-size-14")).toBe(true);
+    expect(screen.getByTestId("probe").textContent).toBe("azul/light/14");
   });
 });

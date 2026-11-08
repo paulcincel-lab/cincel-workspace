@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import type { ReactNode } from "react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
@@ -65,6 +65,11 @@ import type { StaffOption } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 import { TareasClient } from "./TareasClient";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { seedSessionUser } from "@/tests/helpers/session-user";
+
+// The components read the signed-in user from the session store; seed it with the mocked user.
+beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
 const TRAMOS: WorkflowRef[] = [
   { id: "w1", key: "presale", name: "Presale", sortOrder: 1 },

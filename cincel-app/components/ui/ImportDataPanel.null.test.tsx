@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import type { ImportData } from "@/lib/types/core";
 
 const importActions = vi.hoisted(() => ({ getImportDataAction: vi.fn() }));
@@ -35,7 +36,7 @@ afterEach(() => {
 describe("ImportDataPanel with project data (B2)", () => {
   it("renders nothing when the action returns null", async () => {
     importActions.getImportDataAction.mockResolvedValue(null);
-    const { container } = render(<ProjectImportData projectId={PROJECT_ID} />);
+    const { container } = renderWithQueryClient(<ProjectImportData projectId={PROJECT_ID} />);
     await waitFor(() => expect(importActions.getImportDataAction).toHaveBeenCalledWith("project", PROJECT_ID));
     expect(container.innerHTML).toBe("");
     expect(screen.queryByText("Datos de monday")).toBeNull();
@@ -43,21 +44,21 @@ describe("ImportDataPanel with project data (B2)", () => {
 
   it("renders nothing when the action fails", async () => {
     importActions.getImportDataAction.mockRejectedValue(new Error("FORBIDDEN"));
-    const { container } = render(<ProjectImportData projectId={PROJECT_ID} />);
+    const { container } = renderWithQueryClient(<ProjectImportData projectId={PROJECT_ID} />);
     await waitFor(() => expect(importActions.getImportDataAction).toHaveBeenCalled());
     expect(container.innerHTML).toBe("");
   });
 
   it("renders nothing when the only values were the client columns removed for non-admins", async () => {
     importActions.getImportDataAction.mockResolvedValue(makeImportData({}));
-    const { container } = render(<ProjectImportData projectId={PROJECT_ID} />);
+    const { container } = renderWithQueryClient(<ProjectImportData projectId={PROJECT_ID} />);
     await waitFor(() => expect(importActions.getImportDataAction).toHaveBeenCalled());
     expect(container.innerHTML).toBe("");
   });
 
   it("shows the panel when the action returns data", async () => {
     importActions.getImportDataAction.mockResolvedValue(makeImportData({ Cliente: "Familia Ruiz", Presupuesto: "120000" }));
-    render(<ProjectImportData projectId={PROJECT_ID} />);
+    renderWithQueryClient(<ProjectImportData projectId={PROJECT_ID} />);
     expect(await screen.findByRole("button", { name: "Datos de monday" })).toBeTruthy();
   });
 

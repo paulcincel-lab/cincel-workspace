@@ -5,6 +5,7 @@
  * 401 / 413 / 415 / 429; GET sends a sha256 ETag, 304 on match, 404 when
  * absent, private cache.
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 
@@ -41,12 +42,14 @@ vi.mock("@/lib/repositories/preferences-repository", () => repo);
 const revalidatePath = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ revalidatePath }));
 
-import { removeMyPhotoAction } from "@/lib/actions/profile-photo-actions";
+import * as profilePhotoActionsModule from "@/lib/actions/profile-photo-actions";
 import { IMPLEMENTED } from "@/lib/actions/profile-photo-actions.flags";
 import { photoUploadRateLimiter } from "@/lib/profile-photo/upload";
 import { stripImageMetadata } from "@/lib/profile-photo/strip-metadata";
 import { GET } from "@/app/api/staff/[id]/photo/route";
 import { POST } from "@/app/api/staff/me/photo/route";
+
+const { removeMyPhotoAction } = unwrapActions(profilePhotoActionsModule);
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -291,7 +294,8 @@ describe("POST /api/staff/me/photo", () => {
     await expect(res.json()).resolves.toEqual({
       url: `/api/staff/${STAFF_ID}/photo?v=${stored.sha256.slice(0, 8)}`,
     });
-    expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
+    // S2: the client updates `qk.me.profile()`; the route never re-renders the layout.
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("trusts magic bytes, not the declared type", async () => {
@@ -424,10 +428,10 @@ describe("removeMyPhotoAction", () => {
     expect(IMPLEMENTED.removeMyPhotoAction).toBe(true);
   });
 
-  it("deletes the caller's photo and revalidates the layout", async () => {
+  it("deletes the caller's photo without revalidating the layout", async () => {
     await removeMyPhotoAction();
     expect(repo.deleteStaffPhoto).toHaveBeenCalledWith(expect.anything(), STAFF_ID);
-    expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("rejects without a session and deletes nothing", async () => {
@@ -435,5 +439,18 @@ describe("removeMyPhotoAction", () => {
     await expect(removeMyPhotoAction()).rejects.toThrow();
     expect(repo.deleteStaffPhoto).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("removeMyPhotoAction (ActionResult)", () => {
+  it("returns { ok: true } after deleting the photo", async () => {
+    await expect(profilePhotoActionsModule.removeMyPhotoAction()).resolves.toMatchObject({ ok: true });
+    expect(repo.deleteStaffPhoto).toHaveBeenCalledWith(expect.anything(), STAFF_ID);
+  });
+
+  it("returns { ok: false, error: 'FORBIDDEN' } without a session instead of throwing", async () => {
+    session.value = { status: "guest", user: null };
+    await expect(profilePhotoActionsModule.removeMyPhotoAction()).resolves.toEqual({ ok: false, error: "FORBIDDEN" });
+    expect(repo.deleteStaffPhoto).not.toHaveBeenCalled();
   });
 });

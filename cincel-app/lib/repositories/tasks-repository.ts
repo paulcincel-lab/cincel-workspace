@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql, type SQLWrapper } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
 import {
@@ -41,6 +42,7 @@ import type {
   TaskLink,
   TaskLinkInput,
   TaskListItem,
+  TaskListRow,
   TaskPatch,
   TaskRef,
   TaskStatus,
@@ -339,11 +341,89 @@ function searchMatch(search: string) {
   );
 }
 
-/** Task list rows for `viewer`: admin tasks and client names only for administrators (BE §8.6, §12). */
-export async function listTasks(filters: TaskFilters, viewer: ViewerScope): Promise<TaskListItem[]> {
+/**
+ * Per-task aggregates as grouped derived tables, LEFT JOINed on the task id
+ * (one statement, no correlated subqueries). Built per call: the subqueries
+ * hang off `db`.
+ */
+function taskAggregates() {
+  const subtask = alias(tasks, "subtask");
+  const dependency = alias(tasks, "dependency");
+  const checklist = db
+    .select({
+      taskId: taskChecklistItems.taskId,
+      total: sql<number>`count(*)::int`.as("checklist_total"),
+      done: sql<number>`(count(*) filter (where ${taskChecklistItems.completed}))::int`.as("checklist_done"),
+    })
+    .from(taskChecklistItems)
+    .groupBy(taskChecklistItems.taskId)
+    .as("checklist_agg");
+  // Live children only: deleted and archived subtasks don't count.
+  const subtasks = db
+    .select({
+      taskId: subtask.parentTaskId,
+      total: sql<number>`count(*)::int`.as("subtask_total"),
+      done: sql<number>`(count(*) filter (where ${subtask.status} = 'completado'))::int`.as("subtask_done"),
+    })
+    .from(subtask)
+    .where(and(isNull(subtask.deletedAt), eq(subtask.archived, false), sql`${subtask.parentTaskId} is not null`))
+    .groupBy(subtask.parentTaskId)
+    .as("subtask_agg");
+  // Open dependencies only: completado, deleted and archived ones don't count.
+  const dependencies = db
+    .select({ taskId: taskDependencies.taskId, open: sql<number>`count(*)::int`.as("waiting_on") })
+    .from(taskDependencies)
+    .innerJoin(dependency, eq(dependency.id, taskDependencies.dependsOnTaskId))
+    .where(and(isNull(dependency.deletedAt), eq(dependency.archived, false), ne(dependency.status, "completado")))
+    .groupBy(taskDependencies.taskId)
+    .as("dependency_agg");
+  const support = db
+    .select({
+      taskId: taskSupport.taskId,
+      people: sql<StaffRef[] | string>`json_agg(json_build_object('id', ${staff.id}, 'name', ${staff.name}) order by ${staff.name} asc)`.as(
+        "support_people"
+      ),
+    })
+    .from(taskSupport)
+    .innerJoin(staff, eq(staff.id, taskSupport.staffId))
+    .where(isNull(staff.deletedAt))
+    .groupBy(taskSupport.taskId)
+    .as("support_agg");
+  const comments = db
+    .select({ taskId: historyEvents.entityId, total: sql<number>`count(*)::int`.as("comment_total") })
+    .from(historyEvents)
+    .where(and(eq(historyEvents.entity, "task"), eq(historyEvents.kind, "comentario")))
+    .groupBy(historyEvents.entityId)
+    .as("comment_agg");
+  const attachments = db
+    .select({ taskId: taskAttachments.taskId, total: sql<number>`count(*)::int`.as("attachment_total") })
+    .from(taskAttachments)
+    .groupBy(taskAttachments.taskId)
+    .as("attachment_agg");
+  return { checklist, subtasks, dependencies, support, comments, attachments };
+}
+
+const countOf = (column: SQLWrapper) => sql<number>`coalesce(${column}, 0)::int`;
+
+/** A copy without the large `notes` field (slim list rows). */
+function withoutNotes<T extends { notes: unknown }>(value: T): Omit<T, "notes"> {
+  const out: Partial<T> = { ...value };
+  delete out.notes;
+  return out as Omit<T, "notes">;
+}
+
+/**
+ * The task list statement shared by `listTasks` and `listTaskRows`. `slim`
+ * leaves `notes` out and adds the comment and attachment counts.
+ */
+async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: boolean) {
+  const agg = taskAggregates();
+  const parent = alias(tasks, "parent_task");
+  const taskColumns = withoutNotes(getTableColumns(tasks));
   const rows = await db
     .select({
-      task: tasks,
+      task: taskColumns,
+      notes: slim ? sql<string | null>`null` : tasks.notes,
       projectName: projects.name,
       clientName: contacts.name,
       workflowId: workflows.id,
@@ -357,14 +437,16 @@ export async function listTasks(filters: TaskFilters, viewer: ViewerScope): Prom
       customStatusName: taskStatuses.name,
       customStatusCloses: taskStatuses.closes,
       customStatusCountsAsCompleted: taskStatuses.countsAsCompleted,
-      checklistTotal: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id})::int`,
-      checklistDone: sql<number>`(select count(*) from core.task_checklist_items c where c.task_id = ${tasks.id} and c.completed)::int`,
+      checklistTotal: countOf(agg.checklist.total),
+      checklistDone: countOf(agg.checklist.done),
       // A deleted parent reads as no parent title ("Tarea padre eliminada").
-      parentTitle: sql<string | null>`(select p.title from core.tasks p where p.id = ${tasks.parentTaskId} and p.deleted_at is null)`,
-      subtaskCount: sql<number>`(select count(*) from core.tasks s where s.parent_task_id = ${tasks.id} and s.deleted_at is null and not s.archived)::int`,
-      subtaskDoneCount: sql<number>`(select count(*) from core.tasks s where s.parent_task_id = ${tasks.id} and s.deleted_at is null and not s.archived and s.status = 'completado')::int`,
-      // Open dependencies only: completado, deleted and archived ones don't count.
-      waitingOn: sql<number>`(select count(*) from core.task_dependencies d join core.tasks dt on dt.id = d.depends_on_task_id where d.task_id = ${tasks.id} and dt.deleted_at is null and not dt.archived and dt.status <> 'completado')::int`,
+      parentTitle: parent.title,
+      subtaskCount: countOf(agg.subtasks.total),
+      subtaskDoneCount: countOf(agg.subtasks.done),
+      waitingOn: countOf(agg.dependencies.open),
+      support: agg.support.people,
+      commentCount: countOf(agg.comments.total),
+      attachmentCount: countOf(agg.attachments.total),
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -375,6 +457,14 @@ export async function listTasks(filters: TaskFilters, viewer: ViewerScope): Prom
     .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
     .leftJoin(staff, eq(staff.id, tasks.managerId))
     .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
+    .leftJoin(parent, and(eq(parent.id, tasks.parentTaskId), isNull(parent.deletedAt)))
+    .leftJoin(agg.checklist, eq(agg.checklist.taskId, tasks.id))
+    .leftJoin(agg.subtasks, eq(agg.subtasks.taskId, tasks.id))
+    .leftJoin(agg.dependencies, eq(agg.dependencies.taskId, tasks.id))
+    .leftJoin(agg.support, eq(agg.support.taskId, tasks.id))
+    // `listTasks` has no use for these two: a false join condition skips them.
+    .leftJoin(agg.comments, slim ? eq(agg.comments.taskId, tasks.id) : sql`false`)
+    .leftJoin(agg.attachments, slim ? eq(agg.attachments.taskId, tasks.id) : sql`false`)
     .where(whereFilters(filters, viewer))
     // Tramo, then fase, then manual order (BE §8.6); tasks without one go last.
     .orderBy(
@@ -385,33 +475,95 @@ export async function listTasks(filters: TaskFilters, viewer: ViewerScope): Prom
       asc(tasks.title)
     );
 
-  const support = await loadSupport(rows.map((r) => r.task.id));
-  return rows.map((r) => scopeTaskDto({
-    ...toTask(r.task),
-    customStatus:
-      r.task.customStatusId && r.customStatusName
-        ? {
-            id: r.task.customStatusId,
-            name: r.customStatusName,
-            closes: Boolean(r.customStatusCloses),
-            countsAsCompleted: Boolean(r.customStatusCountsAsCompleted),
-          }
+  return rows.map((r) => {
+    const people = typeof r.support === "string" ? (JSON.parse(r.support) as StaffRef[]) : r.support;
+    const item: TaskListItem = scopeTaskDto({
+      ...toTask({ ...r.task, notes: r.notes }),
+      customStatus:
+        r.task.customStatusId && r.customStatusName
+          ? {
+              id: r.task.customStatusId,
+              name: r.customStatusName,
+              closes: Boolean(r.customStatusCloses),
+              countsAsCompleted: Boolean(r.customStatusCountsAsCompleted),
+            }
+          : null,
+      project: { id: r.task.projectId, name: r.projectName, clientName: r.clientName ?? null },
+      workflow: r.workflowId
+        ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName!, sortOrder: r.workflowSortOrder! }
         : null,
-    project: { id: r.task.projectId, name: r.projectName, clientName: r.clientName ?? null },
-    workflow: r.workflowId
-      ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName!, sortOrder: r.workflowSortOrder! }
-      : null,
-    phase: r.task.phaseId && r.phaseName ? { id: r.task.phaseId, name: r.phaseName, sortOrder: r.phaseSortOrder! } : null,
-    space: r.task.spaceId && r.spaceName ? { id: r.task.spaceId, name: r.spaceName } : null,
-    manager: r.task.managerId ? { id: r.task.managerId, name: r.managerName! } : null,
-    support: support.get(r.task.id) ?? [],
-    checklist: { total: r.checklistTotal, completed: r.checklistDone },
-    parentTaskId: r.task.parentTaskId,
-    parentTitle: r.task.parentTaskId ? (r.parentTitle ?? null) : null,
-    subtaskCount: r.subtaskCount,
-    subtaskDoneCount: r.subtaskDoneCount,
-    waitingOn: r.waitingOn,
-  }, viewer));
+      phase: r.task.phaseId && r.phaseName ? { id: r.task.phaseId, name: r.phaseName, sortOrder: r.phaseSortOrder! } : null,
+      space: r.task.spaceId && r.spaceName ? { id: r.task.spaceId, name: r.spaceName } : null,
+      manager: r.task.managerId ? { id: r.task.managerId, name: r.managerName! } : null,
+      support: (people ?? []).map((p) => ({ id: p.id, name: p.name })),
+      checklist: { total: r.checklistTotal, completed: r.checklistDone },
+      parentTaskId: r.task.parentTaskId,
+      parentTitle: r.task.parentTaskId ? (r.parentTitle ?? null) : null,
+      subtaskCount: r.subtaskCount,
+      subtaskDoneCount: r.subtaskDoneCount,
+      waitingOn: r.waitingOn,
+    }, viewer);
+    return { item, commentCount: r.commentCount, attachmentCount: r.attachmentCount };
+  });
+}
+
+/** Task list rows for `viewer`: admin tasks and client names only for administrators (BE §8.6, §12). */
+export async function listTasks(filters: TaskFilters, viewer: ViewerScope): Promise<TaskListItem[]> {
+  return (await selectTaskList(filters, viewer, false)).map((r) => r.item);
+}
+
+/**
+ * Slim list rows (`TaskListRow`): the `listTasks` rows and order without
+ * `notes`, plus flat counts, in one statement (aggregate joins).
+ */
+export async function listTaskRows(filters: TaskFilters, viewer: ViewerScope): Promise<TaskListRow[]> {
+  return (await selectTaskList(filters, viewer, true)).map(({ item, commentCount, attachmentCount }) => ({
+    ...withoutNotes(item),
+    subtaskDone: item.subtaskDoneCount,
+    commentCount,
+    attachmentCount,
+    checklistTotal: item.checklist.total,
+    checklistDone: item.checklist.completed,
+  }));
+}
+
+/**
+ * Open tasks `staffId` manages or supports, as `listMyTasks(staffId, {}, viewer)`
+ * filtered by `isTaskClosed` would count them, with one COUNT(*).
+ */
+export async function countOpenTasksFor(staffId: string, viewer: ViewerScope): Promise<number> {
+  const kind = viewer.isAdmin ? ALL_TASK_KINDS : undefined;
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
+    .where(
+      and(
+        whereFilters({ kind, involvesStaffId: staffId }, viewer),
+        // isTaskClosed: completado, or a live custom status that closes.
+        ne(tasks.status, "completado"),
+        sql`coalesce(${taskStatuses.closes}, false) = false`
+      )
+    );
+  return row?.n ?? 0;
+}
+
+/**
+ * `listTasks({ projectId }, viewer).length` with one COUNT(*). `topLevel`
+ * leaves subtasks out (the project tab shell's Tareas count).
+ */
+export async function countProjectTasks(
+  projectId: string,
+  viewer: ViewerScope,
+  opts: { topLevel?: boolean } = {}
+): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(and(whereFilters({ projectId }, viewer), opts.topLevel ? isNull(tasks.parentTaskId) : undefined));
+  return row?.n ?? 0;
 }
 
 /** Open admin tasks (or all with `includeClosed`), by commitment date then project name (BE §8.6). */

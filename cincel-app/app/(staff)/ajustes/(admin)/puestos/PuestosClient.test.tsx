@@ -27,6 +27,8 @@ vi.mock("@/lib/actions/positions-actions", () => actions);
 vi.mock("@/lib/actions/workflows-actions", () => workflowActions);
 
 import { PuestosClient } from "./PuestosClient";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { seedSessionUser } from "@/tests/helpers/session-user";
 
 const workflows = [
   {
@@ -81,6 +83,7 @@ async function openRowAction(name: string, action: string) {
 
 beforeEach(() => {
   state.access = "Administrador";
+  seedSessionUser(getCurrentAuthenticatedUser());
 });
 
 afterEach(() => {
@@ -112,6 +115,7 @@ describe("PuestosClient table", () => {
 
   it("is read-only for non-admins", async () => {
     state.access = "Colaborador";
+    seedSessionUser(getCurrentAuthenticatedUser());
     renderPuestos();
     await waitFor(() => expect(actions.fetchPositionsAction).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: "+ Nuevo puesto" })).toBeNull();

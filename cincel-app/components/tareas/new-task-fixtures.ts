@@ -65,3 +65,19 @@ export const STAFF: StaffOption[] = [
   { id: "s-luis", name: "Luis", lastName: "Mora", suggested: false },
   { id: "s-ana", name: "Ana", lastName: "López", suggested: true },
 ] as unknown as StaffOption[];
+
+/**
+ * `catalog.projectOptions` rows: the active ones plus a paused project the
+ * dialog must leave out. `currentWorkflowId` drives the default tramo.
+ */
+export const PROJECT_OPTIONS = [
+  { id: "p-roble", name: "Casa Roble", status: "activo", currentWorkflowId: "w-diseno" },
+  { id: "p-norte", name: "Torre Norte", status: "activo", currentWorkflowId: "w-presale" },
+  { id: "p-pausa", name: "Loft Pausado", status: "pausado", currentWorkflowId: null },
+] as const satisfies readonly { id: string; name: string; status: string; currentWorkflowId: string | null }[];
+
+/** `catalog.assignableStaff` rows: `{ id, name, suggested }` only. */
+export const CATALOG_STAFF = [
+  { id: "s-luis", name: "Luis Mora", suggested: false },
+  { id: "s-ana", name: "Ana López", suggested: true },
+] as const;

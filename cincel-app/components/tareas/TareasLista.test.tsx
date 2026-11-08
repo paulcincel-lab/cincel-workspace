@@ -113,6 +113,11 @@ vi.mock("@/components/patterns/ListPage", () => ({
 }));
 
 import { TareasLista } from "./TareasLista";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { seedSessionUser } from "@/tests/helpers/session-user";
+
+// The components read the signed-in user from the session store; seed it with the mocked user.
+beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
 function renderLista({ tramo = null, style = "visual" }: { tramo?: string | null; style?: PresentationStyle } = {}) {
   return render(

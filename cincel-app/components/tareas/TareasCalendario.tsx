@@ -14,7 +14,7 @@ import { CalendarSummaryWidget } from "@/components/widgets/CalendarSummaryWidge
 import { DistributionWidget } from "@/components/widgets/DistributionWidget";
 import { syncGoogleCalendarAction } from "@/lib/actions/calendar-actions";
 import { fetchCalendarAction } from "@/lib/actions/tasks-actions";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import {
   approxTime,
@@ -95,7 +95,7 @@ export function TareasCalendario({ cal, tasks, initialRange, tramos, filters, to
   const searchParams = useSearchParams();
   const today = useMemo(() => startOfDay(todayProp ?? new Date()), [todayProp]);
 
-  const [authenticatedUser, setAuthenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const authenticatedUser = useSessionStore(selectCurrentUser);
   const capabilities = useMemo(() => resolveCalendarCapabilities(authenticatedUser), [authenticatedUser]);
   const viewerName = authenticatedUser?.member.name?.trim() ?? "";
 
@@ -130,12 +130,6 @@ export function TareasCalendario({ cal, tasks, initialRange, tramos, filters, to
   // Keeps the user's Google "Cincel" calendar current; the server skips it when sync is off or ran recently.
   useEffect(() => {
     void syncGoogleCalendarAction({ auto: true }).catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    const refreshUser = () => setAuthenticatedUser(getCurrentAuthenticatedUser());
-    window.addEventListener("focus", refreshUser);
-    return () => window.removeEventListener("focus", refreshUser);
   }, []);
 
   const selectedDate = useMemo(() => fromDayKey(selectedKey), [selectedKey]);

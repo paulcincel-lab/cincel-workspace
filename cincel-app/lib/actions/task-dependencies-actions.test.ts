@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TaskRef } from "@/lib/types/core";
@@ -40,11 +41,12 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/task-dependencies-repository", () => repo);
 
-import {
+import * as tasksActionsModule from "./tasks-actions";
+const {
   addTaskDependencyAction,
   listTaskDependenciesAction,
   removeTaskDependencyAction,
-} from "./tasks-actions";
+} = unwrapActions(tasksActionsModule);
 
 const ref: TaskRef = {
   id: OTHER,

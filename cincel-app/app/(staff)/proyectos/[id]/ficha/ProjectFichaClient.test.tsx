@@ -65,6 +65,8 @@ vi.mock("@/components/proyectos/ProjectAdminFields", () => ({
 }));
 
 import { ProjectFichaClient as ProjectFichaPage } from "./ProjectFichaClient";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { seedSessionUser } from "@/tests/helpers/session-user";
 
 function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
   return {
@@ -148,6 +150,7 @@ const TABS = <nav aria-label="Secciones del proyecto" data-testid="project-tabs"
 
 beforeEach(() => {
   state.admin = false;
+  seedSessionUser(getCurrentAuthenticatedUser());
   vi.clearAllMocks();
   actions.fetchProjectAction.mockResolvedValue(project());
   actions.updateProjectAction.mockResolvedValue(project());
@@ -179,6 +182,7 @@ describe("ficha admin data", () => {
 
   it("shows admins the Por asignar client line and the Administración group", async () => {
     state.admin = true;
+    seedSessionUser(getCurrentAuthenticatedUser());
     render(<ProjectFichaPage tabs={TABS} />);
     await screen.findByRole("heading", { name: "Ficha" });
     expect(screen.getByText("Cliente:")).toBeTruthy();
@@ -190,6 +194,7 @@ describe("ficha admin data", () => {
 
   it("confirms a client change with an AlertDialog, saves and refetches", async () => {
     state.admin = true;
+    seedSessionUser(getCurrentAuthenticatedUser());
     render(<ProjectFichaPage tabs={TABS} />);
     await screen.findByRole("heading", { name: "Ficha" });
     fireEvent.click(screen.getByRole("button", { name: "Asignar" }));

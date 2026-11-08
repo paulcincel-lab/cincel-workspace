@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 
@@ -107,7 +108,7 @@ export async function destroyPortalSession(): Promise<void> {
  * session is unknown or expired, or the user isn't `active`. Slides the
  * expiry to now + 30 days when it was last refreshed more than 24 h ago.
  */
-export async function getPortalUser(): Promise<PortalUser | null> {
+export const getPortalUser = cache(async function getPortalUser(): Promise<PortalUser | null> {
   const jar = await cookies();
   const token = jar.get(PORTAL_SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -126,7 +127,7 @@ export async function getPortalUser(): Promise<PortalUser | null> {
     }
   }
   return record.user;
-}
+});
 
 /** Pages and layouts: the portal user, or a redirect that clears the cookie and lands on `/portal/login`. */
 export async function requirePortalUser(): Promise<PortalUser> {

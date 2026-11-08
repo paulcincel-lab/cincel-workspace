@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 const state = vi.hoisted(() => ({
   photoImplemented: true,
@@ -49,8 +49,13 @@ vi.mock("@/lib/settings/use-general-settings", async () => {
 // Canvas does not decode images in happy-dom: skip the re-encode, keep the real upload.
 vi.mock("./photo-upload", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./photo-upload")>();
-  return { ...actual, changeMyPhoto: (file: File) => actual.uploadMyPhoto(file) };
+  const upload = (file: File) => actual.uploadMyPhoto(file);
+  return { ...actual, changeMyPhoto: upload, usePhotoUploadMutation: () => actual.usePhotoUploadMutation(upload) };
 });
+
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { MyProfile } from "@/lib/types/shell";
 
 import { AvatarMenu, avatarMenuLinks, nameInitials } from "./AvatarMenu";
 
@@ -108,7 +113,7 @@ describe("avatarMenuLinks", () => {
 
 describe("AvatarMenu", () => {
   it("lists the items in the spec order", async () => {
-    render(<AvatarMenu session={{ ...session, photoUrl: "/api/staff/s1/photo?v=1" }} />);
+    renderWithQueryClient(<AvatarMenu session={{ ...session, photoUrl: "/api/staff/s1/photo?v=1" }} />);
     await openMenu();
     expect(itemLabels()).toEqual([
       "Perfil",
@@ -126,7 +131,7 @@ describe("AvatarMenu", () => {
 
   it("takes the contact links from General settings and hides the empty ones", async () => {
     state.company = { website: "", instagramUrl: "https://instagram.com/cincel", contactEmail: "" };
-    render(<AvatarMenu session={session} />);
+    renderWithQueryClient(<AvatarMenu session={session} />);
     await openMenu();
     expect(screen.getByRole("menuitem", { name: "Instagram" }).getAttribute("href")).toBe("https://instagram.com/cincel");
     expect(screen.queryByRole("menuitem", { name: "Sitio web" })).toBeNull();
@@ -134,14 +139,14 @@ describe("AvatarMenu", () => {
   });
 
   it("points Correo at a mailto link", async () => {
-    render(<AvatarMenu session={session} />);
+    renderWithQueryClient(<AvatarMenu session={session} />);
     await openMenu();
     expect(screen.getByRole("menuitem", { name: "Correo" }).getAttribute("href")).toBe("mailto:hola@cincel.mx");
   });
 
   it("hides the photo entries while their actions are not implemented", async () => {
     state.photoImplemented = false;
-    render(<AvatarMenu session={{ ...session, photoUrl: "/x" }} />);
+    renderWithQueryClient(<AvatarMenu session={{ ...session, photoUrl: "/x" }} />);
     await openMenu();
     const labels = itemLabels();
     expect(labels).not.toContain("Cambiar foto");
@@ -151,13 +156,13 @@ describe("AvatarMenu", () => {
   });
 
   it("has no entry back to the old design", async () => {
-    render(<AvatarMenu session={session} />);
+    renderWithQueryClient(<AvatarMenu session={session} />);
     await openMenu();
     expect(itemLabels().some((label) => /diseño/i.test(label))).toBe(false);
   });
 
   it("signs the user out", async () => {
-    render(<AvatarMenu session={session} />);
+    renderWithQueryClient(<AvatarMenu session={session} />);
     await openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Cerrar sesión" }));
     await waitFor(() => expect(state.logout).toHaveBeenCalled());
@@ -168,7 +173,7 @@ describe("AvatarMenu", () => {
   it("shows the photo after a successful upload", async () => {
     const fetchMock = mockFetch(200, { url: "/api/staff/s1/photo?v=2" });
     const onPhotoChange = vi.fn();
-    const { container } = render(<AvatarMenu session={session} onPhotoChange={onPhotoChange} />);
+    const { container } = renderWithQueryClient(<AvatarMenu session={session} onPhotoChange={onPhotoChange} />);
     expect(container.querySelector('[data-photo="initials"]')).not.toBeNull();
     pickFile(new File(["x"], "foto.jpg", { type: "image/jpeg" }));
     await waitFor(() => expect(onPhotoChange).toHaveBeenCalledWith("/api/staff/s1/photo?v=2"));
@@ -186,7 +191,7 @@ describe("AvatarMenu", () => {
   ])("shows the copy for a %i upload error", async (status, code, copy) => {
     mockFetch(status, { error: code });
     const onPhotoChange = vi.fn();
-    render(<AvatarMenu session={session} onPhotoChange={onPhotoChange} />);
+    renderWithQueryClient(<AvatarMenu session={session} onPhotoChange={onPhotoChange} />);
     pickFile(new File(["x"], "foto.jpg", { type: "image/jpeg" }));
     await waitFor(() => expect(state.toastError).toHaveBeenCalledWith(copy));
     expect(onPhotoChange).not.toHaveBeenCalled();
@@ -194,14 +199,14 @@ describe("AvatarMenu", () => {
 
   it("maps a bare status without a body to the same copy", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 413 })));
-    render(<AvatarMenu session={session} />);
+    renderWithQueryClient(<AvatarMenu session={session} />);
     pickFile(new File(["x"], "foto.jpg", { type: "image/jpeg" }));
     await waitFor(() => expect(state.toastError).toHaveBeenCalledWith("La imagen pesa más de 2 MB. Elige una más ligera."));
   });
 
   it("falls back to initials after removing the photo", async () => {
     const onPhotoChange = vi.fn();
-    const { container } = render(<AvatarMenu session={{ ...session, photoUrl: "/api/staff/s1/photo?v=1" }} onPhotoChange={onPhotoChange} />);
+    const { container } = renderWithQueryClient(<AvatarMenu session={{ ...session, photoUrl: "/api/staff/s1/photo?v=1" }} onPhotoChange={onPhotoChange} />);
     await openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Quitar foto" }));
     await waitFor(() => expect(state.removePhoto).toHaveBeenCalled());
@@ -210,9 +215,33 @@ describe("AvatarMenu", () => {
     expect(screen.getByText("AL")).toBeTruthy();
   });
 
+  it("writes the uploaded photo into me.profile", async () => {
+    mockFetch(200, { url: "/api/staff/s1/photo?v=3" });
+    const onPhotoChange = vi.fn();
+    const { client } = renderWithQueryClient(<AvatarMenu session={session} onPhotoChange={onPhotoChange} />);
+    expect(client.getQueryData<MyProfile>(qk.me.profile())).toEqual({ id: "s1", name: "Ana López", photoUrl: null });
+    pickFile(new File(["x"], "foto.jpg", { type: "image/jpeg" }));
+    await waitFor(() => expect(onPhotoChange).toHaveBeenCalled());
+    expect(client.getQueryData<MyProfile>(qk.me.profile())?.photoUrl).toBe("/api/staff/s1/photo?v=3");
+  });
+
+  it("sets me.profile.photoUrl to null after removing the photo", async () => {
+    const { client } = renderWithQueryClient(<AvatarMenu session={{ ...session, photoUrl: "/api/staff/s1/photo?v=1" }} />);
+    await openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Quitar foto" }));
+    await waitFor(() => expect(client.getQueryData<MyProfile>(qk.me.profile())?.photoUrl).toBeNull());
+  });
+
+  it("shows a photo another screen wrote into me.profile", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData<MyProfile>(qk.me.profile(), { id: "s1", name: "Ana López", photoUrl: "/api/staff/s1/photo?v=9" });
+    const { container } = renderWithQueryClient(<AvatarMenu session={session} />, { client });
+    expect(container.querySelector('[data-photo="photo"]')).not.toBeNull();
+  });
+
   it("shows the photo copy when the removal fails", async () => {
     state.removePhoto.mockRejectedValue(new Error("RATE_LIMITED"));
-    render(<AvatarMenu session={{ ...session, photoUrl: "/x" }} />);
+    renderWithQueryClient(<AvatarMenu session={{ ...session, photoUrl: "/x" }} />);
     await openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Quitar foto" }));
     await waitFor(() =>

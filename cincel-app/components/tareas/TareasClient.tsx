@@ -10,7 +10,7 @@ import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState"
 import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader, type PageHeaderProps } from "@/components/shell/PageHeader";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import {
   clearTareasFilters,
@@ -117,7 +117,7 @@ export function TareasClient({ query, initial, staff, tramos }: TareasClientProp
   const router = useRouter();
   const [, startTransition] = useTransition();
   const newTask = useNewTaskParam();
-  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const authenticatedUser = useSessionStore(selectCurrentUser);
   const capabilities = useMemo(() => resolveActivitiesCapabilities(authenticatedUser), [authenticatedUser]);
   const viewerId = authenticatedUser?.member.id ?? null;
 

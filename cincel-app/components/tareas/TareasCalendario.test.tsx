@@ -73,6 +73,11 @@ vi.mock("@/components/widgets/DistributionWidget", () => ({
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { CALENDARIO_DESCRIPTION, TareasCalendario } from "./TareasCalendario";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { seedSessionUser } from "@/tests/helpers/session-user";
+
+// The components read the signed-in user from the session store; seed it with the mocked user.
+beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
 const TODAY = new Date(2026, 10, 6); // viernes 6 de noviembre de 2026
 

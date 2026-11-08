@@ -4,6 +4,7 @@
  * teléfono and firma de correo through the existing staff actions; anything
  * else, or anyone else's record, still needs `canEditCollaborator`.
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const SELF = "00000000-0000-4000-8000-0000000000c1";
@@ -43,7 +44,8 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
 vi.mock("@/lib/repositories/staff-repository", () => staffRepo);
 vi.mock("@/lib/repositories/positions-repository", () => ({}));
 
-import { updateStaffAction, upsertStaffProfileAction } from "./staff-actions";
+import * as staffActionsModule from "./staff-actions";
+const { updateStaffAction, upsertStaffProfileAction } = unwrapActions(staffActionsModule);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -106,5 +108,26 @@ describe("upsertStaffProfileAction (own firma de correo)", () => {
     await expect(upsertStaffProfileAction(OTHER, { emailSignature: "x" })).rejects.toThrow("FORBIDDEN");
     expect(staffRepo.setStaffEmailSignature).not.toHaveBeenCalled();
     expect(staffRepo.upsertStaffProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe("ActionResult (user-facing mutations)", () => {
+  it("updateStaffAction and upsertStaffProfileAction return { ok: false, error } instead of throwing", async () => {
+    await expect(staffActionsModule.updateStaffAction(OTHER, { name: "Otro" })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^FORBIDDEN/),
+    });
+    await expect(staffActionsModule.updateStaffAction(SELF, { name: "   " })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^INVALID/),
+    });
+    await expect(staffActionsModule.upsertStaffProfileAction(OTHER, { emailSignature: "x" })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^FORBIDDEN/),
+    });
+  });
+
+  it("a success returns { ok: true, data }", async () => {
+    await expect(staffActionsModule.updateStaffAction(SELF, { name: "Ana María" })).resolves.toMatchObject({ ok: true });
   });
 });

@@ -27,7 +27,7 @@ import {
   updatePositionAction,
 } from "@/lib/actions/positions-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
 import type { Position, WorkflowDetail } from "@/lib/types/core";
 
@@ -58,7 +58,7 @@ interface PuestosClientProps {
 export function PuestosClient({ initialPositions, initialWorkflows }: PuestosClientProps) {
   const [positions, setPositions] = useState<Position[]>(initialPositions);
   const [workflows, setWorkflows] = useState<WorkflowDetail[]>(initialWorkflows);
-  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const authenticatedUser = useSessionStore(selectCurrentUser);
   const canManage = useMemo(
     () => resolvePositionsCapabilities(authenticatedUser).canManagePositions,
     [authenticatedUser],

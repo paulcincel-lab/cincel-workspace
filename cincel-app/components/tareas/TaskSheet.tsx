@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { StatusChip } from "@/components/widgets/StatusChip";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { fetchProjectSpacesAction } from "@/lib/actions/projects-actions";
 import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
@@ -45,7 +46,7 @@ import {
   updateTaskAction,
 } from "@/lib/actions/tasks-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { actionErrorText } from "@/lib/errors";
 import { isDueDateLate, parseStatusValue, statusSelectItems, statusSelectValue } from "@/lib/tasks/status-options";
@@ -61,6 +62,7 @@ import type {
   WorkflowDetail,
   WorkflowPhaseRef,
 } from "@/lib/types/core";
+import type { ActionResult } from "@/lib/types/schedule";
 
 export type TaskSheetProps = { taskId: string; onClose(): void };
 
@@ -353,7 +355,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const [attachmentError, setAttachmentError] = useState("");
   const [draft, setDraft] = useState<{ taskId: string; title: string; notes: string } | null>(null);
 
-  const [user] = useState(() => getCurrentAuthenticatedUser());
+  const user = useSessionStore(selectCurrentUser);
   const capabilities = useMemo(() => resolveActivitiesCapabilities(user), [user]);
   const viewerId = user?.member.id ?? "";
 
@@ -442,11 +444,11 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
 
   /** Runs a task action, refetches the task and shows any error as Spanish copy (FE §9). */
   const run = useCallback(
-    async (fn: () => Promise<unknown>) => {
+    async (fn: () => Promise<ActionResult<unknown>>) => {
       setBusy(true);
       setError(null);
       try {
-        await fn();
+        unwrapActionResult(await fn());
         await refetch();
       } catch (err) {
         setError(actionErrorText(err));
@@ -543,7 +545,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
     if (notes !== (task.notes ?? null)) next.notes = notes;
     if (Object.keys(next).length === 0) return;
     setError(null);
-    await updateTaskAction(task.id, next);
+    unwrapActionResult(await updateTaskAction(task.id, next));
     await refetch();
   };
 
@@ -879,7 +881,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
             key={task.id}
             staff={staff}
             onSubmit={async (text) => {
-              await addTaskCommentAction(task.id, text);
+              unwrapActionResult(await addTaskCommentAction(task.id, text));
               await refetch();
             }}
           />

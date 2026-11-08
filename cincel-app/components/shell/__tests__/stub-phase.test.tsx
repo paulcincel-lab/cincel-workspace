@@ -28,6 +28,18 @@ vi.mock("@/lib/actions/search-actions.flags", async (actual) => allFalse(await a
 vi.mock("@/lib/actions/time-tracking-actions.flags", async (actual) => allFalse(await actual()));
 vi.mock("@/lib/actions/vacations-actions.flags", async (actual) => allFalse(await actual()));
 
+// The avatar reads me.profile from the query cache; these tests render it without one.
+vi.mock("@/components/shell/photo-upload", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/shell/photo-upload")>()),
+  useMyProfile: (initial: unknown) => initial,
+  usePhotoUploadMutation: () => ({ mutateAsync: async () => "" }),
+  useRemovePhotoMutation: () => ({ mutateAsync: async () => undefined }),
+}));
+// The Sidebar reads the company settings from the query cache; these tests render it without one.
+vi.mock("@/lib/settings/use-general-settings", async () => {
+  const { GENERAL_SETTINGS_DEFAULTS } = await import("@/lib/settings/general-settings");
+  return { useGeneralSettings: () => GENERAL_SETTINGS_DEFAULTS };
+});
 vi.mock("next/navigation", () => ({
   usePathname: () => "/proyectos",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),

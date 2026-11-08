@@ -1,6 +1,10 @@
 "use server";
 
+import { toActionResult } from "@/lib/actions/action-result";
+import type { ActionResult } from "@/lib/types/schedule";
 import { revalidatePath } from "next/cache";
+import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
+import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import {
@@ -12,7 +16,7 @@ import { flowError } from "@/lib/project-flow/errors";
 import * as positionsRepository from "@/lib/repositories/positions-repository";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import type { EmergencyContact, Staff, StaffDetail, StaffInput, StaffProfile } from "@/lib/types/core";
-import { GOOGLE_MANAGED_REFUSAL, type GoogleManagedRefusal } from "@/lib/types/workspace-access";
+import { GOOGLE_MANAGED_REFUSAL, isGoogleManagedRefusal, type GoogleManagedRefusal } from "@/lib/types/workspace-access";
 import { UuidArraySchema, UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
 const normalizeRole = (role: string | null | undefined) => role?.trim() || null;
@@ -39,6 +43,17 @@ export async function fetchEmergencyContactsAction(): Promise<Record<string, Eme
   return staffRepository.listEmergencyContacts();
 }
 
+/**
+ * `toActionResult` for an action that can refuse a Google-managed person:
+ * `GOOGLE_MANAGED_REFUSAL` is already `{ ok: false, error }`, so it is the
+ * failed result itself (callers check `isGoogleManagedRefusal` first).
+ */
+async function refusalResult<T>(run: () => Promise<T | GoogleManagedRefusal>): Promise<ActionResult<T>> {
+  const result = await toActionResult(run);
+  if (result.ok && isGoogleManagedRefusal(result.data)) return result.data;
+  return result as ActionResult<T>;
+}
+
 async function requireTeamCapabilities() {
   return resolveTeamCapabilities(await requireCapabilityUser());
 }
@@ -62,13 +77,19 @@ export async function fetchStaffDetailAction(id: string): Promise<StaffDetail | 
   return staffRepository.getStaff(id);
 }
 
-export async function createStaffAction(input: StaffInput): Promise<Staff> {
+export async function createStaffAction(
+  ...args: Parameters<typeof createStaffActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createStaffActionImpl>>>> {
+  return toActionResult(() => createStaffActionImpl(...args));
+}
+
+async function createStaffActionImpl(input: StaffInput): Promise<Staff> {
   const user = await requireCapabilityUser();
   if (!resolveTeamCapabilities(user).canCreateCollaborator) {
     throw new Error("FORBIDDEN: staff create");
   }
   const row = await staffRepository.createStaff(input, user.member.id);
-  revalidatePath("/equipo");
+  revalidatePersonasScreen(["equipo"]);
   return row;
 }
 
@@ -104,6 +125,12 @@ function isOwnSignaturePatch(profile: Partial<StaffProfile>): boolean {
 }
 
 export async function updateStaffAction(
+  ...args: Parameters<typeof updateStaffActionImpl>
+): Promise<ActionResult<Staff>> {
+  return refusalResult(() => updateStaffActionImpl(...args));
+}
+
+async function updateStaffActionImpl(
   id: string,
   patch: Partial<StaffInput>
 ): Promise<Staff | GoogleManagedRefusal> {
@@ -115,7 +142,7 @@ export async function updateStaffAction(
   if (ownEdit) assertOwnStaffPatch(patch);
   if (await isRoleLocked(id, patch)) return GOOGLE_MANAGED_REFUSAL;
   const row = await staffRepository.updateStaff(id, patch, user.member.id);
-  revalidatePath("/equipo");
+  revalidatePersonasScreen(["equipo"]);
   // The name shows in the shell (avatar menu) on every page.
   if (ownEdit) revalidatePath("/", "layout");
   return row;
@@ -127,7 +154,7 @@ export async function setStaffActiveAction(id: string, active: boolean): Promise
     throw new Error("FORBIDDEN: staff toggle active");
   }
   const row = await staffRepository.setStaffActive(id, active, user.member.id);
-  revalidatePath("/equipo");
+  revalidatePersonasScreen(["equipo"]);
   return row;
 }
 
@@ -137,10 +164,16 @@ export async function deleteStaffAction(id: string): Promise<void> {
     throw new Error("FORBIDDEN: staff delete");
   }
   await staffRepository.softDeleteStaff(id, user.member.id);
-  revalidatePath("/equipo");
+  revalidatePersonasScreen(["equipo"]);
 }
 
 export async function upsertStaffProfileAction(
+  ...args: Parameters<typeof upsertStaffProfileActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof upsertStaffProfileActionImpl>>>> {
+  return toActionResult(() => upsertStaffProfileActionImpl(...args));
+}
+
+async function upsertStaffProfileActionImpl(
   staffId: string,
   profile: Partial<StaffProfile>
 ): Promise<StaffProfile> {
@@ -151,18 +184,24 @@ export async function upsertStaffProfileAction(
       throw new Error("INVALID: emailSignature");
     }
     const row = await staffRepository.setStaffEmailSignature(staffId, signature ?? null);
-    revalidatePath("/ajustes/perfil");
+    revalidateAjustesScreen("perfil");
     return row;
   }
   if (!resolveTeamCapabilities(user).canEditCollaborator) {
     throw new Error("FORBIDDEN: staff profile edit");
   }
   const row = await staffRepository.upsertStaffProfile(staffId, profile);
-  revalidatePath("/equipo");
+  revalidatePersonasScreen(["equipo"]);
   return row;
 }
 
 export async function setStaffCredentialAction(
+  ...args: Parameters<typeof setStaffCredentialActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setStaffCredentialActionImpl>>>> {
+  return toActionResult(() => setStaffCredentialActionImpl(...args));
+}
+
+async function setStaffCredentialActionImpl(
   staffId: string,
   options: { enableAccess: boolean; temporaryPassword?: string }
 ): Promise<void> {
@@ -171,7 +210,7 @@ export async function setStaffCredentialAction(
     throw new Error("FORBIDDEN: staff access");
   }
   await staffRepository.setStaffCredential(staffId, options);
-  revalidatePath("/equipo");
+  revalidatePersonasScreen(["equipo"]);
 }
 
 /**
@@ -184,7 +223,7 @@ export async function reorderStaffAction(orderedIds: string[]): Promise<void> {
     throw new Error("FORBIDDEN: staff reorder");
   }
   await staffRepository.reorderStaff(orderedIds);
-  revalidatePath("/equipo");
+  revalidatePersonasScreen(["equipo"]);
 }
 
 /**
@@ -196,6 +235,12 @@ export async function reorderStaffAction(orderedIds: string[]): Promise<void> {
  * Errors: FORBIDDEN, NOT_FOUND.
  */
 export async function setStaffPositionsAction(
+  ...args: Parameters<typeof setStaffPositionsActionImpl>
+): Promise<ActionResult<void>> {
+  return refusalResult(() => setStaffPositionsActionImpl(...args));
+}
+
+async function setStaffPositionsActionImpl(
   staffId: string,
   positionIds: string[]
 ): Promise<GoogleManagedRefusal | void> {
@@ -211,6 +256,6 @@ export async function setStaffPositionsAction(
   }
   // The repository replaces only the manual rows; puestos held from Workspace stay.
   await positionsRepository.setStaffPositions(id, wanted);
-  revalidatePath("/equipo");
-  revalidatePath("/configuracion/puestos");
+  revalidatePersonasScreen(["equipo"]);
+  revalidateAjustesScreen("puestos");
 }

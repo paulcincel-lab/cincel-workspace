@@ -46,6 +46,8 @@ function uuid(r: Rand): string {
 const TRAMO_KEYS = ["presale", "diseno", "construccion", "decoracion", "tramo_2", "a-b"];
 const SEARCHES = ["plano", "Cambiar tapas", "niño & café", "a+b=c", "100%", "¿qué?", "?q=1&x=2", "línea #3"];
 
+const FECHAS = ["2026-11-06", "2024-02-29", "2026-01-01", "2026-12-31", "1999-07-15"];
+
 function randomQuery(r: Rand): TareasQuery {
   return {
     vista: oneOf(r, TAREAS_VISTAS),
@@ -56,6 +58,7 @@ function randomQuery(r: Rand): TareasQuery {
     estado: maybe(r, () => oneOf(r, TAREAS_ESTADOS)),
     q: maybe(r, () => oneOf(r, SEARCHES)),
     nueva: r() < 0.5,
+    fecha: maybe(r, () => oneOf(r, FECHAS)),
   };
 }
 
@@ -86,6 +89,8 @@ describe("parseTareasQuery / toTareasSearch", () => {
       { estado: "bloqueado" },
       { q: "renders" },
       { nueva: true },
+      { fecha: "2026-11-06" },
+      { vista: "calendario", cal: "semana", fecha: "2024-02-29" },
     ];
     for (const partial of cases) {
       expect(roundTrip(partial)).toEqual({ ...DEFAULT_TAREAS_QUERY, ...partial });
@@ -109,6 +114,7 @@ describe("parseTareasQuery / toTareasSearch", () => {
       estado: "cancelado",
       q: "   ",
       nueva: "si",
+      fecha: "2026-13-01",
     });
     expect(parseTareasQuery(sp)).toEqual(DEFAULT_TAREAS_QUERY);
   });
@@ -132,6 +138,26 @@ describe("parseTareasQuery / toTareasSearch", () => {
     expect(toTareasSearch({ q: "a b", tramo: "presale", vista: "lista", responsable: "yo" })).toBe(
       "?vista=lista&tramo=presale&responsable=yo&q=a+b",
     );
+  });
+});
+
+describe("fecha", () => {
+  it("round trips the calendar date", () => {
+    expect(toTareasSearch({ fecha: "2026-11-06" })).toBe("?fecha=2026-11-06");
+    expect(parseTareasQuery(new URLSearchParams("fecha=2026-11-06")).fecha).toBe("2026-11-06");
+    expect(tareasHref({ vista: "calendario", fecha: "2026-11-06" })).toBe("/tareas?vista=calendario&fecha=2026-11-06");
+  });
+
+  it("drops malformed or impossible dates", () => {
+    for (const bad of ["", "2026-11-6", "06-11-2026", "2026-02-30", "2025-02-29", "2026-00-10", "2026-11-06T00:00", "hoy"]) {
+      expect(parseTareasQuery(new URLSearchParams({ fecha: bad })).fecha).toBeNull();
+    }
+  });
+
+  it("is not a filter and survives clearing the filters", () => {
+    const q: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "calendario", fecha: "2026-11-06", tramo: "presale" };
+    expect(hasTareasFilters({ ...DEFAULT_TAREAS_QUERY, fecha: "2026-11-06" })).toBe(false);
+    expect(clearTareasFilters(q)).toEqual({ ...DEFAULT_TAREAS_QUERY, vista: "calendario", fecha: "2026-11-06" });
   });
 });
 

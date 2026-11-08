@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 const reencodeToJpeg = vi.fn<(file: Blob, maxSide?: number) => Promise<Blob>>();
 
@@ -10,6 +10,9 @@ vi.mock("./reencode-photo", async (importOriginal) => {
 });
 
 import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { MyProfile } from "@/lib/types/shell";
 
 import { ProfilePhotoButton } from "./ProfilePhotoButton";
 import { PHOTO_ACCEPT, PHOTO_MAX_BYTES, PHOTO_MAX_SIDE, scaledSize } from "./reencode-photo";
@@ -23,11 +26,11 @@ function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-function setup(photoUrl: string | null = null) {
+function setup(photoUrl: string | null = null, client = createTestQueryClient()) {
   const onChange = vi.fn();
-  render(<ProfilePhotoButton photoUrl={photoUrl} initials="AL" onChange={onChange} />);
+  renderWithQueryClient(<ProfilePhotoButton photoUrl={photoUrl} initials="AL" onChange={onChange} />, { client });
   const input = screen.getByTestId("profile-photo-input") as HTMLInputElement;
-  return { onChange, input };
+  return { onChange, input, client };
 }
 
 function pick(input: HTMLInputElement, file: File) {
@@ -84,6 +87,30 @@ describe("ProfilePhotoButton", () => {
     expect(sent).toBeInstanceOf(Blob);
     expect((sent as Blob).type).toBe("image/jpeg");
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("writes the new URL into me.profile", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { url: "/api/staff/s-1/photo?v=abcd1234" }));
+    const client = createTestQueryClient();
+    client.setQueryData<MyProfile>(qk.me.profile(), { id: "s-1", name: "Ana López", photoUrl: null });
+    const { input, onChange } = setup(null, client);
+    pick(input, png());
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(client.getQueryData<MyProfile>(qk.me.profile())).toEqual({
+      id: "s-1",
+      name: "Ana López",
+      photoUrl: "/api/staff/s-1/photo?v=abcd1234",
+    });
+  });
+
+  it("leaves me.profile alone when the upload fails", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(413, { error: "TOO_LARGE" }));
+    const client = createTestQueryClient();
+    client.setQueryData<MyProfile>(qk.me.profile(), { id: "s-1", name: "Ana López", photoUrl: "/old" });
+    const { input } = setup("/old", client);
+    pick(input, png());
+    await screen.findByRole("alert");
+    expect(client.getQueryData<MyProfile>(qk.me.profile())?.photoUrl).toBe("/old");
   });
 
   it("shows the TOO_LARGE copy on 413", async () => {

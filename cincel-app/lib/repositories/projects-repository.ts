@@ -5,7 +5,6 @@ import { db } from "@/lib/db/client";
 import {
   contacts,
   driveFiles,
-  importRefs,
   projectContacts,
   projectLinks,
   projectMembers,
@@ -231,11 +230,11 @@ export async function listProjects(filters: ProjectFilters, viewer: ViewerScope)
  * The monday boards a project was imported from (import refs of entity `project`), or null when it wasn't
  * imported. Admin-only data (BE §8.5): "Reacomodar importación" uses it.
  */
-async function mondayImportOf(projectId: string): Promise<ProjectDetail["mondayImport"]> {
-  const refs = await db
-    .select({ data: importRefs.data })
-    .from(importRefs)
-    .where(and(eq(importRefs.source, "monday"), eq(importRefs.entity, "project"), eq(importRefs.rowId, projectId)));
+/** The project's monday import refs' `data`, read inside the project query (no extra statement). */
+const mondayImportRefsData = sql<unknown[] | null>`(select json_agg(ir.data) from core.import_refs ir where ir.source = 'monday' and ir.entity = 'project' and ir.row_id = ${projects.id})`;
+
+function mondayImportOf(refsData: unknown[] | null): ProjectDetail["mondayImport"] {
+  const refs = (refsData ?? []).map((data) => ({ data }));
   if (refs.length === 0) return null;
   const boards = new Map<string, string>();
   for (const ref of refs) {
@@ -261,6 +260,7 @@ export async function getProject(id: string, viewer: ViewerScope): Promise<Proje
       contacts: { with: { contact: true } },
       links: { orderBy: asc(projectLinks.createdAt) },
     },
+    extras: { mondayImportRefs: mondayImportRefsData.as("monday_import_refs") },
   });
   if (!row) return null;
   const stageRows = (await loadStageRows([row.id])).get(row.id);
@@ -282,7 +282,7 @@ export async function getProject(id: string, viewer: ViewerScope): Promise<Proje
     coordinator: row.coordinator ? { id: row.coordinator.id, name: row.coordinator.name } : null,
     originStaff: viewer.isAdmin && row.originStaff ? { id: row.originStaff.id, name: row.originStaff.name } : null,
     // Admins only (BE §8.5).
-    mondayImport: viewer.isAdmin ? await mondayImportOf(row.id) : null,
+    mondayImport: viewer.isAdmin ? mondayImportOf(row.mondayImportRefs) : null,
     members: row.members
       .filter((m) => m.staff.deletedAt === null)
       .map((m) => ({ id: m.staff.id, name: m.staff.name, role: m.role, active: m.staff.active }))

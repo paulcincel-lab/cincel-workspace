@@ -9,6 +9,7 @@
  * driver's timers keep working); the files that run the auto-close pass hold
  * one advisory lock (tests/setup/time-entries-lock.ts).
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { lockTimeEntries } from "@/tests/setup/time-entries-lock";
@@ -47,7 +48,7 @@ vi.mock("@/lib/time-tracking/settings", async (importOriginal) => ({
 describe.skipIf(!url)("time tracking acceptance (test DB)", async () => {
   const { and, eq } = await import("drizzle-orm");
   const { db, schema } = await import("@/lib/db/client");
-  const actions = await import("@/lib/actions/time-tracking-actions");
+  const actions = unwrapActions(await import("@/lib/actions/time-tracking-actions"));
   const { autoCloseJornadasJob } = await import("@/lib/cron/jobs/auto-close-jornadas");
   const { AUTO_CLOSE_TITLE, localInstant } = await import("@/lib/time-tracking/auto-close");
   const { DEFAULT_TIME_TRACKING_SETTINGS } = await import("@/lib/time-tracking/settings");

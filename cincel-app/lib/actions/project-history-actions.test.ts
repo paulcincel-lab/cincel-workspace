@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HistoryEvent } from "@/lib/types/core";
@@ -29,10 +30,11 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/projects-repository", () => repo);
 
-import {
+import * as projectsActionsModule from "./projects-actions";
+const {
   addProjectCommentAction,
   fetchProjectHistoryAction,
-} from "./projects-actions";
+} = unwrapActions(projectsActionsModule);
 
 const events: HistoryEvent[] = [
   {

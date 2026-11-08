@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** setProjectCurrentTramoAction and createProjectAction (project flow BE §7.3, §9.4). */
@@ -33,7 +34,8 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/projects-repository", () => repo);
 
-import { createProjectAction, setProjectCurrentTramoAction } from "./projects-actions";
+import * as projectsActionsModule from "./projects-actions";
+const { createProjectAction, setProjectCurrentTramoAction } = unwrapActions(projectsActionsModule);
 
 const DETAIL = { id: PROJECT, name: "Casa Valle", currentWorkflowId: TRAMO };
 

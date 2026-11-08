@@ -6,6 +6,8 @@
  * Client-safe: the tramo list comes through Project Flow's server action, so
  * a client component can import the pure helpers without pulling in the DB.
  */
+import { cache } from "react";
+
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import * as permissions from "@/lib/auth/permissions";
 import { isAdministratorRole } from "@/lib/data/roles";
@@ -47,14 +49,15 @@ const bySortOrder = (a: WorkflowRef, b: WorkflowRef): number =>
  * Active tramos from `workflows` rows (keys `presale` / `diseno` /
  * `construccion`), in order. Project Flow's nav read returns active,
  * non-deleted rows; the sort keeps the order stable for equal `sortOrder`.
+ * Per-request cache on the server (the nav and the page share one read).
  */
-export async function listTramos(): Promise<WorkflowRef[]> {
+export const listTramos = cache(async function listTramos(): Promise<WorkflowRef[]> {
   const rows = await fetchTramosNavAction();
   return rows
     .filter((row) => row.key.trim() !== "")
     .map((row) => ({ id: row.id, key: row.key, name: row.name, sortOrder: row.sortOrder }))
     .sort(bySortOrder);
-}
+});
 
 /**
  * Display name of a tramo key ("Presale", "Diseño", "Construcción"). Any other

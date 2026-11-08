@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
+import { toActionResult } from "@/lib/actions/action-result";
+import type { ActionResult } from "@/lib/types/schedule";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { deleteStaffPhoto } from "@/lib/repositories/preferences-repository";
@@ -12,9 +12,17 @@ import { deleteStaffPhoto } from "@/lib/repositories/preferences-repository";
  * remove action.
  */
 
-/** Delete the caller's photo. Auth: staff. Revalidates `/` (layout). */
-export async function removeMyPhotoAction(): Promise<void> {
+/**
+ * Delete the caller's photo. Auth: staff. No layout revalidation: the client
+ * sets `qk.me.profile()` to `photoUrl: null` (`useRemovePhotoMutation`).
+ */
+export async function removeMyPhotoAction(
+  ...args: Parameters<typeof removeMyPhotoActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof removeMyPhotoActionImpl>>>> {
+  return toActionResult(() => removeMyPhotoActionImpl(...args));
+}
+
+async function removeMyPhotoActionImpl(): Promise<void> {
   const user = await requireCapabilityUser();
   await deleteStaffPhoto(db, user.member.id);
-  revalidatePath("/", "layout");
 }

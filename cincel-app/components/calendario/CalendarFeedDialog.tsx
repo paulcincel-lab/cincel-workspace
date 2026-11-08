@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
@@ -16,14 +17,21 @@ import {
   disableCalendarFeedAction,
   disableGoogleCalendarSyncAction,
   enableGoogleCalendarSyncAction,
-  fetchCalendarFeedStatusAction,
-  fetchGoogleCalendarSyncStatusAction,
   generateCalendarFeedAction,
   syncGoogleCalendarAction,
-  type GoogleCalendarSyncStatus,
+  type GoogleCalendarSyncOutcome,
 } from "@/lib/actions/calendar-actions";
+import { useActionMutation } from "@/lib/query/mutation";
+import {
+  CALENDAR_INTEGRATION_INVALIDATE,
+  calendarFeedStatusOptions,
+  googleCalendarSyncStatusOptions,
+} from "@/lib/query/options/calendar";
 
 type Props = { open: boolean; onClose: () => void };
+
+/** One Google Calendar sync step: an `{ ok: false }` outcome is shown inline with its own message. */
+type SyncStep = { action: () => Promise<GoogleCalendarSyncOutcome | null | void> };
 
 function formatSyncedAt(iso: string): string {
   return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -37,35 +45,38 @@ export const CALENDAR_CONNECT_URL = "/api/auth/google/start?scope=calendar&retur
  * updates land within minutes instead of Google's hours-long ICS polling.
  */
 export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
-  const [status, setStatus] = useState<GoogleCalendarSyncStatus | null>(null);
-  const [busy, setBusy] = useState(false);
+  const statusQuery = useQuery({ ...googleCalendarSyncStatusOptions(), enabled: open });
+  const status = statusQuery.data ?? null;
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const refresh = () =>
-    fetchGoogleCalendarSyncStatusAction()
-      .then(setStatus)
-      .catch(() => setError("No se pudo consultar la sincronización."));
+  const mutation = useActionMutation<SyncStep, { failed: string | null }>(
+    async ({ action }) => {
+      const outcome = await action();
+      return { failed: outcome && !outcome.ok ? (outcome.error ?? "No se pudo sincronizar.") : null };
+    },
+    {
+      invalidate: CALENDAR_INTEGRATION_INVALIDATE,
+      onFormError: () => setError("No se pudo sincronizar."),
+    },
+  );
+  const busy = mutation.isPending;
 
-  useEffect(() => {
-    if (open) void refresh();
-  }, [open]);
-
-  async function run(action: () => Promise<{ ok: boolean; error?: string } | null | void>, done: string) {
-    setBusy(true);
+  function run(action: SyncStep["action"], done: string) {
     setError("");
     setMessage("");
-    try {
-      const outcome = await action();
-      if (outcome && !outcome.ok) setError(outcome.error ?? "No se pudo sincronizar.");
-      else setMessage(done);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo sincronizar.");
-    } finally {
-      setBusy(false);
-      await refresh();
-    }
+    mutation.mutate(
+      { action },
+      {
+        onSuccess: ({ failed }) => {
+          if (failed) setError(failed);
+          else setMessage(done);
+        },
+      },
+    );
   }
+
+  const shownError = error || (statusQuery.isError ? "No se pudo consultar la sincronización." : "");
 
   function connect() {
     window.location.href = CALENDAR_CONNECT_URL;
@@ -90,7 +101,7 @@ export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
             Cuenta conectada: <span className="text-foreground">{status.connectedEmail}</span>. Activa la
             sincronización para crear el calendario «Cincel».
           </p>
-          <Button disabled={busy} onClick={() => void run(enableGoogleCalendarSyncAction, "Sincronización activada.")}>
+          <Button disabled={busy} onClick={() => run(enableGoogleCalendarSyncAction, "Sincronización activada.")}>
             Activar sincronización
           </Button>
         </>
@@ -101,11 +112,11 @@ export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
             «Cincel».{" "}
             {status.lastSyncedAt ? `Última sincronización: ${formatSyncedAt(status.lastSyncedAt)}.` : null}
           </p>
-          {status.lastError && !error && !message ? (
+          {status.lastError && !shownError && !message ? (
             <p className="text-destructive">Último error: {status.lastError}</p>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button disabled={busy} onClick={() => void run(() => syncGoogleCalendarAction(), "Calendario actualizado.")}>
+            <Button disabled={busy} onClick={() => run(() => syncGoogleCalendarAction(), "Calendario actualizado.")}>
               {busy ? "Sincronizando…" : "Sincronizar ahora"}
             </Button>
             <Button
@@ -113,12 +124,12 @@ export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
               disabled={busy}
               onClick={() => {
                 if (!window.confirm("¿Dejar de sincronizar? El calendario «Cincel» se queda en Google; puedes borrarlo ahí.")) return;
-                void run(disableGoogleCalendarSyncAction, "Sincronización desactivada.");
+                run(disableGoogleCalendarSyncAction, "Sincronización desactivada.");
               }}
             >
               Desactivar
             </Button>
-            {error || status.lastError ? (
+            {shownError || status.lastError ? (
               <Button variant="ghost" disabled={busy} onClick={connect}>
                 Reconectar Google Calendar
               </Button>
@@ -127,7 +138,7 @@ export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
         </>
       )}
       {message ? <p className="text-muted-foreground">{message}</p> : null}
-      {error ? <p className="text-destructive">{error}</p> : null}
+      {shownError ? <p className="text-destructive">{shownError}</p> : null}
     </section>
   );
 }
@@ -139,56 +150,45 @@ export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
  * is how you get a new one (and it invalidates the old link).
  */
 export default function CalendarFeedDialog({ open, onClose }: Props) {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const statusQuery = useQuery({ ...calendarFeedStatusOptions(), enabled: open });
+  const enabled = statusQuery.data?.enabled ?? null;
+  // The token is shown once, right after it's generated; it is never stored in the cache.
   const [feedUrl, setFeedUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    fetchCalendarFeedStatusAction()
-      .then((status) => {
-        if (!cancelled) setEnabled(status.enabled);
-      })
-      .catch(() => {
-        if (!cancelled) setError("No se pudo consultar el estado del enlace.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+  const setFeedEnabled = (qc: QueryClient, value: boolean) =>
+    qc.setQueryData(calendarFeedStatusOptions().queryKey, { enabled: value });
 
-  async function generate() {
-    setBusy(true);
+  const generateMutation = useActionMutation<void, { token: string }>(() => generateCalendarFeedAction(), {
+    invalidate: CALENDAR_INTEGRATION_INVALIDATE,
+    setData: (qc) => setFeedEnabled(qc, true),
+    onFormError: () => setError("No se pudo generar el enlace."),
+  });
+  const disableMutation = useActionMutation<void, void>(() => disableCalendarFeedAction(), {
+    invalidate: CALENDAR_INTEGRATION_INVALIDATE,
+    setData: (qc) => setFeedEnabled(qc, false),
+    onFormError: () => setError("No se pudo desactivar el enlace."),
+  });
+  const busy = generateMutation.isPending || disableMutation.isPending;
+
+  function generate() {
     setError("");
-    try {
-      const { token } = await generateCalendarFeedAction();
-      setFeedUrl(`${window.location.origin}/api/calendario/feed/${token}.ics`);
-      setEnabled(true);
-      setCopied(false);
-    } catch {
-      setError("No se pudo generar el enlace.");
-    } finally {
-      setBusy(false);
-    }
+    generateMutation.mutate(undefined, {
+      onSuccess: ({ token }) => {
+        setFeedUrl(`${window.location.origin}/api/calendario/feed/${token}.ics`);
+        setCopied(false);
+      },
+    });
   }
 
-  async function disable() {
+  function disable() {
     if (!window.confirm("¿Desactivar el enlace? Google Calendar dejará de actualizarse con tus tareas.")) return;
-    setBusy(true);
     setError("");
-    try {
-      await disableCalendarFeedAction();
-      setEnabled(false);
-      setFeedUrl(null);
-    } catch {
-      setError("No se pudo desactivar el enlace.");
-    } finally {
-      setBusy(false);
-    }
+    disableMutation.mutate(undefined, { onSuccess: () => setFeedUrl(null) });
   }
+
+  const shownError = error || (statusQuery.isError ? "No se pudo consultar el estado del enlace." : "");
 
   async function copy() {
     if (!feedUrl) return;
@@ -235,16 +235,16 @@ export default function CalendarFeedDialog({ open, onClose }: Props) {
           ) : (
             <p className="text-muted-foreground">Aún no has creado un enlace.</p>
           )}
-          {error ? <p className="text-destructive">{error}</p> : null}
+          {shownError ? <p className="text-destructive">{shownError}</p> : null}
         </div>
 
         <DialogFooter>
           {enabled ? (
-            <Button variant="outline" disabled={busy} onClick={() => void disable()}>
+            <Button variant="outline" disabled={busy} onClick={disable}>
               Desactivar
             </Button>
           ) : null}
-          <Button disabled={busy || enabled === null} onClick={() => void generate()}>
+          <Button disabled={busy || enabled === null} onClick={generate}>
             {enabled ? "Regenerar enlace" : "Crear enlace"}
           </Button>
         </DialogFooter>

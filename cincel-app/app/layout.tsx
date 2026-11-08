@@ -2,14 +2,13 @@ import type { Metadata } from "next";
 import { DM_Sans, Geist, Geist_Mono, Inter } from "next/font/google";
 import AppRouteGuard from "@/components/auth/AppRouteGuard";
 import SessionHydrator from "@/components/auth/SessionHydrator";
-import { AppearanceProvider } from "@/components/shell/AppearanceProvider";
+import { AppearanceStoreProvider } from "@/lib/stores/appearance-store";
 import { Toaster } from "@/components/ui/shadcn/sonner";
 import QueryProvider from "@/components/providers/QueryProvider";
-import { SessionAccessProvider } from "@/lib/auth/session-context";
 import { getSessionAccess } from "@/lib/auth/session";
-import { buildDefaultGeneralSettings } from "@/lib/settings/general-settings";
+import { buildDefaultLoadedGeneralSettings } from "@/lib/settings/general-settings";
 import { getGeneralSettings } from "@/lib/settings/general-settings-server";
-import { GeneralSettingsProvider } from "@/lib/settings/use-general-settings";
+import { GeneralSettingsSeed } from "@/lib/settings/use-general-settings";
 import type { ResolvedAppearance } from "@/lib/types/redesign";
 import { appearanceStyleBlock, SYSTEM_MODE_SCRIPT } from "@/lib/ui/appearance-css";
 import { getResolvedAppearance } from "@/lib/ui/preferences-server";
@@ -80,17 +79,15 @@ export default async function RootLayout({
 }>) {
   const [sessionAccess, appearance] = await Promise.all([getSessionAccess(), getResolvedAppearance()]);
   // Company details stay off pages rendered without a session (login, public routes).
-  const generalSettings = sessionAccess.user ? (await getGeneralSettings()).settings : buildDefaultGeneralSettings();
+  const generalSettings = sessionAccess.user ? await getGeneralSettings() : buildDefaultLoadedGeneralSettings();
 
   const app = (
-    <QueryProvider>
-      <SessionAccessProvider value={sessionAccess}>
-        <SessionHydrator value={sessionAccess} />
-        <GeneralSettingsProvider value={generalSettings}>
-          <AppRouteGuard>{children}</AppRouteGuard>
-        </GeneralSettingsProvider>
-      </SessionAccessProvider>
-    </QueryProvider>
+    <>
+      <SessionHydrator value={sessionAccess} />
+      <GeneralSettingsSeed value={generalSettings}>
+        <AppRouteGuard>{children}</AppRouteGuard>
+      </GeneralSettingsSeed>
+    </>
   );
 
   return (
@@ -104,9 +101,12 @@ export default async function RootLayout({
         ) : null}
       </head>
       <body className="min-h-full flex flex-col">
-        <AppearanceProvider initial={appearance}>{app}</AppearanceProvider>
-        {/* The one Toaster (FE §3.1). */}
-        <Toaster position="bottom-right" offset={72} />
+        {/* The query cache wraps the appearance store provider and the Toaster, so both can read it. */}
+        <QueryProvider>
+          <AppearanceStoreProvider initial={appearance}>{app}</AppearanceStoreProvider>
+          {/* The one Toaster (FE §3.1). */}
+          <Toaster position="bottom-right" offset={72} />
+        </QueryProvider>
       </body>
     </html>
   );

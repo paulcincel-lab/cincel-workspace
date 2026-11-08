@@ -278,6 +278,18 @@ export async function enablePortalUser(portalUserId: string, staffId: string): P
   });
 }
 
+/** `listProjectAccess(projectId).length` with one COUNT(*) (revoked rows included). */
+export async function countProjectPortalAccess(projectId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(projectPortalAccess)
+    .innerJoin(portalUsers, eq(portalUsers.id, projectPortalAccess.portalUserId))
+    .innerJoin(contacts, eq(contacts.id, portalUsers.contactId))
+    .innerJoin(staff, eq(staff.id, projectPortalAccess.grantedByStaffId))
+    .where(eq(projectPortalAccess.projectId, projectId));
+  return row?.n ?? 0;
+}
+
 /** Every access row of the project, revoked ones included, newest first. */
 export async function listProjectAccess(projectId: string): Promise<PortalAccessRow[]> {
   const rows = await db

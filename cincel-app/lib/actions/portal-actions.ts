@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateProyectoClientesScreen } from "@/lib/cache/screens/proyectos";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolvePortalCapabilities, type PortalCapabilities } from "@/lib/auth/permissions";
@@ -31,7 +31,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_LIMIT_PER_HOUR = 3;
 const HOUR_MS = 60 * 60 * 1000;
-const CLIENTES_PATH = "/proyectos/[id]/clientes";
 
 const isUuid = (value: unknown): value is string => typeof value === "string" && UUID_RE.test(value);
 
@@ -79,7 +78,7 @@ async function sendInvite(to: string, staffName: string, projectName: string): P
 }
 
 function revalidateClientes(): void {
-  revalidatePath(CLIENTES_PATH, "page");
+  revalidateProyectoClientesScreen();
 }
 
 export async function invitePortalClientAction(input: InvitePortalClientInput): Promise<InvitePortalClientResult> {

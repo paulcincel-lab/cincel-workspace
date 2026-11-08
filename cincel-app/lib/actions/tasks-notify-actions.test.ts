@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
@@ -59,7 +60,8 @@ const repo = vi.hoisted(() => ({
 vi.mock("@/lib/repositories/tasks-repository", () => repo);
 vi.mock("@/lib/repositories/task-dependencies-repository", () => ({}));
 
-import { addTaskCommentAction, assignTaskAction, createUserTaskAction } from "./tasks-actions";
+import * as tasksActionsModule from "./tasks-actions";
+const { addTaskCommentAction, assignTaskAction, createUserTaskAction } = unwrapActions(tasksActionsModule);
 
 function taskRow(overrides: Record<string, unknown> = {}) {
   return {

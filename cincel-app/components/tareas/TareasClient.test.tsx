@@ -127,7 +127,13 @@ import { DEFAULT_TAREAS_QUERY, type TareasQuery } from "@/lib/tareas/query";
 import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
 import type { StaffOption } from "@/lib/types/redesign";
 
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { TAREAS_SEARCH_DEBOUNCE_MS, TareasClient, calendarTaskFilters } from "./TareasClient";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { seedSessionUser } from "@/tests/helpers/session-user";
+
+// The components read the signed-in user from the session store; seed it with the mocked user.
+beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
 const P1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const P2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -331,16 +337,18 @@ describe("TareasClient view switch", () => {
 });
 
 describe("TareasClient Nueva tarea", () => {
-  it("opens the dialog through ?nueva=1 with the tramo and project as defaults", () => {
+  it("opens the shell's NewTaskDialogHost with the tramo and project as defaults, without a navigation", () => {
+    navigation.search = `tramo=presale&proyecto=${P1}`;
     renderClient({ tramo: "presale", proyecto: P1 });
     fireEvent.click(screen.getByRole("button", { name: "Nueva tarea" }));
-    expect(navigation.replace).toHaveBeenCalledWith("/tareas?nueva=1", { scroll: false });
-
-    cleanup();
-    navigation.search = `tramo=presale&proyecto=${P1}&nueva=1`;
-    renderClient({ tramo: "presale", proyecto: P1, nueva: true });
-    const dialog = screen.getByRole("dialog", { name: "Nueva tarea" });
-    expect(JSON.parse(dialog.getAttribute("data-defaults") ?? "{}")).toEqual({ projectId: P1, tramoKey: "presale" });
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(useNewTaskUi.getState()).toMatchObject({
+      open: true,
+      defaults: { projectId: P1, tramoKey: "presale" },
+      source: "tareas",
+    });
+    // The host renders the dialog; this screen's own mount stays closed until 4a removes it.
+    expect(screen.queryByRole("dialog", { name: "Nueva tarea" })).toBeNull();
   });
 
   it("hides the button without the create capability", () => {

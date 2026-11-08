@@ -8,7 +8,7 @@ import { ReadyToStartCard } from "@/components/tareas/ReadyToStartCard";
 import { StartTramoSheet } from "@/components/tareas/StartTramoSheet";
 import { UpcomingProjects } from "@/components/tareas/UpcomingProjects";
 import { notifyTramoStarted } from "@/components/tareas/start-tramo-toast";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { actionErrorText } from "@/lib/errors";
 import type { TramoStartContract } from "@/lib/tramos/compat";
@@ -47,7 +47,7 @@ export function TareasStartSlot({ workflow, contract }: TareasStartSlotProps) {
   const searchParams = useSearchParams();
   const deepLinkProject = searchParams.get("iniciar") === "1" ? searchParams.get("project") || null : null;
 
-  const [user] = useState(() => getCurrentAuthenticatedUser());
+  const user = useSessionStore(selectCurrentUser);
   const canStart = useMemo(() => resolveActivitiesCapabilities(user).canCreateActivity, [user]);
   const isAdmin = user?.access === "Administrador";
   const viewerId = user?.member.id ?? "";
@@ -92,7 +92,6 @@ export function TareasStartSlot({ workflow, contract }: TareasStartSlotProps) {
   useEffect(() => {
     if (deepLinkHandled.current || !deepLinkProject || !canStart) return;
     deepLinkHandled.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStartProjectId(deepLinkProject);
   }, [deepLinkProject, canStart]);
 

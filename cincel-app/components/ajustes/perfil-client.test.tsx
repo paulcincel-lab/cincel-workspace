@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -47,6 +47,10 @@ vi.mock("@/components/patterns/SettingsRow", () => ({
   ),
 }));
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { MyProfile } from "@/lib/types/shell";
+
 import {
   PerfilClient,
   PerfilContrasena,
@@ -70,15 +74,23 @@ const BASE: PerfilData = {
   week: null,
 };
 
-function renderPerfil(patch: Partial<PerfilData> = {}) {
-  return render(
+function renderPerfil(patch: Partial<PerfilData> = {}, client = createTestQueryClient()) {
+  return renderWithQueryClient(
     <PerfilClient initial={{ ...BASE, ...patch }}>
       <PerfilFoto />
       <PerfilDatos />
       <PerfilHorasSemana />
       <PerfilContrasena />
     </PerfilClient>,
+    { client },
   );
+}
+
+/** A client whose `me.profile` is already seeded, as the shell does. */
+function seededClient(photoUrl: string | null): ReturnType<typeof createTestQueryClient> {
+  const client = createTestQueryClient();
+  client.setQueryData<MyProfile>(qk.me.profile(), { id: BASE.staffId, name: BASE.name, photoUrl });
+  return client;
 }
 
 function pickFile(file = new File(["x"], "foto.png", { type: "image/png" })) {
@@ -140,6 +152,26 @@ describe("Perfil photo", () => {
     expect(mocks.removeMyPhotoAction).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Quitar" })).toBeNull());
     expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  it("writes the uploaded photo into me.profile", async () => {
+    const client = seededClient(null);
+    renderPerfil({}, client);
+    pickFile();
+    await waitFor(() =>
+      expect(client.getQueryData<MyProfile>(qk.me.profile())?.photoUrl).toBe(
+        "/api/staff/00000000-0000-0000-0000-0000000000aa/photo?v=abcdef12",
+      ),
+    );
+  });
+
+  it("sets me.profile.photoUrl to null after removing the photo", async () => {
+    const client = seededClient("/api/staff/x/photo?v=1");
+    renderPerfil({ photoUrl: "/api/staff/x/photo?v=1" }, client);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
+    });
+    await waitFor(() => expect(client.getQueryData<MyProfile>(qk.me.profile())?.photoUrl).toBeNull());
   });
 
   it("has no Quitar button without a photo or while removeMyPhotoAction is a stub", () => {

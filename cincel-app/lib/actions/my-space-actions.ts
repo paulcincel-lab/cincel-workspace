@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateMiEspacioScreen } from "@/lib/cache/screens/mi-espacio";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import * as notesChecklists from "@/lib/my-space/notes-checklists";
@@ -17,7 +17,7 @@ import type { Checklist, ChecklistItem, Note, ParsedReminder, Reminder } from "@
 // ── Notes ───────────────────────────────────────────────────────────────────
 
 function revalidateMiEspacio() {
-  revalidatePath("/mi-espacio");
+  revalidateMiEspacioScreen(["miEspacio"]);
 }
 
 /** Live notes, pinned first, then `updatedAt desc`. */

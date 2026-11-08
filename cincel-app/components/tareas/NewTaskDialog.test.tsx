@@ -1,31 +1,33 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import { DISENO, PROJECTS, STAFF, WORKFLOWS } from "./new-task-fixtures";
+import { CATALOG_STAFF, DISENO, PROJECT_OPTIONS, WORKFLOWS } from "./new-task-fixtures";
 
 const router = vi.hoisted(() => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }));
-const url = vi.hoisted(() => ({ search: "" }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
   usePathname: () => "/tareas",
-  useSearchParams: () => new URLSearchParams(url.search),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const actions = vi.hoisted(() => ({
-  fetchProjectsAction: vi.fn(),
+  fetchCatalogProjectOptions: vi.fn(),
   fetchWorkflowsAction: vi.fn(),
-  fetchAssignableStaffAction: vi.fn(),
+  fetchCatalogAssignableStaff: vi.fn(),
   createUserTaskAction: vi.fn(),
   createSubtaskAction: vi.fn(),
   setTaskStatusAction: vi.fn(),
   setTaskCustomStatusAction: vi.fn(),
 }));
-vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectsAction: actions.fetchProjectsAction }));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogProjectOptions: actions.fetchCatalogProjectOptions,
+  fetchCatalogAssignableStaff: actions.fetchCatalogAssignableStaff,
+}));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowsAction: actions.fetchWorkflowsAction }));
-vi.mock("@/lib/actions/staff-actions", () => ({ fetchAssignableStaffAction: actions.fetchAssignableStaffAction }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   createUserTaskAction: actions.createUserTaskAction,
   createSubtaskAction: actions.createSubtaskAction,
@@ -63,9 +65,12 @@ vi.mock("@/components/patterns/FormDialog", () => ({
     ) : null,
 }));
 
-import { NewTaskDialog, NewTaskDialogRoute, type NewTaskDialogProps } from "./NewTaskDialog";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+
+import { NewTaskDialog, newTaskInvalidations, newTaskWorkflowsKey, type NewTaskDialogProps } from "./NewTaskDialog";
 import { applyTemplate, initialStatusTarget, tramoFases, tramoTemplateTitles } from "./new-task-form";
-import { newTaskSearch } from "./use-new-task-param";
+import { newTaskDefaultsFromSearch, newTaskSearch } from "./use-new-task-param";
 
 /** A real mouse press on a base-ui Select option: pointerdown, then click. */
 function pressOption(option: HTMLElement) {
@@ -78,12 +83,19 @@ async function pick(trigger: string, option: string) {
   pressOption(await screen.findByRole("option", { name: option }));
 }
 
-async function renderDialog(props: Partial<NewTaskDialogProps> = {}) {
+async function renderDialog(props: Partial<NewTaskDialogProps> = {}, client: QueryClient = createTestQueryClient()) {
   const onOpenChange = vi.fn();
-  render(<NewTaskDialog open onOpenChange={onOpenChange} {...props} />);
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  const view = renderWithQueryClient(<NewTaskDialog open onOpenChange={onOpenChange} {...props} />, { client });
   await waitFor(() => expect(screen.queryByText("Cargando…")).toBeNull());
-  await waitFor(() => expect(actions.fetchAssignableStaffAction).toHaveBeenCalled());
-  return { onOpenChange };
+  await waitFor(() => expect(actions.fetchCatalogAssignableStaff).toHaveBeenCalled());
+  await screen.findByRole("combobox", { name: "Responsable" });
+  return { onOpenChange, client, invalidate, view };
+}
+
+/** The query keys `invalidateQueries` was called with, in order. */
+function invalidatedKeys(spy: { mock: { calls: unknown[][] } }) {
+  return spy.mock.calls.map((call) => (call[0] as { queryKey: unknown }).queryKey);
 }
 
 function titleInput() {
@@ -95,10 +107,9 @@ function subtaskValues() {
 }
 
 beforeEach(() => {
-  url.search = "";
-  actions.fetchProjectsAction.mockResolvedValue(PROJECTS);
+  actions.fetchCatalogProjectOptions.mockResolvedValue(PROJECT_OPTIONS);
   actions.fetchWorkflowsAction.mockResolvedValue(WORKFLOWS);
-  actions.fetchAssignableStaffAction.mockResolvedValue(STAFF);
+  actions.fetchCatalogAssignableStaff.mockResolvedValue(CATALOG_STAFF);
   actions.createUserTaskAction.mockResolvedValue({ id: "task-1" });
   actions.createSubtaskAction.mockResolvedValue({ id: "sub-1" });
   actions.setTaskStatusAction.mockResolvedValue({ id: "task-1" });
@@ -134,17 +145,66 @@ describe("new-task-form helpers", () => {
     expect(newTaskSearch(new URLSearchParams("vista=lista&nueva=1"), false)).toBe("?vista=lista");
     expect(newTaskSearch(new URLSearchParams("nueva=1"), false)).toBe("");
   });
+
+  it("reads the proyecto and tramo defaults from the URL", () => {
+    expect(newTaskDefaultsFromSearch(new URLSearchParams("proyecto=p-1&tramo=diseno&nueva=1"))).toEqual({
+      projectId: "p-1",
+      tramoKey: "diseno",
+    });
+    expect(newTaskDefaultsFromSearch(new URLSearchParams("vista=lista"))).toEqual({});
+  });
 });
 
 describe("NewTaskDialog", () => {
-  it("loads active projects and tramos when it opens", async () => {
-    await renderDialog();
-    expect(actions.fetchProjectsAction).toHaveBeenCalledWith({ status: "activo" });
+  it("loads active projects and tramos through the catalog queries when it opens", async () => {
+    const { client } = await renderDialog();
+    expect(actions.fetchCatalogProjectOptions).toHaveBeenCalledWith({});
     expect(actions.fetchWorkflowsAction).toHaveBeenCalled();
     expect(screen.getByRole("combobox", { name: "Proyecto" }).textContent).toContain("Casa Roble");
     // The project's current tramo is the default.
     expect(screen.getByRole("combobox", { name: "Tramo" }).textContent).toContain("Diseño");
-    expect(actions.fetchAssignableStaffAction).toHaveBeenCalledWith("w-diseno");
+    expect(actions.fetchCatalogAssignableStaff).toHaveBeenCalledWith({ workflowId: "w-diseno" });
+    expect(client.getQueryData(qk.catalog.projectOptions())).toEqual(PROJECT_OPTIONS);
+    expect(client.getQueryData(qk.catalog.assignableStaff("w-diseno"))).toEqual(CATALOG_STAFF);
+    expect(client.getQueryData(newTaskWorkflowsKey())).toEqual(WORKFLOWS);
+  });
+
+  it("leaves non-active projects out of Proyecto", async () => {
+    await renderDialog();
+    fireEvent.click(screen.getByRole("combobox", { name: "Proyecto" }));
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["Casa Roble", "Torre Norte"]);
+  });
+
+  it("lists the suggested responsables first", async () => {
+    await renderDialog();
+    fireEvent.click(screen.getByRole("combobox", { name: "Responsable" }));
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["Sin responsable", "Ana López", "Luis Mora"]);
+  });
+
+  it("loads nothing while closed", () => {
+    renderWithQueryClient(<NewTaskDialog open={false} onOpenChange={vi.fn()} />);
+    expect(actions.fetchCatalogProjectOptions).not.toHaveBeenCalled();
+    expect(actions.fetchWorkflowsAction).not.toHaveBeenCalled();
+    expect(actions.fetchCatalogAssignableStaff).not.toHaveBeenCalled();
+  });
+
+  it("issues the catalog calls once when it opens twice in a session", async () => {
+    const client = createTestQueryClient();
+    const { view } = await renderDialog({}, client);
+    view.rerender(<NewTaskDialog open={false} onOpenChange={vi.fn()} />);
+    view.rerender(<NewTaskDialog open onOpenChange={vi.fn()} />);
+    await screen.findByRole("combobox", { name: "Responsable" });
+    expect(actions.fetchCatalogProjectOptions).toHaveBeenCalledTimes(1);
+    expect(actions.fetchWorkflowsAction).toHaveBeenCalledTimes(1);
+    expect(actions.fetchCatalogAssignableStaff).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a catalog load failure in the form", async () => {
+    actions.fetchCatalogProjectOptions.mockRejectedValue(new Error("FORBIDDEN"));
+    renderWithQueryClient(<NewTaskDialog open onOpenChange={vi.fn()} />);
+    expect((await screen.findByRole("alert")).textContent).toBe("No tienes permiso para realizar esta acción.");
   });
 
   it("fills the Fase list from the selected tramo only", async () => {
@@ -214,7 +274,7 @@ describe("NewTaskDialog", () => {
   });
 
   it("shows INVALID copy when there is no active project", async () => {
-    actions.fetchProjectsAction.mockResolvedValue([]);
+    actions.fetchCatalogProjectOptions.mockResolvedValue([]);
     await renderDialog();
     expect(screen.getByText("No hay proyectos activos disponibles")).toBeTruthy();
     fireEvent.change(titleInput(), { target: { value: "Algo" } });
@@ -227,11 +287,13 @@ describe("NewTaskDialog", () => {
 
   it("shows server errors through actionErrorText and stays open", async () => {
     actions.createUserTaskAction.mockRejectedValue(new Error("FORBIDDEN"));
-    const { onOpenChange } = await renderDialog();
+    const { onOpenChange, invalidate } = await renderDialog();
     fireEvent.change(titleInput(), { target: { value: "Planos" } });
     fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
     expect((await screen.findByRole("alert")).textContent).toBe("No tienes permiso para realizar esta acción.");
     expect(onOpenChange).not.toHaveBeenCalled();
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
     expect(router.refresh).not.toHaveBeenCalled();
   });
 
@@ -243,8 +305,8 @@ describe("NewTaskDialog", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("Esa fase no pertenece al tramo de la tarea.");
   });
 
-  it("creates the task and its subtareas, closes and refreshes the open view", async () => {
-    const { onOpenChange } = await renderDialog();
+  it("creates the task and its subtareas, closes and invalidates the views showing tasks", async () => {
+    const { onOpenChange, invalidate } = await renderDialog();
     fireEvent.change(titleInput(), { target: { value: "  Planos de fachada " } });
     await pick("Fase", "Ejecutivo");
     await pick("Responsable", "Ana López");
@@ -271,7 +333,41 @@ describe("NewTaskDialog", () => {
       priority: "alta",
     });
     expect(toasts.success).toHaveBeenCalledWith("Tarea creada");
-    expect(router.refresh).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(invalidatedKeys(invalidate)).toEqual(newTaskInvalidations("p-roble", { taskId: "task-1", withSubtasks: true })),
+    );
+    expect(invalidatedKeys(invalidate)).toEqual([
+      ["tareas"],
+      ["proyectos", "p-roble", "tareas"],
+      ["proyectos", "p-roble", "shell"],
+      ["proyectos", "p-roble", "resumen"],
+      ["proyectos", "list"],
+      ["inicio"],
+      ["shell", "badges"],
+      ["tasks", "task-1"],
+      ["tasks", "task-1", "subtasks"],
+    ]);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("invalidates no subtask keys for a task without subtareas", async () => {
+    const { onOpenChange, invalidate } = await renderDialog();
+    fireEvent.change(titleInput(), { target: { value: "Planos" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(newTaskInvalidations("p-roble")));
+  });
+
+  it("unwraps ActionResult-shaped results", async () => {
+    actions.createUserTaskAction.mockResolvedValue({ ok: true, data: { id: "task-9" } });
+    actions.createSubtaskAction.mockResolvedValue({ ok: false, error: "NESTED" });
+    const { onOpenChange } = await renderDialog();
+    fireEvent.change(titleInput(), { target: { value: "Planos" } });
+    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla del tramo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(actions.createSubtaskAction.mock.calls[0][0]).toBe("task-9");
+    expect(toasts.error).toHaveBeenCalledWith("No se pudo completar la acción. Intenta de nuevo.");
   });
 
   it("saves no fase for a tramo without a catalog", async () => {
@@ -291,8 +387,10 @@ describe("NewTaskDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(actions.createSubtaskAction).toHaveBeenCalledTimes(2);
+    expect(toasts.success).toHaveBeenCalledWith("Tarea creada");
     expect(toasts.error).toHaveBeenCalledWith("No se pudo completar la acción. Intenta de nuevo.");
-    expect(router.refresh).toHaveBeenCalled();
+    expect(toasts.error).toHaveBeenCalledTimes(1);
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 });
 
@@ -305,7 +403,7 @@ describe("NewTaskDialog · board column (Tablero “+ Agregar”)", () => {
     expect(initialStatusTarget("custom:cs-qa", { status: "pendiente", customStatus: { id: "cs-qa" } })).toBeNull();
   });
 
-  it("creates the task, then moves it to the preselected base estatus and refreshes", async () => {
+  it("creates the task, then moves it to the preselected base estatus", async () => {
     actions.createUserTaskAction.mockResolvedValue({ id: "task-1", status: "pendiente", customStatus: null });
     const { onOpenChange } = await renderDialog({ defaults: { status: "en_proceso" } });
     fireEvent.change(titleInput(), { target: { value: "Render sala" } });
@@ -314,7 +412,7 @@ describe("NewTaskDialog · board column (Tablero “+ Agregar”)", () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(actions.setTaskStatusAction).toHaveBeenCalledWith("task-1", "en_proceso");
     expect(actions.setTaskCustomStatusAction).not.toHaveBeenCalled();
-    expect(router.refresh).toHaveBeenCalled();
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 
   it("moves it to a custom:<id> column through setTaskCustomStatusAction", async () => {
@@ -349,24 +447,6 @@ describe("NewTaskDialog · board column (Tablero “+ Agregar”)", () => {
     expect(actions.createUserTaskAction).toHaveBeenCalledTimes(1);
     expect(toasts.success).toHaveBeenCalledWith("Tarea creada");
     expect(toasts.error).toHaveBeenCalledWith("No tienes permiso para realizar esta acción.");
-    expect(router.refresh).toHaveBeenCalled();
-  });
-});
-
-describe("NewTaskDialogRoute", () => {
-  it("opens with ?nueva=1 and closing removes the param", async () => {
-    url.search = "vista=lista&nueva=1&tramo=presale";
-    render(<NewTaskDialogRoute />);
-    expect(await screen.findByRole("dialog", { name: "Nueva tarea" })).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Tramo" }).textContent).toContain("Presale"));
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    expect(router.replace).toHaveBeenCalledWith("/tareas?vista=lista&tramo=presale", { scroll: false });
-  });
-
-  it("stays closed without ?nueva=1", () => {
-    url.search = "vista=lista";
-    render(<NewTaskDialogRoute />);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(actions.fetchProjectsAction).not.toHaveBeenCalled();
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 });

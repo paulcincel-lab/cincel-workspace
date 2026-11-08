@@ -6,13 +6,14 @@ import { toast } from "sonner";
 
 import { SettingsRow } from "@/components/patterns/SettingsRow";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
+import { usePhotoUploadMutation, useRemovePhotoMutation } from "@/components/shell/photo-upload";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Textarea } from "@/components/ui/shadcn/textarea";
-import { removeMyPhotoAction } from "@/lib/actions/profile-photo-actions";
 import { IMPLEMENTED as PHOTO_IMPLEMENTED } from "@/lib/actions/profile-photo-actions.flags";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { updateStaffAction, upsertStaffProfileAction } from "@/lib/actions/staff-actions";
 import { changePasswordAction } from "@/lib/auth/auth-actions";
 import { actionErrorText } from "@/lib/errors";
@@ -97,7 +98,15 @@ export function PerfilClient({ initial, children }: PerfilClientProps) {
 
 // ── Foto de perfil ──────────────────────────────────────────────────────────
 
-/** Photo: re-encoded on the client, uploaded to the photo route; "Quitar" removes it. */
+/** Re-encode then POST: Perfil's own upload pipeline. */
+async function uploadPerfilPhoto(file: File): Promise<string> {
+  return uploadMyPhoto(await reencodePhoto(file));
+}
+
+/**
+ * Photo: re-encoded on the client, uploaded to the photo route; "Quitar"
+ * removes it. Both write `qk.me.profile()`, so the shell avatar follows.
+ */
 export function PerfilFoto() {
   const { data, setPhotoUrl } = usePerfil();
   const router = useRouter();
@@ -106,17 +115,17 @@ export function PerfilFoto() {
   const hintId = useId();
   const [pending, setPending] = useState<"upload" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const uploadPhoto = usePhotoUploadMutation(uploadPerfilPhoto);
+  const removePhoto = useRemovePhotoMutation();
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     setError(null);
     setPending("upload");
     try {
-      const photo = await reencodePhoto(file);
-      const url = await uploadMyPhoto(photo);
+      const url = await uploadPhoto.mutateAsync(file);
       setPhotoUrl(url);
       toast.success("Foto actualizada");
-      // The shell's avatar reads the photo from the server (no localStorage).
       router.refresh();
     } catch (err) {
       setError(actionErrorText(err, "photo"));
@@ -130,7 +139,7 @@ export function PerfilFoto() {
     setError(null);
     setPending("remove");
     try {
-      await removeMyPhotoAction();
+      await removePhoto.mutateAsync();
       setPhotoUrl(null);
       toast.success("Foto quitada");
       router.refresh();
@@ -232,14 +241,17 @@ export function PerfilDatos() {
     startTransition(async () => {
       try {
         if (staffChanged) {
-          const result = await updateStaffAction(data.staffId, { name: name.trim(), phone: phone.trim() || null });
-          if (isGoogleManagedRefusal(result)) throw new Error("FORBIDDEN");
+          const updated = await updateStaffAction(data.staffId, { name: name.trim(), phone: phone.trim() || null });
+          if (isGoogleManagedRefusal(updated)) throw new Error("FORBIDDEN");
+          const result = unwrapActionResult(updated);
           setSaved({ name: result.name, phone: result.phone ?? "" });
           setName(result.name);
           setPhone(result.phone ?? "");
         }
         if (signatureChanged) {
-          const profile = await upsertStaffProfileAction(data.staffId, { emailSignature: signature.trim() || null });
+          const profile = unwrapActionResult(
+            await upsertStaffProfileAction(data.staffId, { emailSignature: signature.trim() || null }),
+          );
           const saved = profile.emailSignature ?? "";
           setSaved({ emailSignature: saved });
           setSignature(saved);

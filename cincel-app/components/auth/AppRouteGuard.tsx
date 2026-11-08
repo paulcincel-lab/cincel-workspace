@@ -10,7 +10,8 @@ import {
   LOGIN_ROUTE as PUBLIC_LOGIN_ROUTE,
   SIGN_OUT_TO_LOGIN_URL,
 } from "@/lib/auth/public-routes";
-import { useSessionAccess } from "@/lib/auth/session-context";
+import type { SessionAccessStatus } from "@/lib/auth/session";
+import { selectAuthenticatedUser, selectSessionStatus, useSessionStore } from "@/lib/stores/session-store";
 
 // Kept only for the legacy /configuracion paths. /ajustes is never matched
 // here: each admin segment has its own server guard (redesign FE §8, BE §12.2).
@@ -25,14 +26,16 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
     () => false
   );
 
-  // Server-resolved access decision, hydrated by the root layout and refreshed
-  // via revalidatePath() after the login/logout Server Actions.
-  const serverResolution = useSessionAccess();
+  // Server-resolved access decision, mirrored into the session store by
+  // `SessionHydrator` (root layout) and refreshed via revalidatePath() after
+  // the login/logout Server Actions.
+  const sessionStatus = useSessionStore(selectSessionStatus);
+  const sessionUser = useSessionStore(selectAuthenticatedUser);
 
   const route = pathname || "/";
-  const resolution = isMounted
-    ? serverResolution
-    : { status: "guest" as const, user: null };
+  const resolution: { status: SessionAccessStatus; user: { access: string } | null } = isMounted
+    ? { status: sessionStatus, user: sessionUser }
+    : { status: "guest", user: null };
   const isPortal = isPortalPath(route);
   const isPublic = isPublicPath(route);
   const isConfigurationRoute = route === CONFIG_ROUTE_PREFIX || route.startsWith(`${CONFIG_ROUTE_PREFIX}/`);
@@ -68,6 +71,17 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!isMounted || canRender) {
+      return;
+    }
+
+    // The hydrator seeds the store in a layout effect of the same commit, so a
+    // render that came with a new session (login → `router.replace`) may have
+    // read the previous one. Re-check against the current store before acting.
+    const current = useSessionStore.getState();
+    if (
+      selectSessionStatus(current) !== resolution.status ||
+      (selectAuthenticatedUser(current)?.access ?? null) !== (resolution.user?.access ?? null)
+    ) {
       return;
     }
 

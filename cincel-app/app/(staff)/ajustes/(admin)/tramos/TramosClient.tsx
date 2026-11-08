@@ -27,7 +27,7 @@ import {
   updateTemplateAction,
   updateWorkflowPhaseAction,
 } from "@/lib/actions/workflows-actions";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
 import { tramosErrorText } from "@/lib/tramos/tramos-error-text";
 import type {
@@ -123,7 +123,7 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [savingAutoStart, setSavingAutoStart] = useState(false);
 
-  const [authenticatedUser] = useState(() => getCurrentAuthenticatedUser());
+  const authenticatedUser = useSessionStore(selectCurrentUser);
   const capabilities = useMemo(
     () => resolveWorkflowsCapabilities(authenticatedUser),
     [authenticatedUser],

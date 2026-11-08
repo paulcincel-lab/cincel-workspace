@@ -21,7 +21,8 @@ vi.mock("@/lib/actions/assistant-actions", () => ({
   },
 }));
 
-import { AssistantLauncher, assistantEntryEnabled, openAssistant } from "../AssistantLauncher";
+import { AssistantLauncher, assistantEntryEnabled } from "../AssistantLauncher";
+import { openAssistant, useAssistantUi } from "@/lib/stores/assistant-ui-store";
 import { IMPLEMENTED } from "@/lib/actions/assistant-actions.flags";
 
 // The launcher lazy-loads the sheet chunk on first open; load it up front so a
@@ -85,10 +86,38 @@ describe("AssistantLauncher", () => {
     );
   });
 
-  it("opens from other entry points through openAssistant()", async () => {
+  it("opens from other entry points through the store's openAssistant()", async () => {
     render(<AssistantLauncher enabled />);
     act(() => openAssistant());
     expect(await screen.findByPlaceholderText("Pregunta, pide un cálculo o arrastra un plano…")).toBeTruthy();
+    expect(useAssistantUi.getState().open).toBe(true);
+  });
+
+  it("marks the store available while active and unavailable when hidden or unmounted", () => {
+    const { unmount } = render(<AssistantLauncher enabled />);
+    expect(useAssistantUi.getState().available).toBe(true);
+    unmount();
+    expect(useAssistantUi.getState().available).toBe(false);
+
+    render(<AssistantLauncher enabled hidden />);
+    expect(useAssistantUi.getState().available).toBe(false);
+  });
+
+  it("⌘J writes the store and mounts the sheet once", async () => {
+    render(<AssistantLauncher enabled />);
+    pressCmdJ();
+    expect(useAssistantUi.getState()).toMatchObject({ open: true, mounted: true });
+    await screen.findByPlaceholderText("Pregunta, pide un cálculo o arrastra un plano…");
+    pressCmdJ();
+    expect(useAssistantUi.getState()).toMatchObject({ open: false, mounted: true });
+  });
+
+  it("no longer listens for a window event", () => {
+    render(<AssistantLauncher enabled />);
+    act(() => {
+      window.dispatchEvent(new Event("cincel:open-" + "assistant"));
+    });
+    expect(useAssistantUi.getState().open).toBe(false);
   });
 
   it("Escape closes the sheet and focus returns to the trigger", async () => {

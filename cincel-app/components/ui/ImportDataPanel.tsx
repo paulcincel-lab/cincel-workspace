@@ -1,6 +1,7 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 
 import {
   Accordion,
@@ -16,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/shadcn/table";
 import { getImportDataAction } from "@/lib/actions/import-actions";
+import { qk } from "@/lib/query/keys";
 import type { ImportDataEntity } from "@/lib/repositories/import-repository";
 import type { ImportData } from "@/lib/types/core";
 import { formatDateDMY } from "@/lib/utils/date";
@@ -198,32 +200,19 @@ export function ImportDataPanel({
   );
 }
 
-/** Loads a row's import data with `getImportDataAction`; `null` until loaded or when absent. */
+/**
+ * Loads a row's import data through `qk.importData(entity, rowId)`; `null`
+ * until loaded, when absent, or when the load fails. The query function only
+ * reads: it calls `getImportDataAction` and nothing else.
+ */
 export function useImportData(
   entity: ImportDataEntity,
   rowId: string | null | undefined,
 ): ImportData | null {
-  const [loaded, setLoaded] = useState<{
-    key: string;
-    data: ImportData | null;
-  } | null>(null);
-  const key = rowId ? `${entity}:${rowId}` : null;
-
-  useEffect(() => {
-    if (!rowId) return;
-    let cancelled = false;
-    const requested = `${entity}:${rowId}`;
-    getImportDataAction(entity, rowId)
-      .then((data) => {
-        if (!cancelled) setLoaded({ key: requested, data });
-      })
-      .catch(() => {
-        if (!cancelled) setLoaded({ key: requested, data: null });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [entity, rowId]);
-
-  return key && loaded?.key === key ? loaded.data : null;
+  const { data } = useQuery({
+    queryKey: qk.importData(entity, rowId ?? ""),
+    queryFn: () => getImportDataAction(entity, rowId as string),
+    enabled: Boolean(rowId),
+  });
+  return rowId ? (data ?? null) : null;
 }

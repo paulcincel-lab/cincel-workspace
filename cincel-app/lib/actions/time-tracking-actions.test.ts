@@ -4,6 +4,7 @@
  * and exempt roles, `INVALID` source, revalidation of the settings save, the
  * disabled `fetchMyTodayAction` shape, and the caller's Mon–Sun week.
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TimeEntryRow } from "@/lib/repositories/time-entries-repository";
@@ -49,7 +50,10 @@ vi.mock("@/lib/time-tracking/week-hours", () => ({ weekHours }));
 const approvedAbsences = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/vacations/approved-absences", () => ({ approvedAbsences }));
 
-import {
+import * as timeTrackingActionsModule from "./time-tracking-actions";
+import { IMPLEMENTED } from "./time-tracking-actions.flags";
+
+const {
   clockInAction,
   clockOutAction,
   fetchMyTodayAction,
@@ -58,8 +62,7 @@ import {
   pauseWorkAction,
   resumeWorkAction,
   saveTimeTrackingSettingsAction,
-} from "./time-tracking-actions";
-import { IMPLEMENTED } from "./time-tracking-actions.flags";
+} = unwrapActions(timeTrackingActionsModule);
 
 /** Monday 2026-11-09, 10:00 in America/Mexico_City. */
 const NOW = new Date("2026-11-09T10:00:00-06:00");
@@ -315,5 +318,31 @@ describe("fetchMyWeekHoursAction", () => {
   it("ignores another person's absences", async () => {
     approvedAbsences.mockResolvedValue([{ staffId: "someone-else", from: "2026-11-09", to: "2026-11-15", kind: "vacaciones" }]);
     await expect(fetchMyWeekHoursAction()).resolves.toMatchObject({ total: 0, target: 40 });
+  });
+});
+
+describe("ActionResult (user-facing mutations)", () => {
+  it("clock writes return { ok: false, error } with the code instead of throwing", async () => {
+    store(settings({ enabled: false }));
+    await expect(timeTrackingActionsModule.clockInAction({ source: "sidebar" })).resolves.toEqual({
+      ok: false,
+      error: "DISABLED: time tracking",
+    });
+    await expect(timeTrackingActionsModule.pauseWorkAction()).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/^DISABLED/) });
+    await expect(timeTrackingActionsModule.resumeWorkAction()).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/^DISABLED/) });
+    await expect(timeTrackingActionsModule.clockOutAction()).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/^DISABLED/) });
+  });
+
+  it("a clock write returns { ok: true, data } with the new status", async () => {
+    const result = await timeTrackingActionsModule.clockInAction({ source: "sidebar" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toMatchObject({ enabled: true });
+  });
+
+  it("saveTimeTrackingSettingsAction returns FORBIDDEN for non-managers", async () => {
+    await expect(timeTrackingActionsModule.saveTimeTrackingSettingsAction(settings({ hoursPerDay: 7 }))).resolves.toEqual({
+      ok: false,
+      error: "FORBIDDEN: time tracking settings",
+    });
   });
 });

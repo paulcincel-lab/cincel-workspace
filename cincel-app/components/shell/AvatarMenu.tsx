@@ -27,7 +27,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/shadcn/dropdown-menu";
 import { logoutAction } from "@/lib/auth/auth-actions";
-import { removeMyPhotoAction } from "@/lib/actions/profile-photo-actions";
 import { IMPLEMENTED as PHOTO_IMPLEMENTED } from "@/lib/actions/profile-photo-actions.flags";
 import { actionErrorText } from "@/lib/errors";
 import type { GeneralCompanySettings } from "@/lib/settings/general-settings";
@@ -35,7 +34,7 @@ import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { useSessionStore } from "@/lib/stores/session-store";
 
 import type { AppShellProps } from "./AppShell";
-import { changeMyPhoto, PHOTO_ACCEPT } from "./photo-upload";
+import { PHOTO_ACCEPT, useMyProfile, usePhotoUploadMutation, useRemovePhotoMutation } from "./photo-upload";
 
 export type AvatarMenuProps = {
   session: AppShellProps["session"];
@@ -81,15 +80,17 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
   const { company } = useGeneralSettings();
   const links = avatarMenuLinks(company as CompanyLinkFields);
   const fileInput = useRef<HTMLInputElement>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(session.photoUrl);
+  const { photoUrl } = useMyProfile({ id: session.staffId, name: session.name, photoUrl: session.photoUrl });
+  const uploadPhoto = usePhotoUploadMutation();
+  const removePhoto = useRemovePhotoMutation();
   const [busy, setBusy] = useState(false);
   const [, startTransition] = useTransition();
 
   const showPhotoItems = PHOTO_IMPLEMENTED.removeMyPhotoAction;
   const initials = nameInitials(session.name);
 
+  // `me.profile` already holds the new URL (the mutations set it).
   function applyPhoto(url: string | null) {
-    setPhotoUrl(url);
     onPhotoChange?.(url);
     startTransition(() => router.refresh());
   }
@@ -100,7 +101,7 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
     if (!file) return;
     setBusy(true);
     try {
-      applyPhoto(await changeMyPhoto(file));
+      applyPhoto(await uploadPhoto.mutateAsync(file));
       toast.success("Foto actualizada.");
     } catch (err) {
       toast.error(actionErrorText(err, "photo"));
@@ -112,7 +113,7 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
   async function handleRemovePhoto() {
     setBusy(true);
     try {
-      await removeMyPhotoAction();
+      await removePhoto.mutateAsync();
       applyPhoto(null);
       toast.success("Foto eliminada.");
     } catch (err) {

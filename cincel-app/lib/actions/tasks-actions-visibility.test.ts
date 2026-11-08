@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -82,7 +83,8 @@ const deps = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/task-dependencies-repository", () => deps);
 
-import * as actions from "./tasks-actions";
+import * as actionsModule from "./tasks-actions";
+const actions = unwrapActions(actionsModule);
 
 const MEMBER_SCOPE = { staffId: ACTOR, isAdmin: false };
 const ADMIN_SCOPE = { staffId: ACTOR, isAdmin: true };
@@ -160,6 +162,60 @@ describe("writes on an admin task by a non-admin", () => {
     session.access = "Administrador";
     await expect(actions.updateTaskAction(ADMIN_TASK, { title: "x" })).resolves.toBeTruthy();
     expect(repo.updateTask).toHaveBeenCalled();
+  });
+});
+
+const RESULT_MUTATIONS = [
+  "updateTaskAction",
+  "setTaskStatusAction",
+  "setTaskCustomStatusAction",
+  "assignTaskAction",
+  "deleteTaskAction",
+  "addChecklistItemAction",
+  "updateChecklistItemAction",
+  "removeChecklistItemAction",
+  "reorderChecklistAction",
+  "addTaskCommentAction",
+  "addTaskAttachmentAction",
+  "addTaskDependencyAction",
+  "removeTaskDependencyAction",
+  "createSubtaskAction",
+];
+
+describe("ActionResult (user-facing mutations)", () => {
+  const rawWrites: Array<[string, () => Promise<unknown>]> = [
+    ["updateTaskAction", () => actionsModule.updateTaskAction(ADMIN_TASK, { title: "x" })],
+    ["setTaskStatusAction", () => actionsModule.setTaskStatusAction(ADMIN_TASK, "completado")],
+    ["setTaskCustomStatusAction", () => actionsModule.setTaskCustomStatusAction(ADMIN_TASK, "s1")],
+    ["assignTaskAction", () => actionsModule.assignTaskAction(ADMIN_TASK, null)],
+    ["deleteTaskAction", () => actionsModule.deleteTaskAction(ADMIN_TASK)],
+    ["addChecklistItemAction", () => actionsModule.addChecklistItemAction(ADMIN_TASK, "x")],
+    ["updateChecklistItemAction", () => actionsModule.updateChecklistItemAction(ITEM, { completed: true })],
+    ["removeChecklistItemAction", () => actionsModule.removeChecklistItemAction(ITEM)],
+    ["reorderChecklistAction", () => actionsModule.reorderChecklistAction(ADMIN_TASK, [])],
+    ["addTaskCommentAction", () => actionsModule.addTaskCommentAction(ADMIN_TASK, "hola")],
+    ["addTaskAttachmentAction", () => actionsModule.addTaskAttachmentAction(ADMIN_TASK, file())],
+    ["addTaskDependencyAction", () => actionsModule.addTaskDependencyAction(USER_TASK, ADMIN_TASK)],
+    ["removeTaskDependencyAction", () => actionsModule.removeTaskDependencyAction(ADMIN_TASK, USER_TASK)],
+    ["createSubtaskAction", () => actionsModule.createSubtaskAction(ADMIN_TASK, { title: "x" })],
+  ];
+
+  it("covers every user-facing mutation", () => {
+    expect(rawWrites.map(([name]) => name)).toEqual(RESULT_MUTATIONS);
+  });
+
+  it.each(rawWrites)("%s returns { ok: false, error: 'FORBIDDEN' } instead of throwing", async (_name, call) => {
+    await expect(call()).resolves.toEqual({ ok: false, error: "FORBIDDEN" });
+  });
+
+  it("a success returns { ok: true, data }", async () => {
+    session.access = "Administrador";
+    const result = await actionsModule.updateTaskAction(ADMIN_TASK, { title: "x" });
+    expect(result).toMatchObject({ ok: true, data: expect.anything() });
+  });
+
+  it("read actions still return their value directly", async () => {
+    await expect(actionsModule.fetchTaskHistoryAction(ADMIN_TASK)).resolves.toEqual([]);
   });
 });
 

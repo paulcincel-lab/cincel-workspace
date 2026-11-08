@@ -34,6 +34,7 @@ import {
   fetchGmailThreadsAction,
   linkGmailThreadToProjectAction,
 } from "@/lib/actions/gmail-actions";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { addProjectCommentAction, fetchProjectAction, fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
 import { sendDraft } from "@/lib/gmail/client";
@@ -327,7 +328,7 @@ export async function runLinkEmailToProject(ctx: ToolRunContext, input: z.output
 
     await linkGmailThreadToProjectAction(input.threadId, project.id);
     const summary = summarizeLinkEmailToProject({ threadId: input.threadId, project: project.name });
-    await addProjectCommentAction(project.id, `${summary} (vía asistente)`);
+    unwrapActionResult(await addProjectCommentAction(project.id, `${summary} (vía asistente)`));
     return {
       ok: true as const,
       project: project.name,

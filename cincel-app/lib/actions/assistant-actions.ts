@@ -1,7 +1,7 @@
 "use server";
 
 import type { UIMessage } from "ai";
-import { revalidatePath } from "next/cache";
+import { revalidateAsistenteScreen } from "@/lib/cache/screens/asistente";
 
 import { LEGACY_IMPORT_SOURCE, normalizeLegacyMessages, titleFromMessages } from "@/lib/assistant/legacy-import";
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -71,7 +71,7 @@ export async function deleteAssistantThreadAction(id: string): Promise<void> {
   const threadId = threadIdOrNotFound(id);
   const deleted = await assistantRepository.softDeleteOwnedAssistantThread(db, staffId, threadId);
   if (!deleted) throw new Error("NOT_FOUND");
-  revalidatePath(ASSISTANT_PATH);
+  revalidateAsistenteScreen();
 }
 
 /**
@@ -90,7 +90,7 @@ export async function importLegacyAssistantThreadAction(messages: UIMessage[]): 
     importedFrom: LEGACY_IMPORT_SOURCE,
     messages: rows,
   });
-  revalidatePath(ASSISTANT_PATH);
+  revalidateAsistenteScreen();
   return { id: created.id };
 }
 

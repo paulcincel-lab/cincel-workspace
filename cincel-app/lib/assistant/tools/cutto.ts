@@ -27,6 +27,7 @@
  */
 import { z } from "zod";
 
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { defineTool, type DefinedTool } from "@/lib/assistant/define-tool";
 import { toolSummaries } from "@/lib/assistant/tool-summaries";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
@@ -420,13 +421,15 @@ const meeting_to_tasks = defineTool({
     for (const item of todo.slice(0, 50)) {
       const title = item.text.slice(0, 300);
       try {
-        const task = await createUserTaskAction({
-          projectId: project.id,
-          title,
-          workflowId: project.currentWorkflowId,
-          managerId: item.assigneeEmail ? (staffByEmail.get(item.assigneeEmail.trim().toLowerCase()) ?? null) : null,
-          notes: `Acuerdo de la reunión de Cutto ${cuttoLinks.meetingUrl(input.meetingId) ?? input.meetingId}`,
-        });
+        const task = unwrapActionResult(
+          await createUserTaskAction({
+            projectId: project.id,
+            title,
+            workflowId: project.currentWorkflowId,
+            managerId: item.assigneeEmail ? (staffByEmail.get(item.assigneeEmail.trim().toLowerCase()) ?? null) : null,
+            notes: `Acuerdo de la reunión de Cutto ${cuttoLinks.meetingUrl(input.meetingId) ?? input.meetingId}`,
+          }),
+        );
         created.push({ id: task.id, title: task.title, manager: task.manager?.name ?? null });
       } catch (err) {
         const code = actionErrorCode(err) || "ERROR";

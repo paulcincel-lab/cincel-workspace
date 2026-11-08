@@ -1,6 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { toActionResult } from "@/lib/actions/action-result";
+import type { ActionResult } from "@/lib/types/schedule";
+import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
+import { revalidateProyectoFichaScreen } from "@/lib/cache/screens/proyectos";
+import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -52,10 +56,8 @@ async function checklistItemTask(itemId: string): Promise<string[]> {
 }
 
 function revalidateTareas(projectId?: string) {
-  revalidatePath("/tareas");
-  revalidatePath("/tablero");
-  revalidatePath("/calendario");
-  if (projectId) revalidatePath(`/proyectos/${projectId}/ficha`);
+  revalidateTareasScreen(["tareas", "tablero", "calendario"]);
+  if (projectId) revalidateProyectoFichaScreen(projectId, ["ficha"]);
 }
 
 export async function fetchTasksAction(filters: TaskFilters = {}): Promise<TaskListItem[]> {
@@ -100,7 +102,13 @@ export async function fetchTaskAction(id: string): Promise<TaskDetail | null> {
  * tramo), PHASE_MISMATCH (fase not of that tramo), SPACE_MISMATCH (espacio not
  * of the project). Never starts the tramo: no `project_stages` row is written.
  */
-export async function createUserTaskAction(input: UserTaskInput): Promise<TaskDetail> {
+export async function createUserTaskAction(
+  ...args: Parameters<typeof createUserTaskActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createUserTaskActionImpl>>>> {
+  return toActionResult(() => createUserTaskActionImpl(...args));
+}
+
+async function createUserTaskActionImpl(input: UserTaskInput): Promise<TaskDetail> {
   const user = await requireCapabilityUser();
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: task create");
@@ -122,7 +130,13 @@ const SUBTASK_ERRORS: Record<string, string> = {
  * Same permission as creating a task. Throws FORBIDDEN, NOT_FOUND, NESTED
  * (the parent is already a subtask) or SPACE_MISMATCH.
  */
-export async function createSubtaskAction(parentId: string, input: SubtaskInput): Promise<TaskDetail> {
+export async function createSubtaskAction(
+  ...args: Parameters<typeof createSubtaskActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createSubtaskActionImpl>>>> {
+  return toActionResult(() => createSubtaskActionImpl(...args));
+}
+
+async function createSubtaskActionImpl(parentId: string, input: SubtaskInput): Promise<TaskDetail> {
   const { user, viewer } = await requireTaskWriter(parentId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) throw new Error("FORBIDDEN");
   try {
@@ -149,7 +163,13 @@ export async function listSubtasksAction(parentId: string): Promise<TaskRef[]> {
  * (SPACE_MISMATCH), neither on an admin task (ADMIN_TASK). `workflowId` only
  * when the task has none (else INVALID).
  */
-export async function updateTaskAction(id: string, patch: TaskPatch): Promise<TaskDetail> {
+export async function updateTaskAction(
+  ...args: Parameters<typeof updateTaskActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof updateTaskActionImpl>>>> {
+  return toActionResult(() => updateTaskActionImpl(...args));
+}
+
+async function updateTaskActionImpl(id: string, patch: TaskPatch): Promise<TaskDetail> {
   const { user, viewer } = await requireTaskWriter(id);
   const caps = resolveActivitiesCapabilities(user);
   if (patch.status !== undefined && caps.statusScope === "none") {
@@ -167,7 +187,13 @@ export async function updateTaskAction(id: string, patch: TaskPatch): Promise<Ta
   return scopeTaskDto(row, viewer);
 }
 
-export async function setTaskStatusAction(id: string, status: TaskStatus): Promise<TaskDetail> {
+export async function setTaskStatusAction(
+  ...args: Parameters<typeof setTaskStatusActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setTaskStatusActionImpl>>>> {
+  return toActionResult(() => setTaskStatusActionImpl(...args));
+}
+
+async function setTaskStatusActionImpl(id: string, status: TaskStatus): Promise<TaskDetail> {
   const { user, viewer } = await requireTaskWriter(id);
   if (resolveActivitiesCapabilities(user).statusScope === "none") {
     throw new Error("FORBIDDEN: task status change");
@@ -178,7 +204,13 @@ export async function setTaskStatusAction(id: string, status: TaskStatus): Promi
   return scopeTaskDto(row, viewer);
 }
 
-export async function assignTaskAction(id: string, managerId: string | null): Promise<TaskDetail> {
+export async function assignTaskAction(
+  ...args: Parameters<typeof assignTaskActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof assignTaskActionImpl>>>> {
+  return toActionResult(() => assignTaskActionImpl(...args));
+}
+
+async function assignTaskActionImpl(id: string, managerId: string | null): Promise<TaskDetail> {
   const { user, viewer } = await requireTaskWriter(id);
   if (!resolveActivitiesCapabilities(user).canChangeResponsible) {
     throw new Error("FORBIDDEN: task reassign");
@@ -200,7 +232,13 @@ export async function archiveTaskAction(id: string, archived: boolean): Promise<
   return scopeTaskDto(row, viewer);
 }
 
-export async function deleteTaskAction(id: string): Promise<void> {
+export async function deleteTaskAction(
+  ...args: Parameters<typeof deleteTaskActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof deleteTaskActionImpl>>>> {
+  return toActionResult(() => deleteTaskActionImpl(...args));
+}
+
+async function deleteTaskActionImpl(id: string): Promise<void> {
   const { user } = await requireTaskWriter(id);
   if (!resolveActivitiesCapabilities(user).canDeleteActivity) {
     throw new Error("FORBIDDEN: task delete");
@@ -234,7 +272,13 @@ export async function setTaskSupportAction(taskId: string, staffIds: string[]) {
   return support;
 }
 
-export async function addChecklistItemAction(taskId: string, title: string): Promise<TaskChecklistItem> {
+export async function addChecklistItemAction(
+  ...args: Parameters<typeof addChecklistItemActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof addChecklistItemActionImpl>>>> {
+  return toActionResult(() => addChecklistItemActionImpl(...args));
+}
+
+async function addChecklistItemActionImpl(taskId: string, title: string): Promise<TaskChecklistItem> {
   const { user } = await requireTaskWriter(taskId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: checklist edit");
@@ -245,6 +289,12 @@ export async function addChecklistItemAction(taskId: string, title: string): Pro
 }
 
 export async function updateChecklistItemAction(
+  ...args: Parameters<typeof updateChecklistItemActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof updateChecklistItemActionImpl>>>> {
+  return toActionResult(() => updateChecklistItemActionImpl(...args));
+}
+
+async function updateChecklistItemActionImpl(
   id: string,
   patch: { title?: string; completed?: boolean }
 ): Promise<TaskChecklistItem> {
@@ -254,7 +304,13 @@ export async function updateChecklistItemAction(
   return row;
 }
 
-export async function removeChecklistItemAction(id: string): Promise<void> {
+export async function removeChecklistItemAction(
+  ...args: Parameters<typeof removeChecklistItemActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof removeChecklistItemActionImpl>>>> {
+  return toActionResult(() => removeChecklistItemActionImpl(...args));
+}
+
+async function removeChecklistItemActionImpl(id: string): Promise<void> {
   const { user } = await requireTaskWriter(...(await checklistItemTask(id)));
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: checklist edit");
@@ -263,7 +319,13 @@ export async function removeChecklistItemAction(id: string): Promise<void> {
   revalidateTareas();
 }
 
-export async function reorderChecklistAction(taskId: string, orderedIds: string[]): Promise<void> {
+export async function reorderChecklistAction(
+  ...args: Parameters<typeof reorderChecklistActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderChecklistActionImpl>>>> {
+  return toActionResult(() => reorderChecklistActionImpl(...args));
+}
+
+async function reorderChecklistActionImpl(taskId: string, orderedIds: string[]): Promise<void> {
   await requireTaskWriter(taskId);
   await tasksRepository.reorderChecklist(taskId, orderedIds);
   revalidateTareas();
@@ -287,7 +349,13 @@ export async function reorderTasksAction(orderedTaskIds: string[]): Promise<void
   revalidateTareas();
 }
 
-export async function addTaskCommentAction(taskId: string, comment: string): Promise<HistoryEvent> {
+export async function addTaskCommentAction(
+  ...args: Parameters<typeof addTaskCommentActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof addTaskCommentActionImpl>>>> {
+  return toActionResult(() => addTaskCommentActionImpl(...args));
+}
+
+async function addTaskCommentActionImpl(taskId: string, comment: string): Promise<HistoryEvent> {
   const { user } = await requireTaskWriter(taskId);
   const row = await tasksRepository.addTaskComment(taskId, comment, user.member.id);
   revalidateTareas();
@@ -311,7 +379,13 @@ const ATTACHMENT_ERROR_MESSAGES: Record<string, string> = {
 };
 
 /** Attaches a file to a task as a comment (#425). Images and .txt only, up to 10MB. */
-export async function addTaskAttachmentAction(taskId: string, formData: FormData): Promise<TaskAttachment> {
+export async function addTaskAttachmentAction(
+  ...args: Parameters<typeof addTaskAttachmentActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof addTaskAttachmentActionImpl>>>> {
+  return toActionResult(() => addTaskAttachmentActionImpl(...args));
+}
+
+async function addTaskAttachmentActionImpl(taskId: string, formData: FormData): Promise<TaskAttachment> {
   const { user } = await requireTaskWriter(taskId);
 
   const file = formData.get("file");
@@ -336,7 +410,13 @@ export async function addTaskAttachmentAction(taskId: string, formData: FormData
   }
 }
 
-export async function setTaskCustomStatusAction(id: string, customStatusId: string): Promise<TaskDetail> {
+export async function setTaskCustomStatusAction(
+  ...args: Parameters<typeof setTaskCustomStatusActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setTaskCustomStatusActionImpl>>>> {
+  return toActionResult(() => setTaskCustomStatusActionImpl(...args));
+}
+
+async function setTaskCustomStatusActionImpl(id: string, customStatusId: string): Promise<TaskDetail> {
   const { user, viewer } = await requireTaskWriter(id);
   if (resolveActivitiesCapabilities(user).statusScope === "none") {
     throw new Error("FORBIDDEN: task status change");
@@ -378,7 +458,13 @@ export async function removeTaskLinkAction(id: string): Promise<void> {
  * no duplicate, no cycle. Whoever can edit the task can edit its dependencies.
  * Throws `FORBIDDEN`, `NOT_FOUND`, `OTHER_PROJECT`, `SELF`, `DUPLICATE`, `CYCLE`.
  */
-export async function addTaskDependencyAction(taskId: string, dependsOnTaskId: string): Promise<void> {
+export async function addTaskDependencyAction(
+  ...args: Parameters<typeof addTaskDependencyActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof addTaskDependencyActionImpl>>>> {
+  return toActionResult(() => addTaskDependencyActionImpl(...args));
+}
+
+async function addTaskDependencyActionImpl(taskId: string, dependsOnTaskId: string): Promise<void> {
   const { user } = await requireTaskWriter(taskId, dependsOnTaskId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: task dependency edit");
@@ -388,7 +474,13 @@ export async function addTaskDependencyAction(taskId: string, dependsOnTaskId: s
 }
 
 /** Removes a dependency. Throws `FORBIDDEN`, `NOT_FOUND`. */
-export async function removeTaskDependencyAction(taskId: string, dependsOnTaskId: string): Promise<void> {
+export async function removeTaskDependencyAction(
+  ...args: Parameters<typeof removeTaskDependencyActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof removeTaskDependencyActionImpl>>>> {
+  return toActionResult(() => removeTaskDependencyActionImpl(...args));
+}
+
+async function removeTaskDependencyActionImpl(taskId: string, dependsOnTaskId: string): Promise<void> {
   const { user } = await requireTaskWriter(taskId, dependsOnTaskId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: task dependency edit");
@@ -428,7 +520,7 @@ export async function createAdminTaskAction(input: AdminTaskInput): Promise<Task
   const parsed = parseInput(AdminTaskInputSchema, input);
   const row = await tasksRepository.createAdminTask(parsed, user.member.id);
   revalidateTareas(row.projectId);
-  revalidatePath("/actividades", "layout");
-  revalidatePath("/dashboard");
+  revalidateTareasScreen(["actividadesLayout"]);
+  revalidateInicioScreen();
   return row;
 }

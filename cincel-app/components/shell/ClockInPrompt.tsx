@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/shadcn/dialog";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { clockInAction, fetchMyTodayAction } from "@/lib/actions/time-tracking-actions";
 import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
@@ -190,7 +191,7 @@ export function ClockInPrompt({ status, requiredFrom, now, name }: ClockInPrompt
     setPending(true);
     setError(null);
     try {
-      const next = await clockInAction({ source: "login" });
+      const next = unwrapActionResult(await clockInAction({ source: "login" }));
       if (!mounted.current) return;
       sync(next);
       close();

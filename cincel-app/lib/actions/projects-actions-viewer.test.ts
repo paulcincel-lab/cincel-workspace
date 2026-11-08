@@ -1,3 +1,4 @@
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Project reads pass the viewer scope; stage results are scoped for non-admins (project flow BE §8.5, §12). */
@@ -42,11 +43,12 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/projects-repository", () => repo);
 
-import {
+import * as projectsActionsModule from "./projects-actions";
+const {
   fetchProjectAction,
   fetchProjectsAction,
   setProjectCurrentTramoAction,
-} from "./projects-actions";
+} = unwrapActions(projectsActionsModule);
 
 beforeEach(() => {
   vi.clearAllMocks();

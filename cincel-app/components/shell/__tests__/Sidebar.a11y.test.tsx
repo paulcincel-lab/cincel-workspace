@@ -8,6 +8,18 @@ const state = vi.hoisted(() => ({
   time: { clockInAction: true },
 }));
 
+// The avatar reads me.profile from the query cache; these tests render it without one.
+vi.mock("@/components/shell/photo-upload", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/shell/photo-upload")>()),
+  useMyProfile: (initial: unknown) => initial,
+  usePhotoUploadMutation: () => ({ mutateAsync: async () => "" }),
+  useRemovePhotoMutation: () => ({ mutateAsync: async () => undefined }),
+}));
+// The Sidebar reads the company settings from the query cache; these tests render it without one.
+vi.mock("@/lib/settings/use-general-settings", async () => {
+  const { GENERAL_SETTINGS_DEFAULTS } = await import("@/lib/settings/general-settings");
+  return { useGeneralSettings: () => GENERAL_SETTINGS_DEFAULTS };
+});
 vi.mock("next/navigation", () => ({
   usePathname: () => "/tareas",
   // The user block's avatar menu routes on sign-out and photo changes.

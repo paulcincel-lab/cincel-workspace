@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateProyectoCronogramaScreen } from "@/lib/cache/screens/proyectos";
 import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -36,7 +36,7 @@ function forbidden(): { ok: false; error: string } {
 }
 
 function revalidateSchedule(projectId: string) {
-  revalidatePath(`/proyectos/${projectId}/cronograma`);
+  revalidateProyectoCronogramaScreen(projectId);
 }
 
 function seccionOrderOf(seccion: string): number {

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -33,6 +33,7 @@ vi.mock("@/components/patterns/SettingsRow", () => ({
   ),
 }));
 
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 import { PerfilClient, PerfilContrasena, PerfilDatos, PerfilFoto, PerfilHorasSemana, type PerfilData } from "./PerfilClient";
@@ -72,7 +73,7 @@ describe("Ajustes › Perfil accessibility", () => {
         html.setAttribute("data-theme", mode);
         html.classList.toggle("dark", mode === "dark");
 
-        const { container } = render(
+        const { container } = renderWithQueryClient(
           <main>
             <h1>Ajustes</h1>
             <PerfilClient initial={DATA}>
@@ -89,7 +90,7 @@ describe("Ajustes › Perfil accessibility", () => {
   }
 
   it("labels every field and ties the hints to their inputs", () => {
-    const { container, getByLabelText } = render(
+    const { container, getByLabelText } = renderWithQueryClient(
       <PerfilClient initial={DATA}>
         <PerfilFoto />
         <PerfilDatos />

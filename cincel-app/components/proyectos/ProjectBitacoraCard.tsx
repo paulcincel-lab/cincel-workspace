@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { HistoryCommentInput } from "@/components/ui/HistoryCommentInput";
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   addProjectCommentAction,
   fetchProjectHistoryAction,
@@ -43,7 +44,7 @@ export function ProjectBitacoraCard({ projectId }: { projectId: string }) {
   async function addComment(text: string) {
     setError("");
     try {
-      await addProjectCommentAction(projectId, text);
+      unwrapActionResult(await addProjectCommentAction(projectId, text));
     } catch (err) {
       setError(
         err instanceof Error && err.message === "EMPTY"

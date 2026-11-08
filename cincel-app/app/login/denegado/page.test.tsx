@@ -11,13 +11,6 @@ vi.mock("@/lib/auth/session", () => ({
   },
 }));
 
-vi.mock("@/lib/auth/session-context", () => ({
-  useSessionAccess: () => {
-    sessionReads.count += 1;
-    throw new Error("/login/denegado must not read the staff session");
-  },
-}));
-
 // General settings, read without a session.
 const settings = vi.hoisted(() => ({
   contactEmail: undefined as string | undefined,

@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateVacacionesScreen } from "@/lib/cache/screens/biblioteca";
+import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
 import { after } from "next/server";
 import { z } from "zod";
 
@@ -216,7 +217,7 @@ export async function requestVacationAction(input: {
   });
 
   after(() => notifyDecidersOfRequest(user, row));
-  revalidatePath(VACATIONS_PATH);
+  revalidateVacacionesScreen();
   return toDto(row);
 }
 
@@ -238,7 +239,7 @@ export async function cancelVacationRequestAction(id: string): Promise<void> {
     await vacationsRepository.updateVacationRequest(tx, row.id, { status: "cancelada" });
   });
 
-  revalidatePath(VACATIONS_PATH);
+  revalidateVacacionesScreen();
 }
 
 /** Pending requests, oldest first ("Solicitudes del equipo"). Auth: `canDecideVacations`. Errors: `FORBIDDEN`. */
@@ -278,8 +279,8 @@ export async function decideVacationAction(
   });
 
   after(() => notifyRequesterOfDecision(user, row));
-  revalidatePath(VACATIONS_PATH);
-  revalidatePath("/personas");
+  revalidateVacacionesScreen();
+  revalidatePersonasScreen(["personas"]);
   return toDto(row);
 }
 
@@ -329,6 +330,6 @@ export async function saveVacationSettingsAction(input: {
 
   await db.transaction((tx) => vacationsRepository.saveVacationSettings(tx, parsed));
 
-  revalidatePath(VACATIONS_PATH);
+  revalidateVacacionesScreen();
   return loadSettingsView();
 }

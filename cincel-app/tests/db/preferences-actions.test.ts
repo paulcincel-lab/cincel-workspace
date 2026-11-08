@@ -12,6 +12,8 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { unwrapActions } from "@/tests/helpers/action-result";
+
 import type { OrgAppearance } from "@/lib/types/redesign";
 import { THEME_PRESETS } from "@/lib/ui/themes";
 
@@ -40,6 +42,11 @@ vi.mock("next/headers", () => ({
   }),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// The org appearance read opts out of prerendering with `connection()`; there is no request scope here.
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  connection: async () => undefined,
+}));
 vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: async () => ({ member: { id: state.staffId }, access: "Colaborador", email: "" }),
   getSession: async () => ({ user: { id: state.staffId } }),
@@ -61,7 +68,7 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
   const { eq } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const { fetchMyPreferencesAction, updateMyPreferencesAction } = await import("@/lib/actions/preferences-actions");
+  const { fetchMyPreferencesAction, updateMyPreferencesAction } = unwrapActions(await import("@/lib/actions/preferences-actions"));
   const { fetchOrgAppearanceAction } = await import("@/lib/actions/org-appearance-actions");
   const { IMPLEMENTED: PREFERENCES_FLAGS } = await import("@/lib/actions/preferences-actions.flags");
   const { IMPLEMENTED: ORG_FLAGS } = await import("@/lib/actions/org-appearance-actions.flags");

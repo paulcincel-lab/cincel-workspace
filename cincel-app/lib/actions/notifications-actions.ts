@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
+import { revalidateMiEspacioScreen } from "@/lib/cache/screens/mi-espacio";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
@@ -122,7 +123,7 @@ export async function markNotificationsReadAction(ids: string[] | "all"): Promis
   const target = parseInput(MarkNotificationsReadSchema, ids);
   await markNotificationsRead(db, staffId, target === "all" ? "all" : [...new Set(target)]);
   const unreadCount = await countUnreadNotifications(db, staffId);
-  revalidatePath("/mi-espacio");
+  revalidateMiEspacioScreen(["miEspacio"]);
   return { unreadCount };
 }
 
@@ -149,6 +150,6 @@ export async function updateNotificationPreferencesAction(
     await upsertNotificationPreferences(tx, staffId, parsed.rows);
     await saveQuietHours(tx, staffId, parsed.quietHours);
   });
-  revalidatePath("/ajustes/notificaciones");
+  revalidateAjustesScreen("notificaciones");
   return loadPreferences(staffId);
 }

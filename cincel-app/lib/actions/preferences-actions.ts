@@ -1,5 +1,7 @@
 "use server";
 
+import { toActionResult } from "@/lib/actions/action-result";
+import type { ActionResult } from "@/lib/types/schedule";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { findUserPreferences, upsertUserPreferences } from "@/lib/repositories/preferences-repository";
@@ -32,6 +34,12 @@ export async function fetchMyPreferencesAction(): Promise<UserPreferences> {
  * them).
  */
 export async function updateMyPreferencesAction(
+  ...args: Parameters<typeof updateMyPreferencesActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof updateMyPreferencesActionImpl>>>> {
+  return toActionResult(() => updateMyPreferencesActionImpl(...args));
+}
+
+async function updateMyPreferencesActionImpl(
   patch: Partial<UserPreferences>,
 ): Promise<{ preferences: UserPreferences; appearance: ResolvedAppearance }> {
   const user = await requireCapabilityUser();

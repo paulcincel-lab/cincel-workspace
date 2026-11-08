@@ -9,6 +9,7 @@ import {
   resolveClientsCapabilities,
   resolveProjectsCapabilities,
 } from "@/lib/auth/permissions";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { fetchProjectsAction, createProjectAction, deleteProjectAction } from "@/lib/actions/projects-actions";
 import { startTramoAction } from "@/lib/actions/tramo-start-actions";
 import { fetchTasksAction, createUserTaskAction, assignTaskAction, mergeTasksAction } from "@/lib/actions/tasks-actions";
@@ -297,15 +298,17 @@ export const create_task = tool({
       managerId = managerResolved.value.id;
     }
 
-    const task = await createUserTaskAction({
-      projectId: projectResolved.value.id,
-      title: description,
-      workflowId: workflowResolved.value.id,
-      managerId,
-      priority: priority as TaskPriority,
-      commitmentDate,
-      reviewDate,
-    });
+    const task = unwrapActionResult(
+      await createUserTaskAction({
+        projectId: projectResolved.value.id,
+        title: description,
+        workflowId: workflowResolved.value.id,
+        managerId,
+        priority: priority as TaskPriority,
+        commitmentDate,
+        reviewDate,
+      }),
+    );
 
     return {
       ok: true as const,
@@ -359,7 +362,7 @@ export const assign_task = tool({
     const managerResolved = await resolveStaff(manager);
     if (!managerResolved.ok) return managerResolved;
 
-    const task = await assignTaskAction(matches[0].id, managerResolved.value.id);
+    const task = unwrapActionResult(await assignTaskAction(matches[0].id, managerResolved.value.id));
     return {
       ok: true as const,
       id: task.id,
@@ -463,11 +466,13 @@ export const onboard_client = tool({
         : undefined,
     });
 
-    const project = await createProjectAction({
-      name: projectName,
-      clientId: contact.id,
-      managerId,
-    });
+    const project = unwrapActionResult(
+      await createProjectAction({
+        name: projectName,
+        clientId: contact.id,
+        managerId,
+      }),
+    );
 
     // Creating the project may already have started the first tramo; startTramo
     // only adds the templates still missing, so this is safe either way.
@@ -484,12 +489,14 @@ export const onboard_client = tool({
     }
 
     for (const title of extraTasks ?? []) {
-      await createUserTaskAction({
-        projectId: project.id,
-        title,
-        workflowId: workflowResolved.value.id,
-        managerId,
-      });
+      unwrapActionResult(
+        await createUserTaskAction({
+          projectId: project.id,
+          title,
+          workflowId: workflowResolved.value.id,
+          managerId,
+        }),
+      );
     }
 
     return {

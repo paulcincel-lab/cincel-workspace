@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   buildNavModel: vi.fn(),
   fetchMyTodayAction: vi.fn(),
   clockInAction: vi.fn(),
-  findStaffPhoto: vi.fn(),
+  getStaffPhotoUrl: vi.fn(),
   appShellProps: vi.fn(),
 }));
 
@@ -26,8 +26,7 @@ vi.mock("@/lib/actions/time-tracking-actions", () => ({
   fetchMyTodayAction: mocks.fetchMyTodayAction,
   clockInAction: mocks.clockInAction,
 }));
-vi.mock("@/lib/db", () => ({ db: {} }));
-vi.mock("@/lib/repositories/preferences-repository", () => ({ findStaffPhoto: mocks.findStaffPhoto }));
+vi.mock("@/lib/profile-photo/photo-url", () => ({ getStaffPhotoUrl: mocks.getStaffPhotoUrl }));
 
 // The real shell reads actions and settings; this stand-in keeps one landmark.
 vi.mock("@/components/shell/AppShell", () => ({
@@ -91,7 +90,7 @@ beforeEach(() => {
   mocks.getResolvedAppearance.mockResolvedValue(appearance());
   mocks.buildNavModel.mockResolvedValue(NAV);
   mocks.fetchMyTodayAction.mockResolvedValue(DISABLED_TODAY);
-  mocks.findStaffPhoto.mockResolvedValue(null);
+  mocks.getStaffPhotoUrl.mockResolvedValue(null);
 });
 
 afterEach(() => cleanup());
@@ -127,7 +126,7 @@ describe("app/(staff)/layout", () => {
 
   it("passes the admin flag, the photo url and an enabled day to AppShell", async () => {
     mocks.getSessionAccess.mockResolvedValue({ status: "active", user: { ...ACTIVE_USER, access: "Administrador" } });
-    mocks.findStaffPhoto.mockResolvedValue({ staffId: "staff-1", mime: "image/jpeg", sha256: "abcdef0123456789" });
+    mocks.getStaffPhotoUrl.mockResolvedValue("/api/staff/staff-1/photo?v=abcdef01");
     const today = { ...DISABLED_TODAY, enabled: true, required: true };
     mocks.fetchMyTodayAction.mockResolvedValue(today);
 
@@ -142,7 +141,7 @@ describe("app/(staff)/layout", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.buildNavModel.mockRejectedValue(new Error("db down"));
     mocks.fetchMyTodayAction.mockRejectedValue(new Error("db down"));
-    mocks.findStaffPhoto.mockRejectedValue(new Error("db down"));
+    mocks.getStaffPhotoUrl.mockRejectedValue(new Error("db down"));
 
     await renderLayout(<p>Contenido</p>);
     const props = mocks.appShellProps.mock.calls[0][0];

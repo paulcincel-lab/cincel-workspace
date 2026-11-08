@@ -449,6 +449,26 @@ export type TaskListItem = Task & {
   waitingOn: number;
 };
 
+/**
+ * Slim task list row (`listTaskRows`): a `TaskListItem` without the large
+ * `notes` field, with every per-task count flat (one aggregate join each).
+ */
+export type TaskListRow = Omit<TaskListItem, "notes"> & {
+  /** Live (not deleted, not archived) child tasks; same as `subtaskCount` of the item. */
+  subtaskCount: number;
+  /** Live child tasks in completado; same as `subtaskDoneCount`. */
+  subtaskDone: number;
+  /** Comentario events in the task's history. */
+  commentCount: number;
+  attachmentCount: number;
+  /** Same as `checklist.total`. */
+  checklistTotal: number;
+  /** Same as `checklist.completed`. */
+  checklistDone: number;
+  /** Dependencies that aren't completado, deleted or archived. */
+  waitingOn: number;
+};
+
 /** Compact task reference for subtask and dependency lists. */
 export type TaskRef = {
   id: string;

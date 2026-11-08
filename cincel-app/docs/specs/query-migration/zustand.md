@@ -1,6 +1,6 @@
 # Query Migration: client UI state (Zustand, URL or TanStack)
 
-Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers are from `main` @ e985f58; Phase 1a (#935) re-anchors them at its start.
+Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers are from `main` @ 8b4ce2e, the Phase 1a base (re-anchored by #935 from e985f58; files Phase 1a itself edits, such as `app/layout.tsx` and `lib/stores/session-store.ts`, keep their base-commit numbers).
 
 **Owner decisions (2026-11-08 review):** D1 dashboard interactions are approved and built in Phase 12 (§2.5). D2 appearance and style move to one Zustand store, `useAppearance` (§2.6). D3 the remaining app-state contexts go (§2.9). The assistant thread is not persisted across reloads (§2.2).
 
@@ -64,8 +64,8 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 | Search palette open | `AppShellClient.tsx:50` → prop `Sidebar.tsx:44,102`; `CommandPalette.tsx:146-147` ⌘K + `registerShellOpener("search")`; `shell-openers.ts:16` registry | useState + prop + module registry | **Z `useShellUi`** | Opened from the Sidebar, ⌘K and other pages; replaces the registry and the prop. |
 | 404 palette open + second ⌘K listener | `NotFoundSearchButton.tsx:16,25` | useState (root `app/not-found.tsx`, outside the shell) | **Z `useShellUi`** (same actions) | One opener API everywhere; no double ⌘K handler if the 404 ever renders inside the shell. |
 | Palette query text | `CommandPalette.tsx:126` | useState | L | Input draft, reset on close. |
-| Palette results / error | `CommandPalette.tsx:127,153-169` | useState + debounced action | TQ `qk.search(q)` | Server data (`keepPreviousData`). |
-| Palette `today` | `CommandPalette.tsx:128,172-184` | useState fetched on open | TQ `qk.me.today()` | Same data as TimeClock. |
+| Palette results / error | `CommandPalette.tsx:127,154-171` | useState + debounced action | TQ `qk.search(q)` | Server data (`keepPreviousData`). |
+| Palette `today` | `CommandPalette.tsx:128,173-186` | useState fetched on open | TQ `qk.me.today()` | Same data as TimeClock. |
 | Palette clockingIn | `CommandPalette.tsx:129` | useState | TQ mutation `isPending` | Mutation state. |
 | Assistant open / mounted | `AssistantLauncher.tsx:51,53`; event `:29-32,76-80`; `shell-openers.ts:45` | useState + window event + dead registry | **Z `useAssistantUi`** | Opened by the button, ⌘J, the palette and DocumentReader. Removes the event and the registry. |
 | Assistant page context | `AssistantLauncher.tsx:57-60` (route + `?tarea`) | derived useMemo | derived + **Z** `contextOverride` | Route-derived by default; callers like DocumentReader pass an override. |
@@ -92,7 +92,7 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 
 | UI state | file:line | Current | Verdict | Reason |
 |---|---|---|---|---|
-| Profile photo | `InicioClient.tsx:43,51-55` | useState + `router.refresh` | TQ `qk.me.profile()` | Server state. |
+| Profile photo | `InicioClient.tsx:43,50-54` | useState + `router.refresh` | TQ `qk.me.profile()` | Server state. |
 | renderedAt | `InicioClient.tsx:44` | useState initializer | L | SSR/CSR-stable greeting. |
 | Photo upload pending / error | `ProfilePhotoButton.tsx:49-50` | useState | L → mutation | — |
 | WidgetCard empty detection | `WidgetCard.tsx:57` | useState + MutationObserver | L | DOM-derived. |
@@ -187,15 +187,15 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 
 | UI state | file:line | Current | Verdict | Reason |
 |---|---|---|---|---|
-| Notes / checklists / reminders lists | `MiEspacioClient.tsx:51-81` (`useSyncedList`) | useState mirror of props | TQ | Server. |
+| Notes / checklists / reminders lists | `MiEspacioClient.tsx:52-61,77-79` (`useSyncedList`) | useState mirror of props | TQ | Server. |
 | Bandeja tab | `MiEspacioClient.tsx:87` (URL) **and** `Inbox.tsx:137,159-162` (local copy synced from props) | URL + duplicate useState | **URL only** | Remove the duplicate. |
-| Note editor | `MiEspacioClient.tsx:90-94`, `search-params.ts:7-27` (`?nota=`, `history.replaceState`) | URL | URL | Shareable. |
-| Gmail reading pane | `MiEspacioClient.tsx:88` (`?correo=`) | URL | URL | — |
+| Note editor | `MiEspacioClient.tsx:90-94`, `search-params.ts:8-26` (`?nota=`, `history.replaceState`) | URL | URL | Shareable. |
+| Gmail reading pane | `MiEspacioClient.tsx:87` (`?correo=`) | URL | URL | — |
 | Notifications / threads / cursors / unread / loadingMore | `Inbox.tsx:138-142,144,158-175` | useState | TQ infinite + `qk.shell.badges` | Server. |
 | Inbox poll | `Inbox.tsx:188-227` | setInterval + visibilitychange | TQ `refetchInterval` | Plan. |
 | Inbox now tick | `Inbox.tsx:143` | useState | L | — |
 | Project options | `Inbox.tsx:145`, `GmailReader.tsx:132` | useState ×2 | TQ `catalog.projectOptions` | Duplicate fetch. |
-| Row action panel (link / task per thread) | `Inbox.tsx:122,146` | useState | L | One list. |
+| Row action panel (link / task per thread) | `Inbox.tsx:121,146` | useState | L | One list. |
 | Panel form | `Inbox.tsx:656-659` | useState | L | — |
 | Gmail thread data / attempt | `GmailReader.tsx:56-57` | useState | TQ `qk.me.gmail.thread(id)` | — |
 | Show images / pickedId / pending / error / draftOpen | `GmailReader.tsx:131,134-137` | useState | L | — |
@@ -215,7 +215,7 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 | UI state | file:line | Current | Verdict | Reason |
 |---|---|---|---|---|
 | Index search | `BibliotecaIndex.tsx:47` | useState | L (or URL `?q=`) | Low value; keep local unless product wants it shareable. |
-| Recent documents | `use-recent-documents.ts:11-52` + `resources-model.ts:12,67-115` (`cincel.resources.recent-docs.v1`) + `notifyRecentDocumentsChanged` (`DocumentReader.tsx:61-62`, `BibliotecaSection.tsx:93-94`) | localStorage + custom window event + useSyncExternalStore | **Z `useRecentDocs`** (persist, same key and shape) | Removes the custom event; multi-tab through the persist `storage` listener. |
+| Recent documents | `use-recent-documents.ts:11-50` + `resources-model.ts:12,67-115` (`cincel.resources.recent-docs.v1`) + `notifyRecentDocumentsChanged` (`DocumentReader.tsx:61-62`, `BibliotecaSection.tsx:93-94`) | localStorage + custom window event + useSyncExternalStore | **Z `useRecentDocs`** (persist, same key and shape) | Removes the custom event; multi-tab through the persist `storage` listener. |
 | Section links (favorites) | `BibliotecaSection.tsx:73` | useState copy | TQ optimistic | Server. |
 | Section search | `BibliotecaSection.tsx:74` | useState | L | — |
 | Preview / drive preview / pending / error | `BibliotecaSection.tsx:75-78`, `DocumentReader.tsx:47` | useState | L | — |
@@ -253,9 +253,9 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 
 | UI state | file:line | Current | Verdict | Reason |
 |---|---|---|---|---|
-| Active thread | `AsistentePageClient.tsx:52-56,79,95,111` (`?thread=`) | useState + URL | **URL** for the page; mirror into **Z `useAssistantUi.threadId`** | Shareable, and the sheet can continue the same thread. |
-| Threads list | `AsistentePageClient.tsx:51,63-69` | useState | TQ `qk.asistente.threads()` | — |
-| Thread messages / loadingId | `:58,72-87` | useState | TQ `qk.asistente.thread(id)` (`isFetching`) | — |
+| Active thread | `AsistentePageClient.tsx:52-56,79,91,109` (`?thread=`) | useState + URL | **URL** for the page; mirror into **Z `useAssistantUi.threadId`** | Shareable, and the sheet can continue the same thread. |
+| Threads list | `AsistentePageClient.tsx:51,64-70` | useState | TQ `qk.asistente.threads()` | — |
+| Thread messages / loadingId | `:58,72-86` | useState | TQ `qk.asistente.thread(id)` (`isFetching`) | — |
 | Notice | `:57` | useState | L | — |
 | Prompt draft injection | `:59,115-117` → `AssistantChat.tsx:83` | useState nonce | L | Page-local. |
 | Chat input / error | `AssistantChat.tsx:47-52` | useState | L | — |
@@ -471,7 +471,7 @@ No new React contexts for app state. UI state goes to Zustand (global, or a page
 | `NotificacionesFormContext` | `components/ajustes/NotificacionesClient.tsx` | page-scoped store | 9a |
 | `IntegracionesContext` | `components/ajustes/IntegracionesClient.tsx` | page-scoped store | 9a |
 | Horario context | `components/ajustes/horario-context.tsx` | page-scoped store | 9c |
-| General settings editor context | `components/configuracion/general-settings-editor-context.tsx` | page-scoped store | 9c |
+| General settings editor context | `components/ajustes/general-settings-editor-context.tsx` | page-scoped store | 9c |
 | shadcn `chart`, `form-field`, `sidebar` | `components/ui/shadcn/*` | **keep** (library internals) | — |
 
 **Not stores (explicit):** TimeClock status, Bandeja unread, avatar photo, general settings, all lists, catalogs and detail data (all TQ); single-component form drafts (L); `ClockInPrompt` seen-date (L; already mount-safe).

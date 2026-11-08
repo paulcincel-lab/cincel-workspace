@@ -7,7 +7,9 @@
  * layout, `/proyectos`, the ficha, `/dashboard`, `/tablero`, `/mis-tareas`
  * and `/calendario`.
  */
-import { revalidatePath } from "next/cache";
+import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
+import { revalidateProyectoFichaScreen, revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
+import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 
 import { canSeeAdminData, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -36,17 +38,15 @@ async function requireActivities(capability: "canViewActivities" | "canCreateAct
 }
 
 function revalidateTramoStart(projectId?: string) {
-  revalidatePath("/actividades", "layout");
+  revalidateTareasScreen(["actividadesLayout"]);
   if (projectId) {
-    revalidatePath("/proyectos");
-    revalidatePath(`/proyectos/${projectId}/ficha`);
+    revalidateProyectosListScreen(["proyectos"]);
+    revalidateProyectoFichaScreen(projectId, ["ficha"]);
   } else {
-    revalidatePath("/proyectos", "layout");
+    revalidateProyectosListScreen(["proyectosLayout"]);
   }
-  revalidatePath("/dashboard");
-  revalidatePath("/tablero");
-  revalidatePath("/mis-tareas");
-  revalidatePath("/calendario");
+  revalidateInicioScreen();
+  revalidateTareasScreen(["tablero", "misTareas", "calendario"]);
 }
 
 /** Listos para iniciar, Próximos and started projects of one tramo. Errors: FORBIDDEN, NOT_FOUND. */

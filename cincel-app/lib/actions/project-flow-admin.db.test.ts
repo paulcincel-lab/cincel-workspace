@@ -14,6 +14,7 @@
  * DEFAULT_CATALOG, BE §5.1-5.2) and removes what it added afterwards. Every
  * other row carries a per-run marker and is deleted at the end.
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -112,7 +113,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
   const { ASSIGN_CLIENT_SYSTEM_KEY, ASSIGN_CLIENT_TASK_TITLE } = await import("@/lib/project-flow/catalog");
-  const { createProjectAction, updateProjectAction } = await import("./projects-actions");
+  const { createProjectAction, updateProjectAction } = unwrapActions(await import("./projects-actions"));
   const {
     assignTaskAction,
     createAdminTaskAction,
@@ -120,7 +121,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
     mergeTasksAction,
     setTaskSupportAction,
     updateTaskAction,
-  } = await import("./tasks-actions");
+  } = unwrapActions(await import("./tasks-actions"));
 
   type CreateInput = Parameters<typeof createProjectAction>[0];
   const createInput = (name: string) => ({ name }) as unknown as CreateInput;

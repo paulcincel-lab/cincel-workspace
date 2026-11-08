@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import axe from "axe-core";
 
@@ -47,6 +47,11 @@ import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 
 import { EquipoView } from "./EquipoView";
 import { EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_STAFF, EQUIPO_TRAMOS } from "./fixtures/equipo";
+import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { seedSessionUser } from "@/tests/helpers/session-user";
+
+// The components read the signed-in user from the session store; seed it with the mocked user.
+beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
