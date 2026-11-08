@@ -10,19 +10,20 @@ These shape the design.
    - Today almost every mutation pays for one full page render. When `router.refresh()` follows, it pays for two.
    - Example: a Tablero drag runs `setTaskStatusAction` (→ `revalidatePath('/tareas')`), then `router.refresh()` (`components/tareas/TareasTablero.tsx:74`). That ships the 6.3 MB `/tareas` payload twice.
    - **Migration rule:** once a screen reads through TanStack, remove the `revalidatePath` calls that target it. Otherwise every `useMutation` still triggers an RSC re-render, on top of `invalidateQueries`.
-2. **Most `revalidatePath` targets point at legacy routes that only redirect,** so they do nothing. Affected: `/tablero`, `/calendario`, `/dashboard`, `/mis-tareas`, `/actividades` (layout), `/equipo`, `/directorio`, `/recursos`, `/configuracion/*` (redirect map in `lib/ui/legacy-redirects.ts:27-41`).
-   - Live pages that their own actions never revalidate: `/inicio`, `/personas*`, `/biblioteca/[seccion]`, `/ajustes/{puestos,estatus,tramos,google,monday}`, `/proyectos/[id]` (Resumen), `/proyectos/[id]/tareas`.
+2. **Many `revalidatePath` targets point at legacy routes that only redirect** (`/tablero`, `/calendario`, `/dashboard`, `/mis-tareas`, `/actividades` (layout), `/equipo`, `/directorio`, `/recursos`, `/configuracion/*`; redirect map in `lib/ui/legacy-redirects.ts:27-41`). **They are not harmless.** In Next 16.2.10 any `revalidatePath`, even to a redirect-only route, re-renders the *current* route into the action response and clears the client router and prefetch cache (`next/dist/server/web/spec-extension/revalidate.js:210-211`, `action-handler.js:874,901`, `server-action-reducer.js:192-209`). A stub call therefore costs a full render of whatever page the user is on.
+   - Live pages that their own actions never target by path: `/inicio`, `/personas*`, `/biblioteca/[seccion]`, `/ajustes/{puestos,estatus,tramos,google,monday}`, `/proyectos/[id]` (Resumen), `/proyectos/[id]/tareas`. They still re-render when the action is called *from* them (any `revalidatePath` re-renders the current route), but not when the change happens on another screen.
    - This is why the 35 `router.refresh()` calls and the hand-written `reload()` / `refetch()` helpers exist.
+   - **Consequence for the migration:** Phase 1a moves every `revalidatePath` call (live and stub targets) into per-screen helpers `lib/cache/screens/<domain>.ts` with no behaviour change. Each phase removes its screen's revalidation, stub calls included, **only in the same PR** that adds that screen's TanStack invalidation (§4.4).
 3. **The browser runs client-invoked server actions one at a time.**
    - Several `useQuery`s whose `queryFn` is an action run one after another.
    - A poll waits behind a slow mutation or a live Gmail read.
    - Hover-prefetching several links queues up.
    - This is the strongest reason for **one page-data call per route**.
    - For polled data (badges), use a small `GET` route handler, or accept the queue.
-4. **Thrown action errors probably lose their message in production builds.** Next replaces it with a generic error plus digest; `lib/actions/calendar-actions.ts:93-95` notes this.
-   - So `actionErrorText(err)` (`lib/errors.ts:104`), which parses `CODE` out of `err.message`, likely shows the generic copy in prod for every action that throws. **Confirm on a prod build.**
+4. **Thrown action errors lose their message in production builds (confirmed).** Next replaces it with a generic error plus digest (`next/dist/server/app-render/create-error-handler.js:113`); `lib/actions/calendar-actions.ts:93-95` notes this.
+   - So `actionErrorText(err)` (`lib/errors.ts:104`), which parses `CODE` out of `err.message`, shows the generic copy in prod for every action that throws. Phase 1a records the confirmation in #931.
    - Only the actions that return `{ok:false,error}` keep their codes: portal, schedule `ActionResult`, workspace-access, monday-import, onboarding, calendar sync, `submitProjectCreateAction`.
-   - The new mutation helper should handle both styles. Over time, move actions to returning results.
+   - The new mutation helper handles both styles. Each phase converts its user-facing mutations to `ActionResult`; action files used by several phases are converted in Phase 1b. #931 tracks it.
 5. **Soft navigation does not re-render shared layouts.** The `(staff)` layout and `AppShell` run on hard loads, on `router.refresh()`, and on every revalidating action.
    - `next.config.ts:14` already sets `experimental.staleTimes.dynamic = 30`, so going back within 30 s reuses the RSC payload.
    - Each new page segment is still rendered on the server, page data included.
@@ -31,7 +32,7 @@ These shape the design.
    - There are **0** `useQuery` / `useMutation` / `useQueryClient` calls and no `HydrationBoundary`.
    - `AppearanceProvider` (`app/layout.tsx:107`) and `<Toaster>` (`:109`) sit **outside** `QueryProvider`. Move `QueryProvider` up so it wraps both.
    - The only Zustand store is `lib/stores/session-store.ts:20` (`{access,setAccess}`). Its doc comment already says server data belongs in TanStack Query.
-7. **No data repository or action is wrapped in React `cache()`.** Only session (`lib/auth/session.ts:110,137`), appearance (`lib/ui/preferences-server.ts:56,141`) and portal style/appearance (`lib/portal/style-server.ts:16,42`, `lib/portal/appearance.ts:31`) are. A read repeated within one render hits the DB again.
+7. **No data repository or action is wrapped in React `cache()`.** Only session (`lib/auth/session.ts:110,137`), appearance (`lib/ui/preferences-server.ts:58,150`) and portal style/appearance (`lib/portal/style-server.ts:16,42`, `lib/portal/appearance.ts:31`) are. A read repeated within one render hits the DB again.
 8. **Two pairs of actions share a name.** Key and mutation factories must namespace by module:
    - `setTaskStatusAction`: `tasks-actions.ts:170` and `schedule-actions.ts:78`.
    - `addChecklistItemAction`: `tasks-actions.ts:237` and `my-space-actions.ts:87`.
@@ -61,7 +62,7 @@ These shape the design.
 | 1 | `getSessionAccess` (`:21`) | cached |
 | 2 | `getResolvedAppearance` (`:26`) | cached |
 | 3 | `loadPhotoUrl` → `findStaffPhoto` (`:35`, `:72`) | awaited **before** step 4. Selects every column, **including the photo `bytes` blob**, only to read `sha256` (`lib/repositories/preferences-repository.ts:34`). `lib/profile-photo/photo-url.ts:18` already has a sha-only variant. |
-| 4a | `buildNavModel` (`lib/ui/nav.ts:95`) | runs every `lib/shell/nav-items/*` `resolve` in parallel (see below) |
+| 4a | `buildNavModel` (`lib/ui/nav.ts:98`) | runs every `lib/shell/nav-items/*` `resolve` in parallel (see below) |
 | 4b | `fetchMyTodayAction` (`lib/actions/time-tracking-actions.ts:83`) | `requireCaller`, plus `getTimeTrackingSettings` (not cached, `lib/time-tracking/settings.ts:97`), plus the day's entries: about 3 q |
 
 Nav items resolved in step 4a:
@@ -69,14 +70,14 @@ Nav items resolved in step 4a:
 | Item | File | Cost |
 |---|---|---|
 | inicio | `lib/shell/nav-items/inicio.ts` | flag only |
-| mi-espacio | `lib/shell/nav-items/mi-espacio.ts:21-34` | `loadBandejaUnread` → `fetchNotificationsAction({unreadOnly:true})`: **lists 31 rows plus a count, to use only the count** (`notifications-actions.ts:95-117`), plus `loadDueReminders` → `fetchRemindersAction`. About 3 q. |
+| mi-espacio | `lib/shell/nav-items/mi-espacio.ts:21-34` (badge read at `:31`) | `loadBandejaUnread` → `fetchNotificationsAction({unreadOnly:true})`: **lists 31 rows plus a count, to use only the count** (`notifications-actions.ts:95-117`), plus `loadDueReminders` → `fetchRemindersAction`. About 3 q. |
 | **tareas** | `lib/shell/nav-items/tareas.ts:30` | `fetchMyTasksAction()` → full `listTasks` for the viewer (7 correlated subqueries per row, plus `loadSupport`), **only to count open tasks**. Heaviest shell read. |
 | proyectos / personas / biblioteca | — | capability checks (cached session) |
 | asistente / ajustes | — | flags |
 | (tramos list) | `loadTramos` → `listTramos` (`lib/tramos/compat.ts:51`) | 1 q |
 
 **`components/shell/AppShell.tsx`**
-- `renderSidebarSlots` (`:47-48`) mounts `SidebarSlotOutlet`, which calls `bandejaBadgeSlot.load` → `loadBandejaBadge` (`lib/shell/sidebar-slots/bandeja-badge.tsx:52`).
+- `renderSidebarSlots` (`:47-48`) mounts `SidebarSlotOutlet`, which calls `bandejaBadgeSlot.load` → `loadBandejaBadge` (`lib/shell/sidebar-slots/bandeja-badge.tsx:56`).
 - That calls **`fetchNotificationsAction` and `fetchRemindersAction` again**, the same reads as the mi-espacio nav item: about 3 more q.
 - `TimeClock` and `ClockInPrompt` take `today` from the layout (no extra server read).
 
@@ -117,7 +118,7 @@ Nav items resolved in step 4a:
 | `staffRepository.listStaff` | 1 q |
 | `remindersForDay` | 1 q |
 
-Then CPU work: `dailySeries` × 5 KPIs over every task per day (`:174-180`), using `localIsoDate`, which builds a new `Intl.DateTimeFormat` per call (`lib/dashboard/task-trend.ts:34`), and `agendaSortKey` (`lib/dashboard/inicio.ts:424`). This is the 30 s; it is being fixed separately.
+Then CPU work: `dailySeries` × 5 KPIs over every task per day (`:174-180`), using `localIsoDate`, which builds a new `Intl.DateTimeFormat` per call (`lib/dashboard/task-trend.ts:34`), and `agendaSortKey` (`lib/dashboard/inicio.ts:424`). This was the 30 s; it was fixed by #926 (`lib/dates/zoned-formatters.ts`).
 
 **Totals:** about 14–18 q.
 
@@ -125,15 +126,15 @@ Then CPU work: `dailySeries` × 5 KPIs over every task per day (`:174-180`), usi
 
 **Client:** `InicioClient` refreshes after the profile photo upload (`components/inicio/InicioClient.tsx:53`; the upload is `fetch` POST in `components/inicio/ProfilePhotoButton.tsx:67`). No other fetches.
 
-**Invalidated by:** every task, project, status and reminder mutation. Its paths (`/dashboard`) are stubs, so today Inicio is never revalidated and only stays fresh because `staleTimes` re-renders it after 30 s.
+**Invalidated by:** every task, project, status and reminder mutation. The actions target `/dashboard`, a redirect-only stub, so a change made on another screen does not reach Inicio's cached payload; it stays fresh only because `staleTimes` re-renders it after 30 s. (An action called *from* Inicio still re-renders Inicio, because any `revalidatePath` re-renders the current route; see Key findings #2.)
 
 ### 1.2 `/tareas` (`app/(staff)/tareas/page.tsx`), plus `/tareas/[id]`, which redirects to `?tarea=`
 
 **Server:**
 1. `requireCapabilityUser`
 2. `getResolvedAppearance`
-3. `listTramos` (1 q), in sequence before the fan-out (`:65-70`)
-4. `Promise.all` (`:95-102`):
+3. `listTramos` (1 q), in sequence before the fan-out (`:64`)
+4. `Promise.all` (`:100`):
 
 | Read | Cost |
 |---|---|
@@ -273,7 +274,7 @@ Both compute the tab counts with:
 | google (and primeros-pasos) | [`listGroupMappingsAction`, `fetchPositionsAction` (4 q)], **then** `getGoogleHealthAction` (4 q) (`page.tsx:21,30`) | about 9 | — | `create`/`update`/`deleteGroupMappingAction` (`components/configuracion/GoogleGroupMappings.tsx:126-127,147`), then `router.refresh()` (`:134,151`); `GoogleSetupWizard.tsx:103`, then `refresh` (`:114`); `completeOnboardingAction` (`:196`); `ensureMissingProjectFoldersAction` (`components/configuracion/ProjectFoldersBackfill.tsx:45`, creates Drive folders serially), then `refresh` (`:46`) |
 | horario | [`fetchTimeTrackingSettingsAction`, `fetchTeamHoursAction({weekStart})` (`teamHoursReport`: 3 sequential q)]; the setting is **read 3×** per request | about 6 | — | `saveTimeTrackingSettingsAction` (`components/ajustes/HorarioClient.tsx:86`) revalidates `/` layout, then `router.refresh()` (`:90`) |
 | monday | parallel [`getMondayImportStatusAction`, **`openMondayImportRunAction(false)` (writes during GET; repeats `getRunState`)**, `getMondayImportChoicesAction` (3 q)], **then** `getMondayImportHistoryAction` | 10+ | on mount: `getMondayExportSourceAction`, `getMondayImportedProjectsAction`, `checkMondayRollbackAction`; per step: `getMondayImportOptionsAction`, `previewMondayImportAction`; **`setInterval` every 2 s → `getMondayImportRunAction`** (`components/configuracion/monday-import/MondayImportWizard.tsx:63,165-173,221-268,305,507`) | Wizard: `save…Step` / `startMondayExport` / `startMondayApply` / `startMondayRollback` / `saveMondayMappingDraft` / `uploadMondayMapping` / `openMondayImportRun(true)` / `completeOnboarding` (`:300-498`). Elsewhere: `connectMondayAction` (`ConnectStep.tsx:38`); `suggestMondayPosition` / `createMondayStaff` (`CreateStaffButton.tsx:55,82`); `createTaskStatusAction` and `saveMondayStatusMapAction` (`StatusMapTable.tsx:75,225,258`). Apply and rollback revalidate **nothing when they finish**. |
-| permisos | `fetchStaffAction({includeInactive:true})` | about 3 | **refetches the whole staff list on every window `focus` and `storage` event** (`components/configuracion/usePermissionsWorkspace.ts:137-166`) | the matrix is saved to **localStorage only** (`:97,220`); it does not persist across browsers. Flag to the product owner. |
+| permisos | `fetchStaffAction({includeInactive:true})` | about 3 | **refetches the whole staff list on every window `focus` and `storage` event** (`components/configuracion/usePermissionsWorkspace.ts:137-166`) | the matrix is saved to **localStorage only** (`:97,220`); it does not persist across browsers and enforces nothing. **Decided (D4):** Phase 9b hides the matrix until a server model exists (#950); the server model is backlog #971. |
 | puestos | [`fetchPositionsAction`, `fetchWorkflowsAction()` (about 5 q in 3 waves; reads all `workflow_phases` unfiltered, `lib/repositories/workflows-repository.ts:98-131`)] | about 9 | **refetches both on mount** (`app/(staff)/ajustes/(admin)/puestos/PuestosClient.tsx:87-90`) and after each mutation (`:125,146,162`) | `create`/`updatePositionAction` → `setPositionPhasesAction` in sequence (`:119-124`); `deletePositionAction` (`:144`); `reorderPositionsAction` (`:158`, optimistic) |
 | tema | `fetchOrgAppearanceAction` (cached) | 0 | — | `saveOrgAppearanceAction` / `resetOrgAppearanceAction` (`components/ajustes/ThemeEditor.tsx:108,123`) revalidate `/` layout, then `router.refresh()` (`:112,129`) |
 | tramos | `fetchWorkflowsAction({include…})` | about 5 | `refresh()` = `fetchWorkflowsAction` after every mutation (`app/(staff)/ajustes/(admin)/tramos/TramosClient.tsx:159-175`) | `setWorkflowAutoStartAction` (`:182`), `updateWorkflowPhaseAction` (`:203`), `reorderWorkflowPhasesAction` (`:209`), `create`/`updateTemplateAction` (`:244-246`), `deactivateTemplateAction` (`:264`), `reorderTemplatesAction` (`:277`), `create`/`updateWorkflowPhaseAction` (`components/configuracion/PhaseEditorDrawer.tsx:49-50`) |
@@ -286,9 +287,9 @@ Both compute the tab counts with:
 
 | Route | Server | ≈q | Client |
 |---|---|---|---|
-| `app/portal/layout.tsx:34` | root layout (`getResolvedAppearance`: 1 q) + parallel [`getPortalUser` (**not cached**; 1 q plus a daily write that extends the session), `getPortalAppearance`, `getPortalPresentation` → `getPortalStylePolicy`]. **`appearance.theme` is read 3× per request.** **Bug:** `StyleProvider` is not given `fixedByOrg` (`:43`); staff `AppShell.tsx:124` has the same omission. | about 5 | — |
+| `app/portal/layout.tsx:34` | root layout (`getResolvedAppearance`: 1 q) + parallel [`getPortalUser` (**not cached**; 1 q plus a daily write that extends the session), `getPortalAppearance`, `getPortalPresentation` → `getPortalStylePolicy`]. **`appearance.theme` is read 3× per request.** **Bug:** `StyleProvider` is not given `fixedByOrg` (`:43`); staff `AppShell.tsx:55` has the same omission. | about 5 | — |
 | `/portal` | `requirePortalUser` (**session queried again**), `listPortalProjects` (1 q) | 5–6 | — |
-| `/portal/proyectos/[id]` | `requirePortalUser` → `requireProjectAccess` → parallel [`getPortalProject` (**repeats the visibility join**), `getPortalSchedule` (2 q in sequence), `getPortalProjectTramos` (2 q in sequence, **re-checks visibility**), `loadSharedDocuments` (Drive, 60 s memory cache)] | about 10 + Drive | `PortalFileBrowser` `fetch GET /api/portal/projects/[pid]/files?folder` (`components/portal/PortalFileBrowser.tsx:93-120`), download `fetch` (`:133`); `PortalUploader` `fetch GET …/uploads` (`components/portal/PortalUploader.tsx:168,185`), XHR upload (`:107`), then reload (`~:211`) |
+| `/portal/proyectos/[id]` | `requirePortalUser` → `requireProjectAccess` → parallel [`getPortalProject` (**repeats the visibility join**), `getPortalSchedule` (2 q in sequence), `getPortalProjectTramos` (2 q in sequence, **re-checks visibility**), `loadSharedDocuments` (Drive, 60 s memory cache)] | about 10 + Drive | `PortalFileBrowser` `fetch GET /api/portal/projects/[pid]/files?folder` (`components/portal/PortalFileBrowser.tsx:93-120`), download `fetch` (`:133`); `PortalUploader` `fetch GET …/uploads` (`components/portal/PortalUploader.tsx:168,185`), XHR upload (`:111`), then reload (`~:211`) |
 | `/portal/login`, `/portal/acceder`, `/portal/[...missing]` | no data; `PortalLoginForm` `fetch POST /api/portal/auth/link` (`:40`); acceder posts a native form | — | keep as RSC and route handlers |
 
 ---
@@ -307,7 +308,7 @@ Both compute the tab counts with:
 | `lib/google/use-drive-enabled.ts:14` (effect `:12`; used by DriveLinksEditor, BibliotecaSection, DocumentReader, ResourcePreview, DrivePickerDialog) | GET `/api/google/drive/status` |
 | `components/portal/PortalLoginForm.tsx:40` | POST `/api/portal/auth/link` |
 | `components/portal/PortalFileBrowser.tsx:100,133` | files list and download |
-| `components/portal/PortalUploader.tsx:168,107` | uploads GET, XHR POST |
+| `components/portal/PortalUploader.tsx:168,111` | uploads GET, XHR POST |
 | `components/asistente/AssistantChat.tsx:60-62` | `useChat` → POST `/api/asistente/chat` |
 
 ### 2b. Server actions called to load data from effects, transitions or refetch helpers
@@ -423,7 +424,7 @@ Rows 33–35 (auth) should stay.
 
 ### 2e. `revalidatePath` (no `revalidateTag`, `updateTag` or `unstable_cache` anywhere)
 
-⚠ marks a target that only redirects.
+⚠ marks a target that only redirects. A ⚠ call is **not** a no-op: in Next 16.2.10 it still re-renders the current route into the action response and clears the client router cache (Key findings #2). Phase 1a moves every row below into `lib/cache/screens/<domain>.ts` helpers unchanged; each phase deletes its screen's calls (⚠ included) only in the PR that adds the matching TanStack invalidation.
 
 | Target | Where |
 |---|---|
@@ -461,7 +462,10 @@ Rows 33–35 (auth) should stay.
 
 ## 3. Mutation server actions used from the UI, by domain
 
-The **Invalidates** column uses the query keys from §4.2. "RV" is what the action revalidates today.
+The **Invalidates** column uses the query keys from §4.2. "RV" is what the action revalidates today. Ajustes keys are written `ajustes.page('<seg>')` (§4.2).
+
+### Session (`lib/auth/auth-actions.ts`, `components/shell/AvatarMenu.tsx:127-130`)
+- `logoutAction`, the AvatarMenu logout and any `useSessionStore.setAccess` call that changes the user or capabilities: `queryClient.clear()` and reset every UI store (security rule, §4.8).
 
 ### Tasks (`lib/actions/tasks-actions.ts`; RV `revalidateTareas` `:54-59`)
 
@@ -486,19 +490,19 @@ No UI callers (assistant or none): `archiveTaskAction:193`, `mergeTasksAction:21
 
 ### Task statuses (`lib/actions/task-statuses-actions.ts`)
 - `create:21` / `update:31` / `delete:44`, called from `useTaskStatusesEditor.ts:87-112` and `StatusMapTable.tsx:75`.
-- Invalidate: `catalog.taskStatuses`, the `tareas` prefix (board columns), `tasks.detail` prefix, `monday.choices`, `inicio`, `proyectos.list`.
+- Invalidate: `catalog.taskStatuses`, `ajustes.page('estatus')`, the `tareas` prefix (board columns), `tasks.detail` prefix, `monday.choices`, `inicio`, `proyectos.list`.
 
 ### Projects (`lib/actions/projects-actions.ts`)
 
 | Action | Caller | Invalidates |
 |---|---|---|
 | `submitProjectCreateAction:100` / `createProjectAction:79` | `ProjectsPortfolio.tsx:126`, `project-create-form.tsx:37` | `proyectos.list`, `catalog.projectOptions`, `inicio` |
-| `updateProjectAction:116` | `ProjectFichaClient.tsx:244`, `ProjectsPortfolio.tsx:132`, `ProjectAdminFields.tsx:105` | `proyectos.detail(id)` prefix, `proyectos.list`, `inicio`; client changed → `proyectos.tab(id,'clientes')` |
+| `updateProjectAction:116` | `ProjectFichaClient.tsx:244`, `ProjectsPortfolio.tsx:132`, `ProjectAdminFields.tsx:105` | `proyectos.detail(id)` prefix, `proyectos.list`, `catalog.projectOptions`, `inicio`; client changed → `proyectos.tab(id,'clientes')` |
 | `setProjectMembersAction:177`, `setProjectContactsAction:189` | `ProjectFichaClient.tsx:266,280` | `proyectos.tab(id,'ficha')`, `proyectos.resumen(id)`, `proyectos.list`; contacts also `proyectos.tab(id,'clientes')` |
 | `add` / `removeProjectLinkAction:207,222` | `ProjectFichaClient.tsx:290,300` | `proyectos.tab(id,'ficha')` |
 | `addProjectCommentAction:246` | `ProjectBitacoraCard.tsx:46` | `proyectos.history(id)` |
 | `setProjectCurrentTramoAction:267` | `ProjectTramosCard.tsx:65` | `proyectos.detail(id)` prefix, `proyectos.list`, `tareas` prefix |
-| space `create:305` / `rename:314` / `reorder:323` / `delete:331` | `ProjectSpacesCard.tsx:67,83,102,115` | `proyectos.tab(id,'ficha')`, `proyectos.resumen(id)`, `catalog.projectSpaces(id)`; delete also `tareas` prefix |
+| space `create:305` / `rename:314` / `reorder:323` / `delete:331` | `ProjectSpacesCard.tsx:67,83,102,115` | `proyectos.tab(id,'ficha')`, `proyectos.resumen(id)`, `catalog.projectSpaces(id)`; rename also `catalog.projectOptions`; delete also `tareas` prefix |
 | `retryProjectFolderAction:146` | `ProjectFilesBrowser.tsx:140` | `proyectos.archivos(id)` prefix, `proyectos.resumen(id)`, `proyectos.shell(id)` |
 
 ### Schedule (`lib/actions/schedule-actions.ts`; returns `ActionResult`)
@@ -508,32 +512,33 @@ No UI callers (assistant or none): `archiveTaskAction:193`, `mergeTasksAction:21
 - `previewImportScheduleAction:172` is a read; call it with `useMutation` and no invalidation.
 
 ### Workflows / tramos (`lib/actions/workflows-actions.ts`)
-- Templates: `create:110`, `update:129`, `deactivate:144`, `reorder:154` (`TramosClient.tsx:244-277`): `catalog.workflows`.
-- Phases: `create:172`, `update:182`, `reorder:195` (`TramosClient.tsx:203,209`, `PhaseEditorDrawer.tsx:49-50`): `catalog.workflows`, `ajustes.puestos`, `tareas` prefix, `proyectos` prefix.
-- `setWorkflowAutoStartAction:208` (`:182`): `catalog.workflows`, `proyectos.list`.
+- Templates: `create:110`, `update:129`, `deactivate:144`, `reorder:154` (`TramosClient.tsx:244-277`): `catalog.workflows`, `ajustes.page('tramos')`.
+- Phases: `create:172`, `update:182`, `reorder:195` (`TramosClient.tsx:203,209`, `PhaseEditorDrawer.tsx:49-50`): `catalog.workflows`, `ajustes.page('tramos')`, `ajustes.page('puestos')`, `tareas` prefix, `proyectos` prefix.
+- `setWorkflowAutoStartAction:208` (`:182`): `catalog.workflows`, `ajustes.page('tramos')`, `proyectos.list`.
 - The sidebar tramo list does not change: no UI calls `create`/`update`/`deleteWorkflowAction`.
 
 ### Positions (`lib/actions/positions-actions.ts`), all from `PuestosClient.tsx:119-158`
 - `create:41`, `update:50`, `delete:60`, `setPositionPhases:68`, `reorder:78`.
-- Invalidate: `ajustes.puestos`, `personas.equipo`, `catalog.assignableStaff` prefix, `ajustes.google`.
+- Invalidate: `ajustes.page('puestos')`, `personas.equipo`, `catalog.assignableStaff` prefix, `ajustes.page('google')`.
 
 ### Contacts (`lib/actions/contacts-actions.ts`)
-- `create:58` / `update:68` (`PersonasContacts.tsx:176,179`, `ContactEditorSheet.tsx:138`) and `delete:81` (`:193`).
+- `create:58` / `update:68` (`PersonasContacts.tsx:176,179`) and `delete:81` (`PersonasContacts.tsx:193`).
 - Invalidate: `personas.contacts` prefix, `personas.counts`, `contacts.detail(id)` (setQueryData), `contacts.history(id)`, `catalog.contacts`.
+- `deleteContactAction` also invalidates the `proyectos` keys whose third segment is `'clientes'` (predicate), and `removeQueries(contacts.detail(id))`.
 
 ### Staff (`lib/actions/staff-actions.ts`), called from `use-member-editor.ts:279-330` and `PerfilClient.tsx:235,242`
 - `createStaffAction:65`, `updateStaffAction:106`, `upsertStaffProfileAction:143`, `setStaffCredentialAction:165`, `setStaffPositionsAction:198`.
 - `recheckStaffAccessAction` (`workspace-access-actions.ts:175`, from `RecheckAccessButton.tsx:29`).
-- Invalidate: `personas.equipo`, `personas.counts`, `personas.detail(id)`, `catalog.staff`, `catalog.assignableStaff` prefix, `ajustes.permisos`, `me.profile`.
+- Invalidate: `personas.equipo`, `personas.counts`, `personas.detail(id)`, `catalog.staff`, `catalog.assignableStaff` prefix, `ajustes.page('permisos')`, `me.profile`.
 - An own name edit keeps `revalidatePath('/','layout')`: the shell name is server-rendered.
 
 ### Time tracking (`lib/actions/time-tracking-actions.ts`)
-- `clockInAction:90`, `pauseWorkAction:99`, `resumeWorkAction:106`, `clockOutAction:113` (`TimeClock.tsx:218-223`, `CommandPalette.tsx:225`, `ClockInPrompt.tsx:193`): `setQueryData(me.today)` from the result; invalidate `me.weekHours` and `ajustes.horario` prefix. Remove `publishTodayStatus` and both refreshes.
-- `saveTimeTrackingSettingsAction:71` (`HorarioClient.tsx:86`): invalidate `ajustes.horario` prefix and `me.today`. **Keep** the layout revalidation (the TimeClock gate is server-rendered); drop `router.refresh`.
+- `clockInAction:90`, `pauseWorkAction:99`, `resumeWorkAction:106`, `clockOutAction:113` (`TimeClock.tsx:218-223`, `CommandPalette.tsx:225`, `ClockInPrompt.tsx:193`): `setQueryData(me.today)` from the result; invalidate `me.weekHours`, `personas.equipo` (who is working now) and the `ajustes.page('horario')` prefix. Remove `publishTodayStatus` and both refreshes.
+- `saveTimeTrackingSettingsAction:71` (`HorarioClient.tsx:86`): invalidate the `ajustes.page('horario')` prefix and `me.today`. **Keep** the layout revalidation (the TimeClock gate is server-rendered); drop `router.refresh`.
 
 ### Vacations (`lib/actions/vacations-actions.ts`)
 - `requestVacationAction:190` and `cancelVacationRequestAction:224`: `me.vacations`, `vacations.absences` prefix, `vacations.pending`.
-- `decideVacationAction:257`: `vacations.pending`, `vacations.absences`, `personas.equipo`, `personas.detail(staffId)`.
+- `decideVacationAction:257`: `vacations.pending`, the `vacations.absences` prefix, `personas.equipo`, `personas.detail(staffId)`, `inicio`.
 - `saveVacationSettingsAction:320`: `setQueryData(vacations.settings)`, `me.vacations`.
 
 ### Notifications / Mi espacio / Gmail
@@ -541,39 +546,46 @@ No UI callers (assistant or none): `archiveTaskAction:193`, `mergeTasksAction:21
 | Action | Invalidates |
 |---|---|
 | `markNotificationsReadAction` (`notifications-actions.ts:120`, `Inbox.tsx:269`) | patch `me.notifications` pages; `setQueryData(shell.badges, {unreadCount})` from the result |
-| `updateNotificationPreferencesAction:140` | `me.notificationPrefs`, `me.preferences` |
+| `updateNotificationPreferencesAction:140` | `me.notificationPrefs`, `me.preferences`, `ajustes.page('notificaciones')` |
 | Notes `create` / `update` / `archive` / `restoreNoteAction` (`QuickCapture.tsx:99`, `NoteEditor.tsx:68,135,152`) | optimistic `me.notes` |
 | Checklists `createChecklist:75` (`QuickCapture.tsx:107`), `addChecklistItem:87` (`ChecklistCard.tsx:119`), `toggleChecklistItem:95` (`:101`) | optimistic `me.checklists` |
-| Reminders `create:131` (`ReminderDialog.tsx:168`), `snooze` / `cancel` (`RemindersList.tsx:74,85`; the component is **not mounted anywhere**) | `me.reminders`, `shell.badges` |
+| Reminders `create:131` (`ReminderDialog.tsx:168`), `snooze` / `cancel` (only the assistant after `RemindersList` is deleted, #952) | `me.reminders`, `shell.badges`, `inicio` |
 | Gmail `linkGmailThreadToProjectAction:277` (`Inbox.tsx:677,700`, `GmailReader.tsx:194`) | `me.gmail` prefix, project detail and history |
 | Gmail `createTaskFromGmailThreadAction:352` (`GmailReader.tsx:179`, `Inbox.tsx:681`) | same as above + `tareas` prefix |
 | Gmail `sendGmailDraftAction:334` (`GmailDraftSheet.tsx:126`) | `me.gmail.thread`, `me.gmail.threads` |
 | Gmail `createGmailDraftAction:292` | none |
-| Gmail `syncGmailAction:254` / `disconnectGmailAction:401` (`IntegracionesClient.tsx:192,209`) | `me.gmail` prefix, `ajustes.integraciones` |
-| Gmail `fetchGmailThreadAction` | keep it as a query; **remove its `revalidatePath`**; set `unread:false` in the threads cache |
+| Gmail `syncGmailAction:254` / `disconnectGmailAction:401` (`IntegracionesClient.tsx:192,209`) | `me.gmail` prefix, `ajustes.page('integraciones')` |
+| Gmail `fetchGmailThreadAction` | **split** (query functions are side-effect free, §4.8): a read-only query `me.gmail.thread(id)` and a `markGmailThreadReadAction` mutation run when the reader opens an unread thread. The mutation patches `unread:false` in `me.gmail.threads` and `shell.badges`. Its `revalidatePath` goes (today it fires only when the thread was unread, `gmail-actions.ts:249`). |
 
 ### Preferences / appearance / settings
-- `updateMyPreferencesAction`: `setQueryData(me.preferences)`. No revalidation; the provider changes the DOM.
-- `save` / `resetOrgAppearanceAction`, `save` / `restoreGeneralSettingsAction`: **keep `revalidatePath('/','layout')`** because the theme `<style>`, `<html>` attributes and `GeneralSettingsProvider` are server-rendered. Invalidate `ajustes.tema` / `ajustes.general`. Drop the `router.refresh` calls.
-- `removeMyPhotoAction` (`AvatarMenu.tsx:115`, `PerfilClient.tsx:133`) keeps its layout revalidation; drop the follow-up refresh.
-- The photo POST route already revalidates the layout (`route.ts:75`). On the client, replace `router.refresh` with nothing, or with `router.refresh` only where the shell avatar must change.
+- `updateMyPreferencesAction`: `setQueryData(me.preferences)` and the `useAppearance` store update (optimistic, rolled back on error). No revalidation; the store changes the DOM.
+- `save` / `resetOrgAppearanceAction`, `save` / `restoreGeneralSettingsAction`: **keep `revalidatePath('/','layout')`** because the theme `<style>` and `<html>` attributes are server-rendered. Invalidate `ajustes.page('tema')` / `ajustes.page('general')`; the general save also does `setQueryData(org.general())` from the result. Drop the `router.refresh` calls.
+- Photo: `me.profile` is seeded with `initialData` from the layout. The photo POST (`components/shell/photo-upload.ts`, used by AvatarMenu, Inicio and Perfil) and `removeMyPhotoAction` (`AvatarMenu.tsx:115`, `PerfilClient.tsx:133`) do `setQueryData(me.profile)` from the result. The photo route's `revalidatePath('/','layout')` (`app/api/staff/me/photo/route.ts:75`) and `removeMyPhotoAction`'s are dropped, with the follow-up refreshes.
 
 ### Google / workspace access
-- `create` / `update` / `deleteGroupMappingAction:130,144,161`: `ajustes.google`, `ajustes.puestos`, `catalog.staff`.
-- `ensureMissingProjectFoldersAction:204`: `ajustes.google`, `proyectos` prefix.
+- `create` / `update` / `deleteGroupMappingAction:130,144,161`: `ajustes.page('google')`, `ajustes.page('puestos')`, `catalog.staff`.
+- `ensureMissingProjectFoldersAction:204`: `ajustes.page('google')`, the `proyectos.archivos` prefix (predicate on the third segment `'archivos'`), `proyectos.shell` prefix.
 - `completeOnboardingAction`: `inicio`.
 
 ### Monday import (all return results)
 - `openRun`, `saveStep`, `connect`, `startExport`, `createMondayStaff`, `saveMappingDraft`, `uploadMapping`, `startApply`, `startRollback`, `saveStatusMap`, `applyMondayRemapAction:428`.
 - Run state: `monday.run(id)` with `refetchInterval` while a job is running.
 - **When apply or rollback finishes, detected by the poll:** invalidate `proyectos`, `tareas`, `catalog.staff`, `inicio`, `monday.history`.
-- `createMondayStaff`: `catalog.staff`, `ajustes.puestos`.
+- `createMondayStaff`: `catalog.staff`, `ajustes.page('puestos')`.
 - `applyMondayRemap`: `proyectos.detail(id)` prefix, `proyectos.list`.
 
 ### Portal (`lib/actions/portal-actions.ts`, called from `/proyectos/[id]/clientes`)
 - `invite:85`, `revoke:143`: `proyectos.tab(id,'clientes')`, `proyectos.shell(id)`, `proyectos.clientesActivity(id)`.
 - `disable:156` / `enable:169` affect the user's other projects too: invalidate `proyectos` with a predicate on `'clientes'`.
 - `resend:125`: activity only; **remove the refresh**.
+
+### Portal side (`components/portal/*`, `app/api/portal/**`)
+- Staff-side and portal-side `PortalUploader` XHR upload (`components/portal/PortalUploader.tsx:111`): invalidate `portal.uploads(id)`; on the staff side also `proyectos.clientesActivity(id)`.
+- Portal file browser downloads: none (reads).
+- Portal logout: `queryClient.clear()`.
+
+### Calendar (`lib/actions/calendar-actions.ts`, `components/calendario/CalendarFeedDialog.tsx`)
+- `syncGoogleCalendarAction` (auto sync from `TareasCalendario`, at most once per session, and the manual sync) and the `CalendarFeedDialog` mutations (`generateCalendarFeedAction`, `disableCalendarFeedAction`, `enableGoogleCalendarSyncAction`, `disableGoogleCalendarSyncAction`; `lib/actions/calendar-actions.ts:37,42,106,128`): invalidate the `tareas.calendar` prefix and `ajustes.page('integraciones')`.
 
 ### Assistant
 - `deleteAssistantThreadAction:69`: optimistic `asistente.threads`, `removeQueries(asistente.thread(id))`, drop the revalidate.
@@ -605,6 +617,8 @@ lib/query/
   options/<domain>.ts  queryOptions() per page/sub-resource: { queryKey, queryFn: () => action(input), staleTime }
 lib/loaders/<domain>.ts  "server-only" pure loaders: (user, input) => data   ← composed from repositories
 lib/actions/page-data/<domain>-actions.ts  "use server": parse zod → requireCapabilityUser → loader
+lib/cache/screens/<domain>.ts  "server-only": revalidate<Domain>Screen() — every revalidatePath of that screen (1a)
+scripts/check-data-patterns.mjs  guard for the §5.0 patterns, multi-line aware (1a)
 ```
 
 - **Server prefetch calls the loader directly.** It does not go through the action, so the RSC pays no extra POST or session check. `queryOptions` share the same key and point `queryFn` at the action for the client.
@@ -615,15 +629,14 @@ lib/actions/page-data/<domain>-actions.ts  "use server": parse zod → requireCa
 - **Page action plus sub-key seeding.** A page-data action returns the whole bundle in one round trip. The page's `queryFn` can then `setQueryData` the granular keys, such as `tasks.detail` or `catalog.*`, so later invalidation stays targeted.
 - `estilo` (`?estilo=`) is never part of a key: it's render-only.
 - **`useActionMutation`** (`lib/query/mutation.ts`):
-  - Runs the action. If the result is `{ok:false,error}` (`ActionResult`, portal and Google result types), it throws `new Error(error)`.
+  - Runs the action. If the result is `{ok:false,error}` (`ActionResult`, portal and Google result types), it throws `new Error(error)`. A thrown error is handled too, but production strips its message (Key findings #4), so user-facing mutations move to `ActionResult` (#931).
   - `onError`: `toast.error(actionErrorText(err, ctx))`, or a `onFormError(text)` callback for inline errors. This keeps the existing copy tables (`PORTAL_ERROR_MESSAGES`, `GROUP_MAPPING_ERROR_MESSAGES`, `tramosErrorText`).
   - `onMutate`: optional optimistic `setQueryData` with a snapshot. `onError` rolls it back.
   - `onSettled`: `invalidateQueries` for each key in `invalidate` (a static list or a function of variables and result).
   - Options to keep the STALE-code refetch (`TeamRequests.tsx:126`) and the partial-failure toast (`NewTaskDialog.tsx:192-193`).
 - **Reads as server actions:** this is what the product owner asked for and it works, given the one-call-per-page budget.
-  - Caveats: POST, no HTTP cache, serial per tab.
-  - For polled data and hover prefetch, optionally add a thin `GET /api/q/[name]` route that runs the same loader. Polling or prefetching then doesn't queue behind mutations.
-  - Decide this in phase 1. The `queryOptions` shape stays the same either way.
+  - Caveats: POST, no HTTP cache, serial per tab. A navigation discards a queued action's router state: the caller's promise still resolves, and a refresh is scheduled if the action had revalidated (`next/dist/client/components/app-router-instance.js:141-151`).
+  - **Decided (D5):** page data goes through server actions. There is **one** private GET route, only for `shell.badges` (Phase 2): a fixed name (no generic `/api/q/[name]`), the same capability check as the action, `Cache-Control: private, no-store`, and no side effects. Hover prefetch is limited to Inicio, Tareas and Mi espacio, debounced, through actions.
 
 ### 4.2 Key factory (`lib/query/keys.ts`)
 
@@ -638,17 +651,23 @@ export const qk = {
              reminders: (range: 'today-tomorrow') => ['me','reminders',range] as const,
              checklists: () => ['me','checklists'] as const, notes: () => ['me','notes'] as const,
              vacations: () => ['me','vacations'] as const, notificationPrefs: () => ['me','notification-prefs'] as const },
+  org:     { general: () => ['org','general'] as const },                       // GeneralSettings, hydrated by the root layout (1b)
+  importData: (entity: ImportDataEntity, id: string) => ['import-data',entity,id] as const, // ImportDataPanel (1b)
+  google:  { driveStatus: () => ['google','drive-status'] as const },          // useDriveStatus (1b)
   inicio:  () => ['inicio'] as const,
   tareas:  { all: ['tareas'] as const,
-             page: (q: TareasPageInput) => ['tareas','page',q] as const,            // facets + first page / board / calendar
-             list: (f: TareasListFilters, cursor?: string) => ['tareas','list',f,cursor ?? null] as const,
-             board: (f: TareasListFilters) => ['tareas','board',f] as const,
+             page: (q: Omit<TareasPageInput,'cursor'|'limit'>) => ['tareas','page',q] as const, // first page / board / calendar
+             facets: (f: TareasListFilters) => ['tareas','facets',f] as const,
+             list: (f: TareasListFilters) => ['tareas','list',f] as const,                 // useInfiniteQuery; the cursor is the page param
+             board: (f: TareasListFilters, columnId?: string) =>
+               (columnId ? ['tareas','board',f,columnId] : ['tareas','board',f]) as readonly unknown[],
              calendar: (f: TareasListFilters, from: string, to: string) => ['tareas','calendar',f,from,to] as const,
-             startSlot: () => ['tareas','start-slot'] as const },
+             startSlot: (tramoId: string|null) => ['tareas','start-slot',tramoId] as const,  // 4d
+             startPreview: (projectId: string, workflowId: string) => ['tareas','start-preview',projectId,workflowId] as const },
   tasks:   { detail: (id: string) => ['tasks',id] as const, subtasks: (id: string) => ['tasks',id,'subtasks'] as const,
              dependencies: (id: string) => ['tasks',id,'dependencies'] as const,
              options: (projectId: string, q: string) => ['tasks','options',projectId,q] as const },
-  proyectos: { list: () => ['proyectos','list'] as const, detail: (id: string) => ['proyectos',id] as const,
+  proyectos: { all: ['proyectos'] as const, list: () => ['proyectos','list'] as const, detail: (id: string) => ['proyectos',id] as const,
              shell: (id: string) => ['proyectos',id,'shell'] as const, resumen: (id: string) => ['proyectos',id,'resumen'] as const,
              tab: (id: string, tab: 'tareas'|'ficha'|'clientes') => ['proyectos',id,tab] as const,
              archivos: (id: string, folder: string|null) => ['proyectos',id,'archivos',folder ?? 'root'] as const,
@@ -677,19 +696,25 @@ export const qk = {
 } as const;
 ```
 
+- **Frozen in Phase 1a.** After 1a merges, a phase only adds keys inside its own domain section; renames go through a 1a follow-up.
+- **Tareas keys:** `tareas.page(q)` excludes `cursor` and `limit`. The page `queryFn` seeds `tareas.board(f)` and `tareas.facets(f)` from the bundle. Column load-more is `useInfiniteQuery(tareas.board(f, columnId))`; the Tablero drag patches `tareas.board(f)`.
+- **Names used elsewhere in the docs** follow this factory: `asistente.*` (not `assistant.*`), `me.gmail.thread(id)`, `contacts.detail(id)`, `proyectos.cronograma(id)`, `tareas.calendar(f, from, to)`, `ajustes.page('<seg>')`.
+
 **staleTime / gcTime defaults** (gcTime 5 min unless noted):
 
 | Keys | staleTime | Notes |
 |---|---|---|
-| `catalog.*` | 5 min | |
+| `catalog.*`, `org.general` | 5 min | `org.general` uses `initialData` from the root layout |
 | `inicio`, `tareas.*`, `proyectos.*`, `personas.*` | 30 s | aligned with `staleTimes.dynamic` |
 | `tasks.detail` | 30 s | |
 | `me.today` | 60 s | `refetchInterval: 5 min`, `refetchOnWindowFocus: true` (replaces `TimeClock`'s timers) |
-| `shell.badges` | 30 s | `refetchInterval: 60_000`, `refetchIntervalInBackground: false` (replaces the Inbox poll and the module store) |
+| `shell.badges` | 30 s | `refetchInterval: 60_000`, `refetchIntervalInBackground: false` (replaces the Inbox poll and the module store); the queryFn reads the private GET route (D5) |
+| `me.notifications` | 30 s | `refetchInterval: 60_000` while mounted; its result `setQueryData`s `shell.badges` |
+| `me.profile` | 5 min | `initialData` from the layout; the photo upload does `setQueryData` |
 | `me.notes`, `me.checklists` | 5 min | |
 | `asistente.thread` | Infinity | `useChat` owns live state |
 | `ajustes.*` | 5 min | |
-| `ajustes.google` health part | 30 s | |
+| `ajustes.page('google')` health part | 30 s | |
 | `monday.run` | 0 | `refetchInterval: running ? 2000 : false` |
 | `search` | 30 s | `placeholderData: keepPreviousData` |
 | `portal.*` | 60 s | clear the cache on portal logout |
@@ -704,12 +729,25 @@ Every action:
 
 `UuidSchema` comes from `lib/validation/project-flow.ts:23`.
 
+Every page-data action is a public POST endpoint, and dehydrated state is public HTML: the security rules in §4.8 apply to every contract below.
+
+#### Shared contracts (Phase 1b)
+Built once in Phase 1b because several phases read them:
+- `lib/query/options/catalog.ts` + `lib/actions/page-data/catalog-actions.ts` (light actions): `catalog.projectOptions` (**new**, `{id,name,status}[]`), `catalog.workflows` / `catalog.tramos` (`WorkflowRef[]`), `catalog.taskStatuses`, `catalog.staff` (`{id,name}[]`), `catalog.assignableStaff(workflowId)` (`{id,name,suggested}[]`), `catalog.projectSpaces(pid)`, `catalog.contacts(type?)` (`{id,name,type}[]`).
+- `me.today` and `me.profile` options, and the photo-upload mutation in `components/shell/photo-upload.ts`.
+- `org.general()`: `GeneralSettings` hydrated by the root layout (`initialData` from the server value); replaces `GeneralSettingsContext`.
+- `importData(entity,id)` for `ImportDataPanel`; `useDriveStatus` (replaces `lib/google/use-drive-enabled.ts`, used by `DriveLinksEditor` and the Biblioteca readers); `CalendarFeedDialog` queries and mutations.
+- `TaskListRow` + the slim task projection (aggregate joins instead of the 7 correlated subqueries), `countOpenTasksFor` and `countProjectTasks` in `tasks-repository.ts`.
+- The project tab shell: `getProyectoShell`, the `COUNT` rewrite of `lib/projects/project-tab-shell.ts`, `proyectos.shell` options.
+- The frozen `shell.badges` data type (Phase 2 builds the action, the GET route and the poll).
+
 #### Shell
 **`getShellBadgesAction(z.object({}))`** → `{ tareasOpen: number; bandeja: BandejaBadgeData }` (`lib/shell/sidebar-slots/bandeja-badge-view.tsx:13`)
 - Composes a **new** `tasksRepository.countOpenTasksFor(staffId, viewer)` (a `COUNT(*)` with `isTaskClosed` semantics), replacing `fetchMyTasksAction` in `lib/shell/nav-items/tareas.ts:30`.
 - Plus `countUnreadNotifications` (no list) and `loadDueReminders`.
 - Prefetched in `app/(staff)/layout.tsx`, which drops the duplicate bandeja reads in the nav item and the slot.
-- Nav items return no badge; `Sidebar` reads `useQuery(qk.shell.badges())`.
+- Nav items return no badge; `Sidebar` reads `useQuery(qk.shell.badges())`. Badges hide at 0.
+- The 60 s poll reads a private GET route with a fixed name (for example `app/api/shell/badges/route.ts`) that runs the same loader with the same capability check, sends `Cache-Control: private, no-store` and has no side effects (D5, §4.8). This is the only GET data route.
 
 **Shell data that stays server-rendered** (not queries; see 4.6):
 - `NavModel` structure and tramos
@@ -740,21 +778,22 @@ export const TareasPageInput = z.object({
 export type TareasPageData = {
   facets: { total: number; byTramo: Record<string, number>; projects: { id: string; name: string; count: number }[] }; // replaces shipping all tasks
   tramos: WorkflowRef[];
-  staff: StaffOption[];                       // id + name only (today full Staff)
+  staff: StaffOption[];                       // {id,name} only (today full Staff); never emails
   list?:  { rows: TaskListRow[]; nextCursor: string | null; total: number };            // lista
   board?: { columns: Record<string /*status or custom id*/, { rows: TaskListRow[]; total: number; nextCursor: string|null }>;
             statuses: TaskStatusOption[] };                                              // tablero, N per column
   calendar?: TaskListRow[];                   // tablero/lista none; calendario bounded by range
-  startSlot?: unknown;                        // TareasStartSlot data (lista) — fold fetchTramoBoardAction here
 };
 ```
 
-- **New `TaskListRow`** = `Omit<TaskListItem, 'notes' | …large fields>`. Keep `TaskListItem` for detail.
-- **New repository functions:**
+The start slot (lista) is **not** part of `TareasPageData`: it has its own action and key (`getTareasStartSlotData` → `qk.tareas.startSlot()`, folding `fetchTramoBoardAction` + `fetchAssignableStaffAction`), owned by 4d.
+
+- **New `TaskListRow`** = `Omit<TaskListItem, 'notes' | …large fields>`. Keep `TaskListItem` for detail. Built in Phase 1b with the slim projection.
+- **New repository functions (Phase 4a):**
   - `tasksRepository.listTasksPage(filters, viewer, {cursor, limit, orderBy})`: keyset on (workflow sort, phase sort, sortOrder, commitmentDate, id).
-  - `listBoardColumns(filters, viewer, perColumn)`: one `ROW_NUMBER() OVER (PARTITION BY status)` query.
+  - `listBoardColumns(filters, viewer, perColumn)`: one `ROW_NUMBER() OVER (PARTITION BY status)` query. It returns **every** status column, with `total: 0` and no rows for empty ones (regression #919).
   - `taskFacets(filters, viewer)`: `GROUP BY workflow_id, project_id`.
-- Replace the 7 correlated subqueries with `LEFT JOIN (SELECT task_id, count(*) … GROUP BY task_id)` aggregates.
+- Replace the 7 correlated subqueries with `LEFT JOIN (SELECT task_id, count(*) … GROUP BY task_id)` aggregates (Phase 1b).
 - `loadSupport` is then limited to the page's ids.
 - Search, estado and responsable move into the key, with `placeholderData: keepPreviousData`.
 - **Filters stop calling `router.replace`.** Use `window.history.replaceState` (Next 16 supports shallow `history.replaceState` syncing with `useSearchParams`) plus a key change, so no RSC re-render happens. Back/forward still works.
@@ -765,15 +804,17 @@ The Tareas sheet uses separate keys:
 - Subtasks and dependencies: `tasks.subtasks`, `tasks.dependencies`.
 - The dependency picker uses a **new** `searchProjectTasksAction({projectId, q, limit:20})` → `TaskRef[]`, not `fetchTasksAction({projectId})`.
 
-`NewTaskDialog` uses `catalog.projectOptions` (a **new** light `{id,name,status}` action, also used by Inbox and GmailReader), `catalog.workflows` (`WorkflowRef[]`) and `catalog.assignableStaff(workflowId)`. All are `enabled: open`.
+`NewTaskDialog` uses `catalog.projectOptions` (a **new** light `{id,name,status}` action, also used by Inbox and GmailReader), `catalog.workflows` (`WorkflowRef[]`) and `catalog.assignableStaff(workflowId)`. All are `enabled: open`. It is migrated in Phase 1b, behind the single `<NewTaskDialogHost/>`.
+
+Opening or closing a task (`?tarea=`) and `?nueva=1` must not re-render the page on the server: today `TaskSheet.tsx:103` uses `router.replace`, `TaskSheet.tsx:463` `router.push` and `use-new-task-param.ts:32` `router.replace`; they move to `history.replaceState` / `pushState`. The Tablero card link (`TaskBoardWidget.tsx:368`, `/tareas?tarea=<id>`) drops the current `vista` and filters; it must keep them.
 
 #### Proyectos
 
 | Action | Input | Return | Composes |
 |---|---|---|---|
 | `getProyectosPageData` | `z.object({})` | `{ projects: ProjectListItem[]; portfolio: PortfolioRow[]; tramos: WorkflowRef[]; presaleAutoStart: boolean; canSeeAdminData: boolean; canCreateProject: boolean }` | `listProjects`, `listPortfolioRows` (**move progress into SQL, or load schedules only of projects that have one**), `listTramos`, a new `workflowsRepository.presaleAutoStart()`. Admin create options become lazy `catalog.contacts('cliente')` and `catalog.staff` queries, `enabled: dialogOpen`. |
-| `getProyectoShell` | `{ id: UuidSchema }` | `ProjectTabShell \| null` (`lib/projects/project-tab-shell.ts:13`) | a cached `getProjectForViewer`, a **new** `countProjectTasks(id, viewer)` and `countProjectPortalAccess(id)` (`COUNT(*)`). **No Drive.** `counts.archivos` comes from `proyectos.archivos(id,null)` when cached, or a lazy count query. |
-| `getProyectoResumenData` | `{ id }` | `ProjectSummaryInput` (`lib/proyectos/project-summary.ts`) | the shell's project, slim task stats, `listPortfolioRows({projectIds:[id]})` (**new filter**), the same schedule source as Cronograma (payments stripped for non-admins), the root files query, spaces, staff `{id,email,role}` **only for members and contacts**, tramos |
+| `getProyectoShell` (**Phase 1b**) | `{ id: UuidSchema }` | `ProjectTabShell \| null` (`lib/projects/project-tab-shell.ts:13`) | a cached `getProjectForViewer`, a **new** `countProjectTasks(id, viewer)` and `countProjectPortalAccess(id)` (`COUNT(*)`). **No Drive.** `counts.archivos` comes from `proyectos.archivos(id,null)` when cached, or a lazy count query. |
+| `getProyectoResumenData` | `{ id }` | `ProjectSummaryInput` (`lib/proyectos/project-summary.ts`) | the shell's project, slim task stats, `listPortfolioRows({projectIds:[id]})` (**new filter**), the same schedule source as Cronograma (payments stripped for non-admins), the root files query, spaces, staff `{id,name}` **only for members and contacts** (emails only for admins), tramos. `PortfolioRow.budgetSpentPct` is `null` for non-admins. |
 | `getProyectoTareasData` | `{ id }` | `{ tasks: TaskListRow[]; includeAdmin: boolean }` | one `listTasks` (or paged). Estado and responsable become shallow URL state. |
 | `getProyectoArchivosData` | `{ id, folderId: z.string().min(1).nullable() }` | `{kind:'ok';result:StaffFilesResult;canRetry:boolean} \| {kind:'not_found'} \| {kind:'drive_error'}` | `getStaffFilesProject`, `listStaffProjectFiles`. Client-side folder navigation, staleTime 2–5 min. |
 | `getProyectoClientesData` | `{ id }` | `{ rows: PortalAccessRow[]; contacts: PortalInvitableContact[]; capabilities: PortalCapabilities; hasClient: boolean; canAssignClient: boolean; clientFolderUrl: string \| null }` | `listProjectAccess`, `listInvitableContacts` (make it **one** query), `findProjectClientFolderId`. Activity is a separate `proyectos.clientesActivity(id)` query → `PortalActivityRow[]`. |
@@ -791,16 +832,18 @@ Every `/proyectos/[id]/*` page prefetches `getProyectoShell` plus its tab. Tab s
 | `getPersonasContactsPageData` | `z.object({ tab: z.enum(['clientes','contratistas','proveedores']), tipo: z.string().nullish() })` | `Omit<PersonasContactsProps,'counts'>` (`PersonasContact[]`, `lib/personas/contacts.ts:79`) | `listContacts({types})` filtered **in SQL** with the `contactsForTab` mapping (`contacts.ts:151`) |
 | `fetchPersonaDetailAction` (existing) | `{ staffId: UuidSchema }` | `PersonaDetail` | as is |
 | `saveMemberAction` (**new mutation**) | the member editor's form (existing zod schemas combined) | `StaffDetail` | folds the 4 serial actions into one transaction |
-| `fetchStaffOptionsAction` (**new**) | `{}` | `{id,name,lastName}[]` | for `ContactEditorSheet`, `enabled: open` |
 
-Opening the contact sheet uses `history.replaceState` (as `components/mi-espacio/search-params.ts:22-26` already does), not `router.push`.
+`ContactEditorSheet` reads `catalog.staff` (Phase 1b), `enabled: open`; no new staff-options action.
+
+Opening the contact sheet uses `history.replaceState` (as `components/mi-espacio/search-params.ts:22-26` already does), not `router.push` (`PersonasContacts.tsx:136,208`).
 
 #### Mi espacio
 **`getMiEspacioPageData(z.object({}))`** → `Omit<MiEspacioClientProps,'noteParam'>`, i.e. `{ notifications: NotificationsPage; gmail: { status: GmailStatus; threads: GmailThreadSummary[]; nextCursor: string|null } | null; reminders: Reminder[]; checklists: Checklist[]; notes: Note[] }`.
 - Composes the five reads, with `loadGmailAccess` computed **once**.
 - Seeds `me.notifications`, `me.gmail.*`, `me.reminders`, `me.checklists` and `me.notes`.
 - Load-more uses `useInfiniteQuery`.
-- Remove the Inbox `setInterval`: `me.notifications` either refetches when `shell.badges.unreadCount` rises, or uses its own `refetchInterval` while mounted.
+- Remove the Inbox `setInterval`: `me.notifications` has `refetchInterval: 60_000` while mounted, and its result `setQueryData`s `shell.badges`.
+- Opening a Gmail thread is a read query (`me.gmail.thread(id)`) plus a separate `markGmailThreadReadAction` mutation (§3, §4.8).
 - Remove `revalidatePath` from `my-space-actions.ts` and `notifications-actions.ts:125` once migrated.
 - Add limits to notes and checklists (cursor pages, or a cap plus "ver más").
 
@@ -815,25 +858,26 @@ Opening the contact sheet uses `history.replaceState` (as `components/mi-espacio
 #### Asistente
 **`getAsistentePageData(z.object({ threadId: UuidSchema.nullable() }))`** → `{ threads: AssistantThreadSummary[]; initialThread: AsistentePageThread | null; missingThread: boolean }`
 - Thread switching uses `history.replaceState` plus `useQuery(qk.asistente.thread(id))`, which removes the RSC re-runs.
-- `use-confirmed-context.ts` becomes `useQuery(qk.asistente.context(c))` using a **new** name-only lookup (not `fetchStaffDetailAction`).
+- `use-confirmed-context.ts` becomes `useQuery(qk.asistente.context(c))` using a **new** name-only lookup (not `fetchStaffDetailAction`) that returns only `{id,label}`.
+- The thread is not persisted across reloads: it lives in memory across navigation; `/asistente?thread=` is the deep link.
 - `listAssistantThreadMessages` should be paged (last N).
 - The chat route should save only new or changed messages.
 
 #### Ajustes
-One action per segment, `getAjustes<Seg>PageData(z.object({}))`, under the key `qk.ajustes.page(seg)`. It replaces the mount refetches in `useTaskStatusesEditor`, `PuestosClient` and `TramosClient` and the focus listener in `usePermissionsWorkspace`.
+One action per segment, `getAjustes<Seg>PageData(z.object({}))`, under the key `qk.ajustes.page('<seg>')`. It replaces the mount refetches in `useTaskStatusesEditor`, `PuestosClient` and `TramosClient` and the focus listener in `usePermissionsWorkspace`. Phase 9 is split: 9a personal (apariencia, notificaciones, perfil, integraciones), 9b catalogs (estatus, puestos, tramos, permisos), 9c org (general, tema, horario, google), 9d Monday. The page-scoped form contexts become page-scoped Zustand stores (zustand.md §2.9).
 
 | Segment | Returns |
 |---|---|
 | estatus | `{statuses: TaskStatusOption[]}` |
-| general | `{general: LoadedGeneralSettings; canManage; canManageAppearance}` |
-| google | `{mappings: GroupMapping[]; positions: Pick<Position,'id'\|'name'>[]; health: GoogleHealth\|null}`, all in one `Promise.all` |
+| general | `{general: LoadedGeneralSettings; canManage; canManageAppearance}`; the save also `setQueryData(org.general())` |
+| google | `{mappings: GroupMapping[]; positions: Pick<Position,'id'\|'name'>[]; health: GoogleHealth\|null}`, all in one `Promise.all`; `FORBIDDEN` for non-admins |
 | horario | input `{weekStart: IsoDate}` → `{settings: TimeTrackingSettings; rows: TeamHoursRow[]; canManage; canViewReport}` |
-| monday | `{status; run: MondayImportRunState\|null; choices; history; errors}`. **`openMondayImportRunAction` moves out of render into an explicit `useMutation` on mount.** |
-| permisos | `{staff: Staff[]; defaultPermissions: PermissionsState}` |
+| monday | `{status; run: MondayImportRunState\|null; choices; history; errors}`, read-only: it reads the run state and never creates one. **`openMondayImportRunAction` moves out of render** into a "Continuar importación" / "Iniciar importación" button (a mutation) that creates or resumes the run. |
+| permisos | `{staff: {id,name,active}[]; defaultPermissions: PermissionsState}`; `FORBIDDEN` for non-admins. The browser-only matrix is hidden (D4). |
 | puestos | `{positions: Position[]; workflows: WorkflowDetail[]}` |
 | tema | `{org: OrgAppearance}` |
 | tramos | `{workflows: WorkflowDetail[]}` |
-| apariencia | `{preferences: UserPreferences; org: OrgAppearance; isAdmin}` |
+| apariencia | `{preferences: UserPreferences; org: OrgAppearance; isAdmin}`; the form reads and writes the `useAppearance` store (D2) |
 | integraciones | `{gmail: GmailStatus; drive: Pick<PickerDriveStatus,'configured'\|'hasDriveGrant'>}`, with a **DB-only** Drive grant check |
 | notificaciones | `{preferences: NotificationPreferences}`; also remove the duplicate header and nav |
 | perfil | `{profile: PerfilData}` (move the type to `lib/types/redesign.ts`) + `me.weekHours` |
@@ -855,25 +899,26 @@ One action per segment, `getAjustes<Seg>PageData(z.object({}))`, under the key `
   - `onMutate`: cancel `tareas.board(f)`, snapshot it, move the card between columns in the cache (adjust `total`s), and also patch `tasks.detail(id)` if cached.
   - `onError`: roll back and show `toast.error(actionErrorText)`.
   - `onSettled`: invalidate `tareas.facets`/`tareas.list` (not the board just patched, unless `customStatus` semantics changed), `inicio` and `shell.badges`.
-  - `TaskBoardWidget` already does an optimistic move with rollback (`components/widgets/TaskBoardWidget.tsx:50-68`); it then reads the cache instead of local state.
+  - `TaskBoardWidget` already does an optimistic move with rollback (`components/widgets/TaskBoardWidget.tsx:209-235`); it then reads the cache instead of local state.
 - **Cronograma status and flags:** same pattern on `proyectos.cronograma(pid)`.
 - **Mi espacio** checklist toggles, notes and mark-read: optimistic `setQueryData`.
-- **`revalidatePath` clean-up rule:**
-  - When a domain migrates, remove the `revalidatePath` calls targeting its screens.
-  - Delete every ⚠ stub target.
-  - Keep only `('/','layout')` for org theme, general settings, time-tracking settings, own staff name and photo, and auth.
-  - Until a domain migrates, add the **missing live paths** (`/inicio`, `/personas*`, `/biblioteca/[seccion]`, `/ajustes/*`) only if needed to keep it correct.
+- **Revalidation ownership:**
+  - Phase 1a moves every `revalidatePath` call, live and ⚠ stub targets alike, into per-screen helpers `lib/cache/screens/{tareas,proyectos,mi-espacio,ajustes,personas,biblioteca,asistente,inicio}.ts` (for example `revalidateTareasScreen()`). This is mechanical, with **no behaviour change**: 1a does not delete stub targets.
+  - In Next 16.2.10 any `revalidatePath` (even to a redirect-only route) re-renders the current route into the action response and clears the client router and prefetch cache (Key findings #2). So each phase removes its screen's revalidation, stub calls included, **only in the same PR** that adds that screen's TanStack invalidation, by emptying its own `lib/cache/screens/<domain>.ts`. A phase never edits another phase's action file for revalidation.
+  - Keep only `('/','layout')` for org theme, general settings, time-tracking settings, own staff name, and auth. (The photo no longer revalidates the layout: `me.profile` with `setQueryData`, §3.)
+  - Cross-domain staleness during the transition is accepted: a mutation on an unmigrated screen leaves migrated caches stale for at most their staleTime (30 s).
 
 ### 4.5 Prefetch, polling, staleness
 - **Sidebar and BottomTabs links:**
   - `onMouseEnter`/`onFocus`: `queryClient.prefetchQuery(pageOptions(defaultInput))`.
   - When a link enters the viewport (IntersectionObserver), only for the 2–3 most-used items: Inicio, Tareas, Mi espacio.
   - Keep `next/link` prefetch for the RSC shell.
-  - Because actions are serial, prefetch **one** page-data query per hover, debounced 100 ms. Or use the GET route variant.
+  - Because actions are serial, prefetch **one** page-data query per hover, debounced 100 ms, through the page-data action (D5). Hover prefetch is limited to Inicio, Tareas and Mi espacio.
 - **Project tabs (`ProjectTabs`):** prefetch `proyectos.*` per tab on hover. The shell key is shared.
 - **Tareas view switch (tablero / lista / calendario):** prefetch the other views' keys on hover of the switch.
 - **Polling:**
-  - `shell.badges` every 60 s, visible tab only.
+  - `shell.badges` every 60 s, visible tab only, through the private GET route (D5).
+  - `me.notifications` every 60 s while Mi espacio is mounted; it patches `shell.badges`.
   - `me.today` every 5 min plus on focus.
   - `monday.run` every 2 s while running.
   - No custom `setInterval`s that fetch remain.
@@ -882,38 +927,74 @@ One action per segment, `getAjustes<Seg>PageData(z.object({}))`, under the key `
 ### 4.6 What stays server-rendered (shell and appearance)
 - **Appearance:**
   - `<html>` attributes, `<style id="appearance">` and the system-mode script stay in `app/layout.tsx:53-104`.
-  - `AppearanceProvider initial={appearance}`.
-  - `StyleProvider style={appearance.style}` in `AppShell` and each page.
+  - **Decided (D2):** the `AppearanceProvider` and `StyleProvider` contexts are replaced by one Zustand store, `useAppearance` (`lib/stores/appearance-store.ts`), seeded once from the server-resolved appearance. Seeding is SSR-safe: a per-request `createStore` + provider in the root layout, or a seeder that renders the server value until seeded, so the first client render equals the server HTML. `<html>` attributes and `<style id="appearance">` stay server-rendered.
+  - The style comes from the store; the `?estilo=` override is read from the URL (`useSearchParams`); `fixedByOrg` comes from the store. The nested per-page `StyleProvider`s go (Phase 2). `useStyle()` and `useAppearance()` keep their call-site API where possible (selectors). EstiloSwitch and Ajustes › Apariencia write the store and persist with `updateMyPreferencesAction`, rolling back on error. This fixes the style desync bug (zustand.md §0 finding 3).
+  - Owners: Phase 1b creates the store and swaps the providers with identical behaviour; Phase 2 removes the nested page providers and fixes EstiloSwitch; Phase 9a moves Apariencia onto the store.
   - **Never** read appearance through a client query for first paint, because it would flash the wrong theme. `me.preferences` and `ajustes.page('tema')` only seed the editors.
   - Org theme and general-settings saves keep `revalidatePath('/','layout')`.
   - Optional: let `getResolvedAppearance` trust the cookie when its `v` matches, to avoid 2 q per request.
 - **Shell:** `NavModel` (items, flags, capabilities, tramos), `session` (cached, sha-only photo), and the `today` seed stay RSC.
   - Badges are the only live part (`shell.badges`), prefetched in the layout and hydrated with a layout-level `HydrationBoundary`.
   - `TimeClock` and `ClockInPrompt` read `useQuery(qk.me.today(), { initialData: today })`. This removes `publishTodayStatus`/`subscribeTodayStatus` and both `router.refresh`es.
+  - The avatar photo is `me.profile` with `initialData` from the layout; uploads and removal `setQueryData` it (no layout revalidation).
+  - General settings are `org.general()` with `initialData` from the root layout (replaces `GeneralSettingsContext`).
 - **Provider placement:** move `QueryProvider` above `AppearanceProvider` and `<Toaster>` in `app/layout.tsx`.
 
 ### 4.7 Zustand (UI-only state) vs TanStack (server state)
 
-The full UI-state inventory, the store designs (`useShellUi`, `useAssistantUi`, `useNewTaskUi`, `useTareasUi`, the dashboard store factory for Inicio/Proyectos/Personas, `usePresentationStyle`, `useRecentDocs`), the URL/Zustand/TanStack boundary, SSR and testing rules, and the Zustand work per phase are in [`zustand.md`](./zustand.md). That document supersedes the short list below where they differ.
+[`zustand.md`](./zustand.md) is **authoritative** for UI state: the inventory, store designs, the URL/Zustand/TanStack boundary, SSR and testing rules, and the Zustand work per phase. Stores and owners:
 
-**Zustand**
-- **`useAssistantUi`**: `{open, mounted, context, threadId, openAssistant(ctx?), close()}`.
-  - Replaces `AssistantLauncher` local state and the `OPEN_ASSISTANT_EVENT` window event (`components/asistente/AssistantLauncher.tsx:29-34,52-82`).
-  - Removes the second sheet in `DocumentReader.tsx:48,208`, which becomes `openAssistant({route})`.
-  - The sheet stays lazy, which also fixes the bundle problem.
-- **`useTareasUi`** (optional): calendar cursor/selected day, popover, feed dialog, Analítico column state. Shareable filters stay in the URL.
-- **`lib/stores/session-store.ts`** stays.
+| Store | File | Owner |
+|---|---|---|
+| `useSessionStore` + selectors (`selectAuthenticatedUser`, …) | `lib/stores/session-store.ts` | 1a (selectors), 1b (session-context removal) |
+| `useAppearance` (replaces `AppearanceProvider` and `StyleProvider` contexts) | `lib/stores/appearance-store.ts` | 1b (store + provider swap), 2 (nested providers, EstiloSwitch), 9a (Apariencia) |
+| `useAssistantUi` | `lib/stores/assistant-ui-store.ts` | 1b |
+| `useNewTaskUi` + `<NewTaskDialogHost/>` | `lib/stores/new-task-store.ts` | 1b |
+| `useShellUi` | `lib/stores/shell-ui-store.ts` | 2 |
+| `useTareasUi` (`selectedDay` only) | `lib/stores/tareas-ui-store.ts` | 4c |
+| `useRecentDocs` | `lib/stores/recent-docs-store.ts` | 8 |
+| page-scoped form stores (`createStore` + per-page provider, reset on unmount) | next to each Ajustes segment | 9a (Perfil, Notificaciones, Integraciones), 9c (Horario, General) |
+| `createDashboardStore` factory + Inicio/Proyectos/Personas instances | `lib/stores/dashboard-store.ts` | Phase 12 |
 
-**Not Zustand**
-- The Bandeja unread count and the TimeClock status are server state: TanStack.
-- Editor drafts stay `useState`.
-- Presentation style stays in `StyleProvider` plus `?estilo=`.
+**Rule:** no new React contexts for app state. UI state goes to Zustand (global, or a page-scoped `createStore` for form drafts), server data to TanStack, shareable state to the URL. The shadcn `chart`, `form-field` and `sidebar` contexts stay. The current contexts and their fate are listed in zustand.md §2.9.
+
+**Not Zustand:** the Bandeja unread count, the TimeClock status, the avatar photo and general settings are server state (TanStack). Editor drafts that one component owns stay `useState`.
+
+### 4.8 Security rules
+
+Every phase meets these; each issue lists the ones that apply.
+
+1. **Cache reset on identity change.** `logoutAction`, the AvatarMenu logout and any `useSessionStore.setAccess` call that changes the user or capabilities call `queryClient.clear()` and reset the UI stores (1a builds the helper, 1b wires it). Unit test: log out user A, log in user B → the cache is empty.
+2. **Dehydrated state is public HTML.** Whatever a loader returns ends up in the page source. Strip admin fields **in loaders**, never in components. DB-backed loader tests run as a non-admin:
+   - P5 (5a, 5c): payments absent in Cronograma, Reporte and Resumen; `PortfolioRow.budgetSpentPct` is `null` for non-admins; Resumen staff are only members and contacts, as `{id,name}`, with emails only for admins.
+   - P4 and the catalogs: `assignable` and `staff` are `{id,name}`.
+   - P9: permisos and google page data return `FORBIDDEN` for non-admins.
+   - P11: a portal DTO allow-list snapshot test (no payments, no staff emails, no internal notes).
+3. **Every page-data action is a public POST endpoint.** Per phase, a DB test calls each page-data action as a viewer without access (another project, another user's task, a non-admin) and gets `null` or `FORBIDDEN`. This covers `getTaskSheetData`, `searchProjectTasksAction`, every `getProyecto*`, `fetchPersonaDetailAction` and `asistente.thread`.
+4. **The badges GET route** (D5) has a fixed name, the same capability check as the action, `Cache-Control: private, no-store`, and no side effects.
+5. **Query functions are side-effect free.** Writes are mutations:
+   - P7 splits `fetchGmailThreadAction` into a read query and a `markGmailThreadReadAction` mutation (today it revalidates only when the thread was unread, `gmail-actions.ts:249`).
+   - 9d: the Monday page reads the run state only; a "Continuar / Iniciar importación" button creates or resumes the run.
+   - 4c: `syncGoogleCalendarAction({auto:true})` runs at most once per session as a mutation, then invalidates `tareas.calendar`.
+6. **P10:** the confirmed-context lookup returns only `{id,label}` (a test asserts the keys); the chat request body carries no profile or PII fields.
+
+DB tests run in CI only when the repo variable `TEST_DATABASE_URL` is set; otherwise run them locally and note it in the PR.
 
 ---
 
 ## 5. Phased migration
 
-Every phase is shippable on its own. Phase 1 blocks the rest. Phases 2–11 can run in parallel; their only shared files are `lib/query/keys.ts` (append-only per domain section) and the action files whose `revalidatePath` they own.
+Every phase is shippable on its own. **Phase 1a (#935) and Phase 1b (#954) block the rest.** Phases 2–11 depend only on 1a and 1b, never on each other, and run in parallel (Phases 4, 5 and 9 are split into parallel issues). Phase 12 (dashboard interactions) runs after the data phase of its page.
+
+Shared files: none except `lib/query/keys.ts` (frozen in 1a; a phase only adds keys inside its own domain section). A phase never edits another phase's action file for revalidation: it empties its own `lib/cache/screens/<domain>.ts` in the same PR as its TanStack invalidation. `RecordTable` and `ListPage` may only gain opt-in props in later phases (`virtualized`, `onEndReached`); no breaking API change.
+
+**Recommended order:** merge #953 (CI without containers) → #946, #930, #932 → 1a → 1b → Phases 2–11 in parallel (with splits) → #918 → #916 (re-measure) → #922 → #921 → #923. #913 and #933 any time. Phase 12 after its page's data phase.
+
+**CI and e2e.** CI runs lint, build and unit tests; it runs no containers and no Playwright (#953). DB tests run in CI only when the repo variable `TEST_DATABASE_URL` is set; otherwise run them locally and note it in the PR. e2e runs **locally only**: every "local e2e" item below means `CI=1 npx playwright test <spec>` with the result pasted in the PR.
+
+**Measuring.** "≤ N q" criteria use the `countQueries(fn)` test helper from 1a (a drizzle logger wrapper). Payload criteria are DB-backed loader tests. Browser-only criteria ("0 RSC requests", "1 page-data call on hover", "badge within 60 s", "drag sends 1 POST") go in each PR's **local checklist**: DevTools Network, counting `RSC: 1` / `_rsc` requests and `next-action` POSTs, or a local Playwright spec. Bundle checks use `npm run analyze` (no resources needed; it can run in CI verify).
+
+**Formatters.** §6 row 24 lists per-call `Intl` formatters. Each phase hoists the ones in files it touches, using `lib/dates/zoned-formatters.ts` (#926).
 
 ### 5.0 Migration rule: switch fully, leave no old pattern behind
 
@@ -923,234 +1004,201 @@ Every file a phase touches ends the phase on the TanStack pattern only. While ed
 - `initialData`/`initialX` props threaded from the RSC page into client state copies (`useState(initialX)`) → server `prefetch` + `HydrationBoundary` and reading the query;
 - custom polling (`setInterval`, focus/visibility listeners that refetch) → `refetchInterval` / `refetchOnWindowFocus` per query;
 - module-level stores, window events and `publish/subscribe` helpers that carry server data (for example `publishTodayStatus`, the Bandeja badge store) → the query cache;
-- `revalidatePath` calls that target the migrated screens (keep only `('/', 'layout')` for theme, settings and auth);
-- local `useState` copies of server data kept in sync by hand.
+- `revalidatePath` calls that target the migrated screens, by emptying the phase's `lib/cache/screens/<domain>.ts` (keep only `('/', 'layout')` for org theme, general settings, time-tracking settings, own staff name, and auth);
+- local `useState` copies of server data kept in sync by hand;
+- new React contexts for app state (§4.7).
 
-UI-only state that is shared, dashboard-like or must survive navigation moves to the domain's Zustand store (see §4.7); shareable filters stay in the URL.
+UI-only state that is shared, dashboard-like or must survive navigation moves to the domain's Zustand store (§4.7); shareable filters stay in the URL.
 
-A phase is not done while any touched file still contains one of the patterns above. Each phase PR lists the touched files and confirms with:
-`rg -n "router\.refresh\(|useEffect\([^)]*\b(fetch|load|refetch)|setInterval\(|revalidatePath\(" <touched files>` returning nothing (or only auth and `('/', 'layout')` cases).
+**Exempt:** (a) mechanical edits made by Phase 1a/1b (imports, renames, helper swaps), (b) server-only bug and security fixes that touch no client data loading, (c) deletions. These do not pull the file into the phase.
 
-### Phase 1: foundation (one PR)
+A phase is not done while any touched file still contains one of the patterns above. Each phase PR lists the touched files and confirms with `node scripts/check-data-patterns.mjs <touched files>` (added in 1a; it catches multi-line effects that a one-line regex misses), allowing only auth and `('/', 'layout')` cases.
+
+### Phase 1a: infrastructure (#935, one PR)
 
 **Files:**
-- `lib/query/{keys,client,server,hydrate,mutation}.ts(x)`
-- move `QueryProvider` up in `app/layout.tsx`, using `makeQueryClient` from `lib/query/client.ts`
-- `lib/query/test-utils.tsx`: `renderWithQueryClient`, `createTestQueryClient({retry:false})`, a `mockAction` helper, and a hydration-roundtrip helper
-- optional `app/api/q/[name]/route.ts` GET wrapper (decide here)
-- React `cache()` for:
-  - `getGeneralSettings`
-  - `getTimeTrackingSettings`
-  - `findUserPreferences` (inside `getResolvedAppearance` and `fetchMyPreferencesAction`)
-  - a sha-only `getStaffPhotoUrl`, used by the layout, Inicio and Perfil
-  - `listTramos`
-  - `getPortalUser`
-- Confirm whether prod builds strip error messages. If they do, `useActionMutation` maps both thrown and result errors, and an issue is opened to move hot actions to `ActionResult`.
+- `lib/query/{keys,client,server,hydrate,mutation}.ts(x)`; `keys.ts` is frozen with §4.2.
+- move `QueryProvider` up in `app/layout.tsx` (above the appearance provider and `<Toaster>`), using `makeQueryClient` from `lib/query/client.ts`
+- `lib/query/test-utils.tsx`: `renderWithQueryClient`, `createTestQueryClient({retry:false})`, a `mockAction` helper, a hydration-roundtrip helper
+- `tests/helpers/count-queries.ts`: `countQueries(fn)` (drizzle logger wrapper) for "≤ N q" criteria
+- `scripts/check-data-patterns.mjs`: the §5.0 guard (multi-line aware)
+- `lib/cache/screens/{tareas,proyectos,mi-espacio,ajustes,personas,biblioteca,asistente,inicio}.ts`: every `revalidatePath` call in §2e (live and ⚠ stub targets) moved behind `revalidate<Domain>Screen()` helpers, with **no behaviour change** (stub targets are not deleted here)
+- the cache-reset helper for identity changes (`queryClient.clear()` + UI store reset, §4.8 rule 1)
+- React `cache()` for `getGeneralSettings`, `getTimeTrackingSettings`, `findUserPreferences` (inside `getResolvedAppearance` and `fetchMyPreferencesAction`), a sha-only `getStaffPhotoUrl` (layout, Inicio, Perfil), `listTramos`, `getPortalUser`
+- Zustand foundation: `tests/setup/zustand-reset.ts`, `useHasHydrated(store)` in `lib/stores/use-has-hydrated.ts`, `selectAuthenticatedUser` in `session-store.ts`
+- record in #931 that production strips thrown action errors (`create-error-handler.js:113`); `useActionMutation` maps both shapes
+- re-anchor the `zustand.md` line references at the start of 1a
 
 **Acceptance:**
 - `useActionMutation` covers success and invalidation, `{ok:false}` → `actionErrorText` toast, thrown `Error('CODE')` → copy, optimistic rollback, and the inline-error callback.
 - A `prefetch` + `HydrationBoundary` example passes a test where the server-fetched data renders with **0** client action calls.
-- No behaviour change in the app. Existing unit and e2e tests stay green.
+- Logout test: log out A, log in B → the cache is empty.
+- `check-data-patterns.mjs` flags a fixture with a multi-line `useEffect` load.
+- No behaviour change in the app. Unit tests green in CI; the e2e suite run locally (`CI=1 npx playwright test`), result noted in the PR.
 
-**Tests:** unit tests for `keys` (stable shapes), `mutation.ts` (all branches) and `hydrate` (dehydrate/rehydrate), plus a vitest helper smoke test.
+**Tests:** unit tests for `keys` (stable shapes), `mutation.ts` (all branches), `hydrate` (dehydrate/rehydrate), `countQueries`, the guard script and the cache-reset helper.
 
-### Phase 2: shell and sidebar
+### Phase 1b: shared contracts (#954, one PR)
+
+**Owns:**
+- `useNewTaskUi` + `<NewTaskDialogHost/>` in `AppShellClient`, `NewTaskDialog` fully migrated (catalog queries, `useActionMutation` with the `createUserTask`/`createSubtask` invalidation list from §3), `use-new-task-param.ts`.
+- `useAssistantUi` + `AssistantLauncher` reading it. Phase 10 keeps the sheet, threads and `/asistente`; Phase 8 only calls `openAssistant`.
+- The `useAppearance` store and the provider swap with identical behaviour (D2, §4.6).
+- Removal of `lib/auth/session-context.tsx`; its 3 users read `useSessionStore` selectors.
+- `org.general()` query + hook swap for `GeneralSettingsContext` (`lib/settings/use-general-settings.ts`), hydrated by the root layout.
+- An empty `<UiStoresHydrator/>` and the dialog host mount in `AppShellClient` (Phase 2 owns the rest of `AppShellClient`).
+- `TaskListRow` + the slim task projection with aggregate joins replacing the 7 correlated subqueries, `countOpenTasksFor`, `countProjectTasks` in `tasks-repository.ts`. Phase 4 adds only `listTasksPage`, `listBoardColumns`, `taskFacets`.
+- Catalog query options and light actions in `lib/query/options/catalog.ts` + `lib/actions/page-data/catalog-actions.ts` (§4.3 "Shared contracts").
+- `me.today`, `me.profile` options + the photo-upload mutation (`components/shell/photo-upload.ts`).
+- The frozen `shell.badges` data type (Phase 2 builds the action, route and poll).
+- `ImportDataPanel` → `useQuery(qk.importData(entity,id))`; `CalendarFeedDialog`; `useDriveStatus` replacing `lib/google/use-drive-enabled.ts` (+ `DriveLinksEditor`).
+- The project tab shell (`getProyectoShell`, `project-tab-shell.ts` COUNT rewrite, `proyectos.shell` options), because Phase 5 is split.
+- `fecha` in `lib/tareas/query.ts`.
+- Action files used by several phases convert to `ActionResult` here.
+- Wiring of the §4.8 rule 1 cache reset into `logoutAction`, AvatarMenu and `useSessionStore.setAccess`.
+
+**Acceptance:**
+- `<NewTaskDialogHost/>` is mounted once and `NewTaskDialogRoute` (`NewTaskDialog.tsx:430-439`, never mounted) is deleted; the dialog's catalog loads through the shared catalog queries, not per mount. The other mounts are removed by their phases (4a Tablero quick-add and Tareas, 5a project Tareas tab, P7 NoteEditor), after which exactly one `NewTaskDialog` remains in the tree.
+- The style, theme, density and text size render exactly as before (SSR HTML equals the first client render; no hydration warning).
+- `rg "SessionAccessContext|GeneralSettingsContext" components lib app` is empty.
+- Shell and project tab counts use `COUNT` queries: `countOpenTasksFor` equals the old `countOpenTasks(listMyTasks)` (DB test).
+- The slim projection returns the same rows as `listTasks` minus the large fields (DB test).
+
+### Phase 2: shell and sidebar (#936)
 
 **Files:**
-- `app/(staff)/layout.tsx` (photo, nav and badges prefetch in one `Promise.all`)
-- `lib/shell/nav-items/{tareas,mi-espacio}.ts` (no badge reads)
-- `lib/shell/sidebar-slots/bandeja-badge.tsx`
-- `components/shell/{Sidebar,BottomTabs,TimeClock,ClockInPrompt,CommandPalette,AvatarMenu}.tsx`
-- `lib/my-space/bandeja-unread.ts` (removed)
-- new `getShellBadgesAction` + `countOpenTasksFor` repository function
+- `app/(staff)/layout.tsx` (photo, nav and badges prefetch in one `Promise.all`), `components/shell/AppShellClient.tsx`, `components/shell/AppShell.tsx`
+- `lib/shell/nav-items/{tareas,mi-espacio}.ts` (no badge reads), `lib/shell/sidebar-slots/bandeja-badge.tsx`, `lib/shell/sidebar-slots/time-clock.tsx`
+- `components/shell/{Sidebar,BottomTabs,TimeClock,ClockInPrompt,CommandPalette,AvatarMenu,MobileTopBar,NotFoundSearchButton,EstiloSwitch,StyleProvider}.tsx` (`MobileTopBar` mounts the second `TimeClock`)
+- delete `lib/my-space/bandeja-unread.ts`, `lib/time-tracking/today-events.ts`, `lib/ui/shell-openers.ts`
+- `getShellBadgesAction` and the private badges GET route (D5)
 - `lib/repositories/preferences-repository.ts` (no blob select)
-- legacy redirect pages moved to `next.config` `redirects()`
+- legacy redirect pages moved to `proxy.ts` (exists since #929) or `next.config` `redirects()`
+- login and onboarding redirects to `/dashboard` (a legacy stub, so a second render) go straight to `/inicio`: `use-credentials-login.ts:79`, `use-change-password.ts:68`, `AppRouteGuard.tsx:107,111`, `GoogleSetupWizard.tsx:237`, `MondayImportWizard.tsx:459`
+- the nested per-page `StyleProvider`s are removed (inicio, tareas, proyectos, proyectos/[id], [id]/tareas, [id]/cronograma, [id]/archivos, and the conditional ones in personas, biblioteca, biblioteca/[seccion], vacaciones); EstiloSwitch writes `useAppearance` and persists with rollback; `fixedByOrg` is honoured in the staff shell and EstiloSwitch is hidden when the org fixes the style (staff half of #951)
+- `CommandPalette.tsx` in full, including the "Preguntar al asistente" command gated on `useAssistantUi.available`
 
 **Acceptance:**
-- One shell render runs ≤ 8 q and **no full task scan**.
-- The badge updates within 60 s on every page, not only `/mi-espacio`.
-- `CommandPalette.tsx:230`, `ClockInPrompt.tsx:183` and `AvatarMenu.tsx:94` contain no `router.refresh`.
-- Clock in/out updates the sidebar clock with 0 RSC requests.
-- Hovering a sidebar link issues exactly 1 page-data call.
+- One shell render runs ≤ 8 q (`countQueries`) and **no full task scan**.
+- Badges show real counts and hide at 0 (from #918).
+- `CommandPalette.tsx`, `ClockInPrompt.tsx` and `AvatarMenu.tsx` contain no `router.refresh`.
+- Changing Estilo on Inicio, then opening Personas (no `?estilo`), shows the new style without a reload; `html[data-style]` matches.
+- Local checklist: the badge updates within 60 s on every page; clock in/out updates both clocks with 0 RSC requests; hovering a sidebar link issues exactly 1 page-data call.
 
 **Tests:**
-- unit: badge query plus poll interval with fake timers; TimeClock with a query (focus refetch); nav model without badge reads
-- DB test: `countOpenTasksFor` equals the old `countOpenTasks(listMyTasks)`
-- e2e: badge decrements after mark-read on Mi espacio, then navigating to Tareas shows the same count
+- unit: badge query plus poll interval with fake timers; TimeClock with a query (focus refetch); nav model without badge reads; badges route headers and capability check
+- DB test: `countOpenTasksFor` equals the old count
+- local e2e: badge decrements after mark-read on Mi espacio, then navigating to Tareas shows the same count
 
-### Phase 3: Inicio
+### Phase 3: Inicio (#937)
 
-**Files:** `app/(staff)/inicio/page.tsx`, `lib/loaders/inicio.ts` (moved from `dashboard-actions.ts:119`), `lib/actions/page-data/inicio-actions.ts`, `components/inicio/InicioClient.tsx`, `lib/query/options/inicio.ts`.
+**Files:** `app/(staff)/inicio/page.tsx`, `lib/loaders/inicio.ts` (moved from `dashboard-actions.ts:119`), `lib/actions/page-data/inicio-actions.ts`, `components/inicio/InicioClient.tsx`, `components/inicio/ProfilePhotoButton.tsx`, `lib/query/options/inicio.ts`, `lib/cache/screens/inicio.ts`.
 
 **Acceptance:**
 - 1 page-data call.
-- Inicio → Tareas → Inicio within staleTime issues **0** new requests for Inicio.
 - No `router.refresh` in `components/inicio/*`.
-- The photo change updates the avatar through `me.profile` / layout revalidation.
-- This phase does not fix the CPU issue (separate work), but the loader must not call `listTasks` without a column projection.
+- The photo change updates the avatar through `me.profile` (`setQueryData`), with no layout revalidation.
+- The loader does not call `listTasks` without a column projection.
+- Local checklist: Inicio → Tareas → Inicio within staleTime issues **0** new requests for Inicio.
 
-**Tests:** hydration test (no client call on mount); the existing `inicio-actions.db.test.ts` runs against the loader.
+**Tests:** hydration test (no client call on mount); the existing `inicio-actions.db.test.ts` runs against the loader; a snapshot test that the loader output equals the old `fetchInicioAction` output, including delta chips and sparklines (regression #917).
 
-### Phase 4: Tareas
+Dashboard interactions are not part of this phase: see Phase 12.
 
-The largest phase.
+### Phase 4: Tareas (#938, split)
 
-**Files:**
-- `app/(staff)/tareas/page.tsx`
-- `lib/loaders/tareas.ts`
-- `lib/actions/page-data/tareas-actions.ts`: `getTareasPageData`, `getTaskSheetData`, `searchProjectTasksAction`
-- `lib/repositories/tasks-repository.ts`: `listTasksPage`, `listBoardColumns`, `taskFacets`, aggregate joins, `TaskListRow` projection
-- `lib/types/core.ts` (`TaskListRow`)
-- `components/tareas/{TareasClient,TareasTablero,TareasLista,TareasCalendario,TaskSheet,TaskSubtasks,TaskDependencies,NewTaskDialog,EventDetailPopover,TareasStartSlot,StartTramoSheet}.tsx`
-- `components/widgets/{TaskBoardWidget,RecordTable}.tsx` (cache-driven, infinite or virtualized)
-- `lib/actions/tasks-actions.ts` and `tramo-start-actions.ts` (remove `/tareas` and stub revalidates once migrated)
+The largest phase, split into four parallel issues. Each empties only the `lib/cache/screens/tareas.ts` calls of the mutations it migrates.
 
-**Acceptance:**
-- Tareas first payload **under 200 KB** with 1 page-data call, measured with about 2,900 tasks.
-- ≤ 6 DB q per page-data call.
-- Changing a filter or search issues 1 page-data call and **0** RSC requests.
-- Tablero drag moves the card instantly, sends 1 POST, and causes no RSC re-render. On error it rolls back with a toast.
-- Opening a task makes 1 call (`getTaskSheetData`); reopening within staleTime makes 0.
-- No `router.refresh` left in `components/tareas/*`.
-- `fetchTasksAction({projectId})` is no longer used by `TaskDependencies`.
+**4a list and board (#955).** `TareasClient`, `TareasTablero`, `TareasLista`, `TaskBoardWidget`, `ListPage` (drop `onQuickAdd`), `listTasksPage` / `listBoardColumns` / `taskFacets`, `getTareasPageData`, `lib/loaders/tareas.ts`. Filters via `history.replaceState`. `TareasClient` stops passing data props; children read their own queries. `listBoardColumns` returns every status with total 0 (#919). The quick-add task lands in its column without a reload (from #912).
+- Acceptance: DB-backed loader test `JSON.stringify(await loadTareasPage(...)).length < 200_000` with a 2,900-task fixture seeder; ≤ 6 q per page-data call (`countQueries`); empty columns rendered. Local checklist: a filter or search change issues 1 page-data call and 0 RSC requests; the drag moves the card instantly, sends 1 POST and causes no RSC re-render, and rolls back with a toast on error.
+- Tests: DB tests for keyset correctness, per-column totals and facets; unit tests for the optimistic move; local e2e `tareas-tablero.spec.ts`.
 
-**Tests:**
-- DB tests: `listTasksPage` keyset correctness (stable order, no duplicates or gaps); `listBoardColumns` per-column totals; `taskFacets` equals the old client chip counts.
-- Unit: Tablero optimistic move and rollback; filters → key change → no `router.replace`.
-- Update `TareasClient.test.tsx` / `TareasTablero.test.tsx` to use the query test utils.
-- e2e: payload-size assertion (response bytes of the first document < 200 KB); drag e2e.
+**4b TaskSheet (#956).** `TaskSheet`, `TaskSubtasks`, `TaskDependencies`, `task-detail-fields`, `ChecklistItemRow`, `getTaskSheetData`, `searchProjectTasksAction`. Opening or closing a task and `?nueva=1` do not re-render the page on the server; the card link keeps the current `vista` and filters (`TaskBoardWidget.tsx:368`, `TaskSheet.tsx:103,463`, `use-new-task-param.ts:32`).
+- Acceptance: opening a task makes 1 call, reopening within staleTime 0 (local checklist); `TaskDependencies` no longer calls `fetchTasksAction({projectId})`; viewer DB tests for both actions.
 
-### Phase 5: Proyectos
+**4c calendar (#957).** `TareasCalendario`, `EventDetailPopover`, `calendar-actions`, `?fecha`, `useTareasUi` (`selectedDay` only), `components/calendario/*` (delete the dead `UnifiedCalendar` default export). `syncGoogleCalendarAction({auto:true})` runs at most once per session as a mutation, then invalidates `tareas.calendar`.
+- Acceptance: the calendar date survives reload and back/forward; the selected day survives switching to Lista and back; no fetch on mount beyond the page data.
 
-**Files:**
-- `app/(staff)/proyectos/**/page.tsx`
-- `lib/loaders/proyectos.ts`
-- `lib/actions/page-data/proyectos-actions.ts`
-- `lib/projects/project-tab-shell.ts` (counts via `COUNT`, no Drive)
-- `lib/proyectos/project-resumen.ts`
-- `lib/repositories/projects-portfolio-repository.ts` (`projectIds` filter, schedule load limited to projects that have one)
-- `lib/repositories/schedule-repository.ts` (scope, `deleted_at`, payments stripped)
-- `components/proyectos/*`, `components/cronograma/*`
-- `app/(staff)/proyectos/[id]/ficha/ProjectFichaClient.tsx`
-- `lib/actions/{projects,schedule,portal}-actions.ts` (revalidate clean-up)
+**4d start slot (#958).** `TareasStartSlot` (incl. the `:105` router change), `StartTramoSheet`, `start-tramo-toast`, `tramo-start-actions`. `startSlot` is its own action and key, not inside `TareasPageData`.
+- Acceptance: starting or undoing a tramo causes no RSC request (local checklist); the invalidations of §3 "Tramo start".
 
-**Acceptance:**
-- Each tab: 1 shell (cached across tabs) + 1 tab call.
-- Switching Resumen → Ficha → Cronograma → Resumen within staleTime issues 0 calls for Resumen and the shell.
-- **No Drive call** except on Archivos and Resumen files.
-- Ficha has 0 client-only loading flashes and 0 `reload()`.
-- `?week=`, `?folder=` and Tareas filters cause no RSC requests.
-- Non-admins never receive schedule payments.
-- No `router.refresh` in `components/proyectos/*`.
-- `/proyectos` page-data call ≤ 8 q.
+### Phase 5: Proyectos (#939, split)
 
-**Tests:**
-- DB: tab counts equal the old lengths; portfolio row for one project equals the old full-portfolio `.find`; schedule scope test.
-- Unit: cronograma optimistic status persists after settle (regression for the stale-`view` bug).
-- e2e: invite a portal client, and the count in the tab updates without a refresh.
+Every `/proyectos/[id]/*` page prefetches `getProyectoShell` (built in 1b) plus its tab.
 
-### Phase 6: Personas
+**5a list + Resumen (#959).** `/proyectos` (incl. `ProjectsPortfolio.tsx:121` `?nuevo`, `?q=`), the project Tareas tab (`/proyectos/[id]/tareas`, `ProjectTasksByFase`, `getProyectoTareasData`), `getProyectosPageData`, `getProyectoResumenData`, `projects-portfolio-repository.ts` (`projectIds` filter). Acceptance: `/proyectos` ≤ 8 q; non-admin loader tests (no payments in Resumen, `budgetSpentPct` null, staff `{id,name}`).
 
-**Files:**
-- `app/(staff)/personas/**`
-- `lib/personas/{contacts-page.server,tab-counts}.ts`
-- `lib/actions/page-data/personas-actions.ts`
-- `lib/repositories/contacts-repository.ts` (`countByType`, type filter)
-- new `saveMemberAction`
-- `lib/equipo/use-member-editor.ts`
-- `components/personas/*`, `components/directorio/*`, `components/equipo/*`
-- `contacts-actions.ts` / `staff-actions.ts` (stub revalidates removed)
+**5b Ficha (#960).** `ProjectFichaClient`, Bitácora, spaces, the tramos card, `RemapImportSheet`. Acceptance: 0 client-only loading flashes and 0 `reload()`.
 
-**Acceptance:**
-- `/personas` ≤ 10 q in 1 page-data call + 1 counts call.
-- Contact tabs ship only their own types.
-- Opening a contact causes 0 RSC requests.
-- Saving a member is 1 POST.
-- Closed sheets fetch nothing.
-- No `router.refresh` in `components/personas/*`.
+**5c Cronograma + Reporte (#961, closes #947).** Reuses #946's server fix. `?week=` is client state; optimistic status and flags on `proyectos.cronograma(pid)`. Acceptance: the optimistic status persists after settle (unit test); non-admin loader tests (no payments).
 
-**Tests:** DB tests for `countByType` and the type filter; `saveMemberAction` transaction (partial failure rolls back); unit tests for the contact sheet using the URL replaceState.
+**5d Archivos + Clientes (#962, closes #948).** Client-side folder navigation; the second Drive listing (`app/(staff)/proyectos/[id]/archivos/page.tsx:115-116`) goes; `PortalAccessPanel` shows errors and never refreshes. Local e2e: invite a portal client, and the tab count updates without a refresh.
 
-### Phase 7: Mi espacio / Bandeja
+Domain acceptance: each tab is 1 shell (cached across tabs) + 1 tab call; **no Drive call** except on Archivos and Resumen files; `?week=`, `?folder=` and Tareas filters cause no RSC requests (local checklist); no `router.refresh` in `components/proyectos/*`.
 
-**Files:**
-- `app/(staff)/mi-espacio/page.tsx`
-- `lib/actions/page-data/mi-espacio-actions.ts`
-- `components/mi-espacio/{MiEspacioClient,Inbox,GmailReader,QuickCapture,NoteEditor,ChecklistCard,ReminderDialog}.tsx`
-- `lib/actions/{my-space,notifications,gmail}-actions.ts` (revalidate removed, including `fetchGmailThreadAction`)
-- `lib/repositories` notes and checklists paging
-- delete `RemindersList` if it is confirmed dead
+### Phase 6: Personas (#940)
 
-**Acceptance:**
-- 1 page-data call.
-- A checkbox toggle is 1 POST, 0 RSC requests, and instant.
-- Opening an email causes no route re-render.
-- No `setInterval` that fetches in `Inbox.tsx`.
-- `fetchProjectsAction` is replaced by `catalog.projectOptions`, loaded once.
-- Notes and checklists are bounded.
+**Files:** `app/(staff)/personas/**`, `lib/personas/{contacts-page.server,tab-counts}.ts`, `lib/actions/page-data/personas-actions.ts`, `lib/repositories/contacts-repository.ts` (`countByType`, type filter), new `saveMemberAction`, `lib/equipo/use-member-editor.ts`, `components/personas/*`, `components/directorio/*`, `components/equipo/*`, `lib/cache/screens/personas.ts`. `ContactEditorSheet` uses `catalog.staff` from 1b.
 
-**Tests:** unit tests for the optimistic toggle and rollback, the infinite notifications/threads load-more, and the badge patch from `markNotificationsReadAction`.
+**Acceptance:** `/personas` ≤ 10 q in 1 page-data call + 1 counts call; contact tabs ship only their own types; saving a member is 1 POST; closed sheets fetch nothing; no `router.refresh` in `components/personas/*`. Local checklist: opening a contact causes 0 RSC requests.
 
-### Phase 8: Biblioteca and Vacaciones
+**Tests:** DB tests for `countByType`, the type filter, the `saveMemberAction` transaction (partial failure rolls back) and the `fetchPersonaDetailAction` viewer check; unit tests for the contact sheet using `history.replaceState`.
 
-**Files:**
-- `app/(staff)/biblioteca/**`
-- `lib/biblioteca/load.ts`
-- `lib/repositories/resources-repository.ts` (SQL filter)
-- `components/biblioteca/*` (`DocumentReader` opens the assistant through `useAssistantUi`)
-- `lib/vacations/*`
-- `vacations-actions.ts` / `resources-actions.ts`
+### Phase 7: Mi espacio / Bandeja (#941)
 
-**Acceptance:**
-- Vacaciones loads in 1 wave.
-- No `router.refresh` / `reload()` in `components/biblioteca/*`.
-- The section page ships only its own links.
-- The `DocumentReader` route chunk no longer includes `@ai-sdk/react`, `recharts` or `react-markdown` (bundle analyzer check).
+**Files:** `app/(staff)/mi-espacio/page.tsx`, `lib/actions/page-data/mi-espacio-actions.ts`, `components/mi-espacio/{MiEspacioClient,Inbox,GmailReader,QuickCapture,NoteEditor,ChecklistCard,ReminderDialog}.tsx`, `lib/actions/{my-space,notifications,gmail}-actions.ts`, notes and checklists paging, `lib/cache/screens/mi-espacio.ts`; delete `RemindersList` (#952; the reminder actions stay for the assistant).
 
-**Tests:** unit tests for the favorites optimistic add/remove and the decide-vacation invalidation of the Personas keys; bundle check script.
+**Acceptance:** 1 page-data call; no `setInterval` that fetches in `Inbox.tsx`; `fetchProjectsAction` replaced by `catalog.projectOptions`, loaded once; notes and checklists bounded; `fetchGmailThreadAction` split into a read query + `markGmailThreadReadAction`. Local checklist: a checkbox toggle is 1 POST, 0 RSC requests, and instant; opening an email causes no route re-render.
 
-### Phase 9: Ajustes
+**Tests:** unit tests for the optimistic toggle and rollback, the infinite notifications/threads load-more, and the badge patch from `markNotificationsReadAction`; local e2e `mi-espacio.spec.ts`.
 
-**Files:** every `app/(staff)/ajustes/(admin|personal)/*/page.tsx`, `lib/actions/page-data/ajustes-actions.ts`, `components/ajustes/*`, `components/configuracion/**`, `PuestosClient` / `TramosClient`, and the revalidate clean-up in `task-statuses-`, `workflows-`, `positions-`, `workspace-access-`, `monday-import-`, `app-settings-`, `org-appearance-` and `time-tracking-actions`.
+### Phase 8: Biblioteca and Vacaciones (#942)
 
-**Acceptance:**
-- No client mount refetches.
-- No focus-triggered staff refetch.
-- The Monday page performs **no writes on GET**, and its poll is `refetchInterval`.
-- Integraciones makes no OAuth HTTP calls during render.
-- The Notificaciones duplicate header is fixed.
-- Theme, general and horario saves keep the layout revalidation and no longer call `router.refresh`.
-- Task-status changes invalidate the Tareas board keys.
+**Files:** `app/(staff)/biblioteca/**`, `lib/biblioteca/load.ts`, `lib/repositories/resources-repository.ts` (SQL filter), `components/biblioteca/*`, `components/recursos/*`, `lib/vacations/*`, `vacations-actions.ts` / `resources-actions.ts`, `lib/cache/screens/biblioteca.ts`. `DocumentReader` calls `useAssistantUi.openAssistant` (store from 1b).
+
+**Acceptance:** Vacaciones loads in 1 wave; no `router.refresh` / `reload()` in `components/biblioteca/*`; the section page ships only its own links; the `DocumentReader` route chunk no longer includes `@ai-sdk/react`, `recharts` or `react-markdown` (`npm run analyze`).
+
+**Tests:** unit tests for the favorites optimistic add/remove and the decide-vacation invalidations; local e2e `vacaciones.spec.ts`.
+
+### Phase 9: Ajustes (#943, split)
+
+- **9a personal (#963):** apariencia on the `useAppearance` store (merging `apariencia-context.tsx`), notificaciones (closes #949), perfil, integraciones; their form contexts become page-scoped stores.
+- **9b catalogs (#964):** estatus, puestos, tramos, permisos. Permisos drops the focus refetch and hides the browser-only matrix (D4, #950).
+- **9c org (#965):** general (editor store; `setQueryData(org.general())` on save), tema, horario (editor store), google.
+- **9d Monday (#966):** the page reads the run state only; a "Continuar / Iniciar importación" button creates or resumes the run; the poll is `refetchInterval`.
+
+**Domain acceptance:** no client mount refetches; no focus-triggered staff refetch; the Monday page performs **no writes on GET**; Integraciones makes no OAuth HTTP calls during render; theme, general and horario saves keep the layout revalidation and no longer call `router.refresh`; task-status changes invalidate the Tareas board keys; permisos and google page data return `FORBIDDEN` for non-admins (DB test).
 
 **Tests:** per-segment hydration tests; Monday poll stops when done and invalidates project and task keys; ThemeEditor save → the `<html>` style updates (existing test, adapted).
 
-### Phase 10: Asistente
+### Phase 10: Asistente (#944)
 
-**Files:** `app/(staff)/asistente/page.tsx`, `components/asistente/*`, new `lib/stores/assistant-ui-store.ts`, `use-confirmed-context.ts`, `app/api/asistente/chat/route.ts` (incremental saves), `lib/repositories/assistant-repository.ts` (paged messages).
+**Files:** `app/(staff)/asistente/page.tsx`, `components/asistente/*` (not `CommandPalette`, which Phase 2 owns), `use-confirmed-context.ts`, `app/api/asistente/chat/route.ts` (incremental saves), `lib/repositories/assistant-repository.ts` (paged messages), `lib/assistant/tools/correo.ts` (its `revalidatePath` at `:301` has no effect from a route handler), `lib/cache/screens/asistente.ts`. The old read actions (`fetchProjectsAction`, `fetchTasksAction`, `fetchInicioAction`, …) stay while `lib/assistant/**` or `lib/search/**` import them; Phase 10 owns their final clean-up.
 
-**Acceptance:**
-- Switching threads causes 0 RSC requests and 1 thread call, or 0 if cached.
-- The thread list loads once per turn.
-- Tool outputs invalidate the matching domain keys (for example, an assistant "create note" appears in Mi espacio without a reload).
-- The confirmed context does not load PII.
+**Acceptance:** switching threads causes 0 RSC requests and 1 thread call, or 0 if cached (local checklist); the thread list loads once per turn; tool outputs invalidate the matching domain keys; the confirmed context returns only `{id,label}`; the chat body carries no PII.
 
-**Tests:** unit test for the tool-part → invalidation mapper; route test that only new messages are written.
+**Tests:** unit test for the tool-part → invalidation mapper; route test that only new messages are written; `asistente.thread` viewer DB test; local e2e `asistente-sheet.spec.ts`.
 
-### Phase 11: Portal (independent of the staff phases)
+### Phase 11: Portal (#945, independent of the staff phases)
 
 **Files:** `app/portal/**`, `lib/portal/{session,queries,appearance,style-server}.ts`, `components/portal/*`.
 
-**Acceptance:**
-- Portal project page ≤ 6 q.
-- One `appearance.theme` read per request.
-- File browser and uploads use `useQuery`.
-- `fixedByOrg` is passed to `StyleProvider` (both portal and staff).
+**Acceptance:** portal project page ≤ 6 q; one `appearance.theme` read per request; file browser and uploads use `useQuery`; `fixedByOrg` is passed to the portal `StyleProvider` (portal half of #951); portal DTO allow-list snapshot test.
 
-**Tests:** query tests for files/uploads with a mocked fetch; DB test that visibility is checked once.
+**Tests:** query tests for files/uploads with a mocked fetch; DB test that visibility is checked once; local e2e `portal.spec.ts`.
 
-**Global acceptance after every phase:**
+### Phase 12: Dashboard interactions (milestone "Query Migration Phase 12: Dashboard interactions")
+
+Owner-approved new behaviour (D1), not part of the data phases. Design in zustand.md §2.5.
+- **Factory (#967):** `createDashboardStore` + `useWidgetView`, persisted in localStorage `cincel.ui.dashboard.<id>.v1` with `skipHydration` and rehydrate after mount.
+- **Inicio (#968), Proyectos (#969), Personas (#970):** selected KPI, a 4/8/12-week range as a client window over a fixed 12-week series the loader always returns, collapsible widgets, chart/table per presentation style, series toggles.
+
+Each depends only on 1a, 1b, the factory (#967) and its page's data phase (#937, #959, #940).
+
+**Global acceptance after the last phase:**
 - `rg "router.refresh\(\)" components app lib` lists only the auth files.
-- Every remaining `revalidatePath` targets a live route.
+- Every remaining `revalidatePath` targets a live route, and every `lib/cache/screens/<domain>.ts` is empty or deleted.
+- Each phase issue keeps its own "for this domain" version of these checks.
 
 ---
 
@@ -1159,17 +1207,17 @@ The largest phase.
 | # | Problem | Where |
 |---|---|---|
 | 1 | `listTasks` selects the full task row plus **7 correlated subqueries per row**, unbounded; `loadSupport` uses `inArray` over every id | `lib/repositories/tasks-repository.ts:343-417`, `:273-288` |
-| 2 | `listBoard` runs a second full `listTasks`; `/tareas` tablero scans twice | `tasks-repository.ts:1189-1202`; `app/(staff)/tareas/page.tsx:95-102` |
+| 2 | `listBoard` runs a second full `listTasks`; `/tareas` tablero scans twice | `tasks-repository.ts:1189-1202`; `app/(staff)/tareas/page.tsx:100` |
 | 3 | Shell Tareas badge: full `listMyTasks` just to count | `lib/shell/nav-items/tareas.ts:30` |
-| 4 | Bandeja: the notifications list (31 rows) is used only for a count, and it is read twice per render (nav item + slot), plus a third time on `/mi-espacio` | `lib/shell/sidebar-slots/bandeja-badge.tsx:26`; `lib/shell/nav-items/mi-espacio.ts:25`; `app/(staff)/mi-espacio/page.tsx:47` |
+| 4 | Bandeja: the notifications list (31 rows) is used only for a count, and it is read twice per render (nav item + slot), plus a third time on `/mi-espacio` | `lib/shell/sidebar-slots/bandeja-badge.tsx:26`; `lib/shell/nav-items/mi-espacio.ts:31`; `app/(staff)/mi-espacio/page.tsx:47` |
 | 5 | Layout photo lookup selects the image blob, and is awaited before nav and today | `lib/repositories/preferences-repository.ts:34`; `app/(staff)/layout.tsx:35-37` |
 | 6 | `listProjects` has 4 correlated subqueries per project | `lib/repositories/projects-repository.ts:158` |
 | 7 | Portfolio loads every schedule task and payment of every project into Node; Resumen computes the whole portfolio to use one row | `lib/repositories/projects-portfolio-repository.ts:33-89,182-203`; `lib/proyectos/project-resumen.ts:59-63` |
-| 8 | Full Drive `files.list` on **every project tab** just for a count (×2 on Archivos sub-folders) | `lib/projects/project-tab-shell.ts:15-25,65,115`; `lib/proyectos/project-resumen.ts:52-57,96` |
+| 8 | Full Drive `files.list` on **every project tab** just for a count (×2 on Archivos sub-folders) | `lib/projects/project-tab-shell.ts:15-25,65,115`; `lib/proyectos/project-resumen.ts:52-57,96`; the second Archivos listing comes from `app/(staff)/proyectos/[id]/archivos/page.tsx:115-116` |
 | 9 | `listTasks` used as a counter (tab shell, Resumen); `/proyectos/[id]/tareas` scans the same tasks twice | `project-tab-shell.ts:61-63`; `project-resumen.ts:93`; `app/(staff)/proyectos/[id]/tareas/page.tsx:54-60` |
 | 10 | Ficha: 9 queued client POSTs on mount and after every save; all contacts and full workflows | `app/(staff)/proyectos/[id]/ficha/ProjectFichaClient.tsx:137-174` |
 | 11 | Sequential server waterfalls | Cronograma `page.tsx:30-47`; Archivos `:109-116`; Clientes `:58-62`; vacaciones (`VacationDeciders.tsx:15` → `decider-sections.ts:32,41`); Google `page.tsx:30`; Monday `:53`; staff layout `:35`; `listInvitableContacts` 4 sequential q (`portal-contacts-repository.ts:22-48`) |
-| 12 | URL-only UI state triggers full server re-renders | `TareasClient.tsx:124-154`; `cronograma-header.tsx:39`; `ProjectTasksByFase.tsx:106,125`; `project-files-view.ts:90`; `PersonasContacts.tsx:208`; `AsistentePageClient.tsx:79,91,109` |
+| 12 | URL-only UI state triggers full server re-renders | `TareasClient.tsx:124-154`; `cronograma-header.tsx:39`; `ProjectTasksByFase.tsx:106,125`; `project-files-view.ts:90`; `PersonasContacts.tsx:136,208`; `AsistentePageClient.tsx:79,91,109`; the Tablero card link `TaskBoardWidget.tsx:368` (drops the filters, full re-render); `TaskSheet.tsx:103,463`; `use-new-task-param.ts:32`; `ProjectsPortfolio.tsx:121`; `TareasStartSlot.tsx:105` |
 | 13 | Contacts fetched with relations just for tab counts; every contacts tab ships all types; staff fetched just for a count | `lib/personas/tab-counts.ts:15-21`; `lib/repositories/contacts-repository.ts:92-114`; `lib/personas/contacts-page.server.ts:44` |
 | 14 | Staff table read twice on `/personas` | `staff-actions.ts:49`; `people-actions.ts:166` |
 | 15 | Always-mounted closed sheet fetches staff | `components/directorio/ContactEditorSheet.tsx:215-217` |
@@ -1181,7 +1229,7 @@ The largest phase.
 | 21 | Chat route upserts the full history twice per turn; serial decision loop | `app/api/asistente/chat/route.ts:206-232,234,281` |
 | 22 | Heavy client import: `DocumentReader` statically imports `AssistantSheet` (ai-sdk, recharts, react-markdown) and mounts a second `useChat` | `components/biblioteca/DocumentReader.tsx:6,48,208` |
 | 23 | Cronograma panels all mount eagerly; `computeProgress` runs twice per render; `computeSCurve` is O(weeks×tasks) | `components/cronograma/cronograma-view.tsx:100`; `lib/cronograma/schedule-table.ts:19`; `lib/cronograma/metrics.ts:113-141` |
-| 24 | `new Intl.DateTimeFormat` / `NumberFormat` per call in hot paths. Hoist them to module scope or a per-timezone `Map`, as `lib/my-space/zoned-time.ts:18` already does. | `lib/dashboard/task-trend.ts:34` (Inicio, being fixed); `lib/dashboard/inicio.ts:424`; `lib/proyectos/project-summary.ts:75,83,90,110` (per Gantt bar and file); `lib/people/activity.ts:118` + `lib/people/aggregates.ts:10` (about 3 per activity row); `lib/time-tracking/local-time.ts:21`; `lib/calendar/calendar-agenda.ts:81`; `components/mi-espacio/gmail-format.ts:158-159` (2 per message); `components/tareas/TaskSheet.tsx:319`; `components/tareas/EventDetailPopover.tsx:37`; `lib/my-space/note-ui.ts:87`; `lib/project-flow/start-tramo.ts:52`; `lib/project-flow/admin-tasks.ts:14` |
+| 24 | `new Intl.DateTimeFormat` / `NumberFormat` per call in hot paths. Hoist them with `lib/dates/zoned-formatters.ts` (#926); each owning phase hoists the ones in files it touches. **Fixed by #926:** `lib/dashboard/task-trend.ts:34`, `lib/dashboard/inicio.ts:424`, `lib/people/aggregates.ts:10`; `lib/people/activity.ts:118` is now about 1 per row. | Still open: `lib/proyectos/project-summary.ts:75,83,90,110` (per Gantt bar and file); `lib/people/activity.ts:118`; `lib/time-tracking/local-time.ts:21`; `lib/calendar/calendar-agenda.ts:81`; `components/mi-espacio/gmail-format.ts:158-159` (2 per message); `components/tareas/TaskSheet.tsx:319`; `components/tareas/EventDetailPopover.tsx:37`; `lib/my-space/note-ui.ts:87`; `lib/project-flow/start-tramo.ts:52`; `lib/project-flow/admin-tasks.ts:14`; not listed before: `lib/actions/schedule-actions.ts:51`, `lib/proyectos/project-resumen.ts:24`, `lib/inicio/header.ts:11,25`, `lib/my-space/reminder-time.ts:101`, `components/shell/TimeClock.tsx:81,115`, `components/shell/ClockInPrompt.tsx:59,88,95`, `components/inicio/WeeklyPaceChart.tsx:18`, `components/equipo/MemberEditorDrawer.tsx:32`, `lib/equipo/google-access.ts:52`, `lib/assistant/agenda/free-slots.ts:72,99,111`, `lib/notifications/notify.ts:71`, `app/api/proyectos/[id]/cronograma/export/route.ts:10` |
 | 25 | `ProjectSummary` `useMemo` keyed on the props object never hits | `components/proyectos/ProjectSummary.tsx:53` |
 | 26 | Uncached settings reads repeated per render | `getTimeTrackingSettings` (`lib/time-tracking/settings.ts:97`, 3× on horario and perfil); `getGeneralSettings` (`app/layout.tsx:83` + `ajustes/(admin)/general/page.tsx:18`); `findUserPreferences`; `fetchMyTodayAction` (layout + perfil); `appearance.theme` 3× on portal |
 | 27 | Duplicate client refetch right after server data | `useTaskStatusesEditor.ts:55`; `PuestosClient.tsx:87`; `MiEspacioClient.tsx:96-106`; `MisVacacionesClient.tsx:45-60`; `AsistentePageClient.tsx:110` |
@@ -1191,12 +1239,12 @@ The largest phase.
 | 31 | No pagination or virtualization in task tables and board | `components/widgets/RecordTable.tsx`, `TaskBoardWidget.tsx`, `components/tareas/TareasLista.tsx` |
 | 32 | Double debounce on text size | `components/ajustes/AparienciaClient.tsx:173` + `components/shell/AppearanceProvider.tsx:157-159` |
 
-**Bugs found along the way.** These are not perf, but worth their own issues:
-- Cronograma optimistic value likely reverts (`cronograma-view.tsx:43,109,128`; needs a browser check).
-- Schedule payments sent to non-admins on Cronograma and Reporte; `getScheduleForProject` doesn't check scope or `deleted_at`.
-- `/ajustes/notificaciones` renders the header and nav twice.
-- `fixedByOrg` is not passed to `StyleProvider` (portal and staff).
-- Permisos never reaches the server.
-- `RemindersList` is not mounted anywhere.
-- `PortalAccessPanel.run()` refreshes even after an error.
-- Resumen ships every staff member's email.
+**Bugs found along the way**, with their issues:
+- Cronograma optimistic value likely reverts (`cronograma-view.tsx:43,109,128`; needs a browser check): #947, fixed in 5c (#961).
+- Schedule payments sent to non-admins on Cronograma and Reporte; `getScheduleForProject` doesn't check scope or `deleted_at`: #946, a server-only fix done before Phase 1.
+- `/ajustes/notificaciones` renders the header and nav twice: #949, fixed in 9a (#963).
+- `fixedByOrg` is not passed to `StyleProvider`: #951; the staff half in Phase 2 (#936), the portal half in Phase 11 (#945).
+- Permisos never reaches the server and enforces nothing: #950 hides the matrix in 9b (#964); the server model is backlog #971.
+- `RemindersList` is not mounted anywhere: #952, deleted in Phase 7 (#941).
+- `PortalAccessPanel.run()` refreshes even after an error: #948, fixed in 5d (#962).
+- Resumen ships every staff member's email: 5a (#959).

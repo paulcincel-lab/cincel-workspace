@@ -61,5 +61,6 @@
   "Query Migration Phase 8: Biblioteca y Vacaciones": "query-migration:8",
   "Query Migration Phase 9: Ajustes": "query-migration:9",
   "Query Migration Phase 10: Asistente": "query-migration:10",
-  "Query Migration Phase 11: Portal": "query-migration:11"
+  "Query Migration Phase 11: Portal": "query-migration:11",
+  "Query Migration Phase 12: Dashboard interactions": "query-migration:12"
 }
