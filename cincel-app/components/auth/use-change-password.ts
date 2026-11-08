@@ -58,7 +58,7 @@ export function useChangePassword() {
     setSuccess("");
 
     startTransition(async () => {
-      const result = await completeFirstAccessAction(draft.nextPassword, draft.confirmPassword);
+      const result = await completeFirstAccessAction(draft.nextPassword, draft.confirmPassword); // data-patterns: auth
       if (!result.ok) {
         setError(changePasswordErrorText(result.reason));
         return;

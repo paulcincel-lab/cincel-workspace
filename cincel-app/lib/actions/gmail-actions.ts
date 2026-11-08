@@ -1,7 +1,6 @@
 "use server";
 
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { revalidateProyectoFichaScreen } from "@/lib/cache/screens/proyectos";
 
 import { toActionResult } from "@/lib/actions/action-result";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
@@ -45,10 +44,6 @@ import { GmailDraftInputSchema, GmailTaskInputSchema, parseInput } from "@/lib/v
 /** Minimum gap between two manual syncs. */
 const SYNC_MIN_INTERVAL_MS = 30 * 1000;
 const NO_SUBJECT = "(sin asunto)";
-
-function revalidateProject(projectId: string) {
-  revalidateProyectoFichaScreen(projectId, ["projectLayout"]);
-}
 
 function requireThreadId(id: unknown): string {
   if (typeof id !== "string" || !id.trim() || id.length > 200) throw new Error("NOT_FOUND");
@@ -263,9 +258,7 @@ async function linkGmailThreadToProjectActionImpl(threadId: string, projectId: s
   const id = requireThreadId(threadId);
   const target = projectId === null ? null : parseInput(GmailTaskInputSchema.shape.projectId, projectId);
 
-  const { previousProjectId } = await linkThread(user, id, target);
-  if (target) revalidateProject(target);
-  if (previousProjectId && previousProjectId !== target) revalidateProject(previousProjectId);
+  await linkThread(user, id, target);
 }
 
 /**
@@ -386,10 +379,7 @@ async function createTaskFromGmailThreadActionImpl(
     },
     staffId,
   );
-  const { previousProjectId } = await linkThread(user, thread.id, project.id);
-
-  revalidateProject(project.id);
-  if (previousProjectId && previousProjectId !== project.id) revalidateProject(previousProjectId);
+  await linkThread(user, thread.id, project.id);
   return { taskId: task.id };
 }
 

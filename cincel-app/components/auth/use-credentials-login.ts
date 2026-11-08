@@ -53,7 +53,7 @@ export function useCredentialsLogin() {
     setHelpMessage("");
 
     startTransition(async () => {
-      const result = await loginAction(draft.email, draft.password);
+      const result = await loginAction(draft.email, draft.password); // data-patterns: auth
 
       if (!result.ok) {
         if (result.reason === "password_login_disabled") {

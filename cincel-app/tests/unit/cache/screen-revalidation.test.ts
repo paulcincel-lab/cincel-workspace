@@ -12,7 +12,6 @@ const revalidatePath = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ revalidatePath }));
 
 import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
-import { revalidateProyectoFichaScreen } from "@/lib/cache/screens/proyectos";
 
 const calls = () => revalidatePath.mock.calls;
 
@@ -22,18 +21,9 @@ describe("screen revalidation helpers: the full screen", () => {
   it.each([
     // Emptied in Phase 3: Inicio is the `qk.inicio()` query, invalidated by the mutations.
     ["revalidateInicioScreen()", () => revalidateInicioScreen(), []],
-    // The ficha target went in 5b (#960): the ficha is the `qk.proyectos.tab(id,'ficha')` query.
-    ["revalidateProyectoFichaScreen(id)", () => revalidateProyectoFichaScreen("p1"), [["/proyectos/p1", "layout"]]],
   ])("%s", (_name, run, expected) => {
     run();
     expect(calls()).toEqual(expected);
-  });
-});
-
-describe("screen revalidation helpers: the targets an action names, in its order", () => {
-  it("single targets", () => {
-    revalidateProyectoFichaScreen("p2", ["projectLayout"]);
-    expect(calls()).toEqual([["/proyectos/p2", "layout"]]);
   });
 });
 
