@@ -9,6 +9,7 @@ import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
+import type { WidgetView } from "@/lib/stores/dashboard-store";
 import { tramoLabel } from "@/lib/tramos/compat";
 import type { WorkflowRef } from "@/lib/types/core";
 import type { Availability, PersonDatum, RecordTableData } from "@/lib/types/widgets";
@@ -25,6 +26,9 @@ import { cn } from "@/lib/utils";
  * `show` picks the optional facts; open/overdue counts are always shown. The
  * hours column/line appears only when the server returned hours for someone
  * (B4). `actions` renders a per-person slot (e.g. "Ver tareas", correo, Cutto).
+ *
+ * `view` (dashboards, optional): "chart" renders the Visual branch and
+ * "table" the Analítico tables whatever the style; omitted, the style decides.
  */
 export type PeopleShow = "load" | "hours" | "availability" | "projects";
 
@@ -39,6 +43,8 @@ export type PeopleWidgetProps = {
   emptyState?: EmptyStateProps;
   /** Renders the style's `LoadingSkeleton` instead of the data. */
   loading?: boolean;
+  /** Dashboard override: "chart" = the Visual cards/rows, "table" = the Analítico tables. */
+  view?: WidgetView;
 };
 
 export const PEOPLE_EMPTY_TEXT = "Aún no hay personas";
@@ -255,11 +261,13 @@ export function PeopleWidget({
   emptyText,
   emptyState,
   loading,
+  view,
 }: PeopleWidgetProps) {
   if (loading) {
     const rows = Math.max(people.length, 3);
     return (
       <StyleView
+        view={view}
         visual={() => <LoadingSkeleton variant={layout === "rows" ? "list" : "cards"} rows={rows} />}
         esencial={() => <LoadingSkeleton variant="list" rows={rows} />}
         analitico={() => <LoadingSkeleton variant="table" rows={rows} />}
@@ -273,6 +281,7 @@ export function PeopleWidget({
 
   return (
     <StyleView
+      view={view}
       visual={() =>
         layout === "rows" ? (
           <VisualRows people={people} show={show} actions={actions} />

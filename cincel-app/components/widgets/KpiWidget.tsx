@@ -11,6 +11,7 @@ import { RecordTable } from "@/components/widgets/RecordTable";
 import { hasSparklineData, Sparkline } from "@/components/widgets/Sparkline";
 import { StyleView } from "@/components/widgets/StyleView";
 import { tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
+import type { WidgetView } from "@/lib/stores/dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { KpiDatum, RecordTableData } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,11 @@ import { cn } from "@/lib/utils";
  * - Esencial: one card of big numbers + labels; no charts, no tints.
  * - Analítico: `RecordTable` rows: Indicador, Hoy, Δ 7 días, Prom. 30 días,
  *   Mín – máx 30 d, Tendencia 7 d.
+ *
+ * Dashboard extras (zustand.md §2.5), all optional: `view` picks the tiles
+ * ("chart", Visual) or the table ("table", Analítico) whatever the style;
+ * with `onSelect` each KPI is a toggle button (`aria-pressed` when it is
+ * `selectedKey`) instead of a link.
  */
 export type KpiWidgetProps = {
   items: KpiDatum[];
@@ -33,7 +39,41 @@ export type KpiWidgetProps = {
   emptyState?: EmptyStateProps;
   /** Renders the matching `LoadingSkeleton` variant instead of the data. */
   loading?: boolean;
+  /** Dashboard override: "chart" = the Visual tiles, "table" = the Analítico table. */
+  view?: WidgetView;
+  /** The selected KPI key (`aria-pressed`), with `onSelect`. */
+  selectedKey?: string | null;
+  /** Makes each KPI a toggle button; called with its key. */
+  onSelect?(key: string): void;
 };
+
+/** KPI selection passed down to the style branches. */
+type Selection = Pick<KpiWidgetProps, "selectedKey" | "onSelect">;
+
+const SELECT_BUTTON_CLASS =
+  "text-left underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none aria-pressed:font-semibold aria-pressed:text-foreground";
+
+function SelectButton({
+  item,
+  selectedKey,
+  onSelect,
+}: {
+  item: KpiDatum;
+  selectedKey?: string | null;
+  onSelect(key: string): void;
+}) {
+  return (
+    <button
+      type="button"
+      data-slot="kpi-select"
+      aria-pressed={selectedKey === item.key}
+      onClick={() => onSelect(item.key)}
+      className={SELECT_BUTTON_CLASS}
+    >
+      {item.label}
+    </button>
+  );
+}
 
 export const KPI_EMPTY_STATE: EmptyStateProps = {
   icon: BarChart3,
@@ -59,8 +99,9 @@ export function visibleKpis(items: KpiDatum[], style: PresentationStyle): KpiDat
   return items.filter((item) => !item.visibleIn || item.visibleIn.includes(style));
 }
 
-function toTile(item: KpiDatum): KpiTileProps {
+function toTile(item: KpiDatum, { selectedKey, onSelect }: Selection = {}): KpiTileProps {
   return {
+    ...(onSelect ? { pressed: selectedKey === item.key, onToggle: () => onSelect(item.key) } : {}),
     id: item.key,
     size: "lg",
     label: item.label,
@@ -78,22 +119,24 @@ function toTile(item: KpiDatum): KpiTileProps {
   };
 }
 
-function Visual({ items }: { items: KpiDatum[] }) {
+function Visual({ items, ...selection }: { items: KpiDatum[] } & Selection) {
   return (
     <div data-style="visual" data-slot="kpi-widget">
-      <KpiRow spacing="widget" tiles={items.map(toTile)} />
+      <KpiRow spacing="widget" tiles={items.map((item) => toTile(item, selection))} />
     </div>
   );
 }
 
-function Esencial({ items }: { items: KpiDatum[] }) {
+function Esencial({ items, selectedKey, onSelect }: { items: KpiDatum[] } & Selection) {
   return (
     <div data-style="esencial" data-slot="kpi-widget" className="rounded-lg border border-border bg-card p-5">
       <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
         {items.map((item) => (
           <div key={item.key} data-slot="kpi-item" className="flex flex-col-reverse gap-1">
             <dt className="text-[13px] text-muted-foreground">
-              {item.href ? (
+              {onSelect ? (
+                <SelectButton item={item} selectedKey={selectedKey} onSelect={onSelect} />
+              ) : item.href ? (
                 <Link
                   href={item.href}
                   className="underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
@@ -142,7 +185,7 @@ export function kpiTableData(items: KpiDatum[]): RecordTableData {
   };
 }
 
-function Analitico({ items }: { items: KpiDatum[] }) {
+function Analitico({ items, selectedKey, onSelect }: { items: KpiDatum[] } & Selection) {
   const byKey = new Map(items.map((item) => [item.key, item]));
   return (
     <div
@@ -157,6 +200,7 @@ function Analitico({ items }: { items: KpiDatum[] }) {
           const item = byKey.get(String(row.id));
           if (!item) return undefined;
           if (columnKey === "indicador") {
+            if (onSelect) return <SelectButton item={item} selectedKey={selectedKey} onSelect={onSelect} />;
             return item.href ? (
               <Link href={item.href} className="underline-offset-4 hover:underline">
                 {item.label}
@@ -201,11 +245,13 @@ function skeletonRows(count: number, max: number): number {
   return Math.max(1, Math.min(max, count || 4));
 }
 
-export function KpiWidget({ items, emptyState, loading = false }: KpiWidgetProps) {
+export function KpiWidget({ items, emptyState, loading = false, view, selectedKey, onSelect }: KpiWidgetProps) {
   const { style } = useStyle();
+  const selection: Selection = { selectedKey, onSelect };
   if (loading) {
     return (
       <StyleView
+        view={view}
         visual={() => <LoadingSkeleton variant="kpis" rows={skeletonRows(items.length, 4)} />}
         esencial={() => <LoadingSkeleton variant="kpis" rows={skeletonRows(items.length, 4)} />}
         analitico={() => <LoadingSkeleton variant="table" rows={skeletonRows(items.length, 12)} />}
@@ -216,9 +262,10 @@ export function KpiWidget({ items, emptyState, loading = false }: KpiWidgetProps
   if (shown.length === 0) return <EmptyState {...(emptyState ?? KPI_EMPTY_STATE)} />;
   return (
     <StyleView
-      visual={() => <Visual items={shown} />}
-      esencial={() => <Esencial items={shown} />}
-      analitico={() => <Analitico items={shown} />}
+      view={view}
+      visual={() => <Visual items={shown} {...selection} />}
+      esencial={() => <Esencial items={shown} {...selection} />}
+      analitico={() => <Analitico items={shown} {...selection} />}
     />
   );
 }

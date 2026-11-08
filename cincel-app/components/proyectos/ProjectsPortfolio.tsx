@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { FolderKanban, Plus } from "lucide-react";
+import { ChartColumn, ChevronDown, ChevronUp, FolderKanban, LayoutGrid, Plus, Table2, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
+import { useShallow } from "zustand/react/shallow";
 
 import { FiltersBar } from "@/components/patterns/FiltersBar";
 import { ListPage, type ListPageProps } from "@/components/patterns/ListPage";
@@ -17,18 +18,28 @@ import { isStrippedActionError, useActionMutation } from "@/lib/query/mutation";
 import { qk } from "@/lib/query/keys";
 import { catalogOptions } from "@/lib/query/options/catalog";
 import { proyectosPageOptions } from "@/lib/query/options/proyectos";
+import type { WidgetView } from "@/lib/stores/dashboard-store";
+import {
+  selectSelectedTramo,
+  selectTramoStripCollapsed,
+  useProyectosDashboard,
+  useProyectosWidgetView,
+} from "@/lib/stores/proyectos-dashboard-store";
 import type { ProjectCreateInput, ProjectInput } from "@/lib/types/core";
 import type { EntityCard } from "@/lib/types/widgets";
 
 import { NewProjectDialog } from "./NewProjectDialog";
 import type { ProjectCreateAdminOptions } from "./project-create-form";
 import {
+  NO_TRAMO_LABEL,
   PROJECTS_BY_TRAMO_TITLE,
   PROJECTS_TITLE,
   TRAMO_EXTRA_COLUMNS,
   buildPortfolioTable,
   buildProjectCards,
   buildTramoSegments,
+  currentTramoOf,
+  filterByTramo,
   listedProjects,
   orderedTramos,
   portfolioById,
@@ -48,6 +59,54 @@ export const SEARCH_PARAM = "q";
 export const NEW_PROJECT_PARAM = "nuevo";
 /** How long typing waits before the search reaches the URL. */
 export const SEARCH_DEBOUNCE_MS = 300;
+
+export const STRIP_VIEW_LABEL = `Vista de ${PROJECTS_BY_TRAMO_TITLE}`;
+export const PORTFOLIO_VIEW_LABEL = "Vista de proyectos";
+export const COLLAPSE_STRIP_LABEL = `Contraer ${PROJECTS_BY_TRAMO_TITLE}`;
+export const EXPAND_STRIP_LABEL = `Expandir ${PROJECTS_BY_TRAMO_TITLE}`;
+export const CLEAR_TRAMO_LABEL = "Ver todos los tramos";
+
+type ViewOption = { view: WidgetView; label: string; icon: LucideIcon };
+
+const STRIP_VIEWS: ViewOption[] = [
+  { view: "chart", label: "Gráfica", icon: ChartColumn },
+  { view: "table", label: "Tabla", icon: Table2 },
+];
+const PORTFOLIO_VIEWS: ViewOption[] = [
+  { view: "chart", label: "Tarjetas", icon: LayoutGrid },
+  { view: "table", label: "Tabla", icon: Table2 },
+];
+
+/** Chart/table toggle of one widget: pressed buttons in a labelled group. */
+function ViewToggle({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: ViewOption[];
+  value: WidgetView;
+  onChange(view: WidgetView): void;
+}) {
+  return (
+    <div role="group" aria-label={label} className="inline-flex items-center gap-1">
+      {options.map(({ view, label: optionLabel, icon: Icon }) => (
+        <Button
+          key={view}
+          type="button"
+          size="sm"
+          variant={value === view ? "secondary" : "ghost"}
+          aria-pressed={value === view}
+          onClick={() => onChange(view)}
+        >
+          <Icon aria-hidden="true" />
+          {optionLabel}
+        </Button>
+      ))}
+    </div>
+  );
+}
 
 function hasAdminValues(admin: ProjectAdminValue | undefined): admin is ProjectAdminValue {
   return Boolean(admin && (admin.clientId || admin.origin || admin.originStaffId));
@@ -79,6 +138,14 @@ type UpdateVars = { id: string; patch: Partial<ProjectInput> };
  * `history.replaceState` after a short debounce, so it survives opening a
  * project and going back); "Nuevo proyecto" and `?nuevo=1` open
  * `NewProjectDialog`, whose admin options load only while it is open.
+ *
+ * Dashboard interactions (`useProyectosDashboard`, zustand.md §2.5): a tramo
+ * segment filters the cards and the table to that tramo (session only; it
+ * clears when the tramo has no listed project), the strip can be collapsed,
+ * and the strip and the portfolio each have a per-style chart/table
+ * override. A widget gets a `view` only when the user's pick differs from
+ * what its style shows by default, so without a pick the page renders as
+ * before. None of it reaches the server.
  */
 export function ProjectsPortfolio() {
   const { data } = useSuspenseQuery(proyectosPageOptions());
@@ -145,14 +212,39 @@ export function ProjectsPortfolio() {
     onFormError: (text) => toast.error(`Proyecto creado, pero no se guardaron el cliente y el origen. ${text}`),
   });
 
+  // Dashboard UI state: one primitive selector per value, the actions as one shallow bundle; the
+  // per-style views come from the store's hook, so the page never reads the style.
+  const selectedTramo = useProyectosDashboard(selectSelectedTramo);
+  const stripCollapsed = useProyectosDashboard(selectTramoStripCollapsed);
+  const [toggleKpi, selectKpi, toggleCollapsed] = useProyectosDashboard(
+    useShallow((s) => [s.toggleKpi, s.selectKpi, s.toggleCollapsed] as const),
+  );
+  const stripView = useProyectosWidgetView("tramoStrip");
+  const portfolioView = useProyectosWidgetView("portfolio");
+  const stripId = useId();
+
   const listed = useMemo(() => listedProjects(projects), [projects]);
+  // The selection applies only while its tramo still has listed projects.
+  const tramoMembers = useMemo(
+    () => (selectedTramo === null ? [] : filterByTramo(listed, selectedTramo)),
+    [listed, selectedTramo],
+  );
+  const tramoListed = tramoMembers.length > 0;
+  const activeTramo = tramoListed ? selectedTramo : null;
+  const activeTramoLabel = tramoListed ? (currentTramoOf(tramoMembers[0])?.name ?? NO_TRAMO_LABEL) : null;
+  useEffect(() => {
+    if (selectedTramo !== null && !tramoListed) selectKpi(null);
+  }, [selectedTramo, tramoListed, selectKpi]);
+
   const visible = useMemo(() => searchProjects(listed, query), [listed, query]);
+  const shown = useMemo(() => filterByTramo(visible, activeTramo), [visible, activeTramo]);
   const rows = useMemo(() => portfolioById(portfolio), [portfolio]);
   const tramoOrder = useMemo(() => orderedTramos(listed, tramos), [listed, tramos]);
-  const byId = useMemo(() => new Map(visible.map((p) => [p.id, p])), [visible]);
+  const byId = useMemo(() => new Map(shown.map((p) => [p.id, p])), [shown]);
 
-  const items = useMemo(() => buildProjectCards(visible, rows), [visible, rows]);
-  const table = useMemo(() => buildPortfolioTable(visible, rows, { canSeeAdminData }), [visible, rows, canSeeAdminData]);
+  const items = useMemo(() => buildProjectCards(shown, rows), [shown, rows]);
+  const table = useMemo(() => buildPortfolioTable(shown, rows, { canSeeAdminData }), [shown, rows, canSeeAdminData]);
+  // The strip keeps every tramo of the search, so another segment can be picked.
   const segments = useMemo(() => buildTramoSegments(visible, rows, tramoOrder), [visible, rows, tramoOrder]);
 
   function handleSearch(value: string) {
@@ -221,37 +313,90 @@ export function ProjectsPortfolio() {
           description: canCreateProject ? "Crea el primero para empezar a darle seguimiento." : undefined,
           action: canCreateProject ? { label: NEW_PROJECT_LABEL, onClick: openDialog } : undefined,
         }
-      : { title: "Sin resultados", description: `Ningún proyecto coincide con «${query.trim()}».` };
+      : visible.length > 0 && activeTramo
+        ? {
+            title: "Sin resultados",
+            description: `Ningún proyecto de «${activeTramoLabel}» coincide con «${query.trim()}».`,
+            action: { label: CLEAR_TRAMO_LABEL, onClick: () => selectKpi(null) },
+          }
+        : { title: "Sin resultados", description: `Ningún proyecto coincide con «${query.trim()}».` };
 
   return (
     <>
       <ListPage
         header={{
           title: PROJECTS_TITLE,
-          description: projectsDescription(listed.length),
-          actions: canCreateProject ? (
-            <Button type="button" onClick={openDialog}>
-              <Plus aria-hidden="true" />
-              {NEW_PROJECT_LABEL}
-            </Button>
-          ) : undefined,
+          // With a tramo selected the count is the filtered list's.
+          description: projectsDescription(activeTramo ? shown.length : listed.length),
+          actions:
+            listed.length > 0 || canCreateProject ? (
+              <>
+                {listed.length > 0 ? (
+                  <ViewToggle
+                    label={PORTFOLIO_VIEW_LABEL}
+                    options={PORTFOLIO_VIEWS}
+                    value={portfolioView.view}
+                    onChange={portfolioView.setView}
+                  />
+                ) : null}
+                {canCreateProject ? (
+                  <Button type="button" onClick={openDialog}>
+                    <Plus aria-hidden="true" />
+                    {NEW_PROJECT_LABEL}
+                  </Button>
+                ) : null}
+              </>
+            ) : undefined,
         }}
         filters={
           listed.length > 0 ? (
             <div className="flex flex-col gap-4">
               <FiltersBar search={{ value: query, placeholder: SEARCH_PLACEHOLDER, onChange: handleSearch }} />
               {visible.length > 0 ? (
-                <DistributionStripWidget
-                  title={PROJECTS_BY_TRAMO_TITLE}
-                  segments={segments}
-                  totalLabel="Proyectos"
-                  extraColumns={TRAMO_EXTRA_COLUMNS}
-                />
+                <div className="flex flex-col gap-2" data-slot="tramo-strip">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {stripCollapsed ? (
+                      <span className="mr-auto text-[13px] font-medium text-muted-foreground">{PROJECTS_BY_TRAMO_TITLE}</span>
+                    ) : (
+                      <ViewToggle
+                        label={STRIP_VIEW_LABEL}
+                        options={STRIP_VIEWS}
+                        value={stripView.view}
+                        onChange={stripView.setView}
+                      />
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-expanded={!stripCollapsed}
+                      aria-controls={stripId}
+                      aria-label={stripCollapsed ? EXPAND_STRIP_LABEL : COLLAPSE_STRIP_LABEL}
+                      title={stripCollapsed ? EXPAND_STRIP_LABEL : COLLAPSE_STRIP_LABEL}
+                      onClick={() => toggleCollapsed("tramoStrip")}
+                    >
+                      {stripCollapsed ? <ChevronDown aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
+                    </Button>
+                  </div>
+                  <div id={stripId} hidden={stripCollapsed}>
+                    {stripCollapsed ? null : (
+                      <DistributionStripWidget
+                        title={PROJECTS_BY_TRAMO_TITLE}
+                        segments={segments}
+                        totalLabel="Proyectos"
+                        extraColumns={TRAMO_EXTRA_COLUMNS}
+                        selectedKey={activeTramo}
+                        onSelect={toggleKpi}
+                        view={stripView.override}
+                      />
+                    )}
+                  </div>
+                </div>
               ) : null}
             </div>
           ) : undefined
         }
-        spec={{ kind: "cards", items, table, footer }}
+        spec={{ kind: "cards", items, table, footer, view: portfolioView.override }}
         empty={empty}
       />
       {canCreateProject ? (

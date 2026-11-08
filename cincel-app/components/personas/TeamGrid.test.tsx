@@ -1,23 +1,39 @@
 // @vitest-environment happy-dom
 import type { ReactNode } from "react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import type { PeopleWidgetProps } from "@/components/widgets/PeopleWidget";
-import { buildTeamPeople } from "@/lib/personas/team";
+import { PEOPLE_EMPTY_TEXT } from "@/components/widgets/PeopleWidget";
+import { availabilityRows, buildTeamPeople } from "@/lib/personas/team";
+import { usePersonasDashboard } from "@/lib/stores/personas-dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
 import { EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_STAFF, EQUIPO_TRAMOS } from "./fixtures/equipo";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => "/personas",
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 // The people widget owns the per-style markup; these tests check what the
 // Equipo instances hand it, so it renders its props as plain data here.
 const calls = vi.hoisted(() => ({ widget: [] as PeopleWidgetProps[] }));
 vi.mock("@/components/widgets/PeopleWidget", () => ({
+  PEOPLE_EMPTY_TEXT: "Aún no hay personas",
   PeopleWidget: (props: PeopleWidgetProps) => {
     calls.widget.push(props);
+    if (props.people.length === 0) return <p>{props.emptyText ?? "Aún no hay personas"}</p>;
     return (
-      <ul data-testid="people-widget" data-show={props.show.join(",")} data-layout={props.layout ?? ""}>
+      <ul
+        data-testid="people-widget"
+        data-show={props.show.join(",")}
+        data-layout={props.layout ?? ""}
+        data-view={props.view ?? ""}
+      >
         {props.people.map((p) => (
           <li key={p.id}>
             <span>{p.name}</span>
@@ -29,13 +45,30 @@ vi.mock("@/components/widgets/PeopleWidget", () => ({
   },
 }));
 vi.mock("@/components/widgets/WidgetCard", () => ({
-  WidgetCard: ({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) => (
+  WidgetCard: ({
+    title,
+    actions,
+    children,
+    collapsible,
+  }: {
+    title: string;
+    actions?: ReactNode;
+    children: ReactNode;
+    collapsible?: { collapsed: boolean; onToggle(): void };
+  }) => (
     <section aria-label={title}>
       {actions}
-      {children}
+      {collapsible ? (
+        <button type="button" aria-expanded={!collapsible.collapsed} onClick={collapsible.onToggle}>
+          {collapsible.collapsed ? "Expandir" : "Contraer"}
+        </button>
+      ) : null}
+      {collapsible?.collapsed ? null : children}
     </section>
   ),
 }));
+
+const PERSIST_KEY = "cincel.ui.dashboard.personas.v1";
 
 import { AvailabilityWeek } from "./AvailabilityWeek";
 import { TeamGrid } from "./TeamGrid";
@@ -45,6 +78,8 @@ const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 
 beforeEach(() => {
   calls.widget = [];
+  usePersonasDashboard.getState().reset();
+  localStorage.clear();
 });
 afterEach(cleanup);
 
@@ -155,5 +190,168 @@ describe("AvailabilityWeek", () => {
     const { container } = render(<AvailabilityWeek rows={[]} />);
     expect(container.innerHTML).toBe("");
     expect(calls.widget).toHaveLength(0);
+  });
+});
+
+describe("Personas dashboard: availability filter", () => {
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
+
+  function Equipo() {
+    return (
+      <>
+        <AvailabilityWeek rows={availabilityRows(people)} />
+        <TeamGrid people={people} emails={emails} />
+      </>
+    );
+  }
+
+  function teamNames(): string[] {
+    const last = calls.widget.filter((props) => props.layout === "cards").at(-1);
+    return last ? last.people.map((p) => p.name) : [];
+  }
+
+  it("renders the legend items as toggle buttons, none pressed by default", () => {
+    render(<Equipo />);
+    const legend = screen.getByRole("list", { name: "Leyenda de disponibilidad" });
+    const buttons = within(legend).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["Libre", "Ocupado", "Saturado", "Vacaciones"]);
+    for (const button of buttons) expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(teamNames()).toEqual(people.map((p) => p.name));
+  });
+
+  it("Saturado shows only the people saturated on at least one day; pressing it again clears it", () => {
+    render(<Equipo />);
+    const saturado = screen.getByRole("button", { name: "Saturado" });
+    fireEvent.click(saturado);
+    expect(saturado.getAttribute("aria-pressed")).toBe("true");
+    expect(usePersonasDashboard.getState().selectedKpi).toBe("saturado");
+    expect(teamNames()).toEqual([people[0].name]);
+    // The availability grid itself keeps everyone.
+    const availability = calls.widget.filter((props) => props.layout === "rows").at(-1)!;
+    expect(availability.people).toHaveLength(people.length);
+
+    fireEvent.click(saturado);
+    expect(saturado.getAttribute("aria-pressed")).toBe("false");
+    expect(teamNames()).toEqual(people.map((p) => p.name));
+  });
+
+  it("shows the existing empty text when nobody matches", () => {
+    const onlyCarla = people.filter((p) => p.name.startsWith("Carla"));
+    render(
+      <>
+        <AvailabilityWeek rows={availabilityRows(onlyCarla)} />
+        <TeamGrid people={onlyCarla} emails={emails} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Vacaciones" }));
+    expect(screen.getByText(PEOPLE_EMPTY_TEXT)).toBeTruthy();
+  });
+
+  it("keeps the selection across a remount (navigating to a persona and back) but never persists it", () => {
+    const first = render(<Equipo />);
+    fireEvent.click(screen.getByRole("button", { name: "Saturado" }));
+    first.unmount();
+    render(<Equipo />);
+    expect(screen.getByRole("button", { name: "Saturado" }).getAttribute("aria-pressed")).toBe("true");
+    expect(teamNames()).toEqual([people[0].name]);
+    expect(localStorage.getItem(PERSIST_KEY) ?? "").not.toContain("saturado");
+  });
+});
+
+describe("Personas dashboard: collapse and views", () => {
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
+
+  it("collapses Disponibilidad esta semana and persists the choice", () => {
+    render(<AvailabilityWeek rows={availabilityRows(people)} />);
+    const toggle = screen.getByRole("button", { name: "Contraer" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "Expandir" }).getAttribute("aria-expanded")).toBe("false");
+    expect(usePersonasDashboard.getState().collapsed.availability).toBe(true);
+    expect(JSON.parse(localStorage.getItem(PERSIST_KEY)!).state.collapsed).toEqual({ availability: true });
+    // The legend filter stays usable while collapsed.
+    expect(screen.getByRole("button", { name: "Saturado" })).toBeTruthy();
+  });
+
+  it.each(STYLES)("without overrides hands the widgets today's view in %s", (style) => {
+    render(
+      <StyleProvider style={style} scope="staff">
+        <AvailabilityWeek rows={availabilityRows(people)} />
+        <TeamGrid people={people} emails={emails} />
+      </StyleProvider>,
+    );
+    const expected = style === "analitico" ? "table" : "chart";
+    for (const props of calls.widget) expect(props.view).toBe(expected);
+  });
+
+  it("a Tabla pick in Visual does not change Esencial or Analítico", () => {
+    const visual = render(
+      <StyleProvider style="visual" scope="staff">
+        <TeamGrid people={people} emails={emails} />
+      </StyleProvider>,
+    );
+    const group = screen.getByRole("group", { name: "Vista del equipo" });
+    const tabla = within(group).getByRole("button", { name: "Tabla" });
+    expect(tabla.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(tabla);
+    expect(tabla.getAttribute("aria-pressed")).toBe("true");
+    expect(calls.widget.at(-1)!.view).toBe("table");
+    expect(usePersonasDashboard.getState().views).toEqual({ visual: { team: "table" } });
+    visual.unmount();
+
+    calls.widget = [];
+    const esencial = render(
+      <StyleProvider style="esencial" scope="staff">
+        <TeamGrid people={people} emails={emails} />
+      </StyleProvider>,
+    );
+    expect(calls.widget.at(-1)!.view).toBe("chart");
+    esencial.unmount();
+
+    calls.widget = [];
+    render(
+      <StyleProvider style="analitico" scope="staff">
+        <TeamGrid people={people} emails={emails} />
+      </StyleProvider>,
+    );
+    expect(calls.widget.at(-1)!.view).toBe("table");
+  });
+
+  it("keeps the availability and team views apart", () => {
+    usePersonasDashboard.getState().setWidgetView("visual", "availability", "table");
+    render(
+      <StyleProvider style="visual" scope="staff">
+        <AvailabilityWeek rows={availabilityRows(people)} />
+        <TeamGrid people={people} emails={emails} />
+      </StyleProvider>,
+    );
+    expect(calls.widget.find((props) => props.layout === "rows")!.view).toBe("table");
+    expect(calls.widget.find((props) => props.layout === "cards")!.view).toBe("chart");
+  });
+
+  it("first render equals the server render with a persisted value present; it applies after rehydration", async () => {
+    const tree = (
+      <StyleProvider style="visual" scope="staff">
+        <AvailabilityWeek rows={availabilityRows(people)} />
+        <TeamGrid people={people} emails={emails} />
+      </StyleProvider>
+    );
+    const defaults = renderToString(tree);
+    localStorage.setItem(
+      PERSIST_KEY,
+      JSON.stringify({
+        state: { range: "8w", collapsed: { availability: true }, views: { visual: { team: "table" } }, hiddenSeries: {} },
+        version: 1,
+      }),
+    );
+    expect(renderToString(tree)).toBe(defaults);
+
+    const { container } = render(tree);
+    expect(container.querySelector('[data-layout="cards"]')!.getAttribute("data-view")).toBe("chart");
+    await act(async () => {
+      await usePersonasDashboard.persist.rehydrate();
+    });
+    expect(container.querySelector('[data-layout="cards"]')!.getAttribute("data-view")).toBe("table");
+    expect(screen.getByRole("button", { name: "Expandir" })).toBeTruthy();
   });
 });

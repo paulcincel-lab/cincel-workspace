@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 
 // The photo button writes me.profile in the query cache; these tests render it without one.
@@ -23,6 +23,7 @@ vi.mock("@/lib/actions/preferences-actions", () => ({
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { useInicioDashboard } from "@/lib/stores/inicio-dashboard-store";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import type { InicioData, PresentationStyle, ThemeId } from "@/lib/types/redesign";
@@ -108,6 +109,50 @@ describe("Inicio accessibility", () => {
       expect(await seriousViolations()).toEqual([]);
     });
   }
+});
+
+describe("Inicio dashboard controls accessibility", () => {
+  it.each(STYLES)("names the KPI toggles, range, view and collapse controls with their states (%s)", async (style) => {
+    applyTheme(THEME_IDS[0], "light");
+    renderInicio(style, INICIO_NON_ADMIN);
+
+    const kpi = screen.getAllByRole("button").find((b) => b.getAttribute("aria-pressed") !== null && /Vencidas/.test(b.textContent ?? ""));
+    if (!kpi) throw new Error("no Vencidas toggle");
+    fireEvent.click(kpi);
+    expect(kpi.getAttribute("aria-pressed")).toBe("true");
+
+    const tramo = within(screen.getByRole("region", { name: "Tareas abiertas por tramo" }));
+    expect(tramo.getByRole("group", { name: "Vista" })).toBeTruthy();
+    expect(tramo.getByRole("button", { name: "Ver como tabla" }).getAttribute("aria-pressed")).toBe(
+      style === "analitico" ? "true" : "false",
+    );
+
+    if (style !== "esencial") {
+      const pace = within(screen.getByRole("region", { name: "Ritmo semanal" }));
+      expect(pace.getByRole("group", { name: "Rango" })).toBeTruthy();
+      expect(pace.getByRole("button", { name: "8 semanas" }).getAttribute("aria-pressed")).toBe("true");
+    }
+
+    const attention = within(screen.getByRole("region", { name: "Requiere atención" }));
+    const collapse = attention.getByRole("button", { name: "Contraer" });
+    expect(collapse.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(collapse);
+    expect(attention.getByRole("button", { name: "Expandir" }).getAttribute("aria-expanded")).toBe("false");
+
+    expect(await seriousViolations()).toEqual([]);
+  });
+
+  it("has no serious or critical axe violations with persisted choices applied", async () => {
+    applyTheme(THEME_IDS[0], "dark");
+    useInicioDashboard.setState({
+      range: "4w",
+      collapsed: { myDay: true, workload: true },
+      views: { visual: { tramoDonut: "table", weeklyPace: "table" } },
+      hiddenSeries: { weeklyPace: ["created"] },
+    });
+    renderInicio("visual", INICIO_NON_ADMIN);
+    expect(await seriousViolations()).toEqual([]);
+  });
 });
 
 describe("Inicio color pairs", () => {

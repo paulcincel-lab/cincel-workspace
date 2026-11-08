@@ -14,6 +14,9 @@ export const KPI_VALUES = {
   completadas_semana: 58,
 } as const;
 
+/** Destination of the Vencidas KPI (`INICIO_KPI.vencidas.href`). */
+export const VENCIDAS_HREF = "/tareas?vista=lista";
+
 export const INICIO_NON_ADMIN: InicioData = {
   kpis: [
     { key: "proyectos_activos", label: "Proyectos activos", value: KPI_VALUES.proyectos_activos, series7: [30, 31, 33, 34, 35, 36, 37] },
@@ -21,6 +24,7 @@ export const INICIO_NON_ADMIN: InicioData = {
       key: "vencidas",
       label: "Vencidas",
       value: KPI_VALUES.vencidas,
+      href: VENCIDAS_HREF,
       delta: { value: -2, good: true, caption: "vs. semana pasada" },
     },
     { key: "bloqueadas", label: "Bloqueadas", value: KPI_VALUES.bloqueadas },
@@ -37,7 +41,12 @@ export const INICIO_NON_ADMIN: InicioData = {
     { key: "diseno", label: "Diseño", value: 22, colorVar: "var(--chart-2)", secondary: 2, extra: { diasProm: 7 } },
     { key: "construccion", label: "Construcción", value: 19, colorVar: "var(--chart-3)", secondary: 3, extra: { diasProm: 9 } },
   ],
+  // 12 weeks, as the loader returns them (INICIO_PACE_WEEKS); the card shows the last 8 by default.
   weeklyPace: [
+    { weekStart: "2026-08-17", created: 7, completed: 6 },
+    { weekStart: "2026-08-24", created: 8, completed: 9 },
+    { weekStart: "2026-08-31", created: 10, completed: 8 },
+    { weekStart: "2026-09-07", created: 11, completed: 7 },
     { weekStart: "2026-09-14", created: 12, completed: 10 },
     { weekStart: "2026-09-21", created: 15, completed: 13 },
     { weekStart: "2026-09-28", created: 9, completed: 12 },

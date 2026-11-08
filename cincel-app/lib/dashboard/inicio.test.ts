@@ -8,6 +8,7 @@ import {
   completedInWeek,
   inMemoryCounter,
   inicioPortfolioRows,
+  INICIO_PACE_WEEKS,
   inicioWeekBuckets,
   inicioWorkloadRows,
   involves,
@@ -51,11 +52,12 @@ const presale = { id: "w1", key: "presale", name: "Presale", sortOrder: 1 };
 const diseno = { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 };
 
 describe("inicioWeekBuckets", () => {
-  it("returns 8 Monday–Sunday weeks, oldest first, ending with the current week", () => {
+  it("returns 12 Monday–Sunday weeks, oldest first, ending with the current week", () => {
     const buckets = inicioWeekBuckets(NOW, TZ);
-    expect(buckets).toHaveLength(8);
-    expect(buckets[7]).toEqual({ label: "S45", from: "2026-11-02", to: "2026-11-08" });
-    expect(buckets[0].from).toBe("2026-09-14");
+    expect(INICIO_PACE_WEEKS).toBe(12);
+    expect(buckets).toHaveLength(12);
+    expect(buckets[11]).toEqual({ label: "S45", from: "2026-11-02", to: "2026-11-08" });
+    expect(buckets[0].from).toBe("2026-08-17");
     for (let i = 1; i < buckets.length; i++) expect(buckets[i].from > buckets[i - 1].from).toBe(true);
   });
 
@@ -67,8 +69,8 @@ describe("inicioWeekBuckets", () => {
       createdAt: [new Date("2026-11-03T18:00:00Z"), new Date("2026-09-14T18:00:00Z")],
       completions: [{ taskId: "a", at: new Date("2026-11-04T18:00:00Z") }],
     });
-    expect(trend.created).toEqual([1, 0, 0, 0, 0, 0, 0, 1]);
-    expect(trend.completed).toEqual([0, 0, 0, 0, 0, 0, 0, 1]);
+    expect(trend.created).toEqual([0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1]);
+    expect(trend.completed).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
   });
 });
 

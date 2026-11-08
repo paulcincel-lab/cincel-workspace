@@ -109,6 +109,15 @@ export function availabilityRows(people: PersonDatum[]): AvailabilityRow[] {
     .map((p) => ({ staffId: p.id, name: p.name, days: p.availability ?? [] }));
 }
 
+/**
+ * People with `key` on at least one day of the week (the availability legend
+ * filter). Without a key, the same array comes back unchanged.
+ */
+export function peopleWithAvailability(people: PersonDatum[], key: Availability | null): PersonDatum[] {
+  if (!key) return people;
+  return people.filter((p) => p.availability?.includes(key) ?? false);
+}
+
 /** Counts of the four Personas tabs from the staff and directory lists. */
 export function countPersonasTabs(staff: Staff[], contacts: ContactListItem[]): Record<PersonasTab, number> {
   let clientes = 0;

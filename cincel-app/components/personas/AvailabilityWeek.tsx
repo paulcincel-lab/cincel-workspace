@@ -1,8 +1,12 @@
 "use client";
 
+import { PersonasViewToggle } from "@/components/personas/PersonasViewToggle";
+import { Button } from "@/components/ui/shadcn/button";
 import { PeopleWidget } from "@/components/widgets/PeopleWidget";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
 import { initialsOf } from "@/lib/personas/team";
+import { useWidgetView } from "@/lib/stores/dashboard-store";
+import { PERSONAS_VIEW_FALLBACK, usePersonasDashboard } from "@/lib/stores/personas-dashboard-store";
 import type { Availability, PersonDatum } from "@/lib/types/widgets";
 
 export type AvailabilityWeekProps = { rows: { staffId: string; name: string; days: Availability[] }[] };
@@ -15,12 +19,46 @@ export const AVAILABILITY_LEGEND: { key: Availability; label: string }[] = [
 ];
 
 /**
+ * Legend of "Disponibilidad esta semana": each item is a toggle button that
+ * filters the team to the people with that availability on at least one day
+ * (`usePersonasDashboard.selectedKpi`, session only; the same item again
+ * clears it). Filters data already loaded; no server call.
+ */
+export function AvailabilityLegendFilter() {
+  const selected = usePersonasDashboard((s) => s.selectedKpi);
+  const toggleKpi = usePersonasDashboard((s) => s.toggleKpi);
+  return (
+    <ul aria-label="Leyenda de disponibilidad" className="flex flex-wrap gap-1 text-xs text-muted-foreground">
+      {AVAILABILITY_LEGEND.map((item) => (
+        <li key={item.key}>
+          <Button
+            type="button"
+            size="xs"
+            variant={selected === item.key ? "secondary" : "ghost"}
+            aria-pressed={selected === item.key}
+            title={`Mostrar en el equipo solo a quien tiene «${item.label}» algún día`}
+            onClick={() => toggleKpi(item.key)}
+          >
+            {item.label}
+          </Button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
  * "Disponibilidad esta semana" (redesign FE §3.6, §4.7): an instance of
  * `PeopleWidget` (Mon–Fri availability per person; the widget draws the grid,
  * the sentence or the table per style) with the libre / ocupado / saturado /
- * vacaciones legend. Renders nothing without rows.
+ * vacaciones legend as team filter, a grid/table switch per style and a
+ * collapse toggle (both persisted in `usePersonasDashboard`). Renders nothing
+ * without rows.
  */
 export function AvailabilityWeek({ rows }: AvailabilityWeekProps) {
+  const collapsed = usePersonasDashboard((s) => s.collapsed.availability ?? false);
+  const toggleCollapsed = usePersonasDashboard((s) => s.toggleCollapsed);
+  const view = useWidgetView(usePersonasDashboard, "availability", PERSONAS_VIEW_FALLBACK);
   if (rows.length === 0) return null;
   const people: PersonDatum[] = rows.map((row) => ({
     id: row.staffId,
@@ -34,15 +72,22 @@ export function AvailabilityWeek({ rows }: AvailabilityWeekProps) {
   return (
     <WidgetCard
       title="Disponibilidad esta semana"
+      collapsible={{ collapsed, onToggle: () => toggleCollapsed("availability") }}
       actions={
-        <ul aria-label="Leyenda de disponibilidad" className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-          {AVAILABILITY_LEGEND.map((item) => (
-            <li key={item.key}>{item.label}</li>
-          ))}
-        </ul>
+        <div className="flex flex-wrap items-center gap-3">
+          <AvailabilityLegendFilter />
+          {collapsed ? null : (
+            <PersonasViewToggle
+              widget="availability"
+              view={view}
+              label="Vista de disponibilidad"
+              chartLabel="Cuadrícula"
+            />
+          )}
+        </div>
       }
     >
-      <PeopleWidget people={people} show={["availability"]} layout="rows" />
+      <PeopleWidget people={people} show={["availability"]} layout="rows" view={view} />
     </WidgetCard>
   );
 }

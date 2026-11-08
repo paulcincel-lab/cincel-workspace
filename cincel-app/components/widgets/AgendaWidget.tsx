@@ -9,7 +9,7 @@ import type { LoadingSkeletonProps } from "@/components/shell/LoadingSkeleton";
 import { useStyle } from "@/components/shell/StyleProvider";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
-import { WidgetCard } from "@/components/widgets/WidgetCard";
+import { WidgetCard, type WidgetCardProps } from "@/components/widgets/WidgetCard";
 import { addDays, getWeekdayLabels, startOfWeek } from "@/lib/calendar/calendar-service";
 import { tramoColorSlot, tramoLabel, type TramoColorSlot } from "@/lib/tramos/compat";
 import type { PresentationStyle } from "@/lib/types/redesign";
@@ -56,6 +56,8 @@ export type AgendaWidgetProps = {
    * week containing it or its month. Defaults to the earliest item, else today.
    */
   anchorDate?: string;
+  /** Collapse control of the card (`WidgetCard` `collapsible`). */
+  collapsible?: WidgetCardProps["collapsible"];
 };
 
 export const AGENDA_EMPTY_TEXT = "Sin eventos en este periodo";
@@ -868,6 +870,7 @@ export function AgendaWidget({
   emptyState,
   loading = false,
   anchorDate,
+  collapsible,
 }: AgendaWidgetProps) {
   const { style } = useStyle();
   const now = new Date();
@@ -892,6 +895,7 @@ export function AgendaWidget({
       loading={loading}
       skeleton={skeletonVariant(style, mode)}
       padded={style !== "analitico"}
+      collapsible={collapsible}
     >
       {entries.length > 0 ? (
         <StyleView

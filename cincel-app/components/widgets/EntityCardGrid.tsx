@@ -13,6 +13,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/shadcn/card";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
+import type { WidgetView } from "@/lib/stores/dashboard-store";
 import { tramoColorSlot, tramoLabel } from "@/lib/tramos/compat";
 import type { WorkflowRef } from "@/lib/types/core";
 import type { EntityCard, RecordColumn, RecordTableData, Tone, TramoKey } from "@/lib/types/widgets";
@@ -33,6 +34,10 @@ import { cn } from "@/lib/utils";
  * minimum card width of the grid track in px. Widget-level states:
  * `emptyState` when there are no items, `loading` for the `LoadingSkeleton`
  * variant (cards, or table in Analítico).
+ *
+ * Opt-in `view` (zustand.md §2.5): "table" renders the Analítico table in
+ * every style; "chart" renders the cards (Esencial keeps its text cards,
+ * Visual and Analítico draw the Visual cards). Without it the style decides.
  */
 export type EntityCardGridProps = {
   items: EntityCard[];
@@ -41,6 +46,8 @@ export type EntityCardGridProps = {
   minWidth?: number;
   emptyState?: EmptyStateProps;
   loading?: boolean;
+  /** Cards/table override; without it the presentation style decides. */
+  view?: WidgetView;
 };
 
 export const ENTITY_GRID_EMPTY_TITLE = "Sin elementos";
@@ -443,40 +450,48 @@ export function EntityCardGrid({
   minWidth = ENTITY_GRID_DEFAULT_MIN_WIDTH,
   emptyState,
   loading = false,
+  view,
 }: EntityCardGridProps) {
   const { style } = useStyle();
+  const showsTable = view === undefined ? style === "analitico" : view === "table";
+
+  const visualGrid = () => (
+    <Grid minWidth={minWidth}>
+      {items.map((item) => (
+        <li key={item.id} className="flex">
+          <VisualCard item={item} footer={footer} />
+        </li>
+      ))}
+    </Grid>
+  );
+  const esencialGrid = () => (
+    <Grid minWidth={minWidth}>
+      {items.map((item) => (
+        <li key={item.id} className="flex">
+          <EsencialCard item={item} footer={footer} />
+        </li>
+      ))}
+    </Grid>
+  );
+  const analiticoTable = () => <AnaliticoTable items={items} table={table} />;
 
   let body: ReactNode;
   if (loading) {
-    body = <LoadingSkeleton variant={style === "analitico" ? "table" : "cards"} />;
+    body = <LoadingSkeleton variant={showsTable ? "table" : "cards"} />;
   } else if (items.length === 0) {
     body = (
       <div data-slot="entity-empty">
         <EmptyState {...(emptyState ?? { title: ENTITY_GRID_EMPTY_TITLE })} />
       </div>
     );
+  } else if (view === "table") {
+    body = analiticoTable();
   } else {
     body = (
       <StyleView
-        visual={() => (
-          <Grid minWidth={minWidth}>
-            {items.map((item) => (
-              <li key={item.id} className="flex">
-                <VisualCard item={item} footer={footer} />
-              </li>
-            ))}
-          </Grid>
-        )}
-        esencial={() => (
-          <Grid minWidth={minWidth}>
-            {items.map((item) => (
-              <li key={item.id} className="flex">
-                <EsencialCard item={item} footer={footer} />
-              </li>
-            ))}
-          </Grid>
-        )}
-        analitico={() => <AnaliticoTable items={items} table={table} />}
+        visual={visualGrid}
+        esencial={esencialGrid}
+        analitico={view === "chart" ? visualGrid : analiticoTable}
       />
     );
   }

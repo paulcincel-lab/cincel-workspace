@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, screen, within } from "@testing-library/react";
-import type { QueryClient } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { hydrateRoot, type Root } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 
 const actions = vi.hoisted(() => ({ getInicioPageData: vi.fn(), fetchMyProfileAction: vi.fn() }));
 vi.mock("@/lib/actions/page-data/inicio-actions", () => ({ getInicioPageData: actions.getInicioPageData }));
@@ -27,11 +29,14 @@ import type { InicioPageData } from "@/lib/loaders/inicio";
 import { qk } from "@/lib/query/keys";
 import { inicioPageOptions } from "@/lib/query/options/inicio";
 import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
+import { dashboardStorageKey } from "@/lib/stores/dashboard-store";
+import { useInicioDashboard } from "@/lib/stores/inicio-dashboard-store";
 import type { InicioData, PresentationStyle } from "@/lib/types/redesign";
 import type { MyProfile } from "@/lib/types/shell";
 
 import { InicioClient } from "./InicioClient";
-import { ADMIN_TASK_TITLE, INICIO_ADMIN, INICIO_EMPTY, INICIO_NON_ADMIN, KPI_VALUES } from "./inicio-fixtures";
+import { ADMIN_TASK_TITLE, INICIO_ADMIN, INICIO_EMPTY, INICIO_NON_ADMIN, KPI_VALUES, VENCIDAS_HREF } from "./inicio-fixtures";
+import { weekLabel } from "./WeeklyPaceChart";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 // 09:00 on Friday 6 November 2026 in Mexico City.
@@ -236,5 +241,237 @@ describe("InicioClient visibility (B8)", () => {
   it("renders exactly what the server returns (an admin sees the admin task)", () => {
     renderInicio("visual", INICIO_ADMIN);
     expect(screen.getAllByText(ADMIN_TASK_TITLE).length).toBeGreaterThan(0);
+  });
+});
+
+// ── Dashboard interactions (useInicioDashboard, zustand.md §2.5) ────────────
+
+/** The widget card titled `title`. */
+const region = (title: string) => screen.getByRole("region", { name: title });
+
+/** Body rows (rows with data cells) of the table inside a card. */
+const dataRows = (title: string) =>
+  within(region(title))
+    .getAllByRole("row")
+    .filter((row) => within(row).queryAllByRole("cell").length > 0);
+
+const ATTENTION_TITLE = INICIO_NON_ADMIN.attention[0].title;
+const PACE = INICIO_NON_ADMIN.weeklyPace;
+
+describe("InicioClient KPI selection", () => {
+  it("makes the KPIs toggle buttons; the same KPI again clears the selection", () => {
+    renderInicio("esencial");
+    const tile = screen.getByRole("button", { name: "Vencidas" });
+    expect(tile.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(tile);
+    expect(screen.getByRole("button", { name: "Vencidas" }).getAttribute("aria-pressed")).toBe("true");
+    expect(useInicioDashboard.getState().selectedKpi).toBe("vencidas");
+    fireEvent.click(screen.getByRole("button", { name: "Vencidas" }));
+    expect(screen.getByRole("button", { name: "Vencidas" }).getAttribute("aria-pressed")).toBe("false");
+    expect(useInicioDashboard.getState().selectedKpi).toBeNull();
+  });
+
+  it("keeps the selected KPI's destination reachable as a link", () => {
+    renderInicio("esencial");
+    expect(screen.queryByRole("link", { name: /^Ver vencidas/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Vencidas" }));
+    expect(screen.getByRole("link", { name: /^Ver vencidas/ }).getAttribute("href")).toBe(VENCIDAS_HREF);
+  });
+
+  it("shows no selection for a KPI that is not in the data", () => {
+    useInicioDashboard.setState({ selectedKpi: "vencidas" });
+    renderInicio("esencial", INICIO_EMPTY);
+    expect(screen.queryByRole("link", { name: /^Ver / })).toBeNull();
+  });
+});
+
+describe("InicioClient range (Ritmo semanal)", () => {
+  it("offers 4 / 8 / 12 semanas with 8 pressed by default", () => {
+    renderInicio("analitico");
+    const group = within(region("Ritmo semanal")).getByRole("group", { name: "Rango" });
+    const pressed = within(group)
+      .getAllByRole("button")
+      .map((b) => [b.getAttribute("aria-label"), b.getAttribute("aria-pressed")]);
+    expect(pressed).toEqual([
+      ["4 semanas", "false"],
+      ["8 semanas", "true"],
+      ["12 semanas", "false"],
+    ]);
+    expect(dataRows("Ritmo semanal")).toHaveLength(8);
+  });
+
+  it("shows exactly the selected weeks in the Analítico table (seeded 4 weeks)", () => {
+    useInicioDashboard.setState({ range: "4w" });
+    renderInicio("analitico");
+    const rows = dataRows("Ritmo semanal");
+    expect(rows).toHaveLength(4);
+    expect(rows[0].textContent).toContain(weekLabel(PACE[PACE.length - 4].weekStart));
+    expect(rows[3].textContent).toContain(weekLabel(PACE[PACE.length - 1].weekStart));
+  });
+
+  it("switches to 12 weeks from the control", () => {
+    renderInicio("analitico");
+    fireEvent.click(within(region("Ritmo semanal")).getByRole("button", { name: "12 semanas" }));
+    expect(useInicioDashboard.getState().range).toBe("12w");
+    expect(dataRows("Ritmo semanal")).toHaveLength(12);
+  });
+});
+
+describe("InicioClient series toggles (Ritmo semanal)", () => {
+  it("drops a hidden series from the table and keeps the other", () => {
+    useInicioDashboard.setState({ hiddenSeries: { weeklyPace: ["created"] } });
+    renderInicio("analitico");
+    const card = within(region("Ritmo semanal"));
+    expect(card.queryByRole("columnheader", { name: "Creadas" })).toBeNull();
+    expect(card.getByRole("columnheader", { name: "Completadas" })).toBeTruthy();
+  });
+
+  it("toggles a series from the legend and never hides the last one", () => {
+    renderInicio("analitico");
+    const series = within(region("Ritmo semanal")).getByRole("group", { name: "Series" });
+    fireEvent.click(within(series).getByRole("button", { name: /Creadas/ }));
+    expect(useInicioDashboard.getState().hiddenSeries.weeklyPace).toEqual(["created"]);
+    fireEvent.click(within(series).getByRole("button", { name: /Completadas/ }));
+    expect(useInicioDashboard.getState().hiddenSeries.weeklyPace).toEqual(["created"]);
+  });
+});
+
+describe("InicioClient collapse", () => {
+  it.each(STYLES)("gives every widget card a collapse toggle in %s", (style) => {
+    renderInicio(style);
+    const titles = ["Tareas abiertas por tramo", "Requiere atención", "Mi día", "Avance de proyectos activos", "Carga por persona"];
+    if (style !== "esencial") titles.push("Ritmo semanal");
+    for (const title of titles) {
+      const toggle = within(region(title)).getByRole("button", { name: "Contraer" });
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    }
+  });
+
+  it("does not render a collapsed card's body (seeded) and expands it again", () => {
+    useInicioDashboard.setState({ collapsed: { attention: true } });
+    renderInicio("visual");
+    const toggle = within(region("Requiere atención")).getByRole("button", { name: "Expandir" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText(ATTENTION_TITLE)).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getAllByText(ATTENTION_TITLE).length).toBeGreaterThan(0);
+    expect(useInicioDashboard.getState().collapsed.attention).toBe(false);
+  });
+
+  it("collapses an empty widget card too", () => {
+    useInicioDashboard.setState({ collapsed: { workload: true } });
+    renderInicio("visual", INICIO_EMPTY);
+    expect(within(region("Carga por persona")).getByRole("button", { name: "Expandir" })).toBeTruthy();
+    expect(screen.queryByText("Nadie tiene tareas abiertas.")).toBeNull();
+  });
+});
+
+describe("InicioClient chart / table per style", () => {
+  const TRAMO = "Tareas abiertas por tramo";
+
+  it("renders each style's default without a pick", () => {
+    renderInicio("visual");
+    expect(within(region(TRAMO)).queryAllByRole("columnheader")).toHaveLength(0);
+    cleanup();
+    renderInicio("analitico");
+    expect(within(region(TRAMO)).getAllByRole("columnheader").length).toBeGreaterThan(0);
+  });
+
+  it("keeps a table pick in Visual out of Esencial and Analítico", () => {
+    renderInicio("visual");
+    fireEvent.click(within(region(TRAMO)).getByRole("button", { name: "Ver como tabla" }));
+    expect(useInicioDashboard.getState().views).toEqual({ visual: { tramoDonut: "table" } });
+    expect(within(region(TRAMO)).getAllByRole("columnheader").length).toBeGreaterThan(0);
+    cleanup();
+
+    // Esencial falls back to its own list.
+    renderInicio("esencial");
+    expect(within(region(TRAMO)).queryAllByRole("columnheader")).toHaveLength(0);
+    expect(
+      within(region(TRAMO)).getByRole("button", { name: "Ver como gráfica" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    cleanup();
+
+    renderInicio("analitico");
+    expect(
+      within(region(TRAMO)).getByRole("button", { name: "Ver como tabla" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("shows the Analítico pace table in Visual when picked there (seeded)", () => {
+    useInicioDashboard.setState({ views: { visual: { weeklyPace: "table", workload: "table" } } });
+    renderInicio("visual");
+    expect(within(region("Ritmo semanal")).getByRole("columnheader", { name: "Neto" })).toBeTruthy();
+    expect(within(region("Carga por persona")).getAllByRole("columnheader").length).toBeGreaterThan(0);
+  });
+});
+
+describe("InicioClient dashboard state stays on the client", () => {
+  it("calls no server action when the controls change", () => {
+    renderInicio("analitico");
+    fireEvent.click(screen.getByRole("button", { name: "Vencidas" }));
+    fireEvent.click(within(region("Ritmo semanal")).getByRole("button", { name: "4 semanas" }));
+    fireEvent.click(within(region("Ritmo semanal")).getByRole("button", { name: /Creadas/ }));
+    fireEvent.click(within(region("Mi día")).getByRole("button", { name: "Contraer" }));
+    fireEvent.click(within(region("Carga por persona")).getByRole("button", { name: "Ver como gráfica" }));
+    expect(actions.getInicioPageData).not.toHaveBeenCalled();
+    expect(actions.fetchMyProfileAction).not.toHaveBeenCalled();
+  });
+});
+
+describe("InicioClient SSR and persisted choices", () => {
+  let root: Root | null = null;
+
+  afterEach(() => {
+    act(() => root?.unmount());
+    root = null;
+  });
+
+  it("hydrates on the defaults with a persisted value present, then applies it after mount", async () => {
+    localStorage.setItem(
+      dashboardStorageKey("inicio"),
+      JSON.stringify({
+        state: { range: "4w", collapsed: { attention: true }, views: {}, hiddenSeries: { weeklyPace: ["created"] } },
+        version: 1,
+      }),
+    );
+    const client = createTestQueryClient();
+    client.setQueryData(qk.inicio(), pageData(INICIO_NON_ADMIN));
+    client.setQueryData(qk.me.profile(), PROFILE);
+    const tree = <QueryClientProvider client={client}>{ui("analitico")}</QueryClientProvider>;
+
+    const html = renderToString(tree);
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    const recoverable = vi.fn();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    await act(async () => {
+      root = hydrateRoot(container, tree, { onRecoverableError: recoverable });
+    });
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/hydrat/i);
+    consoleError.mockRestore();
+
+    // First client render = server render = defaults.
+    expect(container.textContent).toContain(ATTENTION_TITLE);
+    const scope = within(container);
+    const paceRows = () =>
+      within(scope.getByRole("region", { name: "Ritmo semanal" }))
+        .getAllByRole("row")
+        .filter((row) => within(row).queryAllByRole("cell").length > 0);
+    expect(paceRows()).toHaveLength(8);
+
+    // What `<UiStoresHydrator/>` does after mount.
+    await act(async () => {
+      await useInicioDashboard.persist.rehydrate();
+    });
+    expect(useInicioDashboard.getState().range).toBe("4w");
+    expect(container.textContent).not.toContain(ATTENTION_TITLE);
+    expect(paceRows()).toHaveLength(4);
+    expect(
+      within(scope.getByRole("region", { name: "Ritmo semanal" })).queryByRole("columnheader", { name: "Creadas" }),
+    ).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ const FILES = [
   "components/personas/TeamGrid.tsx",
   "components/personas/TeamTable.tsx",
   "components/personas/AvailabilityWeek.tsx",
+  "components/personas/PersonasViewToggle.tsx",
   "components/personas/EquipoView.tsx",
   "app/(staff)/personas/page.tsx",
 ];

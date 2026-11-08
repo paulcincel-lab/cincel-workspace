@@ -1,10 +1,11 @@
 "use client";
 
 import { Children, useCallback, useId, useState, type ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronUp, type LucideIcon } from "lucide-react";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
 import { LoadingSkeleton, type LoadingSkeletonProps } from "@/components/shell/LoadingSkeleton";
+import { Button } from "@/components/ui/shadcn/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { StyleView } from "@/components/widgets/StyleView";
 import type { Tone } from "@/lib/types/widgets";
@@ -20,6 +21,9 @@ import { cn } from "@/lib/utils";
  *
  * Widget-level states (FE §4.10.1): `loading` renders the `LoadingSkeleton`
  * variant inside the card; `emptyState` is rendered when the children render nothing.
+ *
+ * `collapsible` (dashboards, zustand.md §2.5) adds a "Contraer" / "Expandir"
+ * toggle to the actions slot; while collapsed the body is not rendered.
  */
 export type WidgetCardProps = {
   title: string;
@@ -34,7 +38,29 @@ export type WidgetCardProps = {
   loading?: boolean;
   /** `LoadingSkeleton` variant used while `loading`; defaults to `"list"`. */
   skeleton?: LoadingSkeletonProps["variant"];
+  /** Collapse control: a toggle button in the actions slot; the body is not rendered while collapsed. */
+  collapsible?: { collapsed: boolean; onToggle(): void };
 };
+
+function CollapseToggle({ collapsed, onToggle, bodyId }: NonNullable<WidgetCardProps["collapsible"]> & { bodyId: string }) {
+  const label = collapsed ? "Expandir" : "Contraer";
+  const Icon = collapsed ? ChevronDown : ChevronUp;
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      data-slot="widget-card-collapse"
+      aria-expanded={!collapsed}
+      aria-controls={bodyId}
+      aria-label={label}
+      title={label}
+      onClick={onToggle}
+    >
+      <Icon aria-hidden="true" />
+    </Button>
+  );
+}
 
 /** Icon chip tint and ink per tone (FE §14.2, §14.5). */
 const TONE_CHIP: Record<Tone, string> = {
@@ -83,8 +109,19 @@ export function WidgetCard({
   emptyState,
   loading = false,
   skeleton = "list",
+  collapsible,
 }: WidgetCardProps) {
   const titleId = useId();
+  const bodyId = useId();
+  const collapsed = collapsible?.collapsed ?? false;
+  const headerActions = collapsible ? (
+    <span className="flex items-center gap-2">
+      {actions}
+      <CollapseToggle {...collapsible} bodyId={bodyId} />
+    </span>
+  ) : (
+    actions
+  );
 
   const body = (): ReactNode => {
     if (loading) return <LoadingSkeleton variant={skeleton} />;
@@ -117,9 +154,13 @@ export function WidgetCard({
             <CardTitle id={titleId} role="heading" aria-level={2} className="min-w-0 flex-1">
               {title}
             </CardTitle>
-            {actions ? <CardAction className="text-sm">{actions}</CardAction> : null}
+            {headerActions ? <CardAction className="text-sm">{headerActions}</CardAction> : null}
           </CardHeader>
-          <CardContent className={cn(!padded && "px-0")}>{body()}</CardContent>
+          {collapsed ? null : (
+            <CardContent id={collapsible ? bodyId : undefined} className={cn(!padded && "px-0")}>
+              {body()}
+            </CardContent>
+          )}
         </Card>
       )}
       esencial={() => (
@@ -128,9 +169,13 @@ export function WidgetCard({
             <CardTitle id={titleId} role="heading" aria-level={2}>
               {title}
             </CardTitle>
-            {actions ? <CardAction className="text-[13px]">{actions}</CardAction> : null}
+            {headerActions ? <CardAction className="text-[13px]">{headerActions}</CardAction> : null}
           </CardHeader>
-          <CardContent className={cn("text-[15px]", !padded && "px-0")}>{body()}</CardContent>
+          {collapsed ? null : (
+            <CardContent id={collapsible ? bodyId : undefined} className={cn("text-[15px]", !padded && "px-0")}>
+              {body()}
+            </CardContent>
+          )}
         </Card>
       )}
       analitico={() => (
@@ -139,9 +184,13 @@ export function WidgetCard({
             <CardTitle id={titleId} role="heading" aria-level={2} className="text-[11.5px]">
               {title}
             </CardTitle>
-            {actions ? <CardAction className="self-center text-[11.5px]">{actions}</CardAction> : null}
+            {headerActions ? <CardAction className="self-center text-[11.5px]">{headerActions}</CardAction> : null}
           </CardHeader>
-          <CardContent className={cn("text-[12.5px]", padded ? "py-3" : "px-0")}>{body()}</CardContent>
+          {collapsed ? null : (
+            <CardContent id={collapsible ? bodyId : undefined} className={cn("text-[12.5px]", padded ? "py-3" : "px-0")}>
+              {body()}
+            </CardContent>
+          )}
         </Card>
       )}
     />
