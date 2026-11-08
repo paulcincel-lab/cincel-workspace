@@ -1058,7 +1058,7 @@ A phase is not done while any touched file still contains one of the patterns ab
 - Wiring of the §4.8 rule 1 cache reset into `logoutAction`, AvatarMenu and `useSessionStore.setAccess`.
 
 **Acceptance:**
-- Exactly one `NewTaskDialog` in the React tree (`NewTaskDialogRoute`, `NewTaskDialog.tsx:430-439`, is never mounted and is deleted); the catalog loads once per session, not per mount.
+- `<NewTaskDialogHost/>` is mounted once and `NewTaskDialogRoute` (`NewTaskDialog.tsx:430-439`, never mounted) is deleted; the dialog's catalog loads through the shared catalog queries, not per mount. The other mounts are removed by their phases (4a Tablero quick-add and Tareas, 5a project Tareas tab, P7 NoteEditor), after which exactly one `NewTaskDialog` remains in the tree.
 - The style, theme, density and text size render exactly as before (SSR HTML equals the first client render; no hydration warning).
 - `rg "SessionAccessContext|GeneralSettingsContext" components lib app` is empty.
 - Shell and project tab counts use `COUNT` queries: `countOpenTasksFor` equals the old `countOpenTasks(listMyTasks)` (DB test).

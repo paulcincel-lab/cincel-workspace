@@ -539,11 +539,11 @@ No new React contexts for app state. UI state goes to Zustand (global, or a page
 - **Components:**
   - `AppShellClient.tsx`: mount `<NewTaskDialogHost/>` (gated by `canCreateActivity`) and an empty `<UiStoresHydrator/>`; nothing else (Phase 2 owns the rest).
   - `NewTaskDialog.tsx`: fully migrated (catalog queries, `useActionMutation`); delete the never-mounted `NewTaskDialogRoute` (`:430-439`); `use-new-task-param.ts` becomes the host effect for `?nueva=1`.
-  - The 4 existing mounts (`TareasClient.tsx:310`, `TareasTablero.tsx:96`, `ProjectTasksByFase.tsx:227`, `NoteEditor.tsx:304`) call `openNewTask(defaults, source)`; this is a mechanical swap, exempt from plan §5.0.
+  - The 4 existing mounts (`TareasClient.tsx:310`, `TareasTablero.tsx:96`, `ProjectTasksByFase.tsx:227`, `NoteEditor.tsx:304`) stay until their phases replace them with `openNewTask(defaults, source)`: 4a (Tareas, quick-add), 5a (project Tareas tab), P7 (NoteEditor).
   - `AssistantLauncher.tsx`: reads `useAssistantUi` (`open`, `mounted`, `available`); ⌘J → `toggle`; delete the dead `openAssistant` export and the window event.
   - `app/layout.tsx`: the `useAppearance` provider/seeder replaces `AppearanceProvider`; `AppShell.tsx` stops wrapping `StyleProvider` once `useStyle()` reads the store (identical behaviour; the nested page providers stay until Phase 2).
   - Remove `lib/auth/session-context.tsx` (`SessionAccessProvider` in `app/layout.tsx`, `useSessionAccess` in `AppRouteGuard.tsx`); its users and the tests that mock it (`AppRouteGuard.test.tsx`, `app/login/denegado/page.test.tsx`, `app/__tests__/root-layout*.test.tsx`) read or set `useSessionStore` instead.
-- **Acceptance:** exactly one `NewTaskDialog` in the tree; no visual change in style, theme, density or text size; SSR HTML equals the first client render; `rg "OPEN_ASSISTANT_EVENT|SessionAccessContext"` is empty.
+- **Acceptance:** the host is mounted once and opens from `?nueva=1`; no visual change in style, theme, density or text size; SSR HTML equals the first client render; `rg "OPEN_ASSISTANT_EVENT|SessionAccessContext"` is empty.
 - **Tests:** store unit tests (actions, reset); `NewTaskDialogHost` (URL param → opens → strips the param); appearance SSR equality test; logout clears the cache and resets the stores.
 
 ### Phase 2: shell and sidebar (#936)
@@ -571,7 +571,7 @@ No new React contexts for app state. UI state goes to Zustand (global, or a page
 ### Phase 4: Tareas (#938: 4a #955, 4b #956, 4c #957, 4d #958)
 - **Stores:** create `useTareasUi` (§2.4, `selectedDay` only) in 4c. `useNewTaskUi` and the host come from 1b; `fecha` in `lib/tareas/query.ts` comes from 1b.
 - **Components:**
-  - 4a: `TareasTablero.tsx` (no `quickAddStatus`; quick-add through `openNewTask({status})`), `ListPage.tsx`, `TaskBoardWidget.tsx` (drop `onQuickAdd`), `TareasClient.tsx` (`useSessionStore`)
+  - 4a: `TareasTablero.tsx` (no `quickAddStatus`; quick-add through `openNewTask({status})`), `ListPage.tsx`, `TaskBoardWidget.tsx` (drop `onQuickAdd`), `TareasClient.tsx` (remove the dialog mount at `:310`, the button calls `openNewTask`; `useSessionStore`)
   - 4b: `TaskSheet.tsx` (session selector)
   - 4c: `TareasCalendario.tsx` (cursor ↔ `?fecha`, `selectedKey` ↔ `useTareasUi`, user from `useSessionStore`, drop the focus listener)
   - 4d: `TareasStartSlot.tsx` (session selector)
@@ -580,7 +580,7 @@ No new React contexts for app state. UI state goes to Zustand (global, or a page
 
 ### Phase 5: Proyectos (#939: 5a #959, 5b #960, 5c #961, 5d #962)
 - **Stores:** none new. Portfolio search goes to the URL `?q=` (5a). The dashboard is Phase 12 (#969).
-- **Components:** `ProjectsPortfolio.tsx` (`?q=` with a debounced local draft, 5a); `ProjectFichaClient.tsx:120` and `ProjectSectionNav.tsx:74` read session selectors; Cronograma has no Zustand (`?week` URL, TQ data); `ProjectFiles.tsx` `selectedId` stays local.
+- **Components:** `ProjectsPortfolio.tsx` (`?q=` with a debounced local draft, 5a); `ProjectTasksByFase.tsx` (drop `dialogDefaults` and its dialog mount; `openNewTask({projectId, tramoKey, …})`, 5a); `ProjectFichaClient.tsx:120` and `ProjectSectionNav.tsx:74` read session selectors; Cronograma has no Zustand (`?week` URL, TQ data); `ProjectFiles.tsx` `selectedId` stays local.
 - **Acceptance:** portfolio search survives opening a project and going back; no `NewTaskDialog` mount in `components/proyectos`.
 - **Tests:** `ProjectsPortfolio.test.tsx` (`?q` round trip).
 
@@ -591,8 +591,8 @@ No new React contexts for app state. UI state goes to Zustand (global, or a page
 - **Tests:** `PersonasContacts.test.tsx` (`?q`), an `EquipoView` test with the session store set.
 
 ### Phase 7: Mi espacio / Bandeja (#941)
-- **Stores:** use `useNewTaskUi` (`NoteEditor`, already swapped in 1b). Everything else is TQ or URL.
-- **Components:** `Inbox.tsx` (remove the duplicate `tab` state `:137,159-162`; read `?tab` only; remove the `publishBandejaUnread` calls); `MiEspacioClient.tsx` (remove `useSyncedList`); delete `RemindersList`.
+- **Stores:** use `useNewTaskUi` (store from 1b) in `NoteEditor`. Everything else is TQ or URL.
+- **Components:** `NoteEditor.tsx` (drop `taskOpen` and its dialog mount → `openNewTask({title, description, projectId}, "nota")`); `Inbox.tsx` (remove the duplicate `tab` state `:137,159-162`; read `?tab` only; remove the `publishBandejaUnread` calls); `MiEspacioClient.tsx` (remove `useSyncedList`); delete `RemindersList`.
 - **Acceptance:** Bandeja tab = URL only; "Convertir en tarea" opens the host dialog; `rg "publishBandejaUnread|useSyncedList"` is empty.
 - **Tests:** `Inbox.test.tsx` (tab from the URL only).
 
