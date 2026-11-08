@@ -104,19 +104,16 @@ flowchart LR
         D1["npm run dev\n(next dev, Turbopack)"]
     end
 
-    subgraph CI["GitHub Actions\n.github/workflows/cincel-app-ci.yml + cincel-app-docker.yml"]
+    subgraph CI["GitHub Actions (self-hosted)\ncincel-app-ci.yml (PR) + cincel-app-docker.yml (main)"]
         V["verify\nlint + build"]
         UT["unit-tests\nvitest"]
-        E2E["e2e-tests\nservicio Postgres + db:migrate + db:seed\nplaywright (contra next build && next start)"]
-        DB["docker-build\ndocker build ."]
+        DB["build-and-push\nimágenes + release"]
         V --> UT
-        V --> E2E
-        V --> DB
     end
 
     subgraph Image["Imagen Docker (multi-stage)"]
-        B1["Stage build:\nnode:23-alpine\nnpm ci + next build\n(output: standalone)"]
-        B2["Stage runtime:\nnode:23-alpine\nusuario no-root\ndumb-init + node server.js"]
+        B1["Stage build:\nnode:24-alpine\nnpm ci + next build\n(output: standalone)"]
+        B2["Stage runtime:\nnode:24-alpine\nusuario no-root\ndumb-init + node server.js"]
         B1 --> B2
     end
 
@@ -131,9 +128,9 @@ flowchart LR
     Compose -.DATABASE_URL en runtime.-> PGProd
 ```
 
-- **`Dockerfile`**: build multi-stage sobre `node:23-alpine` con `output: standalone`. No requiere build args — `DATABASE_URL` se inyecta en runtime.
+- **`Dockerfile`**: build multi-stage sobre `node:24-alpine` con `output: standalone`. No requiere build args — `DATABASE_URL` se inyecta en runtime.
 - **`docker-compose.yml`**: incluye un servicio `db` (`postgres:17-alpine`) para desarrollo/CI local; en producción se apunta `DATABASE_URL` a un Postgres gestionado.
-- **CI** (`cincel-app-ci.yml`) corre en cada PR que toque `cincel-app/**`: lint + build, suite unitaria (vitest) y suite E2E (Playwright contra una build de producción, con un servicio Postgres con migraciones y seed). **Docker** (`cincel-app-docker.yml`) corre en cada push a `main`: construye y publica las imágenes y crea el release.
+- **CI** (`cincel-app-ci.yml`) corre en cada PR que toque `cincel-app/**`: lint + build, suite unitaria (vitest; las pruebas de base de datos solo corren si la variable del repositorio `TEST_DATABASE_URL` apunta a una base de pruebas). La suite E2E (Playwright) se corre localmente, no en CI. **Docker** (`cincel-app-docker.yml`) corre en cada push a `main`: construye y publica las imágenes y crea el release.
 - No hay paso de *push* a un registro de contenedores todavía — la validación de CI es solo de build.
 
 ## Flujo de uso (caso de uso principal)
@@ -257,7 +254,7 @@ El schema Drizzle vive en `lib/db/schema/` y las migraciones en `lib/db/migratio
 | Unitario | Vitest + happy-dom | `tests/unit/` | Matriz de permisos por rol, flujo de login/hash, reglas de negocio de Tareas (fechas obligatorias, historial append-only), rechazo de escritura sin capacidad |
 | E2E | Playwright | `tests/e2e/` | Un test por flujo principal: login → Inicio, crear y mover una tarea en el Tablero, proyecto y sus pestañas, vacaciones (solicitar, aprobar, saldo), Mi espacio → Bandeja, tema publicado por un admin, Control de horario, asistente con escritura confirmada, portal (acceso y proyecto), axe por tema |
 
-La suite E2E corre en CI contra una build de producción (`next build && next start`) con un servicio Postgres migrado + seed; no `next dev`, para evitar timeouts por compilación bajo demanda. `tests/e2e/global-cleanup.ts` purga las filas etiquetadas `E2E` antes y después de la corrida (la suite comparte una sola base sin aislamiento por test). Los specs corren en paralelo (4 workers en CI); los que cambian ajustes de toda la organización (tema, Control de horario, apariencia del admin) van en el proyecto `org-settings` de `playwright.config.ts`, uno a la vez y después del resto. `mi-espacio.spec.ts` necesita `CRON_SECRET` con el mismo valor que lee el servidor.
+La suite E2E se corre localmente (no en CI) contra una build de producción (servidor standalone) con una base migrada + seed; no `next dev`, para evitar timeouts por compilación bajo demanda. `tests/e2e/global-cleanup.ts` purga las filas etiquetadas `E2E` antes y después de la corrida (la suite comparte una sola base sin aislamiento por test). Los specs corren en paralelo (4 workers con `CI=1`); los que cambian ajustes de toda la organización (tema, Control de horario, apariencia del admin) van en el proyecto `org-settings` de `playwright.config.ts`, uno a la vez y después del resto. `mi-espacio.spec.ts` necesita `CRON_SECRET` con el mismo valor que lee el servidor.
 
 ## Estructura del proyecto
 

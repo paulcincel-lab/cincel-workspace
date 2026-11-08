@@ -238,13 +238,12 @@ history are entered through the app; there is no bulk importer.
 
 Two workflows, both on the self-hosted runners:
 
-`.github/workflows/cincel-app-ci.yml` runs on pull requests that touch `cincel-app/**`:
+`.github/workflows/cincel-app-ci.yml` runs on pull requests that touch `cincel-app/**` (Playwright e2e is run locally, not in CI):
 
 | Job | What |
 |---|---|
 | `verify` | `npm run lint` + `npm run build` |
-| `unit-tests` | `npm run test:unit` (vitest) against a throwaway Postgres service |
-| `e2e-tests` | Throwaway Postgres service, `db:migrate` + `db:seed`, then Playwright (`npm run test:e2e`) |
+| `unit-tests` | `npm run test:unit` (vitest). The database tests run only when the repository variable `TEST_DATABASE_URL` points at a long-lived, migrated test database; no containers are created |
 
 `.github/workflows/cincel-app-docker.yml` runs on every push to `main` that touches `cincel-app/**`:
 
