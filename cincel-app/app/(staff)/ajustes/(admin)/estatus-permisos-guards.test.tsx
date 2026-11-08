@@ -23,8 +23,6 @@ const session = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth/session", () => session);
 
-const redirects = vi.hoisted(() => ({ redirectIfRedesignOff: vi.fn(async () => undefined) }));
-vi.mock("@/lib/ui/redesign-redirect", () => redirects);
 
 const statusActions = vi.hoisted(() => ({ fetchTaskStatusesAction: vi.fn(async () => []) }));
 vi.mock("@/lib/actions/task-statuses-actions", () => statusActions);
@@ -122,30 +120,22 @@ describe("Ajustes › Estatus / Permisos segment guards", () => {
 describe("Ajustes › Estatus / Permisos pages", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("/ajustes/estatus checks the redesign flag first and hands the statuses to the client", async () => {
+  it("/ajustes/estatus hands the statuses to the client", async () => {
     const statuses = [{ id: "s1", name: "En revisión", closes: false, countsAsCompleted: false, sortOrder: 0 }];
     statusActions.fetchTaskStatusesAction.mockResolvedValueOnce(statuses as never);
 
     const page = (await AjustesEstatusPage()) as ReactElement<{ initialStatuses: unknown }>;
 
-    expect(redirects.redirectIfRedesignOff).toHaveBeenCalledWith("/ajustes/estatus");
     expect(page.type).toBe(EstatusSettings);
     expect(page.props.initialStatuses).toEqual(statuses);
   });
 
-  it("/ajustes/estatus stops at the flag-off redirect", async () => {
-    redirects.redirectIfRedesignOff.mockRejectedValueOnce(new Error("NEXT_REDIRECT:/configuracion/estatus"));
-    await expect(AjustesEstatusPage()).rejects.toThrow("NEXT_REDIRECT:/configuracion/estatus");
-    expect(statusActions.fetchTaskStatusesAction).not.toHaveBeenCalled();
-  });
-
-  it("/ajustes/permisos checks the redesign flag first and hands staff + defaults to the client", async () => {
+  it("/ajustes/permisos hands staff + defaults to the client", async () => {
     const staff = [{ id: "a1", name: "Alejandro", role: "Administrador" }];
     staffActions.fetchStaffAction.mockResolvedValueOnce(staff as never);
 
     const page = (await AjustesPermisosPage()) as ReactElement<{ initialStaff: unknown; defaultPermissions: unknown }>;
 
-    expect(redirects.redirectIfRedesignOff).toHaveBeenCalledWith("/ajustes/permisos");
     expect(staffActions.fetchStaffAction).toHaveBeenCalledWith({ includeInactive: true });
     expect(page.type).toBe(PermisosSettings);
     expect(page.props.initialStaff).toEqual(staff);

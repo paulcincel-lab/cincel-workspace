@@ -8,17 +8,14 @@ import { getSessionAccess, requireCapabilityUser } from "@/lib/auth/session";
 import { isAdministratorRole } from "@/lib/data/roles";
 import { withNotificationDefaults } from "@/lib/notifications/preferences";
 import { settingsSectionsFor } from "@/lib/shell/settings-sections";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Ajustes › Notificaciones (redesign FE §3.8): personal page (staff session
- * only, no admin guard). New-only route: with the redesign off it redirects
- * to the legacy equivalent. 404 while the preference actions are stubs.
+ * only, no admin guard). 404 while the preference actions are stubs.
  */
 export default async function AjustesNotificacionesPage() {
-  await redirectIfRedesignOff("/ajustes/notificaciones");
 
   const access = await getSessionAccess();
   if (!access.user) redirect("/login");

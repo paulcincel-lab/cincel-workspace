@@ -4,7 +4,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 const state = vi.hoisted(() => ({
-  redesignEnabled: false,
   user: { member: { id: "s1" }, email: "ana@cincel.mx", access: "Administrador" } as unknown,
   resumen: null as unknown,
 }));
@@ -15,7 +14,7 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 vi.mock("@/lib/ui/preferences-server", () => ({
-  getResolvedAppearance: vi.fn(async () => ({ redesignEnabled: state.redesignEnabled, style: "visual" })),
+  getResolvedAppearance: vi.fn(async () => ({ style: "visual" })),
 }));
 vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: vi.fn(async () => {
@@ -61,7 +60,6 @@ async function renderPage(query: Record<string, string> = {}) {
 }
 
 beforeEach(() => {
-  state.redesignEnabled = false;
   state.user = { member: { id: "s1" }, email: "ana@cincel.mx", access: "Administrador" };
   state.resumen = RESUMEN;
 });
@@ -69,12 +67,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("/proyectos/[id]", () => {
-  it("opens the Ficha with the flag off, exactly as before", async () => {
-    await expect(renderPage()).rejects.toThrow("REDIRECT:/proyectos/p1/ficha");
-  });
-
-  it("renders the tabs (Resumen, with the style switch) and the Resumen with the flag on", async () => {
-    state.redesignEnabled = true;
+  it("renders the tabs (Resumen, with the style switch) and the Resumen", async () => {
     await renderPage();
     const tabs = screen.getByTestId("tabs");
     expect(tabs.getAttribute("data-active")).toBe("resumen");
@@ -84,7 +77,6 @@ describe("/proyectos/[id]", () => {
   });
 
   it("honours ?estilo= for this render only", async () => {
-    state.redesignEnabled = true;
     await renderPage({ estilo: "analitico" });
     const provider = screen.getByTestId("style");
     expect(provider.getAttribute("data-style")).toBe("analitico");
@@ -92,13 +84,11 @@ describe("/proyectos/[id]", () => {
   });
 
   it("ignores an unknown ?estilo=", async () => {
-    state.redesignEnabled = true;
     await renderPage({ estilo: "otro" });
     expect(screen.getByTestId("style").getAttribute("data-overridden")).toBe("false");
   });
 
   it("shows «Proyecto no encontrado» when the project can't be read", async () => {
-    state.redesignEnabled = true;
     state.resumen = null;
     await renderPage();
     expect(screen.getByRole("heading", { name: "Proyecto no encontrado" })).toBeTruthy();
@@ -106,7 +96,6 @@ describe("/proyectos/[id]", () => {
   });
 
   it("asks to sign in without a session", async () => {
-    state.redesignEnabled = true;
     state.user = null;
     await renderPage();
     expect(screen.getByRole("heading", { name: "Sin permiso" })).toBeTruthy();

@@ -1,8 +1,7 @@
-import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
-import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
+import { redirectLegacy } from "@/lib/ui/legacy-redirects-server";
 
+/** Old route (FE §2.2): redirects to its redesign page, query string preserved. */
 export default async function RecursosEmpresaPage({ searchParams }: LegacyPageProps) {
-  await redirectLegacyIfRedesignOn("/recursos/empresa", searchParams);
-  return <ResourcesWorkspaceServer mode="empresa" />;
+  return redirectLegacy("/recursos/empresa", searchParams);
 }

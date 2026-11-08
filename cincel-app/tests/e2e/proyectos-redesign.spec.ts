@@ -1,6 +1,5 @@
 /**
- * E2E: /proyectos in the redesign (FE §3.5) and the legacy list it keeps
- * with the flag off. Flag on: header copy, the three styles from the same
+ * E2E: /proyectos (FE §3.5): header copy, the three styles from the same
  * data (Estilo switch by keyboard, `?estilo=`), the admin-only
  * "Presup. ejercido" column, and "Nuevo proyecto" opened by `?nuevo=1` with
  * the admin fields; creating opens the new project.
@@ -9,43 +8,11 @@
  */
 import { test, expect } from "@playwright/test";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
-import { setRedesignFlag } from "./helpers/redesign-flag";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
 
-test.describe("Proyectos — flag off", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(false);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
-  test.beforeEach(async ({ page }) => {
-    await seedAuth(page);
-    await loginAsAdmin(page, BASE_URL);
-  });
-
-  test("renders the legacy list", async ({ page }) => {
-    await page.goto(`${BASE_URL}/proyectos`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Vista operativa para riesgo, entregas y carga por proyecto.")).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(page.getByRole("radiogroup", { name: /Estilo/ })).toHaveCount(0);
-  });
-});
-
-test.describe("Proyectos — flag on", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(true);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
+test.describe("Proyectos", () => {
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);

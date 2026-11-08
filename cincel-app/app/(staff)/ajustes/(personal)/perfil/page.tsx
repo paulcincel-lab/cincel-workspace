@@ -8,7 +8,6 @@ import { getStaffPhotoUrl } from "@/lib/profile-photo/photo-url";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import { settingsSectionsFor } from "@/lib/shell/settings-sections";
 import type { WeekHours } from "@/lib/types/redesign";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 export const dynamic = "force-dynamic";
 
@@ -38,11 +37,9 @@ async function loadPhotoUrl(staffId: string): Promise<string | null> {
  * Ajustes › Perfil (redesign FE §3.8): photo, "Mis horas esta semana",
  * datos personales, firma, idioma y región, "Cambiar contraseña". Personal
  * page (staff session only); the Ajustes layout renders the header and
- * `AjustesNav`. New-only route: with the redesign off it redirects to the
- * legacy `/profile`, which renders as today.
+ * `AjustesNav`.
  */
 export default async function AjustesPerfilPage() {
-  await redirectIfRedesignOff("/ajustes/perfil");
 
   const access = await getSessionAccess();
   if (!access.user) redirect("/login");

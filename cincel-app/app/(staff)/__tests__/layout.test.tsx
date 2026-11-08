@@ -29,13 +29,7 @@ vi.mock("@/lib/actions/time-tracking-actions", () => ({
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/repositories/preferences-repository", () => ({ findStaffPhoto: mocks.findStaffPhoto }));
 
-// The real shells read actions and settings; these stand-ins keep one landmark each.
-vi.mock("@/components/layout/Sidebar", () => ({
-  default: () => <nav data-testid="sidebar" aria-label="Menú principal" />,
-}));
-vi.mock("@/components/layout/Header", () => ({
-  default: () => <header data-testid="legacy-header" />,
-}));
+// The real shell reads actions and settings; this stand-in keeps one landmark.
 vi.mock("@/components/shell/AppShell", () => ({
   AppShell: (props: { children: ReactNode }) => {
     mocks.appShellProps(props);
@@ -48,8 +42,6 @@ vi.mock("@/components/shell/AppShell", () => ({
   },
 }));
 
-import Sidebar from "@/components/layout/Sidebar";
-import { LegacyFrame } from "@/components/shell/LegacyFrame";
 import StaffLayout from "../layout";
 
 const ACTIVE_USER = {
@@ -64,14 +56,13 @@ const ACTIVE_USER = {
   access: "Colaborador",
 };
 
-function appearance(redesignEnabled: boolean): ResolvedAppearance {
+function appearance(): ResolvedAppearance {
   return {
     theme: "azul",
     mode: "light",
     style: "visual",
     density: "comoda",
     textSize: 14,
-    redesignEnabled,
     cssVars: { light: {}, dark: {} },
     version: 1,
   };
@@ -90,23 +81,6 @@ const DISABLED_TODAY: TodayStatus = {
 
 const NAV = { items: [], tramos: [], footer: [] };
 
-function LegacyPage() {
-  return (
-    <main>
-      <Sidebar />
-      <p>Página anterior</p>
-    </main>
-  );
-}
-
-function RestyledPage() {
-  return (
-    <LegacyFrame>
-      <p>Página nueva</p>
-    </LegacyFrame>
-  );
-}
-
 async function renderLayout(children: ReactNode) {
   return render(await StaffLayout({ children }));
 }
@@ -114,7 +88,7 @@ async function renderLayout(children: ReactNode) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getSessionAccess.mockResolvedValue({ status: "active", user: ACTIVE_USER });
-  mocks.getResolvedAppearance.mockResolvedValue(appearance(false));
+  mocks.getResolvedAppearance.mockResolvedValue(appearance());
   mocks.buildNavModel.mockResolvedValue(NAV);
   mocks.fetchMyTodayAction.mockResolvedValue(DISABLED_TODAY);
   mocks.findStaffPhoto.mockResolvedValue(null);
@@ -130,31 +104,7 @@ describe("app/(staff)/layout", () => {
     expect(mocks.getResolvedAppearance).not.toHaveBeenCalled();
   });
 
-  it("renders the page bare with the flag off", async () => {
-    await renderLayout(<p>Contenido</p>);
-    expect(screen.getByText("Contenido")).toBeTruthy();
-    expect(screen.queryByTestId("app-shell")).toBeNull();
-    expect(screen.queryByTestId("sidebar")).toBeNull();
-    expect(mocks.buildNavModel).not.toHaveBeenCalled();
-    expect(mocks.fetchMyTodayAction).not.toHaveBeenCalled();
-  });
-
-  it("keeps a legacy page's own sidebar with the flag off, once", async () => {
-    await renderLayout(<LegacyPage />);
-    expect(screen.getAllByTestId("sidebar")).toHaveLength(1);
-    expect(screen.getByText("Página anterior")).toBeTruthy();
-  });
-
-  it("mounts the old sidebar and header through LegacyFrame with the flag off", async () => {
-    await renderLayout(<RestyledPage />);
-    expect(screen.getAllByTestId("sidebar")).toHaveLength(1);
-    expect(screen.getByTestId("legacy-header")).toBeTruthy();
-    expect(screen.queryByTestId("app-shell")).toBeNull();
-    expect(screen.getByText("Página nueva")).toBeTruthy();
-  });
-
-  it("renders AppShell around the page with the flag on", async () => {
-    mocks.getResolvedAppearance.mockResolvedValue(appearance(true));
+  it("renders AppShell around the page for every active session", async () => {
     await renderLayout(<p>Contenido</p>);
     expect(screen.getByTestId("app-shell")).toBeTruthy();
     expect(screen.getByText("Contenido")).toBeTruthy();
@@ -169,23 +119,14 @@ describe("app/(staff)/layout", () => {
       photoUrl: null,
     });
     expect(props.nav).toEqual(NAV);
-    expect(props.appearance.redesignEnabled).toBe(true);
+    expect(props.appearance).toEqual(appearance());
     // Time tracking disabled: the sidebar clock stays hidden.
     expect(props.today).toBeNull();
     expect(mocks.buildNavModel).toHaveBeenCalledWith(props.session);
   });
 
-  it("never shows two sidebars when a restyled page renders inside AppShell", async () => {
-    mocks.getResolvedAppearance.mockResolvedValue(appearance(true));
-    await renderLayout(<RestyledPage />);
-    expect(screen.getAllByTestId("sidebar")).toHaveLength(1);
-    expect(screen.queryByTestId("legacy-header")).toBeNull();
-    expect(screen.getByText("Página nueva")).toBeTruthy();
-  });
-
   it("passes the admin flag, the photo url and an enabled day to AppShell", async () => {
     mocks.getSessionAccess.mockResolvedValue({ status: "active", user: { ...ACTIVE_USER, access: "Administrador" } });
-    mocks.getResolvedAppearance.mockResolvedValue(appearance(true));
     mocks.findStaffPhoto.mockResolvedValue({ staffId: "staff-1", mime: "image/jpeg", sha256: "abcdef0123456789" });
     const today = { ...DISABLED_TODAY, enabled: true, required: true };
     mocks.fetchMyTodayAction.mockResolvedValue(today);
@@ -199,7 +140,6 @@ describe("app/(staff)/layout", () => {
 
   it("still renders the shell when the nav, the day or the photo cannot be read", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    mocks.getResolvedAppearance.mockResolvedValue(appearance(true));
     mocks.buildNavModel.mockRejectedValue(new Error("db down"));
     mocks.fetchMyTodayAction.mockRejectedValue(new Error("db down"));
     mocks.findStaffPhoto.mockRejectedValue(new Error("db down"));
@@ -212,7 +152,7 @@ describe("app/(staff)/layout", () => {
     expect(screen.getByText("Contenido")).toBeTruthy();
   });
 
-  it("leaves a first-access session on the legacy path", async () => {
+  it("renders a first-access session bare (the route guard moves it on)", async () => {
     mocks.getSessionAccess.mockResolvedValue({ status: "pending_first_access", user: ACTIVE_USER });
     await renderLayout(<p>Contenido</p>);
     expect(screen.getByText("Contenido")).toBeTruthy();
@@ -220,11 +160,8 @@ describe("app/(staff)/layout", () => {
     expect(mocks.getResolvedAppearance).not.toHaveBeenCalled();
   });
 
-  it("calls no write action on either path", async () => {
-    await renderLayout(<RestyledPage />);
-    cleanup();
-    mocks.getResolvedAppearance.mockResolvedValue(appearance(true));
-    await renderLayout(<RestyledPage />);
+  it("calls no write action while rendering", async () => {
+    await renderLayout(<p>Contenido</p>);
     expect(mocks.clockInAction).not.toHaveBeenCalled();
   });
 });

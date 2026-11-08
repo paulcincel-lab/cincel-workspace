@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { UIMessage } from "ai";
 import { PlusIcon, Trash2Icon } from "lucide-react";
@@ -13,9 +13,7 @@ import {
   deleteAssistantThreadAction,
   fetchAssistantThreadAction,
   fetchAssistantThreadsAction,
-  importLegacyAssistantThreadAction,
 } from "@/lib/actions/assistant-actions";
-import { importLegacyThreadOnce } from "@/lib/assistant/legacy-import";
 import { ASSISTANT_TOOL_GROUPS } from "@/lib/assistant/starter-prompts";
 import { groupAssistantThreads, threadTimeLabel } from "@/lib/assistant/thread-groups";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
@@ -59,7 +57,6 @@ export function AsistentePageClient({ threads: initialThreads, initialThread, mi
   const [notice, setNotice] = useState<string | null>(missingThread ? actionErrorText(new Error("NOT_FOUND")) : null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ text: string; nonce: number } | undefined>(undefined);
-  const importStarted = useRef(false);
   const cuttoUrl = cuttoBaseUrl();
 
   const groups = useMemo(() => groupAssistantThreads(threads), [threads]);
@@ -71,21 +68,6 @@ export function AsistentePageClient({ threads: initialThreads, initialThread, mi
       toast.error(actionErrorText(err));
     }
   }, []);
-
-  // The old localStorage thread moves to the server once; the key is deleted only after a successful import.
-  useEffect(() => {
-    if (importStarted.current) return;
-    importStarted.current = true;
-    let storage: Storage | null = null;
-    try {
-      storage = window.localStorage;
-    } catch {
-      storage = null;
-    }
-    void importLegacyThreadOnce({ storage, importThread: importLegacyAssistantThreadAction }).then((result) => {
-      if (result.status === "imported") void refreshThreads();
-    });
-  }, [refreshThreads]);
 
   const selectThread = async (id: string) => {
     if (id === conversation.id && !conversation.isNew) return;
@@ -211,7 +193,6 @@ export function AsistentePageClient({ threads: initialThreads, initialThread, mi
             context={PAGE_CONTEXT}
             draft={draft}
             onTurnFinished={onTurnFinished}
-            hideHeader
           />
         </div>
       </section>

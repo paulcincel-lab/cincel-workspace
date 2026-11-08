@@ -36,7 +36,6 @@ function orgAppearance(theme: ThemeId): ResolvedAppearance {
     style: THEME_PRESETS[theme].styleDefault,
     density: "comoda",
     textSize: 14,
-    redesignEnabled: true,
     cssVars: { light: vars("light"), dark: vars("dark") },
     version: 1,
   };
@@ -80,7 +79,7 @@ describe("portal login and 404 accessibility in the organization theme", () => {
           const { container } = render(
             <PortalAppearance appearance={orgAppearance(theme)}>
               <PortalShell clientName={null}>
-                <PortalLoginForm linkError redesign />
+                <PortalLoginForm linkError />
               </PortalShell>
             </PortalAppearance>,
           );
@@ -94,7 +93,7 @@ describe("portal login and 404 accessibility in the organization theme", () => {
           const { container } = render(
             <PortalAppearance appearance={orgAppearance(theme)}>
               <PortalShell clientName="Ana López">
-                <PortalNotFoundView redesign />
+                <PortalNotFoundView />
               </PortalShell>
             </PortalAppearance>,
           );

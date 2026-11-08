@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { appSettings } from "@/lib/db/schema";
 import type { OrgAppearance, StoredOrgAppearance } from "@/lib/types/redesign";
-import { StoredOrgAppearanceSchema } from "@/lib/validation/redesign";
+import { StoredOrgAppearanceSchema, withoutRetiredOrgAppearanceKeys } from "@/lib/validation/redesign";
 
 export const ORG_APPEARANCE_SETTING_KEY = "appearance.theme";
 
@@ -19,7 +19,7 @@ export function parseStoredOrgAppearance(raw: string | null): StoredOrgAppearanc
   try {
     const parsed = JSON.parse(raw) as { version?: unknown; data?: unknown };
     if (parsed?.version !== 1) return null;
-    const result = StoredOrgAppearanceSchema.safeParse(parsed.data);
+    const result = StoredOrgAppearanceSchema.safeParse(withoutRetiredOrgAppearanceKeys(parsed.data));
     return result.success ? result.data : null;
   } catch {
     return null;

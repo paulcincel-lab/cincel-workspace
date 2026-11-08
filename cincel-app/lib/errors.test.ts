@@ -95,7 +95,6 @@ describe("actionErrorText", () => {
     expect(actionErrorText(new Error("RATE_LIMITED"), "photo")).toBe(
       "Demasiados intentos seguidos. Espera unos segundos e intenta de nuevo.",
     );
-    expect(actionErrorText(new Error("DISABLED"), "redesign")).toBe("El nuevo diseño no está disponible por ahora.");
     expect(actionErrorText(new Error("DISABLED"), "cutto")).toBe(
       "La integración con Cutto aún no está disponible. Usa el enlace para abrir Cutto.",
     );

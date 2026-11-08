@@ -105,7 +105,7 @@ function TaskRefRow({
   );
 }
 
-/** The task drawer's Dependencias section: "Depende de" (editable) and "Bloquea a" (read-only). */
+/** The task sheet's Dependencias section: "Depende de" (editable) and "Bloquea a" (read-only). */
 export default function TaskDependencies({
   taskId,
   projectId,

@@ -18,7 +18,7 @@ import type { PortfolioRow } from "@/lib/types/redesign";
 import type { EntityCard } from "@/lib/types/widgets";
 
 import { NewProjectDialog } from "./NewProjectDialog";
-import type { ProjectCreateAdminOptions } from "./ProjectCreateModal";
+import type { ProjectCreateAdminOptions } from "./project-create-form";
 import {
   PROJECTS_BY_TRAMO_TITLE,
   PROJECTS_TITLE,

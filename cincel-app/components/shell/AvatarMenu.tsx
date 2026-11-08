@@ -11,7 +11,6 @@ import {
   MailIcon,
   PaletteIcon,
   Trash2Icon,
-  Undo2Icon,
   UserIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,8 +27,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/shadcn/dropdown-menu";
 import { logoutAction } from "@/lib/auth/auth-actions";
-import { updateMyPreferencesAction } from "@/lib/actions/preferences-actions";
-import { IMPLEMENTED as PREFERENCES_IMPLEMENTED } from "@/lib/actions/preferences-actions.flags";
 import { removeMyPhotoAction } from "@/lib/actions/profile-photo-actions";
 import { IMPLEMENTED as PHOTO_IMPLEMENTED } from "@/lib/actions/profile-photo-actions.flags";
 import { actionErrorText } from "@/lib/errors";
@@ -75,8 +72,8 @@ const LINK_ICONS = { instagram: AtSignIcon, website: GlobeIcon, email: MailIcon 
 
 /**
  * Avatar menu of the new Sidebar user block (redesign FE §3.1, §2.3, §7.2,
- * §7.3): Perfil, Apariencia, the company contact links, photo upload / remove,
- * "Volver al diseño anterior" and "Cerrar sesión". Entry points backed by an
+ * §7.3): Perfil, Apariencia, the company contact links, photo upload / remove
+ * and "Cerrar sesión". Entry points backed by an
  * action stay hidden while its `IMPLEMENTED` flag is false.
  */
 export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
@@ -89,7 +86,6 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
   const [, startTransition] = useTransition();
 
   const showPhotoItems = PHOTO_IMPLEMENTED.removeMyPhotoAction;
-  const showGoBack = PREFERENCES_IMPLEMENTED.updateMyPreferencesAction;
   const initials = nameInitials(session.name);
 
   function applyPhoto(url: string | null) {
@@ -123,15 +119,6 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
       toast.error(actionErrorText(err, "photo"));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function handleGoBack() {
-    try {
-      await updateMyPreferencesAction({ redesignEnabled: false });
-      startTransition(() => router.refresh());
-    } catch (err) {
-      toast.error(actionErrorText(err));
     }
   }
 
@@ -210,12 +197,6 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
           ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            {showGoBack ? (
-              <DropdownMenuItem onClick={() => void handleGoBack()}>
-                <Undo2Icon aria-hidden="true" />
-                Volver al diseño anterior
-              </DropdownMenuItem>
-            ) : null}
             <DropdownMenuItem variant="destructive" onClick={() => void handleSignOut()}>
               <LogOutIcon aria-hidden="true" />
               Cerrar sesión

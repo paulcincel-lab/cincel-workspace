@@ -9,8 +9,6 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/proyectos/p1/cronograma",
 }));
 
-vi.mock("@/components/layout/Header", () => ({ default: () => <div data-testid="header" /> }));
-vi.mock("@/components/layout/Sidebar", () => ({ default: () => <div data-testid="sidebar" /> }));
 
 vi.mock("@/lib/actions/schedule-actions", () => ({
   fetchScheduleAction: vi.fn(),
@@ -88,7 +86,7 @@ describe("Proyecto · Cronograma accessibility", () => {
           applyTheme(theme, mode);
           const { container } = render(
             <StyleProvider style={style} scope="staff">
-              <CronogramaView projectId="p1" initialView={initialView} layout="redesign" contractEnd="2026-10-15" />
+              <CronogramaView projectId="p1" initialView={initialView} contractEnd="2026-10-15" />
             </StyleProvider>,
           );
           expect(await seriousViolations(container)).toEqual([]);
@@ -97,7 +95,7 @@ describe("Proyecto · Cronograma accessibility", () => {
 
       it(`report sheet, ${theme} ${mode}: no serious or critical axe violations`, async () => {
         applyTheme(theme, mode);
-        const { container } = render(<CronogramaReport data={data} asOf={new Date("2026-09-18T00:00:00")} layout="sheet" />);
+        const { container } = render(<CronogramaReport data={data} asOf={new Date("2026-09-18T00:00:00")} />);
         expect(await seriousViolations(container)).toEqual([]);
       });
 

@@ -51,9 +51,7 @@ export function e2eAdminEmail(): string {
 }
 
 /**
- * Logs in through the real login form. Waits for the landing page of either
- * shell: the legacy routes, or the redesign routes when the user's
- * `redesign_enabled` preference is on.
+ * Logs in through the real login form and waits for the landing page.
  */
 export async function loginAs(page: Page, baseUrl: string, email: string, password: string): Promise<void> {
   // "load" (not "domcontentloaded") so bundles are downloaded and React has

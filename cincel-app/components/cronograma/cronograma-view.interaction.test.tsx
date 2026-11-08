@@ -7,8 +7,6 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/proyectos/p1/cronograma",
 }));
 
-vi.mock("@/components/layout/Header", () => ({ default: () => <div data-testid="header" /> }));
-vi.mock("@/components/layout/Sidebar", () => ({ default: () => <div data-testid="sidebar" /> }));
 
 const fetchScheduleAction = vi.fn();
 const setTaskStatusAction = vi.fn();

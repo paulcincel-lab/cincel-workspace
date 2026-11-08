@@ -41,8 +41,8 @@ vi.mock("@/components/patterns/SettingsRow", () => ({
 import { AparienciaClient, toTextSize } from "./AparienciaClient";
 import { TEXT_SIZE_DEBOUNCE_MS } from "./apariencia-context";
 
-const ORG: OrgAppearance = { ...THEME_PRESETS.azul, allowUserOverride: true, redesignAvailable: true, styleDefault: "visual" };
-const PREFS: UserPreferences = { ...DEFAULT_USER_PREFERENCES, redesignEnabled: true };
+const ORG: OrgAppearance = { ...THEME_PRESETS.azul, allowUserOverride: true, styleDefault: "visual" };
+const PREFS: UserPreferences = { ...DEFAULT_USER_PREFERENCES };
 
 function renderClient(overrides: { org?: Partial<OrgAppearance>; prefs?: Partial<UserPreferences>; isAdmin?: boolean } = {}) {
   return render(
@@ -212,38 +212,9 @@ describe("AparienciaClient", () => {
     expect(toTextSize(17)).toBe(16);
   });
 
-  it("toggles the new design and refreshes the page", async () => {
+  it("has no switch back to the old design", () => {
     renderClient();
-    const toggle = screen.getByRole("switch", { name: "Probar el nuevo diseño" });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-
-    fireEvent.click(toggle);
-
-    await waitFor(() => expect(setPreference).toHaveBeenCalledWith({ redesignEnabled: false }));
-    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
-  });
-
-  it("keeps the new design switch off and disabled when the organization turned it off", () => {
-    renderClient({ org: { redesignAvailable: false } });
-    const toggle = screen.getByRole("switch", { name: "Probar el nuevo diseño" });
-
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(toggle.hasAttribute("data-disabled")).toBe(true);
-    expect(screen.getByText("El nuevo diseño no está disponible por ahora.")).toBeTruthy();
-
-    fireEvent.click(toggle);
-    expect(setPreference).not.toHaveBeenCalled();
-  });
-
-  it("does not enable the new design when the action answers DISABLED", async () => {
-    setPreference.mockRejectedValue(new Error("DISABLED"));
-    renderClient({ prefs: { redesignEnabled: false } });
-    const toggle = screen.getByRole("switch", { name: "Probar el nuevo diseño" });
-
-    fireEvent.click(toggle);
-
-    await waitFor(() => expect(screen.getAllByText("El nuevo diseño no está disponible por ahora.").length).toBeGreaterThan(0));
-    expect(screen.getByRole("switch", { name: "Probar el nuevo diseño" }).getAttribute("aria-checked")).toBe("false");
-    expect(refresh).not.toHaveBeenCalled();
+    expect(screen.queryByRole("switch", { name: /diseño/i })).toBeNull();
+    expect(screen.queryByText("Nuevo diseño")).toBeNull();
   });
 });

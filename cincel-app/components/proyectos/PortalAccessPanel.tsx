@@ -98,11 +98,6 @@ export type PortalAccessPanelProps = {
   hasClient?: boolean;
   /** Administrators get a link to the ficha to assign the client. */
   canAssignClient?: boolean;
-  /**
-   * Rendered under `ProjectTabs` in the redesigned project shell (FE §3.5):
-   * the project header owns the page title, so "Clientes" is a section heading.
-   */
-  inProjectShell?: boolean;
 };
 
 export const PORTAL_NO_CLIENT_TEXT = "Asigna un cliente al proyecto para invitarlo al portal y crear su carpeta.";
@@ -133,7 +128,6 @@ export function PortalAccessPanel({
   capabilities,
   hasClient = true,
   canAssignClient = false,
-  inProjectShell = false,
 }: PortalAccessPanelProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -229,11 +223,8 @@ export function PortalAccessPanel({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          {inProjectShell ? (
-            <h2 className="text-lg font-semibold text-foreground">Clientes</h2>
-          ) : (
-            <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
-          )}
+          {/* Under `ProjectTabs` (FE §3.5) the project header owns the page title. */}
+          <h2 className="text-lg font-semibold text-foreground">Clientes</h2>
           <p className="mt-1 text-sm text-muted-foreground">Clientes con acceso al portal para {projectName}.</p>
         </div>
         {hasClient ? <Button onClick={() => setInviteOpen(true)}>Invitar cliente</Button> : null}

@@ -2,7 +2,7 @@
 /**
  * Preferences actions (redesign BE §7.1, §8.1, §8.2, §9.2) against a real
  * Postgres: defaults without a row, persisted patches, the rewritten
- * `cincel-appearance` cookie, `OVERRIDE_DISABLED`, `DISABLED`, `INVALID` and
+ * `cincel-appearance` cookie, `OVERRIDE_DISABLED`, `INVALID` and
  * the org appearance reader. The org setting is served by a mocked
  * `getAppSetting` so the shared `appearance.theme` row is never touched. Runs
  * only when TEST_DATABASE_URL points at a migrated database; the staff row
@@ -101,14 +101,8 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
       style: null,
       density: "comoda",
       textSize: 14,
-      redesignEnabled: false,
       quietHours: null,
     });
-  });
-
-  it("a missing row follows the org redesignDefault", async () => {
-    setOrg({ redesignDefault: true });
-    expect((await fetchMyPreferencesAction()).redesignEnabled).toBe(true);
   });
 
   it("persists theme, mode, style, density and text size and rewrites the cookie", async () => {
@@ -118,7 +112,6 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
       style: "analitico",
       density: "compacta",
       textSize: 15.5,
-      redesignEnabled: true,
     });
 
     expect(result.preferences).toEqual({
@@ -127,7 +120,6 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
       style: "analitico",
       density: "compacta",
       textSize: 15.5,
-      redesignEnabled: true,
       quietHours: null,
     });
     expect(result.appearance).toMatchObject({
@@ -136,7 +128,6 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
       style: "analitico",
       density: "compacta",
       textSize: 15.5,
-      redesignEnabled: true,
       version: 3,
     });
     expect(result.appearance.cssVars.dark["--background"]).toBe(THEME_PRESETS.calido.tokens.background.dark);
@@ -152,7 +143,6 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
       style: "analitico",
       density: "compacta",
       textSize: 15.5,
-      redesignEnabled: true,
     });
     expect(await fetchMyPreferencesAction()).toEqual(result.preferences);
 
@@ -208,20 +198,13 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
     expect(appearance).toMatchObject({ theme: "azul", style: "visual" });
   });
 
-  it("throws DISABLED when turning the redesign on while it is unavailable", async () => {
-    setOrg({ redesignAvailable: false });
-    await expect(updateMyPreferencesAction({ redesignEnabled: true })).rejects.toThrow("DISABLED");
-    const { preferences, appearance } = await updateMyPreferencesAction({ redesignEnabled: false });
-    expect(preferences.redesignEnabled).toBe(false);
-    expect(appearance.redesignEnabled).toBe(false);
-  });
-
-  it("the kill switch forces the redesign off for a user who opted in", async () => {
-    await updateMyPreferencesAction({ redesignEnabled: true });
-    setOrg({ redesignAvailable: false });
-    expect((await fetchMyPreferencesAction()).redesignEnabled).toBe(false);
-    const { appearance } = await updateMyPreferencesAction({ mode: "light" });
-    expect(appearance.redesignEnabled).toBe(false);
+  it("never writes the retired redesign_enabled column", async () => {
+    await updateMyPreferencesAction({ mode: "light" });
+    const [row] = await db
+      .select()
+      .from(schema.userPreferences)
+      .where(eq(schema.userPreferences.staffId, state.staffId));
+    expect(row.retiredRedesignOptIn).toBeNull();
   });
 
   it("throws INVALID for values outside the contract", async () => {

@@ -1,15 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
-  redesignEnabled: true,
   canViewActivities: true,
   tasks: [] as Array<{ commitmentDate: string | null; status: string; customStatus: { id: string; name: string; closes: boolean; countsAsCompleted: boolean } | null }>,
   fail: false,
 }));
 
-vi.mock("@/lib/ui/preferences-server", () => ({
-  getResolvedAppearance: async () => ({ redesignEnabled: state.redesignEnabled }),
-}));
 vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: async () => ({ member: { id: "s1" }, access: "Colaborador" }),
 }));
@@ -34,7 +30,6 @@ function iso(offsetDays: number): string {
 }
 
 beforeEach(() => {
-  state.redesignEnabled = true;
   state.canViewActivities = true;
   state.tasks = [];
   state.fail = false;
@@ -80,10 +75,6 @@ describe("tareasNavItem", () => {
     expect(item?.badge).toBeUndefined();
   });
 
-  it("is absent with the redesign flag off", async () => {
-    state.redesignEnabled = false;
-    expect(await tareasNavItem.resolve(SESSION)).toBeNull();
-  });
 
   it("is absent without the activities view capability", async () => {
     state.canViewActivities = false;

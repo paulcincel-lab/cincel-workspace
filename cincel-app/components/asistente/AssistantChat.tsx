@@ -1,35 +1,27 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-  type UIMessage,
-} from "ai";
+import { lastAssistantMessageIsCompleteWithApprovalResponses, type UIMessage } from "ai";
 
 import { Button } from "@/components/ui/shadcn/button";
-import { Separator } from "@/components/ui/shadcn/separator";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { AssistantMessageParts } from "@/components/asistente/AssistantMessageParts";
 import { AssistantContextStore, createAssistantChatTransport } from "@/components/asistente/assistant-transport";
 import type { AssistantContext } from "@/lib/types/redesign";
 
 /**
- * Server-thread mode (redesign FE §3.9, used by the full `/asistente` page):
- * the thread lives in the database, the client sends `{ id, message?,
- * approvals?, context }` and never touches localStorage. Without `thread` the
- * chat keeps today's localStorage thread (flag off).
+ * Chat of the full `/asistente` page (redesign FE §3.9): the thread lives in
+ * the database and the client sends `{ id, message?, approvals?, context }`.
+ * The page renders its own header.
  */
 export type AssistantChatProps = {
-  thread?: { id: string; messages: UIMessage[] };
+  thread: { id: string; messages: UIMessage[] };
   context?: AssistantContext;
   /** A starter prompt placed in the composer without sending; a new `nonce` re-applies the same text. */
   draft?: { text: string; nonce: number };
-  /** Server mode: called after each finished turn (the page refreshes its history). */
+  /** Called after each finished turn (the page refreshes its history). */
   onTurnFinished?(threadId: string): void;
-  /** Hides the built-in title block (the page renders its own header). */
-  hideHeader?: boolean;
 };
 
 const EXAMPLE_QUESTIONS = [
@@ -41,38 +33,6 @@ const EXAMPLE_QUESTIONS = [
   "Muéstrame la ocupación por área",
 ];
 
-// The conversation is kept in localStorage so it survives a reload / navigation
-// away from /asistente. Per-browser only; capped so it can't grow unbounded.
-const THREAD_KEY = "cincel.asistente.thread.v1";
-const MAX_PERSISTED_MESSAGES = 60;
-
-function loadThread(): UIMessage[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(THREAD_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? (parsed as UIMessage[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveThread(messages: UIMessage[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (messages.length === 0) {
-      window.localStorage.removeItem(THREAD_KEY);
-      return;
-    }
-    window.localStorage.setItem(
-      THREAD_KEY,
-      JSON.stringify(messages.slice(-MAX_PERSISTED_MESSAGES))
-    );
-  } catch {
-    // private mode / quota — the chat still works, just won't persist.
-  }
-}
-
 function Spinner() {
   return (
     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -82,14 +42,11 @@ function Spinner() {
   );
 }
 
-export function AssistantChat({ thread, context, draft, onTurnFinished, hideHeader = false }: AssistantChatProps = {}) {
-  const serverThreadId = thread?.id;
+export function AssistantChat({ thread, context, draft, onTurnFinished }: AssistantChatProps) {
+  const threadId = thread.id;
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [initialMessages] = useState<UIMessage[]>(() => (thread ? thread.messages : loadThread()));
-  // How many messages came from the saved thread; they're shown under a "Conversación anterior" divider and the
-  // view opens at their top instead of jumping to the end. Reset to 0 when a new conversation starts.
-  const [restoredCount, setRestoredCount] = useState(thread ? 0 : initialMessages.length);
+  const [initialMessages] = useState<UIMessage[]>(() => thread.messages);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [contextStore] = useState(() => new AssistantContextStore(context ?? { route: "/asistente" }));
@@ -100,22 +57,12 @@ export function AssistantChat({ thread, context, draft, onTurnFinished, hideHead
     onTurnFinishedRef.current = onTurnFinished;
   }, [context, onTurnFinished, contextStore]);
 
-  const transport = useMemo(
-    () =>
-      serverThreadId
-        ? createAssistantChatTransport("/api/asistente/chat", contextStore)
-        : new DefaultChatTransport<UIMessage>({ api: "/api/asistente/chat" }),
-    [serverThreadId, contextStore],
-  );
+  const transport = useMemo(() => createAssistantChatTransport("/api/asistente/chat", contextStore), [contextStore]);
 
-  const { messages, sendMessage, status, setMessages, addToolApprovalResponse } = useChat({
-    ...(serverThreadId
-      ? {
-          id: serverThreadId,
-          sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-          onFinish: () => onTurnFinishedRef.current?.(serverThreadId),
-        }
-      : {}),
+  const { messages, sendMessage, status, addToolApprovalResponse } = useChat({
+    id: threadId,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    onFinish: () => onTurnFinishedRef.current?.(threadId),
     transport,
     messages: initialMessages,
     onError: (err) => {
@@ -129,16 +76,8 @@ export function AssistantChat({ thread, context, draft, onTurnFinished, hideHead
   const isBusy = status === "submitted" || status === "streaming";
 
   useEffect(() => {
-    // A restored thread opens at its top; only follow the end once the user adds to it.
-    if (messages.length <= restoredCount && status === "ready") return;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, status, restoredCount]);
-
-  // Persist the conversation as it changes so it survives a reload (legacy mode only; server threads persist on the server).
-  useEffect(() => {
-    if (serverThreadId) return;
-    saveThread(messages);
-  }, [messages, serverThreadId]);
+  }, [messages, status]);
 
   // A starter prompt from the page goes into the composer; it is never sent on its own.
   const [appliedDraft, setAppliedDraft] = useState<AssistantChatProps["draft"]>(undefined);
@@ -175,37 +114,8 @@ export function AssistantChat({ thread, context, draft, onTurnFinished, hideHead
     requestAnimationFrame(resizeTextarea);
   };
 
-  const clearConversation = () => {
-    setMessages([]);
-    setRestoredCount(0);
-    setError(null);
-    saveThread([]);
-  };
-
   return (
     <div className="flex h-full w-full flex-col gap-4">
-      {hideHeader ? null : (
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Asistente</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Pregunta sobre proyectos en riesgo, entregas próximas y carga del equipo.
-          </p>
-        </div>
-        {messages.length > 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-auto shrink-0 px-3 py-1.5"
-            onClick={clearConversation}
-            disabled={isBusy}
-          >
-            Nueva conversación
-          </Button>
-        ) : null}
-      </div>
-      )}
-
       {error ? (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
@@ -236,40 +146,16 @@ export function AssistantChat({ thread, context, draft, onTurnFinished, hideHead
           </div>
         ) : null}
 
-        {restoredCount > 0 && messages.length > 0 ? (
-          <div className="flex items-center gap-3">
-            <Separator className="flex-1" />
-            <span className="shrink-0 text-xs text-muted-foreground">Conversación anterior</span>
-            <Separator className="flex-1" />
-          </div>
-        ) : null}
-
-        {messages.map((message, messageIndex) => (
-          <Fragment key={message.id}>
-          {restoredCount > 0 && messageIndex === restoredCount ? (
-            <div className="flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="shrink-0 text-xs text-muted-foreground">Nuevos mensajes</span>
-              <Separator className="flex-1" />
-            </div>
-          ) : null}
+        {messages.map((message) => (
           <div
-            className={
-              message.role === "user"
-                ? "flex justify-end"
-                : "flex flex-col items-start gap-2"
-            }
+            key={message.id}
+            className={message.role === "user" ? "flex justify-end" : "flex flex-col items-start gap-2"}
           >
             <AssistantMessageParts
               message={message}
-              onToolApproval={
-                serverThreadId
-                  ? (approvalId, approved) => addToolApprovalResponse({ id: approvalId, approved })
-                  : undefined
-              }
+              onToolApproval={(approvalId, approved) => addToolApprovalResponse({ id: approvalId, approved })}
             />
           </div>
-          </Fragment>
         ))}
 
         {status === "submitted" ? (
@@ -304,7 +190,7 @@ export function AssistantChat({ thread, context, draft, onTurnFinished, hideHead
             }
           }}
           rows={1}
-          aria-label={serverThreadId ? "Mensaje al asistente" : undefined}
+          aria-label="Mensaje al asistente"
           placeholder="Escribe tu pregunta…  (Shift+Enter para salto de línea)"
           disabled={isBusy}
           className="max-h-40 min-h-[2.75rem] flex-1 resize-none py-2 leading-6"

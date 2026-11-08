@@ -24,16 +24,13 @@ import {
   resolveAppearance,
   serializeAppearanceCookie,
 } from "@/lib/ui/preferences";
-import { StoredOrgAppearanceSchema } from "@/lib/validation/redesign";
+import { StoredOrgAppearanceSchema, withoutRetiredOrgAppearanceKeys } from "@/lib/validation/redesign";
 
 /** `app_settings` key of the org appearance (BE §3.12). */
 export const ORG_APPEARANCE_SETTING_KEY = "appearance.theme";
 
 /** The Azul preset at version 1: what a missing or unreadable `appearance.theme` means. */
 export const DEFAULT_STORED_ORG_APPEARANCE: StoredOrgAppearance = { ...DEFAULT_ORG_APPEARANCE, v: 1 };
-
-/** Resolver input: `UserPreferences` with the stored, nullable `redesignEnabled`. */
-export type StoredUserPreferences = Omit<UserPreferences, "redesignEnabled"> & { redesignEnabled: boolean | null };
 
 /**
  * Parses the stored `{ version: 1, data }` JSON of `appearance.theme`; null
@@ -48,13 +45,13 @@ export function parseStoredOrgAppearance(raw: string | null): StoredOrgAppearanc
     return null;
   }
   if (!json || typeof json !== "object" || (json as { version?: unknown }).version !== 1) return null;
-  const parsed = StoredOrgAppearanceSchema.safeParse((json as { data?: unknown }).data);
+  const parsed = StoredOrgAppearanceSchema.safeParse(withoutRetiredOrgAppearanceKeys((json as { data?: unknown }).data));
   return parsed.success ? parsed.data : null;
 }
 
 /**
  * The stored org appearance with its version `v` (per-request cache). On a
- * DB error logs and returns the Azul preset, like `getPrimaryColor`.
+ * DB error logs and returns the Azul preset.
  */
 export const getStoredOrgAppearance = cache(async (): Promise<StoredOrgAppearance> => {
   try {
@@ -78,7 +75,7 @@ function hourMinute(value: string): string {
 }
 
 /** A stored row as the resolver input; null for no row (= all defaults). */
-export function rowToResolverInput(row: UserPreferencesRow | null): StoredUserPreferences | null {
+export function rowToResolverInput(row: UserPreferencesRow | null): UserPreferences | null {
   if (!row) return null;
   return {
     theme: row.theme,
@@ -86,20 +83,14 @@ export function rowToResolverInput(row: UserPreferencesRow | null): StoredUserPr
     style: row.style,
     density: row.density,
     textSize: Number(row.textSize) as TextSize,
-    redesignEnabled: row.redesignEnabled,
     quietHours:
       row.quietFrom && row.quietTo ? { from: hourMinute(row.quietFrom), to: hourMinute(row.quietTo) } : null,
   };
 }
 
-/**
- * A stored row as `UserPreferences`: defaults when there is no row, and the
- * nullable `redesignEnabled` resolved to the canonical boolean (BE §3.3, §8.1).
- */
-export function rowToUserPreferences(row: UserPreferencesRow | null, org: OrgAppearance): UserPreferences {
-  const input = rowToResolverInput(row);
-  const redesignEnabled = org.redesignAvailable && (input?.redesignEnabled ?? org.redesignDefault);
-  return input ? { ...input, redesignEnabled } : { ...DEFAULT_USER_PREFERENCES, redesignEnabled };
+/** A stored row as `UserPreferences`: defaults when there is no row (BE §3.3, §8.1). */
+export function rowToUserPreferences(row: UserPreferencesRow | null): UserPreferences {
+  return rowToResolverInput(row) ?? { ...DEFAULT_USER_PREFERENCES };
 }
 
 /** The `cincel-appearance` cookie of this request; null when missing, invalid or of another org version. */
@@ -145,8 +136,7 @@ export async function writeAppearanceCookieForStaff(staffId: string): Promise<vo
  * `appearance.theme` (per-request cache) and the caller's preferences row.
  * The DB is the source of truth; the cookie (`readAppearanceCookie`) is a
  * hint that is ignored when its `v` differs. Guests resolve with no row. On
- * DB errors logs and returns the Azul defaults (flag off), like
- * `getPrimaryColor`.
+ * DB errors logs and returns the Azul defaults.
  */
 export const getResolvedAppearance = cache(async (): Promise<ResolvedAppearance> => {
   const org = await getStoredOrgAppearance();

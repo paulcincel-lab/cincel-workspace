@@ -47,7 +47,7 @@ export async function saveOrgAppearanceAction(input: OrgAppearance): Promise<Org
 
 /**
  * Reset tokens, type scale and shape to the `base` preset, keeping the style
- * and flag settings. Auth: `canManageAppearance`. Errors: `FORBIDDEN`.
+ * settings. Auth: `canManageAppearance`. Errors: `FORBIDDEN`.
  */
 export async function resetOrgAppearanceAction(base: ThemeId): Promise<OrgAppearance> {
   const user = await requireCapabilityUser();
@@ -59,8 +59,6 @@ export async function resetOrgAppearanceAction(base: ThemeId): Promise<OrgAppear
       ...structuredClone(THEME_PRESETS[theme]),
       styleDefault: kept.styleDefault,
       allowUserOverride: kept.allowUserOverride,
-      redesignDefault: kept.redesignDefault,
-      redesignAvailable: kept.redesignAvailable,
     };
   });
   revalidatePath("/", "layout");

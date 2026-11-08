@@ -15,7 +15,7 @@ type ChecklistItemRowProps = {
 
 /**
  * One checklist point: checkbox + text, struck through when done. Shared by
- * the task checklist (`TaskDrawer`) and Mi espacio's `ChecklistCard`.
+ * the task checklist (`TaskSheet`) and Mi espacio's `ChecklistCard`.
  */
 export function ChecklistItemRow({ label, checked, onToggle, disabled }: ChecklistItemRowProps) {
   const id = useId();

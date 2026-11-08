@@ -17,8 +17,11 @@ export const userPreferences = core.table(
     style: presentationStyle("style"),
     density: density("density").notNull().default("comoda"),
     textSize: numeric("text_size", { precision: 3, scale: 1, mode: "number" }).notNull().default(14),
-    /** null = org `redesignDefault`; resolved to a boolean by `resolveAppearance` (§8.1). */
-    redesignEnabled: boolean("redesign_enabled"),
+    /**
+     * The retired per-user redesign opt-in. Nothing reads or writes it since the
+     * cleanup phase; the column stays (no migration drops it).
+     */
+    retiredRedesignOptIn: boolean("redesign_enabled"),
     /** Quiet hours: both null or both set. */
     quietFrom: time("quiet_from"),
     quietTo: time("quiet_to"),

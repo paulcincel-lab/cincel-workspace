@@ -21,8 +21,7 @@ import { parseInput, UserPreferencesPatchSchema } from "@/lib/validation/redesig
 /** The caller's preferences; defaults when no row exists. Auth: staff. */
 export async function fetchMyPreferencesAction(): Promise<UserPreferences> {
   const user = await requireCapabilityUser();
-  const [org, row] = await Promise.all([getStoredOrgAppearance(), findUserPreferences(db, user.member.id)]);
-  return rowToUserPreferences(row, org);
+  return rowToUserPreferences(await findUserPreferences(db, user.member.id));
 }
 
 /**
@@ -30,7 +29,7 @@ export async function fetchMyPreferencesAction(): Promise<UserPreferences> {
  * `cincel-appearance` cookie and return the resolved appearance so the client
  * applies it without a round-trip. No revalidation.
  * Errors: `INVALID`, `OVERRIDE_DISABLED` (theme or style while the org fixed
- * them), `DISABLED` (`redesignEnabled: true` while `redesignAvailable` is off).
+ * them).
  */
 export async function updateMyPreferencesAction(
   patch: Partial<UserPreferences>,
@@ -42,9 +41,6 @@ export async function updateMyPreferencesAction(
   if (!org.allowUserOverride && (input.theme != null || input.style != null)) {
     throw new Error("OVERRIDE_DISABLED");
   }
-  if (input.redesignEnabled === true && !org.redesignAvailable) {
-    throw new Error("DISABLED");
-  }
 
   const values: Parameters<typeof upsertUserPreferences>[2] = {};
   if (input.theme !== undefined) values.theme = input.theme;
@@ -52,7 +48,6 @@ export async function updateMyPreferencesAction(
   if (input.style !== undefined) values.style = input.style;
   if (input.density !== undefined) values.density = input.density;
   if (input.textSize !== undefined) values.textSize = input.textSize;
-  if (input.redesignEnabled !== undefined) values.redesignEnabled = input.redesignEnabled;
   if (input.quietHours !== undefined) {
     values.quietFrom = input.quietHours?.from ?? null;
     values.quietTo = input.quietHours?.to ?? null;
@@ -61,5 +56,5 @@ export async function updateMyPreferencesAction(
   const row = await upsertUserPreferences(db, user.member.id, values);
   const appearance = resolveAppearance(org, rowToResolverInput(row));
   await writeAppearanceCookie(appearance);
-  return { preferences: rowToUserPreferences(row, org), appearance };
+  return { preferences: rowToUserPreferences(row), appearance };
 }

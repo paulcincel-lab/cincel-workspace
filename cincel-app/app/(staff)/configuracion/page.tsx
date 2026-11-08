@@ -1,8 +1,7 @@
-import { redirect } from "next/navigation";
 import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
-import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
+import { redirectLegacy } from "@/lib/ui/legacy-redirects-server";
 
+/** Old route (FE §2.2): redirects to its redesign page, query string preserved. */
 export default async function ConfiguracionPage({ searchParams }: LegacyPageProps) {
-  await redirectLegacyIfRedesignOn("/configuracion", searchParams);
-  redirect("/configuracion/permisos");
+  return redirectLegacy("/configuracion", searchParams);
 }

@@ -1,7 +1,7 @@
 /**
  * Org appearance writes (redesign BE §7.1, §8.2): guards, the contrast gate,
  * the `LOW_CONTRAST` message format, version bump and revalidation, and reset
- * keeping the style / override / redesign settings. Also: every preset passes
+ * keeping the style / override settings. Also: every preset passes
  * `checkContrast` in all six theme × mode combos.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -126,15 +126,13 @@ describe("resetOrgAppearanceAction", () => {
     expect(repo.writeOrgAppearance).not.toHaveBeenCalled();
   });
 
-  it("replaces tokens, type scale and shape with the preset and keeps the style and flag settings", async () => {
+  it("replaces tokens, type scale and shape with the preset and keeps the style settings", async () => {
     const customized = clone("azul");
     customized.tokens.primary.light = "#1d4ed8";
     customized.typeScale.pageTitle = { size: 30, weight: 500 };
     customized.shape = { radius: 4, cardPadding: 12, gap: 8, shadow: "marcada" };
     customized.styleDefault = "esencial";
     customized.allowUserOverride = false;
-    customized.redesignDefault = true;
-    customized.redesignAvailable = false;
     store.value = { ...customized, v: 5 };
 
     const result = await resetOrgAppearanceAction("calido");
@@ -147,8 +145,6 @@ describe("resetOrgAppearanceAction", () => {
     expect(result).toMatchObject({
       styleDefault: "esencial",
       allowUserOverride: false,
-      redesignDefault: true,
-      redesignAvailable: false,
     });
     expect(store.value).toEqual({ ...result, v: 6 });
     expect(revalidatePath).toHaveBeenCalledWith("/", "layout");

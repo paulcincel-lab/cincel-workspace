@@ -14,7 +14,6 @@ const redirect = vi.hoisted(() =>
 );
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
-const appearance = vi.hoisted(() => ({ redesignEnabled: false }));
 const completeFirstAccessAction = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
@@ -26,9 +25,6 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 vi.mock("@/lib/auth/auth-actions", () => ({
   completeFirstAccessAction,
-}));
-vi.mock("@/lib/auth/auth-appearance", () => ({
-  isAuthRedesignOn: async () => appearance.redesignEnabled,
 }));
 
 import ChangePasswordPage from "./page";
@@ -46,7 +42,6 @@ describe("/change-password", () => {
     router.replace.mockClear();
     router.refresh.mockClear();
     completeFirstAccessAction.mockReset();
-    appearance.redesignEnabled = false;
   });
 
   afterEach(() => {
@@ -103,42 +98,26 @@ describe("/change-password", () => {
     },
   );
 
-  describe("redesign flag", () => {
-    beforeEach(() => {
-      setPasswordFlag(undefined);
-      session.value = {
-        status: "pending_first_access",
-        user: { id: "staff-1" },
-      } as SessionAccess;
-    });
-
-    it("renders the legacy form exactly as today with the flag off", async () => {
-      appearance.redesignEnabled = false;
-      render(await ChangePasswordPage());
-      expect(screen.queryByTestId("auth-split-layout")).toBeNull();
-      expect(screen.getByRole("heading", { name: "Define tu nueva contraseña" })).not.toBeNull();
-      expect(screen.getByText("Regresar a Login")).not.toBeNull();
-    });
-
-    it("renders the split layout with the redesigned card with the flag on", async () => {
-      appearance.redesignEnabled = true;
-      render(await ChangePasswordPage());
-      expect(screen.getByTestId("auth-split-layout")).not.toBeNull();
-      expect(screen.getByRole("heading", { name: "Cambia tu contraseña" })).not.toBeNull();
-      expect(screen.getByLabelText("Contraseña nueva")).not.toBeNull();
-      expect(screen.getByLabelText("Confirmar contraseña nueva")).not.toBeNull();
-      expect(screen.getByRole("button", { name: "Guardar y continuar" })).not.toBeNull();
-      expect(screen.queryByRole("heading", { name: "Define tu nueva contraseña" })).toBeNull();
-    });
+  it("renders the split layout with the change-password card", async () => {
+    setPasswordFlag(undefined);
+    session.value = {
+      status: "pending_first_access",
+      user: { id: "staff-1" },
+    } as SessionAccess;
+    render(await ChangePasswordPage());
+    expect(screen.getByTestId("auth-split-layout")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Cambia tu contraseña" })).not.toBeNull();
+    expect(screen.getByLabelText("Contraseña nueva")).not.toBeNull();
+    expect(screen.getByLabelText("Confirmar contraseña nueva")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Guardar y continuar" })).not.toBeNull();
   });
 
-  describe.each([
-    ["legacy", false, "Nueva contraseña", "Confirmar nueva contraseña"],
-    ["redesign", true, "Contraseña nueva", "Confirmar contraseña nueva"],
-  ] as const)("%s form submit", (_name, flag, nextLabel, confirmLabel) => {
+  describe("form submit", () => {
+    const nextLabel = "Contraseña nueva";
+    const confirmLabel = "Confirmar contraseña nueva";
+
     beforeEach(() => {
       setPasswordFlag(undefined);
-      appearance.redesignEnabled = flag;
       session.value = {
         status: "pending_first_access",
         user: { id: "staff-1" },

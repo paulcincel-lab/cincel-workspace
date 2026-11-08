@@ -1,7 +1,6 @@
 /**
  * Nav item "Personas" (/personas) of the new shell (redesign FE §3.1, §21.1; Phase 4).
- * `resolve` returns the item, or null while it stays hidden: the redesign is
- * off for the viewer, `fetchPeopleOverviewAction` is not implemented yet
+ * `resolve` returns the item, or null while it stays hidden: `fetchPeopleOverviewAction` is not implemented yet
  * (`people-actions.flags.ts`), or the viewer can see neither Equipo
  * (`team.canViewTeam`) nor the directory (`clients.canViewClients`).
  */
@@ -10,7 +9,6 @@ import { Users } from "lucide-react";
 import { IMPLEMENTED } from "@/lib/actions/people-actions.flags";
 import { resolveClientsCapabilities, resolveTeamCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { getResolvedAppearance } from "@/lib/ui/preferences-server";
 import type { NavItemSource } from "@/lib/ui/nav";
 
 export const personasNavItem: NavItemSource = {
@@ -19,8 +17,6 @@ export const personasNavItem: NavItemSource = {
   order: 50,
   resolve: async () => {
     if (!IMPLEMENTED.fetchPeopleOverviewAction) return null;
-    const appearance = await getResolvedAppearance();
-    if (!appearance.redesignEnabled) return null;
     const user = await requireCapabilityUser().catch(() => null);
     if (!user) return null;
     if (resolveTeamCapabilities(user).canViewTeam) {

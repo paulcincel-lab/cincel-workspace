@@ -19,7 +19,6 @@ test.describe("Estados — página no encontrada", () => {
     await expect(page.getByRole("heading", { level: 1, name: "No encontramos esta página" })).toBeVisible();
     const home = page.getByRole("link", { name: "Volver a Inicio" });
     await expect(home).toBeVisible();
-    // The redesign is off by default, so the way back is the legacy home.
-    await expect(home).toHaveAttribute("href", /^\/(inicio|dashboard)$/);
+    await expect(home).toHaveAttribute("href", "/inicio");
   });
 });

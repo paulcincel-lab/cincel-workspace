@@ -19,7 +19,6 @@ import {
   resetAdminPreferences,
   restoreSettingRaw,
   setAppearanceFor,
-  setRedesignFor,
   signedInContext,
   withDb,
   type E2EUser,
@@ -48,9 +47,7 @@ test.describe("Ajustes — accesibilidad en los tres temas", () => {
 
   test.beforeAll(async () => {
     snapshot = await readSettingRaw(SETTINGS_KEY);
-    await setRedesignFor(ADMIN_EMAIL, true);
     worker = await createStaffUser({ tag: "Axe", role: "Colaborador" });
-    await setRedesignFor(worker.email, true);
   });
 
   test.afterAll(async () => {

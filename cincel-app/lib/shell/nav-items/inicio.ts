@@ -2,8 +2,7 @@
  * Nav item "Inicio" (/inicio) of the new shell (redesign FE §3.1, §21.1; Phase 3).
  * `resolve` returns the item, or null while it stays hidden: until
  * `fetchInicioAction` is implemented (`IMPLEMENTED` in
- * `lib/actions/dashboard-actions.flags.ts`). The nav model is built only for
- * the new shell, so the item never shows with the redesign flag off.
+ * `lib/actions/dashboard-actions.flags.ts`).
  */
 import { House } from "lucide-react";
 

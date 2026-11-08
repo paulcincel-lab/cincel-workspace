@@ -56,8 +56,8 @@ function staffLabel(member: StaffOption): string {
 }
 
 /**
- * New task dialog (redesign FE §3.4, frame `NuevaTarea`): extends
- * `NewTaskModal` on `FormDialog`. Título, Proyecto, Tramo, Fase (the tramo's
+ * New task dialog (redesign FE §3.4, frame `NuevaTarea`),
+ * on `FormDialog`. Título, Proyecto, Tramo, Fase (the tramo's
  * catalog; hidden when it has none), Responsable, Fecha de entrega, Prioridad,
  * Descripción and Subtareas ("Usar plantilla del tramo"). "Crear tarea" calls
  * `createUserTaskAction`, then `createSubtaskAction` per subtarea, and

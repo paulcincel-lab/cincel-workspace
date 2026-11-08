@@ -13,7 +13,7 @@ import * as onboardingRepository from "@/lib/repositories/onboarding-repository"
 
 export type FirstLoginState = {
   wizard: FirstLoginWizard | null;
-  /** Where the dashboard redirects; null when there is no wizard or its page isn't built. */
+  /** Where Inicio redirects; null when there is no wizard or its page isn't built. */
   route: string | null;
   /** Dashboard banner: the bootstrap admin skipped the Google wizard and no group is mapped yet. */
   showGoogleSetupBanner: boolean;
@@ -37,7 +37,7 @@ export async function getFirstLoginState(): Promise<FirstLoginState> {
   if (wizard) return { wizard, route: firstLoginWizardRoute(wizard), showGoogleSetupBanner: false };
 
   const bannerInput = { email: user.email, access: user.access, onboardingCompletedAt };
-  // Count only when every other condition holds, so most dashboards skip the query.
+  // Count only when every other condition holds, so most Inicio loads skip the query.
   if (!shouldShowGoogleSetupBanner({ ...bannerInput, groupMappingCount: 0 })) return NONE;
   const groupMappingCount = await onboardingRepository.countGroupMappings();
   return { ...NONE, showGoogleSetupBanner: shouldShowGoogleSetupBanner({ ...bannerInput, groupMappingCount }) };

@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
     importLegacyAssistantThreadAction: true,
     fetchAssistantActionsAction: true,
   } as Record<string, boolean>,
-  redesignEnabled: true,
   replace: vi.fn(),
   redirect: vi.fn((to: string) => {
     throw new Error(`NEXT_REDIRECT:${to}`);
@@ -29,22 +28,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
+  },
   redirect: mocks.redirect,
   useRouter: () => ({ replace: mocks.replace, push: vi.fn(), refresh: vi.fn() }),
 }));
 vi.mock("@/lib/auth/session", () => ({ getSession: mocks.getSession }));
-vi.mock("@/lib/ui/preferences-server", () => ({
-  getResolvedAppearance: async () => ({
-    theme: "azul",
-    mode: "light",
-    style: "visual",
-    density: "comoda",
-    textSize: 14,
-    redesignEnabled: mocks.redesignEnabled,
-    cssVars: { light: {}, dark: {} },
-    version: 1,
-  }),
-}));
 vi.mock("@/lib/actions/assistant-actions.flags", () => ({ IMPLEMENTED: mocks.flags }));
 vi.mock("@/lib/actions/assistant-actions", () => ({
   fetchAssistantThreadsAction: mocks.fetchThreads,
@@ -53,8 +43,6 @@ vi.mock("@/lib/actions/assistant-actions", () => ({
   importLegacyAssistantThreadAction: mocks.importLegacy,
   fetchAssistantActionsAction: vi.fn(async () => []),
 }));
-vi.mock("@/components/layout/Sidebar", () => ({ default: () => <nav aria-label="Menú anterior">Menú anterior</nav> }));
-vi.mock("@/components/layout/Header", () => ({ default: () => <header>Encabezado anterior</header> }));
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn() } }));
 // useChat is replaced by a local state holder so the tests never hit the network.
 vi.mock("@ai-sdk/react", () => ({
@@ -68,7 +56,6 @@ vi.mock("@ai-sdk/react", () => ({
 import AsistentePage from "../page";
 import { AsistentePageClient } from "@/components/asistente/AsistentePageClient";
 import { asistenteNavItem } from "@/lib/shell/nav-items/asistente";
-import { LEGACY_THREAD_KEY } from "@/lib/assistant/legacy-import";
 
 // Thursday 5 Nov 2026, noon local time.
 const NOW = new Date(2026, 10, 5, 12, 0, 0);
@@ -100,7 +87,6 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   window.localStorage.clear();
   for (const key of Object.keys(mocks.flags)) mocks.flags[key] = true;
-  mocks.redesignEnabled = true;
   mocks.getSession.mockResolvedValue({ user: { id: "u1" } });
   mocks.fetchThreads.mockResolvedValue(THREADS);
   mocks.fetchThread.mockImplementation(async (id: string) => {
@@ -235,38 +221,16 @@ describe("/asistente Herramientas panel", () => {
   });
 });
 
-describe("/asistente flag and stubs", () => {
-  it("with the redesign off renders today's page: legacy shell and the localStorage chat", async () => {
-    mocks.redesignEnabled = false;
-    window.localStorage.setItem(LEGACY_THREAD_KEY, JSON.stringify([textMessage("m1", "user", "Hola de antes")]));
-
-    await renderPage({ thread: "t-hoy" });
-
-    expect(screen.getByRole("navigation", { name: "Menú anterior" })).toBeTruthy();
-    expect(screen.getByText("Encabezado anterior")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Asistente", level: 1 })).toBeTruthy();
-    expect(screen.getByText("Conversación anterior")).toBeTruthy();
-    expect(screen.getByText("Hola de antes")).toBeTruthy();
-    expect(screen.queryByRole("complementary", { name: "Herramientas" })).toBeNull();
-    expect(mocks.fetchThreads).not.toHaveBeenCalled();
-    expect(mocks.fetchThread).not.toHaveBeenCalled();
-    expect(mocks.importLegacy).not.toHaveBeenCalled();
-    expect(window.localStorage.getItem(LEGACY_THREAD_KEY)).not.toBeNull();
-  });
-
+describe("/asistente session and stubs", () => {
   it("redirects to /login without a session", async () => {
     mocks.getSession.mockResolvedValue(null);
     await expect(AsistentePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT:/login");
   });
 
-  it("while the assistant-actions flags are false the new shell shows the current chat and no history", async () => {
+  it("is a 404 while any assistant-actions flag is false", async () => {
     mocks.flags.fetchAssistantThreadsAction = false;
 
-    await renderPage();
-
-    expect(screen.queryByRole("complementary", { name: "Conversaciones" })).toBeNull();
-    expect(screen.queryByRole("complementary", { name: "Herramientas" })).toBeNull();
-    expect(screen.queryByRole("navigation", { name: "Menú anterior" })).toBeNull();
+    await expect(AsistentePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_NOT_FOUND");
     expect(mocks.fetchThreads).not.toHaveBeenCalled();
   });
 
@@ -280,30 +244,21 @@ describe("/asistente flag and stubs", () => {
   });
 });
 
-describe("/asistente legacy thread import", () => {
-  it("imports the localStorage thread once and deletes the key after success", async () => {
-    window.localStorage.setItem(LEGACY_THREAD_KEY, JSON.stringify([textMessage("m1", "user", "Hola de antes")]));
+describe("/asistente and the retired browser thread", () => {
+  it("never reads cincel.asistente.thread.v1 nor imports it", async () => {
+    window.localStorage.setItem("cincel.asistente.thread.v1", JSON.stringify([textMessage("m1", "user", "Hola de antes")]));
+    const getItem = vi.spyOn(Storage.prototype, "getItem");
 
     render(
       <StrictMode>
         <AsistentePageClient threads={THREADS} initialThread={null} />
       </StrictMode>,
     );
-
-    await waitFor(() => expect(window.localStorage.getItem(LEGACY_THREAD_KEY)).toBeNull());
-    expect(mocks.importLegacy).toHaveBeenCalledTimes(1);
-    expect(mocks.importLegacy.mock.calls[0][0]).toEqual([textMessage("m1", "user", "Hola de antes")]);
-    await waitFor(() => expect(mocks.fetchThreads).toHaveBeenCalled());
-  });
-
-  it("keeps the key when the import fails", async () => {
-    window.localStorage.setItem(LEGACY_THREAD_KEY, JSON.stringify([textMessage("m1", "user", "Hola de antes")]));
-    mocks.importLegacy.mockRejectedValueOnce(new Error("INVALID"));
-
-    render(<AsistentePageClient threads={THREADS} initialThread={null} />);
-
-    await waitFor(() => expect(mocks.importLegacy).toHaveBeenCalledTimes(1));
     await act(async () => {});
-    expect(window.localStorage.getItem(LEGACY_THREAD_KEY)).not.toBeNull();
+
+    expect(getItem.mock.calls.map(([key]) => key)).not.toContain("cincel.asistente.thread.v1");
+    expect(mocks.importLegacy).not.toHaveBeenCalled();
+    expect(screen.queryByText("Hola de antes")).toBeNull();
+    getItem.mockRestore();
   });
 });

@@ -1,15 +1,9 @@
 /**
- * Legacy localStorage thread import (redesign BE §7.9, §8.10). Pure: turns
- * the old `cincel.asistente.thread.v1` messages into rows for a new server
- * thread. Tool parts are kept for display only: every tool part ends in a
- * final state, so nothing imported can be resumed, approved or executed.
- *
- * Also the client side of the one-time move (redesign FE §3.9, RD-12): read
- * the key, call `importLegacyAssistantThreadAction(messages)` once (no model
- * call) and delete the key only after the import succeeds. A failed import
- * keeps the key, so the next page load tries again. Client-safe.
+ * Imported thread normalization (redesign BE §7.9, §8.10). Pure: turns
+ * previously saved chat messages into rows for a new server thread. Tool
+ * parts are kept for display only: every tool part ends in a final state, so
+ * nothing imported can be resumed, approved or executed. Client-safe.
  */
-import type { UIMessage } from "ai";
 
 /** Max messages accepted by `importLegacyAssistantThreadAction`. */
 export const LEGACY_IMPORT_MAX_MESSAGES = 200;
@@ -87,77 +81,4 @@ export function titleFromMessages(rows: ImportedMessageRow[]): string {
     if (text) return text.length > TITLE_MAX ? `${text.slice(0, TITLE_MAX - 1).trimEnd()}…` : text;
   }
   return DEFAULT_TITLE;
-}
-
-export const LEGACY_THREAD_KEY = "cincel.asistente.thread.v1";
-
-type LegacyStorage = Pick<Storage, "getItem" | "removeItem">;
-
-export type LegacyImportResult =
-  | { status: "none" }
-  | { status: "imported"; id: string }
-  | { status: "failed"; error: unknown };
-
-function isMessage(value: unknown): value is UIMessage {
-  if (!value || typeof value !== "object") return false;
-  const m = value as { id?: unknown; role?: unknown; parts?: unknown };
-  return (
-    typeof m.id === "string" &&
-    (m.role === "user" || m.role === "assistant" || m.role === "system") &&
-    Array.isArray(m.parts)
-  );
-}
-
-/** The saved legacy messages (last 200), or null when there is nothing usable to import. */
-export function readLegacyThread(storage: LegacyStorage | null | undefined): UIMessage[] | null {
-  if (!storage) return null;
-  let raw: string | null;
-  try {
-    raw = storage.getItem(LEGACY_THREAD_KEY);
-  } catch {
-    return null;
-  }
-  if (!raw) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(parsed)) return null;
-  const messages = parsed.filter(isMessage).slice(-LEGACY_IMPORT_MAX_MESSAGES);
-  return messages.length > 0 ? messages : null;
-}
-
-let inFlight: Promise<LegacyImportResult> | null = null;
-
-/**
- * Imports the legacy thread at most once per page load: concurrent calls (a
- * double-mounted effect) share the same request, and after a success the key
- * is gone so later calls find nothing to do.
- */
-export function importLegacyThreadOnce(input: {
-  storage: LegacyStorage | null | undefined;
-  importThread(messages: UIMessage[]): Promise<{ id: string }>;
-}): Promise<LegacyImportResult> {
-  if (inFlight) return inFlight;
-  const messages = readLegacyThread(input.storage);
-  if (!messages) return Promise.resolve({ status: "none" });
-
-  inFlight = (async (): Promise<LegacyImportResult> => {
-    try {
-      const { id } = await input.importThread(messages);
-      try {
-        input.storage?.removeItem(LEGACY_THREAD_KEY);
-      } catch {
-        // Storage became unavailable after the import; nothing else to do here.
-      }
-      return { status: "imported", id };
-    } catch (error) {
-      return { status: "failed", error };
-    } finally {
-      inFlight = null;
-    }
-  })();
-  return inFlight;
 }

@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { canViewResourceSection } from "@/lib/auth/permissions";
 import { documentToc, empresaDoc, empresaDocLinks, pickDocumentPart } from "@/lib/biblioteca/catalog";
 import { loadBibliotecaData } from "@/lib/biblioteca/load";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -24,7 +23,6 @@ export default async function BibliotecaDocumentoPage({
   searchParams: Promise<SearchParams>;
 }) {
   const [{ doc: slug }, sp] = await Promise.all([params, searchParams]);
-  await redirectIfRedesignOff(`/biblioteca/empresa/${slug}`, sp);
 
   const doc = empresaDoc(slug);
   if (!doc) notFound();

@@ -81,7 +81,7 @@ describe("resolveFirstLoginWizard", () => {
 
 describe("firstLoginWizardRoute", () => {
   it("maps a wizard to its page and null to null", () => {
-    expect(firstLoginWizardRoute("google_groups")).toBe("/configuracion/google/primeros-pasos");
+    expect(firstLoginWizardRoute("google_groups")).toBe("/ajustes/google/primeros-pasos");
     expect(firstLoginWizardRoute(null)).toBeNull();
     expect(firstLoginWizardRoute("monday_import")).toBe(FIRST_LOGIN_WIZARD_ROUTES.monday_import);
   });

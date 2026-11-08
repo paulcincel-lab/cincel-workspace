@@ -3,14 +3,18 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { describe, expect, it } from "vitest";
 
+import { THEME_PRESETS } from "@/lib/ui/themes";
+
 const css = readFileSync(resolve(__dirname, "../../../app/globals.css"), "utf8");
 const componentSrc = readFileSync(
   resolve(__dirname, "../../../components/asistente/AssistantChartMessage.tsx"),
   "utf8",
 );
 
-const LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#6250d6"];
-const DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#9085e9"];
+/** The `globals.css` fallback is the Azul preset (BE §16). */
+const CHART = [1, 2, 3, 4, 5].map((n) => THEME_PRESETS.azul.tokens[`chart-${n}` as `chart-${1 | 2 | 3 | 4 | 5}`]);
+const LIGHT = CHART.map((token) => token.light.toLowerCase());
+const DARK = CHART.map((token) => token.dark.toLowerCase());
 
 /** Body of the first `{ ... }` block (no nested braces) opening at or after `from`. */
 function blockBodyAt(from: number): string {

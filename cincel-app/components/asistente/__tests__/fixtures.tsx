@@ -64,7 +64,7 @@ export function renderInStyle(style: PresentationStyle, ui: ReactNode) {
 }
 
 /**
- * Applies a theme and mode the way the flag-on root layout does: `data-theme`,
+ * Applies a theme and mode the way the root layout does: `data-theme`,
  * `data-theme-id`, `.dark` and a `<style id="appearance">` block with the
  * preset tokens.
  */

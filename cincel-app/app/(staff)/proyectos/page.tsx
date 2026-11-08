@@ -1,9 +1,7 @@
 import { notFound } from "next/navigation";
 
-import Sidebar from "@/components/layout/Sidebar";
-import Header from "@/components/layout/Header";
 import { ProjectsPortfolio } from "@/components/proyectos/ProjectsPortfolio";
-import type { ProjectCreateAdminOptions } from "@/components/proyectos/ProjectCreateModal";
+import type { ProjectCreateAdminOptions } from "@/components/proyectos/project-create-form";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { fetchContactsAction } from "@/lib/actions/contacts-actions";
 import { fetchProjectsAction, fetchProjectsPortfolioAction } from "@/lib/actions/projects-actions";
@@ -16,7 +14,6 @@ import { canSeeAdminData, listTramos } from "@/lib/tramos/compat";
 import type { ContactListItem, Staff, WorkflowRef } from "@/lib/types/core";
 import type { PortfolioRow, PresentationStyle } from "@/lib/types/redesign";
 import { getResolvedAppearance } from "@/lib/ui/preferences-server";
-import { ProyectosClient } from "./ProyectosClient";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -35,27 +32,6 @@ function presaleAutoStartOf(workflows: Workflows): boolean {
   return workflows.some((w) => w.key === "presale" && w.active && w.autoStart === "on_create");
 }
 
-/** Today's page, unchanged: legacy shell around `ProyectosClient` (flag off, FE §2.3). */
-async function legacyProyectosPage() {
-  // Server-rendered initial data — no client-side fetch waterfall on first paint.
-  let initialProjects: Awaited<ReturnType<typeof fetchProjectsAction>> = [];
-  let presaleAutoStart = false;
-  const [projectsResult, workflowsResult] = await Promise.allSettled([fetchProjectsAction(), fetchWorkflowsAction()]);
-  // Not authorized / no session — the client falls back to hydrating itself.
-  if (projectsResult.status === "fulfilled") initialProjects = projectsResult.value;
-  if (workflowsResult.status === "fulfilled") presaleAutoStart = presaleAutoStartOf(workflowsResult.value);
-
-  return (
-    <main className="flex min-h-screen bg-background text-foreground">
-      <Sidebar />
-      <section className="flex-1 overflow-y-auto p-10">
-        <Header />
-        <ProyectosClient initialProjects={initialProjects} presaleAutoStart={presaleAutoStart} />
-      </section>
-    </main>
-  );
-}
-
 function settled<T>(result: PromiseSettledResult<T>, fallback: T, label: string): T {
   if (result.status === "fulfilled") return result.value;
   console.error(`[proyectos] ${label}`, result.reason);
@@ -63,12 +39,13 @@ function settled<T>(result: PromiseSettledResult<T>, fallback: T, label: string)
 }
 
 /**
- * `/proyectos` with the redesign on (FE §3.5): projects + portfolio metrics
+ * `/proyectos` (FE §3.5): the three-style portfolio. Projects + portfolio metrics
  * (while `fetchProjectsPortfolioAction` is implemented), the tramos, and for
  * admins the clients and staff of the dialog's admin fields. The `(staff)`
  * layout mounts `AppShell` around it.
  */
-async function redesignProyectosPage(searchParams: SearchParams, style: PresentationStyle) {
+export default async function ProyectosPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const [query, appearance] = await Promise.all([searchParams, getResolvedAppearance()]);
   const user = await requireCapabilityUser();
   const capabilities = resolveProjectsCapabilities(user);
   if (!capabilities.canViewProjects) notFound();
@@ -109,10 +86,10 @@ async function redesignProyectosPage(searchParams: SearchParams, style: Presenta
       }
     : null;
 
-  const override = estiloOverride(searchParams);
+  const override = estiloOverride(query);
 
   return (
-    <StyleProvider style={override ?? style} scope="staff" isOverridden={override !== null}>
+    <StyleProvider style={override ?? appearance.style} scope="staff" isOverridden={override !== null}>
       <ProjectsPortfolio
         projects={projects}
         portfolio={portfolio}
@@ -124,15 +101,4 @@ async function redesignProyectosPage(searchParams: SearchParams, style: Presenta
       />
     </StyleProvider>
   );
-}
-
-/**
- * `/proyectos` exists in both worlds (FE §2.3): with the redesign flag off
- * (or `redesignAvailable` false) it renders exactly as today; with it on, the
- * three-style portfolio.
- */
-export default async function ProyectosPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const appearance = await getResolvedAppearance();
-  if (!appearance.redesignEnabled) return legacyProyectosPage();
-  return redesignProyectosPage(await searchParams, appearance.style);
 }

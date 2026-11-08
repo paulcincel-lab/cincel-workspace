@@ -29,8 +29,7 @@ const actions = vi.hoisted(() => ({
 
 vi.mock("@/lib/actions/tasks-actions", () => actions);
 
-import TaskDrawer from "./TaskDrawer";
-import { dependencyErrorMessage } from "./TaskDependencies";
+import TaskDependencies, { dependencyErrorMessage } from "./TaskDependencies";
 
 const TASK_ID = "00000000-0000-4000-8000-0000000000a1";
 const PROJECT_ID = "00000000-0000-4000-8000-000000000001";
@@ -111,25 +110,14 @@ const blockedRef: TaskRef = {
 };
 
 const task = makeTask();
-const noop = () => {};
 
-function renderDrawer(
+function renderDependencies(
   shown: TaskDetail,
-  onOpenTask: ((id: string) => void) | undefined = vi.fn(),
-  onDependenciesChange?: () => void,
+  onOpenTask: (task: TaskRef) => void = vi.fn(),
+  onChange?: () => void,
 ) {
   return render(
-    <TaskDrawer
-      open
-      task={shown}
-      onClose={noop}
-      onAddComment={noop}
-      onAddChecklistItem={noop}
-      onToggleChecklistItem={noop}
-      onRemoveChecklistItem={noop}
-      onOpenTask={onOpenTask}
-      onDependenciesChange={onDependenciesChange}
-    />,
+    <TaskDependencies taskId={shown.id} projectId={shown.projectId} onOpenTask={onOpenTask} onChange={onChange} />,
   );
 }
 
@@ -148,7 +136,7 @@ beforeAll(() => {
   } as unknown as typeof ResizeObserver;
 });
 
-describe("TaskDrawer Dependencias", () => {
+describe("TaskDependencies", () => {
   beforeEach(() => {
     actions.listSubtasksAction.mockResolvedValue([]);
     actions.listTaskDependenciesAction.mockResolvedValue({
@@ -170,7 +158,7 @@ describe("TaskDrawer Dependencias", () => {
   });
 
   it("lists Depende de and Bloquea a", async () => {
-    renderDrawer(task);
+    renderDependencies(task);
 
     expect(await screen.findByText("Levantamiento topográfico")).toBeTruthy();
     expect(screen.getByText("Licencia de construcción")).toBeTruthy();
@@ -190,16 +178,16 @@ describe("TaskDrawer Dependencias", () => {
       dependsOn: [],
       blocks: [],
     });
-    renderDrawer(task);
+    renderDependencies(task);
     expect(await screen.findByText("No depende de otras tareas.")).toBeTruthy();
     expect(screen.getByText("Ninguna tarea espera a esta.")).toBeTruthy();
   });
 
-  it("opens linked tasks in the drawer", async () => {
+  it("opens linked tasks", async () => {
     const onOpenTask = vi.fn();
-    renderDrawer(task, onOpenTask);
+    renderDependencies(task, onOpenTask);
     fireEvent.click(await screen.findByText("Licencia de construcción"));
-    expect(onOpenTask).toHaveBeenCalledWith(BLOCKED_ID);
+    expect(onOpenTask).toHaveBeenCalledWith(expect.objectContaining({ id: BLOCKED_ID }));
   });
 
   it("searches only the task's project, without itself or existing dependencies", async () => {
@@ -213,7 +201,7 @@ describe("TaskDrawer Dependencias", () => {
         projectId: "00000000-0000-4000-8000-000000000002",
       }),
     ]);
-    renderDrawer(task);
+    renderDependencies(task);
     await screen.findByText("Levantamiento topográfico");
 
     fireEvent.click(screen.getByText("Agregar dependencia"));
@@ -230,7 +218,7 @@ describe("TaskDrawer Dependencias", () => {
 
   it("adds a dependency, reloads and notifies the caller", async () => {
     const onChange = vi.fn();
-    renderDrawer(task, vi.fn(), onChange);
+    renderDependencies(task, vi.fn(), onChange);
     await screen.findByText("Levantamiento topográfico");
 
     await pickCandidate("Estudio de mecánica de suelos");
@@ -250,7 +238,7 @@ describe("TaskDrawer Dependencias", () => {
       new Error("CYCLE: dependency would close a cycle"),
     );
     const onChange = vi.fn();
-    renderDrawer(task, vi.fn(), onChange);
+    renderDependencies(task, vi.fn(), onChange);
     await screen.findByText("Levantamiento topográfico");
 
     await pickCandidate("Estudio de mecánica de suelos");
@@ -265,7 +253,7 @@ describe("TaskDrawer Dependencias", () => {
 
   it("removes a dependency after confirming", async () => {
     const onChange = vi.fn();
-    renderDrawer(task, vi.fn(), onChange);
+    renderDependencies(task, vi.fn(), onChange);
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Quitar dependencia Levantamiento topográfico",
@@ -286,7 +274,7 @@ describe("TaskDrawer Dependencias", () => {
   });
 
   it("keeps the dependency when the removal is cancelled", async () => {
-    renderDrawer(task);
+    renderDependencies(task);
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Quitar dependencia Levantamiento topográfico",
@@ -321,52 +309,5 @@ describe("TaskDrawer Dependencias", () => {
     expect(dependencyErrorMessage(new Error("boom"))).toBe(
       "No se pudo actualizar la dependencia.",
     );
-  });
-
-  it("hides the section when the drawer can't navigate between tasks", () => {
-    render(
-      <TaskDrawer
-        open
-        task={task}
-        onClose={noop}
-        onAddComment={noop}
-        onAddChecklistItem={noop}
-        onToggleChecklistItem={noop}
-        onRemoveChecklistItem={noop}
-      />,
-    );
-    expect(screen.queryByText("Dependencias")).toBeNull();
-    expect(actions.listTaskDependenciesAction).not.toHaveBeenCalled();
-  });
-});
-
-describe("TaskDrawer En espera badge", () => {
-  beforeEach(() => {
-    actions.listSubtasksAction.mockResolvedValue([]);
-    actions.listTaskDependenciesAction.mockResolvedValue({
-      dependsOn: [],
-      blocks: [],
-    });
-  });
-
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-  });
-
-  it("shows En espera next to the status when a dependency is open", () => {
-    renderDrawer(makeTask({ waitingOn: 2 }));
-    expect(screen.getByText("En espera")).toBeTruthy();
-  });
-
-  it("hides it when the only dependencies are completed, deleted or archived", async () => {
-    // A completed dependency is still listed but doesn't count toward waitingOn.
-    actions.listTaskDependenciesAction.mockResolvedValue({
-      dependsOn: [{ ...depRef, status: "completado" }],
-      blocks: [],
-    });
-    renderDrawer(makeTask({ waitingOn: 0 }));
-    expect(await screen.findByText("Levantamiento topográfico")).toBeTruthy();
-    expect(screen.queryByText("En espera")).toBeNull();
   });
 });

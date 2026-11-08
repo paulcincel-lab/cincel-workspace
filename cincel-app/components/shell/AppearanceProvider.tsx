@@ -4,7 +4,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from "sonner";
 
 import { updateMyPreferencesAction } from "@/lib/actions/preferences-actions";
-import { IMPLEMENTED } from "@/lib/actions/preferences-actions.flags";
 import { actionErrorText } from "@/lib/errors";
 import type { ColorMode, ResolvedAppearance, UserPreferences } from "@/lib/types/redesign";
 import { appearanceStyleBlock } from "@/lib/ui/appearance-css";
@@ -15,7 +14,7 @@ import { TEXT_SIZES, textSizeClass } from "@/lib/ui/text-size";
  * attributes, the `.dark` class, the `text-size-{n}` class and the
  * `<style id="appearance">` block from `updateMyPreferencesAction`'s result;
  * optimistic with rollback and an error toast. Never writes variables on
- * `documentElement.style`. Mounted by the root layout for flag-on users only.
+ * `documentElement.style`. Mounted by the root layout.
  */
 export type AppearanceProviderProps = { initial: ResolvedAppearance; children: ReactNode };
 
@@ -26,9 +25,6 @@ type AppearanceContextValue = {
 
 /** Debounce for text-size (slider) changes, FE §4.1. */
 export const TEXT_SIZE_DEBOUNCE_MS = 300;
-
-/** The legacy `ThemeToggle` localStorage key, migrated once into the preferences row. */
-export const LEGACY_THEME_STORAGE_KEY = "cincel.theme";
 
 const AppearanceContext = createContext<AppearanceContextValue | null>(null);
 
@@ -106,7 +102,6 @@ export function AppearanceProvider({ initial, children }: AppearanceProviderProp
   const pendingPatch = useRef<Partial<UserPreferences>>({});
   const waiters = useRef<Array<() => void>>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const migrated = useRef(false);
 
   // A new server render (router.refresh, org change on the next load) replaces the state.
   if (renderedInitial !== initial) {
@@ -134,7 +129,7 @@ export function AppearanceProvider({ initial, children }: AppearanceProviderProp
         show(optimistic(result.appearance, pendingPatch.current), true);
       } catch (err) {
         show(optimistic(committed.current, pendingPatch.current), true);
-        toast.error(actionErrorText(err, patch.redesignEnabled === true ? "redesign" : undefined));
+        toast.error(actionErrorText(err));
       }
     },
     [show],
@@ -178,23 +173,6 @@ export function AppearanceProvider({ initial, children }: AppearanceProviderProp
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
   }, [appearance.mode]);
-
-  // The legacy ThemeToggle choice: read once, migrated into the preferences row, deleted (FE §4.1).
-  useEffect(() => {
-    if (migrated.current || !IMPLEMENTED.updateMyPreferencesAction) return;
-    migrated.current = true;
-    let stored: string | null = null;
-    try {
-      stored = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
-      if (stored !== null) window.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
-    } catch {
-      return;
-    }
-    if ((stored === "light" || stored === "dark") && committed.current.mode === "system") {
-      const mode = stored;
-      queueMicrotask(() => void setPreference({ mode }));
-    }
-  }, [setPreference]);
 
   useEffect(
     () => () => {

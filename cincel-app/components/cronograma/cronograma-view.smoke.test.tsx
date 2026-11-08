@@ -8,8 +8,6 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/proyectos/p1/cronograma",
 }));
 
-vi.mock("@/components/layout/Header", () => ({ default: () => <div data-testid="header" /> }));
-vi.mock("@/components/layout/Sidebar", () => ({ default: () => <div data-testid="sidebar" /> }));
 
 import { GanttChart } from "./gantt-chart";
 import { ProgressDonut } from "./progress-donut";

@@ -15,7 +15,6 @@ import { listTramos } from "@/lib/tramos/compat";
 import { parseTareasQuery, tareasCalendarRange, toUrlSearchParams, type TareasQuery } from "@/lib/tareas/query";
 import type { TaskFilters, TaskStatus, WorkflowRef } from "@/lib/types/core";
 import type { PresentationStyle, TaskBoard } from "@/lib/types/redesign";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 import { getResolvedAppearance } from "@/lib/ui/preferences-server";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -50,7 +49,6 @@ function baseFilters(query: TareasQuery, staffId: string): TaskFilters {
  */
 export default async function TareasPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const raw = await searchParams;
-  await redirectIfRedesignOff("/tareas", raw);
 
   const user = await requireCapabilityUser();
   if (!resolveActivitiesCapabilities(user).canViewActivities) notFound();

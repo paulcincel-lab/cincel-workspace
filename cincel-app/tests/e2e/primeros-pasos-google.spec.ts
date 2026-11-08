@@ -20,8 +20,8 @@ const connectionString = process.env.DATABASE_URL ?? "postgres://cincel:cincel@l
 const BOOTSTRAP_EMAIL = process.env.E2E_BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() ?? "";
 const BOOTSTRAP_PASSWORD = process.env.E2E_BOOTSTRAP_ADMIN_PASSWORD ?? "";
 const ADMIN_GROUP = process.env.E2E_GOOGLE_ADMIN_GROUP ?? "e2e-admins@example.test";
-const WIZARD_PATH = "/configuracion/google/primeros-pasos";
-/** The stepper's active step: `aria-current="step"` in both the legacy chips and the restyled stepper. */
+const WIZARD_PATH = "/ajustes/google/primeros-pasos";
+/** The stepper's active step (`aria-current="step"`). */
 const currentStep = (page: Page) => page.getByRole("list", { name: "Pasos" }).locator('[aria-current="step"]');
 
 async function resetWizard(): Promise<void> {
@@ -29,9 +29,6 @@ async function resetWizard(): Promise<void> {
   try {
     await sql`delete from core.workspace_group_mappings where group_email like 'e2e-%'`;
     await sql`update core.staff set onboarding_completed_at = null where lower(email) = ${BOOTSTRAP_EMAIL}`;
-    // The legacy wizard route; with the redesign flag on it lives at /ajustes/google/primeros-pasos.
-    await sql`update core.user_preferences set redesign_enabled = false
-      where staff_id in (select id from core.staff where lower(email) = ${BOOTSTRAP_EMAIL})`;
   } finally {
     await sql.end();
   }
@@ -83,9 +80,9 @@ test.describe("Primeros pasos — grupos de Google", () => {
     await page.getByRole("button", { name: "Cerrar sesión y entrar con Google" }).click();
     await page.waitForURL(/\/login/, { timeout: 15_000 });
 
-    // Completed: the next sign-in lands on the dashboard.
+    // Completed: the next sign-in lands on Inicio.
     await loginAsBootstrapAdmin(page);
-    await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+    await page.waitForURL(/\/inicio/, { timeout: 30_000 });
   });
 
   test("skipping leaves a dismissible banner while no group is mapped", async ({ page }) => {
@@ -97,7 +94,7 @@ test.describe("Primeros pasos — grupos de Google", () => {
     await loginAsBootstrapAdmin(page);
     await page.waitForURL(new RegExp(`${WIZARD_PATH}$`), { timeout: 30_000 });
     await page.getByRole("button", { name: "Omitir por ahora" }).click();
-    await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+    await page.waitForURL(/\/inicio/, { timeout: 30_000 });
 
     await expect(page.getByText("Nadie puede entrar con Google todavía")).toBeVisible();
     await page.getByRole("button", { name: "Cerrar aviso" }).click();

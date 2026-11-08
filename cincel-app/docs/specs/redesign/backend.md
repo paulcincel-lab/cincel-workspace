@@ -450,7 +450,7 @@ Lease acquire (one statement, works on any pooled connection): `insert into core
 | `appearance.theme` | `OrgAppearance` (§6), including `styleDefault`, `allowUserOverride`, `redesignDefault`, `redesignAvailable` (kill switch), plus an integer `v` bumped on every save (review B2) | `OrgAppearanceSchema` |
 | `time_tracking` | `TimeTrackingSettings` | `TimeTrackingSettingsSchema` |
 | `vacations` | `{ daysPerYear: number }` (default 12); per-person override in `staff_profiles.vacation_days` | `VacationSettingsSchema` |
-| `appearance.primary_color` | kept, read only to seed `appearance.theme` (§4), then ignored; deleted in the Cleanup phase | — |
+| `appearance.primary_color` | kept, read only to seed `appearance.theme` (§4), then ignored; deleted in the Cleanup phase by the migration `0028_delete_primary_color_setting` (no code reads or writes it any more) | — |
 | `general_settings` (existing, #673) | `company` gains `instagramUrl: string \| null` and `contactEmail: string \| null`; `websiteUrl` is the existing `website` field (renamed only in the parsed type). They feed the avatar-menu links; localStorage `cincel.header.links.v1` is read once by the client and then ignored (FE Annex C5). **Known rollback effect:** the schema is `.strict()`, so an image older than this feature can't parse a row that has the new fields and General settings fall back to defaults until the row is re-saved; the rollback runbook strips the two keys with one SQL statement (documented in `docs/deployment.md`) | extends `lib/settings/general-settings-schema.ts` (both optional, `https://` URLs, email validated); schema fields and defaults land in Phase 1, the Ajustes › General UI in Phase 6 (review B19a) |
 
 ### 3.13 FK index check

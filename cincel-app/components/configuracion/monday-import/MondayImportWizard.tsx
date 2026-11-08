@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Download, Upload, X } from "lucide-react";
+import { Download, Upload, X } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
-import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { SelectionBar } from "@/components/configuracion/monday-import/BoardGallery";
 import { BoardsStep, type ExportChoice } from "@/components/configuracion/monday-import/BoardsStep";
@@ -98,53 +97,7 @@ export type MondayImportWizardProps = {
   hasServerToken: boolean;
   /** Load error of the page (no run could be opened). */
   loadError: string | null;
-  /**
-   * The caller's resolved redesign flag (`getResolvedAppearance().redesignEnabled`, redesign FE §2.3). Off (the
-   * default) renders today's wizard unchanged; on renders the restyled stepper and chrome (FE §3.10).
-   */
-  redesign?: boolean;
 };
-
-/** The step chips; a finished step opens on click when going back is allowed (#679). */
-function StepHeader({
-  current,
-  canJump,
-  onJump,
-}: {
-  current: MondayImportStep;
-  canJump: (step: MondayImportStep) => boolean;
-  onJump: (step: MondayImportStep) => void;
-}) {
-  const currentIndex = stepIndex(current);
-  return (
-    <ol className="flex flex-wrap gap-2" aria-label="Pasos">
-      {MONDAY_IMPORT_STEPS.map((step, index) => {
-        const content = (
-          <>
-            {index < currentIndex ? <Check data-icon="inline-start" aria-hidden="true" /> : null}
-            {index + 1}. {step.label}
-          </>
-        );
-        return (
-          <li key={step.id} aria-current={index === currentIndex ? "step" : undefined}>
-            {canJump(step.id) ? (
-              <Badge
-                variant="secondary"
-                render={<button type="button" aria-label={`Volver a ${step.label}`} onClick={() => onJump(step.id)} />}
-              >
-                {content}
-              </Badge>
-            ) : (
-              <Badge variant={index === currentIndex ? "default" : index < currentIndex ? "secondary" : "outline"}>
-                {content}
-              </Badge>
-            )}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
 
 function IssueList({ issues }: { issues: string[] }) {
   if (issues.length === 0) return null;
@@ -174,7 +127,6 @@ export function MondayImportWizard({
   initialChoices,
   hasServerToken,
   loadError,
-  redesign = false,
 }: MondayImportWizardProps) {
   const router = useRouter();
   const [run, setRun] = useState<MondayImportRunState | null>(initialRun);
@@ -603,9 +555,9 @@ export function MondayImportWizard({
     </Button>
   );
 
-  // Redesign (FE §3.10, frame `BienvenidaMonday`): the title row on the card surface and the full-width stepper
+  // FE §3.10, frame `BienvenidaMonday`: the title row on the card surface and the full-width stepper
   // under it; the step chips' "go back" rule is the same as today's.
-  const topBar = redesign ? (
+  const topBar = (
     <header className="sticky top-0 z-20 border-b bg-card">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 md:px-6">
         <div className="flex items-center justify-between gap-4">
@@ -620,22 +572,6 @@ export function MondayImportWizard({
             onJump={(target) => goTo(target)}
           />
         ) : null}
-      </div>
-    </header>
-  ) : (
-    <header className="sticky top-0 z-20 border-b bg-background">
-      <div className="mx-auto flex w-full max-w-6xl items-start justify-between gap-4 px-4 py-3 md:px-6">
-        <div className="min-w-0 space-y-2">
-          <h1 className="text-lg font-semibold text-foreground">Importar de monday</h1>
-          {run ? (
-            <StepHeader
-              current={step}
-              canJump={(target) => !isPending && canJumpTo(target, step, state)}
-              onJump={(target) => goTo(target)}
-            />
-          ) : null}
-        </div>
-        {closeButton}
       </div>
     </header>
   );
@@ -659,7 +595,7 @@ export function MondayImportWizard({
 
       <div className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-4 py-6 md:px-6">
         <div className="space-y-1">
-          <h2 className={redesign ? "text-xl font-semibold text-foreground" : "text-base font-medium text-foreground"}>
+          <h2 className="text-xl font-semibold text-foreground">
             {current.label}
           </h2>
           <p className="text-sm text-muted-foreground">{current.description}</p>
@@ -800,7 +736,7 @@ export function MondayImportWizard({
         ) : null}
       </div>
 
-      <footer className={redesign ? "sticky bottom-0 z-20 border-t bg-card" : "sticky bottom-0 z-20 border-t bg-background"}>
+      <footer className="sticky bottom-0 z-20 border-t bg-card">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3 md:px-6">
           <div className="flex flex-wrap items-center gap-2">
             {finished ? null : (

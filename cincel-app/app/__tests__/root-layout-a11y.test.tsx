@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Accessibility of the flag-on root layout in the three themes, light and
+ * Accessibility of the root layout in the three themes, light and
  * dark: no serious or critical axe violations in the rendered document, and
  * every color pair of the resolved tokens passes `checkContrast`
  * (`CONTRAST_PAIRS`, BE §5.5). happy-dom has no layout, so axe's own
@@ -24,7 +24,6 @@ vi.mock("@/lib/auth/session", async () => (await import("./root-layout-mocks")).
 vi.mock("@/lib/settings/general-settings", async () => (await import("./root-layout-mocks")).generalSettingsMock);
 vi.mock("@/lib/settings/general-settings-server", async () => (await import("./root-layout-mocks")).generalSettingsServerMock);
 vi.mock("@/lib/settings/use-general-settings", async () => (await import("./root-layout-mocks")).useGeneralSettingsMock);
-vi.mock("@/lib/theme/primary-color-server", async () => (await import("./root-layout-mocks")).primaryColorServerMock);
 vi.mock("@/lib/ui/preferences-server", async () => (await import("./root-layout-mocks")).preferencesServerMock);
 vi.mock("@/lib/actions/preferences-actions", async () => (await import("./root-layout-mocks")).preferencesActionsMock);
 vi.mock("@/components/ui/shadcn/sonner", async () => (await import("./root-layout-mocks")).toasterMock);
@@ -32,9 +31,9 @@ vi.mock("../globals.css", async () => (await import("./root-layout-mocks")).cssM
 
 const HTML_ATTRIBUTES = ["lang", "class", "data-theme", "data-mode", "data-theme-id", "data-style", "data-density"];
 
-/** Renders the flag-on layout and mounts its <html> attributes, head styles and body into the live document. */
+/** Renders the layout and mounts its <html> attributes, head styles and body into the live document. */
 async function mountLayout(theme: ThemeId, mode: "light" | "dark") {
-  appearanceState.value = appearanceFor(theme, { redesignEnabled: true, mode });
+  appearanceState.value = appearanceFor(theme, { mode });
   const { default: RootLayout } = await import("../layout");
   const markup = renderToStaticMarkup(
     await RootLayout({
@@ -64,7 +63,7 @@ async function seriousViolations() {
   return results.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
 }
 
-describe("root layout accessibility (flag on)", () => {
+describe("root layout accessibility", () => {
   afterEach(() => {
     document.body.innerHTML = "";
   });

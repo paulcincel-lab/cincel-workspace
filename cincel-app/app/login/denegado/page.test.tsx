@@ -18,16 +18,9 @@ vi.mock("@/lib/auth/session-context", () => ({
   },
 }));
 
-// Org appearance and General settings, read without a session.
+// General settings, read without a session.
 const settings = vi.hoisted(() => ({
-  appearance: null as null | { redesignDefault: boolean; redesignAvailable: boolean },
   contactEmail: undefined as string | undefined,
-}));
-vi.mock("@/lib/repositories/app-settings-repository", () => ({
-  getAppSettingEntry: async (key: string) =>
-    key === "appearance.theme" && settings.appearance
-      ? { value: JSON.stringify({ version: 1, data: settings.appearance }), updatedAt: new Date() }
-      : null,
 }));
 vi.mock("@/lib/settings/general-settings-server", () => ({
   getGeneralSettings: async () => ({
@@ -74,7 +67,6 @@ async function renderPage(
 describe("/login/denegado", () => {
   beforeEach(() => {
     sessionReads.count = 0;
-    settings.appearance = null;
     settings.contactEmail = undefined;
     vi.stubEnv("GOOGLE_WORKSPACE_DOMAIN", "example.test");
   });
@@ -132,12 +124,12 @@ describe("/login/denegado", () => {
     );
   });
 
-  it("renders without a session and links Volver a intentar to /login", async () => {
+  it("renders without a session and links Usar otra cuenta to /login", async () => {
     await renderPage({ motivo: "revoked" });
 
     expect(
       screen
-        .getByRole("link", { name: "Volver a intentar" })
+        .getByRole("link", { name: "Usar otra cuenta" })
         .getAttribute("href"),
     ).toBe("/login");
     expect(sessionReads.count).toBe(0);
@@ -147,7 +139,6 @@ describe("/login/denegado", () => {
 describe("/login/denegado look", () => {
   beforeEach(() => {
     sessionReads.count = 0;
-    settings.appearance = { redesignDefault: true, redesignAvailable: true };
     settings.contactEmail = "admin@example.test";
     vi.stubEnv("GOOGLE_WORKSPACE_DOMAIN", "example.test");
   });
@@ -155,19 +146,6 @@ describe("/login/denegado look", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllEnvs();
-  });
-
-  it.each([
-    ["missing", null],
-    ["off", { redesignDefault: false, redesignAvailable: true }],
-    ["unavailable", { redesignDefault: true, redesignAvailable: false }],
-  ])("renders today's page when the org setting is %s", async (_label, appearance) => {
-    settings.appearance = appearance;
-    await renderPage({ motivo: "revoked", email: "persona@gmail.com" });
-
-    expect(screen.queryByTestId("auth-centered-layout")).toBeNull();
-    expect(screen.getByRole("link", { name: "Volver a intentar" })).not.toBeNull();
-    expect(screen.queryByText("Contactar al administrador")).toBeNull();
   });
 
   it("shows the denied email, Usar otra cuenta and Contactar al administrador", async () => {

@@ -25,44 +25,35 @@ export const metadata: Metadata = { title: "Portal de clientes · Cincel" };
  * never redirects, so `/portal/acceder?token=…` and `/portal/login?error=…` keep their query string.
  * Protected pages call `requirePortalUser()` themselves, which clears a stale cookie.
  *
- * With the redesign on, the presentation style comes from the `cincel-portal-style` cookie (org default when
- * missing or invalid, FE §3.11) and wraps the shell in `StyleProvider scope="portal"`; a signed-in client gets
+ * The presentation style comes from the `cincel-portal-style` cookie (org default when missing or invalid,
+ * FE §3.11) and wraps the shell in `StyleProvider scope="portal"`; a signed-in client gets
  * `EstiloSwitch scope="portal"` in the top bar on the pages that have the three styles.
  */
 export default async function PortalLayout({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
-  const [user, appearance] = await Promise.all([
+  const [user, appearance, presentation] = await Promise.all([
     cookieStore.get(PORTAL_SESSION_COOKIE)?.value ? getPortalUser() : null,
     getPortalAppearance(),
+    getPortalPresentation(),
   ]);
-
-  const presentation = appearance.redesignEnabled ? await getPortalPresentation() : null;
-  const shell = (
-    <PortalShell
-      clientName={user?.name ?? null}
-      redesign={presentation !== null}
-      styleSwitch={
-        presentation && user ? (
-          <Suspense fallback={null}>
-            <PortalStyleSwitch />
-          </Suspense>
-        ) : undefined
-      }
-    >
-      {children}
-    </PortalShell>
-  );
 
   // Organization theme only (FE §3.11): portal clients have no theme or mode override; only the style.
   return (
     <PortalAppearance appearance={appearance}>
-      {presentation ? (
-        <StyleProvider style={presentation.style} scope="portal">
-          {shell}
-        </StyleProvider>
-      ) : (
-        shell
-      )}
+      <StyleProvider style={presentation.style} scope="portal">
+        <PortalShell
+          clientName={user?.name ?? null}
+          styleSwitch={
+            user ? (
+              <Suspense fallback={null}>
+                <PortalStyleSwitch />
+              </Suspense>
+            ) : undefined
+          }
+        >
+          {children}
+        </PortalShell>
+      </StyleProvider>
     </PortalAppearance>
   );
 }

@@ -12,13 +12,7 @@ import {
   type LoadedGeneralSettings,
   readLegacyGeneralSettings,
 } from "@/lib/settings/general-settings";
-import {
-  applyLegacyHeaderLinks,
-  type HeaderLinkErrors,
-  headerLinkErrors,
-  markLegacyHeaderLinksMigrated,
-  readLegacyHeaderLinksOnce,
-} from "@/lib/settings/header-links-migration";
+import { type HeaderLinkErrors, headerLinkErrors } from "@/lib/settings/header-links";
 
 function loadImageAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -45,18 +39,11 @@ export type LogoScope = "company" | "appearance";
 export type GeneralSettingsEditorOptions = {
   general: LoadedGeneralSettings;
   canManage: boolean;
-  /**
-   * Ajustes › General only: pick up the avatar-menu links saved in this
-   * browser (`cincel.header.links.v1`) once, and validate the link fields
-   * before saving.
-   */
+  /** Ajustes › General only: validate the avatar-menu link fields before saving. */
   headerLinks?: boolean;
 };
 
-/**
- * State and actions of the General settings editor, shared by the legacy
- * `/configuracion/general` workspace and Ajustes › General.
- */
+/** State and actions of the General settings editor of Ajustes › General. */
 export function useGeneralSettingsEditor({ general, canManage, headerLinks = false }: GeneralSettingsEditorOptions) {
   const router = useRouter();
   const defaultSettings = useMemo(() => buildDefaultGeneralSettings(), []);
@@ -69,7 +56,6 @@ export function useGeneralSettingsEditor({ general, canManage, headerLinks = fal
   const [error, setError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<{ scope: LogoScope; message: string } | null>(null);
   const [pickedUpLegacy, setPickedUpLegacy] = useState(false);
-  const [pickedUpLegacyLinks, setPickedUpLegacyLinks] = useState(false);
   const [pending, startTransition] = useTransition();
 
   // One-time pickup: a value saved in this browser before the settings moved to the server.
@@ -95,23 +81,6 @@ export function useGeneralSettingsEditor({ general, canManage, headerLinks = fal
       setPickedUpLegacy(true);
     }
   }, [canManage, general.hasCustom, general.settings]);
-
-  // One-time pickup of the avatar-menu links of the legacy header (read once, then ignored).
-  useEffect(() => {
-    if (!headerLinks || !canManage) return;
-    const legacyLinks = readLegacyHeaderLinksOnce();
-    if (!legacyLinks) return;
-    const { applied } = applyLegacyHeaderLinks(general.settings, legacyLinks, { hasCustom: general.hasCustom });
-    if (!applied) {
-      // The server already holds every link: nothing to offer, never read the key again.
-      markLegacyHeaderLinksMigrated();
-      return;
-    }
-    // Browser storage is only readable after mount.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSettings((current) => applyLegacyHeaderLinks(current, legacyLinks, { hasCustom: general.hasCustom }).settings);
-    setPickedUpLegacyLinks(true);
-  }, [canManage, general.hasCustom, general.settings, headerLinks]);
 
   const isDirty = useMemo(() => JSON.stringify(settings) !== JSON.stringify(savedSettings), [savedSettings, settings]);
 
@@ -211,10 +180,6 @@ export function useGeneralSettingsEditor({ general, canManage, headerLinks = fal
         setHasCustomConfig(true);
         setPickedUpLegacy(false);
         clearLegacyGeneralSettings();
-        if (headerLinks) {
-          markLegacyHeaderLinksMigrated();
-          setPickedUpLegacyLinks(false);
-        }
         router.refresh();
       } catch {
         setError("No se pudo guardar la configuración. Intenta de nuevo.");
@@ -232,11 +197,6 @@ export function useGeneralSettingsEditor({ general, canManage, headerLinks = fal
         setHasCustomConfig(false);
         setSavedAt(null);
         setPickedUpLegacy(false);
-        if (headerLinks) {
-          // Restoring clears the links too; the old browser value must not come back.
-          markLegacyHeaderLinksMigrated();
-          setPickedUpLegacyLinks(false);
-        }
         router.refresh();
       } catch {
         setError("No se pudo restaurar la configuración. Intenta de nuevo.");
@@ -253,7 +213,6 @@ export function useGeneralSettingsEditor({ general, canManage, headerLinks = fal
     error,
     logoError,
     pickedUpLegacy,
-    pickedUpLegacyLinks,
     linkErrors,
     hasLinkErrors,
     canManage,

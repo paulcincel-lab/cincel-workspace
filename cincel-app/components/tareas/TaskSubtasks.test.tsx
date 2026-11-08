@@ -7,7 +7,6 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { useState } from "react";
 
 import type { TaskDetail, TaskRef } from "@/lib/types/core";
 
@@ -22,8 +21,7 @@ vi.mock("@/lib/actions/import-actions", () => ({
   getImportDataAction: vi.fn().mockResolvedValue(null),
 }));
 
-import TaskDrawer from "./TaskDrawer";
-import { subtaskErrorMessage } from "./TaskSubtasks";
+import TaskSubtasks, { subtaskErrorMessage } from "./TaskSubtasks";
 
 const PARENT_ID = "00000000-0000-4000-8000-0000000000a1";
 const CHILD_ID = "00000000-0000-4000-8000-0000000000c1";
@@ -98,45 +96,11 @@ const childTask = makeTask({
   parentTitle: "Planos arquitectónicos",
 });
 
-const noop = () => {};
-
-function renderDrawer(task: TaskDetail, onOpenTask?: (id: string) => void) {
-  return render(
-    <TaskDrawer
-      open
-      task={task}
-      onClose={noop}
-      onAddComment={noop}
-      onAddChecklistItem={noop}
-      onToggleChecklistItem={noop}
-      onRemoveChecklistItem={noop}
-      onOpenTask={onOpenTask}
-    />,
-  );
+function renderSubtasks(task: TaskDetail, onOpenSubtask: (subtask: TaskRef) => void = vi.fn()) {
+  return render(<TaskSubtasks parentId={task.id} onOpenSubtask={onOpenSubtask} />);
 }
 
-/** Drawer wired like the pages: onOpenTask swaps the task shown. */
-function NavigableDrawer() {
-  const tasksById: Record<string, TaskDetail> = {
-    [PARENT_ID]: parentTask,
-    [CHILD_ID]: childTask,
-  };
-  const [taskId, setTaskId] = useState(PARENT_ID);
-  return (
-    <TaskDrawer
-      open
-      task={tasksById[taskId]}
-      onClose={noop}
-      onAddComment={noop}
-      onAddChecklistItem={noop}
-      onToggleChecklistItem={noop}
-      onRemoveChecklistItem={noop}
-      onOpenTask={setTaskId}
-    />
-  );
-}
-
-describe("TaskDrawer Subtareas", () => {
+describe("TaskSubtasks", () => {
   beforeEach(() => {
     actions.listSubtasksAction.mockResolvedValue([childRef]);
     actions.createSubtaskAction.mockResolvedValue(childTask);
@@ -148,7 +112,7 @@ describe("TaskDrawer Subtareas", () => {
   });
 
   it("lists the subtasks with status, title, manager and commitment date", async () => {
-    renderDrawer(parentTask, vi.fn());
+    renderSubtasks(parentTask);
 
     expect(screen.getByText("Subtareas")).toBeTruthy();
     expect(await screen.findByText("Fachada norte")).toBeTruthy();
@@ -160,7 +124,7 @@ describe("TaskDrawer Subtareas", () => {
 
   it("shows an empty state", async () => {
     actions.listSubtasksAction.mockResolvedValue([]);
-    renderDrawer(parentTask, vi.fn());
+    renderSubtasks(parentTask);
     expect(await screen.findByText("Sin subtareas.")).toBeTruthy();
   });
 
@@ -168,7 +132,7 @@ describe("TaskDrawer Subtareas", () => {
     actions.listSubtasksAction
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([childRef]);
-    renderDrawer(parentTask, vi.fn());
+    renderSubtasks(parentTask);
     await screen.findByText("Sin subtareas.");
 
     fireEvent.change(screen.getByLabelText("Título de la subtarea"), {
@@ -187,7 +151,7 @@ describe("TaskDrawer Subtareas", () => {
 
   it("shows Spanish copy when adding fails", async () => {
     actions.createSubtaskAction.mockRejectedValue(new Error("NESTED"));
-    renderDrawer(parentTask, vi.fn());
+    renderSubtasks(parentTask);
     await screen.findByText("Fachada norte");
 
     fireEvent.change(screen.getByLabelText("Título de la subtarea"), {
@@ -213,56 +177,5 @@ describe("TaskDrawer Subtareas", () => {
     expect(subtaskErrorMessage(new Error("boom"))).toBe(
       "No se pudo agregar la subtarea.",
     );
-  });
-
-  it("opens a child in the same drawer with a back link to the parent", async () => {
-    render(<NavigableDrawer />);
-
-    fireEvent.click(await screen.findByText("Fachada norte"));
-
-    expect(screen.getByText("← Planos arquitectónicos")).toBeTruthy();
-    expect(screen.getByText("Subtarea de")).toBeTruthy();
-    expect(screen.queryByText("Subtareas")).toBeNull();
-
-    fireEvent.click(screen.getByText("← Planos arquitectónicos"));
-
-    expect(screen.getByText("Subtareas")).toBeTruthy();
-    expect(screen.queryByText("← Planos arquitectónicos")).toBeNull();
-  });
-
-  it("hides the section and the add button for subtasks and links to the parent", () => {
-    const onOpenTask = vi.fn();
-    renderDrawer(childTask, onOpenTask);
-
-    expect(screen.queryByText("Subtareas")).toBeNull();
-    expect(screen.queryByText("Agregar subtarea")).toBeNull();
-    expect(actions.listSubtasksAction).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByText("Planos arquitectónicos"));
-    expect(onOpenTask).toHaveBeenCalledWith(PARENT_ID);
-  });
-
-  it("shows the deleted-parent state and treats the task as top-level", async () => {
-    renderDrawer(
-      makeTask({
-        id: CHILD_ID,
-        title: "Fachada norte",
-        parentTaskId: PARENT_ID,
-        parentTitle: null,
-      }),
-      vi.fn(),
-    );
-
-    expect(screen.getByText("Tarea padre eliminada")).toBeTruthy();
-    expect(screen.queryByText("Subtarea de")).toBeNull();
-    expect(screen.getByText("Subtareas")).toBeTruthy();
-    await waitFor(() =>
-      expect(actions.listSubtasksAction).toHaveBeenCalledWith(CHILD_ID),
-    );
-  });
-
-  it("hides the section when the drawer can't navigate between tasks", () => {
-    renderDrawer(parentTask);
-    expect(screen.queryByText("Subtareas")).toBeNull();
   });
 });

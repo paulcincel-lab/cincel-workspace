@@ -21,7 +21,6 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { loginAsAdmin } from "./helpers/seed-auth";
 import {
-  ADMIN_EMAIL,
   BASE_URL,
   createStaffUser,
   mexicoDate,
@@ -29,7 +28,6 @@ import {
   readSettingRaw,
   resetAdminPreferences,
   restoreSettingRaw,
-  setRedesignFor,
   signedInContext,
   withDb,
   type E2EUser,
@@ -89,9 +87,7 @@ test.describe("Control de horario", () => {
       promptAtLogin: true,
       exemptRoles: [],
     });
-    await setRedesignFor(ADMIN_EMAIL, true);
     worker = await createStaffUser({ tag: "Jornada", role: "Colaborador" });
-    await setRedesignFor(worker.email, true);
   });
 
   test.afterAll(async () => {

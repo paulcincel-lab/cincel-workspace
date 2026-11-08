@@ -8,9 +8,7 @@ import postgres from "postgres";
  * Shared helpers for the redesign e2e specs (Phase 6: Ajustes, tema y
  * Control de horario).
  *
- * The redesign flag is `user_preferences.redesign_enabled` (FE §2.3); the
- * layout re-reads it from the DB on every request, so flipping it here takes
- * effect on the next page load. Org settings live in `core.app_settings` as
+ * Org settings live in `core.app_settings` as
  * `{ version: 1, data }` JSON (BE §3.12); specs that change them snapshot the
  * row first and put it back afterwards.
  *
@@ -25,7 +23,7 @@ export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "paul@cincel.mx";
 
 const connectionString = process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
 
-/** Pages a signed-in staff member can land on, in either world. */
+/** Pages a signed-in staff member can land on. */
 export const STAFF_LANDING = /\/inicio|\/dashboard|\/directorio|\/proyectos|\/tareas|\/equipo|\/change-password/;
 
 export async function withDb<T>(fn: (sql: postgres.Sql) => Promise<T>): Promise<T> {
@@ -39,24 +37,6 @@ export async function withDb<T>(fn: (sql: postgres.Sql) => Promise<T>): Promise<
 
 /** Name of the appearance cookie (`APPEARANCE_COOKIE` in `lib/ui/preferences.ts`). */
 export const APPEARANCE_COOKIE = "cincel-appearance";
-
-/**
- * Sets the redesign flag of the active staff member with this email:
- * `true` / `false` force it, `null` goes back to the org `redesignDefault`.
- * Creates the preferences row when it is missing (a missing row means all
- * defaults). Throws when no such staff member exists.
- */
-export async function setRedesignFor(email: string, enabled: boolean | null): Promise<void> {
-  await withDb(async (sql) => {
-    const rows = await sql`
-      insert into core.user_preferences (staff_id, redesign_enabled)
-      select id, ${enabled} from core.staff
-      where lower(email) = lower(${email}) and deleted_at is null
-      on conflict (staff_id) do update set redesign_enabled = excluded.redesign_enabled, updated_at = now()
-      returning staff_id`;
-    if (rows.length === 0) throw new Error(`No staff member with email ${email} to set the redesign flag on.`);
-  });
-}
 
 /** Drops the appearance cookie so the next request renders from the DB. */
 export async function clearAppearanceCookie(context: BrowserContext): Promise<void> {
@@ -82,11 +62,11 @@ export async function setAppearanceFor(
   });
 }
 
-/** Removes every preference row change of the admin made by a spec (back to all defaults, flag off). */
+/** Removes every preference row change of the admin made by a spec (back to all defaults). */
 export async function resetAdminPreferences(): Promise<void> {
   await withDb(async (sql) => {
     await sql`
-      update core.user_preferences set theme = null, mode = 'system', redesign_enabled = false, updated_at = now()
+      update core.user_preferences set theme = null, mode = 'system', updated_at = now()
       where staff_id in (select id from core.staff where lower(email) = lower(${ADMIN_EMAIL}))`;
   });
 }
@@ -200,7 +180,7 @@ export async function expectAxeClean(page: Page, label: string): Promise<void> {
   expect(violations, `axe violations on ${label}`).toEqual([]);
 }
 
-/** Whether the page renders inside the new `AppShell` (the appearance block and attributes are flag-on only). */
+/** Whether the page renders with the appearance block and attributes of the root layout. */
 export async function rendersNewShell(page: Page): Promise<boolean> {
   return page.evaluate(
     () => document.getElementById("appearance") !== null && document.documentElement.hasAttribute("data-theme-id"),

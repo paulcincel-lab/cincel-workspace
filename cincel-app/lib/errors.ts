@@ -31,10 +31,9 @@ export function reportRepositoryError(error: RepositoryError): void {
 
 /**
  * Where the failing call came from, for codes whose copy depends on it
- * (`INVALID` in search, `RATE_LIMITED` in Gmail sync, `DISABLED` for Cutto and
- * the redesign opt-in). `"redesign"` selects the opt-in `DISABLED` copy.
+ * (`INVALID` in search, `RATE_LIMITED` in Gmail sync, `DISABLED` for Cutto).
  */
-export type ErrorContextName = "search" | "cutto" | "photo" | "gmail" | "vacations" | "redesign";
+export type ErrorContextName = "search" | "cutto" | "photo" | "gmail" | "vacations";
 
 /** The one context argument of `actionErrorText`: a redesign context name or Project Flow's keys. */
 export type ErrorContext = ErrorContextName | ActionErrorContext;
@@ -99,8 +98,8 @@ export function actionErrorCode(err: unknown): string {
 
 /**
  * Spanish copy for an action error (FE §9). `context` is a redesign context
- * name (`"search"`, `"cutto"`, `"photo"`, `"gmail"`, `"vacations"`,
- * `"redesign"`) or Project Flow's keys. Unknown errors get the generic copy.
+ * name (`"search"`, `"cutto"`, `"photo"`, `"gmail"`, `"vacations"`) or
+ * Project Flow's keys. Unknown errors get the generic copy.
  */
 export function actionErrorText(err: unknown, context: ErrorContext = {}): string {
   const ctx: ActionErrorContext = typeof context === "string" ? { area: context } : context;
@@ -164,7 +163,6 @@ function codeText(code: string, context: ActionErrorContext): string {
     case "NOT_ON":
       return "Tu jornada no está en curso.";
     case "DISABLED":
-      if (context.area === "redesign") return "El nuevo diseño no está disponible por ahora.";
       if (context.area === "cutto") return "La integración con Cutto aún no está disponible. Usa el enlace para abrir Cutto.";
       return "Esta función está desactivada.";
     case "OVERLAP":

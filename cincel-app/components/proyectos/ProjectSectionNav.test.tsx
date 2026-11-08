@@ -37,24 +37,8 @@ afterEach(() => {
 });
 
 describe("projectSectionLinks", () => {
-  it("lists Ficha, Cronograma and Archivos without Clientes by default", () => {
-    expect(projectSectionLinks("p1")).toEqual([
-      { section: "ficha", label: "Ficha", href: "/proyectos/p1/ficha" },
-      { section: "cronograma", label: "Cronograma", href: "/proyectos/p1/cronograma" },
-      { section: "archivos", label: "Archivos", href: "/proyectos/p1/archivos" },
-    ]);
-  });
-
-  it("adds Clientes last only when asked", () => {
-    const links = projectSectionLinks("p1", { showClientes: true });
-    expect(links.map((l) => l.label)).toEqual(["Ficha", "Cronograma", "Archivos", "Clientes"]);
-    expect(links[3].href).toBe("/proyectos/p1/clientes");
-  });
-});
-
-describe("projectSectionLinks · redesign layout", () => {
   it("adds Resumen and Tareas, puts Ficha last and carries the counts", () => {
-    const links = projectSectionLinks("p1", { layout: "redesign", counts: { tareas: 39, archivos: 48, clientes: 2 } });
+    const links = projectSectionLinks("p1", { counts: { tareas: 39, archivos: 48, clientes: 2 } });
     expect(links.map((l) => l.section)).toEqual(["resumen", "tareas", "cronograma", "archivos", "ficha"]);
     expect(links[0].href).toBe("/proyectos/p1");
     expect(links.find((l) => l.section === "tareas")?.count).toBe(39);
@@ -63,8 +47,9 @@ describe("projectSectionLinks · redesign layout", () => {
   });
 
   it("adds Clientes before Ficha only when asked", () => {
-    const links = projectSectionLinks("p1", { layout: "redesign", showClientes: true });
+    const links = projectSectionLinks("p1", { showClientes: true });
     expect(links.map((l) => l.section)).toEqual(["resumen", "tareas", "cronograma", "archivos", "clientes", "ficha"]);
+    expect(links.find((l) => l.section === "clientes")?.href).toBe("/proyectos/p1/clientes");
   });
 });
 

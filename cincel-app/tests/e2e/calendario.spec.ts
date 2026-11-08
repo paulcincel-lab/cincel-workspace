@@ -1,15 +1,14 @@
 /**
  * E2E: Calendario — subscribable ICS feed for Google Calendar (#434).
  *
- * Flag off: the legacy `/calendario` page. Flag on (redesign FE §3.4): the
- * same `CalendarFeedDialog` from the aside of `/tareas?vista=calendario`.
+ * The `CalendarFeedDialog` from the aside of `/tareas?vista=calendario`
+ * (redesign FE §3.4).
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { test, expect, request as playwrightRequest, type Page } from "@playwright/test";
 import postgres from "postgres";
 import { loginAsAdmin } from "./helpers/seed-auth";
-import { setRedesignFlag } from "./helpers/redesign-flag";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
@@ -79,33 +78,7 @@ async function exerciseFeed(page: Page): Promise<void> {
   await anon.dispose();
 }
 
-test.describe("Calendario — Google Calendar feed (flag off)", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(false);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
-  test("create a private ICS link, read it without a session, regenerate and disable it", async ({ page }) => {
-    await seedAdminTask();
-    await loginAsAdmin(page, BASE_URL);
-    await page.goto(`${BASE_URL}/calendario`, { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveURL(/\/calendario/);
-    await exerciseFeed(page);
-  });
-});
-
-test.describe("Calendario — Google Calendar feed (flag on, /tareas?vista=calendario)", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(true);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
+test.describe("Calendario — Google Calendar feed (/tareas?vista=calendario)", () => {
   test("the calendar view's aside creates, regenerates and disables the same ICS link", async ({ page }) => {
     await seedAdminTask();
     await loginAsAdmin(page, BASE_URL);

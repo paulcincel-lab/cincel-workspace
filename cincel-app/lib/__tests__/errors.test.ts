@@ -76,7 +76,6 @@ describe("actionErrorText codes (FE §9)", () => {
     ["ALREADY_ON", undefined, "Ya registraste tu entrada hoy."],
     ["NOT_ON", undefined, "Tu jornada no está en curso."],
     ["DISABLED", undefined, "Esta función está desactivada."],
-    ["DISABLED", "redesign", "El nuevo diseño no está disponible por ahora."],
     ["DISABLED", "cutto", "La integración con Cutto aún no está disponible. Usa el enlace para abrir Cutto."],
     ["OVERLAP", "vacations", "Ya tienes una solicitud en esas fechas."],
     ["NOT_IMPLEMENTED", undefined, "Esta función todavía no está disponible."],

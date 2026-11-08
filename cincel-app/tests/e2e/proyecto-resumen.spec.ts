@@ -1,9 +1,8 @@
 /**
  * E2E: the project shell and the Resumen tab (redesign FE §3.5, issue R4-05).
- * Flag off: `/proyectos/<id>` still opens the Ficha, as before.
- * Flag on: `/proyectos/<id>` renders the project header, the tabs (Resumen
- * active) and the Resumen; the other tab routes keep working; Cutto appears
- * only as links that open in a new tab.
+ * `/proyectos/<id>` renders the project header, the tabs (Resumen active) and
+ * the Resumen; the other tab routes keep working; Cutto appears only as links
+ * that open in a new tab.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -11,7 +10,6 @@ import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
-import { setRedesignFlag } from "./helpers/redesign-flag";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const connectionString = process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
@@ -43,37 +41,7 @@ test.beforeAll(async () => {
   projectId = await seedProject();
 });
 
-test.describe("Proyecto — flag off", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(false);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
-  test.beforeEach(async ({ page }) => {
-    await seedAuth(page);
-    await loginAsAdmin(page, BASE_URL);
-  });
-
-  test("/proyectos/<id> opens the Ficha as before", async ({ page }) => {
-    await page.goto(`${BASE_URL}/proyectos/${projectId}`, { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveURL(new RegExp(`/proyectos/${projectId}/ficha`), { timeout: 30_000 });
-    await expect(page.getByRole("heading", { name: PROJECT_NAME })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("link", { name: "Resumen" })).toHaveCount(0);
-  });
-});
-
-test.describe("Proyecto · Resumen — flag on", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(true);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
+test.describe("Proyecto · Resumen", () => {
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);

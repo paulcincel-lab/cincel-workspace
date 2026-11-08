@@ -38,7 +38,7 @@
  *
  * "Ir al tablero" or "Omitir por ahora" calls completeOnboardingAction (lib/actions/onboarding-actions.ts) and a
  * succeeded apply marks it too, so undoing the import later keeps the wizard finished; the first-login
- * routing (lib/onboarding/first-login.ts) sends Google-signed-in admins to /configuracion/importar-monday
+ * routing (lib/onboarding/first-login.ts) sends Google-signed-in admins to /ajustes/monday
  * until then, while no import is applied.
  *
  * The monday token is a plain argument of connect and export only: the screens keep it in component state,

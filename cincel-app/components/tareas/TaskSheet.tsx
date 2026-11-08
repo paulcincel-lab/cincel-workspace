@@ -15,10 +15,11 @@ import {
   TaskTramoSelect,
   sortTaskHistory,
   taskAttachmentError,
-} from "@/components/tareas/TaskDrawer";
+} from "@/components/tareas/task-detail-fields";
 import TaskSubtasks from "@/components/tareas/TaskSubtasks";
 import { WaitingBadge } from "@/components/tareas/TaskRowMeta";
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
+import { ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
@@ -331,8 +332,7 @@ function todayIso(): string {
 
 /**
  * Task sheet (redesign FE §3.4, frame `TareaDetalle`): opens from
- * `/tareas?tarea=<id>` over the mounted view. It extends `TaskDrawer` (same
- * fields, actions and bitácora) on the `FormSheet` shell: property edits save
+ * `/tareas?tarea=<id>` over the mounted view, on the `FormSheet` shell: property edits save
  * right away through the existing task actions; title and descripción save
  * with "Guardar cambios". Fase and Espacio render only when that data exists.
  * An admin task loads as missing for a viewer who can't see it (the server
@@ -359,6 +359,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
 
   const current: LoadState = state.taskId === taskId ? state : { kind: "loading", taskId };
   const task = current.kind === "ready" ? current.task : null;
+  const importData = useImportData("task", task?.id);
 
   // The task (again whenever the id changes: a subtask or dependency opened in place).
   useEffect(() => {
@@ -883,6 +884,8 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
             }}
           />
         </section>
+
+        <ImportDataPanel importData={importData} />
       </div>
     </FormSheet>
   );

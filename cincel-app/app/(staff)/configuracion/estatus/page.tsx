@@ -1,26 +1,7 @@
-import Sidebar from "@/components/layout/Sidebar";
-import Header from "@/components/layout/Header";
-import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
-import { EstatusClient } from "./EstatusClient";
 import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
-import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
+import { redirectLegacy } from "@/lib/ui/legacy-redirects-server";
 
+/** Old route (FE §2.2): redirects to its redesign page, query string preserved. */
 export default async function ConfiguracionEstatusPage({ searchParams }: LegacyPageProps) {
-  await redirectLegacyIfRedesignOn("/configuracion/estatus", searchParams);
-  let initialStatuses: Awaited<ReturnType<typeof fetchTaskStatusesAction>> = [];
-  try {
-    initialStatuses = await fetchTaskStatusesAction();
-  } catch {
-    // Not authorized / no session — the client falls back to hydrating itself.
-  }
-
-  return (
-    <main className="flex min-h-screen bg-background text-foreground">
-      <Sidebar />
-      <section className="flex-1 overflow-y-auto p-10">
-        <Header />
-        <EstatusClient initialStatuses={initialStatuses} />
-      </section>
-    </main>
-  );
+  return redirectLegacy("/configuracion/estatus", searchParams);
 }

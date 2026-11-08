@@ -13,7 +13,6 @@ const mocks = vi.hoisted(() => {
     getPortalProject: vi.fn(),
     getPortalSchedule: vi.fn(),
     getPortalProjectTramos: vi.fn(),
-    getPortalPresentation: vi.fn(),
     listPortalFolder: vi.fn(),
     notFound: vi.fn(() => {
       throw new Error("NEXT_NOT_FOUND");
@@ -43,7 +42,6 @@ vi.mock("@/lib/portal/queries", () => ({
   getPortalSchedule: mocks.getPortalSchedule,
   getPortalProjectTramos: mocks.getPortalProjectTramos,
 }));
-vi.mock("@/lib/portal/style-server", () => ({ getPortalPresentation: mocks.getPortalPresentation }));
 vi.mock("@/lib/portal/files", () => ({ listPortalFolder: mocks.listPortalFolder }));
 vi.mock("@/components/portal/PortalProjectOverview", () => ({
   default: ({ project, data }: { project: { id: string }; data: Record<string, unknown> }) => (
@@ -90,23 +88,8 @@ describe("/portal/proyectos/[id]", () => {
     mocks.getPortalProject.mockResolvedValue(project);
     mocks.getPortalSchedule.mockResolvedValue(schedule);
     mocks.getPortalProjectTramos.mockResolvedValue([]);
-    mocks.getPortalPresentation.mockResolvedValue({ redesignEnabled: false, style: "visual", fixedByOrg: false });
   });
   afterEach(cleanup);
-
-  it("renders Resumen by default from the project DTO", async () => {
-    render(await renderPage());
-
-    expect(screen.getByRole("heading", { level: 1, name: "Casa Lomas" })).toBeTruthy();
-    expect(screen.getByText("Activo")).toBeTruthy();
-    expect(screen.getByText("42%")).toBeTruthy();
-    expect(screen.getByText("15-01-2026")).toBeTruthy();
-    expect(screen.getByText("20-12-2026")).toBeTruthy();
-    expect(screen.getByText("Av. Siempre Viva 742, Monterrey, NL")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "laura@cincel.mx" }).getAttribute("href")).toBe("mailto:laura@cincel.mx");
-    expect(mocks.getPortalSchedule).not.toHaveBeenCalled();
-    expect(mocks.requireProjectAccess).toHaveBeenCalledWith(PID, expect.objectContaining({ id: "pu1" }));
-  });
 
   it("shows both tabs as links that keep the tab in ?tab=", async () => {
     render(await renderPage());
@@ -183,19 +166,11 @@ describe("/portal/proyectos/[id]", () => {
   it("falls back to Resumen for an unknown tab", async () => {
     render(await renderPage("pagos"));
 
-    expect(screen.getByText("Avance")).toBeTruthy();
-    expect(mocks.getPortalSchedule).not.toHaveBeenCalled();
-  });
-
-  it("stays in one column at 360 px", async () => {
-    window.innerWidth = 360;
-    render(await renderPage());
-
-    expect(document.querySelector("dl")?.className).toContain("grid-cols-1");
+    expect(screen.getByTestId("overview").getAttribute("data-project")).toBe(PID);
   });
 });
 
-describe("/portal/proyectos/[id] with the redesign on (FE §3.11)", () => {
+describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
   const tramos = [
     { key: "presale", name: "Presale", state: "completado" },
     { key: "diseno", name: "Diseño", state: "en_curso" },
@@ -217,7 +192,6 @@ describe("/portal/proyectos/[id] with the redesign on (FE §3.11)", () => {
     mocks.getPortalSchedule.mockResolvedValue(schedule);
     mocks.getPortalProjectTramos.mockResolvedValue(tramos);
     mocks.listPortalFolder.mockResolvedValue({ folderId: "client-root", breadcrumbs: [], items: files });
-    mocks.getPortalPresentation.mockResolvedValue({ redesignEnabled: true, style: "esencial", fixedByOrg: false });
   });
   afterEach(cleanup);
 
@@ -238,17 +212,6 @@ describe("/portal/proyectos/[id] with the redesign on (FE §3.11)", () => {
     expect(data.progress[0]).toMatchObject({ label: "Avance general", real: 42 });
     expect(data.documentos.rows.map((r: { id: string }) => r.id)).toEqual(["f1"]);
     expect(screen.getByRole("heading", { level: 1, name: "Casa Lomas" }).className).toContain("font-semibold");
-  });
-
-  it("the style never changes the data the page loads", async () => {
-    const seen: string[] = [];
-    for (const style of ["visual", "esencial", "analitico"]) {
-      mocks.getPortalPresentation.mockResolvedValue({ redesignEnabled: true, style, fixedByOrg: false });
-      render(await renderPage());
-      seen.push(screen.getByTestId("overview").getAttribute("data-overview") ?? "");
-      cleanup();
-    }
-    expect(new Set(seen).size).toBe(1);
   });
 
   it("drops the documents section when the client folder isn't ready or Drive fails", async () => {
@@ -282,26 +245,5 @@ describe("/portal/proyectos/[id] with the redesign on (FE §3.11)", () => {
     expect(raw).not.toContain("Colado secreto");
     expect(raw).not.toContain("Juan Interno");
     expect(raw).not.toContain("99999");
-  });
-});
-
-describe("/portal/proyectos/[id] with the redesign off", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.requirePortalUser.mockResolvedValue({ id: "pu1", name: "Ana", email: "ana@example.com", contactId: "c1" });
-    mocks.requireProjectAccess.mockResolvedValue({ accessId: "a1", projectId: PID, driveFolderStatus: "ready", driveClientFolderId: "r" });
-    mocks.getPortalProject.mockResolvedValue(project);
-    mocks.getPortalPresentation.mockResolvedValue({ redesignEnabled: false, style: "analitico", fixedByOrg: false });
-  });
-  afterEach(cleanup);
-
-  it("renders exactly the legacy Resumen, whatever the cookie says", async () => {
-    render(await renderPage());
-
-    expect(screen.queryByTestId("overview")).toBeNull();
-    expect(screen.getByRole("progressbar", { name: "Avance del proyecto" })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 1, name: "Casa Lomas" }).className).toContain("font-bold");
-    expect(mocks.getPortalProjectTramos).not.toHaveBeenCalled();
-    expect(mocks.listPortalFolder).not.toHaveBeenCalled();
   });
 });

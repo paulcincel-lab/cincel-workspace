@@ -1,8 +1,9 @@
 /**
- * `npm run themes:css` (redesign BE §5.3, §15): regenerates the token block of
- * `app/globals.css` from `THEME_PRESETS.azul`. Not run until Phase 9 (Cleanup);
- * until then `globals.css` keeps today's values (drift test:
- * `tests/unit/themes-css-snapshot.test.ts`).
+ * `npm run themes:css` (redesign BE §5.3, §15, §16): regenerates the token
+ * block of `app/globals.css` from `THEME_PRESETS.azul`, the static fallback
+ * before the appearance block applies. The drift test
+ * (`tests/unit/themes-css-snapshot.test.ts`) fails when the block no longer
+ * equals the generated one.
  *
  * The token block is everything from the first `:root {` rule up to
  * `@layer base`: the light `:root`, the explicit dark rule

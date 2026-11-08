@@ -18,13 +18,13 @@ export const FIRST_LOGIN_WIZARDS = ["google_groups", "monday_import"] as const;
 export type FirstLoginWizard = (typeof FIRST_LOGIN_WIZARDS)[number];
 
 /**
- * Page of each wizard. Null while that wizard has no page yet: the dashboard only redirects to a wizard with a
- * route, so a wizard that isn't built never sends anyone to a 404. `monday_import` is the Configuración →
+ * Page of each wizard. Null while that wizard has no page yet: Inicio only redirects to a wizard with a
+ * route, so a wizard that isn't built never sends anyone to a 404. `monday_import` is the Ajustes ›
  * Importar de monday page (#672).
  */
 export const FIRST_LOGIN_WIZARD_ROUTES: Record<FirstLoginWizard, string | null> = {
-  google_groups: "/configuracion/google/primeros-pasos",
-  monday_import: "/configuracion/importar-monday",
+  google_groups: "/ajustes/google/primeros-pasos",
+  monday_import: "/ajustes/monday",
 };
 
 /** `BOOTSTRAP_ADMIN_EMAIL`, trimmed and lowercased like `scripts/bootstrap-admin.mjs`; null when unset. */
@@ -81,7 +81,7 @@ export type GoogleSetupBannerInput = {
 };
 
 /**
- * The dashboard banner after the bootstrap admin skipped (or finished) the Google wizard while no Workspace group
+ * The Inicio banner after the bootstrap admin skipped (or finished) the Google wizard while no Workspace group
  * is mapped yet: nobody can sign in with Google until one is.
  */
 export function shouldShowGoogleSetupBanner(input: GoogleSetupBannerInput, env: Env = process.env): boolean {

@@ -6,21 +6,16 @@ import { getGoogleHealthAction, listGroupMappingsAction } from "@/lib/actions/wo
 import { requireSettingsAdminPage } from "@/lib/auth/settings-admin-page";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
 import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 export const dynamic = "force-dynamic";
-
-type SearchParams = Record<string, string | string[] | undefined>;
 
 /**
  * First-login Google setup wizard of the bootstrap admin (#671) under Ajustes
  * (redesign FE §2.2, §3.10). The wizard and its stepper are unchanged here
  * (restyled in Phase 8). Administrador only; any other admin goes to
- * Ajustes › Google instead, as before. New-only route: with the redesign off it
- * redirects to the legacy `/configuracion/google/primeros-pasos`.
+ * Ajustes › Google instead, as before.
  */
-export default async function AjustesGoogleSetupWizardPage({ searchParams }: { searchParams?: Promise<SearchParams> }) {
-  await redirectIfRedesignOff("/ajustes/google/primeros-pasos", searchParams ? await searchParams : undefined);
+export default async function AjustesGoogleSetupWizardPage() {
   const user = await requireSettingsAdminPage();
   if (!isBootstrapAdminEmail(user.email)) redirect("/ajustes/google");
 

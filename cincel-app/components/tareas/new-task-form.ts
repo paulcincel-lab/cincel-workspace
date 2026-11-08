@@ -12,7 +12,6 @@ import type {
   WorkflowDetail,
   WorkflowPhaseRef,
 } from "@/lib/types/core";
-import { resolvePhaseId } from "./NewTaskModal";
 
 export const PRIORITY_OPTIONS: readonly { value: TaskPriority; label: string }[] = [
   { value: "alta", label: "Alta" },
@@ -85,7 +84,14 @@ export function tramoFases(workflow: Pick<WorkflowDetail, "phases"> | null | und
     .map((p) => ({ id: p.id, name: p.name, sortOrder: p.sortOrder }));
 }
 
-export { resolvePhaseId };
+/**
+ * The fase to save: the picked one while it's still in the tramo's catalog,
+ * else the first catalog fase (the catalog can change under an open form);
+ * null when the tramo has no fases.
+ */
+export function resolvePhaseId(phaseId: string | null, phases: readonly WorkflowPhaseRef[]): string | null {
+  return phaseId && phases.some((p) => p.id === phaseId) ? phaseId : (phases[0]?.id ?? null);
+}
 
 /**
  * Titles of the tramo's active task templates in catalog order: those of the

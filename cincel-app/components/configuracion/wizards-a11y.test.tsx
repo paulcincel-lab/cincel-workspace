@@ -58,7 +58,7 @@ import type { ThemeId } from "@/lib/types/redesign";
 const MODES = ["light", "dark"] as const;
 type Mode = (typeof MODES)[number];
 
-/** What the flag-on root layout puts on `<html>` (FE §4.1), with the preset's tokens as CSS variables. */
+/** What the root layout puts on `<html>` (FE §4.1), with the preset's tokens as CSS variables. */
 function applyTheme(theme: ThemeId, mode: Mode) {
   const root = document.documentElement;
   root.setAttribute("data-theme", mode);
@@ -125,18 +125,17 @@ const exportingRun: MondayImportRunState = {
   batchStatus: null,
 };
 
-function renderGoogle(redesign: boolean) {
-  return render(<GoogleSetupWizard health={health} mappings={[]} positions={[]} redesign={redesign} />);
+function renderGoogle() {
+  return render(<GoogleSetupWizard health={health} mappings={[]} positions={[]} />);
 }
 
-function renderMonday(redesign: boolean) {
+function renderMonday() {
   return render(
     <MondayImportWizard
       initialRun={exportingRun}
       initialChoices={null}
       hasServerToken={false}
       loadError={null}
-      redesign={redesign}
     />,
   );
 }
@@ -150,12 +149,12 @@ afterEach(() => {
   resetTheme();
 });
 
-describe("first-login wizards: restyled stepper (flag on)", () => {
+describe("first-login wizards: stepper", () => {
   for (const theme of THEME_IDS) {
     for (const mode of MODES) {
       it(`Google primeros pasos has no serious axe violations (${theme}, ${mode})`, async () => {
         applyTheme(theme, mode);
-        const { container } = renderGoogle(true);
+        const { container } = renderGoogle();
         const items = stepItems();
         expect(items.map((item) => item.dataset.state)).toEqual(["done", "current", "upcoming", "upcoming"]);
         const current = items.filter((item) => item.getAttribute("aria-current") === "step");
@@ -166,7 +165,7 @@ describe("first-login wizards: restyled stepper (flag on)", () => {
 
       it(`Importar de monday has no serious axe violations (${theme}, ${mode})`, async () => {
         applyTheme(theme, mode);
-        const { container } = renderMonday(true);
+        const { container } = renderMonday();
         const items = stepItems();
         expect(items).toHaveLength(7);
         expect(items.map((item) => item.dataset.state)).toEqual([
@@ -186,32 +185,6 @@ describe("first-login wizards: restyled stepper (flag on)", () => {
       });
     }
   }
-});
-
-describe("first-login wizards: flag off renders today's chips", () => {
-  it("Google primeros pasos keeps the badge stepper", () => {
-    renderGoogle(false);
-    const items = stepItems();
-    expect(items).toHaveLength(4);
-    for (const item of items) {
-      expect(item.dataset.state).toBeUndefined();
-      expect(item.querySelector('[data-slot="badge"]')).not.toBeNull();
-    }
-    expect(items[1].getAttribute("aria-current")).toBe("step");
-    expect(items[1].textContent).toBe("2. Grupo de administradores");
-  });
-
-  it("Importar de monday keeps the badge stepper", () => {
-    renderMonday(false);
-    const items = stepItems();
-    expect(items).toHaveLength(7);
-    for (const item of items) {
-      expect(item.dataset.state).toBeUndefined();
-      expect(item.querySelector('[data-slot="badge"]')).not.toBeNull();
-    }
-    expect(items[1].getAttribute("aria-current")).toBe("step");
-    expect(items[1].textContent).toBe("2. Tableros");
-  });
 });
 
 describe("first-login wizards: stepper colors", () => {

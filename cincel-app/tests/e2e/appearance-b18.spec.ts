@@ -1,8 +1,8 @@
 /**
- * E2E (review B18): with the OS in dark mode, the flag-on appearance follows
- * the user's mode — an explicit light choice is never overridden by the legacy
- * `prefers-color-scheme` rule in globals.css — and flag-off pages keep today's
- * pipeline. Covers light, dark, system and flag-off.
+ * E2E (review B18): with the OS in dark mode, the appearance follows the
+ * user's mode — an explicit light choice is never overridden by the
+ * `prefers-color-scheme` fallback rule in globals.css. Covers light, dark and
+ * system.
  *
  * The admin's `user_preferences` row is written directly and removed after.
  *
@@ -21,7 +21,7 @@ type Mode = "light" | "dark" | "system";
 type ThemeKey = keyof typeof THEME_PRESETS;
 
 /** Writes (or with null removes) the admin's preferences row. */
-async function setAdminPreferences(prefs: { mode: Mode; redesignEnabled: boolean } | null): Promise<void> {
+async function setAdminPreferences(prefs: { mode: Mode } | null): Promise<void> {
   const sql = postgres(connectionString, { max: 1 });
   try {
     const [admin] = await sql`select id from core.staff where lower(email) = ${ADMIN_EMAIL.toLowerCase()} limit 1`;
@@ -31,9 +31,9 @@ async function setAdminPreferences(prefs: { mode: Mode; redesignEnabled: boolean
       return;
     }
     await sql`
-      insert into core.user_preferences (staff_id, mode, redesign_enabled)
-      values (${admin.id}, ${prefs.mode}, ${prefs.redesignEnabled})
-      on conflict (staff_id) do update set mode = excluded.mode, redesign_enabled = excluded.redesign_enabled`;
+      insert into core.user_preferences (staff_id, mode)
+      values (${admin.id}, ${prefs.mode})
+      on conflict (staff_id) do update set mode = excluded.mode`;
   } finally {
     await sql.end();
   }
@@ -49,7 +49,6 @@ async function htmlState(page: Page) {
       styleAttr: html.getAttribute("style"),
       appearanceBlock: document.getElementById("appearance") !== null,
       modeScript: document.getElementById("appearance-mode") !== null,
-      primaryBlock: document.getElementById("primary-color") !== null,
       background: getComputedStyle(html).getPropertyValue("--background").trim().toLowerCase(),
     };
   });
@@ -75,7 +74,7 @@ test.describe("Apariencia — B18 dark-scheme run", () => {
   });
 
   test("light: an explicit light choice wins over a dark OS", async ({ page }) => {
-    await setAdminPreferences({ mode: "light", redesignEnabled: true });
+    await setAdminPreferences({ mode: "light" });
     await openApp(page);
     const state = await htmlState(page);
     expect(state.dataTheme).toBe("light");
@@ -88,7 +87,7 @@ test.describe("Apariencia — B18 dark-scheme run", () => {
 
   test("dark: data-theme dark and .dark together", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "light" });
-    await setAdminPreferences({ mode: "dark", redesignEnabled: true });
+    await setAdminPreferences({ mode: "dark" });
     await openApp(page);
     const state = await htmlState(page);
     expect(state.dataTheme).toBe("dark");
@@ -99,7 +98,7 @@ test.describe("Apariencia — B18 dark-scheme run", () => {
   });
 
   test("system: follows the OS before paint and on change", async ({ page }) => {
-    await setAdminPreferences({ mode: "system", redesignEnabled: true });
+    await setAdminPreferences({ mode: "system" });
     await openApp(page);
     let state = await htmlState(page);
     expect(state.modeScript).toBe(true);
@@ -112,16 +111,5 @@ test.describe("Apariencia — B18 dark-scheme run", () => {
     state = await htmlState(page);
     expect(state.dark).toBe(false);
     expect(state.background).toBe(expectedBackground(state.themeId, "light"));
-  });
-
-  test("flag off: today's pipeline, no appearance block, attributes or head script", async ({ page }) => {
-    await setAdminPreferences({ mode: "light", redesignEnabled: false });
-    await openApp(page);
-    const state = await htmlState(page);
-    expect(state.appearanceBlock).toBe(false);
-    expect(state.modeScript).toBe(false);
-    expect(state.themeId).toBeNull();
-    // Legacy globals.css: a dark OS gets the Grafito dark background.
-    expect(state.background).toBe("#141414");
   });
 });

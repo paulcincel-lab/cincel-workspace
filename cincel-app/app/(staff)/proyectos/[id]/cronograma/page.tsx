@@ -37,13 +37,10 @@ export default async function CronogramaPage({
   }
 
   const appearance = await getResolvedAppearance();
-  if (!appearance.redesignEnabled) {
-    return <CronogramaView projectId={projectId} initialView={initialView} />;
-  }
 
-  // New shell (redesign FE §3.5): `AppShell` comes from the staff layout; the
-  // page renders the project header + tabs and the Cronograma tab, whose three
-  // styles live in `CronogramaWidget`.
+  // Redesign FE §3.5: `AppShell` comes from the staff layout; the page renders
+  // the project header + tabs and the Cronograma tab, whose three styles live
+  // in `CronogramaWidget`.
   const { estilo: rawEstilo } = await searchParams;
   const estilo = PresentationStyleSchema.safeParse(Array.isArray(rawEstilo) ? rawEstilo[0] : rawEstilo);
   const user = await loadUser();
@@ -66,7 +63,6 @@ export default async function CronogramaPage({
         <CronogramaView
           projectId={projectId}
           initialView={initialView}
-          layout="redesign"
           contractEnd={shell?.detail.endDate ?? null}
         />
       </div>

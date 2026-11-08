@@ -1,31 +1,19 @@
 import "server-only";
 
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { legacyRedirectTarget, type LegacySearchParams } from "@/lib/ui/legacy-redirects";
-import { getResolvedAppearance } from "@/lib/ui/preferences-server";
 
 /**
- * Flag-aware redirect for a legacy route (FE §2.2, §2.3). A legacy `page.tsx`
- * awaits it before anything else: when the caller's resolved appearance has
- * `redesignEnabled` (read server-side from the `cincel-appearance` cookie,
- * re-validated from the DB) it redirects to the FE §2.2 target with the query
- * string preserved; otherwise it returns and the page renders as today. If the
- * appearance cannot be resolved the flag counts as off, so a legacy bookmark
- * never breaks.
+ * Redirect for an old route (FE §2.2). An old `page.tsx` returns it: it
+ * redirects to the FE §2.2 target with the query string preserved, or renders
+ * the 404 when `pathname` is not in the table.
  */
-export async function redirectLegacyIfRedesignOn(
+export async function redirectLegacy(
   pathname: string,
   searchParams?: LegacySearchParams | Promise<LegacySearchParams>,
-): Promise<void> {
-  let enabled = false;
-  try {
-    enabled = (await getResolvedAppearance()).redesignEnabled;
-  } catch {
-    enabled = false;
-  }
-  if (!enabled) return;
-
+): Promise<never> {
   const target = legacyRedirectTarget(pathname, await searchParams);
-  if (target) redirect(target);
+  if (!target) notFound();
+  redirect(target);
 }

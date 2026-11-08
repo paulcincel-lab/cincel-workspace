@@ -13,11 +13,8 @@ import { requireSettingsAdminPage } from "@/lib/auth/settings-admin-page";
 import type { MondayImportHistoryEntry } from "@/lib/monday-import/history";
 import { isBootstrapAdminEmail } from "@/lib/onboarding/first-login";
 import type { MondayImportChoices, MondayImportRunState } from "@/lib/types/monday-import";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 export const dynamic = "force-dynamic";
-
-type SearchParams = Record<string, string | string[] | undefined>;
 
 const HISTORY_ERROR = "No se pudo cargar el historial de importaciones. Recarga la página.";
 
@@ -26,11 +23,9 @@ const HISTORY_ERROR = "No se pudo cargar el historial de importaciones. Recarga 
  * existing import wizard (#672) between "Última importación" and "Historial".
  * Administrador only and never the bootstrap admin (today's rule), checked by
  * the segment layout, here and again by every action. Opening the page resumes
- * the latest import (or starts one), as before. New-only route: with the
- * redesign off it redirects to the legacy `/configuracion/importar-monday`.
+ * the latest import (or starts one), as before.
  */
-export default async function AjustesMondayPage({ searchParams }: { searchParams?: Promise<SearchParams> }) {
-  await redirectIfRedesignOff("/ajustes/monday", searchParams ? await searchParams : undefined);
+export default async function AjustesMondayPage() {
   const user = await requireSettingsAdminPage();
   if (isBootstrapAdminEmail(user.email)) redirect("/ajustes/permisos");
 

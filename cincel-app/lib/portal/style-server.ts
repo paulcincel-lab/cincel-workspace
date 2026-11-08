@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { appSettings } from "@/lib/db/schema";
-import { getPortalAppearance } from "@/lib/portal/appearance";
 import { ORG_APPEARANCE_SETTING_KEY, parseStoredOrgAppearance } from "@/lib/portal/appearance-scope";
 import type { OrgAppearance, PresentationStyle } from "@/lib/types/redesign";
 import { DEFAULT_ORG_APPEARANCE } from "@/lib/ui/themes";
@@ -30,23 +29,19 @@ export const getPortalStylePolicy = cache(async (): Promise<Pick<OrgAppearance, 
 });
 
 export type PortalPresentation = {
-  /** False renders the portal exactly as before the redesign: no style switch, no styled project page. */
-  redesignEnabled: boolean;
   style: PresentationStyle;
   /** True when the organization fixed the style; the cookie is then ignored. */
   fixedByOrg: boolean;
 };
 
 /**
- * Redesign flag and presentation style for this portal request (FE §3.11, §15.1). The flag and the theme come
- * from the organization appearance (`getPortalAppearance`, no user row); the style is the `cincel-portal-style`
- * cookie when it holds a known style and the organization allows a personal style, else the org default.
- * Cached per request, so the layout and the page agree.
+ * Presentation style for this portal request (FE §3.11, §15.1): the `cincel-portal-style` cookie when it holds
+ * a known style and the organization allows a personal style, else the org default. Cached per request, so the
+ * layout and the page agree.
  */
 export const getPortalPresentation = cache(async (): Promise<PortalPresentation> => {
-  const [appearance, policy, cookieStore] = await Promise.all([getPortalAppearance(), getPortalStylePolicy(), cookies()]);
+  const [policy, cookieStore] = await Promise.all([getPortalStylePolicy(), cookies()]);
   return {
-    redesignEnabled: appearance.redesignEnabled,
     style: resolvePortalStyle(cookieStore.get(PORTAL_STYLE_COOKIE)?.value, policy),
     fixedByOrg: !policy.allowUserOverride,
   };

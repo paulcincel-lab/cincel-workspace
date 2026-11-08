@@ -235,14 +235,6 @@ export function ThemeEditor({ initial, presets }: ThemeEditorProps) {
                 />
                 <Label htmlFor="allow-user-override">Permitir que cada persona elija su estilo y tema</Label>
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="redesign-default"
-                  checked={draft.redesignDefault}
-                  onCheckedChange={(checked) => update({ redesignDefault: checked === true })}
-                />
-                <Label htmlFor="redesign-default">Nuevo diseño para todos</Label>
-              </div>
             </div>
           </SettingsSection>
 

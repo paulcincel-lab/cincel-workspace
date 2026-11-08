@@ -1,12 +1,10 @@
 /**
- * Legacy route → redesign route table (FE §2.2). Pure and client-safe; the
- * flag-aware server helper that calls it is `lib/ui/legacy-redirects-server.ts`.
+ * Old route → redesign route table (FE §2.2). Pure and client-safe; the
+ * server helper that calls it is `lib/ui/legacy-redirects-server.ts`.
  *
- * Every legacy `page.tsx` listed in FE §2.2 calls the server helper first: with
- * the redesign flag on it redirects to the target returned here (query string
- * preserved), with it off the page renders as today. The canonical link forms
- * (`/tareas/[id]`, `/mi-espacio/notas/[id]`) and the new-only routes are not
- * part of this table (`lib/ui/redesign-redirect.ts`).
+ * Every old `page.tsx` listed in FE §2.2 is a plain redirect to the target
+ * returned here (query string preserved). The canonical link forms
+ * (`/tareas/[id]`, `/mi-espacio/notas/[id]`) are not part of this table.
  */
 
 /** What a Next.js page receives as `searchParams`, or a ready `URLSearchParams`. */
@@ -98,7 +96,7 @@ function targetFor(path: string): string | null {
 }
 
 /**
- * The redesign URL an old route redirects to when the flag is on (FE §2.2), or
+ * The redesign URL an old route redirects to (FE §2.2), or
  * null when `pathname` is not a legacy route. The target's own query keys come
  * first and win over the same keys in the old query; every other old key is
  * kept in its original order. `/actividades/[tramo]?project=X` (Project Flow's

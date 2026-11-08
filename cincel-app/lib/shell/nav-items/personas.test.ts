@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   implemented: { fetchPersonaDetailAction: false, fetchPeopleOverviewAction: false },
-  redesignEnabled: false,
   user: { access: "Administrador" } as { access: string } | null,
   canViewTeam: true,
   canViewClients: true,
@@ -12,9 +11,6 @@ vi.mock("@/lib/actions/people-actions.flags", () => ({
   get IMPLEMENTED() {
     return state.implemented;
   },
-}));
-vi.mock("@/lib/ui/preferences-server", () => ({
-  getResolvedAppearance: vi.fn(async () => ({ redesignEnabled: state.redesignEnabled })),
 }));
 vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: vi.fn(async () => {
@@ -33,14 +29,13 @@ const session = { staffId: "s1", name: "Ana", role: "Administrador", isAdmin: tr
 
 beforeEach(() => {
   state.implemented = { fetchPersonaDetailAction: true, fetchPeopleOverviewAction: true };
-  state.redesignEnabled = true;
   state.user = { access: "Administrador" };
   state.canViewTeam = true;
   state.canViewClients = true;
 });
 
 describe("personas nav item", () => {
-  it("links to /personas with the flag on and the overview implemented", async () => {
+  it("links to /personas with the overview implemented", async () => {
     const item = await personasNavItem.resolve(session);
     expect(item).toMatchObject({ key: "personas", label: "Personas", href: "/personas" });
   });
@@ -50,10 +45,6 @@ describe("personas nav item", () => {
     expect(await personasNavItem.resolve(session)).toBeNull();
   });
 
-  it("stays hidden with the redesign flag off", async () => {
-    state.redesignEnabled = false;
-    expect(await personasNavItem.resolve(session)).toBeNull();
-  });
 
   it("goes to the directory for a viewer who only sees clients", async () => {
     state.canViewTeam = false;

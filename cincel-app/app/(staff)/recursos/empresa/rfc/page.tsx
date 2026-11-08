@@ -1,8 +1,7 @@
-import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
-import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
+import { redirectLegacy } from "@/lib/ui/legacy-redirects-server";
 
-export default async function EmpresaRFCPage({ searchParams }: LegacyPageProps) {
-  await redirectLegacyIfRedesignOn("/recursos/empresa/rfc", searchParams);
-  return <ResourcesWorkspaceServer mode="empresa" titleOverride="RFC" descriptionOverride="Datos fiscales y documentación administrativa." />;
+/** Old route (FE §2.2): redirects to its redesign page, query string preserved. */
+export default async function RecursosEmpresaRfcPage({ searchParams }: LegacyPageProps) {
+  return redirectLegacy("/recursos/empresa/rfc", searchParams);
 }

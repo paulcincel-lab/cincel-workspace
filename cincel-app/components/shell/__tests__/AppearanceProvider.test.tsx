@@ -16,7 +16,6 @@ import { THEME_PRESETS } from "@/lib/ui/themes";
 
 import {
   AppearanceProvider,
-  LEGACY_THEME_STORAGE_KEY,
   TEXT_SIZE_DEBOUNCE_MS,
   useAppearance,
 } from "../AppearanceProvider";
@@ -44,7 +43,6 @@ function resolved(patch: Partial<UserPreferences> = {}, theme: keyof typeof THEM
       density: "comoda",
       textSize: 14,
       quietHours: null,
-      redesignEnabled: true,
       ...patch,
     },
   );
@@ -212,21 +210,6 @@ describe("AppearanceProvider", () => {
     );
   });
 
-  it("uses the redesign opt-in copy when turning the redesign on fails", async () => {
-    const initial = resolved();
-    prepareDocument(initial);
-    mocks.update.mockRejectedValue(new Error("DISABLED: redesign"));
-    render(
-      <AppearanceProvider initial={initial}>
-        <Probe />
-      </AppearanceProvider>,
-    );
-    await act(async () => {
-      await setPreference({ redesignEnabled: true });
-    });
-    expect(mocks.toastError).toHaveBeenCalledWith("El nuevo diseño no está disponible por ahora.");
-  });
-
   it("debounces text-size changes by 300 ms and sends only the last one", async () => {
     vi.useFakeTimers();
     const initial = resolved();
@@ -310,26 +293,10 @@ describe("AppearanceProvider", () => {
     }
   });
 
-  it("migrates the legacy ThemeToggle choice once and deletes the key", async () => {
+  it("never reads the retired cincel.theme key nor writes a preference from it", async () => {
     mocks.flags.updateMyPreferencesAction = true;
-    window.localStorage.setItem(LEGACY_THEME_STORAGE_KEY, "dark");
-    const initial = resolved({ mode: "system" });
-    prepareDocument(initial);
-    mocks.update.mockResolvedValue({ preferences: {} as UserPreferences, appearance: resolved({ mode: "dark" }) });
-    await act(async () => {
-      render(
-        <AppearanceProvider initial={initial}>
-          <Probe />
-        </AppearanceProvider>,
-      );
-      await Promise.resolve();
-    });
-    expect(window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY)).toBeNull();
-    await vi.waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ mode: "dark" }));
-  });
-
-  it("does not migrate while the preferences write is a stub", async () => {
-    window.localStorage.setItem(LEGACY_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem("cincel.theme", "dark");
+    const getItem = vi.spyOn(Storage.prototype, "getItem");
     const initial = resolved({ mode: "system" });
     prepareDocument(initial);
     await act(async () => {
@@ -340,7 +307,9 @@ describe("AppearanceProvider", () => {
       );
       await Promise.resolve();
     });
+    expect(getItem.mock.calls.map(([key]) => key)).not.toContain("cincel.theme");
     expect(mocks.update).not.toHaveBeenCalled();
-    expect(window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY)).toBe("dark");
+    expect(window.localStorage.getItem("cincel.theme")).toBe("dark");
+    getItem.mockRestore();
   });
 });

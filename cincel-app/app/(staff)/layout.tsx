@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 
 import { AppShell, type AppShellProps } from "@/components/shell/AppShell";
-import { NewShellProvider } from "@/components/shell/shell-context";
 import { fetchMyTodayAction } from "@/lib/actions/time-tracking-actions";
 import { getSessionAccess } from "@/lib/auth/session";
 import { LOGIN_ROUTE } from "@/lib/auth/public-routes";
@@ -14,21 +13,18 @@ import { buildNavModel, type NavModel, type NavSession } from "@/lib/ui/nav";
 import { getResolvedAppearance } from "@/lib/ui/preferences-server";
 
 /**
- * Layout of every staff page (redesign FE §2.3, §5). No session → `/login`.
- * Flag off → the page renders bare, with its own legacy `Sidebar` + `Header`
- * (restyled pages use `LegacyFrame`). Flag on → the page renders inside
- * `AppShell`. The flag is read on the server, so there is no client flash.
+ * Layout of every staff page (redesign FE §2.3, §5). No session → `/login`;
+ * an active session renders the page inside `AppShell`.
  */
 export default async function StaffLayout({ children }: { children: ReactNode }) {
   const access = await getSessionAccess();
   if (access.status === "guest" || !access.user) redirect(LOGIN_ROUTE);
 
-  // First access, inactive members and the like stay on the legacy path: the
-  // route guard decides where they go, exactly as today.
+  // First access, inactive members and the like render bare: the route guard
+  // decides where they go.
   if (access.status !== "active") return <>{children}</>;
 
   const appearance = await getResolvedAppearance();
-  if (!appearance.redesignEnabled) return <>{children}</>;
 
   const { user } = access;
   const session: NavSession = {
@@ -41,11 +37,9 @@ export default async function StaffLayout({ children }: { children: ReactNode })
   const [nav, today] = await Promise.all([loadNav(session), loadToday()]);
 
   return (
-    <NewShellProvider>
-      <AppShell appearance={appearance} session={session} nav={nav} today={today}>
-        {children}
-      </AppShell>
-    </NewShellProvider>
+    <AppShell appearance={appearance} session={session} nav={nav} today={today}>
+      {children}
+    </AppShell>
   );
 }
 

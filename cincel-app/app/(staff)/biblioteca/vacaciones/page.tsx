@@ -2,7 +2,6 @@ import { MisVacacionesClient } from "@/components/biblioteca/MisVacacionesClient
 import { VacationDeciders } from "@/components/biblioteca/VacationDeciders";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import type { PresentationStyle } from "@/lib/types/redesign";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 import { loadMisVacaciones } from "./load-mis-vacaciones";
 
@@ -16,13 +15,11 @@ function styleOverride(value: SearchParams[string]): PresentationStyle | null {
 }
 
 /**
- * `/biblioteca/vacaciones` (redesign FE §3.7): Mis vacaciones in the new
- * shell; with the redesign off it redirects to the legacy section.
+ * `/biblioteca/vacaciones` (redesign FE §3.7): Mis vacaciones.
  * `?estilo=` overrides the style for this render only (FE §4.2).
  */
 export default async function MisVacacionesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  await redirectIfRedesignOff("/biblioteca/vacaciones", params);
   const data = await loadMisVacaciones();
   const page = (
     <div className="flex flex-col gap-6">

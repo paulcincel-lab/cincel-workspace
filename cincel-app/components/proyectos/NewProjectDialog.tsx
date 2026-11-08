@@ -7,10 +7,10 @@ import {
   ProjectCreateFields,
   projectCreateDescription,
   useProjectCreateForm,
-  type ProjectCreateModalProps,
-} from "./ProjectCreateModal";
+  type ProjectCreateFormProps,
+} from "./project-create-form";
 
-export type NewProjectDialogProps = Omit<ProjectCreateModalProps, "onClose"> & {
+export type NewProjectDialogProps = ProjectCreateFormProps & {
   open: boolean;
   onOpenChange(open: boolean): void;
 };
@@ -21,8 +21,8 @@ export function newProjectErrorText(err: unknown): string {
 }
 
 /**
- * "Nuevo proyecto" (redesign FE §3.5, frame `NuevoProyecto`): extends
- * `ProjectCreateModal` (same form state, fields and submit) on `FormDialog`.
+ * "Nuevo proyecto" (redesign FE §3.5, frame `NuevoProyecto`): the create form
+ * (`useProjectCreateForm`, `ProjectCreateFields`) on `FormDialog`.
  * Project Flow fields: the name only, plus Cliente, Origen and "Quién trajo
  * el proyecto" when `adminOptions` is given (admins only). Ignores the
  * presentation style. Closes itself after a successful create; the caller's

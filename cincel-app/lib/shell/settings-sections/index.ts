@@ -18,7 +18,6 @@ import { aparienciaEstiloSection } from "./apariencia/estilo";
 import { aparienciaModoSection } from "./apariencia/modo";
 import { aparienciaDensidadSection } from "./apariencia/densidad";
 import { aparienciaTamanoTextoSection } from "./apariencia/tamano-texto";
-import { aparienciaNuevoDisenoSection } from "./apariencia/nuevo-diseno";
 import { horarioControlSection } from "./horario/control";
 import { horarioReglasSection } from "./horario/reglas";
 import { horarioVistaPreviaSection } from "./horario/vista-previa";
@@ -52,7 +51,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionEntry[] = [
   aparienciaModoSection,
   aparienciaDensidadSection,
   aparienciaTamanoTextoSection,
-  aparienciaNuevoDisenoSection,
   horarioControlSection,
   horarioReglasSection,
   horarioVistaPreviaSection,

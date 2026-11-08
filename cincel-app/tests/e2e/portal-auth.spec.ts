@@ -1,6 +1,5 @@
 /**
- * E2E: portal sign-in page (R8-04). Works with the organization redesign on or off: the sign-in flow is the
- * same, only the card changes (button "Enviar enlace" today, "Enviar enlace de acceso" restyled).
+ * E2E: portal sign-in page (R8-04, canvas `PortalLogin`).
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */

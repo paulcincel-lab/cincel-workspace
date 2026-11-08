@@ -10,11 +10,8 @@ export const TEXT_SIZE_DEBOUNCE_MS = 400;
 /** Copy shown on the Tema and Estilo cards when the organization fixed them (FE §3.8, §9). */
 export const OVERRIDE_LOCKED_COPY = "La organización fijó el tema y el estilo.";
 
-/** Copy for the "Nuevo diseño" switch when the org kill switch is off (FE §9, `DISABLED` redesign opt-in). */
-export const REDESIGN_UNAVAILABLE_COPY = "El nuevo diseño no está disponible por ahora.";
-
 /** Which Apariencia section an inline error belongs to. */
-export type AparienciaSectionKey = "tema" | "estilo" | "modo" | "densidad" | "tamano-texto" | "nuevo-diseno";
+export type AparienciaSectionKey = "tema" | "estilo" | "modo" | "densidad" | "tamano-texto";
 
 export type AparienciaContextValue = {
   /** The caller's preferences, optimistically updated. */
@@ -23,8 +20,6 @@ export type AparienciaContextValue = {
   isAdmin: boolean;
   /** False when the org disallows overrides, or the action answered `OVERRIDE_DISABLED`. */
   overridesAllowed: boolean;
-  /** False when the org kill switch is off, or the action answered `DISABLED`. */
-  redesignAvailable: boolean;
   /** Live text size (moves with the slider before the debounced save). */
   textSize: number;
   /** Inline error per section (Spanish copy), null when none. */

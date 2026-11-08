@@ -11,7 +11,6 @@ import { getSessionAccess, requireCapabilityUser } from "@/lib/auth/session";
 import { getPickerDriveStatus } from "@/lib/google/picker-drive";
 import { settingsSectionsFor } from "@/lib/shell/settings-sections";
 import type { GmailStatus } from "@/lib/types/redesign";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +29,9 @@ async function loadGmailStatus(): Promise<GmailStatus> {
 /**
  * Ajustes › Integraciones (redesign FE §3.8): Gmail, Google Calendar, Google
  * Drive, Cutto (link only) and monday. Personal page (staff session only);
- * the Ajustes layout renders the header and `AjustesNav`. New-only route:
- * with the redesign off it redirects to the legacy equivalent.
+ * the Ajustes layout renders the header and `AjustesNav`.
  */
 export default async function AjustesIntegracionesPage() {
-  await redirectIfRedesignOff("/ajustes/integraciones");
 
   const access = await getSessionAccess();
   if (!access.user) redirect("/login");

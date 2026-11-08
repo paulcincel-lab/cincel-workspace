@@ -3,8 +3,7 @@
  * requests days, an administrator approves them from "Solicitudes del
  * equipo", and the requester's balance reflects the decision.
  *
- * Both users have the redesign flag on (`/biblioteca/vacaciones` is a
- * new-only route). The requester is a seeded "Colaborador" tagged E2E with
+ * The requester is a seeded "Colaborador" tagged E2E with
  * its own credential and a 10-day override in `staff_profiles.vacation_days`,
  * so the balance is deterministic; global-cleanup removes it (its requests,
  * preferences and profile cascade with it).
@@ -15,7 +14,7 @@ import { randomBytes, scryptSync } from "node:crypto";
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import postgres from "postgres";
 import { e2eAdminEmail, loginAs, loginAsAdmin } from "./helpers/seed-auth";
-import { clearAppearanceCookie, setRedesignFor } from "./helpers/redesign";
+import { clearAppearanceCookie } from "./helpers/redesign";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
@@ -83,7 +82,6 @@ async function seedRequester(): Promise<void> {
   } finally {
     await sql.end();
   }
-  await setRedesignFor(REQUESTER_EMAIL, true);
 }
 
 async function requesterRequests(): Promise<{ status: string; days: number; from: string; to: string; decidedBy: string | null }[]> {
@@ -131,11 +129,6 @@ async function gotoMisVacaciones(page: Page): Promise<void> {
 test.describe("Mis vacaciones — request, approve, balance", () => {
   test.beforeAll(async () => {
     await seedRequester();
-    await setRedesignFor(e2eAdminEmail(), true);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFor(e2eAdminEmail(), null);
   });
 
   test("a collaborator requests days, an administrator approves them and the balance updates", async ({ browser }) => {

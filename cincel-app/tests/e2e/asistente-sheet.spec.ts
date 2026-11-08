@@ -1,8 +1,7 @@
 /**
  * E2E: the assistant sheet on staff pages (redesign R7-11, FE §3.9, §17).
  *
- * Runs with the redesign flag on for the admin. The chat route is answered by
- * a fixture UI message stream (`page.route`), so no LLM credentials are needed:
+ * The chat route is answered by a fixture UI message stream (`page.route`), so no LLM credentials are needed:
  * the first request gets an approval request for `create_note`, the next one
  * (carrying `approvals`) gets the tool result.
  *
@@ -55,14 +54,6 @@ async function stubChatRoute(page: Page): Promise<Record<string, unknown>[]> {
   return bodies;
 }
 
-/** Turns the redesign on for the signed-in user through the legacy opt-in banner (FE §2.3). */
-async function enableRedesign(page: Page) {
-  await page.goto(`${BASE_URL}/dashboard`, { waitUntil: "domcontentloaded" });
-  if (/\/inicio/.test(page.url())) return;
-  await page.getByRole("button", { name: "Activar" }).click();
-  await page.waitForURL(/\/inicio/, { timeout: 20_000 });
-}
-
 async function openSheet(page: Page) {
   await page.getByRole("button", { name: /Pregúntale a Cincel/ }).click();
   await expect(page.getByPlaceholder(COMPOSER)).toBeVisible();
@@ -72,7 +63,6 @@ test.describe("Asistente · sheet", () => {
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
-    await enableRedesign(page);
   });
 
   test("Inicio: opens with ⌘J, no entity chip, confirmation card flow", async ({ page }) => {

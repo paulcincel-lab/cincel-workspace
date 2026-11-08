@@ -1,15 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 
-const calls = vi.hoisted(() => [] as string[]);
-
-const redirectHelper = vi.hoisted(() => ({
-  redirectIfRedesignOff: vi.fn(async (pathname: string) => {
-    calls.push(`redirectIfRedesignOff:${pathname}`);
-  }),
-}));
-vi.mock("@/lib/ui/redesign-redirect", () => redirectHelper);
-
 const nav = vi.hoisted(() => ({
   redirect: vi.fn((to: string) => {
     throw new Error(`NEXT_REDIRECT:${to}`);
@@ -58,7 +49,6 @@ async function renderPage(search: Record<string, string | string[] | undefined> 
 
 beforeEach(() => {
   vi.clearAllMocks();
-  calls.length = 0;
   Object.assign(gmailFlags, { fetchGmailStatusAction: true, fetchGmailThreadsAction: true });
   session.getSessionAccess.mockResolvedValue({ user: { id: "s1" }, status: "ok" });
   actions.fetchNotificationsAction.mockResolvedValue({ items: [], nextCursor: null, unreadCount: 2 });
@@ -70,18 +60,6 @@ beforeEach(() => {
 });
 
 describe("/mi-espacio page", () => {
-  it("runs the flag-aware redirect before loading anything", async () => {
-    await renderPage({ nota: "n1" });
-    expect(redirectHelper.redirectIfRedesignOff).toHaveBeenCalledWith("/mi-espacio", { nota: "n1" });
-    expect(calls[0]).toBe("redirectIfRedesignOff:/mi-espacio");
-  });
-
-  it("stops when the redirect helper redirects (flag off)", async () => {
-    redirectHelper.redirectIfRedesignOff.mockRejectedValueOnce(new Error("NEXT_REDIRECT:/dashboard"));
-    await expect(renderPage()).rejects.toThrow("NEXT_REDIRECT:/dashboard");
-    expect(actions.fetchNotesAction).not.toHaveBeenCalled();
-  });
-
   it("sends a visitor without a session to the login", async () => {
     session.getSessionAccess.mockResolvedValue({ user: null, status: "anonymous" });
     await expect(renderPage()).rejects.toThrow("NEXT_REDIRECT:/login");

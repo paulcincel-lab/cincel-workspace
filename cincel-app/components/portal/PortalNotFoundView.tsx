@@ -6,7 +6,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/shadcn/card";
@@ -19,31 +18,11 @@ export const PORTAL_NOT_FOUND_DESCRIPTION =
 export const PORTAL_NOT_FOUND_BACK_LABEL = "Volver a mis proyectos";
 export const PORTAL_NOT_FOUND_HELP = "¿Necesitas ayuda? Escríbele a tu contacto en Cincel.";
 
-type PortalNotFoundViewProps = {
-  /** Organization redesign on: the restyled card of canvas `Portal404`. Off: today's card, unchanged. */
-  redesign: boolean;
-};
-
-/** Portal 404 (FE §3.4, §3.11): unknown pages and projects the client can't see; rendered inside the portal shell. */
-export default function PortalNotFoundView({ redesign }: PortalNotFoundViewProps) {
-  if (!redesign) {
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>
-            <h1>{PORTAL_NOT_FOUND_TITLE}</h1>
-          </CardTitle>
-          <CardDescription>{PORTAL_NOT_FOUND_DESCRIPTION}</CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <Link href={PORTAL_ROUTE} className={buttonVariants()}>
-            {PORTAL_NOT_FOUND_BACK_LABEL}
-          </Link>
-        </CardFooter>
-      </Card>
-    );
-  }
-
+/**
+ * Portal 404 (FE §3.4, §3.11, canvas `Portal404`): unknown pages and projects the client can't see; rendered inside
+ * the portal shell.
+ */
+export default function PortalNotFoundView() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-6">
       <Card className="w-full max-w-md text-center">

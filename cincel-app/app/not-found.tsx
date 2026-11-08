@@ -2,18 +2,16 @@ import Link from "next/link";
 
 import { NotFoundSearchButton } from "@/components/shell/NotFoundSearchButton";
 import { buttonVariants } from "@/components/ui/shadcn/button";
-import { getResolvedAppearance } from "@/lib/ui/preferences-server";
-import { isNotFoundSearchAvailable, NOT_FOUND_COPY, notFoundHomeHref } from "@/lib/ui/route-states";
+import { isNotFoundSearchAvailable, NOT_FOUND_COPY, NOT_FOUND_HOME_HREF } from "@/lib/ui/route-states";
 
 /**
  * Staff not-found page (redesign FE §3.12, frame `Error404`): a CSS-shape
- * illustration, "No encontramos esta página", "Volver a Inicio" (`/inicio`
- * with the redesign on, `/dashboard` otherwise) and "Buscar", which opens the
- * command palette only while the palette is available.
+ * illustration, "No encontramos esta página", "Volver a Inicio" and
+ * "Buscar", which opens the command palette only while the palette is
+ * available.
  */
-export default async function NotFound() {
-  const redesignEnabled = await readRedesignEnabled();
-  const showSearch = isNotFoundSearchAvailable(redesignEnabled);
+export default function NotFound() {
+  const showSearch = isNotFoundSearchAvailable();
 
   return (
     <main className="flex min-h-[70vh] flex-1 flex-col items-center justify-center px-4 py-10">
@@ -25,7 +23,7 @@ export default async function NotFound() {
         </h1>
         <p className="text-sm leading-relaxed text-muted-foreground">{NOT_FOUND_COPY.description}</p>
         <div className="flex flex-wrap justify-center gap-2">
-          <Link href={notFoundHomeHref(redesignEnabled)} className={buttonVariants({ size: "lg" })}>
+          <Link href={NOT_FOUND_HOME_HREF} className={buttonVariants({ size: "lg" })}>
             {NOT_FOUND_COPY.home}
           </Link>
           {showSearch ? <NotFoundSearchButton /> : null}
@@ -33,16 +31,6 @@ export default async function NotFound() {
       </section>
     </main>
   );
-}
-
-/** A flag read failure must not break the 404; it falls back to the legacy links. */
-async function readRedesignEnabled(): Promise<boolean> {
-  try {
-    return (await getResolvedAppearance()).redesignEnabled;
-  } catch (error) {
-    console.error("[not-found] appearance lookup failed", error);
-    return false;
-  }
 }
 
 /** A building with an unfinished extension and a crane, from plain shapes and theme tokens. */

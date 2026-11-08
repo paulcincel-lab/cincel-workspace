@@ -17,21 +17,24 @@ vi.mock("next/headers", () => ({
       name === "cincel_portal_session" && state.cookie ? { name, value: state.cookie } : undefined,
   }),
 }));
-vi.mock("next/navigation", () => ({ notFound }));
+vi.mock("next/navigation", () => ({
+  notFound,
+  usePathname: () => "/portal",
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock("@/lib/portal/session", () => ({ getPortalUser }));
 vi.mock("@/lib/portal/appearance", () => ({ getPortalAppearance }));
 vi.mock("@/lib/portal/style-server", () => ({
-  getPortalPresentation: async () => ({ redesignEnabled: true, style: "visual", fixedByOrg: false }),
+  getPortalPresentation: async () => ({ style: "visual", fixedByOrg: false }),
 }));
 
-function appearance(redesignEnabled: boolean) {
+function appearance() {
   return {
     theme: "azul",
     mode: "system",
     style: "visual",
     density: "comoda",
     textSize: 14,
-    redesignEnabled,
     cssVars: { light: { "--background": "#f1f4f9" }, dark: { "--background": "#0f1115" } },
     version: 1,
   };
@@ -51,7 +54,7 @@ describe("portal layout", () => {
     state.cookie = undefined;
     getPortalUser.mockReset();
     getPortalAppearance.mockReset();
-    getPortalAppearance.mockResolvedValue(appearance(false));
+    getPortalAppearance.mockResolvedValue(appearance());
   });
   afterEach(cleanup);
 
@@ -87,16 +90,7 @@ describe("portal layout", () => {
     expect(screen.queryByRole("link", { name: "Salir" })).toBeNull();
   });
 
-  it("with the redesign off emits no appearance block or wrapper (today's look)", async () => {
-    const { container } = render(await PortalLayout({ children: <p>login</p> }));
-
-    expect(container.querySelector("style#portal-appearance")).toBeNull();
-    expect(container.querySelector("[data-portal-appearance]")).toBeNull();
-  });
-
-  it("with the redesign on scopes the organization tokens to the portal, with no client control", async () => {
-    getPortalAppearance.mockResolvedValue(appearance(true));
-
+  it("scopes the organization tokens to the portal, with no client control", async () => {
     const { container } = render(await PortalLayout({ children: <p>login</p> }));
 
     const style = container.querySelector("style#portal-appearance");
@@ -115,22 +109,12 @@ describe("portal layout", () => {
 describe("portal 404 and error pages", () => {
   beforeEach(() => {
     getPortalAppearance.mockReset();
-    getPortalAppearance.mockResolvedValue(appearance(false));
+    getPortalAppearance.mockResolvedValue(appearance());
   });
   afterEach(cleanup);
 
-  it("404 is in Spanish and links back to /portal", async () => {
-    render(await PortalNotFound());
-
-    expect(screen.getByRole("heading", { name: "No encontramos esta página" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Volver a mis proyectos" }).getAttribute("href")).toBe("/portal");
-    expect(screen.queryByText("Error 404")).toBeNull();
-  });
-
-  it("404 renders the restyled card when the redesign is on", async () => {
-    getPortalAppearance.mockResolvedValue(appearance(true));
-
-    render(await PortalNotFound());
+  it("404 is in Spanish, renders the card of canvas Portal404 and links back to /portal", () => {
+    render(<PortalNotFound />);
 
     expect(screen.getByText("Error 404")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1, name: "No encontramos esta página" })).toBeTruthy();

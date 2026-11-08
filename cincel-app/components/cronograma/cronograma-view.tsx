@@ -3,9 +3,6 @@
 import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 
-import Header from "@/components/layout/Header";
-import Sidebar from "@/components/layout/Sidebar";
-import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
 import { fetchScheduleAction, setTaskStatusAction, toggleTaskFlagAction, type ScheduleViewData } from "@/lib/actions/schedule-actions";
 import { CronogramaWidget } from "@/components/widgets/CronogramaWidget";
 import { computeProgress } from "@/lib/cronograma/metrics";
@@ -27,13 +24,7 @@ interface CronogramaViewProps {
   projectId: string;
   /** Pre-fetched server-side by the page. Null when the server render had no session (auth cookie not yet visible) — the client re-fetches once mounted. */
   initialView: ScheduleViewData | null;
-  /**
-   * "legacy" (default): today's page with its own Sidebar, Header and section nav.
-   * "redesign": the Cronograma tab inside the new shell (redesign FE §3.5); the
-   * same panels and state, rendered through `CronogramaWidget`.
-   */
-  layout?: "legacy" | "redesign";
-  /** Contract delivery date (ISO) for the "Entrega de obra" holgura; redesign only. */
+  /** Contract delivery date (ISO) for the "Entrega de obra" holgura. */
   contractEnd?: string | null;
 }
 
@@ -41,7 +32,11 @@ type TaskOptimisticAction =
   | { type: "status"; taskId: string; status: ScheduleStatus }
   | { type: "flag"; taskId: string; flagged: boolean };
 
-export default function CronogramaView({ projectId, initialView, layout = "legacy", contractEnd = null }: CronogramaViewProps) {
+/**
+ * The Cronograma tab (redesign FE §3.5): the schedule panels and state, rendered
+ * through `CronogramaWidget`.
+ */
+export default function CronogramaView({ projectId, initialView, contractEnd = null }: CronogramaViewProps) {
   const searchParams = useSearchParams();
   const weekOffset = Number.parseInt(searchParams.get("week") ?? "0", 10) || 0;
 
@@ -142,10 +137,10 @@ export default function CronogramaView({ projectId, initialView, layout = "legac
 
   const scheduleTable = useMemo(
     () =>
-      layout === "redesign" && view && today
+      view && today
         ? buildScheduleTable({ tasks: optimisticTasks, payments: view.data.payments, today, contractEnd })
         : { columns: SCHEDULE_TABLE_COLUMNS, rows: [] },
-    [layout, view, today, optimisticTasks, contractEnd]
+    [view, today, optimisticTasks, contractEnd]
   );
 
   const panels =
@@ -199,36 +194,13 @@ export default function CronogramaView({ projectId, initialView, layout = "legac
       </div>
     );
 
-  if (layout === "redesign") {
-    const emptyTable = { columns: SCHEDULE_TABLE_COLUMNS, rows: [] };
-    // `panels` is passed by spread: the widget wraps the existing panels for Visual.
-    const widgetProps = {
-      projectId,
-      table: notFound ? emptyTable : scheduleTable,
-      panels: notFound ? null : panels,
-      loading,
-    };
-    return <CronogramaWidget {...widgetProps} />;
-  }
-
-  return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <ProjectSectionNav projectId={projectId} />
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Cargando cronograma…</p>
-          ) : notFound || !panels ? (
-            <p className="text-sm text-muted-foreground">
-              Este proyecto todavía no tiene un cronograma importado.
-            </p>
-          ) : (
-            panels
-          )}
-        </main>
-      </div>
-    </div>
-  );
+  const emptyTable = { columns: SCHEDULE_TABLE_COLUMNS, rows: [] };
+  // `panels` is passed by spread: the widget wraps the existing panels for Visual.
+  const widgetProps = {
+    projectId,
+    table: notFound ? emptyTable : scheduleTable,
+    panels: notFound ? null : panels,
+    loading,
+  };
+  return <CronogramaWidget {...widgetProps} />;
 }

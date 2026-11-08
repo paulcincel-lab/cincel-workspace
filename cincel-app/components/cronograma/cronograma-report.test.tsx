@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 
 import { CronogramaReport } from "./cronograma-report";
 import md22Tasks from "@/lib/cronograma/__fixtures__/md22-schedule-tasks.json";
@@ -28,8 +28,9 @@ describe("CronogramaReport", () => {
   it("renders every section read-only against the real MD22 dataset", () => {
     render(<CronogramaReport data={data} asOf={new Date("2026-09-18T00:00:00")} />);
 
-    expect(screen.getByText("Madrid 22")).toBeTruthy();
-    expect(screen.getByText("CDMX")).toBeTruthy();
+    const sheet = within(screen.getByRole("article", { name: "Hoja del reporte" }));
+    expect(sheet.getByText("Madrid 22")).toBeTruthy();
+    expect(sheet.getByText("CDMX")).toBeTruthy();
     expect(screen.getByText("Cronograma general")).toBeTruthy();
     expect(screen.getByText("Avance del proyecto")).toBeTruthy();
     expect(screen.getByText(/Resumen 1/)).toBeTruthy();

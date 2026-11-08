@@ -12,7 +12,6 @@ import { buildTeamPeople, parseEstiloParam } from "@/lib/personas/team";
 import { listTramos } from "@/lib/tramos/compat";
 import type { PeopleOverviewRow } from "@/lib/types/redesign";
 import type { Position, WorkflowRef } from "@/lib/types/core";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -23,7 +22,6 @@ type SearchParams = Record<string, string | string[] | undefined>;
  */
 export default async function PersonasEquipoPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
-  await redirectIfRedesignOff("/personas", sp);
 
   const user = await requireCapabilityUser();
   const teamCaps = resolveTeamCapabilities(user);

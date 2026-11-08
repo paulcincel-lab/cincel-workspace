@@ -203,25 +203,23 @@ describe("ThemeEditor presets", () => {
   });
 
   it("keeps the organization style settings when a preset is applied", () => {
-    renderEditor({ ...initial, styleDefault: "analitico", allowUserOverride: false, redesignDefault: true });
+    renderEditor({ ...initial, styleDefault: "analitico", allowUserOverride: false });
     fireEvent.click(screen.getByRole("button", { name: /Grafito/ }));
     fireEvent.click(publishButton());
     expect(mocks.save).toHaveBeenCalledWith(
-      expect.objectContaining({ baseTheme: "grafito", styleDefault: "analitico", allowUserOverride: false, redesignDefault: true }),
+      expect.objectContaining({ baseTheme: "grafito", styleDefault: "analitico", allowUserOverride: false }),
     );
   });
 
-  it("binds the style cards and the two organization checkboxes", () => {
+  it("binds the style cards and the organization checkbox", () => {
     renderEditor();
     fireEvent.click(screen.getByRole("radio", { name: /Esencial/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Permitir que cada persona elija su estilo y tema" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Nuevo diseño para todos" }));
     fireEvent.click(publishButton());
     expect(mocks.save).toHaveBeenCalledWith(
       expect.objectContaining({
         styleDefault: "esencial",
         allowUserOverride: !initial.allowUserOverride,
-        redesignDefault: !initial.redesignDefault,
       }),
     );
   });
