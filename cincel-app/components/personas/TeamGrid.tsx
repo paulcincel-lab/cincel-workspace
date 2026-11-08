@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 
+import { PersonasViewToggle } from "@/components/personas/PersonasViewToggle";
 import { PeopleWidget } from "@/components/widgets/PeopleWidget";
 import { buttonVariants } from "@/components/ui/shadcn/button";
 import { cuttoLinks } from "@/lib/integrations/cutto-links";
-import { teamShow } from "@/lib/personas/team";
+import { peopleWithAvailability, teamShow } from "@/lib/personas/team";
+import { useWidgetView } from "@/lib/stores/dashboard-store";
+import { PERSONAS_VIEW_FALLBACK, usePersonasDashboard } from "@/lib/stores/personas-dashboard-store";
 import type { PersonDatum } from "@/lib/types/widgets";
 
 export type TeamGridProps = {
@@ -52,15 +55,26 @@ export function TeamMemberActions({ person, email }: { person: PersonDatum; emai
 /**
  * Equipo cards (redesign FE §3.6, §4.7): an instance of `PeopleWidget`
  * (avatar, name → detail, puesto, tramo, "n proyectos", load). Hours appear
- * only when the server returned them.
+ * only when the server returned them. The availability legend filter
+ * (`selectedKpi`) narrows the people over the data already loaded, and the
+ * cards/table switch is kept per style in `usePersonasDashboard`.
  */
 export function TeamGrid({ people, emails = {} }: TeamGridProps) {
+  const selectedKpi = usePersonasDashboard((s) => s.selectedKpi);
+  const view = useWidgetView(usePersonasDashboard, "team", PERSONAS_VIEW_FALLBACK);
+  const visible = peopleWithAvailability(people, selectedKpi);
   return (
-    <PeopleWidget
-      people={people}
-      show={teamShow(people, ["load", "projects"])}
-      layout="cards"
-      actions={(person) => <TeamMemberActions person={person} email={emails[person.id] ?? null} />}
-    />
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-end">
+        <PersonasViewToggle widget="team" view={view} label="Vista del equipo" chartLabel="Tarjetas" />
+      </div>
+      <PeopleWidget
+        people={visible}
+        show={teamShow(people, ["load", "projects"])}
+        layout="cards"
+        view={view}
+        actions={(person) => <TeamMemberActions person={person} email={emails[person.id] ?? null} />}
+      />
+    </div>
   );
 }

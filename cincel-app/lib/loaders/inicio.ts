@@ -212,7 +212,7 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
     secondaryOf: (t) => (state.overdue(t, today) ? 1 : 0),
   }).map((segment) => ({ ...segment, extra: { diasProm: ages.get(segment.key) ?? 0 } }));
 
-  // ── Ritmo semanal: 8 weeks, oldest first ──
+  // ── Ritmo semanal: 12 weeks (INICIO_PACE_WEEKS), oldest first ──
   const pace = bucketTaskTrend({ buckets: weeks, timeZone: tz, createdAt: trendCreatedAt, completions });
   const weeklyPace = weeks.map((bucket, i) => ({
     weekStart: bucket.from,

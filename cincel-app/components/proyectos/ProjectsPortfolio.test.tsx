@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { renderToString } from "react-dom/server";
+import { QueryClientProvider } from "@tanstack/react-query";
 
 import type { ListPageProps } from "@/components/patterns/ListPage";
 import type { NewProjectDialogProps } from "./NewProjectDialog";
@@ -97,13 +99,24 @@ import { qk } from "@/lib/query/keys";
 import { proyectosPageOptions } from "@/lib/query/options/proyectos";
 import { prefetch } from "@/lib/query/server";
 import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
+import { useProyectosDashboard } from "@/lib/stores/proyectos-dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
-import { ProjectsPortfolio, SEARCH_DEBOUNCE_MS } from "./ProjectsPortfolio";
+import {
+  CLEAR_TRAMO_LABEL,
+  COLLAPSE_STRIP_LABEL,
+  EXPAND_STRIP_LABEL,
+  PORTFOLIO_VIEW_LABEL,
+  ProjectsPortfolio,
+  SEARCH_DEBOUNCE_MS,
+  STRIP_VIEW_LABEL,
+} from "./ProjectsPortfolio";
 import { PORTFOLIO, PROJECTS, TRAMOS, portfolioPageData } from "./projects-portfolio.fixtures";
 import {
   BUDGET_COLUMN_LABEL,
+  NO_TRAMO_KEY,
   buildTramoSegments,
+  filterByTramo,
   formatDeliveryDate,
   portfolioById,
   sparklineText,
@@ -385,7 +398,202 @@ describe("ProjectsPortfolio", () => {
   });
 });
 
+describe("ProjectsPortfolio dashboard interactions", () => {
+  const dashboard = () => useProyectosDashboard.getState();
+  const titles = () => cardsSpec().items.map((i) => i.title);
+  const tableIds = () => cardsSpec().table.rows.map((r) => r.id);
+  const stripRegion = () => screen.queryByRole("region", { name: "Proyectos por tramo" });
+
+  it("without any choice: no view handed to the widgets, the strip expanded, every project listed", () => {
+    for (const style of ["visual", "esencial", "analitico"] as const) {
+      renderPortfolio({}, style);
+      expect(cardsSpec().view).toBeUndefined();
+      expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
+      expect(screen.getByRole("button", { name: COLLAPSE_STRIP_LABEL }).getAttribute("aria-expanded")).toBe("true");
+      cleanup();
+    }
+  });
+
+  it("Visual: a tramo segment is a toggle; it filters the cards, the table and the header count, and clears on a second press", () => {
+    renderPortfolio();
+    const diseno = screen.getByRole("button", { name: /Diseño/ });
+    expect(diseno.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(diseno);
+    expect(screen.getByRole("button", { name: /Diseño/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(titles()).toEqual(["Casa Lomas"]);
+    expect(tableIds()).toEqual(["p-lomas"]);
+    expect(cardsSpec().table.totals).toMatchObject({ name: "Total (1)" });
+    expect(screen.getByTestId("description").textContent).toBe("1 activo · avance, fase y entregas de cada obra.");
+    // The strip keeps every tramo, so another one can be picked.
+    expect(screen.getByRole("button", { name: /Presale/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Diseño/ }));
+    expect(dashboard().selectedKpi).toBeNull();
+    expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
+    expect(screen.getByTestId("description").textContent).toBe("3 activos · avance, fase y entregas de cada obra.");
+  });
+
+  it("Analítico: the segment toggles under the table filter the portfolio table", () => {
+    renderPortfolio({}, "analitico");
+    const group = screen.getByRole("group", { name: "Filtrar: Proyectos por tramo" });
+    fireEvent.click(within(group).getByRole("button", { name: /Presale/ }));
+    expect(tableIds()).toEqual(["p-andares"]);
+    expect(within(group).getByRole("button", { name: /Presale/ }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("selects Sin tramo for the projects without a tramo", () => {
+    renderPortfolio();
+    fireEvent.click(screen.getByRole("button", { name: /Sin tramo/ }));
+    expect(dashboard().selectedKpi).toBe(NO_TRAMO_KEY);
+    expect(titles()).toEqual(["Oficina Centro"]);
+  });
+
+  it("keeps a seeded selection (back from a project) and clears one whose tramo has no listed project", async () => {
+    dashboard().selectKpi("presale");
+    renderPortfolio();
+    expect(titles()).toEqual(["Depto Andares"]);
+    cleanup();
+
+    // Construcción has no listed project in the loaded data.
+    dashboard().selectKpi("construccion");
+    renderPortfolio();
+    expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
+    await waitFor(() => expect(dashboard().selectedKpi).toBeNull());
+  });
+
+  it("offers to drop the tramo when the search leaves it without results", () => {
+    dashboard().selectKpi("diseno");
+    renderPortfolio();
+    fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "zapopan" } });
+    expect(titles()).toEqual([]);
+    expect(captured.list?.empty?.title).toBe("Sin resultados");
+    expect(captured.list?.empty?.action?.label).toBe(CLEAR_TRAMO_LABEL);
+    act(() => captured.list?.empty?.action?.onClick?.());
+    expect(dashboard().selectedKpi).toBeNull();
+    expect(titles()).toEqual(["Depto Andares"]);
+  });
+
+  it("collapses the strip (aria-expanded) and keeps the choice in the store", () => {
+    renderPortfolio();
+    expect(stripRegion()).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: COLLAPSE_STRIP_LABEL }));
+    expect(stripRegion()).toBeNull();
+    const expand = screen.getByRole("button", { name: EXPAND_STRIP_LABEL });
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    expect(dashboard().collapsed.tramoStrip).toBe(true);
+    // The cards stay.
+    expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
+    fireEvent.click(expand);
+    expect(stripRegion()).toBeTruthy();
+  });
+
+  it("renders a seeded collapsed strip collapsed", () => {
+    dashboard().setCollapsed("tramoStrip", true);
+    renderPortfolio();
+    expect(stripRegion()).toBeNull();
+    expect(screen.getByRole("button", { name: EXPAND_STRIP_LABEL })).toBeTruthy();
+  });
+
+  it("a cards/table pick in Visual does not change Esencial or Analítico", () => {
+    renderPortfolio({}, "visual");
+    const group = screen.getByRole("group", { name: PORTFOLIO_VIEW_LABEL });
+    fireEvent.click(within(group).getByRole("button", { name: "Tabla" }));
+    expect(dashboard().views.visual?.portfolio).toBe("table");
+    expect(cardsSpec().view).toBe("table");
+    expect(within(group).getByRole("button", { name: "Tabla" }).getAttribute("aria-pressed")).toBe("true");
+    cleanup();
+
+    renderPortfolio({}, "esencial");
+    expect(cardsSpec().view).toBeUndefined();
+    cleanup();
+    renderPortfolio({}, "analitico");
+    expect(cardsSpec().view).toBeUndefined();
+  });
+
+  it("Analítico can pick the cards; picking its default again hands no view down", () => {
+    dashboard().setWidgetView("analitico", "portfolio", "chart");
+    renderPortfolio({}, "analitico");
+    expect(cardsSpec().view).toBe("chart");
+    const group = screen.getByRole("group", { name: PORTFOLIO_VIEW_LABEL });
+    fireEvent.click(within(group).getByRole("button", { name: "Tabla" }));
+    expect(cardsSpec().view).toBeUndefined();
+  });
+
+  it("the strip view override is per style too", () => {
+    renderPortfolio({}, "visual");
+    const group = screen.getByRole("group", { name: STRIP_VIEW_LABEL });
+    fireEvent.click(within(group).getByRole("button", { name: "Tabla" }));
+    expect(dashboard().views.visual?.tramoStrip).toBe("table");
+    // Visual now shows the table, not the strip.
+    expect(document.querySelector("[data-slot=distribution-strip]")).toBeNull();
+    cleanup();
+
+    renderPortfolio({}, "esencial");
+    expect(dashboard().views.esencial).toBeUndefined();
+    expect(document.querySelector("[data-slot=distribution-esencial]")).toBeTruthy();
+  });
+
+  it("shows no range or series control", () => {
+    renderPortfolio();
+    expect(screen.queryByText(/\b(4|8|12) ?(sem|w)\b/i)).toBeNull();
+    expect(screen.queryByRole("group", { name: /rango|serie/i })).toBeNull();
+  });
+
+  it("store changes cause no server call", () => {
+    renderPortfolio();
+    fireEvent.click(screen.getByRole("button", { name: /Diseño/ }));
+    fireEvent.click(screen.getByRole("button", { name: COLLAPSE_STRIP_LABEL }));
+    fireEvent.click(within(screen.getByRole("group", { name: PORTFOLIO_VIEW_LABEL })).getByRole("button", { name: "Tabla" }));
+    expect(pageData.getProyectosPageData).not.toHaveBeenCalled();
+    expect(catalog.fetchCatalogContacts).not.toHaveBeenCalled();
+    expect(catalog.fetchCatalogStaff).not.toHaveBeenCalled();
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("the server render equals the first client render with a persisted value present; it applies after mount", async () => {
+    const html = () => {
+      const client = createTestQueryClient();
+      client.setQueryData(qk.proyectos.list(), portfolioPageData());
+      return renderToString(
+        <QueryClientProvider client={client}>
+          <StyleProvider style="visual" scope="staff">
+            <ProjectsPortfolio />
+          </StyleProvider>
+        </QueryClientProvider>,
+      );
+    };
+    const withoutValue = html();
+    localStorage.setItem(
+      "cincel.ui.dashboard.proyectos.v1",
+      JSON.stringify({
+        state: { range: "8w", collapsed: { tramoStrip: true }, views: { visual: { portfolio: "table" } }, hiddenSeries: {} },
+        version: 1,
+      }),
+    );
+    // skipHydration: nothing is read from storage before the hydrator runs.
+    expect(html()).toBe(withoutValue);
+    expect(dashboard().collapsed).toEqual({});
+
+    await act(async () => {
+      await useProyectosDashboard.persist.rehydrate();
+    });
+    renderPortfolio();
+    expect(stripRegion()).toBeNull();
+    expect(cardsSpec().view).toBe("table");
+  });
+});
+
 describe("projects portfolio data", () => {
+  it("filters by the current tramo, Sin tramo included; null keeps every project", () => {
+    const listed = PROJECTS.filter((p) => p.status !== "completado");
+    expect(filterByTramo(listed, "diseno").map((p) => p.id)).toEqual(["p-lomas"]);
+    expect(filterByTramo(listed, "presale").map((p) => p.id)).toEqual(["p-andares"]);
+    expect(filterByTramo(listed, NO_TRAMO_KEY).map((p) => p.id)).toEqual(["p-pausado"]);
+    expect(filterByTramo(listed, "construccion")).toEqual([]);
+    expect(filterByTramo(listed, null)).toBe(listed);
+  });
+
   it("formats delivery dates in lowercase es-MX", () => {
     expect(formatDeliveryDate("2026-11-12")).toBe("12 nov");
   });

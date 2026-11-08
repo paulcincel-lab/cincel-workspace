@@ -21,8 +21,8 @@ import type { AgendaItem, TramoKey } from "@/lib/types/widgets";
 
 const DAY_MS = 86_400_000;
 
-/** Weeks in `InicioData.weeklyPace`. */
-export const INICIO_PACE_WEEKS = 8;
+/** Weeks in `InicioData.weeklyPace`: a fixed window the client slices to 4 / 8 / 12 (`sliceToRange`). */
+export const INICIO_PACE_WEEKS = 12;
 /** Daily points behind each KPI (avg30 / min30 / max30). */
 export const INICIO_KPI_DAYS = 30;
 /** "Revisiones · 7 días": reviews from the day through the next 6. */

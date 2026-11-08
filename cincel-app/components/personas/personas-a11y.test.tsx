@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { act, cleanup } from "@testing-library/react";
 import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
@@ -40,6 +40,7 @@ import { buildTeamPeople, countPersonasTabs } from "@/lib/personas/team";
 import { appearanceStyleBlock, toCssVars } from "@/lib/ui/appearance-css";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
+import { usePersonasDashboard } from "@/lib/stores/personas-dashboard-store";
 // EquipoView reads the puestos catalog and saves through TanStack Query.
 import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
@@ -50,7 +51,10 @@ import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 
 // The components read the signed-in user from the session store; seed it with the mocked user.
-beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
+beforeEach(() => {
+  seedSessionUser(getCurrentAuthenticatedUser());
+  usePersonasDashboard.getState().reset();
+});
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
@@ -143,5 +147,33 @@ describe("Personas · Equipo accessibility", () => {
         expect(await seriousViolations(container)).toEqual([]);
       });
     }
+  }
+});
+
+describe("Personas · Equipo dashboard controls accessibility", () => {
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
+  const counts = countPersonasTabs(EQUIPO_STAFF, []);
+
+  for (const style of STYLES) {
+    it(`legend toggles, view switches and the collapse button have no serious or critical axe violations (${style})`, async () => {
+      const state = usePersonasDashboard.getState();
+      state.toggleKpi("saturado");
+      state.setWidgetView(style, "team", style === "analitico" ? "chart" : "table");
+      const { container, getByRole } = render(
+        <main>
+          <StyleProvider style={style} scope="staff">
+            <EquipoView people={people} emails={emails} counts={counts} canCreate />
+          </StyleProvider>
+        </main>,
+      );
+      const legend = getByRole("list", { name: "Leyenda de disponibilidad" });
+      expect(legend.querySelectorAll("button[aria-pressed]")).toHaveLength(4);
+      expect(legend.querySelector('button[aria-pressed="true"]')?.textContent).toBe("Saturado");
+      expect(await seriousViolations(container)).toEqual([]);
+
+      act(() => usePersonasDashboard.getState().setCollapsed("availability", true));
+      expect(container.querySelector('[aria-expanded="false"]')).toBeTruthy();
+      expect(await seriousViolations(container)).toEqual([]);
+    });
   }
 });

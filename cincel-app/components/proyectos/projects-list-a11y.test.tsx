@@ -45,6 +45,7 @@ import { StyleProvider } from "@/components/shell/StyleProvider";
 import type { ProyectosPageData } from "@/lib/loaders/proyectos";
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { useProyectosDashboard } from "@/lib/stores/proyectos-dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 
@@ -125,6 +126,33 @@ describe("Proyectos list accessibility", () => {
   }
 
   for (const mode of MODES) {
+    it(`segment toggles, view toggles and the collapse button are axe clean in ${mode} for the three styles`, async () => {
+      setTheme("azul", mode);
+      for (const style of STYLES) {
+        // A selected tramo (pressed toggle) and a table pick in this style.
+        useProyectosDashboard.getState().selectKpi("diseno");
+        useProyectosDashboard.getState().setWidgetView(style, "portfolio", style === "analitico" ? "chart" : "table");
+        const expanded = renderSeeded(
+          <StyleProvider style={style} scope="staff">
+            <ProjectsPortfolio />
+          </StyleProvider>,
+        );
+        expect(await seriousViolations(expanded.container)).toEqual([]);
+        expanded.unmount();
+
+        // The collapsed strip: only its title and the expand button remain.
+        useProyectosDashboard.getState().setCollapsed("tramoStrip", true);
+        const collapsed = renderSeeded(
+          <StyleProvider style={style} scope="staff">
+            <ProjectsPortfolio />
+          </StyleProvider>,
+        );
+        expect(await seriousViolations(collapsed.container)).toEqual([]);
+        collapsed.unmount();
+        useProyectosDashboard.getState().reset();
+      }
+    });
+
     it(`NewProjectDialog (?nuevo=1) has no serious axe violations in ${mode}, admin fields included`, async () => {
       setTheme("azul", mode);
       nav.params = new URLSearchParams("nuevo=1");

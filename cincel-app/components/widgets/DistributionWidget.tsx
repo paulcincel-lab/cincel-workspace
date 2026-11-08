@@ -1,11 +1,14 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { useStyle } from "@/components/shell/StyleProvider";
 import type { ChartConfig } from "@/components/ui/shadcn/chart";
 import { LazyDonutChart } from "@/components/widgets/charts/lazy";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
-import { WidgetCard } from "@/components/widgets/WidgetCard";
+import { WidgetCard, type WidgetCardProps } from "@/components/widgets/WidgetCard";
+import type { WidgetView } from "@/lib/stores/dashboard-store";
 import type { DistributionSegment, RecordColumn, RecordTableData } from "@/lib/types/widgets";
 
 /**
@@ -21,6 +24,9 @@ import type { DistributionSegment, RecordColumn, RecordTableData } from "@/lib/t
  *
  * Widget-level states: `emptyText` is shown when there are no segments or the
  * total is 0; `loading` renders the `LoadingSkeleton` variant of the style.
+ *
+ * `view` (dashboards, optional): "chart" renders the Visual donut and
+ * "table" the Analítico table whatever the style; omitted, the style decides.
  */
 export type DistributionWidgetProps = {
   title: string;
@@ -34,6 +40,12 @@ export type DistributionWidgetProps = {
   emptyText?: string;
   /** Renders the skeleton instead of the data. */
   loading?: boolean;
+  /** Dashboard override: "chart" = the Visual donut, "table" = the Analítico table. */
+  view?: WidgetView;
+  /** Card header controls (`WidgetCard` `actions`), e.g. a chart / table picker. */
+  actions?: ReactNode;
+  /** Collapse control of the card (`WidgetCard` `collapsible`). */
+  collapsible?: WidgetCardProps["collapsible"];
 };
 
 export const DISTRIBUTION_EMPTY_TEXT = "Sin datos para mostrar";
@@ -237,19 +249,23 @@ function AnaliticoDistribution(props: DistributionWidgetProps) {
 
 export function DistributionWidget(props: DistributionWidgetProps) {
   const { style } = useStyle();
-  const { title, segments, emptyText, loading = false } = props;
+  const { title, segments, emptyText, loading = false, view, actions, collapsible } = props;
   const empty = segments.length === 0 || sumValues(segments) <= 0;
+  const tableShown = view ? view === "table" : style === "analitico";
 
   return (
     <WidgetCard
       title={title}
-      padded={style !== "analitico"}
+      padded={!tableShown}
       loading={loading}
-      skeleton={style === "analitico" ? "table" : "list"}
+      skeleton={tableShown ? "table" : "list"}
       emptyState={{ title: emptyText ?? DISTRIBUTION_EMPTY_TEXT }}
+      actions={actions}
+      collapsible={collapsible}
     >
       {empty ? null : (
         <StyleView
+          view={view}
           visual={() => <VisualDistribution {...props} />}
           esencial={() => <EsencialDistribution {...props} />}
           analitico={() => <AnaliticoDistribution {...props} />}

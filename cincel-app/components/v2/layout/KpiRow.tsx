@@ -27,6 +27,12 @@ export interface KpiTileProps {
   split?: { key: string; label: string; share: number; colorVar: string }[];
   caption?: string;
   href?: string;
+  /**
+   * Selectable tile (dashboard KPI selection): with `onToggle` the large tile
+   * is a toggle button (`aria-pressed` = `pressed`) instead of a link.
+   */
+  pressed?: boolean;
+  onToggle?(): void;
 }
 
 export type KpiDelta = { value: number; good: boolean; caption: string; label?: string; tone?: KpiDeltaTone };
@@ -82,7 +88,7 @@ function SplitBar({ split }: { split: NonNullable<KpiTileProps["split"]> }) {
   );
 }
 
-function LargeTile({ label, value, tone = "default", series7, delta, split, caption, href }: KpiTileProps) {
+function LargeTile({ label, value, tone = "default", series7, delta, split, caption, href, pressed, onToggle }: KpiTileProps) {
   const deltaToneKey = delta ? kpiDeltaTone(delta) : "neutral";
   const body = (
     <>
@@ -132,6 +138,22 @@ function LargeTile({ label, value, tone = "default", series7, delta, split, capt
     </>
   );
   const className = "flex flex-col gap-2.5 rounded-lg border border-border bg-card px-5 py-[18px] shadow-sm";
+  if (onToggle) {
+    return (
+      <button
+        type="button"
+        data-slot="kpi-tile"
+        aria-pressed={pressed ?? false}
+        onClick={onToggle}
+        className={cn(
+          className,
+          "text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none aria-pressed:border-ring aria-pressed:bg-muted/40"
+        )}
+      >
+        {body}
+      </button>
+    );
+  }
   return href ? (
     <Link
       href={href}

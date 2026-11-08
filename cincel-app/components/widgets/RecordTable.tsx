@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, type ReactNode } from "react";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { CellContext, ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
@@ -18,6 +18,7 @@ import { RowActionsMenu, createRowActionsColumn, type RowAction } from "@/compon
 import { actionErrorText } from "@/lib/errors";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { RecordColumn, RecordTableData } from "@/lib/types/widgets";
+import type { WidgetView } from "@/lib/stores/dashboard-store";
 import { exportTableData, type ExportFormat, type ExportValue } from "@/lib/utils/export-service";
 
 import {
@@ -62,6 +63,8 @@ export type RecordTableProps = {
   hasMore?: boolean;
   /** The next rows are loading: "Cargar más" is disabled. */
   loadingMore?: boolean;
+  /** Dashboard override (`StyleView`): "table" renders the Analítico table whatever the style. */
+  view?: WidgetView;
 };
 
 /** "Cargar más" under a paginated `RecordTable`. */
@@ -86,6 +89,7 @@ export function RecordTable(props: RecordTableProps) {
   }
   const view = (
     <StyleView
+      view={props.view}
       visual={() => <TableView {...props} style="visual" />}
       esencial={() => <ListView {...props} />}
       analitico={() => <TableView {...props} style="analitico" />}
@@ -118,6 +122,23 @@ export function RecordTableSkeleton({ rows }: { rows?: number }) {
 function cellContent(column: RecordColumn, row: Row, renderCell: RecordTableProps["renderCell"]): ReactNode {
   const custom = renderCell?.(column.key, row);
   return custom !== undefined ? custom : formatCell(column, row);
+}
+
+/** What `RecordCell` reads from its column's meta: this render's column and `renderCell`. */
+type RecordCellMeta = {
+  record: RecordColumn;
+  renderCell: RecordTableProps["renderCell"];
+};
+
+/**
+ * The `cell` of every data column: one module-level component, so a
+ * re-render (a new `renderCell` closure) updates the cell instead of
+ * remounting it, and a focused control inside keeps its element.
+ */
+function RecordCell({ row, column }: CellContext<Row, unknown>): ReactNode {
+  const meta = column.columnDef.meta as RecordCellMeta | undefined;
+  if (!meta) return null;
+  return cellContent(meta.record, row.original, meta.renderCell);
 }
 
 function useSelection(rows: Row[]) {
@@ -214,7 +235,8 @@ function TableView({
             {column.label}
           </span>
         ),
-        cell: ({ row }) => cellContent(column, row.original, renderCell),
+        cell: RecordCell,
+        meta: { record: column, renderCell } satisfies RecordCellMeta,
       }),
     ),
     ...(hasActions ? [createRowActionsColumn<Row>(() => rowActions ?? [])] : []),

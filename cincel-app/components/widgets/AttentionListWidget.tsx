@@ -11,7 +11,7 @@ import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
-import { WidgetCard } from "@/components/widgets/WidgetCard";
+import { WidgetCard, type WidgetCardProps } from "@/components/widgets/WidgetCard";
 import { tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
 import type { WorkflowRef } from "@/lib/types/core";
 import type { AttentionItem, RecordTableData, Tone, TramoKey } from "@/lib/types/widgets";
@@ -40,6 +40,8 @@ export type AttentionListWidgetProps = {
   /** Full empty state; overrides `emptyText`. */
   emptyState?: EmptyStateProps;
   loading?: boolean;
+  /** Collapse control of the card (`WidgetCard` `collapsible`). */
+  collapsible?: WidgetCardProps["collapsible"];
 };
 
 export const ATTENTION_EMPTY_TEXT = "Nada requiere atención hoy";
@@ -262,6 +264,7 @@ export function AttentionListWidget({
   emptyText = ATTENTION_EMPTY_TEXT,
   emptyState,
   loading = false,
+  collapsible,
 }: AttentionListWidgetProps) {
   const { style } = useStyle();
   const showMore = Boolean(moreHref) || (totalCount !== undefined && totalCount > items.length);
@@ -276,6 +279,7 @@ export function AttentionListWidget({
       skeleton={style === "analitico" ? "table" : "list"}
       padded={style !== "analitico"}
       emptyState={emptyState ?? { title: emptyText }}
+      collapsible={collapsible}
     >
       {items.length > 0 ? (
         <StyleView

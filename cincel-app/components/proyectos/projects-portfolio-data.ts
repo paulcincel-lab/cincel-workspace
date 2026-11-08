@@ -53,6 +53,16 @@ export function currentTramoOf(project: ProjectListItem): WorkflowRef | null {
   return project.currentWorkflow ?? project.tramos.find((t) => t.current) ?? null;
 }
 
+/**
+ * Projects whose current tramo is `key` (a `buildTramoSegments` key;
+ * `NO_TRAMO_KEY` keeps the projects without a tramo). A null key keeps every
+ * project.
+ */
+export function filterByTramo(projects: ProjectListItem[], key: string | null): ProjectListItem[] {
+  if (key === null) return projects;
+  return projects.filter((p) => (currentTramoOf(p)?.key ?? NO_TRAMO_KEY) === key);
+}
+
 /** "Ciudad, Estado", or null when the ficha has no address. */
 export function placeOf(project: Pick<ProjectListItem, "addressCity" | "addressState">): string | null {
   const parts = [project.addressCity, project.addressState].map((s) => s?.trim()).filter((s): s is string => Boolean(s));
@@ -144,12 +154,14 @@ export function buildProjectCards(projects: ProjectListItem[], portfolio: Map<st
 }
 
 const HIDE_ESENCIAL: PresentationStyle[] = ["visual", "esencial"];
-const HIDE_ANALITICO: PresentationStyle[] = ["visual", "analitico"];
+/** Hidden in Analítico only: Esencial reads them, and so does the Visual table view (a dashboard override). */
+const ONLY_ANALITICO: PresentationStyle[] = ["analitico"];
 
 /**
- * The portfolio table (FE §3.5): Esencial reads nombre, lugar, tramo, avance
- * and próxima entrega; Analítico reads Real, Plan, Desv., Presup. ejercido
- * (only with `canSeeAdminData`: the column is absent otherwise), Abiertas,
+ * The portfolio table (FE §3.5): Esencial (and Visual, when the user picks
+ * the table view) reads nombre, lugar, tramo, avance and próxima entrega;
+ * Analítico reads Real, Plan, Desv., Presup. ejercido (only with
+ * `canSeeAdminData`: the column is absent otherwise), Abiertas,
  * Vencidas, Días a entrega, Próxima entrega and the 7-day trend, with a
  * totals row.
  */
@@ -160,9 +172,9 @@ export function buildPortfolioTable(
 ): RecordTableData {
   const columns: RecordColumn[] = [
     { key: "name", label: "Proyecto" },
-    { key: "lugar", label: "Lugar", hideOn: ["visual", "analitico"] },
+    { key: "lugar", label: "Lugar", hideOn: ONLY_ANALITICO },
     { key: "tramo", label: "Tramo" },
-    { key: "avance", label: "Avance", format: "percent", hideOn: HIDE_ANALITICO },
+    { key: "avance", label: "Avance", format: "percent", hideOn: ONLY_ANALITICO },
     { key: "real", label: "Real", format: "percent", hideOn: HIDE_ESENCIAL },
     { key: "plan", label: "Plan", format: "percent", hideOn: HIDE_ESENCIAL },
     { key: "desviacion", label: "Desv.", format: "delta", hideOn: HIDE_ESENCIAL },

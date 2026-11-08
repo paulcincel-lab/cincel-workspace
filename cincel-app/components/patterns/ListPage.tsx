@@ -27,7 +27,14 @@ export type ListSpec =
       /** Opt-in "Cargar más" under the table (`RecordTable.onEndReached`). */
       pagination?: Pick<RecordTableProps, "onEndReached" | "hasMore" | "loadingMore">;
     }
-  | { kind: "cards"; items: EntityCard[]; table: RecordTableData; footer?: EntityCardGridProps["footer"] }
+  | {
+      kind: "cards";
+      items: EntityCard[];
+      table: RecordTableData;
+      footer?: EntityCardGridProps["footer"];
+      /** Opt-in cards/table override (dashboard store); without it the style decides. */
+      view?: EntityCardGridProps["view"];
+    }
   | { kind: "people"; people: PersonDatum[]; show: PeopleWidgetProps["show"] }
   | {
       kind: "board";
@@ -77,7 +84,7 @@ function ListWidget({ spec, empty }: { spec: ListSpec; empty?: EmptyStateProps }
         <RecordTable data={spec.data} renderCell={spec.renderCell} rowActions={spec.rowActions} {...spec.pagination} />
       );
     case "cards":
-      return <EntityCardGrid items={spec.items} table={spec.table} footer={spec.footer} />;
+      return <EntityCardGrid items={spec.items} table={spec.table} footer={spec.footer} view={spec.view} />;
     case "people":
       return <PeopleWidget people={spec.people} show={spec.show} />;
     case "board":

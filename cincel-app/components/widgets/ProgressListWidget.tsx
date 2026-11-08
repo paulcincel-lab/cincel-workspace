@@ -9,7 +9,7 @@ import { CapacityRing } from "@/components/v2/status/CapacityRing";
 import { LoadBar } from "@/components/v2/status/LoadBar";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
-import { WidgetCard } from "@/components/widgets/WidgetCard";
+import { WidgetCard, type WidgetCardProps } from "@/components/widgets/WidgetCard";
 import type { ProgressItem, RecordColumn, RecordTableData } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +36,8 @@ export type ProgressListWidgetProps = {
   emptyText?: string;
   emptyState?: EmptyStateProps;
   loading?: boolean;
+  /** Collapse control of the card (`WidgetCard` `collapsible`). */
+  collapsible?: WidgetCardProps["collapsible"];
 };
 
 export const PROGRESS_LIST_EMPTY_TEXT = "Aún no hay avance que mostrar";
@@ -269,6 +271,7 @@ export function ProgressListWidget({
   emptyText,
   emptyState,
   loading = false,
+  collapsible,
 }: ProgressListWidgetProps) {
   const { style } = useStyle();
   const empty: EmptyStateProps = emptyState ?? { title: emptyText ?? PROGRESS_LIST_EMPTY_TEXT };
@@ -280,6 +283,7 @@ export function ProgressListWidget({
       loading={loading}
       skeleton={style === "analitico" ? "table" : "list"}
       padded={style !== "analitico"}
+      collapsible={collapsible}
     >
       {items.length > 0 ? (
         <StyleView

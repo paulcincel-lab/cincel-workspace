@@ -302,7 +302,7 @@ export type InicioData = {
   kpis: KpiDatum[];
   /** value = open, secondary = overdue, extra = { diasProm }. */
   tasksByTramo: DistributionSegment[];
-  /** 8 weeks. */
+  /** 12 weeks, oldest first: a fixed window; the client shows the last 4 / 8 / 12 (`sliceToRange`). */
   weeklyPace: { weekStart: string; created: number; completed: number }[];
   attention: AttentionItem[];
   /** Events, tasks due today, the caller's reminders. */
