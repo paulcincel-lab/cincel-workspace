@@ -1,4 +1,4 @@
-FROM node:23-alpine AS build
+FROM node:24-alpine AS build
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
@@ -17,7 +17,7 @@ ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 
 RUN npm run build
 
-FROM node:23-alpine
+FROM node:24-alpine
 RUN apk update && apk upgrade && apk add dumb-init && adduser -D nextuser
 
 # set work dir as app
