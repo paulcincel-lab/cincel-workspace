@@ -4,7 +4,7 @@
 #
 # The `migrate` service intentionally points at a *different* image
 # (`cincel-app-migrate`) than `app`. Both are published by
-# .github/workflows/cincel-app-build.yml from the same Dockerfile, but from
+# .github/workflows/cincel-app-docker.yml from the same Dockerfile, but from
 # different build stages: `cincel-app-migrate` is the `build` stage (still has
 # drizzle-kit + tsx + the migration SQL), `cincel-app` is the final distroless-
 # style runtime stage (does not). This mirrors docker-compose.yml's local
