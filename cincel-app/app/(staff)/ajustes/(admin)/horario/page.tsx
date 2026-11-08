@@ -5,7 +5,8 @@ import { fetchTeamHoursAction, fetchTimeTrackingSettingsAction } from "@/lib/act
 import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
 import { canManageTimeTracking, canViewTeamHours } from "@/lib/auth/permissions";
 import { getSessionAccess, requireCapabilityUser } from "@/lib/auth/session";
-import { settingsSectionsFor } from "@/lib/shell/settings-sections";
+import { HORARIO_SECTIONS } from "@/lib/shell/settings-sections/horario";
+import { visibleSettingsSections } from "@/lib/shell/settings-sections/visible";
 import { localDate, mondayOf } from "@/lib/time-tracking/local-time";
 import { DEFAULT_TIME_TRACKING_SETTINGS } from "@/lib/time-tracking/settings";
 import type { TeamHoursRow, TimeTrackingSettings } from "@/lib/types/redesign";
@@ -52,7 +53,7 @@ export default async function AjustesHorarioPage() {
   if (!canManage && !canViewReport) notFound();
 
   const weekStart = mondayOf(localDate(new Date()));
-  const sections = settingsSectionsFor("horario", user);
+  const sections = visibleSettingsSections(HORARIO_SECTIONS, user);
   const [settings, rows] = await Promise.all([loadSettings(), loadRows(canViewReport, weekStart)]);
 
   return (

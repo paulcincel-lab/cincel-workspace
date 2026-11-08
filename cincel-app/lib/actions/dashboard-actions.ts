@@ -19,13 +19,19 @@ import {
   inicioWeekBuckets,
   inicioWorkloadRows,
   involves,
+  KPI_CONTEXT,
   myDayItems,
+  nextReviewLine,
   projectActiveOn,
+  projectTramoGroup,
   shiftIsoDate,
   statusResolver,
   taskDayState,
+  taskTramoGroup,
   taskTramoKey,
   taskTramoLabel,
+  tramoConcentrationLine,
+  tramoCountsLine,
   tramoSplit,
 } from "@/lib/dashboard/inicio";
 import {
@@ -161,7 +167,6 @@ export async function fetchInicioAction(): Promise<InicioData> {
   const blockedToday = tasks.filter((t) => state.blocked(t, today));
   const reviewsToday = tasks.filter((t) => state.reviewDue(t, today));
   const activeProjects = scopedProjects.filter((p) => p.status === "activo");
-  const projectsWithOverdue = new Set(overdueToday.map((t) => t.projectId));
   const tramoOfTask = (t: (typeof tasks)[number]) => t.workflow?.key ?? null;
 
   // ── KPIs ──
@@ -179,9 +184,10 @@ export async function fetchInicioAction(): Promise<InicioData> {
       ...kpiFromDaily(INICIO_KPI.proyectosActivos.key, INICIO_KPI.proyectosActivos.label, projectsDaily, {
         goodWhen: "up",
         href: INICIO_KPI.proyectosActivos.href,
+        deltaWindow: "mes",
       }),
       split: tramoSplit(activeProjects, (p) => p.currentWorkflow?.key ?? null),
-      caption: `${activeProjects.filter((p) => projectsWithOverdue.has(p.id)).length} con tareas vencidas`,
+      caption: tramoCountsLine(activeProjects, projectTramoGroup, KPI_CONTEXT.noActiveProjects),
     },
     {
       ...kpiFromDaily(INICIO_KPI.vencidas.key, INICIO_KPI.vencidas.label, overdueDaily, {
@@ -189,7 +195,7 @@ export async function fetchInicioAction(): Promise<InicioData> {
         href: INICIO_KPI.vencidas.href,
       }),
       split: tramoSplit(overdueToday, tramoOfTask),
-      caption: `de ${openTasks.length} abiertas`,
+      caption: tramoConcentrationLine(overdueToday, taskTramoGroup, KPI_CONTEXT.noOverdue),
     },
     {
       ...kpiFromDaily(INICIO_KPI.bloqueadas.key, INICIO_KPI.bloqueadas.label, blockedDaily, {
@@ -197,7 +203,7 @@ export async function fetchInicioAction(): Promise<InicioData> {
         href: INICIO_KPI.bloqueadas.href,
       }),
       split: tramoSplit(blockedToday, tramoOfTask),
-      caption: `de ${openTasks.length} abiertas`,
+      caption: tramoConcentrationLine(blockedToday, taskTramoGroup, KPI_CONTEXT.noBlocked),
     },
     {
       ...kpiFromDaily(INICIO_KPI.revisiones.key, INICIO_KPI.revisiones.label, reviewsDaily, {
@@ -205,7 +211,7 @@ export async function fetchInicioAction(): Promise<InicioData> {
         href: INICIO_KPI.revisiones.href,
       }),
       split: tramoSplit(reviewsToday, tramoOfTask),
-      caption: "próximos 7 días",
+      caption: nextReviewLine(openTasks, today),
     },
     {
       ...kpiFromDaily(INICIO_KPI.completadas.key, INICIO_KPI.completadas.label, completedDaily, {

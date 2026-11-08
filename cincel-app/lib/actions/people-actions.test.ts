@@ -74,6 +74,7 @@ const repo = vi.hoisted(() => ({
   listAssignedOpenTasks: vi.fn(),
   listActiveProjectsByStaff: vi.fn(),
   staffIdsWithPhoto: vi.fn(),
+  listRecentActivity: vi.fn(),
 }));
 vi.mock("@/lib/repositories/people-repository", () => repo);
 
@@ -187,6 +188,7 @@ describe("people actions", async () => {
       return new Map(ids.map((id) => [id, [{ staffId: id, projectId: "p", name: "Casa", progress: 40, role: "coordinador" }]]));
     });
     repo.staffIdsWithPhoto.mockReset().mockResolvedValue(new Set());
+    repo.listRecentActivity.mockReset().mockResolvedValue({ rows: [], customStatusNames: new Map() });
   });
 
   it("refuses viewers without team.canViewTeam", async () => {
@@ -238,5 +240,32 @@ describe("people actions", async () => {
     expect(detail.stats.map((s) => s.key)).toEqual(["abiertas", "vencidas", "horas_semana", "proyectos_activos"]);
     expect(detail.weekHours).toEqual([{ date: "2026-11-02", hours: 7.5 }]);
     expect(detail.tasks[0]).toMatchObject({ id: `t-${OTHER}`, assignee: { id: OTHER, name: "Ana López", initials: "AL" } });
+  });
+
+  it("returns recentActivity from the person's events, admin items only with canSeeAdminData", async () => {
+    const now = Date.now();
+    repo.listRecentActivity.mockResolvedValue({
+      rows: [
+        { id: "e1", entity: "project", entityId: "p", kind: "cambio", field: "progress", afterValue: "90", comment: null, eventAt: new Date(now - 60_000), title: "Casa Lomas", adminTask: false },
+        { id: "e2", entity: "task", entityId: "t-a", kind: "comentario", field: null, afterValue: null, comment: "Listo", eventAt: new Date(now - 120_000), title: "Conciliar facturas", adminTask: true },
+        { id: "e3", entity: "task", entityId: "t-1", kind: "cambio", field: "customStatusId", afterValue: "cs-qa", comment: null, eventAt: new Date(now - 180_000), title: "Plano", adminTask: false },
+      ],
+      customStatusNames: new Map([["cs-qa", "QA en revisión"]]),
+    });
+
+    const admin = await fetchPersonaDetailAction(OTHER);
+    expect(repo.listRecentActivity).toHaveBeenLastCalledWith(OTHER, { includeAdmin: true });
+    expect(admin.recentActivity.map((a) => a.text)).toEqual([
+      "Movió “Casa Lomas” a 90%",
+      "Comentó en “Conciliar facturas”",
+      "Movió “Plano” a QA en revisión",
+    ]);
+    expect(admin.recentActivity[0]).toMatchObject({ id: "e1", href: "/proyectos/p" });
+    expect(admin.recentActivity[0]!.when).toMatch(/^(hoy|ayer) \d{1,2}:\d{2}$/);
+
+    state.access = "Dirección";
+    const director = await fetchPersonaDetailAction(OTHER);
+    expect(repo.listRecentActivity).toHaveBeenLastCalledWith(OTHER, { includeAdmin: false });
+    expect(director.recentActivity.map((a) => a.id)).toEqual(["e1", "e3"]);
   });
 });

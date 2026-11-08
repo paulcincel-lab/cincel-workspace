@@ -139,9 +139,12 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
         <DropdownMenuTrigger
           render={<Button variant="ghost" size="icon" aria-label={`Menú de la cuenta de ${session.name}`} />}
         >
-          <Avatar data-photo={photoUrl ? "photo" : "initials"}>
+          <Avatar data-photo={photoUrl ? "photo" : "initials"} className="size-[30px]">
             {photoUrl ? <AvatarImage src={photoUrl} alt="" /> : null}
-            <AvatarFallback>{initials}</AvatarFallback>
+            {/* Initials on the primary tint, as in frames `Sidebar` and `MovilInicio`. */}
+            <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary dark:bg-primary/20">
+              {initials}
+            </AvatarFallback>
           </Avatar>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="start" className="w-56">

@@ -1,16 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { AssistantButton } from "@/components/asistente/AssistantButton";
-import { AssistantSheet } from "@/components/asistente/AssistantSheet";
 import { IMPLEMENTED } from "@/lib/actions/assistant-actions.flags";
 import { assistantContextFromRoute, isAssistantPage } from "@/lib/assistant/page-context";
 
 /** Stub phase (FE §9): the entry point stays hidden until the assistant thread actions are implemented. */
 export function assistantEntryEnabled(flags: Record<string, boolean> = IMPLEMENTED): boolean {
   return Object.values(flags).every(Boolean);
+}
+
+/**
+ * The sheet (chat transport, markdown, charts, tool summaries) is the
+ * heaviest client tree of the shell, so it loads as its own chunk the first
+ * time the assistant opens instead of with every staff page.
+ */
+const loadAssistantSheet = () => import("@/components/asistente/AssistantSheet");
+const AssistantSheet = lazy(() => loadAssistantSheet().then((m) => ({ default: m.AssistantSheet })));
+
+/** Starts fetching the sheet chunk early (hover / focus on the button). */
+export function preloadAssistantSheet(): void {
+  void loadAssistantSheet();
 }
 
 /** Event other entry points (e.g. the command palette's "Preguntar al asistente") dispatch to open the sheet. */
@@ -37,6 +49,8 @@ export function AssistantLauncher({ hidden = false, enabled = assistantEntryEnab
   const pathname = usePathname() ?? "/";
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
+  // Stays true after the first open so the sheet keeps its state and close animation.
+  const [sheetMounted, setSheetMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const tarea = searchParams?.get("tarea") ?? null;
@@ -52,9 +66,13 @@ export function AssistantLauncher({ hidden = false, enabled = assistantEntryEnab
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "j" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
       event.preventDefault();
+      setSheetMounted(true);
       setOpen((prev) => !prev);
     };
-    const onOpenEvent = () => setOpen(true);
+    const onOpenEvent = () => {
+      setSheetMounted(true);
+      setOpen(true);
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener(OPEN_ASSISTANT_EVENT, onOpenEvent);
     return () => {
@@ -67,8 +85,19 @@ export function AssistantLauncher({ hidden = false, enabled = assistantEntryEnab
 
   return (
     <>
-      <AssistantButton ref={buttonRef} onOpen={() => setOpen(true)} />
-      <AssistantSheet open={open} onOpenChange={setOpen} context={context} finalFocus={buttonRef} />
+      <AssistantButton
+        ref={buttonRef}
+        onOpen={() => {
+          setSheetMounted(true);
+          setOpen(true);
+        }}
+        onIntent={preloadAssistantSheet}
+      />
+      {sheetMounted ? (
+        <Suspense fallback={null}>
+          <AssistantSheet open={open} onOpenChange={setOpen} context={context} finalFocus={buttonRef} />
+        </Suspense>
+      ) : null}
     </>
   );
 }

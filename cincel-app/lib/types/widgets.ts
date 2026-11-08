@@ -12,13 +12,21 @@ export type Tone = "default" | "ok" | "warn" | "critical";
 /** `workflows.key`. */
 export type TramoKey = string;
 
+/** Color of a KPI delta: better, worse or unchanged. */
+export type KpiDeltaTone = "good" | "bad" | "neutral";
+
 export type KpiDatum = {
   key: string;
   label: string;
   value: number;
   display?: string;
-  /** Week-over-week. */
-  delta?: { value: number; good: boolean; caption: string };
+  /**
+   * Week-over-week `value` (Analítico "Δ 7 días"). `label` is the Visual chip
+   * text ("+4 vs. semana", "+1 este mes", "sin cambio") and `tone` its color;
+   * a zero change is `neutral`. Without them the chip derives both from
+   * `value` / `good`.
+   */
+  delta?: { value: number; good: boolean; caption: string; label?: string; tone?: KpiDeltaTone };
   series7?: Series7;
   avg30?: number;
   min30?: number;

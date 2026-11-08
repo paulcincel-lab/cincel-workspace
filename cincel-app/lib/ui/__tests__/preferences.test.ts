@@ -37,7 +37,7 @@ describe("resolveAppearance", () => {
     expect(resolved).toMatchObject({
       theme: "azul",
       style: "visual",
-      mode: "system",
+      mode: "light",
       density: "comoda",
       textSize: 14,
       version: 5,
@@ -76,6 +76,18 @@ describe("resolveAppearance", () => {
     );
     expect(resolved.cssVars.light["--primary"]).toBe(THEME_PRESETS.grafito.tokens.primary.light);
     expect(resolved.cssVars.dark["--primary"]).toBe(THEME_PRESETS.grafito.tokens.primary.dark);
+  });
+
+  it("a new user starts in light mode, whatever the OS prefers", () => {
+    expect(DEFAULT_USER_PREFERENCES.mode).toBe("light");
+    expect(resolveAppearance(org(), null).mode).toBe("light");
+    expect(resolveAppearance(org(), user()).mode).toBe("light");
+  });
+
+  it("a saved mode is kept, Sistema included", () => {
+    for (const mode of ["light", "dark", "system"] as const) {
+      expect(resolveAppearance(org(), user({ mode })).mode).toBe(mode);
+    }
   });
 
   it("mode, density and text size come from the user", () => {

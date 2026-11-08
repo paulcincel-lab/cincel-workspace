@@ -31,10 +31,19 @@ export const TEXT_SIZE_MAX = 16;
 export const TEXT_SIZE_STEP = 0.5;
 
 const STYLE_OPTIONS: { value: PresentationStyle; label: string; description: string; icon: LucideIcon }[] = [
-  { value: "visual", label: "Visual", description: "Gráficas, colores y tarjetas para ver todo de un vistazo.", icon: LayoutGrid },
-  { value: "esencial", label: "Esencial", description: "Solo lo importante, en texto claro y sin adornos.", icon: TextAlignStart },
-  { value: "analitico", label: "Analítico", description: "Tablas con más datos, totales y comparaciones.", icon: Table2 },
+  { value: "visual", label: "Visual", description: "Gráficas grandes, donas, anillos y color por tramo.", icon: LayoutGrid },
+  { value: "esencial", label: "Esencial", description: "Solo números, texto y listas. Sin gráficas.", icon: TextAlignStart },
+  { value: "analitico", label: "Analítico", description: "Tablas densas con variaciones y desvíos.", icon: Table2 },
 ];
+
+const STYLE_NAMES: Record<PresentationStyle, string> = { visual: "Visual", esencial: "Esencial", analitico: "Analítico" };
+
+/** One-line description under each theme card (canvas `Ajustes`). */
+const THEME_DESCRIPTIONS: Record<ThemeId, string> = {
+  azul: "Gris azulado, tarjetas blancas con sombra suave y azul de acción.",
+  calido: "Piedra, tinta café y colores de obra: arcilla, malva, ocre, azul piedra.",
+  grafito: "Blanco y negro como cincel.mx. El color queda solo en los datos.",
+};
 
 const MODE_OPTIONS: { value: ColorMode; label: string }[] = [
   { value: "light", label: "Claro" },
@@ -158,6 +167,7 @@ export function AparienciaTemaSection() {
                   </Badge>
                 ) : null}
               </span>
+              <span className="text-sm text-muted-foreground">{THEME_DESCRIPTIONS[id]}</span>
             </label>
           ))}
         </RadioGroup>
@@ -185,7 +195,10 @@ export function AparienciaEstiloSection() {
   const selected: PresentationStyle = overridesAllowed ? (preferences.style ?? org.styleDefault) : org.styleDefault;
 
   return (
-    <SettingsSection title="Estilo de presentación" description="Cómo se muestran los datos en Inicio, Tareas, Proyectos y Personas.">
+    <SettingsSection
+      title="Estilo de presentación"
+      description={`Cambia cómo se muestran los datos en todas las vistas: gráficas, listas o tablas. La organización usa ${STYLE_NAMES[org.styleDefault]}.`}
+    >
       <div className="flex flex-col gap-3">
         <RadioGroup
           aria-label="Estilo de presentación"

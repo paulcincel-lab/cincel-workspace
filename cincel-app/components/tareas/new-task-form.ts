@@ -4,12 +4,14 @@
  * the `createUserTaskAction` / `createSubtaskAction` inputs. Client-safe.
  */
 import { actionErrorText } from "@/lib/errors";
+import { parseStatusValue, statusSelectValue, type ParsedStatusValue } from "@/lib/tasks/status-options";
 import type {
   ProjectListItem,
   SubtaskInput,
   TaskPriority,
   UserTaskInput,
   WorkflowDetail,
+  TaskStatus,
   WorkflowPhaseRef,
 } from "@/lib/types/core";
 
@@ -35,7 +37,17 @@ export type NewTaskDraft = {
   subtasks: string[];
 };
 
-export type NewTaskDefaults = { projectId?: string; tramoKey?: string; title?: string; description?: string };
+export type NewTaskDefaults = {
+  projectId?: string;
+  tramoKey?: string;
+  title?: string;
+  description?: string;
+  /**
+   * Board column the task is created in (Tablero "+ Agregar"): a base status
+   * (`pendiente`, …) or `custom:<id>`. Applied right after the task is created.
+   */
+  status?: string;
+};
 
 export function initialDraft(defaults: NewTaskDefaults = {}): NewTaskDraft {
   return {
@@ -161,6 +173,21 @@ export function toUserTaskInput(draft: ResolvedDraft, fases: readonly WorkflowPh
     priority: draft.priority,
     deliveryDate: draft.deliveryDate || null,
   };
+}
+
+/**
+ * The status to set on a just-created task so it lands in the preselected
+ * board column; null when there is none or the task already sits there.
+ */
+export function initialStatusTarget(
+  statusKey: string | undefined,
+  created: { status?: TaskStatus; customStatus?: { id: string } | null },
+): ParsedStatusValue | null {
+  if (!statusKey) return null;
+  if (created.status && statusSelectValue({ status: created.status, customStatus: created.customStatus }) === statusKey) {
+    return null;
+  }
+  return parseStatusValue(statusKey);
 }
 
 /** One `createSubtaskAction` input per non-empty subtarea row, in order. */

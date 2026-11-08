@@ -9,7 +9,8 @@ import { fetchGmailStatusAction } from "@/lib/actions/gmail-actions";
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
 import { getSessionAccess, requireCapabilityUser } from "@/lib/auth/session";
 import { getPickerDriveStatus } from "@/lib/google/picker-drive";
-import { settingsSectionsFor } from "@/lib/shell/settings-sections";
+import { INTEGRACIONES_SECTIONS } from "@/lib/shell/settings-sections/integraciones";
+import { visibleSettingsSections } from "@/lib/shell/settings-sections/visible";
 import type { GmailStatus } from "@/lib/types/redesign";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export default async function AjustesIntegracionesPage() {
   if (!access.user) redirect("/login");
   const user = await requireCapabilityUser();
 
-  const sections = settingsSectionsFor("integraciones", user);
+  const sections = visibleSettingsSections(INTEGRACIONES_SECTIONS, user);
   const [gmail, drive] = await Promise.all([
     loadGmailStatus(),
     getPickerDriveStatus({

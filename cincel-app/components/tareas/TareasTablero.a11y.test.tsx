@@ -15,6 +15,7 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   setTaskStatusAction: vi.fn(() => Promise.resolve({})),
   setTaskCustomStatusAction: vi.fn(() => Promise.resolve({})),
 }));
+vi.mock("@/components/tareas/NewTaskDialog", () => ({ NewTaskDialog: () => null }));
 vi.mock("@/lib/actions/preferences-actions", () => ({
   updateMyPreferencesAction: vi.fn(() => Promise.resolve({})),
   fetchMyPreferencesAction: vi.fn(() => Promise.resolve(null)),

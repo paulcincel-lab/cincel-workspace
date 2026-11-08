@@ -2,13 +2,22 @@ import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 
+/**
+ * Specs that change state every signed-in page reads: the org theme
+ * (`appearance.theme`), Control de horario (`time_tracking`, whose login
+ * prompt would cover any page) and the admin's own appearance preferences.
+ * They run one at a time, after the rest of the suite.
+ */
+const ORG_SETTINGS_SPECS = ["**/tema-publicar.spec.ts", "**/control-horario.spec.ts", "**/appearance-b18.spec.ts"];
+
 export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/global-cleanup.ts",
+  // Spec files run in parallel; the tests inside one file keep their order.
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: process.env.CI ? 4 : 2,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL,
@@ -18,6 +27,14 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: ORG_SETTINGS_SPECS,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "org-settings",
+      testMatch: ORG_SETTINGS_SPECS,
+      dependencies: ["chromium"],
+      workers: 1,
       use: { ...devices["Desktop Chrome"] },
     },
   ],

@@ -77,6 +77,100 @@ describe("KpiWidget · Visual", () => {
   });
 });
 
+describe("KpiWidget · Visual chip, sparkline and context line (frame Dashboard)", () => {
+  const canvasItems: KpiWidgetProps["items"] = [
+    {
+      key: "proyectos_activos",
+      label: "Proyectos activos",
+      value: 6,
+      delta: { value: 1, good: true, caption: "vs. semana pasada", label: "+1 este mes", tone: "good" },
+      series7: [1, 1, 3, 3, 3, 5, 5],
+      split: [{ tramo: "presale", share: 0.33 }],
+      caption: "Por área: Presale 2 · Diseño 1 · Construcción 2 · Decoración 1",
+    },
+    {
+      key: "vencidas",
+      label: "Vencidas",
+      value: 31,
+      delta: { value: 4, good: false, caption: "vs. semana pasada", label: "+4 vs. semana", tone: "bad" },
+      series7: [19, 22, 21, 25, 26, 28, 31],
+      split: [{ tramo: "construccion", share: 0.45 }],
+      caption: "Construcción concentra 14 de 31",
+    },
+    {
+      key: "bloqueadas",
+      label: "Bloqueadas",
+      value: 0,
+      delta: { value: 0, good: true, caption: "vs. semana pasada", label: "sin cambio", tone: "neutral" },
+      series7: [0, 0, 0, 0, 0, 0, 0],
+      split: [],
+      caption: "Nada bloqueado hoy",
+    },
+    {
+      key: "revisiones_7d",
+      label: "Revisiones · 7 días",
+      value: 0,
+      // No producer label: the chip still reads "sin cambio".
+      delta: { value: 0, good: true, caption: "vs. semana pasada" },
+      series7: [],
+      split: [],
+      caption: "Próxima revisión sin agendar",
+    },
+  ];
+
+  it("renders the chip text and tone; zero deltas read \"sin cambio\" in a neutral chip", () => {
+    const { container } = renderWidget("visual", { items: canvasItems });
+    const pills = Array.from(container.querySelectorAll('[data-slot="kpi-delta"]'));
+    expect(pills.map((p) => [p.textContent, p.getAttribute("data-tone"), p.getAttribute("data-variant")])).toEqual([
+      ["+1 este mes", "good", "success"],
+      ["+4 vs. semana", "bad", "destructive"],
+      ["sin cambio", "neutral", "outline"],
+      ["sin cambio", "neutral", "outline"],
+    ]);
+    expect(pills.every((p) => (p.textContent ?? "").trim().length > 0)).toBe(true);
+    expect(screen.queryByText("vs. semana pasada")).toBeNull();
+  });
+
+  it("never renders an empty chip, even without a producer label", () => {
+    const { container } = renderWidget("visual");
+    const pills = Array.from(container.querySelectorAll('[data-slot="kpi-delta"]'));
+    expect(pills.length).toBeGreaterThan(0);
+    expect(pills.every((p) => (p.textContent ?? "").trim().length > 0)).toBe(true);
+  });
+
+  it("renders one context line per card with the canvas copy", () => {
+    const { container } = renderWidget("visual", { items: canvasItems });
+    expect(Array.from(container.querySelectorAll('[data-slot="kpi-context"]')).map((n) => n.textContent)).toEqual([
+      "Por área: Presale 2 · Diseño 1 · Construcción 2 · Decoración 1",
+      "Construcción concentra 14 de 31",
+      "Nada bloqueado hoy",
+      "Próxima revisión sin agendar",
+    ]);
+  });
+
+  it("draws the sparkline from the series with a tinted area, and hides it without one", () => {
+    const { container } = renderWidget("visual", { items: canvasItems });
+    const lines = Array.from(container.querySelectorAll('[data-slot="sparkline"]'));
+    // Only the two cards with a non-zero series draw a line; none is flat.
+    expect(lines).toHaveLength(2);
+    expect(lines[0].getAttribute("width")).toBe("120");
+    expect(lines[0].getAttribute("height")).toBe("36");
+    expect(lines[0].querySelector('[data-slot="sparkline-area"]')).toBeTruthy();
+    expect(lines[0].getAttribute("class")).toContain("text-success");
+    expect(lines[1].getAttribute("class")).toContain("text-destructive");
+  });
+
+  it("keeps the split track on cards with an empty split", () => {
+    const { container } = renderWidget("visual", { items: canvasItems });
+    expect(container.querySelectorAll('[data-slot="kpi-split"]')).toHaveLength(4);
+  });
+
+  it("shows no chip or context line in Esencial", () => {
+    const { container } = renderWidget("esencial", { items: canvasItems });
+    expect(container.querySelector('[data-slot="kpi-delta"], [data-slot="kpi-context"]')).toBeNull();
+  });
+});
+
 describe("KpiWidget · Esencial", () => {
   it("renders a number + label grid with the same numbers and no charts or tints", () => {
     const { container } = renderWidget("esencial");
@@ -122,8 +216,22 @@ describe("KpiWidget · Analítico", () => {
     const { container } = renderWidget("analitico");
     const deltas = Array.from(container.querySelectorAll("td [data-good]"));
     expect(deltas.map((d) => d.getAttribute("data-good"))).toEqual(["true", "true", "false", "false"]);
-    expect(deltas[1].className).toContain("text-success-foreground");
+    expect(deltas[1].className).toContain("text-success");
     expect(deltas[2].className).toContain("text-destructive");
+  });
+
+  it("reads a zero Δ in a neutral color", () => {
+    const { container } = renderWidget("analitico", {
+      items: [{ key: "b", label: "Bloqueadas", value: 0, delta: { value: 0, good: true, caption: "vs. semana pasada" } }],
+    });
+    const cell = container.querySelector("td [data-good]") as HTMLElement;
+    expect(cell.textContent).toBe("0 vs. semana pasada");
+    expect(cell.className).toContain("text-muted-foreground");
+  });
+
+  it("shows a dash instead of a flat trend when there is no series", () => {
+    const data = kpiTableData([{ key: "z", label: "Ceros", value: 0, series7: [0, 0, 0, 0, 0, 0, 0] }]);
+    expect(data.rows[0].tendencia).toBe("—");
   });
 
   it("shows a dash for missing data", () => {

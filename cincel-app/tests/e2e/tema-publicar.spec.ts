@@ -5,7 +5,8 @@
  * The admin starts from the Cálido preset ("Partir de"), publishes it ("Publicar para todos" →
  * `saveOrgAppearanceAction`), and a second user — in their own browser context, following the org theme —
  * gets `data-theme-id="calido"` and the Cálido tokens in `<style id="appearance">` after a reload.
- * The org theme row is snapshotted before and put back afterwards.
+ * The org theme row is snapshotted before and put back afterwards. Runs in the `org-settings` project
+ * (playwright.config.ts), since the published theme reaches every signed-in page.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -97,23 +98,5 @@ test.describe("Tema de la organización — publicar para todos", () => {
     } finally {
       await otherContext.close();
     }
-  });
-
-  test("Restablecer asks for confirmation and goes back to the Azul preset", async ({ page }) => {
-    await loginAsAdmin(page, BASE_URL);
-    await page.goto(`${BASE_URL}/ajustes/tema`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("button", { name: "Publicar para todos" })).toBeVisible({ timeout: 30_000 });
-
-    await page.getByRole("button", { name: "Azul Cincel", exact: true }).first().click();
-    await page.getByRole("button", { name: "Restablecer", exact: true }).click();
-    const confirm = page.getByRole("dialog");
-    await expect(confirm).toBeVisible();
-    await confirm.getByRole("button", { name: /Restablecer/ }).click();
-
-    await expect
-      .poll(async () => (await readSettingData<OrgAppearanceData>(THEME_KEY))?.baseTheme, { timeout: 15_000 })
-      .toBe("azul");
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await expect.poll(() => themeId(page), { timeout: 15_000 }).toBe("azul");
   });
 });

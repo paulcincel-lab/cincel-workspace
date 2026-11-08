@@ -75,9 +75,14 @@ export function tramoColorSlot(key: string): TramoColorSlot | null {
   return slot === 1 || slot === 2 || slot === 3 ? slot : null;
 }
 
-/** `var(--chart-N)` for a tramo key (neutral when unknown). */
-export function tramoColorVar(key: string): string {
-  return projectFlowColorVar(tramoColorSlot(key) ? { key, sortOrder: 0 } : null);
+/**
+ * `var(--chart-N)` for a tramo key (neutral when unknown). With the row's
+ * `sortOrder`, a tramo outside the three known keys takes Project Flow's slot
+ * for it (e.g. Decoración, sortOrder 4 → `chart-4`), as everywhere else.
+ */
+export function tramoColorVar(key: string, sortOrder?: number): string {
+  if (tramoColorSlot(key)) return projectFlowColorVar({ key, sortOrder: 0 });
+  return projectFlowColorVar(typeof sortOrder === "number" ? { key, sortOrder } : null);
 }
 
 /**

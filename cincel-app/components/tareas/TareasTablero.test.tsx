@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { TaskListItem } from "@/lib/types/core";
@@ -61,6 +61,18 @@ vi.mock("@/components/widgets/RecordTable", () => ({
       </tbody>
     </table>
   ),
+}));
+
+// The dialog has its own tests; here it only shows which estatus it opened in.
+vi.mock("./NewTaskDialog", () => ({
+  NewTaskDialog: (p: { open: boolean; onOpenChange(open: boolean): void; defaults?: { status?: string } }) =>
+    p.open ? (
+      <div role="dialog" aria-label="Nueva tarea" data-status={p.defaults?.status}>
+        <button type="button" onClick={() => p.onOpenChange(false)}>
+          Cancelar
+        </button>
+      </div>
+    ) : null,
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
@@ -193,7 +205,30 @@ describe("TareasTablero · three styles from the same board", () => {
     expect(table.getAttribute("data-columns")?.split(",")).toHaveLength(10);
   });
 
-  it.each<PresentationStyle>(["visual", "esencial", "analitico"])("shows the filters empty state in %s", (style) => {
+  it("Visual: with no task matching the filters every column still shows with 0", () => {
+    renderTablero("visual", { pendiente: [], en_proceso: [], completado: [], bloqueado: [] });
+
+    expect(screen.queryByTestId("empty-state")).toBeNull();
+    for (const label of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
+      expect(screen.getByRole("group", { name: `${label} · 0` })).toBeTruthy();
+    }
+    expect(screen.getAllByText("Sin tareas")).toHaveLength(4);
+  });
+
+  it("Visual: shows a column for every configured custom status, even when empty", () => {
+    render(
+      <StyleProvider style="visual" scope="staff">
+        <TareasTablero
+          board={{ pendiente: [], en_proceso: [], completado: [], bloqueado: [] }}
+          customStatuses={[{ id: "cs-qa", name: "QA en revisión" }]}
+          header={{ title: "Tareas" }}
+        />
+      </StyleProvider>,
+    );
+    expect(screen.getByRole("group", { name: "QA en revisión · 0" })).toBeTruthy();
+  });
+
+  it.each<PresentationStyle>(["esencial", "analitico"])("shows the filters empty state in %s", (style) => {
     renderTablero(style, { pendiente: [], en_proceso: [], completado: [], bloqueado: [] });
     expect(screen.getByTestId("empty-state").textContent).toBe("No hay tareas con estos filtros");
   });
@@ -265,6 +300,27 @@ describe("TareasTablero · moves", () => {
   });
 });
 
+describe("TareasTablero · drop into an empty custom column", () => {
+  it("moves the card through setTaskCustomStatusAction", async () => {
+    const { container } = render(
+      <StyleProvider style="visual" scope="staff">
+        <TareasTablero board={BOARD} customStatuses={[{ id: "cs-qa", name: "QA en revisión" }]} header={{ title: "Tareas" }} />
+      </StyleProvider>,
+    );
+
+    fireEvent.dragStart(card(container, "t2"));
+    const strip = screen.getByRole("group", { name: "QA en revisión · 0" });
+    fireEvent.dragOver(strip);
+    await act(async () => {
+      fireEvent.drop(strip);
+    });
+
+    expect(actions.setTaskCustomStatusAction).toHaveBeenCalledWith("t2", "cs-qa");
+    expect(screen.getByRole("group", { name: "QA en revisión · 1" }).contains(card(container, "t2"))).toBe(true);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("moveTaskToColumn", () => {
   it("sends base columns to setTaskStatusAction", async () => {
     await moveTaskToColumn("t1", "bloqueado");
@@ -281,5 +337,37 @@ describe("moveTaskToColumn", () => {
   it("rejects with the action error so the board rolls back", async () => {
     actions.setTaskStatusAction.mockRejectedValue(new Error("NOT_FOUND"));
     await expect(moveTaskToColumn("t1", "completado")).rejects.toThrow("NOT_FOUND");
+  });
+});
+
+describe("TareasTablero · quick-add", () => {
+  it("shows “+ Agregar” at the end of every open column", () => {
+    renderTablero("visual");
+    for (const label of ["Pendiente", "En proceso", "Completado"]) {
+      const column = screen.getByRole("group", { name: new RegExp(`^${label} · `) });
+      expect(within(column).getByRole("button", { name: `Agregar tarea en ${label}` }).textContent).toBe("+ Agregar");
+    }
+  });
+
+  it("opens NewTaskDialog with that column's estatus and closes it", () => {
+    renderTablero("visual");
+    expect(screen.queryByRole("dialog", { name: "Nueva tarea" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Agregar tarea en En proceso" }));
+    expect(screen.getByRole("dialog", { name: "Nueva tarea" }).getAttribute("data-status")).toBe("en_proceso");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog", { name: "Nueva tarea" })).toBeNull();
+  });
+
+  it("passes custom:<id> for a custom status column", () => {
+    const qa = { id: "cs-qa", name: "QA en revisión", closes: false, countsAsCompleted: false };
+    const board: TaskBoard = {
+      ...BOARD,
+      en_proceso: [...BOARD.en_proceso, makeTask({ id: "t5", title: "Revisión QA", status: "en_proceso", customStatus: qa })],
+    };
+    renderTablero("visual", board);
+    fireEvent.click(screen.getByRole("button", { name: "Agregar tarea en QA en revisión" }));
+    expect(screen.getByRole("dialog", { name: "Nueva tarea" }).getAttribute("data-status")).toBe("custom:cs-qa");
   });
 });

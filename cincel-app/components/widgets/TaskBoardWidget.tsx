@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
+import { Button } from "@/components/ui/shadcn/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,7 +36,7 @@ import {
   statusSelectValue,
   type StatusColorToken,
 } from "@/lib/tasks/status-options";
-import type { TaskListItem, TaskPriority, TaskStatus } from "@/lib/types/core";
+import type { TaskListItem, TaskPriority, TaskStatus, TaskStatusOption } from "@/lib/types/core";
 import type { TaskBoard } from "@/lib/types/redesign";
 import type { DistributionSegment, RecordTableData } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
@@ -48,7 +49,9 @@ import { formatDateDMY } from "@/lib/utils/date";
  *
  * - Visual: kanban columns with drag-and-drop (optimistic move, rollback and
  *   error toast when `onMove` rejects), empty columns collapsed to strips, and
- *   a keyboard "Mover a…" menu on every card.
+ *   a keyboard "Mover a…" menu on every card. The columns always render, even
+ *   when the filters leave no task: every column then shows its 0 count and a
+ *   small "Sin tareas" drop zone, so a card can still be dropped or added.
  * - Esencial: `RecordTable` per estatus ("Pendiente · 4"); Completado
  *   collapsed with a link to the list view.
  * - Analítico: estatus summary (`DistributionWidget`) + dense `RecordTable`.
@@ -63,7 +66,18 @@ export type TaskBoardWidgetProps = {
    * the move back.
    */
   onMove(taskId: string, statusId: string): Promise<void>;
-  /** Shown when the board has no tasks. */
+  /**
+   * Visual "+ Agregar" at the end of each open column: called with the column
+   * key (same keys as `onMove`) so the page opens a new task in that estatus.
+   * Without it the button isn't shown.
+   */
+  onQuickAdd?(statusId: string): void;
+  /**
+   * Every configured custom status, so its column shows even with no task in
+   * it. Custom statuses found on the tasks are always added.
+   */
+  customStatuses?: Pick<TaskStatusOption, "id" | "name">[];
+  /** Shown by Esencial and Analítico when the board has no tasks; Visual keeps its columns. */
   emptyState?: EmptyStateProps;
   /** Renders the style's loading skeleton instead of the board. */
   loading?: boolean;
@@ -77,6 +91,21 @@ const PRIORITY_LABEL: Record<TaskPriority, string> = { alta: "Alta", media: "Med
 const COMPLETED_LIST_HREF = "/tareas?vista=lista&estado=completado";
 
 const NO_MOVES: Record<string, string> = {};
+
+const NO_CUSTOM_STATUSES: Pick<TaskStatusOption, "id" | "name">[] = [];
+
+/** Text of an empty column's drop zone when the whole board is empty. */
+export const BOARD_COLUMN_EMPTY = "Sin tareas";
+
+/** The configured custom statuses, then any other custom status the tasks are in. */
+function mergeCustomStatuses(
+  configured: Pick<TaskStatusOption, "id" | "name">[],
+  fromTasks: { id: string; name: string }[],
+): { id: string; name: string }[] {
+  const seen = new Map<string, { id: string; name: string }>();
+  for (const c of [...configured, ...fromTasks]) if (!seen.has(c.id)) seen.set(c.id, { id: c.id, name: c.name });
+  return [...seen.values()];
+}
 
 /** Local calendar date as `YYYY-MM-DD`. */
 function todayIso(): string {
@@ -118,9 +147,20 @@ export function boardSegments(board: TaskBoard, today: string = todayIso()): Dis
   });
 }
 
-export function TaskBoardWidget({ board, table, onMove, emptyState, loading }: TaskBoardWidgetProps) {
+export function TaskBoardWidget({
+  board,
+  table,
+  onMove,
+  onQuickAdd,
+  customStatuses = NO_CUSTOM_STATUSES,
+  emptyState,
+  loading,
+}: TaskBoardWidgetProps) {
   const tasks = useMemo(() => flattenBoard(board), [board]);
-  const columns = useMemo(() => boardColumns(customStatusesOf(tasks)), [tasks]);
+  const columns = useMemo(
+    () => boardColumns(mergeCustomStatuses(customStatuses, customStatusesOf(tasks))),
+    [customStatuses, tasks],
+  );
 
   if (loading) {
     return (
@@ -132,13 +172,17 @@ export function TaskBoardWidget({ board, table, onMove, emptyState, loading }: T
     );
   }
 
-  if (tasks.length === 0) return <EmptyState {...(emptyState ?? DEFAULT_EMPTY)} />;
+  // Visual always shows its columns (a drop target per estatus); the
+  // Esencial and Analítico styles have no columns, so they show the empty state.
+  const empty = tasks.length === 0 ? <EmptyState {...(emptyState ?? DEFAULT_EMPTY)} /> : null;
 
   return (
     <StyleView
-      visual={() => <BoardVisual board={board} tasks={tasks} columns={columns} onMove={onMove} />}
-      esencial={() => <BoardEsencial tasks={tasks} columns={columns} table={table} />}
-      analitico={() => <BoardAnalitico board={board} table={table} />}
+      visual={() => (
+        <BoardVisual board={board} tasks={tasks} columns={columns} onMove={onMove} onQuickAdd={onQuickAdd} />
+      )}
+      esencial={() => empty ?? <BoardEsencial tasks={tasks} columns={columns} table={table} />}
+      analitico={() => empty ?? <BoardAnalitico board={board} table={table} />}
     />
   );
 }
@@ -146,7 +190,7 @@ export function TaskBoardWidget({ board, table, onMove, emptyState, loading }: T
 // ── Visual ─────────────────────────────────────────────────────────────────
 
 function StatusRing({ token }: { token: StatusColorToken }) {
-  return <span aria-hidden className={cn("inline-block size-3 shrink-0 rounded-full border-2", statusBorderClass(token))} />;
+  return <span aria-hidden className={cn("inline-block size-[18px] shrink-0 rounded-full border-2", statusBorderClass(token))} />;
 }
 
 function BoardVisual({
@@ -154,11 +198,13 @@ function BoardVisual({
   tasks,
   columns,
   onMove,
+  onQuickAdd,
 }: {
   board: TaskBoard;
   tasks: TaskListItem[];
   columns: BoardColumn[];
   onMove: TaskBoardWidgetProps["onMove"];
+  onQuickAdd?: TaskBoardWidgetProps["onQuickAdd"];
 }) {
   // Optimistic moves, keyed by task, valid for the board they were made on: a
   // new `board` from the page (after the server confirmed) replaces them.
@@ -167,6 +213,9 @@ function BoardVisual({
   const columnOf = (t: TaskListItem) => byTask[t.id] ?? statusSelectValue(t);
   const grouped = groupTasksByColumn(tasks, columns, columnOf);
   const today = todayIso();
+  // With no task at all every column stays open (count 0 and a drop zone) so
+  // the board keeps its shape; otherwise empty columns collapse to strips.
+  const boardEmpty = tasks.length === 0;
 
   async function move(taskId: string, columnKey: string) {
     const task = tasks.find((t) => t.id === taskId);
@@ -195,14 +244,14 @@ function BoardVisual({
   });
 
   return (
-    <div data-testid="task-board" className="flex w-full min-w-0 gap-3 overflow-x-auto pb-2">
+    <div data-testid="task-board" className="flex w-full min-w-0 items-start gap-3.5 overflow-x-auto pb-2">
       {columns.map((column) => {
         const inColumn = grouped[column.key] ?? [];
         const token = columnColor(column, inColumn);
         const isDragOver = dragOverKey === column.key;
         const dropTarget = columnProps(column.key);
 
-        if (inColumn.length === 0) {
+        if (inColumn.length === 0 && !boardEmpty) {
           return (
             <div
               key={column.key}
@@ -211,13 +260,13 @@ function BoardVisual({
               data-collapsed="true"
               {...dropTarget}
               className={cn(
-                "flex w-[52px] shrink-0 flex-col items-center gap-2 rounded-[14px] border bg-muted px-1 py-3 text-foreground transition-colors",
+                "flex min-h-[360px] w-[52px] shrink-0 flex-col items-center gap-2.5 rounded-[14px] border bg-muted py-3 text-foreground transition-colors",
                 isDragOver ? "border-primary" : "border-transparent",
               )}
             >
               <StatusRing token={token} />
-              <span className="font-mono text-xs">0</span>
-              <span className="text-xs font-medium [writing-mode:vertical-rl]">{column.label}</span>
+              <span className="font-mono text-xs text-muted-foreground">0</span>
+              <span className="text-[13px] font-medium [writing-mode:vertical-rl]">{column.label}</span>
             </div>
           );
         }
@@ -233,11 +282,22 @@ function BoardVisual({
               isDragOver ? "border-primary" : "border-transparent",
             )}
           >
-            <div className="flex items-center gap-2 px-1 py-0.5">
+            <div className="flex items-center gap-2 px-1.5 py-1">
               <StatusRing token={token} />
-              <h3 className="text-sm font-semibold">{column.label}</h3>
-              <span className="ml-auto font-mono text-xs">{inColumn.length}</span>
+              <h3 className="flex-1 text-[13.5px] font-semibold">{column.label}</h3>
+              <span className="font-mono text-xs text-muted-foreground">{inColumn.length}</span>
             </div>
+            {inColumn.length === 0 ? (
+              <p
+                data-testid="board-column-empty"
+                className={cn(
+                  "rounded-xl border border-dashed px-3 py-6 text-center text-xs text-muted-foreground transition-colors",
+                  isDragOver ? "border-primary" : "border-border",
+                )}
+              >
+                {BOARD_COLUMN_EMPTY}
+              </p>
+            ) : null}
             <ul className="flex flex-col gap-2">
               {inColumn.map((task) => (
                 <BoardCard
@@ -251,6 +311,17 @@ function BoardVisual({
                 />
               ))}
             </ul>
+            {onQuickAdd ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="justify-start px-2 text-[13px] font-normal text-muted-foreground"
+                aria-label={`Agregar tarea en ${column.label}`}
+                onClick={() => onQuickAdd(column.key)}
+              >
+                + Agregar
+              </Button>
+            ) : null}
           </div>
         );
       })}

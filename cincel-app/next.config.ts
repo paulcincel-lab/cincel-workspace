@@ -8,6 +8,11 @@ const GOOGLE_IMG_SRC =
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   output: "standalone",
+  experimental: {
+    // Going back to a page seen in the last 30 s reuses its payload instead of rendering it again.
+    // Server Actions that revalidate and router.refresh() still drop it right away.
+    staleTimes: { dynamic: 30 },
+  },
   async headers() {
     return [
       {

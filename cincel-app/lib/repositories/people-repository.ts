@@ -4,10 +4,11 @@
  * Admin tasks (`kind = 'admin'`) are left out unless `includeAdmin`; the
  * caller decides that from `canSeeAdminData` (BE §9.7).
  */
-import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
+  historyEvents,
   projectMembers,
   projects,
   staff,
@@ -17,6 +18,8 @@ import {
   tasks,
   workflows,
 } from "@/lib/db/schema";
+
+import { ADMIN_PROJECT_ACTIVITY_FIELDS, type ActivityEventRow } from "@/lib/people/activity";
 
 export type StaffRow = typeof staff.$inferSelect;
 
@@ -192,3 +195,90 @@ export async function staffIdsWithPhoto(staffIds: string[]): Promise<Set<string>
     .where(inArray(staffPhotos.staffId, staffIds));
   return new Set(rows.map((row) => row.staffId));
 }
+
+/**
+ * Events read per entity for "Actividad reciente": more than the 10 rows shown,
+ * so the rows that collapse (one edit, several fields) still leave 10.
+ */
+const ACTIVITY_FETCH = 40;
+
+/**
+ * The newest history events `staffId` made on live tasks and live projects
+ * (redesign BE §7.11), with the task title or project name, plus the names
+ * of the custom statuses those events moved tasks to. Admin-task events and
+ * admin-only project fields are left out unless `includeAdmin`.
+ */
+export async function listRecentActivity(
+  staffId: string,
+  options: { includeAdmin: boolean }
+): Promise<{ rows: ActivityEventRow[]; customStatusNames: Map<string, string> }> {
+  const columns = {
+    id: historyEvents.id,
+    entityId: historyEvents.entityId,
+    kind: historyEvents.kind,
+    field: historyEvents.field,
+    afterValue: historyEvents.afterValue,
+    comment: historyEvents.comment,
+    eventAt: historyEvents.eventAt,
+  };
+
+  const [taskRows, projectRows] = await Promise.all([
+    db
+      .select({ ...columns, title: tasks.title, taskKind: tasks.kind })
+      .from(historyEvents)
+      .innerJoin(tasks, eq(tasks.id, historyEvents.entityId))
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(
+        and(
+          eq(historyEvents.actorId, staffId),
+          eq(historyEvents.entity, "task"),
+          isNull(tasks.deletedAt),
+          isNull(projects.deletedAt),
+          options.includeAdmin ? undefined : ne(tasks.kind, "admin")
+        )
+      )
+      .orderBy(desc(historyEvents.eventAt))
+      .limit(ACTIVITY_FETCH),
+    db
+      .select({ ...columns, title: projects.name })
+      .from(historyEvents)
+      .innerJoin(projects, eq(projects.id, historyEvents.entityId))
+      .where(
+        and(
+          eq(historyEvents.actorId, staffId),
+          eq(historyEvents.entity, "project"),
+          isNull(projects.deletedAt),
+          options.includeAdmin
+            ? undefined
+            : or(isNull(historyEvents.field), notInArray(historyEvents.field, [...ADMIN_PROJECT_ACTIVITY_FIELDS]))
+        )
+      )
+      .orderBy(desc(historyEvents.eventAt))
+      .limit(ACTIVITY_FETCH),
+  ]);
+
+  const rows: ActivityEventRow[] = [
+    ...taskRows.map(({ taskKind, ...row }) => ({ ...row, entity: "task" as const, adminTask: taskKind === "admin" })),
+    ...projectRows.map((row) => ({ ...row, entity: "project" as const, adminTask: false })),
+  ];
+
+  const statusIds = [
+    ...new Set(
+      taskRows
+        .filter((r) => r.field === "customStatusId" && r.afterValue && UUID_TEXT.test(r.afterValue))
+        .map((r) => r.afterValue as string)
+    ),
+  ];
+  const customStatusNames = new Map<string, string>();
+  if (statusIds.length > 0) {
+    const statuses = await db
+      .select({ id: taskStatuses.id, name: taskStatuses.name })
+      .from(taskStatuses)
+      .where(inArray(taskStatuses.id, statusIds));
+    for (const status of statuses) customStatusNames.set(status.id, status.name);
+  }
+
+  return { rows, customStatusNames };
+}
+
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

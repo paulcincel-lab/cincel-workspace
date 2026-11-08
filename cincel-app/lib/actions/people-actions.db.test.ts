@@ -169,6 +169,7 @@ describe.skipIf(!url)("people actions (test DB)", async () => {
         await db.delete(schema.taskSupport).where(inArray(schema.taskSupport.taskId, taskIds));
         await db.delete(schema.tasks).where(inArray(schema.tasks.id, taskIds));
       }
+      await db.delete(schema.historyEvents).where(inArray(schema.historyEvents.entityId, projectIds));
       await db.delete(schema.projectMembers).where(inArray(schema.projectMembers.projectId, projectIds));
       await db.delete(schema.projects).where(inArray(schema.projects.id, projectIds));
     }
@@ -250,5 +251,43 @@ describe.skipIf(!url)("people actions (test DB)", async () => {
       .where(eq(schema.staff.id, inactiveId))
       .returning({ id: schema.staff.id });
     await expect(actions.fetchPersonaDetailAction(deleted!.id)).rejects.toThrow("NOT_FOUND");
+  });
+
+  it("lists the person's recent activity, admin items only with canSeeAdminData", async () => {
+    const taskRows = await db
+      .select({ id: schema.tasks.id, title: schema.tasks.title })
+      .from(schema.tasks)
+      .where(inArray(schema.tasks.title, [`Vencida ${run}`, `Admin ${run}`, `Borrada ${run}`]));
+    const taskId = (title: string) => taskRows.find((t) => t.title === title)!.id;
+    const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000);
+    await db.insert(schema.historyEvents).values([
+      { entity: "task", entityId: taskId(`Vencida ${run}`), kind: "cambio", actorId: workerId, field: "status", beforeValue: "pendiente", afterValue: "en_proceso", eventAt: at(1) },
+      { entity: "project", entityId: projectId, kind: "cambio", actorId: workerId, field: "progress", beforeValue: "30", afterValue: "90", eventAt: at(2) },
+      { entity: "task", entityId: taskId(`Admin ${run}`), kind: "comentario", actorId: workerId, comment: "Revisado", eventAt: at(3) },
+      { entity: "project", entityId: projectId, kind: "cambio", actorId: workerId, field: "contractAmountMxn", beforeValue: null, afterValue: "100000", eventAt: at(4) },
+      // A deleted task and someone else's event never show.
+      { entity: "task", entityId: taskId(`Borrada ${run}`), kind: "comentario", actorId: workerId, comment: "Hola", eventAt: at(5) },
+      { entity: "task", entityId: taskId(`Vencida ${run}`), kind: "comentario", actorId: adminId, comment: "Otro", eventAt: at(6) },
+    ]);
+
+    session.access = "Administrador";
+    const admin = await actions.fetchPersonaDetailAction(workerId);
+    expect(admin.recentActivity.map((a) => a.text)).toEqual([
+      `Movió “Vencida ${run}” a En proceso`,
+      `Movió “Personas ${run} A” a 90%`,
+      `Comentó en “Admin ${run}”`,
+      `Editó “Personas ${run} A”`,
+    ]);
+    expect(admin.recentActivity[0]).toMatchObject({ href: `/tareas?tarea=${taskId(`Vencida ${run}`)}` });
+    expect(admin.recentActivity[1]).toMatchObject({ href: `/proyectos/${projectId}` });
+    expect(admin.recentActivity[0]!.when).toMatch(/^(hoy|ayer) \d{1,2}:\d{2}$/);
+
+    session.access = "Dirección";
+    session.memberId = directorId;
+    const director = await actions.fetchPersonaDetailAction(workerId);
+    expect(director.recentActivity.map((a) => a.text)).toEqual([
+      `Movió “Vencida ${run}” a En proceso`,
+      `Movió “Personas ${run} A” a 90%`,
+    ]);
   });
 });

@@ -97,7 +97,7 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
   it("returns the defaults when there is no row", async () => {
     expect(await fetchMyPreferencesAction()).toEqual({
       theme: null,
-      mode: "system",
+      mode: "light",
       style: null,
       density: "comoda",
       textSize: 14,

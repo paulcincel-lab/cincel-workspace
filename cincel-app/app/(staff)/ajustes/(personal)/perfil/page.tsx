@@ -6,7 +6,8 @@ import { IMPLEMENTED as TIME_TRACKING_IMPLEMENTED } from "@/lib/actions/time-tra
 import { getSessionAccess, requireCapabilityUser } from "@/lib/auth/session";
 import { getStaffPhotoUrl } from "@/lib/profile-photo/photo-url";
 import * as staffRepository from "@/lib/repositories/staff-repository";
-import { settingsSectionsFor } from "@/lib/shell/settings-sections";
+import { PERFIL_SECTIONS } from "@/lib/shell/settings-sections/perfil";
+import { visibleSettingsSections } from "@/lib/shell/settings-sections/visible";
 import type { WeekHours } from "@/lib/types/redesign";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +64,7 @@ export default async function AjustesPerfilPage() {
     week,
   };
 
-  const sections = settingsSectionsFor("perfil", user);
+  const sections = visibleSettingsSections(PERFIL_SECTIONS, user);
 
   return (
     <PerfilClient initial={initial}>

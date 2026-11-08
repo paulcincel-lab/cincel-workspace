@@ -3,7 +3,8 @@ import { fetchOrgAppearanceAction } from "@/lib/actions/org-appearance-actions";
 import { fetchMyPreferencesAction } from "@/lib/actions/preferences-actions";
 import { canManageAppearance } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { settingsSectionsFor } from "@/lib/shell/settings-sections";
+import { APARIENCIA_SECTIONS } from "@/lib/shell/settings-sections/apariencia";
+import { visibleSettingsSections } from "@/lib/shell/settings-sections/visible";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function AjustesAparienciaPage() {
 
   const user = await requireCapabilityUser();
   const [preferences, org] = await Promise.all([fetchMyPreferencesAction(), fetchOrgAppearanceAction()]);
-  const sections = settingsSectionsFor("apariencia", user);
+  const sections = visibleSettingsSections(APARIENCIA_SECTIONS, user);
 
   return (
     <AparienciaClient preferences={preferences} org={org} isAdmin={canManageAppearance(user)}>

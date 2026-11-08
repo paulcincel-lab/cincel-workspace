@@ -86,9 +86,9 @@ LLM_MODEL=…
 ```
 
 Sin estas variables el endpoint responde 503 y la UI muestra el aviso "El
-asistente no está configurado". Las rutas de degradación están cubiertas por
-`tests/e2e/asistente.spec.ts`; el camino con LLM real por
-`tests/e2e/asistente-live.spec.ts` (`RUN_LIVE_ASSISTANT=1`).
+asistente no está configurado". El sheet con una escritura confirmada está
+cubierto por `tests/e2e/asistente-sheet.spec.ts` (respuestas simuladas); el
+camino con LLM real por `tests/e2e/asistente-live.spec.ts` (`RUN_LIVE_ASSISTANT=1`).
 
 `create_rfc` (opcional, independiente de lo anterior):
 

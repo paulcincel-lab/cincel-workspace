@@ -21,7 +21,7 @@ import {
   type TareasVista,
 } from "@/lib/tareas/query";
 import { tramoColorVar } from "@/lib/tramos/compat";
-import type { TaskFilters, TaskListItem, TaskStatus, WorkflowRef } from "@/lib/types/core";
+import type { TaskFilters, TaskListItem, TaskStatus, TaskStatusOption, WorkflowRef } from "@/lib/types/core";
 import type { CalendarData, StaffOption, TaskBoard } from "@/lib/types/redesign";
 
 import { NewTaskDialog } from "./NewTaskDialog";
@@ -38,9 +38,10 @@ export type TareasClientProps = {
    * `tasks`: the tasks matching every filter except tramo and proyecto (they
    * feed the tramo chip counts and the Proyecto options; the views get them
    * narrowed by tramo and proyecto). `board` (Tablero) and `calendar`
-   * (Calendario) come with every filter applied.
+   * (Calendario) come with every filter applied. `statuses` (Tablero): every
+   * configured custom status, so its column shows even when empty.
    */
-  initial: { tasks?: TaskListItem[]; board?: TaskBoard; calendar?: CalendarData };
+  initial: { tasks?: TaskListItem[]; board?: TaskBoard; calendar?: CalendarData; statuses?: TaskStatusOption[] };
   staff: StaffOption[];
   tramos: WorkflowRef[];
 };
@@ -264,7 +265,15 @@ export function TareasClient({ query, initial, staff, tramos }: TareasClientProp
   // ── The selected view.
   let view: ReactNode;
   if (query.vista === "tablero") {
-    view = <TareasTablero board={initial.board ?? boardOf(viewTasks)} header={header} filters={filters} empty={empty} />;
+    view = (
+      <TareasTablero
+        board={initial.board ?? boardOf(viewTasks)}
+        customStatuses={initial.statuses}
+        header={header}
+        filters={filters}
+        empty={empty}
+      />
+    );
   } else if (query.vista === "lista") {
     view = (
       <TareasLista

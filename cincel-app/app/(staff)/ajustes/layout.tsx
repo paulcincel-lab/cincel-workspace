@@ -16,12 +16,12 @@ export default async function AjustesLayout({ children }: { children: ReactNode 
   const segments = resolveAjustesSegments(user);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col">
       <PageHeader
         title="Ajustes"
         description="Tus preferencias y, si eres administrador, las de la organización."
       />
-      <div className="grid gap-6 md:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="grid gap-4 md:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="md:sticky md:top-4 md:self-start">
           <AjustesNavFromPath isAdmin={isSettingsAdministrator(user)} segments={segments} />
         </aside>

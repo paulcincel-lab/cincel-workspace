@@ -2,13 +2,13 @@
 
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { useStyle } from "@/components/shell/StyleProvider";
-import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/shadcn/chart";
+import type { ChartConfig } from "@/components/ui/shadcn/chart";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { RecordTableData } from "@/lib/types/widgets";
 
+import { LazyAreaSeriesChart } from "./charts/lazy";
 import { RecordTable, type RecordTableProps } from "./RecordTable";
 import { StyleView } from "./StyleView";
 import { WidgetCard } from "./WidgetCard";
@@ -72,32 +72,7 @@ export function LineSeriesWidget({
 
   return (
     <StyleView
-      visual={() =>
-        card(
-          <ChartContainer config={config} className="aspect-auto h-56 w-full">
-            <AreaChart accessibilityLayer data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-              <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} />
-              <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              {series.map((s) => (
-                <Area
-                  key={s.key}
-                  type="monotone"
-                  dataKey={s.key}
-                  stroke={`var(--color-${s.key})`}
-                  strokeWidth={2}
-                  strokeDasharray={s.dashed ? "5 4" : undefined}
-                  fill={`var(--color-${s.key})`}
-                  fillOpacity={s.area ? 0.12 : 0}
-                  dot={false}
-                />
-              ))}
-            </AreaChart>
-          </ChartContainer>,
-        )
-      }
+      visual={() => card(<LazyAreaSeriesChart config={config} rows={rows} series={series} />)}
       esencial={() =>
         card(
           <ul className="flex flex-col divide-y divide-border">

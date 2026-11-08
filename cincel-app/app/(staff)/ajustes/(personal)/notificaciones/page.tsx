@@ -7,7 +7,8 @@ import { fetchNotificationPreferencesAction } from "@/lib/actions/notifications-
 import { getSessionAccess, requireCapabilityUser } from "@/lib/auth/session";
 import { isAdministratorRole } from "@/lib/data/roles";
 import { withNotificationDefaults } from "@/lib/notifications/preferences";
-import { settingsSectionsFor } from "@/lib/shell/settings-sections";
+import { NOTIFICACIONES_SECTIONS } from "@/lib/shell/settings-sections/notificaciones";
+import { visibleSettingsSections } from "@/lib/shell/settings-sections/visible";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function AjustesNotificacionesPage() {
   if (!access.user) redirect("/login");
   const user = await requireCapabilityUser();
 
-  const sections = settingsSectionsFor("notificaciones", user);
+  const sections = visibleSettingsSections(NOTIFICACIONES_SECTIONS, user);
   if (sections.length === 0) notFound();
 
   const initial = withNotificationDefaults(await fetchNotificationPreferencesAction());

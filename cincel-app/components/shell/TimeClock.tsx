@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/time-tracking-actions";
 import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
+import { formatDayMonthYear } from "@/lib/time-tracking/horario-copy";
 import { localDate, TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/local-time";
 import { subscribeTodayStatus } from "@/lib/time-tracking/today-events";
 import type { TodayStatus } from "@/lib/types/redesign";
@@ -93,12 +94,9 @@ export function localToday(now: Date = new Date()): string {
   return localDate(now);
 }
 
-/** "1 de diciembre" for a `YYYY-MM-DD` date. */
+/** "4 ene 2027" for a `YYYY-MM-DD` date (frame `Sidebar`, same copy as the login prompt). */
 export function formatRequiredFrom(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", timeZone: "UTC" }).format(
-    new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12)),
-  );
+  return formatDayMonthYear(date);
 }
 
 /**
@@ -272,13 +270,11 @@ export function TimeClock({ initial, variant = "card" }: TimeClockProps) {
   const idle = status.state === "off" || status.state === "done";
 
   const body = (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <Clock aria-hidden="true" className="size-4" strokeWidth={1.8} />
-        <span className="text-sm font-medium">Jornada</span>
-        <Badge variant={STATE_BADGE[status.state]} className="ml-auto">
-          {STATE_LABEL[status.state]}
-        </Badge>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        <Clock aria-hidden="true" className="size-3.5" strokeWidth={2} />
+        <span className="flex-1 text-xs font-medium">Jornada</span>
+        <Badge variant={STATE_BADGE[status.state]}>{STATE_LABEL[status.state]}</Badge>
       </div>
       <div
         role="timer"
@@ -294,9 +290,9 @@ export function TimeClock({ initial, variant = "card" }: TimeClockProps) {
           aria-label="Avance de la jornada"
           indicatorClassName={reducedMotion ? "transition-none" : undefined}
         />
-        <p className="text-xs text-muted-foreground">{subLine}</p>
+        <p className="text-[11.5px] text-muted-foreground">{subLine}</p>
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-1.5">
         {idle ? (
           <Button className="flex-1" disabled={pending} onClick={() => void run("clockIn")}>
             Registrar entrada
@@ -312,13 +308,18 @@ export function TimeClock({ initial, variant = "card" }: TimeClockProps) {
                 Reanudar
               </Button>
             )}
-            <Button variant="outline" className="flex-1" disabled={pending} onClick={() => void run("clockOut")}>
+            <Button
+              variant={status.state === "on" ? "default" : "outline"}
+              className="flex-1"
+              disabled={pending}
+              onClick={() => void run("clockOut")}
+            >
               Salida
             </Button>
           </>
         )}
       </div>
-      {optionalUntil ? <p className="text-xs text-muted-foreground">{optionalUntil}</p> : null}
+      {optionalUntil ? <p className="text-[11px] text-muted-foreground">{optionalUntil}</p> : null}
       <span role="status" aria-live="polite" className="sr-only">
         {announcement}
       </span>

@@ -65,9 +65,9 @@ async function resolveSource(source: NavItemSource, session: NavSession): Promis
   }
 }
 
-function colorVarOf(key: string): string {
+function colorVarOf(key: string, sortOrder: number): string {
   try {
-    return tramoColorVar(key) || NEUTRAL_TRAMO_COLOR;
+    return tramoColorVar(key, sortOrder) || NEUTRAL_TRAMO_COLOR;
   } catch {
     return NEUTRAL_TRAMO_COLOR;
   }
@@ -81,7 +81,7 @@ async function loadTramos(): Promise<NavModel["tramos"]> {
       .map((row) => ({
         key: row.key,
         name: row.name,
-        colorVar: colorVarOf(row.key),
+        colorVar: colorVarOf(row.key, row.sortOrder),
         href: `/tareas?tramo=${encodeURIComponent(row.key)}`,
       }));
   } catch {
