@@ -3,6 +3,7 @@
  * completed per day (current week) or per week (current month). Dates are
  * bucketed by their calendar date in the app's time zone.
  */
+import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
 
 export const TASK_TREND_TIME_ZONE = "America/Mexico_City";
 
@@ -31,12 +32,7 @@ const DAY_LABELS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
 
 /** Calendar date of `at` in `timeZone`, as `YYYY-MM-DD`. */
 export function localIsoDate(at: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(at);
+  return zonedIsoDate(at, timeZone);
 }
 
 // Calendar dates are handled as UTC midnights so no local clock leaks in.
