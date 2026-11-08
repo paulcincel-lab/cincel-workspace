@@ -10,8 +10,6 @@ import { getSessionAccess } from "@/lib/auth/session";
 import { buildDefaultGeneralSettings } from "@/lib/settings/general-settings";
 import { getGeneralSettings } from "@/lib/settings/general-settings-server";
 import { GeneralSettingsProvider } from "@/lib/settings/use-general-settings";
-import { primaryColorCss } from "@/lib/theme/primary-color";
-import { getPrimaryColor } from "@/lib/theme/primary-color-server";
 import type { ResolvedAppearance } from "@/lib/types/redesign";
 import { appearanceStyleBlock, SYSTEM_MODE_SCRIPT } from "@/lib/ui/appearance-css";
 import { getResolvedAppearance } from "@/lib/ui/preferences-server";
@@ -47,12 +45,12 @@ export const metadata: Metadata = {
 };
 
 /**
- * `<html>` props for flag-on users (FE §4.1, BE §8.2, reviews B2, B18):
+ * `<html>` props (FE §4.1, BE §8.2, reviews B2, B18):
  * `data-theme` always set (explicit modes from the server; in system mode the
  * head script corrects it before first paint), `.dark` in sync, the
  * appearance attributes and the text-size class. No `style` attribute.
  */
-function redesignHtmlProps(appearance: ResolvedAppearance) {
+function appearanceHtmlProps(appearance: ResolvedAppearance) {
   const dark = appearance.mode === "dark";
   const className = [
     geistSans.variable,
@@ -80,11 +78,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [sessionAccess, primaryColor, appearance] = await Promise.all([
-    getSessionAccess(),
-    getPrimaryColor(),
-    getResolvedAppearance(),
-  ]);
+  const [sessionAccess, appearance] = await Promise.all([getSessionAccess(), getResolvedAppearance()]);
   // Company details stay off pages rendered without a session (login, public routes).
   const generalSettings = sessionAccess.user ? (await getGeneralSettings()).settings : buildDefaultGeneralSettings();
 
@@ -98,26 +92,10 @@ export default async function RootLayout({
       </SessionAccessProvider>
     </QueryProvider>
   );
-  // The one Toaster, for both shells (FE §3.1).
-  const toaster = <Toaster position="bottom-right" offset={72} />;
-
-  if (!appearance.redesignEnabled) {
-    // Flag off (review B17): today's pipeline; no appearance block, attributes or head script.
-    const primaryCss = primaryColorCss(primaryColor);
-    return (
-      <html lang="es" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-        <body className="min-h-full flex flex-col">
-          {primaryCss ? <style id="primary-color">{primaryCss}</style> : null}
-          {app}
-          {toaster}
-        </body>
-      </html>
-    );
-  }
 
   return (
     // In system mode the head script sets data-theme and the class before hydration.
-    <html lang="es" {...redesignHtmlProps(appearance)} suppressHydrationWarning>
+    <html lang="es" {...appearanceHtmlProps(appearance)} suppressHydrationWarning>
       <head>
         <style id="appearance" dangerouslySetInnerHTML={{ __html: appearanceStyleBlock(appearance.cssVars) }} />
         <style id="appearance-base" dangerouslySetInnerHTML={{ __html: APPEARANCE_BASE_CSS }} />
@@ -127,7 +105,8 @@ export default async function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <AppearanceProvider initial={appearance}>{app}</AppearanceProvider>
-        {toaster}
+        {/* The one Toaster (FE §3.1). */}
+        <Toaster position="bottom-right" offset={72} />
       </body>
     </html>
   );

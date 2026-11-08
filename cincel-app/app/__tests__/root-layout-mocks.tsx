@@ -30,10 +30,6 @@ export const generalSettingsServerMock = { getGeneralSettings: vi.fn(async () =>
 export const useGeneralSettingsMock = { GeneralSettingsProvider: Passthrough };
 export const cssMock = {};
 
-/** What `getPrimaryColor` returns; tests set it. */
-export const primaryColorState: { value: string | null } = { value: null };
-export const primaryColorServerMock = { getPrimaryColor: vi.fn(async () => primaryColorState.value) };
-
 /** What `getResolvedAppearance` returns; tests set it. */
 export const appearanceState: { value: ResolvedAppearance | null } = { value: null };
 export const preferencesServerMock = {
@@ -54,11 +50,8 @@ export const toasterMock = {
   ),
 };
 
-/** A resolved appearance for an org on `theme` and a user with `redesignEnabled`. */
-export function appearanceFor(
-  theme: ThemeId,
-  patch: Partial<UserPreferences> & { redesignEnabled: boolean },
-): ResolvedAppearance {
+/** A resolved appearance for an org on `theme` and a user with `patch`. */
+export function appearanceFor(theme: ThemeId, patch: Partial<UserPreferences> = {}): ResolvedAppearance {
   return resolveAppearance(
     { ...THEME_PRESETS[theme], v: 1 },
     {

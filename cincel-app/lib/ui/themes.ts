@@ -232,8 +232,6 @@ function preset(
     shape: { ...SHAPE_DEFAULT, shadow },
     styleDefault: "visual",
     allowUserOverride: true,
-    redesignDefault: false,
-    redesignAvailable: true,
   };
 }
 

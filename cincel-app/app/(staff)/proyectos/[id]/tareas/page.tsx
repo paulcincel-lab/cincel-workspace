@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { ProjectTabs } from "@/components/proyectos/ProjectTabs";
 import { ProjectTasksByFase } from "@/components/proyectos/ProjectTasksByFase";
@@ -34,8 +34,7 @@ async function loadUser(): Promise<CapabilityUser | null> {
 /**
  * `/proyectos/[id]/tareas` (redesign FE §2.1, §3.5): the project's tasks
  * grouped by fase, inside the project header + tabs; `AppShell` comes from
- * the staff layout. The tab exists only in the redesign: with the flag off
- * the project opens on its legacy Ficha, which lists the project's tasks.
+ * the staff layout.
  */
 export default async function ProjectTareasPage({
   params,
@@ -47,7 +46,6 @@ export default async function ProjectTareasPage({
   const [{ id: projectId }, sp] = await Promise.all([params, searchParams]);
 
   const appearance = await getResolvedAppearance();
-  if (!appearance.redesignEnabled) redirect(`/proyectos/${encodeURIComponent(projectId)}/ficha`);
 
   const user = await loadUser();
   if (!user || !resolveProjectsCapabilities(user).canViewProjects) notFound();

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { ProjectSummary } from "@/components/proyectos/ProjectSummary";
 import { ProjectTabs } from "@/components/proyectos/ProjectTabs";
@@ -36,9 +35,8 @@ function StateCard({ title, message }: { title: string; message: string }) {
 }
 
 /**
- * `/proyectos/<id>`. Flag off: opens the project's Ficha, exactly as before.
- * Flag on (redesign FE §2.3, §3.5): the project header + tabs and the Resumen
- * tab, inside the `AppShell` the staff layout mounts.
+ * `/proyectos/<id>` (redesign FE §3.5): the project header + tabs and the
+ * Resumen tab, inside the `AppShell` the staff layout mounts.
  */
 export default async function ProjectPage({
   params,
@@ -48,7 +46,6 @@ export default async function ProjectPage({
   searchParams: Promise<{ estilo?: string | string[] }>;
 }) {
   const [{ id }, query, appearance] = await Promise.all([params, searchParams, getResolvedAppearance()]);
-  if (!appearance.redesignEnabled) redirect(`/proyectos/${encodeURIComponent(id)}/ficha`);
 
   const user = await loadUser();
   if (!user) return <StateCard title="Sin permiso" message="Inicia sesión para ver el proyecto." />;

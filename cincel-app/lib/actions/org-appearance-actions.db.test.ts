@@ -3,7 +3,7 @@
  * Org appearance writes against a real Postgres (redesign BE §7.1, §8.2):
  * a save is what the next page load renders (new `v`, new `:root` / `.dark`
  * block), a denied role writes nothing, the `LOW_CONTRAST` message format, and
- * reset keeping the style / override / redesign settings. Runs only when
+ * reset keeping the style / override settings. Runs only when
  * TEST_DATABASE_URL points at a migrated database (`npm run db:migrate`). The
  * `appearance.theme` row is restored afterwards.
  */
@@ -65,11 +65,11 @@ describe.skipIf(!url)("org appearance actions (test DB)", async () => {
       .onConflictDoUpdate({ target: appSettings.key, set: { value } });
   }
 
-  /** What the root layout renders for a flag-on user on the next load (BE §8.2). */
+  /** What the root layout renders on the next load (BE §8.2). */
   async function nextLoad() {
     const stored = await repo.readStoredOrgAppearance();
     expect(stored).not.toBeNull();
-    const resolved = resolveAppearance(stored!, { ...DEFAULT_USER_PREFERENCES, redesignEnabled: true });
+    const resolved = resolveAppearance(stored!, { ...DEFAULT_USER_PREFERENCES });
     return { stored: stored!, resolved, block: appearanceStyleBlock(resolved.cssVars) };
   }
 
@@ -135,13 +135,11 @@ describe.skipIf(!url)("org appearance actions (test DB)", async () => {
     expect(await rawRow()).toBe(before);
   });
 
-  it("reset keeps the style, override and redesign settings and bumps v", async () => {
+  it("reset keeps the style and override settings and bumps v", async () => {
     const customized = structuredClone(THEME_PRESETS.azul);
     customized.tokens.primary.light = "#1d4ed8";
     customized.styleDefault = "esencial";
     customized.allowUserOverride = false;
-    customized.redesignDefault = true;
-    customized.redesignAvailable = false;
     await putRow(repo.serializeStoredOrgAppearance({ ...customized, v: 7 }));
 
     const result = await actions.resetOrgAppearanceAction("grafito");
@@ -155,8 +153,6 @@ describe.skipIf(!url)("org appearance actions (test DB)", async () => {
     expect(result).toMatchObject({
       styleDefault: "esencial",
       allowUserOverride: false,
-      redesignDefault: true,
-      redesignAvailable: false,
     });
     expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
   });

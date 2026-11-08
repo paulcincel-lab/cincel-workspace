@@ -10,13 +10,10 @@ import { useSessionStore } from "@/lib/stores/session-store";
 
 export type ProjectSection = "resumen" | "tareas" | "ficha" | "cronograma" | "archivos" | "clientes";
 
-/** Tab counts of the redesigned shell (redesign FE §3.5). */
+/** Tab counts of the project shell (redesign FE §3.5). */
 export type ProjectSectionCounts = { tareas: number; archivos: number; clientes: number };
 
 export type ProjectSectionLink = { section: ProjectSection; label: string; href: string; count?: number };
-
-/** `legacy`: today's Ficha · Cronograma · Archivos · Clientes; `redesign`: the `ProjectTabs` set (FE §3.5). */
-export type ProjectSectionLayout = "legacy" | "redesign";
 
 const SECTION_LABELS: Record<ProjectSection, string> = {
   resumen: "Resumen",
@@ -27,27 +24,19 @@ const SECTION_LABELS: Record<ProjectSection, string> = {
   clientes: "Clientes",
 };
 
-/** Tabs the redesigned shell keeps on phones (frame `MovilProyecto`); the rest move to the "Más opciones" menu. */
+/** Tabs the project shell keeps on phones (frame `MovilProyecto`); the rest move to the "Más opciones" menu. */
 export const MOBILE_PROJECT_SECTIONS: readonly ProjectSection[] = ["resumen", "tareas", "archivos"];
 
 /**
- * Tabs shown for a project, in order. Clientes needs `portal.manageAccess`, the capability the Clientes page and its
- * actions check on the server. The redesign layout adds Resumen (the project's base URL) and Tareas, puts Ficha
- * last and carries the counts of Tareas, Archivos and Clientes.
+ * Tabs shown for a project, in order (FE §3.5): Resumen (the project's base URL), Tareas, Cronograma, Archivos,
+ * Clientes and Ficha last, with the counts of Tareas, Archivos and Clientes. Clientes needs `portal.manageAccess`,
+ * the capability the Clientes page and its actions check on the server.
  */
 export function projectSectionLinks(
   projectId: string,
-  {
-    showClientes = false,
-    layout = "legacy",
-    counts,
-  }: { showClientes?: boolean; layout?: ProjectSectionLayout; counts?: ProjectSectionCounts } = {}
+  { showClientes = false, counts }: { showClientes?: boolean; counts?: ProjectSectionCounts } = {}
 ): ProjectSectionLink[] {
   const base = `/proyectos/${encodeURIComponent(projectId)}`;
-  if (layout === "legacy") {
-    const sections: ProjectSection[] = ["ficha", "cronograma", "archivos", ...(showClientes ? ["clientes" as const] : [])];
-    return sections.map((section) => ({ section, label: SECTION_LABELS[section], href: `${base}/${section}` }));
-  }
   const sections: ProjectSection[] = [
     "resumen",
     "tareas",
@@ -86,38 +75,35 @@ function useCanManagePortalAccess(): boolean {
 }
 
 /**
- * `showClientes` overrides the capability check (the Clientes page passes what the server resolved). `layout="redesign"`
- * renders the `ProjectTabs` set with counts; `active` then comes from the page instead of the path.
+ * The `ProjectTabs` tab row with counts. `showClientes` overrides the capability check (the Clientes page passes what
+ * the server resolved); `active` comes from the page, else from the path.
  */
 export function ProjectSectionNav({
   projectId,
   showClientes,
-  layout = "legacy",
   active: activeProp,
   counts,
 }: {
   projectId: string;
   showClientes?: boolean;
-  layout?: ProjectSectionLayout;
   active?: ProjectSection;
   counts?: ProjectSectionCounts;
 }) {
   const pathname = usePathname();
   const active = activeProp ?? activeProjectSection(pathname);
   const canManagePortalAccess = useCanManagePortalAccess();
-  const links = projectSectionLinks(projectId, { showClientes: showClientes ?? canManagePortalAccess, layout, counts });
-  const redesign = layout === "redesign";
+  const links = projectSectionLinks(projectId, { showClientes: showClientes ?? canManagePortalAccess, counts });
 
   return (
-    <nav aria-label="Secciones del proyecto" className={redesign ? undefined : "mb-6"}>
+    <nav aria-label="Secciones del proyecto">
       <Tabs value={active}>
-        <TabsList variant="line" className={redesign ? "max-w-full" : undefined}>
+        <TabsList variant="line" className="max-w-full">
           {links.map((link) => (
             <TabsTrigger
               key={link.section}
               value={link.section}
               nativeButton={false}
-              className={redesign && !MOBILE_PROJECT_SECTIONS.includes(link.section) ? "hidden md:inline-flex" : undefined}
+              className={MOBILE_PROJECT_SECTIONS.includes(link.section) ? undefined : "hidden md:inline-flex"}
               render={<Link href={link.href} aria-current={link.section === active ? "page" : undefined} />}
             >
               {link.label}

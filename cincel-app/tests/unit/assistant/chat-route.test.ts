@@ -340,7 +340,7 @@ describe("POST /api/asistente/chat (server threads)", () => {
     info.mockRestore();
   });
 
-  it("keeps the legacy { messages } body unchanged (flag off)", async () => {
+  it("still answers a bare { messages } body statelessly", async () => {
     const res = await post({ messages: [{ id: "a", role: "user", parts: [{ type: "text", text: "hola" }] }] });
     expect(res.status).toBe(200);
     expect(mocks.upsertOwnedThread).not.toHaveBeenCalled();

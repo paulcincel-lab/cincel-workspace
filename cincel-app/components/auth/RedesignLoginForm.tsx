@@ -8,14 +8,21 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Separator } from "@/components/ui/shadcn/separator";
 
+import type { LoginCallbackError } from "@/lib/auth/login-callback-error";
+
 import { AuthSplitLayout } from "./AuthSplitLayout";
-import type { LoginFormProps } from "./LoginForm";
 import {
   CALLBACK_ERROR_MESSAGES,
   GOOGLE_START_URL,
   NO_SIGN_IN_MESSAGE,
   useCredentialsLogin,
 } from "./use-credentials-login";
+
+export type LoginFormProps = {
+  googleEnabled: boolean;
+  passwordEnabled: boolean;
+  callbackError: LoginCallbackError | null;
+};
 
 /** Neutral "G" mark: no Google brand colors, inverted from the primary button. */
 export function GoogleMark() {
@@ -31,9 +38,8 @@ export function GoogleMark() {
 }
 
 /**
- * Redesigned `/login` (FE §3.10, canvas `Login`): split layout, "Continuar con
- * Google" as the primary action and the same credentials form as the legacy
- * `LoginForm` (shared `useCredentialsLogin`, so sign-in behaves the same).
+ * `/login` (FE §3.10, canvas `Login`): split layout, "Continuar con Google" as
+ * the primary action and the credentials form (`useCredentialsLogin`).
  */
 export default function RedesignLoginForm({ googleEnabled, passwordEnabled, callbackError }: LoginFormProps) {
   const { draft, setEmail, setPassword, error, helpMessage, showHelp, canSubmit, handleSubmit } =

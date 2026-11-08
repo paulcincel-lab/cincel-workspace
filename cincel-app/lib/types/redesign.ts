@@ -30,8 +30,6 @@ export type UserPreferences = {
   style: PresentationStyle | null;
   density: Density;
   textSize: TextSize;
-  /** Forced false when `OrgAppearance.redesignAvailable` is false. */
-  redesignEnabled: boolean;
   /** "HH:MM" pair. */
   quietHours: { from: string; to: string } | null;
 };
@@ -59,9 +57,6 @@ export type OrgAppearance = {
   shape: { radius: number; cardPadding: number; gap: number; shadow: ShadowLevel };
   styleDefault: PresentationStyle;
   allowUserOverride: boolean;
-  redesignDefault: boolean;
-  /** Org kill switch (review B3); false forces `redesignEnabled = false`. */
-  redesignAvailable: boolean;
 };
 
 /**
@@ -76,7 +71,6 @@ export type ResolvedAppearance = {
   style: PresentationStyle;
   density: Density;
   textSize: TextSize;
-  redesignEnabled: boolean;
   /** Review B2. */
   cssVars: { light: Record<string, string>; dark: Record<string, string> };
   /** Appearance version `v` (bumped on every org save). */

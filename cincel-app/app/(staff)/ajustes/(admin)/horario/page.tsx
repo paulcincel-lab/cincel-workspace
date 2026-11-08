@@ -9,7 +9,6 @@ import { settingsSectionsFor } from "@/lib/shell/settings-sections";
 import { localDate, mondayOf } from "@/lib/time-tracking/local-time";
 import { DEFAULT_TIME_TRACKING_SETTINGS } from "@/lib/time-tracking/settings";
 import type { TeamHoursRow, TimeTrackingSettings } from "@/lib/types/redesign";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 export const dynamic = "force-dynamic";
 
@@ -40,11 +39,9 @@ function firstName(name: string): string {
  * Ajustes › Control de horario (redesign FE §3.8). The segment layout admits
  * `canManageTimeTracking` or `canViewTeamHours`; the page renders the visible
  * sections of `lib/shell/settings-sections/horario/*` inside `HorarioClient`.
- * The Ajustes layout renders the header and `AjustesNav`. New-only route:
- * with the redesign off it redirects to the legacy equivalent.
+ * The Ajustes layout renders the header and `AjustesNav`.
  */
 export default async function AjustesHorarioPage() {
-  await redirectIfRedesignOff("/ajustes/horario");
 
   const access = await getSessionAccess();
   if (!access.user) redirect("/login");

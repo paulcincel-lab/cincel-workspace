@@ -32,7 +32,7 @@ function user(overrides: Partial<UserPreferences> = {}): UserPreferences {
 }
 
 describe("resolveAppearance", () => {
-  it("without a user: org theme, org style, defaults, org redesignDefault", () => {
+  it("without a user: org theme, org style and the defaults", () => {
     const resolved = resolveAppearance(org(), null);
     expect(resolved).toMatchObject({
       theme: "azul",
@@ -40,10 +40,8 @@ describe("resolveAppearance", () => {
       mode: "system",
       density: "comoda",
       textSize: 14,
-      redesignEnabled: false,
       version: 5,
     });
-    expect(resolveAppearance(org({ redesignDefault: true }), null).redesignEnabled).toBe(true);
   });
 
   it("override on: the user's theme and style apply", () => {
@@ -85,22 +83,6 @@ describe("resolveAppearance", () => {
     expect(resolved).toMatchObject({ mode: "dark", density: "compacta", textSize: 15.5 });
     expect(resolved.cssVars.light["--text-base"]).toBe("15.5px");
     expect(resolved.cssVars.dark["--text-base"]).toBe("15.5px");
-  });
-
-  it("redesignEnabled follows the user, else the org default", () => {
-    expect(resolveAppearance(org(), user({ redesignEnabled: true })).redesignEnabled).toBe(true);
-    expect(resolveAppearance(org({ redesignDefault: true }), user({ redesignEnabled: false })).redesignEnabled).toBe(
-      false,
-    );
-    expect(
-      resolveAppearance(org({ redesignDefault: true }), { ...user(), redesignEnabled: null }).redesignEnabled,
-    ).toBe(true);
-  });
-
-  it("redesignAvailable = false forces the redesign off for everyone", () => {
-    const off = org({ redesignAvailable: false, redesignDefault: true });
-    expect(resolveAppearance(off, user({ redesignEnabled: true })).redesignEnabled).toBe(false);
-    expect(resolveAppearance(off, null).redesignEnabled).toBe(false);
   });
 
   it("cssVars carry both modes and the version is the org v (1 when absent)", () => {

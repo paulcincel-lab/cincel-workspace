@@ -6,7 +6,6 @@ import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/comp
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { loadProjectTabShell } from "@/lib/projects/project-tab-shell";
-import { getResolvedAppearance } from "@/lib/ui/preferences-server";
 
 import { ProjectFichaClient } from "./ProjectFichaClient";
 
@@ -39,13 +38,11 @@ function StateCard({ title, message }: { title: string; message: string }) {
 }
 
 /**
- * `/proyectos/[id]/ficha` (FE §3.5). Flag off: the legacy client page exactly
- * as before. Flag on: the same ficha form under `ProjectTabs` (no styles);
- * admin fields stay behind `canSeeAdminData` inside the form.
+ * `/proyectos/[id]/ficha` (FE §3.5): the ficha form under `ProjectTabs` (no
+ * styles); admin fields stay behind `canSeeAdminData` inside the form.
  */
 export default async function ProjectFichaPage({ params }: { params: Promise<{ id: string }> }) {
-  const [{ id: projectId }, appearance] = await Promise.all([params, getResolvedAppearance()]);
-  if (!appearance.redesignEnabled) return <ProjectFichaClient />;
+  const { id: projectId } = await params;
 
   const user = await loadUser();
   if (!user) return <StateCard title="Sin permiso" message="Inicia sesión para ver la ficha del proyecto." />;

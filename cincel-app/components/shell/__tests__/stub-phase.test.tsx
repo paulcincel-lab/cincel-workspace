@@ -59,7 +59,6 @@ const APPEARANCE: ResolvedAppearance = {
   style: "visual",
   density: "comoda",
   textSize: 14,
-  redesignEnabled: true,
   cssVars: { light: {}, dark: {} },
   version: 1,
 };
@@ -102,7 +101,7 @@ const DOMAINS: Domain[] = [
   { domain: "people", absent: [link(/^Personas/)] },
   { domain: "vacations", absent: [button(/vacaciones/i), link(/Mis vacaciones/)] },
   { domain: "org-appearance", absent: [button("Editar tema de la organización"), link("Editar tema de la organización")] },
-  { domain: "preferences", absent: [button("Volver al diseño anterior"), button("Probar el nuevo diseño")] },
+  { domain: "preferences", absent: [link(/^Ajustes/)] },
   { domain: "profile-photo", absent: [button(/foto/i)] },
 ];
 

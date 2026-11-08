@@ -4,7 +4,7 @@ import { useGeneralSettingsEditorContext } from "@/components/ajustes/general-se
 import { SettingsRow } from "@/components/patterns/SettingsRow";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
 import { Input } from "@/components/ui/shadcn/input";
-import type { HeaderLinkFields } from "@/lib/settings/header-links-migration";
+import type { HeaderLinkFields } from "@/lib/settings/header-links";
 
 type LinkField = keyof HeaderLinkFields;
 
@@ -39,15 +39,10 @@ const FIELDS: readonly { key: LinkField; label: string; description: string; typ
  * shared editor, so the page's "Guardar cambios" saves them.
  */
 export function GeneralLinksSection() {
-  const { settings, canManage, linkErrors, pickedUpLegacyLinks, updateCompanyField } = useGeneralSettingsEditorContext();
+  const { settings, canManage, linkErrors, updateCompanyField } = useGeneralSettingsEditorContext();
 
   return (
     <SettingsSection title="Enlaces del despacho" description="Aparecen en el menú de tu perfil, para todo el equipo.">
-      {pickedUpLegacyLinks ? (
-        <p className="pb-4 text-xs text-muted-foreground">
-          Se cargaron los enlaces guardados en este navegador. Guarda los cambios para compartirlos con todo el equipo.
-        </p>
-      ) : null}
       {FIELDS.map(({ key, label, description, type, placeholder }) => {
         const id = `general-${key}`;
         const errorId = `${id}-error`;

@@ -5,7 +5,6 @@ import { StyleProvider } from "@/components/shell/StyleProvider";
 import { canViewResourceSection } from "@/lib/auth/permissions";
 import { isBibliotecaSection, parseEstilo, parseTipo, parseTramo } from "@/lib/biblioteca/catalog";
 import { loadBibliotecaData } from "@/lib/biblioteca/load";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -23,7 +22,6 @@ export default async function BibliotecaSeccionPage({
   searchParams: Promise<SearchParams>;
 }) {
   const [{ seccion }, sp] = await Promise.all([params, searchParams]);
-  await redirectIfRedesignOff(`/biblioteca/${seccion}`, sp);
 
   if (seccion === "mis-vacaciones") redirect("/biblioteca/vacaciones");
   if (seccion === "empresa") redirect("/biblioteca");

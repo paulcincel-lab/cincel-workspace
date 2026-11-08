@@ -53,13 +53,12 @@ describe("theme editor model", () => {
   });
 
   it("applies a preset while keeping the organization style settings", () => {
-    const draft = { ...THEME_PRESETS.azul, styleDefault: "analitico" as const, allowUserOverride: false, redesignDefault: true };
+    const draft = { ...THEME_PRESETS.azul, styleDefault: "analitico" as const, allowUserOverride: false };
     const next = applyPreset(draft, THEME_PRESETS.grafito);
     expect(next.tokens).toEqual(THEME_PRESETS.grafito.tokens);
     expect(next.baseTheme).toBe("grafito");
     expect(next.styleDefault).toBe("analitico");
     expect(next.allowUserOverride).toBe(false);
-    expect(next.redesignDefault).toBe(true);
     expect(matchesPreset(next, THEME_PRESETS, "grafito")).toBe(true);
     expect(matchesPreset(next, THEME_PRESETS, "azul")).toBe(false);
   });

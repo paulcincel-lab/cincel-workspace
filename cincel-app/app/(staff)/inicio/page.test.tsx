@@ -7,7 +7,11 @@ import type { InicioData, ResolvedAppearance } from "@/lib/types/redesign";
 
 const state = vi.hoisted(() => ({
   session: { status: "guest", user: null } as SessionAccess,
-  redesignEnabled: true,
+  firstLogin: { wizard: null, route: null, showGoogleSetupBanner: false } as {
+    wizard: string | null;
+    route: string | null;
+    showGoogleSetupBanner: boolean;
+  },
   style: "visual" as "visual" | "esencial" | "analitico",
 }));
 const redirect = vi.hoisted(() =>
@@ -15,13 +19,15 @@ const redirect = vi.hoisted(() =>
     throw new Error(`NEXT_REDIRECT ${url}`);
   }),
 );
-const redirectIfRedesignOff = vi.hoisted(() => vi.fn(async () => undefined));
 const fetchInicioAction = vi.hoisted(() => vi.fn());
 const staffPhotoUrl = vi.hoisted(() => vi.fn(async () => "/api/staff/s-1/photo?v=abcd1234"));
 
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/lib/auth/session", () => ({ getSessionAccess: async () => state.session }));
-vi.mock("@/lib/ui/redesign-redirect", () => ({ redirectIfRedesignOff }));
+vi.mock("@/lib/onboarding/first-login-server", () => ({ getFirstLoginState: async () => state.firstLogin }));
+vi.mock("@/components/configuracion/GoogleSetupBanner", () => ({
+  GoogleSetupBanner: () => <div data-testid="google-setup-banner" />,
+}));
 vi.mock("@/lib/ui/preferences-server", () => ({
   getResolvedAppearance: async () =>
     ({
@@ -30,7 +36,6 @@ vi.mock("@/lib/ui/preferences-server", () => ({
       style: state.style,
       density: "comoda",
       textSize: 14,
-      redesignEnabled: state.redesignEnabled,
       cssVars: { light: {}, dark: {} },
       version: 1,
     }) satisfies ResolvedAppearance,
@@ -87,7 +92,7 @@ async function renderPage(params: Record<string, string> = {}) {
 
 beforeEach(() => {
   state.session = ACTIVE;
-  state.redesignEnabled = true;
+  state.firstLogin = { wizard: null, route: null, showGoogleSetupBanner: false };
   state.style = "visual";
   fetchInicioAction.mockResolvedValue(DATA);
 });
@@ -98,15 +103,21 @@ afterEach(() => {
 });
 
 describe("/inicio", () => {
-  it("asks the flag-aware redirect first", async () => {
-    await renderPage({ estilo: "esencial" });
-    expect(redirectIfRedesignOff).toHaveBeenCalledWith("/inicio", { estilo: "esencial" });
+  it("sends a first-login admin to their setup wizard without loading Inicio", async () => {
+    state.firstLogin = { wizard: "google_groups", route: "/ajustes/google/primeros-pasos", showGoogleSetupBanner: false };
+    await expect(renderPage()).rejects.toThrow("NEXT_REDIRECT /ajustes/google/primeros-pasos");
+    expect(fetchInicioAction).not.toHaveBeenCalled();
   });
 
-  it("sends flag-off users to the legacy dashboard without loading Inicio", async () => {
-    state.redesignEnabled = false;
-    await expect(renderPage()).rejects.toThrow("NEXT_REDIRECT /dashboard");
-    expect(fetchInicioAction).not.toHaveBeenCalled();
+  it("shows the Google setup banner above Inicio only when asked", async () => {
+    await renderPage();
+    expect(screen.queryByTestId("google-setup-banner")).toBeNull();
+    cleanup();
+
+    state.firstLogin = { wizard: null, route: null, showGoogleSetupBanner: true };
+    await renderPage();
+    expect(screen.getByTestId("google-setup-banner")).toBeTruthy();
+    expect(screen.getByTestId("inicio")).toBeTruthy();
   });
 
   it("sends guests to the login", async () => {

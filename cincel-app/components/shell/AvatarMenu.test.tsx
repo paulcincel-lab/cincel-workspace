@@ -4,7 +4,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 const state = vi.hoisted(() => ({
   photoImplemented: true,
-  prefsImplemented: true,
   company: {
     instagramUrl: "https://instagram.com/cincel",
     website: "https://cincel.mx",
@@ -12,7 +11,6 @@ const state = vi.hoisted(() => ({
   } as { instagramUrl?: string; website: string; contactEmail?: string },
   refresh: vi.fn(),
   push: vi.fn(),
-  updatePrefs: vi.fn(),
   removePhoto: vi.fn(),
   logout: vi.fn(),
   setAccess: vi.fn(),
@@ -27,14 +25,6 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("sonner", () => ({ toast: { error: state.toastError, success: state.toastSuccess } }));
 
-vi.mock("@/lib/actions/preferences-actions", () => ({
-  updateMyPreferencesAction: (patch: unknown) => state.updatePrefs(patch),
-}));
-vi.mock("@/lib/actions/preferences-actions.flags", () => ({
-  get IMPLEMENTED() {
-    return { fetchMyPreferencesAction: true, updateMyPreferencesAction: state.prefsImplemented };
-  },
-}));
 vi.mock("@/lib/actions/profile-photo-actions", () => ({
   removeMyPhotoAction: () => state.removePhoto(),
 }));
@@ -89,9 +79,7 @@ function pickFile(file: File) {
 
 beforeEach(() => {
   state.photoImplemented = true;
-  state.prefsImplemented = true;
   state.company = { instagramUrl: "https://instagram.com/cincel", website: "https://cincel.mx", contactEmail: "hola@cincel.mx" };
-  state.updatePrefs.mockResolvedValue({});
   state.removePhoto.mockResolvedValue(undefined);
   state.logout.mockResolvedValue(undefined);
 });
@@ -130,7 +118,6 @@ describe("AvatarMenu", () => {
       "Correo",
       "Cambiar foto",
       "Quitar foto",
-      "Volver al diseño anterior",
       "Cerrar sesión",
     ]);
     expect(screen.getByRole("menuitem", { name: "Perfil" }).getAttribute("href")).toBe("/ajustes/perfil");
@@ -152,25 +139,21 @@ describe("AvatarMenu", () => {
     expect(screen.getByRole("menuitem", { name: "Correo" }).getAttribute("href")).toBe("mailto:hola@cincel.mx");
   });
 
-  it("hides photo and go-back entries while their actions are not implemented", async () => {
+  it("hides the photo entries while their actions are not implemented", async () => {
     state.photoImplemented = false;
-    state.prefsImplemented = false;
     render(<AvatarMenu session={{ ...session, photoUrl: "/x" }} />);
     await openMenu();
     const labels = itemLabels();
     expect(labels).not.toContain("Cambiar foto");
     expect(labels).not.toContain("Quitar foto");
-    expect(labels).not.toContain("Volver al diseño anterior");
     expect(labels).toContain("Cerrar sesión");
     expect(document.querySelector('input[type="file"]')).toBeNull();
   });
 
-  it("goes back to the legacy design and refreshes", async () => {
+  it("has no entry back to the old design", async () => {
     render(<AvatarMenu session={session} />);
     await openMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Volver al diseño anterior" }));
-    await waitFor(() => expect(state.updatePrefs).toHaveBeenCalledWith({ redesignEnabled: false }));
-    await waitFor(() => expect(state.refresh).toHaveBeenCalled());
+    expect(itemLabels().some((label) => /diseño/i.test(label))).toBe(false);
   });
 
   it("signs the user out", async () => {

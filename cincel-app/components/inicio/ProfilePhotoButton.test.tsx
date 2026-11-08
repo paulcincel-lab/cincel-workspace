@@ -50,6 +50,14 @@ afterEach(() => {
 });
 
 describe("ProfilePhotoButton", () => {
+  it("never reads the retired browser copy of the photo", () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem");
+    setup("/api/staff/s1/photo?v=1");
+    const keys = getItem.mock.calls.map(([key]) => String(key));
+    expect(keys.some((key) => key.startsWith("cincel.dashboard.profile.photo"))).toBe(false);
+    getItem.mockRestore();
+  });
+
   it("offers a jpeg / png / webp file picker behind the camera button", () => {
     const { input } = setup();
     expect(input.getAttribute("accept")).toBe(PHOTO_ACCEPT);

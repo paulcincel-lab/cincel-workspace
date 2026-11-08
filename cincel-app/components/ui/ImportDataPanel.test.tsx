@@ -9,26 +9,22 @@ import {
   within,
 } from "@testing-library/react";
 
-import type { ContactDetail, ImportData, TaskDetail } from "@/lib/types/core";
+import type { ContactDetail, ImportData } from "@/lib/types/core";
 
 const importActions = vi.hoisted(() => ({ getImportDataAction: vi.fn() }));
 
 vi.mock("@/lib/actions/import-actions", () => importActions);
-vi.mock("@/lib/actions/tasks-actions", () => ({
-  createSubtaskAction: vi.fn(),
-  listSubtasksAction: vi.fn().mockResolvedValue([]),
-}));
 vi.mock("@/lib/actions/contacts-actions", () => ({
   fetchContactHistoryAction: vi.fn().mockResolvedValue([]),
 }));
 
-import TaskDrawer from "@/components/tareas/TaskDrawer";
 import { ClientDetailSheet } from "@/components/directorio/ClientDetailSheet";
 import {
   formatImportValue,
   hasImportData,
   ImportDataPanel,
   importDataFooter,
+  useImportData,
 } from "./ImportDataPanel";
 
 const TASK_ID = "00000000-0000-4000-8000-0000000000a1";
@@ -151,67 +147,13 @@ describe("ImportDataPanel", () => {
 
 const noop = () => {};
 
-function makeTask(): TaskDetail {
-  return {
-    id: TASK_ID,
-    projectId: "00000000-0000-4000-8000-000000000001",
-    kind: "usuario",
-    templateId: null,
-    workflowId: null,
-    phaseId: null,
-    spaceId: null,
-    closedAt: null,
-    title: "Planos arquitectónicos",
-    notes: null,
-    createdById: "00000000-0000-4000-8000-000000000009",
-    managerId: null,
-    status: "pendiente",
-    customStatusId: null,
-    priority: "media",
-    sortOrder: null,
-    commitmentDate: null,
-    reviewDate: null,
-    deliveryDate: null,
-    archived: false,
-    createdAt: "2026-10-01T00:00:00.000Z",
-    updatedAt: "2026-10-01T00:00:00.000Z",
-    customStatus: null,
-    project: {
-      id: "00000000-0000-4000-8000-000000000001",
-      name: "Casa Lomas",
-      clientName: "Cliente",
-    },
-    workflow: null,
-    phase: null,
-    space: null,
-    manager: null,
-    support: [],
-    checklist: { total: 0, completed: 0 },
-    parentTaskId: null,
-    parentTitle: null,
-    subtaskCount: 0,
-    subtaskDoneCount: 0,
-    waitingOn: 0,
-    createdBy: { id: "00000000-0000-4000-8000-000000000009", name: "Ana" },
-    checklistItems: [],
-    attachments: [],
-    links: [],
-    history: [],
-  };
+/** How `TaskSheet` wires the panel: the task's import data, loaded by id. */
+function TaskImportData({ taskId }: { taskId: string }) {
+  return <ImportDataPanel importData={useImportData("task", taskId)} />;
 }
 
-function renderDrawer() {
-  return render(
-    <TaskDrawer
-      open
-      task={makeTask()}
-      onClose={noop}
-      onAddComment={noop}
-      onAddChecklistItem={noop}
-      onToggleChecklistItem={noop}
-      onRemoveChecklistItem={noop}
-    />,
-  );
+function renderTaskPanel() {
+  return render(<TaskImportData taskId={TASK_ID} />);
 }
 
 const contact = {
@@ -242,10 +184,10 @@ function renderContactSheet() {
   );
 }
 
-describe("Datos de monday in the task drawer and contact sheet", () => {
+describe("Datos de monday in the task sheet and contact sheet", () => {
   it("shows the task's import data", async () => {
     importActions.getImportDataAction.mockResolvedValue(fullData);
-    renderDrawer();
+    renderTaskPanel();
     expect(
       await screen.findByRole("button", { name: "Datos de monday" }),
     ).toBeTruthy();
@@ -257,7 +199,7 @@ describe("Datos de monday in the task drawer and contact sheet", () => {
 
   it("hides the panel on a task that wasn't imported", async () => {
     importActions.getImportDataAction.mockResolvedValue(null);
-    renderDrawer();
+    renderTaskPanel();
     await waitFor(() =>
       expect(importActions.getImportDataAction).toHaveBeenCalled(),
     );

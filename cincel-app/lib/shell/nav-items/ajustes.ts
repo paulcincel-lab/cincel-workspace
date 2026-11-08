@@ -5,8 +5,6 @@
  * waits for `fetchMyPreferencesAction` / `updateMyPreferencesAction`
  * (`IMPLEMENTED` in `lib/actions/preferences-actions.flags.ts`). Every staff
  * member gets it; the Organización pages inside Ajustes have their own guards.
- * The nav model is built only for the new shell, so the item never shows with
- * the redesign flag off.
  */
 import { Settings } from "lucide-react";
 

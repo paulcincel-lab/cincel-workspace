@@ -1,12 +1,7 @@
-import ResourcesWorkspaceServer from "@/components/recursos/ResourcesWorkspaceServer";
 import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
-import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
+import { redirectLegacy } from "@/lib/ui/legacy-redirects-server";
 
-/**
- * Same card/tile workspace as /recursos/empresa (#437): section folders, Drive
- * browser and recent documents. Each section opens at /recursos/<seccion>.
- */
+/** Old route (FE §2.2): redirects to its redesign page, query string preserved. */
 export default async function RecursosPage({ searchParams }: LegacyPageProps) {
-  await redirectLegacyIfRedesignOn("/recursos", searchParams);
-  return <ResourcesWorkspaceServer mode="overview" />;
+  return redirectLegacy("/recursos", searchParams);
 }

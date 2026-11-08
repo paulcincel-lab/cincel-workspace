@@ -53,7 +53,6 @@ const APPEARANCE: ResolvedAppearance = {
   style: "visual",
   density: "comoda",
   textSize: 14,
-  redesignEnabled: true,
   cssVars: { light: {}, dark: {} },
   version: 1,
 };

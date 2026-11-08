@@ -47,9 +47,7 @@ export function withTokenAlpha(hex: string, alpha: number | null): string {
 
 /**
  * One token row of the theme editor (redesign FE §4.8): color input + label +
- * `--name` + value chip, as a `SettingsRow`. Evolves `PrimaryColorPicker`
- * (one swatch control per token instead of one palette for the primary only);
- * the legacy picker stays on the flag-off General page until Cleanup.
+ * `--name` + value chip, as a `SettingsRow`: one swatch control per token.
  */
 export function TokenRow({ name, label, value, onChange, invalid }: TokenRowProps) {
   const id = `token-${name}`;

@@ -1,11 +1,9 @@
 /**
- * Text size classes for the flag-on appearance (redesign FE §4.1, §14.3).
- * Pure and client-safe.
+ * Text size classes of the appearance (redesign FE §4.1, §14.3). Pure and
+ * client-safe.
  *
- * `globals.css` stays unchanged until Phase 9 (review B17 snapshot), so the
- * `text-size-{n}` classes and the `--font-sans` hookup live in a static rule
- * set the root layout renders next to `<style id="appearance">`, for flag-on
- * users only.
+ * The `text-size-{n}` classes and the `--font-sans` hookup live in a static
+ * rule set the root layout renders next to `<style id="appearance">`.
  */
 import type { TextSize } from "@/lib/types/redesign";
 

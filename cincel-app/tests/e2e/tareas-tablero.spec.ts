@@ -1,8 +1,6 @@
 /**
- * E2E: the task routes before and after the redesign (FE §2.2, §3.4).
- * Flag off: `/tablero`, `/mis-tareas` and `/calendario` render as today and
- * `/tareas` is not reachable. Flag on: they redirect to the views of
- * `/tareas`; the Tablero view moves a card between columns by drag and drop
+ * E2E: the task routes (FE §2.2, §3.4): `/tablero`, `/mis-tareas` and
+ * `/calendario` redirect to the views of `/tareas`; the Tablero view moves a card between columns by drag and drop
  * and the task sheet opens and closes through `?tarea=<id>`.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
@@ -10,7 +8,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
-import { E2E_ADMIN_EMAIL, setRedesignFlag } from "./helpers/redesign-flag";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
@@ -39,7 +36,7 @@ function ensureBoardTask(): Promise<string> {
     const [workflow] = await sql`select id from core.workflows where key = 'presale' limit 1`;
     if (!workflow) throw new Error("presale workflow not seeded");
     const [admin] = await sql`
-      select id from core.staff where lower(email) = lower(${E2E_ADMIN_EMAIL}) and deleted_at is null limit 1`;
+      select id from core.staff where lower(email) = lower(${process.env.E2E_ADMIN_EMAIL ?? "paul@cincel.mx"}) and deleted_at is null limit 1`;
     if (!admin) throw new Error("seeded admin not found");
     const [client] = await sql`
       insert into core.contacts (type, kind, name)
@@ -92,58 +89,14 @@ async function expectSheetShowsTask(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 15_000 });
 }
 
-test.describe("Rutas de tareas — flag off", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(false);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
-  test.beforeEach(async ({ page }) => {
-    await seedAuth(page);
-    await loginAsAdmin(page, BASE_URL);
-  });
-
-  test("/tablero, /mis-tareas and /calendario render the legacy pages", async ({ page }) => {
-    await page.goto(`${BASE_URL}/tablero`, { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveURL(/\/tablero/);
-    await expect(page.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("tablero-board")).toBeVisible();
-
-    await page.goto(`${BASE_URL}/mis-tareas`, { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveURL(/\/mis-tareas/);
-    await expect(page.getByRole("heading", { name: "Mis tareas", exact: true })).toBeVisible({ timeout: 30_000 });
-
-    await page.goto(`${BASE_URL}/calendario`, { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveURL(/\/calendario/);
-    await expect(page.getByRole("heading", { name: "Calendario", exact: true })).toBeVisible({ timeout: 30_000 });
-  });
-
-  test("/tareas is not reachable and falls back to a legacy page", async ({ page }) => {
-    await page.goto(`${BASE_URL}/tareas?vista=tablero`, { waitUntil: "domcontentloaded" });
-    await expect(page).not.toHaveURL(/\/tareas(\?|$)/, { timeout: 30_000 });
-    await expect(page).toHaveURL(/\/(tablero|mis-tareas|calendario|dashboard|actividades)/);
-  });
-});
-
-test.describe("Tareas — flag on", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(true);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
+test.describe("Tareas", () => {
   test.beforeEach(async ({ page }) => {
     await ensureBoardTask();
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
   });
 
-  test("legacy routes redirect to the views of /tareas", async ({ page }) => {
+  test("old routes redirect to the views of /tareas", async ({ page }) => {
     const expected: Array<[string, Record<string, string>]> = [
       ["/tablero", { vista: "tablero" }],
       ["/mis-tareas", { vista: "lista", responsable: "yo" }],

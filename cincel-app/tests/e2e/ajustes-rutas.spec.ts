@@ -1,11 +1,8 @@
 /**
- * E2E: the Configuración / Perfil routes in both worlds (redesign Phase 6, FE §2.2, §2.3, §3.8, §8).
- *
- * - Flag off: `/configuracion/*` and `/profile` render as today (no redirect, no appearance block) and
- *   the new-only `/ajustes/*` routes send the viewer back to the legacy app.
- * - Flag on: every legacy route redirects to its `/ajustes/*` home, which renders inside `AppShell`;
- *   each admin segment is guarded on the server (404 for a viewer without its capability) and
- *   `AjustesNav` lists only the segments the viewer can open; Dirección reaches the hours report only.
+ * E2E: the Ajustes routes (redesign Phase 6, FE §2.2, §3.8, §8): every old Configuración / Perfil route
+ * redirects to its `/ajustes/*` home, which renders inside `AppShell`; each admin segment is guarded on
+ * the server (404 for a viewer without its capability) and `AjustesNav` lists only the segments the
+ * viewer can open; Dirección reaches the hours report only.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -17,21 +14,11 @@ import {
   createStaffUser,
   rendersNewShell,
   resetAdminPreferences,
-  setRedesignFor,
   signedInContext,
   type E2EUser,
 } from "./helpers/redesign";
 
-const LEGACY_PAGES = [
-  "/configuracion/general",
-  "/configuracion/estatus",
-  "/configuracion/permisos",
-  "/configuracion/tramos",
-  "/configuracion/puestos",
-  "/profile",
-];
-
-/** FE §2.2: legacy route → new route with the flag on. */
+/** FE §2.2: old route → new route. */
 const REDIRECTS: [from: string, to: string][] = [
   ["/configuracion", "/ajustes/apariencia"],
   ["/configuracion/general", "/ajustes/general"],
@@ -61,43 +48,15 @@ async function expectNotFound(page: Page, path: string): Promise<void> {
   }
 }
 
-test.describe("Ajustes — rutas con el nuevo diseño apagado", () => {
-  test.beforeAll(() => setRedesignFor(ADMIN_EMAIL, false));
-
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page, BASE_URL);
-  });
-
-  test("Configuración and Perfil render as today, without the appearance block", async ({ page }) => {
-    for (const path of LEGACY_PAGES) {
-      await test.step(path, async () => {
-        await page.goto(`${BASE_URL}${path}`, { waitUntil: "domcontentloaded" });
-        await expect(page.locator("main").first()).toBeVisible({ timeout: 30_000 });
-        expect(pathOf(page)).toBe(path);
-        expect(await rendersNewShell(page)).toBe(false);
-      });
-    }
-  });
-
-  test("the new-only Ajustes routes send the viewer back to the legacy app", async ({ page }) => {
-    await page.goto(`${BASE_URL}/ajustes/apariencia`, { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
-    expect(await rendersNewShell(page)).toBe(false);
-  });
-});
-
-test.describe("Ajustes — rutas con el nuevo diseño encendido", () => {
+test.describe("Ajustes — rutas", () => {
   test.describe.configure({ mode: "serial" });
 
   let colaborador: E2EUser;
   let direccion: E2EUser;
 
   test.beforeAll(async () => {
-    await setRedesignFor(ADMIN_EMAIL, true);
     colaborador = await createStaffUser({ tag: "Colaborador", role: "Colaborador" });
     direccion = await createStaffUser({ tag: "Direccion", role: "Dirección" });
-    await setRedesignFor(colaborador.email, true);
-    await setRedesignFor(direccion.email, true);
   });
 
   test.afterAll(resetAdminPreferences);

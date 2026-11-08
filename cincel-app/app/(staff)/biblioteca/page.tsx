@@ -2,7 +2,6 @@ import { BibliotecaIndex } from "@/components/biblioteca/BibliotecaIndex";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { parseEstilo } from "@/lib/biblioteca/catalog";
 import { loadBibliotecaData } from "@/lib/biblioteca/load";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -13,7 +12,6 @@ type SearchParams = Record<string, string | string[] | undefined>;
  */
 export default async function BibliotecaPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
-  await redirectIfRedesignOff("/biblioteca", sp);
 
   const { links, capabilities } = await loadBibliotecaData();
   const view = <BibliotecaIndex links={links} showEmpresa={capabilities.enterprise.canView} />;

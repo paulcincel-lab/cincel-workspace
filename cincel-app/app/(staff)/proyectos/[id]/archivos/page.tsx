@@ -1,11 +1,6 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 
-import Header from "@/components/layout/Header";
-import Sidebar from "@/components/layout/Sidebar";
 import { ProjectFiles } from "@/components/proyectos/ProjectFiles";
-import { ProjectFilesBrowser } from "@/components/proyectos/ProjectFilesBrowser";
-import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
 import { ProjectTabs } from "@/components/proyectos/ProjectTabs";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
@@ -19,7 +14,6 @@ import { loadProjectTabShell } from "@/lib/projects/project-tab-shell";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { StaffFilesResult } from "@/lib/types/workspace-access";
 import { getResolvedAppearance } from "@/lib/ui/preferences-server";
-import { cn } from "@/lib/utils";
 
 const STYLES: readonly PresentationStyle[] = ["visual", "esencial", "analitico"];
 
@@ -39,30 +33,6 @@ async function loadUser(): Promise<CapabilityUser | null> {
     if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "FORBIDDEN")) return null;
     throw error;
   }
-}
-
-function Shell({ children }: { children: ReactNode }) {
-  return (
-    <main className="flex min-h-screen bg-background text-foreground">
-      <Sidebar />
-      <section className="flex-1 overflow-y-auto p-10">
-        <Header />
-        {children}
-      </section>
-    </main>
-  );
-}
-
-function StateCard({ title, message }: { title: string; message: string }) {
-  return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{message}</p>
-      <Link href="/proyectos" className={cn(buttonVariants(), "mt-4")}>
-        Volver a proyectos
-      </Link>
-    </div>
-  );
 }
 
 type Loaded = { kind: "ok"; result: StaffFilesResult } | { kind: "not_found" } | { kind: "drive_error" };
@@ -92,58 +62,19 @@ export default async function ProjectArchivosPage({
   const folderId = rawFolder?.trim() || null;
 
   const [user, appearance] = await Promise.all([loadUser(), getResolvedAppearance()]);
-  if (appearance.redesignEnabled) {
-    return (
-      <RedesignArchivos
-        user={user}
-        projectId={projectId}
-        folderId={folderId}
-        estilo={estiloOverride(query.estilo)}
-        style={appearance.style}
-      />
-    );
-  }
-
-  if (!user) {
-    return (
-      <Shell>
-        <StateCard title="Sin permiso" message="Inicia sesión para ver los archivos del proyecto." />
-      </Shell>
-    );
-  }
-
-  const loaded = await loadFiles(user.member.id, projectId, folderId);
-  if (loaded.kind === "not_found") {
-    return (
-      <Shell>
-        <ProjectSectionNav projectId={projectId} />
-        <StateCard title="Carpeta no encontrada" message="El proyecto o la carpeta no existen." />
-      </Shell>
-    );
-  }
-
   return (
-    <Shell>
-      <ProjectSectionNav projectId={projectId} />
-      <h1 className="mb-4 text-2xl font-bold text-foreground">Archivos</h1>
-      {loaded.kind === "drive_error" ? (
-        <Alert variant="destructive">
-          <AlertTitle>No se pudo leer la carpeta en Drive.</AlertTitle>
-          <AlertDescription>Intenta de nuevo en unos minutos.</AlertDescription>
-        </Alert>
-      ) : (
-        <ProjectFilesBrowser
-          projectId={projectId}
-          result={loaded.result}
-          canRetry={resolveProjectsCapabilities(user).canEditProjectGeneral}
-        />
-      )}
-    </Shell>
+    <ArchivosTab
+      user={user}
+      projectId={projectId}
+      folderId={folderId}
+      estilo={estiloOverride(query.estilo)}
+      style={appearance.style}
+    />
   );
 }
 
-/** Card used by the redesigned tab for its own states (no legacy shell; the layout mounts `AppShell`). */
-function RedesignState({ title, message }: { title: string; message: string }) {
+/** Card for the tab's own states (the layout mounts `AppShell`). */
+function StateCard({ title, message }: { title: string; message: string }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-6 text-card-foreground">
       <h1 className="text-lg font-semibold">{title}</h1>
@@ -157,8 +88,8 @@ function RedesignState({ title, message }: { title: string; message: string }) {
   );
 }
 
-/** Flag on (FE §2.3, §3.5): `ProjectTabs` + the Archivos tab in three styles. */
-async function RedesignArchivos({
+/** `ProjectTabs` + the Archivos tab in three styles (FE §3.5). */
+async function ArchivosTab({
   user,
   projectId,
   folderId,
@@ -172,19 +103,19 @@ async function RedesignArchivos({
   style: PresentationStyle;
 }) {
   if (!user) {
-    return <RedesignState title="Sin permiso" message="Inicia sesión para ver los archivos del proyecto." />;
+    return <StateCard title="Sin permiso" message="Inicia sesión para ver los archivos del proyecto." />;
   }
 
   const loaded = await loadFiles(user.member.id, projectId, folderId);
   if (loaded.kind === "not_found") {
-    return <RedesignState title="Carpeta no encontrada" message="El proyecto o la carpeta no existen." />;
+    return <StateCard title="Carpeta no encontrada" message="El proyecto o la carpeta no existen." />;
   }
 
   // The tab count is the folder the tab opens on: reuse this listing when it is the root.
   const archivos = loaded.kind === "ok" && !folderId ? filesCount(loaded.result) : undefined;
   const shell = await loadProjectTabShell(projectId, user, { archivos });
   if (!shell) {
-    return <RedesignState title="Carpeta no encontrada" message="El proyecto o la carpeta no existen." />;
+    return <StateCard title="Carpeta no encontrada" message="El proyecto o la carpeta no existen." />;
   }
 
   // `ListPage` renders the tab's `EstiloSwitch` (FE §4.11), so `ProjectTabs` doesn't repeat it.

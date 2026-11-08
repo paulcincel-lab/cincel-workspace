@@ -1,40 +1,7 @@
-import Header from "@/components/layout/Header";
-import Sidebar from "@/components/layout/Sidebar";
-import { GoogleWorkspaceSettings } from "@/components/configuracion/GoogleWorkspaceSettings";
-import { fetchPositionsAction } from "@/lib/actions/positions-actions";
-import { getGoogleHealthAction, listGroupMappingsAction } from "@/lib/actions/workspace-access-actions";
-import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
 import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
-import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
+import { redirectLegacy } from "@/lib/ui/legacy-redirects-server";
 
-/** Administrador only: `AppRouteGuard` gates `/configuracion/*` and every action re-checks the role. */
+/** Old route (FE §2.2): redirects to its redesign page, query string preserved. */
 export default async function ConfiguracionGooglePage({ searchParams }: LegacyPageProps) {
-  await redirectLegacyIfRedesignOn("/configuracion/google", searchParams);
-  let mappings: GroupMapping[] = [];
-  let positions: { id: string; name: string }[] = [];
-  let health: GoogleHealth | null = null;
-  try {
-    const [mappingRows, positionRows] = await Promise.all([listGroupMappingsAction(), fetchPositionsAction()]);
-    mappings = mappingRows;
-    positions = positionRows
-      .filter((position) => position.active || position.googleManaged)
-      .map((position) => ({ id: position.id, name: position.name }));
-  } catch {
-    // Not authorized or no session: the guard redirects and nothing is loaded.
-  }
-  try {
-    health = await getGoogleHealthAction();
-  } catch {
-    // Not authorized, or the health query failed: Estado shows its error state.
-  }
-
-  return (
-    <main className="flex min-h-screen bg-background text-foreground">
-      <Sidebar />
-      <section className="flex-1 overflow-y-auto p-10">
-        <Header />
-        <GoogleWorkspaceSettings mappings={mappings} positions={positions} health={health} />
-      </section>
-    </main>
-  );
+  return redirectLegacy("/configuracion/google", searchParams);
 }

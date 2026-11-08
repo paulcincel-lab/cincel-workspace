@@ -513,7 +513,7 @@ describe("monday wizard puesto suggestion", () => {
 
 describe("first-login routing", () => {
   it("sends Google-signed-in admins to the import wizard page", () => {
-    expect(FIRST_LOGIN_WIZARD_ROUTES.monday_import).toBe("/configuracion/importar-monday");
+    expect(FIRST_LOGIN_WIZARD_ROUTES.monday_import).toBe("/ajustes/monday");
   });
 });
 

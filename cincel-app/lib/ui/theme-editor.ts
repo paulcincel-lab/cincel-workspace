@@ -99,15 +99,13 @@ export const STYLE_CARDS: readonly { value: OrgAppearance["styleDefault"]; label
 
 /**
  * "Partir de": the preset's tokens, type scale, font and shape; the org's
- * style and flag settings stay as they are in the draft.
+ * style settings stay as they are in the draft.
  */
 export function applyPreset(draft: OrgAppearance, preset: OrgAppearance): OrgAppearance {
   return {
     ...preset,
     styleDefault: draft.styleDefault,
     allowUserOverride: draft.allowUserOverride,
-    redesignDefault: draft.redesignDefault,
-    redesignAvailable: draft.redesignAvailable,
   };
 }
 

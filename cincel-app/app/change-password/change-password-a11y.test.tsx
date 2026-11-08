@@ -19,7 +19,7 @@ vi.mock("@/lib/auth/auth-actions", () => ({
   completeFirstAccessAction: vi.fn(),
 }));
 
-/** Applies a theme and mode the way the flag-on root layout does. */
+/** Applies a theme and mode the way the root layout does. */
 function applyTheme(theme: ThemeId, mode: "light" | "dark") {
   const html = document.documentElement;
   html.setAttribute("lang", "es");

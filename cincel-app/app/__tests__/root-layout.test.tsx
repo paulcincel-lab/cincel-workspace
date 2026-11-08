@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Root layout with `ui.redesign` on (FE §4.1, BE §8.2, reviews B2, B18):
+ * Root layout (FE §4.1, BE §8.2, reviews B2, B18):
  * `<html>` appearance attributes with `data-theme` always set, `.dark` in
  * sync, one `<style id="appearance">` with `html:root[data-theme=…]`
  * sections, the system-mode head script (≤ 1 KB) only in system mode, and no
@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ColorMode, ThemeId } from "@/lib/types/redesign";
 import { appearanceStyleBlock, SYSTEM_MODE_SCRIPT } from "@/lib/ui/appearance-css";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
-import { appearanceFor, appearanceState, preferencesActionsMock, primaryColorState } from "./root-layout-mocks";
+import { appearanceFor, appearanceState, preferencesActionsMock } from "./root-layout-mocks";
 
 vi.mock("next/font/google", async () => (await import("./root-layout-mocks")).fontMock);
 vi.mock("@/components/auth/AppRouteGuard", async () => (await import("./root-layout-mocks")).passthroughDefaultMock);
@@ -23,14 +23,13 @@ vi.mock("@/lib/auth/session", async () => (await import("./root-layout-mocks")).
 vi.mock("@/lib/settings/general-settings", async () => (await import("./root-layout-mocks")).generalSettingsMock);
 vi.mock("@/lib/settings/general-settings-server", async () => (await import("./root-layout-mocks")).generalSettingsServerMock);
 vi.mock("@/lib/settings/use-general-settings", async () => (await import("./root-layout-mocks")).useGeneralSettingsMock);
-vi.mock("@/lib/theme/primary-color-server", async () => (await import("./root-layout-mocks")).primaryColorServerMock);
 vi.mock("@/lib/ui/preferences-server", async () => (await import("./root-layout-mocks")).preferencesServerMock);
 vi.mock("@/lib/actions/preferences-actions", async () => (await import("./root-layout-mocks")).preferencesActionsMock);
 vi.mock("@/components/ui/shadcn/sonner", async () => (await import("./root-layout-mocks")).toasterMock);
 vi.mock("../globals.css", async () => (await import("./root-layout-mocks")).cssMock);
 
 async function renderLayout(theme: ThemeId, mode: ColorMode): Promise<{ markup: string; doc: Document }> {
-  appearanceState.value = appearanceFor(theme, { redesignEnabled: true, mode, density: "compacta", textSize: 15 });
+  appearanceState.value = appearanceFor(theme, { mode, density: "compacta", textSize: 15 });
   const { default: RootLayout } = await import("../layout");
   const markup = renderToStaticMarkup(
     await RootLayout({
@@ -44,11 +43,7 @@ async function renderLayout(theme: ThemeId, mode: ColorMode): Promise<{ markup: 
   return { markup, doc: new DOMParser().parseFromString(`<!doctype html>${markup}`, "text/html") };
 }
 
-describe("root layout, redesign flag on", () => {
-  beforeEach(() => {
-    primaryColorState.value = "blue-700";
-  });
-
+describe("root layout", () => {
   describe.each(THEME_IDS)("theme %s", (theme) => {
     it("light: data-theme light, no .dark, appearance attributes, no head script", async () => {
       const { doc } = await renderLayout(theme, "light");
@@ -104,11 +99,6 @@ describe("root layout, redesign flag on", () => {
         }
       }
     });
-  });
-
-  it("drops the legacy primary-color block (folded into the appearance)", async () => {
-    const { doc } = await renderLayout("azul", "light");
-    expect(doc.getElementById("primary-color")).toBeNull();
   });
 
   it("declares every selectable font variable on <html>", async () => {

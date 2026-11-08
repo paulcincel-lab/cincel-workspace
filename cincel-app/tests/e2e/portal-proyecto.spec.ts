@@ -4,7 +4,7 @@
  * `cincel-portal-style` cookie and survives a reload.
  *
  * Seeds a client, a project, an active portal user with access and a portal session straight in Postgres, and
- * turns the redesign on for the organization for the duration of the spec (restored afterwards).
+ * lets clients pick a style (Visual by default) for the duration of the spec (restored afterwards).
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -51,8 +51,6 @@ async function seed(): Promise<void> {
     previousAppearance = setting ? (setting.value as string) : null;
     if (setting) {
       const stored = JSON.parse(setting.value as string) as { version: number; data: Record<string, unknown> };
-      stored.data.redesignAvailable = true;
-      stored.data.redesignDefault = true;
       stored.data.allowUserOverride = true;
       stored.data.styleDefault = "visual";
       await sql`update core.app_settings set value = ${JSON.stringify(stored)} where key = 'appearance.theme'`;

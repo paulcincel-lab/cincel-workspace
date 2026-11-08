@@ -3,12 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
 import axe from "axe-core";
 
-const state = vi.hoisted(() => ({ redesignEnabled: true }));
-
 vi.mock("next/navigation", () => ({ usePathname: () => "/proyectos" }));
-vi.mock("@/lib/ui/preferences-server", () => ({
-  getResolvedAppearance: vi.fn(async () => ({ redesignEnabled: state.redesignEnabled })),
-}));
 vi.mock("@/lib/actions/search-actions.flags", () => ({ IMPLEMENTED: { searchWorkspaceAction: true } }));
 vi.mock("@/components/shell/CommandPalette", () => ({ CommandPalette: () => null }));
 
@@ -59,7 +54,7 @@ describe("route states accessibility", () => {
     for (const mode of MODES) {
       it(`not-found has no serious or critical axe violations (${theme}, ${mode})`, async () => {
         applyTheme(theme, mode);
-        const { container } = render(await NotFound());
+        const { container } = render(<NotFound />);
         expect(await seriousViolations(container)).toEqual([]);
       });
 

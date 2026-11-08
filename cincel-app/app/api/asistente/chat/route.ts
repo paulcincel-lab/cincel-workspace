@@ -44,8 +44,8 @@ import { actionErrorCode, actionErrorText } from "@/lib/errors";
  * from `assistant_messages` (client history is ignored), approval-gated tools
  * use the native approval round trip and are audited in `assistant_actions`.
  *
- * The legacy page (flag off) still posts `{ messages }` with its
- * localStorage thread; that body keeps today's behavior unchanged.
+ * A bare `{ messages }` body (no thread id) is still answered statelessly,
+ * as before; no page of the app sends it any more.
  */
 export async function POST(request: NextRequest): Promise<Response> {
   const session = await getSession();
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   return serverThreadChat(request, user, body);
 }
 
-// ── Legacy page (flag off): unchanged ──────────────────────────────────────
+// ── Stateless `{ messages }` body ──────────────────────────────────────
 
 function isLegacyBody(body: unknown): body is { messages: UIMessage[] } {
   if (!body || typeof body !== "object") return false;

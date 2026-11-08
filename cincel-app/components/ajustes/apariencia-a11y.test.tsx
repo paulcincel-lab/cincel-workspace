@@ -37,7 +37,7 @@ vi.mock("@/components/patterns/SettingsRow", () => ({
 
 import { AparienciaClient } from "./AparienciaClient";
 
-const PREFS: UserPreferences = { ...DEFAULT_USER_PREFERENCES, redesignEnabled: true };
+const PREFS: UserPreferences = { ...DEFAULT_USER_PREFERENCES };
 
 async function seriousViolations(container: HTMLElement) {
   // Color contrast needs real layout and rendering, which happy-dom doesn't provide;
@@ -67,7 +67,7 @@ describe("Ajustes › Apariencia accessibility", () => {
     for (const mode of ["light", "dark"] as const) {
       it(`has no serious axe violations in ${theme} ${mode}`, async () => {
         setHtmlAppearance(theme, mode);
-        const org: OrgAppearance = { ...THEME_PRESETS[theme], allowUserOverride: true, redesignAvailable: true };
+        const org: OrgAppearance = { ...THEME_PRESETS[theme], allowUserOverride: true };
         const { container } = render(
           <main>
             <AparienciaClient preferences={{ ...PREFS, mode }} org={org} isAdmin />
@@ -80,7 +80,7 @@ describe("Ajustes › Apariencia accessibility", () => {
 
   it("has no serious axe violations with overrides and the new design turned off", async () => {
     setHtmlAppearance("azul", "light");
-    const org: OrgAppearance = { ...THEME_PRESETS.azul, allowUserOverride: false, redesignAvailable: false };
+    const org: OrgAppearance = { ...THEME_PRESETS.azul, allowUserOverride: false };
     const { container } = render(
       <main>
         <AparienciaClient preferences={PREFS} org={org} isAdmin={false} />
@@ -92,12 +92,11 @@ describe("Ajustes › Apariencia accessibility", () => {
   it("names every radio group and control", () => {
     setHtmlAppearance("azul", "light");
     const { getByRole } = render(
-      <AparienciaClient preferences={PREFS} org={{ ...THEME_PRESETS.azul, allowUserOverride: true, redesignAvailable: true }} isAdmin={false} />,
+      <AparienciaClient preferences={PREFS} org={{ ...THEME_PRESETS.azul, allowUserOverride: true }} isAdmin={false} />,
     );
     for (const name of ["Tema", "Estilo de presentación", "Modo", "Densidad"]) {
       expect(getByRole("radiogroup", { name })).toBeTruthy();
     }
     expect(getByRole("slider", { name: "Tamaño de texto" })).toBeTruthy();
-    expect(getByRole("switch", { name: "Probar el nuevo diseño" })).toBeTruthy();
   });
 });

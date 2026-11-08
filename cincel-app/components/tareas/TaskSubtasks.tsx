@@ -35,7 +35,7 @@ type Props = {
   onOpenSubtask: (subtask: TaskRef) => void;
 };
 
-/** The task drawer's Subtareas section: child tasks plus "Agregar subtarea". */
+/** The task sheet's Subtareas section: child tasks plus "Agregar subtarea". */
 export default function TaskSubtasks({ parentId, onOpenSubtask }: Props) {
   const [subtasks, setSubtasks] = useState<TaskRef[] | null>(null);
   const [loadError, setLoadError] = useState("");

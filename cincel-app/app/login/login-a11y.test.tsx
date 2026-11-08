@@ -13,15 +13,6 @@ vi.mock("@/lib/auth/session", () => ({
   getSessionAccess: async () => ({ status: "guest", user: null }),
 }));
 vi.mock("@/lib/auth/auth-actions", () => ({ loginAction: vi.fn() }));
-vi.mock("@/lib/ui/preferences-server", () => ({
-  getResolvedAppearance: async () => ({ redesignEnabled: false }),
-}));
-vi.mock("@/lib/repositories/app-settings-repository", () => ({
-  getAppSettingEntry: async () => ({
-    value: JSON.stringify({ version: 1, data: { redesignDefault: true, redesignAvailable: true } }),
-    updatedAt: new Date(),
-  }),
-}));
 vi.mock("@/lib/settings/general-settings-server", () => ({
   getGeneralSettings: async () => ({
     settings: { company: { contactEmail: "admin@example.test" } },
@@ -35,7 +26,7 @@ import LoginPage from "./page";
 
 const MODES = ["light", "dark"] as const;
 
-/** Applies the theme the way the root layout does for flag-on pages (FE §14.1). */
+/** Applies the theme the way the root layout does (FE §14.1). */
 function applyTheme(themeId: string, mode: (typeof MODES)[number]) {
   const html = document.documentElement;
   html.setAttribute("lang", "es");

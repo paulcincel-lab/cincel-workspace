@@ -32,8 +32,7 @@ test.describe("Smoke — login and navigation", () => {
       waitUntil: "domcontentloaded",
     });
     await expect(page.getByText("Tu acceso a Cincel fue retirado en Google Workspace.")).toBeVisible();
-    // Today's page says "Volver a intentar"; the redesign (org default on) says "Usar otra cuenta".
-    const back = page.getByRole("link", { name: /Volver a intentar|Usar otra cuenta/ });
+    const back = page.getByRole("link", { name: "Usar otra cuenta" });
     await expect(back).toHaveAttribute("href", "/login");
   });
 

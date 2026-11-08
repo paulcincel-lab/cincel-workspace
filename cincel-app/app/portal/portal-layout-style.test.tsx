@@ -6,7 +6,6 @@ import { useStyle } from "@/components/shell/StyleProvider";
 
 const state = vi.hoisted(() => ({
   session: undefined as string | undefined,
-  redesignEnabled: true,
   style: "visual" as string,
 }));
 const getPortalUser = vi.hoisted(() => vi.fn());
@@ -25,13 +24,12 @@ vi.mock("@/lib/portal/appearance", () => ({
     style: "visual",
     density: "comoda",
     textSize: 14,
-    redesignEnabled: state.redesignEnabled,
     cssVars: { light: {}, dark: {} },
     version: 1,
   }),
 }));
 vi.mock("@/lib/portal/style-server", () => ({
-  getPortalPresentation: async () => ({ redesignEnabled: state.redesignEnabled, style: state.style, fixedByOrg: false }),
+  getPortalPresentation: async () => ({ style: state.style, fixedByOrg: false }),
 }));
 vi.mock("@/components/portal/PortalStyleSwitch", () => ({
   default: () => <div data-testid="estilo-switch" />,
@@ -47,7 +45,6 @@ function StyleProbe() {
 describe("portal layout: presentation style (FE §3.11)", () => {
   beforeEach(() => {
     state.session = "token";
-    state.redesignEnabled = true;
     state.style = "visual";
     getPortalUser.mockReset();
     getPortalUser.mockResolvedValue({ id: "u1", name: "Ana López", email: "ana@example.com" });
@@ -76,17 +73,6 @@ describe("portal layout: presentation style (FE §3.11)", () => {
     render(await PortalLayout({ children: <StyleProbe /> }));
 
     expect(screen.queryByTestId("estilo-switch")).toBeNull();
-  });
-
-  it("with the redesign off renders as before: no switch, no style provider, legacy weights", async () => {
-    state.redesignEnabled = false;
-    state.style = "analitico";
-    render(await PortalLayout({ children: <StyleProbe /> }));
-
-    expect(screen.queryByTestId("estilo-switch")).toBeNull();
-    // Outside a StyleProvider useStyle() answers Visual: the cookie never reaches the legacy portal.
-    expect(screen.getByTestId("probe").textContent).toBe("visual");
-    expect(screen.getByText("Portal de clientes").className).toContain("font-extrabold");
   });
 
   it("offers no theme or mode control to the client", async () => {

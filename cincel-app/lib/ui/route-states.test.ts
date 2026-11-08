@@ -4,7 +4,7 @@ import {
   isNotFoundSearchAvailable,
   loadingVariantFor,
   NOT_FOUND_COPY,
-  notFoundHomeHref,
+  NOT_FOUND_HOME_HREF,
   OFFLINE_COPY,
   ROUTE_ERROR_TITLE,
 } from "./route-states";
@@ -19,19 +19,16 @@ describe("route states copy", () => {
   });
 });
 
-describe("notFoundHomeHref", () => {
-  it("goes to /inicio with the redesign on and /dashboard with it off", () => {
-    expect(notFoundHomeHref(true)).toBe("/inicio");
-    expect(notFoundHomeHref(false)).toBe("/dashboard");
+describe("NOT_FOUND_HOME_HREF", () => {
+  it("goes to /inicio", () => {
+    expect(NOT_FOUND_HOME_HREF).toBe("/inicio");
   });
 });
 
 describe("isNotFoundSearchAvailable", () => {
-  it("needs both the redesign and an implemented search action", () => {
-    expect(isNotFoundSearchAvailable(true, { searchWorkspaceAction: true })).toBe(true);
-    expect(isNotFoundSearchAvailable(true, { searchWorkspaceAction: false })).toBe(false);
-    expect(isNotFoundSearchAvailable(false, { searchWorkspaceAction: true })).toBe(false);
-    expect(isNotFoundSearchAvailable(false, { searchWorkspaceAction: false })).toBe(false);
+  it("follows the search action flag", () => {
+    expect(isNotFoundSearchAvailable({ searchWorkspaceAction: true })).toBe(true);
+    expect(isNotFoundSearchAvailable({ searchWorkspaceAction: false })).toBe(false);
   });
 });
 

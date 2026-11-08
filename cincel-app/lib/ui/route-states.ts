@@ -26,21 +26,17 @@ export const PERMISSION_DENIED_COPY = {
 
 export const OFFLINE_COPY = "Sin conexión. Los cambios se guardarán cuando vuelvas a estar en línea.";
 
-/** "Volver a Inicio": `/inicio` with the redesign on, the legacy `/dashboard` otherwise (FE §2.3). */
-export function notFoundHomeHref(redesignEnabled: boolean): string {
-  return redesignEnabled ? "/inicio" : "/dashboard";
-}
+/** "Volver a Inicio". */
+export const NOT_FOUND_HOME_HREF = "/inicio";
 
 /**
- * "Buscar" opens `CommandPalette`, a new-shell feature backed by
- * `searchWorkspaceAction`: shown only with the redesign on and the action
- * implemented (FE §9 stubs rule), hidden otherwise.
+ * "Buscar" opens `CommandPalette`, backed by `searchWorkspaceAction`: shown
+ * only while the action is implemented (FE §9 stubs rule), hidden otherwise.
  */
 export function isNotFoundSearchAvailable(
-  redesignEnabled: boolean,
   implemented: { searchWorkspaceAction: boolean } = SEARCH_IMPLEMENTED,
 ): boolean {
-  return redesignEnabled && implemented.searchWorkspaceAction;
+  return implemented.searchWorkspaceAction;
 }
 
 /** Second-level pages of a project (`/proyectos/<id>/<tab>`). */

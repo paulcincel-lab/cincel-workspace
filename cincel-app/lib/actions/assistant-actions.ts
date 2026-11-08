@@ -75,8 +75,8 @@ export async function deleteAssistantThreadAction(id: string): Promise<void> {
 }
 
 /**
- * Store the legacy localStorage thread (`cincel.asistente.thread.v1`, ≤ 200
- * messages) as a new thread; no model call. Tool parts are kept for display
+ * Store previously saved chat messages (≤ 200) as a new thread; no model
+ * call. No page calls it since the browser copy of the thread was retired. Tool parts are kept for display
  * only (`lib/assistant/legacy-import.ts`). Errors: `INVALID`. Revalidates `/asistente`.
  */
 export async function importLegacyAssistantThreadAction(messages: UIMessage[]): Promise<{ id: string }> {

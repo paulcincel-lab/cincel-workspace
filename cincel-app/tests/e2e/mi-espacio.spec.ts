@@ -40,15 +40,9 @@ function localNow(): { date: string; time: string } {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
 }
 
-/** Opens /mi-espacio in the new design, opting in from the legacy banner when needed. */
+/** Opens /mi-espacio. */
 async function openMiEspacio(page: Page): Promise<void> {
   await page.goto(`${BASE_URL}/mi-espacio`, { waitUntil: "load" });
-  if (!page.url().includes("/mi-espacio")) {
-    await page.goto(`${BASE_URL}/dashboard`, { waitUntil: "load" });
-    await page.getByRole("button", { name: "Activar" }).click();
-    await page.waitForLoadState("load");
-    await page.goto(`${BASE_URL}/mi-espacio`, { waitUntil: "load" });
-  }
   await expect(page).toHaveURL(/\/mi-espacio/);
   await expect(page.getByRole("heading", { name: "Mi espacio" })).toBeVisible();
 }

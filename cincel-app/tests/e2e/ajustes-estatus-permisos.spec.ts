@@ -1,24 +1,17 @@
 /**
- * E2E: Ajustes › Estatus and Ajustes › Permisos in the new shell (redesign FE
- * §3.8). With the redesign flag on, the admin manages custom statuses and the
- * permissions editor there; with it off, the legacy Configuración pages render
- * as before.
- *
- * The flag is `core.user_preferences.redesign_enabled` for the seeded admin;
- * each test pins it before logging in, and `afterAll` resets the admin's
- * preferences so the legacy specs keep running on the old shell.
+ * E2E: Ajustes › Estatus and Ajustes › Permisos (redesign FE §3.8): the admin
+ * manages custom statuses and the permissions editor there. `afterAll` resets
+ * the admin's preferences.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { test, expect } from "@playwright/test";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
-import { ADMIN_EMAIL, BASE_URL, resetAdminPreferences, setRedesignFor, withDb } from "./helpers/redesign";
+import { BASE_URL, resetAdminPreferences, withDb } from "./helpers/redesign";
 
 const RUN_ID = Date.now();
 const STATUS_NAME = `Revisión ajustes E2E ${RUN_ID}`;
 const PERMISSIONS_KEY = "cincel.permissions.custom.v1";
-
-const setAdminRedesign = (enabled: boolean | null) => setRedesignFor(ADMIN_EMAIL, enabled);
 
 async function removeTestStatus(): Promise<void> {
   await withDb(async (sql) => {
@@ -26,7 +19,7 @@ async function removeTestStatus(): Promise<void> {
   });
 }
 
-test.describe("Ajustes › Estatus y Permisos (nuevo diseño)", () => {
+test.describe("Ajustes › Estatus y Permisos", () => {
   test.describe.configure({ mode: "serial" });
 
   test.afterAll(async () => {
@@ -35,7 +28,6 @@ test.describe("Ajustes › Estatus y Permisos (nuevo diseño)", () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    await setAdminRedesign(true);
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
   });
@@ -91,13 +83,4 @@ test.describe("Ajustes › Estatus y Permisos (nuevo diseño)", () => {
     expect(await page.evaluate((key) => window.localStorage.getItem(key), PERMISSIONS_KEY)).toBeNull();
   });
 
-  test("with the redesign off the legacy Configuración pages render as before", async ({ page }) => {
-    await setAdminRedesign(false);
-    await page.goto(`${BASE_URL}/configuracion/estatus`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Estatus de tareas" })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("button", { name: "+ Nuevo estatus" })).toBeVisible();
-
-    await page.goto(`${BASE_URL}/configuracion/permisos`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Editor de permisos" })).toBeVisible({ timeout: 30_000 });
-  });
 });

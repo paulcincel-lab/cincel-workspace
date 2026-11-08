@@ -24,20 +24,6 @@ vi.mock("@/lib/actions/time-tracking-actions", () => ({
 }));
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/repositories/preferences-repository", () => ({ findStaffPhoto: async () => null }));
-vi.mock("@/components/layout/Sidebar", () => ({
-  default: () => (
-    <nav aria-label="Menú principal">
-      <a href="/dashboard">Dashboard</a>
-    </nav>
-  ),
-}));
-vi.mock("@/components/layout/Header", () => ({
-  default: () => (
-    <header>
-      <button type="button">Cerrar sesión</button>
-    </header>
-  ),
-}));
 vi.mock("@/components/shell/AppShell", () => ({
   AppShell: ({ children }: { children: ReactNode }) => (
     <div>
@@ -49,7 +35,6 @@ vi.mock("@/components/shell/AppShell", () => ({
   ),
 }));
 
-import { LegacyFrame } from "@/components/shell/LegacyFrame";
 import StaffLayout from "../layout";
 
 async function seriousViolations(container: HTMLElement) {
@@ -58,11 +43,7 @@ async function seriousViolations(container: HTMLElement) {
   return results.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
 }
 
-const page = (
-  <LegacyFrame>
-    <h1>Proyectos</h1>
-  </LegacyFrame>
-);
+const page = <h1>Proyectos</h1>;
 
 const CASES = THEME_IDS.flatMap((theme) => (["light", "dark"] as const).map((mode) => [theme, mode] as const));
 
@@ -80,24 +61,20 @@ afterEach(() => {
 });
 
 describe("app/(staff)/layout accessibility", () => {
-  it.each(CASES)("%s / %s: no serious or critical axe violations, flag off and on", async (theme, mode) => {
+  it.each(CASES)("%s / %s: no serious or critical axe violations", async (theme, mode) => {
     document.documentElement.setAttribute("data-theme", mode);
     document.documentElement.setAttribute("data-theme-id", theme);
 
-    for (const redesignEnabled of [false, true]) {
-      mocks.getResolvedAppearance.mockResolvedValue({
-        theme,
-        mode,
-        style: "visual",
-        density: "comoda",
-        textSize: 14,
-        redesignEnabled,
-        cssVars: { light: {}, dark: {} },
-        version: 1,
-      });
-      const { container, unmount } = render(await StaffLayout({ children: page }));
-      expect(await seriousViolations(container)).toEqual([]);
-      unmount();
-    }
+    mocks.getResolvedAppearance.mockResolvedValue({
+      theme,
+      mode,
+      style: "visual",
+      density: "comoda",
+      textSize: 14,
+      cssVars: { light: {}, dark: {} },
+      version: 1,
+    });
+    const { container } = render(await StaffLayout({ children: page }));
+    expect(await seriousViolations(container)).toEqual([]);
   });
 });

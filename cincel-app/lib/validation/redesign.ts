@@ -125,10 +125,23 @@ export const OrgAppearanceSchema = z
     shape: ShapeSchema,
     styleDefault: PresentationStyleSchema,
     allowUserOverride: z.boolean(),
-    redesignDefault: z.boolean(),
-    redesignAvailable: z.boolean(),
   })
   .strict() satisfies z.ZodType<OrgAppearance>;
+
+/**
+ * Keys an `appearance.theme` value saved before the cleanup phase may still
+ * carry (the retired rollout switches). Readers drop them before validating,
+ * so a theme stored earlier keeps applying.
+ */
+const RETIRED_ORG_APPEARANCE_KEYS = ["redesignDefault", "redesignAvailable"] as const;
+
+/** A copy of the stored `data` without the retired keys; anything that is not a plain object is returned as is. */
+export function withoutRetiredOrgAppearanceKeys(data: unknown): unknown {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  const copy: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+  for (const key of RETIRED_ORG_APPEARANCE_KEYS) delete copy[key];
+  return copy;
+}
 
 /** `app_settings('appearance.theme').data`: the org appearance plus its version `v` (BE §3.12). */
 export const StoredOrgAppearanceSchema = OrgAppearanceSchema.extend({
@@ -143,7 +156,6 @@ export const UserPreferencesPatchSchema = z
     style: PresentationStyleSchema.nullable(),
     density: DensitySchema,
     textSize: TextSizeSchema,
-    redesignEnabled: z.boolean(),
     quietHours: QuietHoursSchema.nullable(),
   })
   .strict()

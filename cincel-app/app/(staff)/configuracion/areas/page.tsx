@@ -1,9 +1,7 @@
-import { redirect } from "next/navigation";
 import type { LegacyPageProps } from "@/lib/ui/legacy-redirects";
-import { redirectLegacyIfRedesignOn } from "@/lib/ui/legacy-redirects-server";
+import { redirectLegacy } from "@/lib/ui/legacy-redirects-server";
 
-/** Áreas were replaced by Puestos (ADR 0003); old links land on the new page. */
+/** Old route (FE §2.2): redirects to its redesign page, query string preserved. */
 export default async function ConfiguracionAreasPage({ searchParams }: LegacyPageProps) {
-  await redirectLegacyIfRedesignOn("/configuracion/areas", searchParams);
-  redirect("/configuracion/puestos");
+  return redirectLegacy("/configuracion/areas", searchParams);
 }

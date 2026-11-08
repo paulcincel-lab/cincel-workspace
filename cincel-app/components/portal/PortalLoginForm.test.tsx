@@ -19,7 +19,7 @@ function respond(status: number, body: unknown = {}) {
 async function submit(email: string) {
   fireEvent.change(screen.getByLabelText("Correo"), { target: { value: email } });
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Enviar enlace" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar enlace de acceso" }));
   });
 }
 
@@ -67,7 +67,7 @@ describe("PortalLoginForm", () => {
     expect(slot?.textContent).toBe("");
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Enviar enlace" }));
+      fireEvent.click(screen.getByRole("button", { name: "Enviar enlace de acceso" }));
     });
 
     expect(fetchMock).not.toHaveBeenCalled();
@@ -86,11 +86,11 @@ describe("PortalLoginForm", () => {
 
     expect((screen.getByLabelText("Correo") as HTMLInputElement).value).toBe("ana@example.com");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Enviar enlace" }));
+      fireEvent.click(screen.getByRole("button", { name: "Enviar enlace de acceso" }));
     });
     fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
 
-    expect(screen.getByText("Entra al portal")).toBeTruthy();
+    expect(screen.getByText("Bienvenido a tu proyecto")).toBeTruthy();
     expect((screen.getByLabelText("Correo") as HTMLInputElement).value).toBe("ana@example.com");
   });
 
@@ -138,7 +138,7 @@ describe("PortalLoginForm", () => {
     await submit("ana@example.com");
 
     expect(screen.getByText("Demasiados intentos, espera unos minutos.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Enviar enlace" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Enviar enlace de acceso" })).toBeTruthy();
   });
 
   it("shows an invalid email message on 400 and a retry message on network errors", async () => {
@@ -162,7 +162,7 @@ describe("PortalLoginForm", () => {
   });
 });
 
-describe("PortalLoginForm restyled (organization redesign on)", () => {
+describe("PortalLoginForm (canvas PortalLogin)", () => {
   async function submitRedesign(email: string) {
     fireEvent.change(screen.getByLabelText("Correo"), { target: { value: email } });
     await act(async () => {
@@ -171,7 +171,7 @@ describe("PortalLoginForm restyled (organization redesign on)", () => {
   }
 
   it("shows the restyled request step with a page heading and the link hint", () => {
-    render(<PortalLoginForm linkError={false} redesign />);
+    render(<PortalLoginForm linkError={false} />);
 
     expect(screen.getByRole("heading", { level: 1, name: PORTAL_LOGIN_TITLE })).toBeTruthy();
     expect(screen.getByText(PORTAL_LOGIN_HINT)).toBeTruthy();
@@ -180,7 +180,7 @@ describe("PortalLoginForm restyled (organization redesign on)", () => {
 
   it("requests the link exactly as before and shows Revisa tu correo", async () => {
     respond(200);
-    render(<PortalLoginForm linkError={false} redesign />);
+    render(<PortalLoginForm linkError={false} />);
 
     await submitRedesign("ana@example.com");
 
@@ -196,7 +196,7 @@ describe("PortalLoginForm restyled (organization redesign on)", () => {
   });
 
   it("keeps the same validation, expired-link notice and rate-limit copy", async () => {
-    render(<PortalLoginForm linkError redesign />);
+    render(<PortalLoginForm linkError />);
     expect(screen.getByText("El enlace ya no es válido. Pide uno nuevo.")).toBeTruthy();
 
     await act(async () => {
@@ -214,7 +214,7 @@ describe("PortalLoginForm restyled (organization redesign on)", () => {
 
   it("goes back to the request step with Cambiar correo", async () => {
     respond(200);
-    render(<PortalLoginForm linkError={false} initialEmail="ana@example.com" redesign />);
+    render(<PortalLoginForm linkError={false} initialEmail="ana@example.com" />);
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: PORTAL_LOGIN_SUBMIT_LABEL }));
     });

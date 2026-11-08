@@ -24,11 +24,6 @@ const taskActions = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "p1" }) }));
-vi.mock("@/components/layout/Sidebar", () => ({ default: () => <div data-testid="legacy-sidebar" /> }));
-vi.mock("@/components/layout/Header", () => ({ default: () => null }));
-vi.mock("@/components/proyectos/ProjectSectionNav", () => ({
-  ProjectSectionNav: () => <div data-testid="legacy-section-nav" />,
-}));
 vi.mock("@/components/proyectos/ProjectBitacoraCard", () => ({ ProjectBitacoraCard: () => null }));
 vi.mock("@/components/ui/DriveLinksEditor", () => ({ DriveLinksEditor: () => null }));
 vi.mock("@/components/ui/ImportDataPanel", () => ({
@@ -149,6 +144,8 @@ function adminTask(): TaskListItem {
   } as TaskListItem;
 }
 
+const TABS = <nav aria-label="Secciones del proyecto" data-testid="project-tabs" />;
+
 beforeEach(() => {
   state.admin = false;
   vi.clearAllMocks();
@@ -163,8 +160,8 @@ afterEach(cleanup);
 
 describe("ficha admin data", () => {
   it("shows no client line, admin fields or Administración group to non-admins", async () => {
-    render(<ProjectFichaPage />);
-    await screen.findByRole("heading", { name: "Casa Lomas" });
+    render(<ProjectFichaPage tabs={TABS} />);
+    await screen.findByRole("heading", { name: "Ficha" });
     expect(screen.queryByText("Cliente:")).toBeNull();
     expect(screen.queryByText("Por asignar")).toBeNull();
     expect(screen.queryByText("Administración")).toBeNull();
@@ -182,8 +179,8 @@ describe("ficha admin data", () => {
 
   it("shows admins the Por asignar client line and the Administración group", async () => {
     state.admin = true;
-    render(<ProjectFichaPage />);
-    await screen.findByRole("heading", { name: "Casa Lomas" });
+    render(<ProjectFichaPage tabs={TABS} />);
+    await screen.findByRole("heading", { name: "Ficha" });
     expect(screen.getByText("Cliente:")).toBeTruthy();
     expect(screen.getByText("Por asignar")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Asignar" })).toBeTruthy();
@@ -193,8 +190,8 @@ describe("ficha admin data", () => {
 
   it("confirms a client change with an AlertDialog, saves and refetches", async () => {
     state.admin = true;
-    render(<ProjectFichaPage />);
-    await screen.findByRole("heading", { name: "Casa Lomas" });
+    render(<ProjectFichaPage tabs={TABS} />);
+    await screen.findByRole("heading", { name: "Ficha" });
     fireEvent.click(screen.getByRole("button", { name: "Asignar" }));
     fireEvent.click(screen.getByRole("button", { name: "Elegir Grupo Norte" }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
@@ -219,27 +216,18 @@ describe("ficha admin data", () => {
   });
 });
 
-describe("ficha in the redesigned project shell", () => {
-  it("renders the legacy shell without tabs", async () => {
-    render(<ProjectFichaPage />);
-    await screen.findByRole("heading", { name: "Casa Lomas" });
-    expect(screen.getByTestId("legacy-sidebar")).toBeTruthy();
-    expect(screen.getByTestId("legacy-section-nav")).toBeTruthy();
-  });
-
-  it("renders the same form under ProjectTabs, without the legacy shell", async () => {
-    render(<ProjectFichaPage tabs={<nav aria-label="Secciones del proyecto" data-testid="project-tabs" />} />);
+describe("ficha in the project shell", () => {
+  it("renders the form under ProjectTabs", async () => {
+    render(<ProjectFichaPage tabs={TABS} />);
     await screen.findByRole("heading", { name: "Ficha" });
     expect(screen.getByTestId("project-tabs")).toBeTruthy();
-    expect(screen.queryByTestId("legacy-sidebar")).toBeNull();
-    expect(screen.queryByTestId("legacy-section-nav")).toBeNull();
     // Same behavior: edit and save go through the same action.
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
     await waitFor(() => expect(actions.updateProjectAction).toHaveBeenCalledWith("p1", expect.any(Object)));
   });
 
-  it("keeps admin client data behind canSeeAdminData under the new shell", async () => {
+  it("keeps admin client data behind canSeeAdminData", async () => {
     render(<ProjectFichaPage tabs={<nav aria-label="Secciones del proyecto" />} />);
     await screen.findByRole("heading", { name: "Ficha" });
     expect(screen.queryByText("Cliente:")).toBeNull();

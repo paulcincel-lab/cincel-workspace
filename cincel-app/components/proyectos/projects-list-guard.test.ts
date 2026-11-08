@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
  * Guard for the /proyectos list (redesign FE §18 items 12, 15 and 16): the
  * page and its components compose library widgets and patterns only; they
  * never import `StyleView`, never read or branch on the presentation style,
- * never use a font weight above 600, and the dialog extends
- * `ProjectCreateModal` instead of copying it.
+ * never use a font weight above 600, and the dialog reuses the shared create
+ * form instead of copying it.
  */
 const ROOT = join(__dirname, "..", "..");
 const FILES = [
@@ -48,7 +48,7 @@ describe("Proyectos list composition guard", () => {
     expect(portfolio).toMatch(/from "@\/components\/patterns\/ListPage"/);
     const dialog = FILES.find((f) => f.path.endsWith("NewProjectDialog.tsx"))!.text;
     expect(dialog).toMatch(/from "@\/components\/patterns\/FormDialog"/);
-    expect(dialog).toMatch(/from "\.\/ProjectCreateModal"/);
+    expect(dialog).toMatch(/from "\.\/project-create-form"/);
     expect(dialog).not.toMatch(/<Input\b/);
   });
 });

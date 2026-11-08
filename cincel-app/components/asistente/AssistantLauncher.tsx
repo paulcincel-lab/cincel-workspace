@@ -31,7 +31,7 @@ export type AssistantLauncherProps = {
  * Mounts the floating `AssistantButton` and the `AssistantSheet` on every
  * staff page except `/asistente`; ⌘J / Ctrl+J toggles the sheet. The page
  * context comes from the route; Escape closes and focus returns to the
- * button. Mounted once by `AppShell` (so only with the redesign flag on).
+ * button. Mounted once by `AppShell`.
  */
 export function AssistantLauncher({ hidden = false, enabled = assistantEntryEnabled() }: AssistantLauncherProps) {
   const pathname = usePathname() ?? "/";

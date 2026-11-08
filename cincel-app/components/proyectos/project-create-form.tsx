@@ -1,8 +1,7 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
-import { Button } from "@/components/ui/shadcn/button";
+import { useState } from "react";
+
 import { Input } from "@/components/ui/shadcn/input";
 import { FormField } from "@/components/ui/shadcn/form-field";
 import { Label } from "@/components/ui/shadcn/label";
@@ -19,8 +18,7 @@ export type ProjectCreateAdminOptions = {
   staff: Array<{ id: string; name: string }>;
 };
 
-export interface ProjectCreateModalProps {
-  onClose: () => void;
+export interface ProjectCreateFormProps {
   /**
    * Creates the project. `admin` is passed only when `adminOptions` is set:
    * the trimmed Cliente / Origen / "Quién trajo el proyecto" values, saved
@@ -51,8 +49,7 @@ export function projectCreateDescription(presaleAutoStart: boolean): string {
 }
 
 /**
- * State and submit of the create form, shared by the legacy sheet and the
- * redesign `NewProjectDialog` (FE §4.11.1: the dialog extends this component).
+ * State and submit of `NewProjectDialog`'s create form (redesign FE §3.5).
  * `submit` validates the name, calls `onConfirm` and maps a rejection to copy
  * with `toErrorText`; it resolves `true` once `onConfirm` succeeded.
  */
@@ -60,7 +57,7 @@ export function useProjectCreateForm({
   onConfirm,
   adminOptions,
   toErrorText = friendlyCreateError,
-}: Pick<ProjectCreateModalProps, "onConfirm" | "adminOptions"> & { toErrorText?: (err: unknown) => string }) {
+}: Pick<ProjectCreateFormProps, "onConfirm" | "adminOptions"> & { toErrorText?: (err: unknown) => string }) {
   const [name, setNameState] = useState("");
   const [admin, setAdmin] = useState<ProjectAdminValue>(EMPTY_ADMIN);
   const [error, setError] = useState("");
@@ -108,14 +105,11 @@ export type ProjectCreateForm = ReturnType<typeof useProjectCreateForm>;
 export function ProjectCreateFields({
   form,
   adminOptions,
-  errorId,
 }: {
   form: ProjectCreateForm;
   adminOptions?: ProjectCreateAdminOptions | null;
-  /** Set when the error is shown under the field (sheet); the dialog shows it in its own alert. */
-  errorId?: string;
 }) {
-  const showInlineError = Boolean(errorId && form.error);
+  // The dialog shows the error in its own alert.
   return (
     <>
       <FormField>
@@ -126,13 +120,7 @@ export function ProjectCreateFields({
           className="mt-1"
           autoFocus
           aria-invalid={form.error ? true : undefined}
-          aria-describedby={showInlineError ? errorId : undefined}
         />
-        {showInlineError ? (
-          <p id={errorId} className="mt-1 text-sm text-destructive">
-            {form.error}
-          </p>
-        ) : null}
       </FormField>
       {adminOptions ? (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -146,45 +134,5 @@ export function ProjectCreateFields({
         </div>
       ) : null}
     </>
-  );
-}
-
-/**
- * Sheet for creating a project. A project starts with its name only: client,
- * tipo, encargado and fechas are edited later in the ficha.
- */
-export function ProjectCreateModal({ onClose, onConfirm, presaleAutoStart, adminOptions }: ProjectCreateModalProps) {
-  const form = useProjectCreateForm({ onConfirm, adminOptions });
-  const errorId = useId();
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await form.submit();
-  }
-
-  return (
-    <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <SheetContent className="overflow-y-auto">
-        <form onSubmit={handleSubmit} noValidate className="flex flex-1 flex-col">
-          <SheetHeader>
-            <SheetTitle className="text-lg">Nuevo proyecto</SheetTitle>
-            <SheetDescription>{projectCreateDescription(presaleAutoStart)}</SheetDescription>
-          </SheetHeader>
-
-          <div className="flex-1 space-y-4 px-6 py-4">
-            <ProjectCreateFields form={form} adminOptions={adminOptions} errorId={errorId} />
-          </div>
-
-          <SheetFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={form.saving}>
-              {form.saving ? "Creando…" : "Crear proyecto"}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
   );
 }

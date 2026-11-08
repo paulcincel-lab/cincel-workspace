@@ -38,29 +38,7 @@ export type GoogleSetupWizardProps = {
   health: GoogleHealth | null;
   mappings: GroupMapping[];
   positions: { id: string; name: string }[];
-  /**
-   * The caller's resolved redesign flag (`getResolvedAppearance().redesignEnabled`, redesign FE §2.3). Off (the
-   * default) renders today's wizard unchanged; on renders the restyled stepper and card (FE §3.10).
-   */
-  redesign?: boolean;
 };
-
-/** Stepper-like header: one badge per step, the current one marked with `aria-current`. */
-function StepHeader({ current }: { current: GoogleSetupStepId }) {
-  const currentIndex = stepIndex(current);
-  return (
-    <ol className="flex flex-wrap gap-2" aria-label="Pasos">
-      {GOOGLE_SETUP_STEPS.map((step, index) => (
-        <li key={step.id} aria-current={index === currentIndex ? "step" : undefined}>
-          <Badge variant={index === currentIndex ? "default" : index < currentIndex ? "secondary" : "outline"}>
-            {index < currentIndex ? <Check data-icon="inline-start" aria-hidden="true" /> : null}
-            {index + 1}. {step.label}
-          </Badge>
-        </li>
-      ))}
-    </ol>
-  );
-}
 
 function ReviewStep({ health }: { health: GoogleHealth | null }) {
   return (
@@ -182,7 +160,7 @@ function DoneStep({ domain }: { domain: string | null }) {
       <p className="text-foreground">{doneMessage(domain)}</p>
       <p className="text-muted-foreground">
         Puedes cambiar los grupos cuando quieras en{" "}
-        <Link href="/configuracion/google" className="underline underline-offset-4">
+        <Link href="/ajustes/google" className="underline underline-offset-4">
           Configuración → Google
         </Link>
         .
@@ -202,7 +180,7 @@ const STEP_DESCRIPTIONS: Record<GoogleSetupStepId, string> = {
  * First-login wizard of the bootstrap admin (#671): only sets up the Google groups so others can sign in with
  * Google. "Omitir por ahora" and finishing both mark it completed for this staff member.
  */
-export function GoogleSetupWizard({ health, mappings, positions, redesign = false }: GoogleSetupWizardProps) {
+export function GoogleSetupWizard({ health, mappings, positions }: GoogleSetupWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<GoogleSetupStepId>(() => initialStep({ health, mappings }));
   const [isPending, startTransition] = useTransition();
@@ -284,30 +262,17 @@ export function GoogleSetupWizard({ health, mappings, positions, redesign = fals
     </>
   );
 
-  if (redesign) {
-    // Redesign (FE §3.10, frame `BienvenidaGoogle`): the stepper sits above the wizard card.
-    return (
-      <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6" data-wizard="google">
-        <WizardStepper steps={GOOGLE_SETUP_STEPS} current={step} />
-        <Card className="min-w-0">
-          <CardHeader>
-            <CardTitle className="text-xl font-semibold">{current.label}</CardTitle>
-            <CardDescription>{STEP_DESCRIPTIONS[step]}</CardDescription>
-          </CardHeader>
-          {body}
-        </Card>
-      </div>
-    );
-  }
-
+  // FE §3.10, frame `BienvenidaGoogle`: the stepper sits above the wizard card.
   return (
-    <Card className="mx-auto w-full max-w-3xl">
-      <CardHeader>
-        <StepHeader current={step} />
-        <CardTitle className="pt-2">{current.label}</CardTitle>
-        <CardDescription>{STEP_DESCRIPTIONS[step]}</CardDescription>
-      </CardHeader>
-      {body}
-    </Card>
+    <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6" data-wizard="google">
+      <WizardStepper steps={GOOGLE_SETUP_STEPS} current={step} />
+      <Card className="min-w-0">
+        <CardHeader>
+          <CardTitle className="text-xl font-semibold">{current.label}</CardTitle>
+          <CardDescription>{STEP_DESCRIPTIONS[step]}</CardDescription>
+        </CardHeader>
+        {body}
+      </Card>
+    </div>
   );
 }

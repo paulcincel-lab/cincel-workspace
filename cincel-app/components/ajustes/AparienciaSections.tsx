@@ -10,14 +10,12 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { buttonVariants } from "@/components/ui/shadcn/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import { Slider } from "@/components/ui/shadcn/slider";
-import { Switch } from "@/components/ui/shadcn/switch";
 import type { ColorMode, Density, OrgAppearance, PresentationStyle, ThemeId, TokenName } from "@/lib/types/redesign";
 import { THEME_IDS, THEME_LABELS, THEME_PRESETS } from "@/lib/ui/themes";
 import { cn } from "@/lib/utils";
 
 import {
   OVERRIDE_LOCKED_COPY,
-  REDESIGN_UNAVAILABLE_COPY,
   useApariencia,
   type AparienciaSectionKey,
 } from "./apariencia-context";
@@ -328,38 +326,6 @@ export function AparienciaTamanoTextoSection() {
           }
         />
         <SectionError section="tamano-texto" />
-      </div>
-    </SettingsSection>
-  );
-}
-
-// ── Nuevo diseño ────────────────────────────────────────────────────────────
-
-export function AparienciaNuevoDisenoSection() {
-  const { preferences, redesignAvailable, change } = useApariencia();
-  const switchId = useId();
-  return (
-    <SettingsSection title="Nuevo diseño">
-      <div className="flex flex-col gap-2">
-        <SettingsRow
-          label="Probar el nuevo diseño"
-          htmlFor={switchId}
-          description={
-            redesignAvailable
-              ? "Si lo apagas, vuelves al diseño anterior en todas las páginas."
-              : REDESIGN_UNAVAILABLE_COPY
-          }
-          control={
-            <Switch
-              id={switchId}
-              aria-label="Probar el nuevo diseño"
-              checked={redesignAvailable && preferences.redesignEnabled}
-              disabled={!redesignAvailable}
-              onCheckedChange={(checked) => void change("nuevo-diseno", { redesignEnabled: checked })}
-            />
-          }
-        />
-        <SectionError section="nuevo-diseno" />
       </div>
     </SettingsSection>
   );

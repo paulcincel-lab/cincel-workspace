@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/shadcn/card";
-import { adminContactHref, getAdminContactEmail, isAuthRedesignOn } from "@/lib/auth/auth-appearance";
+import { adminContactHref, getAdminContactEmail } from "@/lib/auth/auth-appearance";
 import { getDenialMessage } from "@/lib/auth/denial-messages";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -22,9 +22,8 @@ function firstValue(value: string | string[] | undefined): string | undefined {
 
 /**
  * Landing page for refused Google staff sign-ins (FE §2.2). Public route; it never
- * reads the staff session, so a stale cookie can't bounce it. The look follows
- * the org setting (redesign FE §3.10): the redesign card shows the email that
- * was refused, "Usar otra cuenta" and, when General settings has a
+ * reads the staff session, so a stale cookie can't bounce it. The card
+ * (redesign FE §3.10) shows the email that was refused, "Usar otra cuenta" and, when General settings has a
  * `contactEmail`, "Contactar al administrador".
  */
 export default async function LoginDeniedPage({
@@ -39,29 +38,11 @@ export default async function LoginDeniedPage({
     email,
   });
 
-  if (await isAuthRedesignOn()) {
-    const contactEmail = await getAdminContactEmail();
-    return <RedesignDenied message={message} email={email} contactEmail={contactEmail} />;
-  }
-
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-muted px-4 py-6">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>No pudimos darte acceso</CardTitle>
-          <CardDescription role="alert">{message}</CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <Link href="/login" className={buttonVariants()}>
-            Volver a intentar
-          </Link>
-        </CardFooter>
-      </Card>
-    </main>
-  );
+  const contactEmail = await getAdminContactEmail();
+  return <DeniedCard message={message} email={email} contactEmail={contactEmail} />;
 }
 
-function RedesignDenied({
+function DeniedCard({
   message,
   email,
   contactEmail,

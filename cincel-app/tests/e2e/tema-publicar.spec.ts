@@ -21,7 +21,6 @@ import {
   resetAdminPreferences,
   restoreSettingRaw,
   setAppearanceFor,
-  setRedesignFor,
   signedInContext,
   type E2EUser,
 } from "./helpers/redesign";
@@ -45,13 +44,11 @@ test.describe("Tema de la organización — publicar para todos", () => {
   test.beforeAll(async () => {
     snapshot = await readSettingRaw(THEME_KEY);
     // Start from the seeded Azul preset with overrides allowed, so the change is visible.
-    await patchSettingData(THEME_KEY, { allowUserOverride: true, redesignAvailable: true });
+    await patchSettingData(THEME_KEY, { allowUserOverride: true });
     expect((await readSettingData<OrgAppearanceData>(THEME_KEY))?.baseTheme, "org theme before the run").toBe("azul");
 
-    await setRedesignFor(ADMIN_EMAIL, true);
     await setAppearanceFor(ADMIN_EMAIL, { theme: null, mode: "light" });
     other = await createStaffUser({ tag: "Tema", role: "Colaborador" });
-    await setRedesignFor(other.email, true);
     // Follows the org theme (theme null), light mode for a stable token check.
     await setAppearanceFor(other.email, { theme: null, mode: "light" });
   });

@@ -12,8 +12,6 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/proyectos/p1/cronograma",
 }));
 
-vi.mock("@/components/layout/Header", () => ({ default: () => <div data-testid="header" /> }));
-vi.mock("@/components/layout/Sidebar", () => ({ default: () => <div data-testid="sidebar" /> }));
 
 const fetchScheduleAction = vi.fn();
 const setTaskStatusAction = vi.fn();
@@ -56,7 +54,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderTab(style: PresentationStyle, ui: ReactNode = <CronogramaView projectId="p1" initialView={initialView} layout="redesign" contractEnd="2026-10-15" />) {
+function renderTab(style: PresentationStyle, ui: ReactNode = <CronogramaView projectId="p1" initialView={initialView} contractEnd="2026-10-15" />) {
   return render(
     <StyleProvider style={style} scope="staff">
       {ui}
@@ -65,10 +63,8 @@ function renderTab(style: PresentationStyle, ui: ReactNode = <CronogramaView pro
 }
 
 describe("Proyecto · Cronograma tab", () => {
-  it("Visual: the existing panels, unchanged, inside the new cards and without the legacy shell", () => {
+  it("Visual: the existing panels, unchanged, inside the new cards", () => {
     renderTab("visual");
-    expect(screen.queryByTestId("sidebar")).toBeNull();
-    expect(screen.queryByTestId("header")).toBeNull();
     expect(screen.getByText("Cronograma general")).toBeTruthy();
     expect(screen.getByText("Avance del proyecto")).toBeTruthy();
     expect(screen.getByText(/Resumen 1/)).toBeTruthy();
@@ -97,13 +93,6 @@ describe("Proyecto · Cronograma tab", () => {
     expect(within(schedule as HTMLElement).getAllByText("Preliminares").length).toBeGreaterThan(0);
   });
 
-  it("legacy layout (flag off) still renders its own shell and the panels", () => {
-    render(<CronogramaView projectId="p1" initialView={initialView} />);
-    expect(screen.getByTestId("sidebar")).toBeTruthy();
-    expect(screen.getByTestId("header")).toBeTruthy();
-    expect(screen.getByText("Cronograma general")).toBeTruthy();
-  });
-
   it("never calls a write action on render", () => {
     for (const style of ["visual", "esencial", "analitico"] as const) {
       renderTab(style);
@@ -116,7 +105,7 @@ describe("Proyecto · Cronograma tab", () => {
 
 describe("Proyecto · Reporte (sheet)", () => {
   it("prints a token-styled sheet with a screen-only toolbar and no style switch", () => {
-    const { container } = render(<CronogramaReport data={data} asOf={new Date("2026-09-18T00:00:00")} layout="sheet" />);
+    const { container } = render(<CronogramaReport data={data} asOf={new Date("2026-09-18T00:00:00")} />);
     expect(screen.getByRole("heading", { level: 1, name: "Reporte de avance" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Imprimir" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Hoja del reporte" })).toBeTruthy();
@@ -159,6 +148,6 @@ describe("style guard (FE §18 item 15)", () => {
 
   it("the tab renders through CronogramaWidget, not a copy of cronograma-view", () => {
     expect(read("components/cronograma/cronograma-view.tsx")).toMatch(/<CronogramaWidget/);
-    expect(read("app/(staff)/proyectos/[id]/cronograma/page.tsx")).toMatch(/layout="redesign"/);
+    expect(read("app/(staff)/proyectos/[id]/cronograma/page.tsx")).toMatch(/<CronogramaView/);
   });
 });

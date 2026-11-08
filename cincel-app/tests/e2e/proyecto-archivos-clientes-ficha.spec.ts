@@ -1,8 +1,6 @@
 /**
  * E2E: Proyecto · Archivos, Clientes and Ficha tabs (redesign FE §3.5).
- * Flag off: each tab renders the legacy page as today (old shell, section nav,
- * project name as the page title).
- * Flag on: the same tab content renders in the new project shell: Archivos
+ * The tabs render in the project shell: Archivos
  * keeps the files browser states, Clientes keeps the portal access panel,
  * Ficha keeps the form ("Editar") under the "Ficha" heading.
  *
@@ -11,7 +9,6 @@
 import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
-import { setRedesignFlag } from "./helpers/redesign-flag";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
@@ -35,52 +32,7 @@ function seedProject(): Promise<string> {
   return seeded;
 }
 
-test.describe("Proyecto · Archivos, Clientes y Ficha — flag off", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(false);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
-  test.beforeEach(async ({ page }) => {
-    await seedAuth(page);
-    await loginAsAdmin(page, BASE_URL);
-  });
-
-  test("Archivos renders the legacy page", async ({ page }) => {
-    const id = await seedProject();
-    await page.goto(`${BASE_URL}/proyectos/${id}/archivos`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { level: 1, name: "Archivos" })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Creando la carpeta del proyecto…")).toBeVisible();
-  });
-
-  test("Ficha renders the legacy page with the project name as title", async ({ page }) => {
-    const id = await seedProject();
-    await page.goto(`${BASE_URL}/proyectos/${id}/ficha`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { level: 1, name: PROJECT })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("button", { name: "Editar" })).toBeVisible();
-  });
-
-  test("Clientes renders the legacy portal access page", async ({ page }) => {
-    const id = await seedProject();
-    await page.goto(`${BASE_URL}/proyectos/${id}/clientes`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { level: 1, name: "Clientes" })).toBeVisible({ timeout: 30_000 });
-    // The seeded project has no client yet, so inviting waits (portal gating).
-    await expect(page.getByText(/Asigna un cliente al proyecto/)).toBeVisible();
-  });
-});
-
-test.describe("Proyecto · Archivos, Clientes y Ficha — flag on", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(true);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
+test.describe("Proyecto · Archivos, Clientes y Ficha", () => {
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);

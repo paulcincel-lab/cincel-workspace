@@ -26,12 +26,7 @@ import {
   formatGeneralSettingsSavedAt,
   type LoadedGeneralSettings,
 } from "@/lib/settings/general-settings";
-import {
-  CONTACT_EMAIL_ERROR,
-  HEADER_LINKS_MIGRATED_STORAGE_KEY,
-  HTTPS_URL_ERROR,
-  LEGACY_HEADER_LINKS_STORAGE_KEY,
-} from "@/lib/settings/header-links-migration";
+import { CONTACT_EMAIL_ERROR, HTTPS_URL_ERROR } from "@/lib/settings/header-links";
 
 const SAVED_AT = "2026-11-04T16:30:00.000Z";
 
@@ -142,58 +137,24 @@ describe("Ajustes › General", () => {
   });
 });
 
-describe("Ajustes › General one-time pickup of the legacy header links", () => {
-  beforeEach(() => vi.clearAllMocks());
-
+describe("Ajustes › General and the retired browser copy of the header links", () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     window.localStorage.clear();
   });
 
-  const legacyLinks = {
-    instagram: "https://www.instagram.com/cincel.mx/",
-    website: "https://www.cincel.mx/",
-    email: "hola@cincel.mx",
-  };
-
-  it("prefills the empty fields from this browser and marks the key as migrated after saving", async () => {
-    window.localStorage.setItem(LEGACY_HEADER_LINKS_STORAGE_KEY, JSON.stringify(legacyLinks));
-    actions.saveGeneralSettingsAction.mockResolvedValue({ savedAt: SAVED_AT });
-    renderPage();
-
-    await waitFor(() => expect(field("Instagram").value).toBe(legacyLinks.instagram));
-    expect(field("Sitio web").value).toBe(legacyLinks.website);
-    expect(field("Correo").value).toBe(legacyLinks.email);
-    expect(screen.getByText(/Se cargaron los enlaces guardados en este navegador/)).toBeTruthy();
-    expect(window.localStorage.getItem(HEADER_LINKS_MIGRATED_STORAGE_KEY)).toBeNull();
-
-    fireEvent.click(saveButton());
-
-    await waitFor(() => expect(actions.saveGeneralSettingsAction).toHaveBeenCalledTimes(1));
-    expect(actions.saveGeneralSettingsAction.mock.calls[0][0].company).toMatchObject({
-      instagramUrl: legacyLinks.instagram,
-      website: legacyLinks.website,
-      contactEmail: legacyLinks.email,
-    });
-    await waitFor(() => expect(window.localStorage.getItem(HEADER_LINKS_MIGRATED_STORAGE_KEY)).toBeTruthy());
-    expect(screen.queryByText(/Se cargaron los enlaces guardados en este navegador/)).toBeNull();
-  });
-
-  it("ignores the legacy key once it was migrated", () => {
-    window.localStorage.setItem(LEGACY_HEADER_LINKS_STORAGE_KEY, JSON.stringify(legacyLinks));
-    window.localStorage.setItem(HEADER_LINKS_MIGRATED_STORAGE_KEY, "2026-11-01T00:00:00.000Z");
+  it("never reads cincel.header.links.v1: the fields come from the server only", () => {
+    window.localStorage.setItem(
+      "cincel.header.links.v1",
+      JSON.stringify({ instagram: "https://www.instagram.com/cincel.mx/", website: "https://www.cincel.mx/", email: "hola@cincel.mx" }),
+    );
+    const getItem = vi.spyOn(Storage.prototype, "getItem");
     renderPage();
 
     expect(field("Instagram").value).toBe("");
+    expect(field("Correo").value).toBe("");
+    expect(getItem.mock.calls.map(([key]) => key)).not.toContain("cincel.header.links.v1");
     expect(screen.queryByText(/Se cargaron los enlaces guardados en este navegador/)).toBeNull();
-  });
-
-  it("keeps the saved values and stops reading the key when the server already has every link", async () => {
-    window.localStorage.setItem(LEGACY_HEADER_LINKS_STORAGE_KEY, JSON.stringify(legacyLinks));
-    renderPage(savedWithLinks());
-
-    await waitFor(() => expect(window.localStorage.getItem(HEADER_LINKS_MIGRATED_STORAGE_KEY)).toBeTruthy());
-    expect(field("Instagram").value).toBe("https://instagram.com/cincel");
-    expect(saveButton().hasAttribute("disabled")).toBe(true);
   });
 });

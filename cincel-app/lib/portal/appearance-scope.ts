@@ -7,7 +7,7 @@
  * preferences row).
  */
 import type { OrgAppearance, StoredOrgAppearance } from "@/lib/types/redesign";
-import { StoredOrgAppearanceSchema } from "@/lib/validation/redesign";
+import { StoredOrgAppearanceSchema, withoutRetiredOrgAppearanceKeys } from "@/lib/validation/redesign";
 
 /** `app_settings` key holding `{ version: 1, data: StoredOrgAppearance }` (BE §3.12). */
 export const ORG_APPEARANCE_SETTING_KEY = "appearance.theme";
@@ -34,7 +34,7 @@ export function parseStoredOrgAppearance(raw: string | null): StoredOrgAppearanc
   if (!payload || typeof payload !== "object") return null;
   const envelope = payload as { version?: unknown; data?: unknown };
   if (envelope.version !== 1) return null;
-  const parsed = StoredOrgAppearanceSchema.safeParse(envelope.data);
+  const parsed = StoredOrgAppearanceSchema.safeParse(withoutRetiredOrgAppearanceKeys(envelope.data));
   return parsed.success ? parsed.data : null;
 }
 

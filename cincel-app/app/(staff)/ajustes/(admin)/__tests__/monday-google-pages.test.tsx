@@ -34,9 +34,6 @@ vi.mock("@/lib/onboarding/first-login", () => ({
   isBootstrapAdminEmail: (email: string | null | undefined) => email === bootstrap.email,
 }));
 
-const redesign = vi.hoisted(() => ({ redirectIfRedesignOff: vi.fn(async () => {}) }));
-vi.mock("@/lib/ui/redesign-redirect", () => redesign);
-
 const monday = vi.hoisted(() => ({
   getMondayImportStatusAction: vi.fn(),
   openMondayImportRunAction: vi.fn(),
@@ -70,8 +67,8 @@ vi.mock("@/components/ajustes/MondayImportSections", () => ({
 }));
 vi.mock("@/components/ajustes/GoogleSettings", () => ({ GoogleSettings: stand("GoogleSettings") }));
 vi.mock("@/components/configuracion/GoogleSetupWizard", () => ({ GoogleSetupWizard: stand("GoogleSetupWizard") }));
-vi.mock("@/app/(staff)/configuracion/tramos/TramosClient", () => ({ TramosClient: stand("TramosClient") }));
-vi.mock("@/app/(staff)/configuracion/puestos/PuestosClient", () => ({ PuestosClient: stand("PuestosClient") }));
+vi.mock("@/app/(staff)/ajustes/(admin)/tramos/TramosClient", () => ({ TramosClient: stand("TramosClient") }));
+vi.mock("@/app/(staff)/ajustes/(admin)/puestos/PuestosClient", () => ({ PuestosClient: stand("PuestosClient") }));
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
 import MondayLayout from "../monday/layout";
@@ -93,18 +90,18 @@ const RUN = { runId: "run-1", step: "conectar" };
 const CHOICES = { statuses: [] };
 const ENTRY = { batchId: "b-1", status: "applied", appliedAt: "2026-11-03T18:00:00.000Z" };
 
-type Page = (props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) => Promise<ReactElement>;
+type Page = () => Promise<ReactElement>;
 type Layout = (props: { children: ReactNode }) => Promise<ReactNode>;
 
-const PAGES: { name: string; path: string; Page: Page; Layout: Layout }[] = [
-  { name: "monday", path: "/ajustes/monday", Page: MondayPage, Layout: MondayLayout },
-  { name: "google", path: "/ajustes/google", Page: GooglePage, Layout: GoogleLayout },
-  { name: "tramos", path: "/ajustes/tramos", Page: TramosPage, Layout: TramosLayout },
-  { name: "puestos", path: "/ajustes/puestos", Page: PuestosPage, Layout: PuestosLayout },
+const PAGES: { name: string; Page: Page; Layout: Layout }[] = [
+  { name: "monday", Page: MondayPage, Layout: MondayLayout },
+  { name: "google", Page: GooglePage, Layout: GoogleLayout },
+  { name: "tramos", Page: TramosPage, Layout: TramosLayout },
+  { name: "puestos", Page: PuestosPage, Layout: PuestosLayout },
 ];
 
-async function renderPage(Page: Page, searchParams: Record<string, string> = {}) {
-  render(await Page({ searchParams: Promise.resolve(searchParams) }));
+async function renderPage(Page: Page) {
+  render(await Page());
 }
 
 beforeEach(() => {
@@ -128,7 +125,7 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("Ajustes admin segments: monday, Google, Tramos y fases, Puestos", () => {
-  for (const { name, path, Page, Layout } of PAGES) {
+  for (const { name, Page, Layout } of PAGES) {
     describe(name, () => {
       it("the segment layout 404s for anyone but an Administrador", async () => {
         for (const other of [DIRECCION, COLABORADOR]) {
@@ -142,7 +139,7 @@ describe("Ajustes admin segments: monday, Google, Tramos y fases, Puestos", () =
       it("the page 404s for anyone but an Administrador, before loading data", async () => {
         for (const other of [DIRECCION, COLABORADOR]) {
           viewer.value = other;
-          await expect(Page({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_NOT_FOUND");
+          await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
         }
         expect(monday.getMondayImportHistoryAction).not.toHaveBeenCalled();
         expect(workspace.listGroupMappingsAction).not.toHaveBeenCalled();
@@ -151,18 +148,7 @@ describe("Ajustes admin segments: monday, Google, Tramos y fases, Puestos", () =
 
       it("sends a guest to /login", async () => {
         viewer.value = { status: "guest", user: null };
-        await expect(Page({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT:/login");
-      });
-
-      it("asks the flag-aware redirect first, with the search params", async () => {
-        await renderPage(Page, { a: "1" });
-        expect(redesign.redirectIfRedesignOff).toHaveBeenCalledWith(path, { a: "1" });
-      });
-
-      it("renders nothing of its own when the redesign is off (the redirect wins)", async () => {
-        redesign.redirectIfRedesignOff.mockRejectedValueOnce(new Error("NEXT_REDIRECT:/configuracion"));
-        await expect(Page({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT:/configuracion");
-        expect(navigation.notFound).not.toHaveBeenCalled();
+        await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
       });
     });
   }
@@ -214,7 +200,7 @@ describe("/ajustes/monday", () => {
 
   it("sends the bootstrap admin to Permisos (rule unchanged)", async () => {
     viewer.value = BOOTSTRAP;
-    await expect(MondayPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT:/ajustes/permisos");
+    await expect(MondayPage()).rejects.toThrow("NEXT_REDIRECT:/ajustes/permisos");
     expect(monday.openMondayImportRunAction).not.toHaveBeenCalled();
   });
 });
@@ -243,19 +229,18 @@ describe("/ajustes/google/primeros-pasos", () => {
   it("renders the unchanged wizard for the bootstrap admin", async () => {
     viewer.value = BOOTSTRAP;
     await renderPage(GoogleSetupPage);
-    expect(redesign.redirectIfRedesignOff).toHaveBeenCalledWith("/ajustes/google/primeros-pasos", {});
     expect(seen.props.GoogleSetupWizard).toMatchObject({ mappings: [{ id: "m-1" }], health: { sharedDriveId: "drive" } });
   });
 
   it("sends any other admin to Ajustes › Google", async () => {
-    await expect(GoogleSetupPage({ searchParams: Promise.resolve({}) })).rejects.toThrow(
+    await expect(GoogleSetupPage()).rejects.toThrow(
       "NEXT_REDIRECT:/ajustes/google",
     );
   });
 
   it("404s for anyone but an Administrador", async () => {
     viewer.value = COLABORADOR;
-    await expect(GoogleSetupPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(GoogleSetupPage()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });
 

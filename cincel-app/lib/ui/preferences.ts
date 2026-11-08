@@ -20,7 +20,6 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   style: null,
   density: "comoda",
   textSize: 14,
-  redesignEnabled: false,
   quietHours: null,
 };
 
@@ -42,23 +41,15 @@ export const APPEARANCE_COOKIE_OPTIONS = {
  *    never inherits the org's token edits of another base);
  * 3. style: the user's only when `allowUserOverride`, else `org.styleDefault`;
  * 4. mode / density / text size from the user (defaults `system`, `comoda`, 14);
- * 5. `redesignEnabled = org.redesignAvailable && (user?.redesignEnabled ?? org.redesignDefault)`;
- * 6. `cssVars` for both modes and `version = org.v`.
- *
- * `user.redesignEnabled` may be null (a stored row without a choice) and then
- * follows the org default.
+ * 5. `cssVars` for both modes and `version = org.v`.
  */
-export function resolveAppearance(
-  org: OrgAppearance & { v?: number },
-  user: (Omit<UserPreferences, "redesignEnabled"> & { redesignEnabled: boolean | null }) | null,
-): ResolvedAppearance {
+export function resolveAppearance(org: OrgAppearance & { v?: number }, user: UserPreferences | null): ResolvedAppearance {
   const theme = org.allowUserOverride && user?.theme ? user.theme : org.baseTheme;
   const tokens = theme === org.baseTheme ? org.tokens : THEME_PRESETS[theme].tokens;
   const style = org.allowUserOverride && user?.style ? user.style : org.styleDefault;
   const mode = user?.mode ?? DEFAULT_USER_PREFERENCES.mode;
   const density = user?.density ?? DEFAULT_USER_PREFERENCES.density;
   const textSize = user?.textSize ?? DEFAULT_USER_PREFERENCES.textSize;
-  const redesignEnabled = org.redesignAvailable && (user?.redesignEnabled ?? org.redesignDefault);
 
   const effective: OrgAppearance = { ...org, baseTheme: theme, tokens };
   return {
@@ -67,7 +58,6 @@ export function resolveAppearance(
     style,
     density,
     textSize,
-    redesignEnabled,
     cssVars: { light: toCssVars(effective, "light", textSize), dark: toCssVars(effective, "dark", textSize) },
     version: org.v ?? 1,
   };

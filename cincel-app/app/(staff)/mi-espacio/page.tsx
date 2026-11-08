@@ -7,7 +7,6 @@ import { fetchChecklistsAction, fetchNotesAction, fetchRemindersAction } from "@
 import { fetchNotificationsAction } from "@/lib/actions/notifications-actions";
 import { getSessionAccess } from "@/lib/auth/session";
 import { todayTomorrowRange } from "@/lib/my-space/today-tomorrow";
-import { redirectIfRedesignOff } from "@/lib/ui/redesign-redirect";
 
 export const dynamic = "force-dynamic";
 
@@ -36,13 +35,11 @@ async function loadGmail(): Promise<MiEspacioClientProps["gmail"]> {
 
 /**
  * /mi-espacio (redesign FE §3.3): the private home of each staff member.
- * New-only route: with the redesign off it redirects to the legacy page. Every
- * read is owner-scoped on the server (the session decides whose rows load);
+ * Every read is owner-scoped on the server (the session decides whose rows load);
  * read stubs return empty data and the client hides their sections.
  */
 export default async function MiEspacioPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  await redirectIfRedesignOff("/mi-espacio", params);
 
   const access = await getSessionAccess();
   if (!access.user) redirect("/login");

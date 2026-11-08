@@ -18,7 +18,7 @@ import type { DistributionSegment, RecordColumn, RecordTableData } from "@/lib/t
  * Distribution in three styles (redesign FE §4.10.1, §15.3 "Tareas por tramo"):
  *
  * - Visual: donut + legend on `components/ui/shadcn/chart.tsx` (replaces
- *   `app/dashboard/DonutCard.tsx`).
+ *   the old dashboard donut).
  * - Esencial: text list "label … value".
  * - Analítico: `RecordTable` with the value, `secondary`, `% secondary/value`
  *   heat cell (> 45 % warning, > 60 % destructive, FE §15.2), the

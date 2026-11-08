@@ -63,7 +63,7 @@ describe.skipIf(!canCreate)("redesign contracts migration (scratch databases)", 
     it("seeds appearance.theme with the Azul preset, v = 1 and the flag defaults", async () => {
       const stored = await seededAppearance(sql);
       expect(stored.version).toBe(1);
-      expect(stored.data).toEqual({ ...THEME_PRESETS.azul, v: 1 });
+      expect(stored.data).toEqual({ ...THEME_PRESETS.azul, redesignDefault: false, redesignAvailable: true, v: 1 });
       expect(stored.data.baseTheme).toBe("azul");
       expect(stored.data.redesignDefault).toBe(false);
       expect(stored.data.redesignAvailable).toBe(true);

@@ -2,31 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
-import { canManageAppearance, canManageGeneralSettings } from "@/lib/auth/permissions";
+import { canManageGeneralSettings } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import * as appSettingsRepository from "@/lib/repositories/app-settings-repository";
 import { GENERAL_SETTINGS_SETTING_KEY, type LoadedGeneralSettings } from "@/lib/settings/general-settings";
 import { parseGeneralSettingsInput } from "@/lib/settings/general-settings-schema";
 import { getGeneralSettings } from "@/lib/settings/general-settings-server";
-import { isPrimaryColorToken, PRIMARY_COLOR_SETTING_KEY, type PrimaryColorToken } from "@/lib/theme/primary-color";
-import { getPrimaryColor } from "@/lib/theme/primary-color-server";
-
-/** `canManage` gates the primary color (`canManageAppearance`); `canManageGeneral` gates Configuración → General (`canManageGeneralSettings`). */
-export type AppearanceState = { primaryColor: PrimaryColorToken | null; canManage: boolean; canManageGeneral: boolean };
-
-export async function fetchAppearanceAction(): Promise<AppearanceState> {
-  const user = await requireCapabilityUser();
-  return { primaryColor: await getPrimaryColor(), canManage: canManageAppearance(user), canManageGeneral: canManageGeneralSettings(user) };
-}
-
-/** Save the company's primary color; `null` restores the default. */
-export async function savePrimaryColorAction(token: PrimaryColorToken | null): Promise<void> {
-  const user = await requireCapabilityUser();
-  if (!canManageAppearance(user)) throw new Error("FORBIDDEN: appearance edit");
-  if (token !== null && !isPrimaryColorToken(token)) throw new Error("INVALID_PRIMARY_COLOR");
-  await appSettingsRepository.setAppSetting(PRIMARY_COLOR_SETTING_KEY, token);
-  revalidatePath("/", "layout");
-}
 
 export async function fetchGeneralSettingsAction(): Promise<LoadedGeneralSettings> {
   await requireCapabilityUser();

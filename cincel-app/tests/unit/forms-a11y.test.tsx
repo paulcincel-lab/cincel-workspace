@@ -16,7 +16,7 @@ vi.mock("@/lib/actions/workspace-access-actions", () => ({ recheckStaffAccessAct
 
 import { ContactEditorSheet, emptyContactDraft } from "@/components/directorio/ContactEditorSheet";
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
-import { ProjectCreateModal } from "@/components/proyectos/ProjectCreateModal";
+import { NewProjectDialog } from "@/components/proyectos/NewProjectDialog";
 import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { AccessPreviewState, MemberDraft } from "@/lib/equipo/types";
 
@@ -129,7 +129,7 @@ describe("form fields have accessible names", () => {
   });
 
   it("Proyectos: Nuevo proyecto", async () => {
-    render(<ProjectCreateModal onClose={() => undefined} onConfirm={async () => undefined} presaleAutoStart />);
+    render(<NewProjectDialog open onOpenChange={() => undefined} onConfirm={async () => undefined} presaleAutoStart />);
     await waitFor(() => expect(screen.getByLabelText("Nombre del proyecto").tagName).toBe("INPUT"));
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(await nameViolations()).toEqual([]);

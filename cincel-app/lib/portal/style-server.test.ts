@@ -8,7 +8,6 @@ const state = vi.hoisted(() => ({
   cookieHeader: "" as string,
   stored: null as string | null,
   dbError: false,
-  redesignEnabled: true,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -37,9 +36,6 @@ vi.mock("@/lib/db/client", () => ({
     }),
   },
 }));
-vi.mock("@/lib/portal/appearance", () => ({
-  getPortalAppearance: async () => ({ redesignEnabled: state.redesignEnabled }),
-}));
 
 import { getPortalPresentation } from "@/lib/portal/style-server";
 
@@ -52,7 +48,6 @@ describe("getPortalPresentation", () => {
     state.cookieHeader = "";
     state.stored = null;
     state.dbError = false;
-    state.redesignEnabled = true;
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
@@ -60,7 +55,7 @@ describe("getPortalPresentation", () => {
     store({ styleDefault: "visual", allowUserOverride: true });
     state.cookieHeader = `cincel_portal_session=t; ${serializePortalStyleCookie("analitico").split(";")[0]}`;
 
-    expect(await getPortalPresentation()).toEqual({ redesignEnabled: true, style: "analitico", fixedByOrg: false });
+    expect(await getPortalPresentation()).toEqual({ style: "analitico", fixedByOrg: false });
   });
 
   it("an invalid cookie falls back to the organization default style", async () => {
@@ -80,13 +75,7 @@ describe("getPortalPresentation", () => {
     store({ styleDefault: "visual", allowUserOverride: false });
     state.cookieHeader = "cincel-portal-style=esencial";
 
-    expect(await getPortalPresentation()).toEqual({ redesignEnabled: true, style: "visual", fixedByOrg: true });
-  });
-
-  it("follows the organization flag", async () => {
-    state.redesignEnabled = false;
-
-    expect((await getPortalPresentation()).redesignEnabled).toBe(false);
+    expect(await getPortalPresentation()).toEqual({ style: "visual", fixedByOrg: true });
   });
 
   it("DB errors fall back to the Azul defaults", async () => {

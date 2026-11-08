@@ -5,7 +5,6 @@ const m = vi.hoisted(() => ({
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
-  redirectIfRedesignOff: vi.fn(async () => undefined),
   canViewTeam: true,
   fetchStaffAction: vi.fn(),
   fetchPeopleOverviewAction: vi.fn(),
@@ -13,7 +12,6 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({ notFound: m.notFound }));
-vi.mock("@/lib/ui/redesign-redirect", () => ({ redirectIfRedesignOff: m.redirectIfRedesignOff }));
 vi.mock("@/lib/auth/session", () => ({ requireCapabilityUser: vi.fn(async () => ({ access: "Colaborador" })) }));
 vi.mock("@/lib/auth/permissions", () => ({ resolveTeamCapabilities: () => ({ canViewTeam: m.canViewTeam, canCreateCollaborator: true }) }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffAction: m.fetchStaffAction }));
@@ -39,7 +37,6 @@ const run = (sp: Record<string, string> = {}) => PersonasEquipoPage({ searchPara
 
 beforeEach(() => {
   m.notFound.mockClear();
-  m.redirectIfRedesignOff.mockClear();
   m.canViewTeam = true;
   m.fetchStaffAction.mockReset().mockResolvedValue(EQUIPO_STAFF);
   m.fetchPeopleOverviewAction.mockReset().mockResolvedValue(EQUIPO_OVERVIEW_NO_HOURS);
@@ -51,14 +48,6 @@ beforeEach(() => {
 });
 
 describe("/personas", () => {
-  it("checks the redesign flag with the page path before loading anything", async () => {
-    await run({ estilo: "esencial" });
-    expect(m.redirectIfRedesignOff).toHaveBeenCalledWith("/personas", { estilo: "esencial" });
-    expect(m.redirectIfRedesignOff.mock.invocationCallOrder[0]).toBeLessThan(
-      m.fetchStaffAction.mock.invocationCallOrder[0],
-    );
-  });
-
   it("is not found without team.canViewTeam", async () => {
     m.canViewTeam = false;
     await expect(run()).rejects.toThrow("NEXT_NOT_FOUND");

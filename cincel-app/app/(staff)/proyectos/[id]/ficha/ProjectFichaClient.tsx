@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 
-import Sidebar from "@/components/layout/Sidebar";
-import Header from "@/components/layout/Header";
 import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -31,7 +29,6 @@ import {
 import { ProjectAdminFields, projectAdminPatch, type ProjectAdminValue } from "@/components/proyectos/ProjectAdminFields";
 import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard";
 import { canRemapImport, RemapImportSheet } from "@/components/proyectos/RemapImportSheet";
-import { ProjectSectionNav } from "@/components/proyectos/ProjectSectionNav";
 import { ProjectTramosCard } from "@/components/proyectos/ProjectTramosCard";
 import { ProjectSpacesCard } from "@/components/proyectos/ProjectSpacesCard";
 import { groupFichaTasks, hasTasksWithoutTramo, NO_PHASE_LABEL } from "@/lib/proyectos/task-groups";
@@ -83,44 +80,25 @@ const PROJECT_STATUS_LABEL: Record<ProjectDetail["status"], string> = {
   cancelado: "Cancelado",
 };
 
-/**
- * Legacy page frame (flag off): the old `Sidebar` + `Header`, exactly as before
- * the redesign. Flag on, the staff layout mounts `AppShell` and the page
- * renders bare under `ProjectTabs`.
- */
-function Frame({ tabs, children }: { tabs?: ReactNode; children: ReactNode }) {
-  if (tabs !== undefined) {
-    return (
-      <div className="flex flex-col gap-4">
-        {tabs}
-        <div>{children}</div>
-      </div>
-    );
-  }
+/** The page under `ProjectTabs`, inside the `AppShell` the staff layout mounts. */
+function Frame({ tabs, children }: { tabs: ReactNode; children: ReactNode }) {
   return (
-    <main className="flex min-h-screen bg-background text-foreground">
-      <Sidebar />
-      <section className="flex-1 overflow-y-auto p-10">
-        <Header />
-        {children}
-      </section>
-    </main>
+    <div className="flex flex-col gap-4">
+      {tabs}
+      <div>{children}</div>
+    </div>
   );
 }
 
 export type ProjectFichaClientProps = {
-  /**
-   * `ProjectTabs` of the redesigned project shell (FE §3.5). Omitted: the
-   * legacy page (old shell + `ProjectSectionNav`).
-   */
-  tabs?: ReactNode;
+  /** `ProjectTabs` of the project shell (FE §3.5). */
+  tabs: ReactNode;
 };
 
-/** `/proyectos/[id]/ficha`: the project's ficha form. Same behavior in both shells (no styles). */
-export function ProjectFichaClient({ tabs }: ProjectFichaClientProps = {}) {
+/** `/proyectos/[id]/ficha`: the project's ficha form (no styles). */
+export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
-  const redesign = tabs !== undefined;
   const googleConnectResult = useGoogleConnectResult();
   const importData = useImportData("project", projectId);
 
@@ -207,7 +185,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps = {}) {
     return (
       <Frame tabs={tabs}>
         <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h1 className={redesign ? "text-lg font-semibold text-foreground" : "text-2xl font-bold text-foreground"}>
+          <h1 className="text-lg font-semibold text-foreground">
             Proyecto no encontrado
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">No existe un proyecto con este identificador.</p>
@@ -328,8 +306,6 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps = {}) {
 
   return (
     <Frame tabs={tabs}>
-        {redesign ? null : <ProjectSectionNav projectId={project.id} />}
-
         {remapNotice ? (
           <Alert className="mb-3">
             <AlertDescription>{remapNotice}</AlertDescription>
@@ -345,11 +321,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps = {}) {
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              {redesign ? (
-                <h2 className="text-lg font-semibold text-foreground">Ficha</h2>
-              ) : (
-                <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
-              )}
+              <h2 className="text-lg font-semibold text-foreground">Ficha</h2>
               <Badge variant="secondary">{PROJECT_STATUS_LABEL[project.status]}</Badge>
             </div>
             {isAdmin ? (

@@ -7,11 +7,16 @@ import {
 } from "@/lib/portal/appearance-scope";
 import { THEME_PRESETS } from "@/lib/ui/themes";
 
-const stored = { ...THEME_PRESETS.calido, redesignDefault: true, v: 3 };
+const stored = { ...THEME_PRESETS.calido, v: 3 };
 
 describe("parseStoredOrgAppearance", () => {
   it("reads the v1 envelope stored in app_settings('appearance.theme')", () => {
     expect(parseStoredOrgAppearance(JSON.stringify({ version: 1, data: stored }))).toEqual(stored);
+  });
+
+  it("still reads a value saved with the retired rollout keys, without them", () => {
+    const saved = { ...stored, redesignDefault: true, redesignAvailable: false };
+    expect(parseStoredOrgAppearance(JSON.stringify({ version: 1, data: saved }))).toEqual(stored);
   });
 
   it("returns null for a missing, malformed, wrong-version or invalid value", () => {

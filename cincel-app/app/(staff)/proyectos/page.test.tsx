@@ -6,7 +6,6 @@ import type { ProjectsPortfolioProps } from "@/components/proyectos/ProjectsPort
 import type { ResolvedAppearance } from "@/lib/types/redesign";
 
 const state = vi.hoisted(() => ({
-  redesignEnabled: false,
   style: "visual" as "visual" | "esencial" | "analitico",
   access: "Colaborador" as string,
   canViewProjects: true,
@@ -41,7 +40,6 @@ vi.mock("@/lib/ui/preferences-server", () => ({
       style: state.style,
       density: "comoda",
       textSize: 14,
-      redesignEnabled: state.redesignEnabled,
       cssVars: { light: {}, dark: {} },
       version: 1,
     }) as unknown as ResolvedAppearance,
@@ -69,13 +67,6 @@ vi.mock("@/lib/actions/workflows-actions", () => ({
 }));
 vi.mock("@/lib/actions/contacts-actions", () => ({ fetchContactsAction }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffAction }));
-vi.mock("@/components/layout/Sidebar", () => ({ default: () => <nav data-testid="legacy-sidebar" /> }));
-vi.mock("@/components/layout/Header", () => ({ default: () => <header data-testid="legacy-header" /> }));
-vi.mock("./ProyectosClient", () => ({
-  ProyectosClient: (props: { presaleAutoStart: boolean }) => (
-    <div data-testid="legacy-client">{props.presaleAutoStart ? "autostart" : "manual"}</div>
-  ),
-}));
 
 const portfolioProps = vi.hoisted(() => ({ current: null as ProjectsPortfolioProps | null }));
 vi.mock("@/components/proyectos/ProjectsPortfolio", async () => {
@@ -96,7 +87,6 @@ async function renderPage(searchParams: Record<string, string> = {}) {
 }
 
 beforeEach(() => {
-  state.redesignEnabled = false;
   state.style = "visual";
   state.access = "Colaborador";
   state.canViewProjects = true;
@@ -108,34 +98,21 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("/proyectos page", () => {
-  it("flag off: renders today's page with the legacy shell and no portfolio", async () => {
-    await renderPage();
-    expect(screen.getByTestId("legacy-sidebar")).toBeTruthy();
-    expect(screen.getByTestId("legacy-header")).toBeTruthy();
-    expect(screen.getByTestId("legacy-client").textContent).toBe("autostart");
-    expect(screen.queryByTestId("portfolio")).toBeNull();
-    expect(fetchProjectsPortfolioAction).not.toHaveBeenCalled();
-  });
-
-  it("flag on: renders the portfolio without the legacy shell, in the viewer's style", async () => {
-    state.redesignEnabled = true;
+  it("renders the portfolio in the viewer's style", async () => {
     state.style = "esencial";
     await renderPage();
-    expect(screen.queryByTestId("legacy-sidebar")).toBeNull();
     expect(screen.getByTestId("portfolio").textContent).toBe("esencial");
     expect(fetchProjectsPortfolioAction).toHaveBeenCalledTimes(1);
     expect(portfolioProps.current?.tramos?.map((t) => t.key)).toEqual(["presale", "diseno"]);
     expect(portfolioProps.current?.presaleAutoStart).toBe(true);
   });
 
-  it("flag on: ?estilo= overrides the style for this render", async () => {
-    state.redesignEnabled = true;
+  it("?estilo= overrides the style for this render", async () => {
     await renderPage({ estilo: "analitico" });
     expect(screen.getByTestId("portfolio").textContent).toBe("analitico (url)");
   });
 
-  it("flag on: non-admins get no admin data and no client/staff lookups", async () => {
-    state.redesignEnabled = true;
+  it("non-admins get no admin data and no client/staff lookups", async () => {
     await renderPage();
     expect(portfolioProps.current?.canSeeAdminData).toBe(false);
     expect(portfolioProps.current?.adminOptions).toBeNull();
@@ -143,8 +120,7 @@ describe("/proyectos page", () => {
     expect(fetchStaffAction).not.toHaveBeenCalled();
   });
 
-  it("flag on: admins get the clients and active staff for the dialog", async () => {
-    state.redesignEnabled = true;
+  it("admins get the clients and active staff for the dialog", async () => {
     state.access = "Administrador";
     await renderPage();
     expect(portfolioProps.current?.canSeeAdminData).toBe(true);
@@ -154,15 +130,13 @@ describe("/proyectos page", () => {
     });
   });
 
-  it("flag on: passes canCreateProject through", async () => {
-    state.redesignEnabled = true;
+  it("passes canCreateProject through", async () => {
     state.canCreateProject = false;
     await renderPage();
     expect(portfolioProps.current?.canCreateProject).toBe(false);
   });
 
-  it("flag on: 404 without projects.canViewProjects", async () => {
-    state.redesignEnabled = true;
+  it("404 without projects.canViewProjects", async () => {
     state.canViewProjects = false;
     await expect(ProyectosPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_NOT_FOUND");
   });

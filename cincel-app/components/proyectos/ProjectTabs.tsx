@@ -75,7 +75,7 @@ export function ProjectTabs({ project, active, counts, canManagePortal, showEsti
     addressCity: project.addressCity ?? null,
     manager: project.manager ?? null,
   });
-  const moreLinks = projectSectionLinks(project.id, { showClientes: canManagePortal, layout: "redesign" }).filter(
+  const moreLinks = projectSectionLinks(project.id, { showClientes: canManagePortal }).filter(
     (link) => !MOBILE_PROJECT_SECTIONS.includes(link.section)
   );
 
@@ -144,7 +144,6 @@ export function ProjectTabs({ project, active, counts, canManagePortal, showEsti
 
       <ProjectSectionNav
         projectId={project.id}
-        layout="redesign"
         active={active}
         counts={counts}
         showClientes={canManagePortal}

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useAppearance } from "@/components/shell/AppearanceProvider";
@@ -11,7 +10,6 @@ import { cn } from "@/lib/utils";
 
 import {
   AparienciaContext,
-  REDESIGN_UNAVAILABLE_COPY,
   TEXT_SIZE_DEBOUNCE_MS,
   type AparienciaContextValue,
   type AparienciaSectionKey,
@@ -20,7 +18,6 @@ import {
   AparienciaDensidadSection,
   AparienciaEstiloSection,
   AparienciaModoSection,
-  AparienciaNuevoDisenoSection,
   AparienciaTamanoTextoSection,
   AparienciaTemaSection,
   TEXT_SIZE_MAX,
@@ -53,7 +50,6 @@ function DefaultSections() {
       <AparienciaModoSection />
       <AparienciaDensidadSection />
       <AparienciaTamanoTextoSection />
-      <AparienciaNuevoDisenoSection />
     </>
   );
 }
@@ -104,19 +100,17 @@ function AparienciaPreview({ density, textSize }: { density: UserPreferences["de
 
 /**
  * Ajustes › Apariencia (redesign FE §3.8): theme, style, mode, density, text
- * size, preview and the "Nuevo diseño" switch through `useAppearance`. Each
+ * size and preview through `useAppearance`. Each
  * change is applied optimistically and rolled back on failure; the text size
  * slider saves after `TEXT_SIZE_DEBOUNCE_MS`.
  */
 export function AparienciaClient({ preferences: initial, org, isAdmin, children }: AparienciaClientProps) {
   const { setPreference } = useAppearance();
-  const router = useRouter();
 
   const [preferences, setPreferences] = useState<UserPreferences>(initial);
   const preferencesRef = useRef<UserPreferences>(initial);
   const [textSize, setTextSize] = useState<number>(initial.textSize);
   const [lockedByServer, setLockedByServer] = useState(false);
-  const [redesignBlocked, setRedesignBlocked] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<AparienciaSectionKey, string>>>({});
 
   const apply = useCallback((next: UserPreferences) => {
@@ -131,7 +125,6 @@ export function AparienciaClient({ preferences: initial, org, isAdmin, children 
       setErrors((current) => ({ ...current, [section]: undefined }));
       try {
         await setPreference(patch);
-        if ("redesignEnabled" in patch) router.refresh();
       } catch (err) {
         // Roll back only the fields of this patch; later changes stay.
         const rolledBack: UserPreferences = { ...preferencesRef.current };
@@ -147,15 +140,10 @@ export function AparienciaClient({ preferences: initial, org, isAdmin, children 
           setLockedByServer(true);
           return;
         }
-        if (code === "DISABLED" && "redesignEnabled" in patch) {
-          setRedesignBlocked(true);
-          setErrors((current) => ({ ...current, [section]: REDESIGN_UNAVAILABLE_COPY }));
-          return;
-        }
         setErrors((current) => ({ ...current, [section]: actionErrorText(err) }));
       }
     },
-    [apply, router, setPreference],
+    [apply, setPreference],
   );
 
   const changeRef = useRef(change);
@@ -196,13 +184,12 @@ export function AparienciaClient({ preferences: initial, org, isAdmin, children 
       org,
       isAdmin,
       overridesAllowed: org.allowUserOverride && !lockedByServer,
-      redesignAvailable: org.redesignAvailable && !redesignBlocked,
       textSize,
       errors,
       change,
       changeTextSize,
     }),
-    [preferences, org, isAdmin, lockedByServer, redesignBlocked, textSize, errors, change, changeTextSize],
+    [preferences, org, isAdmin, lockedByServer, textSize, errors, change, changeTextSize],
   );
 
   return (

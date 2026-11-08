@@ -1,8 +1,6 @@
 /**
  * E2E: Proyecto · Tareas tab (redesign FE §3.5, §4.6).
- * Flag off: `/proyectos/[id]/tareas` opens the legacy Ficha (which lists the
- * project's tasks today).
- * Flag on: tasks are grouped by fase when the project has fase data, by tramo
+ * Tasks are grouped by fase when the project has fase data, by tramo
  * otherwise; each group shows its progress and "Agregar tarea"; task titles
  * link to `/tareas?tarea=<id>`.
  *
@@ -11,7 +9,6 @@
 import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
-import { setRedesignFlag } from "./helpers/redesign-flag";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const RUN_ID = Date.now();
@@ -70,37 +67,7 @@ function seed(): Promise<Seeded> {
   return seeded;
 }
 
-test.describe("Proyecto · Tareas — flag off", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(false);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
-  test.beforeEach(async ({ page }) => {
-    await seedAuth(page);
-    await loginAsAdmin(page, BASE_URL);
-  });
-
-  test("the tab opens the legacy ficha", async ({ page }) => {
-    const { faseProjectId } = await seed();
-    await page.goto(`${BASE_URL}/proyectos/${faseProjectId}/tareas`, { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveURL(new RegExp(`/proyectos/${faseProjectId}/ficha`), { timeout: 30_000 });
-    await expect(page.getByRole("heading", { name: "Avance por fase" })).toHaveCount(0);
-  });
-});
-
-test.describe("Proyecto · Tareas — flag on", () => {
-  test.beforeAll(async () => {
-    await setRedesignFlag(true);
-  });
-
-  test.afterAll(async () => {
-    await setRedesignFlag(null);
-  });
-
+test.describe("Proyecto · Tareas", () => {
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);

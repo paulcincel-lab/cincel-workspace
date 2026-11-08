@@ -39,7 +39,7 @@ const INICIO_PAIRS = new Set([
   "chart-4/card",
 ]);
 
-/** Applies a preset the way the root layout does for flag-on users: `<html>` attributes + one token block. */
+/** Applies a preset the way the root layout does: `<html>` attributes + one token block. */
 function applyTheme(theme: ThemeId, mode: (typeof MODES)[number]) {
   const html = document.documentElement;
   html.setAttribute("lang", "es");

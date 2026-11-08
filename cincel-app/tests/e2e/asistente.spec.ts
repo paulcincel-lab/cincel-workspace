@@ -47,24 +47,4 @@ test.describe("Asistente", () => {
     expect(result.body?.error).toMatch(/no está configurado/i);
   });
 
-  test("redesign off: the saved localStorage thread still shows and is kept", async ({ page }) => {
-    await seedAuth(page);
-    await loginAsAdmin(page, BASE_URL);
-
-    const key = "cincel.asistente.thread.v1";
-    const saved = [
-      { id: "e2e-m1", role: "user", parts: [{ type: "text", text: "Pregunta guardada de prueba" }] },
-      { id: "e2e-m2", role: "assistant", parts: [{ type: "text", text: "Respuesta guardada de prueba" }] },
-    ];
-    await page.evaluate(([k, v]) => window.localStorage.setItem(k, v), [key, JSON.stringify(saved)] as const);
-
-    await page.goto(`${BASE_URL}/asistente`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Conversación anterior")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Respuesta guardada de prueba")).toBeVisible();
-    // The new full page (history + Herramientas) is not rendered with the flag off.
-    await expect(page.getByRole("complementary", { name: "Herramientas" })).toHaveCount(0);
-
-    const stored = await page.evaluate((k) => window.localStorage.getItem(k), key);
-    expect(stored).not.toBeNull();
-  });
 });

@@ -10,7 +10,7 @@ vi.mock("@/lib/auth/auth-actions", () => ({
   loginAction: vi.fn(),
 }));
 
-import LoginForm from "./LoginForm";
+import LoginForm from "./RedesignLoginForm";
 
 // Text that must never be rendered on the public login page; the password values come from the env below.
 const FORBIDDEN_SNIPPETS = ["contraseña temporal inicial"];

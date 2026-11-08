@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/shadcn/button";
 import { FIRST_LOGIN_WIZARD_ROUTES } from "@/lib/onboarding/first-login";
 
 /**
- * Dashboard banner for the bootstrap admin after skipping the Google setup wizard (#671), shown while no Workspace
+ * Inicio banner for the bootstrap admin after skipping the Google setup wizard (#671), shown while no Workspace
  * group is mapped. Closing it hides it until the next page load.
  */
 export function GoogleSetupBanner() {
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
-  const wizardRoute = FIRST_LOGIN_WIZARD_ROUTES.google_groups ?? "/configuracion/google";
+  const wizardRoute = FIRST_LOGIN_WIZARD_ROUTES.google_groups ?? "/ajustes/google";
 
   return (
     <Alert className="mb-6">

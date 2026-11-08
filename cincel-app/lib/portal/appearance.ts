@@ -26,8 +26,7 @@ async function readOrgAppearance(): Promise<PortalOrgAppearance> {
 
 /**
  * What the portal renders (FE §3.11): the organization appearance resolved with no user row, so a client never
- * gets a theme, mode or style override. `redesignEnabled` is `redesignAvailable && redesignDefault`; when it is
- * false the portal keeps today's look. Cached per request (layout and page share one read).
+ * gets a theme, mode or style override. Cached per request (layout and page share one read).
  */
 export const getPortalAppearance = cache(async (): Promise<ResolvedAppearance> => {
   return resolveAppearance(await readOrgAppearance(), null);
