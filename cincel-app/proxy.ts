@@ -25,7 +25,7 @@ import { PORTAL_SESSION_COOKIE, PORTAL_SESSION_MAX_AGE_S, SESSION_COOKIE } from 
  * browser side of the sliding session keeps up with `portal_sessions` (pages are Server Components, which can't
  * write cookies). An expired or revoked DB session still fails in `requirePortalUser()`.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
@@ -70,7 +70,7 @@ export function middleware(request: NextRequest) {
 /**
  * `/api/portal/projects/*` stays out of the matcher: Next buffers (and past
  * 10 MB truncates) the request body of every request that runs through
- * middleware, which would break the streamed 50 MB portal upload. The
+ * the proxy, which would break the streamed 50 MB portal upload. The
  * function returns early for `/api` anyway.
  */
 export const config = {

@@ -1,6 +1,8 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { connection } from "next/server";
+import { unstable_rethrow } from "next/navigation";
 import { cache } from "react";
 
 import { getSession } from "@/lib/auth/session";
@@ -54,9 +56,14 @@ export function parseStoredOrgAppearance(raw: string | null): StoredOrgAppearanc
  * DB error logs and returns the Azul preset.
  */
 export const getStoredOrgAppearance = cache(async (): Promise<StoredOrgAppearance> => {
+  // Request-time data: opt out of prerendering before touching the DB, so
+  // `next build` never queries Postgres.
+  await connection();
   try {
     return parseStoredOrgAppearance(await getAppSetting(ORG_APPEARANCE_SETTING_KEY)) ?? DEFAULT_STORED_ORG_APPEARANCE;
   } catch (error) {
+    // Let Next.js control-flow errors (dynamic rendering, redirect, notFound) through.
+    unstable_rethrow(error);
     console.error("[appearance] could not read the org appearance", error);
     return DEFAULT_STORED_ORG_APPEARANCE;
   }
@@ -127,6 +134,8 @@ export async function writeAppearanceCookieForStaff(staffId: string): Promise<vo
   try {
     await writeAppearanceCookie(await resolveAppearanceForStaff(staffId));
   } catch (error) {
+    // Let Next.js control-flow errors (dynamic rendering, redirect, notFound) through.
+    unstable_rethrow(error);
     console.error("[appearance] could not write the appearance cookie", error);
   }
 }
@@ -146,6 +155,8 @@ export const getResolvedAppearance = cache(async (): Promise<ResolvedAppearance>
     const row = await findUserPreferences(db, session.user.id);
     return resolveAppearance(org, rowToResolverInput(row));
   } catch (error) {
+    // Let Next.js control-flow errors (dynamic rendering, redirect, notFound) through.
+    unstable_rethrow(error);
     console.error("[appearance] could not resolve the appearance", error);
     return resolveAppearance(DEFAULT_STORED_ORG_APPEARANCE, null);
   }
