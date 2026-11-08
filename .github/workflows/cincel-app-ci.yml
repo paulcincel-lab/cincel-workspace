@@ -59,10 +59,11 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
-    env:
-      TEST_DATABASE_URL: postgres://cincel:cincel@localhost:${{ job.services.postgres.ports['5432'] }}/cincel_test
-
     steps:
+      # The service port is random (shared self-hosted machines); the job context is only readable in steps.
+      - name: Point TEST_DATABASE_URL at the service Postgres
+        run: echo "TEST_DATABASE_URL=postgres://cincel:cincel@localhost:${{ job.services.postgres.ports['5432'] }}/cincel_test" >> "$GITHUB_ENV"
+
       - name: Check out the repo
         uses: actions/checkout@v4
 
@@ -105,7 +106,6 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgres://cincel:cincel@localhost:${{ job.services.postgres.ports['5432'] }}/cincel
       SEED_ADMIN_EMAIL: paul@cincel.mx
       # Throwaway value for the CI database only; no deployed instance uses it.
       SEED_ADMIN_PASSWORD: ci-e2e-admin-password
@@ -114,6 +114,10 @@ jobs:
       CRON_SECRET: ci-e2e-cron-secret
 
     steps:
+      # The service port is random (shared self-hosted machines); the job context is only readable in steps.
+      - name: Point DATABASE_URL at the service Postgres
+        run: echo "DATABASE_URL=postgres://cincel:cincel@localhost:${{ job.services.postgres.ports['5432'] }}/cincel" >> "$GITHUB_ENV"
+
       - name: Check out the repo
         uses: actions/checkout@v4
 
