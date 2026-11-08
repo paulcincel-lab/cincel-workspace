@@ -12,7 +12,7 @@ type LoginPageProps = {
 /**
  * Staff login (frontend spec §2.1, backend spec §A.5.1; redesign FE §3.10).
  * Flags are read here on the server and passed down as props; an `active`
- * session goes straight to the dashboard (the middleware no longer does this
+ * session goes straight to the dashboard (the proxy no longer does this
  * for any request with a cookie).
  */
 export default async function LoginPage({ searchParams }: LoginPageProps) {

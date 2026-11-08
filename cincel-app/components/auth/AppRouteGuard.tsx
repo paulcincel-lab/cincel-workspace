@@ -71,7 +71,7 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
       return;
     }
 
-    // A guest on a protected path only gets past the middleware with a staff
+    // A guest on a protected path only gets past the proxy with a staff
     // cookie, which is therefore stale (session row missing or expired). A
     // hard navigation through the sign-out route clears it before landing on
     // /login, so the browser can't bounce between the page and /login.

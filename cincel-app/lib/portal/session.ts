@@ -122,7 +122,7 @@ export async function getPortalUser(): Promise<PortalUser | null> {
     try {
       jar.set(PORTAL_SESSION_COOKIE, token, cookieOptions(expiresAt));
     } catch {
-      // Server Components can't set cookies; middleware re-issues the cookie on every portal page request.
+      // Server Components can't set cookies; the proxy re-issues the cookie on every portal page request.
     }
   }
   return record.user;

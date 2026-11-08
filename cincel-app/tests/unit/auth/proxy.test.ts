@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 
-import { middleware } from "@/middleware";
+import { proxy } from "@/proxy";
 import { PORTAL_SESSION_COOKIE, PORTAL_SESSION_MAX_AGE_S, SESSION_COOKIE } from "@/lib/auth/session-cookie";
 
 function run(path: string, withCookie: boolean, withPortalCookie = false) {
@@ -12,7 +12,7 @@ function run(path: string, withCookie: boolean, withPortalCookie = false) {
     withPortalCookie ? `${PORTAL_SESSION_COOKIE}=fake-portal-token` : null,
   ].filter(Boolean);
   if (cookies.length > 0) headers.set("cookie", cookies.join("; "));
-  return middleware(new NextRequest(`http://localhost:3000${path}`, { headers }));
+  return proxy(new NextRequest(`http://localhost:3000${path}`, { headers }));
 }
 
 function redirectTarget(response: Response): string | null {
@@ -20,7 +20,7 @@ function redirectTarget(response: Response): string | null {
   return location ? new URL(location).pathname : null;
 }
 
-describe("middleware", () => {
+describe("proxy", () => {
   it("redirects a protected path without a cookie to /login", () => {
     expect(redirectTarget(run("/dashboard", false))).toBe("/login");
   });
@@ -46,7 +46,7 @@ describe("middleware", () => {
   });
 });
 
-describe("middleware portal gate", () => {
+describe("proxy portal gate", () => {
   it.each(["/portal", "/portal/proyectos/1", "/portal/proyectos/1/cronograma"])(
     "redirects %s without the portal cookie to /portal/login",
     (path) => {

@@ -1,6 +1,6 @@
 /**
  * Single source of the routes that render without a staff session. Imported by
- * `middleware.ts` (edge runtime) and `AppRouteGuard` (client), so it must stay
+ * `proxy.ts` and `AppRouteGuard` (client), so it must stay
  * free of server-only and browser-only imports.
  */
 

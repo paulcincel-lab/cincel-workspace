@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import { unstable_rethrow } from "next/navigation";
 import { cache } from "react";
 
@@ -55,6 +56,9 @@ export function parseStoredOrgAppearance(raw: string | null): StoredOrgAppearanc
  * DB error logs and returns the Azul preset.
  */
 export const getStoredOrgAppearance = cache(async (): Promise<StoredOrgAppearance> => {
+  // Request-time data: opt out of prerendering before touching the DB, so
+  // `next build` never queries Postgres.
+  await connection();
   try {
     return parseStoredOrgAppearance(await getAppSetting(ORG_APPEARANCE_SETTING_KEY)) ?? DEFAULT_STORED_ORG_APPEARANCE;
   } catch (error) {

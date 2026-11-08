@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Portal de clientes · Cincel" };
 /**
  * Portal layout (FE §3): its own shell, never the staff sidebar or header.
  *
- * Without a portal cookie the shell renders without the client name (the middleware already sends
+ * Without a portal cookie the shell renders without the client name (the proxy already sends
  * protected `/portal/*` paths to `/portal/login`, which renders here too). With a cookie,
  * `getPortalUser()` validates it, and a stale one just renders the shell without the name: the layout
  * never redirects, so `/portal/acceder?token=…` and `/portal/login?error=…` keep their query string.
