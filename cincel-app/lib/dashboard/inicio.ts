@@ -9,6 +9,7 @@
  * had at the end of a past day is the `before` of its first status change
  * after that day, else its current status.
  */
+import { zonedIsoMinute } from "@/lib/dates/zoned-formatters";
 import { ADMIN_TRAMO_LABEL } from "@/lib/calendar/calendar-service";
 import { NO_TRAMO_LABEL } from "@/lib/dashboard/donut-groups";
 import { localIsoDate, TASK_TREND_TIME_ZONE, type TaskTrendBucket } from "@/lib/dashboard/task-trend";
@@ -144,7 +145,17 @@ export type TaskDayState = {
 };
 
 export function taskDayState(statusAt: StatusAt, tz: string = TASK_TREND_TIME_ZONE): TaskDayState {
-  const createdBy = (task: DatedTask, day: string) => localDayOf(task.createdAt, tz) <= day;
+  // Each task's local creation day is computed once, not once per day per check.
+  const createdDays = new Map<string, string>();
+  const createdDay = (task: DatedTask) => {
+    let created = createdDays.get(task.id);
+    if (created === undefined) {
+      created = localDayOf(task.createdAt, tz);
+      createdDays.set(task.id, created);
+    }
+    return created;
+  };
+  const createdBy = (task: DatedTask, day: string) => createdDay(task) <= day;
   const statusOn = (task: DatedTask, day: string) => statusAt(task.id, currentTaskStatus(task), day);
   const open = (task: DatedTask, day: string) => createdBy(task, day) && statusOn(task, day) !== "completado";
   return {
@@ -421,17 +432,7 @@ export function agendaSortKey(start: string, tz: string = TASK_TREND_TIME_ZONE):
   if (!/(Z|[+-]\d{2}:?\d{2})$/.test(start)) return start;
   const at = new Date(start);
   if (Number.isNaN(at.getTime())) return start;
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(at);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
-  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+  return zonedIsoMinute(at, tz);
 }
 
 /**

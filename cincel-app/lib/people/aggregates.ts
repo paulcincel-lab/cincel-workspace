@@ -3,16 +3,12 @@
  * availability per day, occupancy and the order of a person's open tasks.
  * No I/O; `lib/actions/people-actions.ts` feeds it rows.
  */
+import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
 import type { Availability, AttentionItem, Tone } from "@/lib/types/widgets";
 
 /** ISO date (`YYYY-MM-DD`) of `now` in `timeZone`. */
 export function localIsoDate(now: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
+  return zonedIsoDate(now, timeZone);
 }
 
 function parseIso(date: string): Date {
