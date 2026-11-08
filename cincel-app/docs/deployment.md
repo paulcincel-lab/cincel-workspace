@@ -236,15 +236,21 @@ history are entered through the app; there is no bulk importer.
 
 ## CI
 
-`.github/workflows/cincel-app-build.yml` runs on PRs and pushes to `main`:
+Two workflows, both on the self-hosted runners:
+
+`.github/workflows/cincel-app-ci.yml` runs on pull requests that touch `cincel-app/**`:
 
 | Job | What |
 |---|---|
 | `verify` | `npm run lint` + `npm run build` |
-| `unit-tests` | `npm run test:unit` (vitest) |
-| `e2e-tests` | Spins a throwaway Postgres service, runs `db:migrate` + `db:seed`, then Playwright (`npm run test:e2e`) |
-| `docker-build` | `docker build` smoke |
-| `docker-publish` | **push to `main` only**, once every other job passed, on the self-hosted runner — builds and pushes the runtime and migrate images to `secrets.REGISTRY_URL`, then cuts a GitHub release |
+| `unit-tests` | `npm run test:unit` (vitest) against a throwaway Postgres service |
+| `e2e-tests` | Throwaway Postgres service, `db:migrate` + `db:seed`, then Playwright (`npm run test:e2e`) |
+
+`.github/workflows/cincel-app-docker.yml` runs on every push to `main` that touches `cincel-app/**`:
+
+| Job | What |
+|---|---|
+| `build-and-push` | Builds and pushes the runtime and migrate images to `secrets.REGISTRY_URL`, then cuts a GitHub release |
 
 ### Releases and versions
 

@@ -14,7 +14,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
+const BASE_URL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${process.env.E2E_PORT ?? "3000"}`;
 const RUN_ID = Date.now();
 const PROJECT_NAME = `Proyecto portal E2E ${RUN_ID}`;
 const CLIENT_NAME = `Cliente portal E2E ${RUN_ID}`;

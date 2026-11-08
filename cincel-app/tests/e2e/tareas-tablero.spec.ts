@@ -8,7 +8,7 @@ import { test, expect, type Page } from "@playwright/test";
 import postgres from "postgres";
 import { seedAuth, loginAsAdmin } from "./helpers/seed-auth";
 
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
+const BASE_URL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${process.env.E2E_PORT ?? "3000"}`;
 const RUN_ID = Date.now();
 const TASK_TITLE = `Tarea tablero E2E ${RUN_ID}`;
 

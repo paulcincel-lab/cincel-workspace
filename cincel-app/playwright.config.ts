@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
+const e2ePort = process.env.E2E_PORT ?? "3000";
+const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${e2ePort}`;
 
 /**
  * Specs that change state every signed-in page reads: the org theme
@@ -47,17 +48,12 @@ export default defineConfig({
         // flaky against a 30s test timeout. A production build removes that
         // variable entirely, so CI runs against `next build && next start`;
         // local runs keep `next dev` for fast iteration without a build step.
-        // `output: "standalone"` builds are served by `.next/standalone/server.js`
-        // (with the static assets copied next to it), not `next start`.
-        command: process.env.CI
-          ? "npm run build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/ && node .next/standalone/server.js"
-          : "npm run dev",
-        url: "http://127.0.0.1:3000",
+        command: process.env.CI ? "npm run build && npm run start" : "npm run dev",
+        url: `http://127.0.0.1:${e2ePort}`,
         reuseExistingServer: !process.env.CI,
         timeout: process.env.CI ? 180_000 : 120_000,
         env: {
-          PORT: "3000",
-          HOSTNAME: "127.0.0.1",
+          PORT: e2ePort,
           DATABASE_URL:
             process.env.DATABASE_URL ??
             "postgres://cincel:cincel@localhost:5432/cincel",

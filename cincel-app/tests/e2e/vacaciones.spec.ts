@@ -16,7 +16,7 @@ import postgres from "postgres";
 import { e2eAdminEmail, loginAs, loginAsAdmin } from "./helpers/seed-auth";
 import { clearAppearanceCookie } from "./helpers/redesign";
 
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
+const BASE_URL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${process.env.E2E_PORT ?? "3000"}`;
 const RUN_ID = Date.now();
 const connectionString = process.env.DATABASE_URL ?? "postgres://cincel:cincel@localhost:5432/cincel";
 

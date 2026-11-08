@@ -104,7 +104,7 @@ flowchart LR
         D1["npm run dev\n(next dev, Turbopack)"]
     end
 
-    subgraph CI["GitHub Actions\n.github/workflows/cincel-app-build.yml"]
+    subgraph CI["GitHub Actions\n.github/workflows/cincel-app-ci.yml + cincel-app-docker.yml"]
         V["verify\nlint + build"]
         UT["unit-tests\nvitest"]
         E2E["e2e-tests\nservicio Postgres + db:migrate + db:seed\nplaywright (contra next build && next start)"]
@@ -133,7 +133,7 @@ flowchart LR
 
 - **`Dockerfile`**: build multi-stage sobre `node:23-alpine` con `output: standalone`. No requiere build args — `DATABASE_URL` se inyecta en runtime.
 - **`docker-compose.yml`**: incluye un servicio `db` (`postgres:17-alpine`) para desarrollo/CI local; en producción se apunta `DATABASE_URL` a un Postgres gestionado.
-- **CI** (`cincel-app-build.yml`) corre en cada PR/push a `main` que toque `cincel-app/**`: lint + build, suite unitaria (vitest), suite E2E (Playwright contra una build de producción, con un servicio Postgres al que se le aplican migraciones y seed), y una verificación de que la imagen Docker construye.
+- **CI** (`cincel-app-ci.yml`) corre en cada PR que toque `cincel-app/**`: lint + build, suite unitaria (vitest) y suite E2E (Playwright contra una build de producción, con un servicio Postgres con migraciones y seed). **Docker** (`cincel-app-docker.yml`) corre en cada push a `main`: construye y publica las imágenes y crea el release.
 - No hay paso de *push* a un registro de contenedores todavía — la validación de CI es solo de build.
 
 ## Flujo de uso (caso de uso principal)

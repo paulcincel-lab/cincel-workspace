@@ -12,7 +12,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { loginAsAdmin, seedAuth } from "./helpers/seed-auth";
 
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
+const BASE_URL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${process.env.E2E_PORT ?? "3000"}`;
 const TIME_ZONE = "America/Mexico_City";
 
 function cronSecret(): string {
