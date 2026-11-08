@@ -1,14 +1,16 @@
 # Query Migration: client UI state (Zustand, URL or TanStack)
 
-Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
+Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers are from `main` @ e985f58; Phase 1a (#935) re-anchors them at its start.
+
+**Owner decisions (2026-11-08 review):** D1 dashboard interactions are approved and built in Phase 12 (§2.5). D2 appearance and style move to one Zustand store, `useAppearance` (§2.6). D3 the remaining app-state contexts go (§2.9). The assistant thread is not persisted across reloads (§2.2).
 
 **Verdict key:** **Z** = Zustand (store name) · **URL** = search param · **TQ** = TanStack (it is really server state) · **L** = keep `useState`/local.
 
 ## 0. Key findings (read first)
 
-1. **Dashboards hold no UI state today.** `InicioClient.tsx:43-44` only holds `photo` and `renderedAt`. KpiTiles, TramoDonut, WeeklyPaceChart, WorkloadBars, AttentionList, MyDayAgenda and ProjectProgressList have no `useState`, toggles or selection. Proyectos (`ProjectsPortfolio`) and Personas (`EquipoView`) are the same. The dashboard store is therefore **new behaviour**, not a move of existing state. Each interaction it enables (selected KPI, range, collapse, chart/table view, series toggles) needs product sign-off before it is built.
+1. **Dashboards hold no UI state today.** `InicioClient.tsx:43-44` only holds `photo` and `renderedAt`. KpiTiles, TramoDonut, WeeklyPaceChart, WorkloadBars, AttentionList, MyDayAgenda and ProjectProgressList have no `useState`, toggles or selection. Proyectos (`ProjectsPortfolio`) and Personas (`EquipoView`) are the same. The dashboard store is therefore **new behaviour**, not a move of existing state. The product owner approved the interactions (selected KPI, 4/8/12-week range, collapse, chart/table view, series toggles); they are built in Phase 12, separately from the data phases.
 2. **Assistant open is wired twice, and one path is dead.**
-   - `AssistantLauncher.tsx:29-32` exports `openAssistant()`, which fires the window event `cincel:open-assistant`.
+   - `AssistantLauncher.tsx` exports `openAssistant()` (const `:29`, function `:31-33`), which fires the window event `cincel:open-assistant`. **That export has no callers**, so both external open paths are dead.
    - `lib/ui/shell-openers.ts:45` exports a second `openAssistant()` through a module registry. Nobody ever calls `registerShellOpener("assistant", …)`; the only registration is `"search"` at `CommandPalette.tsx:147`.
    - So `CommandPalette.tsx:191` `canOpenShellOverlay("assistant")` is always false, and the palette's "Preguntar al asistente" command never shows.
    - `DocumentReader.tsx:48,208` mounts a **second, eager `AssistantSheet`** with its own conversation.
@@ -18,20 +20,23 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
    - `personas/page.tsx:48-55`, `biblioteca/page.tsx:19-25`, `[seccion]:46` and `vacaciones:33` add a provider **only when `?estilo=` is set**, so they normally use the shell provider.
    - `EstiloSwitch.tsx:52-70` calls `updateMyPreferencesAction` directly. That action has no `revalidatePath`, and `AppearanceProvider` is never told, so `<html data-style>` goes stale too.
    - Repro: change the style on Inicio, then open Personas or Biblioteca. They show the old style until a hard reload.
+   - **Fix (D2):** one `useAppearance` store replaces both contexts (§2.6); Phase 2 removes the nested providers.
 4. **Session user is read as a non-reactive snapshot** with `useState(() => getCurrentAuthenticatedUser())`:
    - `TareasClient.tsx:120`, `TaskSheet.tsx:356`, `TareasStartSlot.tsx:50`, `EquipoView.tsx:42`.
    - `TareasCalendario.tsx:98` adds a window `focus` listener (`:137`) just to refresh it.
+   - Per-render getters with the same problem: `useTaskStatusesEditor.ts:37`, `PuestosClient.tsx:61`, `TramosClient.tsx:126`, `ProjectFichaClient.tsx:120`, `ProjectSectionNav.tsx:74`.
    - These should all read `useSessionStore(selector)`.
 5. **Cross-component sync through ad-hoc stores and events. All of it is server state and moves to TQ:**
    - `lib/my-space/bandeja-unread.ts`: module store. `Inbox.tsx:181,266,275` publishes; `bandeja-badge-view.tsx:52` reads.
    - `lib/time-tracking/today-events.ts`: window CustomEvent. `ClockInPrompt.tsx:182` publishes; `TimeClock.tsx:175` subscribes. `CommandPalette.tsx:230` clock-in does **not** publish, it calls `router.refresh()`.
    - Two `TimeClock` instances, the sidebar slot (`lib/shell/sidebar-slots/time-clock.tsx:31`) and the mobile one (`MobileTopBar.tsx:57`), each run their own focus and 5-minute poll (`TimeClock.tsx:188`).
-6. **`NewTaskDialog` is mounted 5 times,** each loading its own catalog:
+6. **`NewTaskDialog` has 4 live mounts,** each loading its own catalog:
    - `TareasClient.tsx:310` (`?nueva=1`)
    - `TareasTablero.tsx:96` (quick-add)
    - `ProjectTasksByFase.tsx:227`
    - `NoteEditor.tsx:304`
-   - `NewTaskDialog.tsx:431-438` (from the URL)
+
+   A fifth, `NewTaskDialogRoute` (`NewTaskDialog.tsx:430-439`), is never mounted; Phase 1b deletes it.
 
    Its API is only `open` / `onOpenChange` / `defaults` (`:48-53`), so a single host fed by a store is a clean fit.
 7. **Prop drilling (3 or more levels):**
@@ -65,10 +70,10 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
 | Assistant open / mounted | `AssistantLauncher.tsx:51,53`; event `:29-32,76-80`; `shell-openers.ts:45` | useState + window event + dead registry | **Z `useAssistantUi`** | Opened by the button, ⌘J, the palette and DocumentReader. Removes the event and the registry. |
 | Assistant page context | `AssistantLauncher.tsx:57-60` (route + `?tarea`) | derived useMemo | derived + **Z** `contextOverride` | Route-derived by default; callers like DocumentReader pass an override. |
 | Assistant sheet conversation id | `AssistantSheet.tsx:113-116,223` | useState | **Z `useAssistantUi.threadId`** | Lets the palette, `/asistente` and the sheet share a thread; survives navigation. |
-| Sheet messages / thread list | `AssistantSheet.tsx:120,156,174-187` | useState + actions | TQ `qk.assistant.threads()`, `qk.assistant.thread(id)` | Server data. |
+| Sheet messages / thread list | `AssistantSheet.tsx:120,156,174-187` | useState + actions | TQ `qk.asistente.threads()`, `qk.asistente.thread(id)` | Server data. |
 | Sheet input / files / listening / error | `AssistantSheet.tsx:117-119,121,123` | useState | L | Composer draft. |
 | Sheet context store | `AssistantSheet.tsx:128` (`AssistantContextStore`) | class instance | L (fed from the Z context) | Transport plumbing. |
-| Confirmed context chip | `use-confirmed-context.ts:44` | useState + effect | TQ `qk.assistant.confirmedContext(key)` | Server lookup. |
+| Confirmed context chip | `use-confirmed-context.ts:44` | useState + effect | TQ `qk.asistente.context(c)` | Server lookup. |
 | Bottom "Más" sheet | `BottomTabs.tsx:81` | useState | L | One component. |
 | TimeClock status | `TimeClock.tsx:138`; events `:175`; poll `:188` | useState + window event + interval ×2 instances | TQ `qk.me.today()` (`refetchInterval` 5 min, `refetchOnWindowFocus`) | Server state (plan §4.7). |
 | TimeClock tick / announcement / pending | `TimeClock.tsx:139-141` | useState | L (pending → mutation) | Per instance. |
@@ -77,8 +82,8 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
 | Bandeja unread | `bandeja-unread.ts:10-43`; `bandeja-badge-view.tsx:52` | module store | TQ `qk.shell.badges()` | Server state (plan). |
 | Badge clock | `bandeja-badge-view.tsx:33` | useState tick | L | — |
 | Avatar photo | `AvatarMenu.tsx:84` (duplicated by `InicioClient.tsx:43` and `PerfilClient`) | useState ×3 + `router.refresh` | TQ `qk.me.profile()` | Server state; one cache replaces three copies. |
-| Presentation style | `StyleProvider.tsx:49-55`; shell provider `AppShell.tsx:55`; per-page providers; `EstiloSwitch.tsx:52-70` | context ×2 levels | **StyleProvider stays the API.** Back its *persisted* value with **Z `usePresentationStyle`** (see §2.6) or revalidate the layout. | Fixes finding 3 without a second style API. Needs a decision: plan §4.7 says the style stays in StyleProvider. |
-| Appearance (theme/mode/density/text size) | `AppearanceProvider.tsx:95-96`, context `:29` | context + `<html>` writes | L (context) | SSR-seeded first paint (plan §4.6); must not flash. |
+| Presentation style | `StyleProvider.tsx:49-55`; shell provider `AppShell.tsx:55`; per-page providers; `EstiloSwitch.tsx:52-70` | context ×2 levels | **Z `useAppearance`** (§2.6); `?estilo=` read from the URL | Decided (D2). Fixes finding 3; `useStyle()` keeps its call-site API as a selector. |
+| Appearance (theme/mode/density/text size) | `AppearanceProvider.tsx:95-96`, context `:29` | context + `<html>` writes | **Z `useAppearance`** (§2.6), SSR-safe seeding | Decided (D2). `<html>` attributes and `<style id="appearance">` stay server-rendered; must not flash. |
 | Mobile breakpoint | `use-mobile-shell.ts:35`, `hooks/use-mobile.ts:6` | useSyncExternalStore / useState (duplicate hooks) | L | Browser media state; dedupe the hooks separately. |
 | Offline | `OfflineBanner.tsx:34` | useSyncExternalStore | L | Browser state. |
 | Session access | `lib/stores/session-store.ts` | Zustand | keep | Already correct; make consumers reactive (finding 4). |
@@ -92,7 +97,7 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
 | Photo upload pending / error | `ProfilePhotoButton.tsx:49-50` | useState | L → mutation | — |
 | WidgetCard empty detection | `WidgetCard.tsx:57` | useState + MutationObserver | L | DOM-derived. |
 | Selected KPI, range, collapsed widgets, chart/table per widget, series toggles | *(none today)*: KpiTiles, WeeklyPaceChart (fixed 8 weeks, `types/redesign.ts:288-289`), TramoDonut, WorkloadBars | — | **Z `useInicioDashboard`** (new) | Owner's dashboard pattern. Range is a client window over the 8 weeks already loaded unless the loader grows a range input (then it becomes URL + query key). |
-| Style (Visual/Esencial/Analítico) | `inicio/page.tsx:51`, `EstiloSwitch` `InicioClient.tsx:72` | StyleProvider | StyleProvider | Not duplicated in the dashboard store. |
+| Style (Visual/Esencial/Analítico) | `inicio/page.tsx:51`, `EstiloSwitch` `InicioClient.tsx:72` | StyleProvider | `useAppearance` (`useStyle()` selector); the page provider goes (Phase 2) | Not duplicated in the dashboard store. |
 
 ### Tareas: tablero / lista / calendario + TaskSheet
 
@@ -108,7 +113,7 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
 | Column collapse | `TaskBoardWidget.tsx:217,260` | derived (empty columns) | none | Not user state. |
 | Lista row selection | `RecordTable.tsx:101-114` | useState | L | Only feeds export inside the same widget. Move to Z only if a bulk bar outside the table appears. |
 | Filter combobox open | `TareasFilterCombobox.tsx:44` | useState | L | — |
-| Calendar rows / loaded range / error | `TareasCalendario.tsx:102-104,152-174` | useState + action | TQ `qk.tareas.calendar({from,to,filters})` | Server data. |
+| Calendar rows / loaded range / error | `TareasCalendario.tsx:102-104,152-174` | useState + action | TQ `qk.tareas.calendar(f, from, to)` | Server data. |
 | Calendar cursor (month/week anchor) | `TareasCalendario.tsx:105,197-200` | useState (lost on reload/back) | **URL `?fecha=YYYY-MM-DD`** | Bookmarkable; matches Cronograma `?week=`. |
 | Calendar selected day | `TareasCalendario.tsx:106` | useState | **Z `useTareasUi.calendar.selectedDay`** | Survives switching views and back within the session. Not worth a URL entry. |
 | Feed dialog open | `TareasCalendario.tsx:107,124-127` (reopened after OAuth return) | useState | L | One component; the OAuth reopen stays local. |
@@ -148,7 +153,7 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
 | Project tareas filters | `ProjectTasksByFase.tsx:125` | URL push | URL | — |
 | Project new-task dialog | `ProjectTasksByFase.tsx:71,227` | useState + own mount | **Z `useNewTaskUi`** | Single host. |
 | Cronograma week | `cronograma-view.tsx:41`, `cronograma-header.tsx:31-39` | URL `?week=` | URL | Shareable. |
-| Cronograma view / loading / notFound / error | `cronograma-view.tsx:43-46` | useState | TQ `qk.proyectos.schedule(id)` | Server. |
+| Cronograma view / loading / notFound / error | `cronograma-view.tsx:43-46` | useState | TQ `qk.proyectos.cronograma(id)` | Server. |
 | Cronograma announcement | `cronograma-view.tsx:47` | useState | L | a11y live region. |
 | Imprevistos list | `imprevistos-panel.tsx:39` | useState + useOptimistic | TQ | Server. |
 | Imprevistos form | `imprevistos-panel.tsx:45-47` | useState | L | — |
@@ -170,7 +175,7 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
 | Contacts search | `PersonasContacts.tsx:104` | useState | **URL `?q=`** (debounced) | Shareable, survives back. |
 | Contact editor (show, editingId, draft, error, delete) | `PersonasContacts.tsx:105-110` | useState | L | Form. |
 | Contact detail sheet | `PersonasContacts.tsx:112,132-137` (`?contacto=`) | URL | URL | Shareable. |
-| Contact detail data | `PersonasContacts.tsx:113-127` | useState + effect | TQ `qk.personas.contact(id)` | Server. |
+| Contact detail data | `PersonasContacts.tsx:113-127` | useState + effect | TQ `qk.contacts.detail(id)` | Server. |
 | Subfilter (proveedores) | `PersonasContacts.tsx:100` (prop from URL) | URL | URL | — |
 | Contact editor staff options | `ContactEditorSheet.tsx:213` | useState | TQ `catalog.staff` | — |
 | Client history | `ClientDetailSheet.tsx:64` | useState | TQ | — |
@@ -192,7 +197,7 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
 | Project options | `Inbox.tsx:145`, `GmailReader.tsx:132` | useState ×2 | TQ `catalog.projectOptions` | Duplicate fetch. |
 | Row action panel (link / task per thread) | `Inbox.tsx:122,146` | useState | L | One list. |
 | Panel form | `Inbox.tsx:656-659` | useState | L | — |
-| Gmail thread data / attempt | `GmailReader.tsx:56-57` | useState | TQ `qk.gmail.thread(id)` | — |
+| Gmail thread data / attempt | `GmailReader.tsx:56-57` | useState | TQ `qk.me.gmail.thread(id)` | — |
 | Show images / pickedId / pending / error / draftOpen | `GmailReader.tsx:131,134-137` | useState | L | — |
 | Linked project | `GmailReader.tsx:133` | useState copy | TQ (thread field) | — |
 | Draft sheet | `GmailDraftSheet.tsx:40-57` | useState | L | Form. |
@@ -229,14 +234,15 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
 
 | UI state | file:line | Current | Verdict | Reason |
 |---|---|---|---|---|
-| Apariencia preferences / textSize / locked | `AparienciaClient.tsx:110-113`, `apariencia-context.tsx:16-38` | useState + page context | L (context) on top of `AppearanceProvider` | Page-scoped form context, reset per segment. Correct as is. |
-| Horario | `HorarioClient.tsx:52-56`, `horario-context.tsx:30` | useState + context | L (saved → TQ) | — |
-| Notificaciones matrix / quiet hours | `NotificacionesClient.tsx:96-99`, context `:81` | useState + context | L | Form. |
-| Perfil data / form / password | `PerfilClient.tsx:85,195-197,395-397`, context `:70` | useState + context | TQ data; L form | — |
-| Integraciones status / dialogs | `IntegracionesClient.tsx:121,161-164`, context `:100` | useState + context | TQ status; L | — |
+| Apariencia preferences / textSize / locked | `AparienciaClient.tsx:110-113`, `apariencia-context.tsx:16-38` | useState + page context | **Z `useAppearance`** (context merged into the store, 9a) | Decided (D3). One debounce, rollback on error. |
+| Horario | `HorarioClient.tsx:52-56`, `horario-context.tsx:30` | useState + context | page-scoped Z store (9c); saved → TQ | Decided (D3). |
+| Notificaciones matrix / quiet hours | `NotificacionesClient.tsx:96-99`, context `:81` | useState + context | page-scoped Z store (9a); saved → TQ | Decided (D3). |
+| Perfil data / form / password | `PerfilClient.tsx:85,195-197,395-397`, context `:70` | useState + context | TQ data (`me.profile`); page-scoped Z store for the form (9a) | Decided (D3). |
+| Integraciones status / dialogs | `IntegracionesClient.tsx:121,161-164`, context `:100` | useState + context | TQ status; page-scoped Z store (9a) | Decided (D3). |
+| General settings editor | `general-settings-editor-context.tsx` | context | page-scoped Z store (9c); saved → `setQueryData(org.general())` | Decided (D3). |
 | Theme editor draft / published / mode / reset | `ThemeEditor.tsx:71-76` | useState | L draft and mode; TQ published | — |
 | Estatus editor | `EstatusSettings.tsx`, `useTaskStatusesEditor.ts` (10) | useState | TQ list; L editor | — |
-| Permisos custom matrix | `usePermissionsWorkspace.ts:94,103,226` + `lib/auth/permissions.ts:6,830` (`cincel.permissions.custom.v1`) | localStorage | **Out of scope; flag** | Org configuration kept per browser; should be server state (separate issue), not Zustand. |
+| Permisos custom matrix | `usePermissionsWorkspace.ts:94,103,226` + `lib/auth/permissions.ts:6,830` (`cincel.permissions.custom.v1`) | localStorage | **Hidden in 9b** (D4, #950) | Enforces nothing; the server model is backlog #971. Not Zustand. |
 | General settings legacy key | `lib/settings/general-settings.ts:4,223,242` | localStorage read/remove | leave | Legacy cleanup. |
 | Monday wizard steps | `MondayImportWizard.tsx` (22 useState) | useState | L (run status → TQ poll) | Wizard-local. |
 | Monday reviewed ids | `MondayImportWizard.tsx:78-88` (`reviewedKey(runId)`) | localStorage | L (route through `browser-state-repository`) | Per-run scratch, one reader. |
@@ -248,8 +254,8 @@ Companion to `plan.md` (§4.7). Line numbers are from `main` @ e985f58.
 | UI state | file:line | Current | Verdict | Reason |
 |---|---|---|---|---|
 | Active thread | `AsistentePageClient.tsx:52-56,79,95,111` (`?thread=`) | useState + URL | **URL** for the page; mirror into **Z `useAssistantUi.threadId`** | Shareable, and the sheet can continue the same thread. |
-| Threads list | `AsistentePageClient.tsx:51,63-69` | useState | TQ `qk.assistant.threads()` | — |
-| Thread messages / loadingId | `:58,72-87` | useState | TQ `qk.assistant.thread(id)` (`isFetching`) | — |
+| Threads list | `AsistentePageClient.tsx:51,63-69` | useState | TQ `qk.asistente.threads()` | — |
+| Thread messages / loadingId | `:58,72-87` | useState | TQ `qk.asistente.thread(id)` (`isFetching`) | — |
 | Notice | `:57` | useState | L | — |
 | Prompt draft injection | `:59,115-117` → `AssistantChat.tsx:83` | useState nonce | L | Page-local. |
 | Chat input / error | `AssistantChat.tsx:47-52` | useState | L | — |
@@ -314,7 +320,8 @@ type AssistantUiState = {
   consumePrompt(): void;
 };
 ```
-- **Persist:** none for `open`, `mounted` and `contextOverride`. `threadId` optionally persists to **sessionStorage**, key `cincel.ui.assistant.v1`, so a reload keeps the conversation. This is a product decision; the default is no persistence.
+- **Persist:** none. **Decided:** the thread is not persisted across reloads; it lives in memory across navigation, and `/asistente?thread=` is the deep link.
+- **Owner:** Phase 1b creates the store and makes `AssistantLauncher` read it. Phase 10 keeps the sheet, threads and `/asistente`; Phase 8 only calls `openAssistant`; Phase 2 adds the palette command.
 - **Reset:** `close()` clears `contextOverride`. `threadId` is kept across navigation; "Nueva conversación" sets it to null.
 - **Writes:** `AssistantButton` (onOpen), the ⌘J handler in `AssistantLauncher`, `CommandPalette` "Preguntar al asistente" (shown when `available`), `DocumentReader` (`openAssistant({context:{route}})`), `AssistantSheet` (`setThreadId` on a new thread or on "Nueva"), `AsistentePageClient` (`setThreadId` on select).
 - **Reads:** `AssistantLauncher` (`mounted`, `open`, `available`), `AssistantSheet` (`threadId`, `contextOverride`, `pendingPrompt`).
@@ -351,7 +358,8 @@ type TareasUiState = {
 
 ### 2.5 Dashboard store factory: `lib/stores/dashboard-store.ts`, with instances
 - `lib/stores/inicio-dashboard-store.ts`: `useInicioDashboard = createDashboardStore<InicioWidget, InicioKpiKey>("inicio")`
-- `lib/stores/proyectos-dashboard-store.ts` and `lib/stores/personas-dashboard-store.ts` (optional, same factory)
+- `lib/stores/proyectos-dashboard-store.ts` and `lib/stores/personas-dashboard-store.ts` (same factory)
+- **Approved (D1)** and built in Phase 12 ("Query Migration Phase 12: Dashboard interactions"): the factory (#967), then Inicio (#968), Proyectos (#969) and Personas (#970). Each depends only on 1a, 1b, the factory and its page's data phase.
 
 ```ts
 export type WidgetView = "chart" | "table";
@@ -379,10 +387,11 @@ export function createDashboardStore<W extends string, K extends string>(
   defaults?: Partial<Pick<DashboardUiState<W, K>, "range" | "collapsed">>,
 ): UseBoundStore<StoreApi<DashboardUiState<W, K>> & { persist: … }>;
 ```
-- **Persist:** `persist` + `createJSONStorage(() => localStorage)`, key `cincel.ui.dashboard.<id>.v1`, `version: 1` with `migrate`. `partialize: ({range, collapsed, views, hiddenSeries}) => …`. `selectedKpi` is not persisted (session only). Use `skipHydration: true` (see §3 SSR).
+- **Persist:** `persist` + `createJSONStorage(() => localStorage)`, key `cincel.ui.dashboard.<id>.v1`, `version: 1` with `migrate`. `partialize: ({range, collapsed, views, hiddenSeries}) => …`. `selectedKpi` is not persisted (session only). Use `skipHydration: true`; `<UiStoresHydrator/>` (1b) rehydrates after mount (see §3 SSR).
+- **Range:** `4w | 8w | 12w` (default `8w`) is a pure client window. The loader always returns a fixed 12-week series (Inicio: `weeklyPace` goes from 8 to 12 weeks, with no input, so the key does not change), and widgets slice it.
 - **Reset:** survives navigation (module store). `selectedKpi` clears on `reset()` or when the KPI disappears from data.
 - **Composition with Visual/Esencial/Analítico, without duplicating StyleProvider:**
-  - The store never holds the current style. Style-dependent selectors take it as an argument from `useStyle()`:
+  - The store never holds the current style. Style-dependent selectors take it from `useStyle()` (a selector on `useAppearance`, §2.6):
     ```ts
     export function useWidgetView<W extends string>(store: DashboardStore<W, any>, widget: W, fallback: Record<PresentationStyle, WidgetView>) {
       const { style } = useStyle();
@@ -400,24 +409,36 @@ export function createDashboardStore<W extends string, K extends string>(
   - Widget ids: `kpis | tramoDonut | weeklyPace | attention | myDay | projectsProgress | workload`.
   - `KpiTiles` writes `toggleKpi`. `WidgetCard` gets a collapse toggle (`actions` slot) that writes `toggleCollapsed`. `WeeklyPaceChart` reads `range` (slices `weeklyPace`) and `hiddenSeries.weeklyPace` (created/completed). `TramoDonut` and `WorkloadBars` read `useWidgetView`.
   - `InicioClient` stays style-agnostic.
-- **Rule:** if a dashboard control ever changes what the **server returns** (for example a 12-week range beyond the loaded 8), it is a **query-key input**. It moves to the **URL** (shareable), not the store.
+- **Rule:** if a dashboard control ever changes what the **server returns** (for example a range beyond the fixed 12 weeks), it is a **query-key input**. It moves to the **URL** (shareable), not the store.
 
-### 2.6 `usePresentationStyle`: `lib/stores/presentation-style-store.ts` (fixes finding 3; needs a decision)
+### 2.6 `useAppearance`: `lib/stores/appearance-store.ts` (decided, D2; fixes finding 3)
+
+Replaces the `AppearanceProvider` context (`components/shell/AppearanceProvider.tsx`) **and** the `StyleProvider` context (`components/shell/StyleProvider.tsx`).
+
 ```ts
-type PresentationStyleState = {
-  /** The persisted user style, seeded from the server once per session. */
-  userStyle: PresentationStyle | null;
-  seed(style: PresentationStyle): void;   // first seed wins until setUserStyle
-  setUserStyle(style: PresentationStyle): void;
+type AppearanceState = {
+  /** Server-resolved appearance (theme, mode, style, density, text size, cssVars). */
+  appearance: ResolvedAppearance;
+  /** The org fixes the presentation style: EstiloSwitch hides and `?estilo=` is ignored. */
+  fixedByOrg: boolean;
+  seeded: boolean;
+  seed(appearance: ResolvedAppearance, opts: { fixedByOrg: boolean }): void; // first seed wins
+  /** Optimistic: applies to the store and `<html>`, persists with updateMyPreferencesAction, rolls back on error. */
+  setPreference(patch: Partial<UserPreferences>): Promise<void>;
 };
+
+/** Same call-site API as today. */
+export function useStyle(): StyleContextValue;      // style = (!fixedByOrg && ?estilo) || appearance.style
+export function useAppearance<T>(selector: (s: AppearanceState) => T): T;
 ```
-- `StyleProvider` keeps its public API (`useStyle()`).
-  - Without `isOverridden`, it renders `userStyle ?? props.style`.
-  - With `?estilo=`, it keeps local state as today.
-- `EstiloSwitch` calls `setUserStyle` (and rolls it back on error), then `useAppearance().setPreference({style})` instead of calling the action directly. That keeps `<html data-style>` and `AppearanceProvider` in sync.
-- Not persisted; the server is the source.
-- Alternative without a store: make `updateMyPreferencesAction({style})` revalidate the layout. The store avoids the round trip.
-- **Seeding must be SSR-safe.** Use a `<PresentationStyleSeed style>` client component, or a context-scoped store.
+
+- **Seeding is SSR-safe.** Either a per-request `createStore` + `<AppearanceStoreProvider initial>` in the root layout (the zustand Next.js pattern, `useRef` per request), or a seeder that renders the server value until seeded. The first client render equals the server HTML.
+- `<html>` attributes, `<style id="appearance">` and the system-mode script stay server-rendered in `app/layout.tsx`; the store only writes `<html>` after a client change (`applyAppearanceToDocument`).
+- The style comes from the store. The `?estilo=` override is read from the URL with `useSearchParams` (never mirrored into the store). `fixedByOrg` comes from the store.
+- EstiloSwitch and Ajustes › Apariencia call `setPreference`, which persists with `updateMyPreferencesAction` and rolls back on error. One debounce for text size (today it is debounced twice: `AparienciaClient.tsx:173` + `AppearanceProvider.tsx:157-159`).
+- `apariencia-context.tsx` merges into this store (Phase 9a).
+- **Not persisted** in the browser: the server is the source.
+- **Owners:** Phase 1b creates the store and swaps the providers with identical behaviour. Phase 2 removes the nested per-page `StyleProvider`s (inicio, tareas, proyectos, proyectos/[id], [id]/tareas, [id]/cronograma, [id]/archivos, and the conditional ones in personas, biblioteca, biblioteca/[seccion], vacaciones) and fixes EstiloSwitch. Phase 9a moves Apariencia onto the store. The portal keeps its own server-rendered style (cookie), with `fixedByOrg` passed (Phase 11).
 
 ### 2.7 `useRecentDocs`: `lib/stores/recent-docs-store.ts`
 ```ts
@@ -435,7 +456,25 @@ type RecentDocsState = {
 ### 2.8 Existing `useSessionStore`: keep, and add selectors
 `lib/stores/session-store.ts` adds `selectAuthenticatedUser`, a memoized selector equivalent to `toAuthenticatedUser`. Replace the `useState(() => getCurrentAuthenticatedUser())` snapshots listed in finding 4.
 
-**Not stores (explicit):** TimeClock status, Bandeja unread, avatar photo, all lists, catalogs and detail data (all TQ); every form draft (L); `AppearanceProvider` (context, SSR-seeded); `ClockInPrompt` seen-date (L; already mount-safe).
+### 2.9 React contexts (decided, D3)
+
+No new React contexts for app state. UI state goes to Zustand (global, or a page-scoped `createStore` + per-page provider for form drafts, reset on unmount), server data to TanStack, shareable state to the URL.
+
+| Context | File | Fate | Owner |
+|---|---|---|---|
+| `AppearanceContext` | `components/shell/AppearanceProvider.tsx` | `useAppearance` store (§2.6) | 1b |
+| `StyleContext` | `components/shell/StyleProvider.tsx` | `useAppearance` + `?estilo=` from the URL (§2.6) | 1b (swap), 2 (nested providers) |
+| `SessionAccessContext` | `lib/auth/session-context.tsx` | **removed**: duplicates `lib/stores/session-store.ts`; its 3 users read `useSessionStore` selectors (`selectAuthenticatedUser` …) | 1b |
+| `GeneralSettingsContext` (7 users) | `lib/settings/use-general-settings.ts` | server data → TanStack `qk.org.general()`, hydrated by the root layout (`initialData`); Ajustes › General save does `setQueryData` | 1b (query + hook), 9c (editor) |
+| `AparienciaContext` | `components/ajustes/apariencia-context.tsx` | merged into `useAppearance` | 9a |
+| `PerfilContext` | `components/ajustes/PerfilClient.tsx` | page-scoped store; saved data via TanStack mutations | 9a |
+| `NotificacionesFormContext` | `components/ajustes/NotificacionesClient.tsx` | page-scoped store | 9a |
+| `IntegracionesContext` | `components/ajustes/IntegracionesClient.tsx` | page-scoped store | 9a |
+| Horario context | `components/ajustes/horario-context.tsx` | page-scoped store | 9c |
+| General settings editor context | `components/configuracion/general-settings-editor-context.tsx` | page-scoped store | 9c |
+| shadcn `chart`, `form-field`, `sidebar` | `components/ui/shadcn/*` | **keep** (library internals) | — |
+
+**Not stores (explicit):** TimeClock status, Bandeja unread, avatar photo, general settings, all lists, catalogs and detail data (all TQ); single-component form drafts (L); `ClockInPrompt` seen-date (L; already mount-safe).
 
 ---
 
@@ -451,15 +490,16 @@ type RecentDocsState = {
 | Anything from the DB | **TanStack** | Optimistic copies too: `setQueryData`, never `useState(props)` mirrors like `useSyncedList` or Inbox `synced` |
 | UI state read or written by **2+ components not in a parent/child pair**, opened from elsewhere, must survive navigation, or a user layout preference | **Zustand** | — |
 | Single-component transient state | **useState** | Drafts, a popover/dialog owned by one component, hover/drag, a11y announcements, "pending" before TQ owns it |
-| Page-scoped form contexts | stay **context** | Apariencia, Horario, Notificaciones, Perfil, Integraciones; reset per segment |
+| Page-scoped form drafts shared by several components of one page | page-scoped **Zustand** store (`createStore` + per-page provider, reset on unmount) | Horario, Notificaciones, Perfil, Integraciones, General (§2.9) |
+| New React context for app state | **never** | use one of the rows above |
 
-- **Never put in Zustand:** the presentation style itself (StyleProvider; §2.6 only backs its persisted value), server data, data derived from server data (derive with selectors or `useMemo` from TQ data), or URL params (don't mirror them into a store; read `useSearchParams`).
+- **Never put in Zustand:** server data, data derived from server data (derive with selectors or `useMemo` from TQ data), or URL params (don't mirror them into a store; read `useSearchParams`).
 - **Event and registry ban.** No new `window.dispatchEvent`/CustomEvent, module-level `let` stores or opener registries for UI coordination. Remove `OPEN_ASSISTANT_EVENT`, `shell-openers.ts`, `today-events.ts` and `bandeja-unread.ts` (the last two go to TQ).
 
 **SSR safety:**
 1. Module-singleton stores (`create()`) are allowed **only** if they hold request-independent defaults and are **never written on the server**. All stores above qualify.
-2. A store seeded from server props per request (like §2.6) must either:
-   - seed in a client effect or seeder component, with the provider rendering `props.style` until seeded so server and first client render match; or
+2. A store seeded from server props per request (like §2.6 `useAppearance`) must either:
+   - seed in a client effect or seeder component, rendering the server value until seeded so server and first client render match; or
    - use the zustand Next.js pattern `createStore` + `<XStoreProvider>` with `useRef` per request and `useStore(ctx, selector)`.
 3. Persisted stores use `persist(..., { skipHydration: true })`. One `<UiStoresHydrator/>` client component in `AppShellClient` calls `useInicioDashboard.persist.rehydrate()`, `useRecentDocs.persist.rehydrate()` etc. in a `useEffect`. The first render always uses defaults, so server HTML equals the first client render.
 4. If a persisted value changes layout (a collapsed widget), accept the post-mount shift, or render the collapsed state behind `useHasHydrated(store)` to avoid flicker. Don't move it to cookies unless product requires SSR-correct collapse.
@@ -488,181 +528,104 @@ type RecentDocsState = {
 
 ## 4. Zustand work per Query Migration phase
 
-**Phase 1 (foundation)**, added here because the other phases need it:
-- Add `tests/setup/zustand-reset.ts`, the `<UiStoresHydrator/>` skeleton and `useHasHydrated(store)` in `lib/stores/use-has-hydrated.ts`.
-- Add `selectAuthenticatedUser` to `session-store.ts`.
-- Add a grep guard test: no `window.dispatchEvent(new (Custom)?Event("cincel:` in `components/` or `lib/` once phases 2 and 10 land.
+### Phase 1a: infrastructure (#935)
+- Add `tests/setup/zustand-reset.ts` (registered in `vitest.config.ts` `setupFiles`) and `useHasHydrated(store)` in `lib/stores/use-has-hydrated.ts`.
+- Add `selectAuthenticatedUser` (and the other session selectors) to `session-store.ts`.
+- The cache-reset helper: `queryClient.clear()` + every UI store's `reset()` on an identity change (plan §4.8 rule 1).
+- Re-anchor the line references in this document.
 
-### Phase 2: shell and sidebar
-- **Stores:** create `useShellUi`. Optionally create `usePresentationStyle` (§2.6) if the product owner approves; otherwise open a bug for the layout revalidation.
+### Phase 1b: shared contracts (#954)
+- **Stores:** `useNewTaskUi` (§2.3), `useAssistantUi` (§2.2), `useAppearance` (§2.6).
 - **Components:**
-  - `AppShellClient.tsx` (drop `searchOpen`; mount `UiStoresHydrator`)
+  - `AppShellClient.tsx`: mount `<NewTaskDialogHost/>` (gated by `canCreateActivity`) and an empty `<UiStoresHydrator/>`; nothing else (Phase 2 owns the rest).
+  - `NewTaskDialog.tsx`: fully migrated (catalog queries, `useActionMutation`); delete the never-mounted `NewTaskDialogRoute` (`:430-439`); `use-new-task-param.ts` becomes the host effect for `?nueva=1`.
+  - The 4 existing mounts (`TareasClient.tsx:310`, `TareasTablero.tsx:96`, `ProjectTasksByFase.tsx:227`, `NoteEditor.tsx:304`) call `openNewTask(defaults, source)`; this is a mechanical swap, exempt from plan §5.0.
+  - `AssistantLauncher.tsx`: reads `useAssistantUi` (`open`, `mounted`, `available`); ⌘J → `toggle`; delete the dead `openAssistant` export and the window event.
+  - `app/layout.tsx`: the `useAppearance` provider/seeder replaces `AppearanceProvider`; `AppShell.tsx` stops wrapping `StyleProvider` once `useStyle()` reads the store (identical behaviour; the nested page providers stay until Phase 2).
+  - Remove `lib/auth/session-context.tsx` (`SessionAccessProvider` in `app/layout.tsx`, `useSessionAccess` in `AppRouteGuard.tsx`); its users and the tests that mock it (`AppRouteGuard.test.tsx`, `app/login/denegado/page.test.tsx`, `app/__tests__/root-layout*.test.tsx`) read or set `useSessionStore` instead.
+- **Acceptance:** exactly one `NewTaskDialog` in the tree; no visual change in style, theme, density or text size; SSR HTML equals the first client render; `rg "OPEN_ASSISTANT_EVENT|SessionAccessContext"` is empty.
+- **Tests:** store unit tests (actions, reset); `NewTaskDialogHost` (URL param → opens → strips the param); appearance SSR equality test; logout clears the cache and resets the stores.
+
+### Phase 2: shell and sidebar (#936)
+- **Stores:** create `useShellUi` (§2.1).
+- **Components:**
+  - `AppShellClient.tsx` (drop `searchOpen`)
   - `Sidebar.tsx` (drop the `onOpenSearch` prop; call `openSearch`)
-  - `CommandPalette.tsx` (`open`/`onOpenChange` from the store; ⌘K → `toggleSearch`; `setSearchAvailable`)
+  - `CommandPalette.tsx` (`open`/`onOpenChange` from the store; ⌘K → `toggleSearch`; `setSearchAvailable`; "Preguntar al asistente" shown when `useAssistantUi.available`, calls `openAssistant()`)
   - `NotFoundSearchButton.tsx`
-  - delete `lib/ui/shell-openers.ts`
-  - `TimeClock`, `ClockInPrompt` and the badge go to TQ per the plan (not Zustand)
-  - delete `today-events.ts` and `bandeja-unread.ts`
-  - replace the snapshot reads in shell components with `useSessionStore`
-  - if §2.6 is approved: `StyleProvider.tsx`, `EstiloSwitch.tsx` (go through `useAppearance().setPreference`), and a seed in `AppShell.tsx`
+  - delete `lib/ui/shell-openers.ts`, `lib/time-tracking/today-events.ts`, `lib/my-space/bandeja-unread.ts`
+  - `TimeClock` (both instances: the sidebar slot `lib/shell/sidebar-slots/time-clock.tsx` and `MobileTopBar.tsx`), `ClockInPrompt` and the badge go to TQ (not Zustand)
+  - replace the snapshot user reads in shell components with `useSessionStore`
+  - `StyleProvider.tsx` / `EstiloSwitch.tsx`: remove the nested per-page providers; EstiloSwitch writes `useAppearance.setPreference` (rollback on error) and hides when `fixedByOrg`
 - **Acceptance:**
   - ⌘K, the Sidebar button and the 404 button all open the same palette.
   - `rg "registerShellOpener|openShellOverlay|cincel:today-status"` is empty.
   - Changing Estilo on Inicio, then opening Personas (no `?estilo`), shows the new style without a reload. `html[data-style]` matches.
   - No hydration warnings.
-- **Tests:**
-  - store unit tests
-  - `CommandPalette.test.tsx` and `layout.test.tsx` adapted to the store
-  - a test that ⌘K toggles via the store
-  - a style regression test (two providers, set on one, read on the other)
+- **Tests:** store unit tests; `CommandPalette.test.tsx` and `layout.test.tsx` adapted to the store; ⌘K toggles via the store; a style regression test (set on one page, read on another).
 
-### Phase 3: Inicio
-- **Stores:** create the `createDashboardStore` factory and `useInicioDashboard` (persisted, `skipHydration`).
-- **Components:**
-  - `KpiTiles.tsx` (selectable tiles: `aria-pressed`, `toggleKpi`)
-  - `WidgetCard.tsx` (optional collapse action: `aria-expanded`)
-  - `WeeklyPaceChart.tsx` (range segmented control 4/8 weeks over the 8 loaded; series toggles)
-  - `TramoDonut.tsx` and `WorkloadBars.tsx` (`useWidgetView` chart/table)
-  - `InicioClient.tsx` stays style-agnostic. The photo goes to TQ `me.profile`, with no Zustand.
-  - The Inicio "Nueva tarea" link can call `useNewTaskUi.openNewTask()` once Phase 4 lands.
-- **Product gate:** the interactions are new, so confirm the list before building.
-- **Acceptance:**
-  - Collapse, range, view and series choices survive Inicio → Tareas → Inicio and a reload.
-  - `selectedKpi` survives navigation but not a reload.
-  - Switching Estilo does not carry a per-style view override into the other style.
-  - The first render equals the SSR render (defaults), and persisted values apply after mount.
-  - Zero new server calls caused by store changes.
-- **Tests:**
-  - factory unit tests (actions, `partialize`, `migrate`, per-style views)
-  - `InicioClient.test.tsx` with a seeded store
-  - an SSR snapshot equality test
-  - an a11y test for the tile toggle and the collapse buttons
+### Phase 3: Inicio (#937)
+- **Stores:** none. The photo goes to TQ `me.profile`. Dashboard interactions are Phase 12 (#968).
+- The Inicio "Nueva tarea" link can call `useNewTaskUi.openNewTask()` (store from 1b).
 
-### Phase 4: Tareas
-- **Stores:**
-  - create `useNewTaskUi` and `<NewTaskDialogHost/>` (mounted in `AppShellClient`)
-  - create `useTareasUi`
-  - add `fecha` to `TareasQuery`
+### Phase 4: Tareas (#938: 4a #955, 4b #956, 4c #957, 4d #958)
+- **Stores:** create `useTareasUi` (§2.4, `selectedDay` only) in 4c. `useNewTaskUi` and the host come from 1b; `fecha` in `lib/tareas/query.ts` comes from 1b.
 - **Components:**
-  - `TareasClient.tsx`: remove the dialog mount at `:310`; the button calls `openNewTask`; `useSessionStore`
-  - `TareasTablero.tsx`: remove `quickAddStatus` and the second dialog
-  - `ListPage.tsx`, `TaskBoardWidget.tsx`: drop `onQuickAdd`; `BoardVisual` calls `openNewTask({status})`
-  - `NewTaskDialog.tsx`: `NewTaskDialogFromUrl` becomes the host effect for `?nueva=1`
-  - `use-new-task-param.ts`
-  - `TareasCalendario.tsx`: cursor ↔ `?fecha`, `selectedKey` ↔ `useTareasUi`, user from `useSessionStore` (drop the focus listener)
-  - `TaskSheet.tsx`, `TareasStartSlot.tsx`: session selector
-  - `lib/tareas/query.ts` (parse and serialize `fecha`)
-- **Acceptance:**
-  - Exactly one `NewTaskDialog` in the React tree on any page (`rg "<NewTaskDialog" components` → only the host).
-  - The quick-add, Tareas, `?nueva=1` and Proyectos/Nota entry points all open it with the right defaults.
-  - The calendar date survives reload and back/forward via `?fecha`. The selected day survives switching to Lista and back.
-  - No `useState(() => getCurrentAuthenticatedUser())` left in `components/tareas`.
-- **Tests:**
-  - `new-task-store` and `tareas-ui-store` unit tests
-  - `NewTaskDialogHost` (URL param → opens → strips the param)
-  - update `TareasTablero.test.tsx` (quick-add through the store)
-  - `TareasCalendario.test.tsx` (`?fecha` round trip, selected day kept)
-  - `lib/tareas/query` round-trip test for `fecha`
+  - 4a: `TareasTablero.tsx` (no `quickAddStatus`; quick-add through `openNewTask({status})`), `ListPage.tsx`, `TaskBoardWidget.tsx` (drop `onQuickAdd`), `TareasClient.tsx` (`useSessionStore`)
+  - 4b: `TaskSheet.tsx` (session selector)
+  - 4c: `TareasCalendario.tsx` (cursor ↔ `?fecha`, `selectedKey` ↔ `useTareasUi`, user from `useSessionStore`, drop the focus listener)
+  - 4d: `TareasStartSlot.tsx` (session selector)
+- **Acceptance:** the calendar date survives reload and back/forward via `?fecha`; the selected day survives switching to Lista and back; no `useState(() => getCurrentAuthenticatedUser())` left in `components/tareas`.
+- **Tests:** `tareas-ui-store` unit test; `TareasTablero.test.tsx` (quick-add through the store); `TareasCalendario.test.tsx` (`?fecha` round trip, selected day kept).
 
-### Phase 5: Proyectos
-- **Stores:**
-  - use `useNewTaskUi`
-  - optionally `useProyectosDashboard` (factory)
-  - Portfolio search goes to the URL
-- **Components:**
-  - `ProjectTasksByFase.tsx` (drop `dialogDefaults` and its dialog mount; `openNewTask({projectId, tramoKey, …})`)
-  - `ProjectsPortfolio.tsx` (`?q=` with a debounced local draft, like Tareas)
-  - if the dashboard is approved: the tramo strip and card/table view through `useWidgetView`
-  - Cronograma: no Zustand (`?week` URL, TQ data)
-  - `ProjectFiles.tsx` `selectedId` stays local
-- **Acceptance:**
-  - Portfolio search survives opening a project and going back.
-  - The project Tareas "Nueva tarea" uses the host dialog.
-  - No `NewTaskDialog` mount in `components/proyectos`.
-- **Tests:**
-  - `ProjectsPortfolio.test.tsx` (`?q` round trip)
-  - `ProjectTasksByFase.test.tsx` (store called with defaults)
+### Phase 5: Proyectos (#939: 5a #959, 5b #960, 5c #961, 5d #962)
+- **Stores:** none new. Portfolio search goes to the URL `?q=` (5a). The dashboard is Phase 12 (#969).
+- **Components:** `ProjectsPortfolio.tsx` (`?q=` with a debounced local draft, 5a); `ProjectFichaClient.tsx:120` and `ProjectSectionNav.tsx:74` read session selectors; Cronograma has no Zustand (`?week` URL, TQ data); `ProjectFiles.tsx` `selectedId` stays local.
+- **Acceptance:** portfolio search survives opening a project and going back; no `NewTaskDialog` mount in `components/proyectos`.
+- **Tests:** `ProjectsPortfolio.test.tsx` (`?q` round trip).
 
-### Phase 6: Personas
-- **Stores:**
-  - `useSessionStore` selector
-  - contacts search goes to the URL `?q`
-  - optionally `usePersonasDashboard`
-- **Components:**
-  - `EquipoView.tsx` (session selector)
-  - `PersonasContacts.tsx` (`?q` + debounced draft)
-  - `PersonasTabs.tsx` (carry `q`? No: reset per tab; keep `estilo` only)
-  - if approved: `AvailabilityWeek`, `TeamGrid`/`TeamTable` through the dashboard store
-  - `use-member-editor.ts` stays local; its staff/access data goes to TQ
-- **Acceptance:**
-  - Contact search survives opening and closing `?contacto=` and the back button.
-  - No snapshot user reads.
+### Phase 6: Personas (#940)
+- **Stores:** `useSessionStore` selector; contacts search goes to the URL `?q`. The dashboard is Phase 12 (#970).
+- **Components:** `EquipoView.tsx` (session selector); `PersonasContacts.tsx` (`?q` + debounced draft); `PersonasTabs.tsx` (reset `q` per tab; keep `estilo` only); `use-member-editor.ts` stays local, its staff/access data goes to TQ.
+- **Acceptance:** contact search survives opening and closing `?contacto=` and the back button; no snapshot user reads.
 - **Tests:** `PersonasContacts.test.tsx` (`?q`), an `EquipoView` test with the session store set.
 
-### Phase 7: Mi espacio / Bandeja
-- **Stores:** use `useNewTaskUi` (`NoteEditor`). Everything else is TQ or URL.
-- **Components:**
-  - `NoteEditor.tsx` (drop `taskOpen` and its dialog mount → `openNewTask({title, description, projectId}, "nota")`)
-  - `Inbox.tsx` (remove the duplicate `tab` state `:137,159-162`; read `?tab` only; remove the `publishBandejaUnread` calls)
-  - `MiEspacioClient.tsx` (remove `useSyncedList`)
-- **Acceptance:**
-  - Bandeja tab = URL only.
-  - "Convertir en tarea" opens the host dialog.
-  - `rg "publishBandejaUnread|useSyncedList"` is empty.
-- **Tests:** `NoteEditor.test.tsx` (store called), `Inbox.test.tsx` (tab from the URL only).
+### Phase 7: Mi espacio / Bandeja (#941)
+- **Stores:** use `useNewTaskUi` (`NoteEditor`, already swapped in 1b). Everything else is TQ or URL.
+- **Components:** `Inbox.tsx` (remove the duplicate `tab` state `:137,159-162`; read `?tab` only; remove the `publishBandejaUnread` calls); `MiEspacioClient.tsx` (remove `useSyncedList`); delete `RemindersList`.
+- **Acceptance:** Bandeja tab = URL only; "Convertir en tarea" opens the host dialog; `rg "publishBandejaUnread|useSyncedList"` is empty.
+- **Tests:** `Inbox.test.tsx` (tab from the URL only).
 
-### Phase 8: Biblioteca and Vacaciones
-- **Stores:** create `useRecentDocs` (persist on the legacy key). Use `useAssistantUi` if Phase 10 has landed; otherwise this phase creates the store.
-- **Components:**
-  - `DocumentReader.tsx` (remove `assistantOpen` and the `AssistantSheet` import → `openAssistant({context:{route}})`; `remember` via the store)
-  - `BibliotecaSection.tsx` (`remember` via the store)
-  - `BibliotecaIndex.tsx` (read `useRecentDocs`)
-  - delete `use-recent-documents.ts` and `notifyRecentDocumentsChanged`
-  - `resources-model.ts` keeps the pure helpers
-  - Vacaciones: no Zustand
-- **Acceptance:**
-  - Existing recent-docs entries still show after the upgrade (legacy array read).
-  - Opening a doc updates "Abiertos recientemente" in another tab.
-  - The `DocumentReader` chunk has no `AssistantSheet`/`@ai-sdk/react` (bundle check, plan).
-  - No `cincel:recent-docs-changed`.
-- **Tests:**
-  - store test (legacy key migration, limit, multi-tab `storage` rehydrate)
-  - `DocumentReader` test (calls `openAssistant` with the route context)
+### Phase 8: Biblioteca and Vacaciones (#942)
+- **Stores:** create `useRecentDocs` (§2.7, persist on the legacy key). `useAssistantUi` comes from 1b.
+- **Components:** `DocumentReader.tsx` (remove `assistantOpen` and the `AssistantSheet` import → `openAssistant({context:{route}})`; `remember` via the store); `BibliotecaSection.tsx` (`remember` via the store); `BibliotecaIndex.tsx` (read `useRecentDocs`); delete `use-recent-documents.ts` and `notifyRecentDocumentsChanged`; `resources-model.ts` keeps the pure helpers; Vacaciones has no Zustand.
+- **Acceptance:** existing recent-docs entries still show after the upgrade; opening a doc updates "Abiertos recientemente" in another tab; the `DocumentReader` chunk has no `AssistantSheet`/`@ai-sdk/react` (`npm run analyze`); no `cincel:recent-docs-changed`.
+- **Tests:** store test (legacy key migration, limit, multi-tab `storage` rehydrate); `DocumentReader` test (calls `openAssistant` with the route context).
 
-### Phase 9: Ajustes
-- **Stores:** none new.
-  - Keep the page-scoped contexts (Apariencia, Horario, Notificaciones, Perfil, Integraciones). They are correct form scopes, reset per segment.
-  - If §2.6 shipped, `AparienciaClient`'s style change must also call `usePresentationStyle.setUserStyle` (or go through `AppearanceProvider`, which does it).
-- **Flag (separate issue):** `cincel.permissions.custom.v1` (`usePermissionsWorkspace.ts:94-226`, `lib/auth/permissions.ts:830`) stores org permissions in the browser; that is server state. Monday reviewed-ids localStorage stays local, routed through `browser-state-repository`.
-- **Acceptance:** changing Estilo in Ajustes › Apariencia is reflected by the next page's `useStyle()` without a reload. No Zustand store holds a settings draft.
-- **Tests:** an Apariencia → style store integration test (if §2.6).
+### Phase 9: Ajustes (#943: 9a #963, 9b #964, 9c #965, 9d #966)
+- **Stores:** page-scoped form stores (`createStore` + per-page provider, reset on unmount) replace the contexts in §2.9: 9a Perfil, Notificaciones, Integraciones; 9c Horario, General. 9a merges `apariencia-context.tsx` into `useAppearance`.
+- **Permisos (9b):** the browser-only matrix (`cincel.permissions.custom.v1`, `usePermissionsWorkspace.ts:94-226`, `lib/auth/permissions.ts:830`) is hidden until a server model exists (D4, #950; server model #971). Monday reviewed-ids localStorage stays local, routed through `browser-state-repository`.
+- **Acceptance:** changing Estilo in Ajustes › Apariencia is reflected by the next page's `useStyle()` without a reload; no global Zustand store holds a settings draft; `rg "createContext" components/ajustes components/configuracion` is empty.
+- **Tests:** an Apariencia → `useAppearance` integration test; each page-scoped store resets on unmount.
 
-### Phase 10: Asistente
-- **Stores:** create `useAssistantUi` (§2.2), unless Phase 8 already did.
-- **Components:**
-  - `AssistantLauncher.tsx` (drop `open`, `sheetMounted` and the event; ⌘J → `toggle`; `setAvailable(active)`)
-  - `AssistantSheet.tsx` (`open`, `threadId`, `contextOverride` and `pendingPrompt` from the store; `setThreadId` on new/reset)
-  - `CommandPalette.tsx` ("Preguntar al asistente" visible when `available`, calls `openAssistant()`)
-  - `AsistentePageClient.tsx` (`?thread` stays the URL; `setThreadId` on select so the floating sheet elsewhere continues it; threads and messages go to TQ)
-  - `use-confirmed-context.ts` goes to TQ
-  - remove `OPEN_ASSISTANT_EVENT` and both old `openAssistant` exports
-- **Acceptance:**
-  - The palette command is visible and opens the sheet on every staff page except `/asistente`.
-  - ⌘J toggles it. The sheet keeps its conversation across navigation, and "Abrir en página completa" lands on the same `?thread`.
-  - Only one `AssistantSheet` mount exists in the tree.
-  - `rg "cincel:open-assistant|OPEN_ASSISTANT_EVENT"` is empty.
-- **Tests:**
-  - store unit tests (open with context merge, `close` clears the override, thread kept)
-  - `AssistantLauncher` (⌘J, lazy mount once)
-  - `CommandPalette` (command shown when `available`)
-  - an a11y test for focus return to the button after close
+### Phase 10: Asistente (#944)
+- **Stores:** `useAssistantUi` exists (1b). Phase 10 wires the rest.
+- **Components:** `AssistantSheet.tsx` (`open`, `threadId`, `contextOverride` and `pendingPrompt` from the store; `setThreadId` on new/reset); `AsistentePageClient.tsx` (`?thread` stays the URL; `setThreadId` on select so the floating sheet continues it; threads and messages go to TQ); `use-confirmed-context.ts` goes to TQ. `CommandPalette` is Phase 2.
+- **Acceptance:** ⌘J toggles the sheet; the sheet keeps its conversation across navigation (not across reloads), and "Abrir en página completa" lands on the same `?thread`; only one `AssistantSheet` mount exists in the tree; `rg "cincel:open-assistant|OPEN_ASSISTANT_EVENT"` is empty.
+- **Tests:** store unit tests (open with context merge, `close` clears the override, thread kept); a11y test for focus return to the button after close.
 
-### Phase 11: Portal
-- **Stores:** none. The portal style stays the cookie plus `StyleProvider` (`fixedByOrg` passed). The file browser folder goes to the URL or stays local; lists and uploads go to TQ. The upload queue and drag state stay local in `PortalUploader.tsx:160-161`.
-- **Acceptance:** no `lib/stores/*` import under `components/portal` or `app/portal`. If §2.6 shipped, the portal `StyleProvider` path (scope `"portal"`) is unchanged.
-- **Tests:** existing portal tests stay green; add a guard test for the no-store rule.
+### Phase 11: Portal (#945)
+- **Stores:** none. The portal style stays the cookie plus its server-rendered style, with `fixedByOrg` passed. The file browser folder goes to the URL or stays local; lists and uploads go to TQ. The upload queue and drag state stay local in `PortalUploader.tsx:160-161`.
+- **Acceptance:** no `lib/stores/*` import under `components/portal` or `app/portal`.
+- **Tests:** a guard test for the no-store rule.
 
-**Global acceptance after all phases:**
-- `lib/stores/` contains only: `session`, `shell-ui`, `assistant-ui`, `new-task`, `tareas-ui`, `dashboard` (+ instances), `recent-docs`, and optionally `presentation-style`.
-- No UI coordination through window events, module registries or `useState(props)` mirrors.
+### Phase 12: Dashboard interactions (#967 factory, #968 Inicio, #969 Proyectos, #970 Personas)
+- **Stores:** the `createDashboardStore` factory and `useWidgetView` (§2.5) in #967; `useInicioDashboard`, `useProyectosDashboard`, `usePersonasDashboard` in their issues. Persisted (`cincel.ui.dashboard.<id>.v1`, `skipHydration`, rehydrated by `<UiStoresHydrator/>`).
+- **Inicio components:** `KpiTiles.tsx` (selectable tiles: `aria-pressed`, `toggleKpi`), `WidgetCard.tsx` (collapse action: `aria-expanded`), `WeeklyPaceChart.tsx` (4/8/12-week segmented control over the fixed 12 weeks; series toggles), `TramoDonut.tsx` and `WorkloadBars.tsx` (`useWidgetView` chart/table). `InicioClient.tsx` stays style-agnostic.
+- **Acceptance:** collapse, range, view and series choices survive Inicio → Tareas → Inicio and a reload; `selectedKpi` survives navigation but not a reload; switching Estilo does not carry a per-style view override into the other style; the first render equals the SSR render (defaults) and persisted values apply after mount; zero new server calls caused by store changes.
+- **Tests:** factory unit tests (actions, `partialize`, `migrate`, per-style views); a seeded-store component test per page; an SSR snapshot equality test; a11y tests for the tile toggle and the collapse buttons.
+
+**Global acceptance after the last phase:**
+- `lib/stores/` contains only: `session`, `appearance`, `shell-ui`, `assistant-ui`, `new-task`, `tareas-ui`, `recent-docs`, `dashboard` (+ instances), and the page-scoped Ajustes form stores.
+- No UI coordination through window events, module registries, `useState(props)` mirrors or app-state React contexts (shadcn `chart`, `form-field`, `sidebar` excepted).
 - Every persisted store uses `skipHydration`, a versioned key and a reset helper registered in the test setup.
