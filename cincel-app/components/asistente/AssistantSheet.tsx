@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -12,6 +13,7 @@ import { ArrowUpIcon, HistoryIcon, Maximize2Icon, MicIcon, PaperclipIcon, XIcon 
 
 import { AssistantMessageParts } from "@/components/asistente/AssistantMessageParts";
 import { AssistantContextStore, createAssistantChatTransport } from "@/components/asistente/assistant-transport";
+import { useAssistantTurnFinished } from "@/components/asistente/use-asistente-cache";
 import { useConfirmedContext } from "@/components/asistente/use-confirmed-context";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -26,15 +28,16 @@ import {
 } from "@/components/ui/shadcn/dropdown-menu";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Textarea } from "@/components/ui/shadcn/textarea";
-import { fetchAssistantThreadAction, fetchAssistantThreadsAction } from "@/lib/actions/assistant-actions";
 import { actionErrorText } from "@/lib/errors";
-import type { AssistantContext, AssistantThreadSummary } from "@/lib/types/redesign";
+import { asistenteThreadOptions, asistenteThreadsOptions } from "@/lib/query/options/asistente";
+import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
+import type { AssistantContext } from "@/lib/types/redesign";
 
 export type AssistantSheetProps = {
   open: boolean;
   onOpenChange(open: boolean): void;
+  /** The route context; `useAssistantUi.contextOverride` is merged over it. */
   context: AssistantContext;
-  threadId?: string;
   /** Where focus goes when the sheet closes (the trigger). */
   finalFocus?: RefObject<HTMLElement | null>;
 };
@@ -103,21 +106,180 @@ function speechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+const NO_MESSAGES: UIMessage[] = [];
+
+/** Focuses the composer with the caret at `length` and grows it to its content (max 160 px). */
+function focusComposerAtEnd(el: HTMLTextAreaElement | null, length: number): void {
+  if (!el) return;
+  el.focus();
+  el.setSelectionRange(length, length);
+  el.style.height = "auto";
+  el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+}
+
 /**
  * Assistant sheet (redesign FE §3.9, §4.9): the `AssistantChat` conversation
  * (same `useChat`, same message rendering) in a right `Sheet`, 460 px,
  * radius 18, inset 12 px. Sends the client-generated thread id and only the
  * new message or the approval responses, plus the page context.
+ *
+ * State (Query Migration Phase 10, #944): the thread id lives in
+ * `useAssistantUi.threadId` (in memory, survives navigation, not reloads);
+ * null is a new conversation with a local id until its first turn. The
+ * stored messages come from `qk.asistente.thread(id)` and the history menu
+ * from `qk.asistente.threads()`. `contextOverride` is merged over the route
+ * context and `pendingPrompt` lands in the composer.
  */
-export function AssistantSheet({ open, onOpenChange, context, threadId, finalFocus }: AssistantSheetProps) {
-  const [conversation, setConversation] = useState<{ id: string; messages: UIMessage[] }>(() => ({
-    id: threadId ?? newAssistantThreadId(),
-    messages: [],
-  }));
+export function AssistantSheet({ open, onOpenChange, context, finalFocus }: AssistantSheetProps) {
+  const storeThreadId = useAssistantUi((s) => s.threadId);
+  const contextOverride = useAssistantUi((s) => s.contextOverride);
+  const setThreadId = useAssistantUi((s) => s.setThreadId);
+  const [draftId, setDraftId] = useState(newAssistantThreadId);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const conversationId = storeThreadId ?? draftId;
+  const isNew = storeThreadId === null;
+
+  const effectiveContext = useMemo<AssistantContext>(
+    () => (contextOverride ? { ...context, ...contextOverride } : context),
+    [context, contextOverride],
+  );
+  const confirmed = useConfirmedContext(effectiveContext, open);
+
+  const threadQuery = useQuery({ ...asistenteThreadOptions(conversationId), enabled: !isNew });
+  const threadsQuery = useQuery({ ...asistenteThreadsOptions(), enabled: historyOpen });
+  const threads = threadsQuery.data;
+
+  const loadError = isNew
+    ? null
+    : threadQuery.isError
+      ? actionErrorText(threadQuery.error)
+      : threadQuery.data === null
+        ? actionErrorText(new Error("NOT_FOUND"))
+        : null;
+  const seedMessages = isNew
+    ? NO_MESSAGES
+    : threadQuery.data
+      ? threadQuery.data.messages
+      : loadError
+        ? NO_MESSAGES
+        : null;
+
+  const turnFinished = useAssistantTurnFinished();
+  const onTurnFinished = (turn: Parameters<typeof turnFinished>[0]) => {
+    turnFinished(turn);
+    // A new conversation becomes the store's thread once the route has stored it.
+    if (useAssistantUi.getState().threadId !== turn.threadId) setThreadId(turn.threadId);
+  };
+
+  const startNewConversation = () => {
+    setThreadId(null);
+    setDraftId(newAssistantThreadId());
+  };
+
+  const fullPageHref = isNew ? "/asistente" : `/asistente?thread=${encodeURIComponent(conversationId)}`;
+
+  return (
+    <Sheet open={open} onOpenChange={(next) => onOpenChange(next)}>
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        finalFocus={finalFocus}
+        className="gap-0 overflow-hidden rounded-[18px] border p-0 data-[side=right]:inset-y-3 data-[side=right]:right-3 data-[side=right]:h-auto data-[side=right]:w-[calc(100%-1.5rem)] data-[side=right]:sm:max-w-[460px]"
+      >
+        <SheetHeader className="flex-row items-center gap-2 border-b px-4 py-3">
+          <span
+            aria-hidden
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
+          >
+            C
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <SheetTitle>Cincel</SheetTitle>
+            <SheetDescription className="sr-only">
+              Asistente de Cincel. Pregunta sobre tus proyectos, tareas y equipo.
+            </SheetDescription>
+            {confirmed ? (
+              <Badge variant="outline" className="max-w-full" data-testid="asistente-contexto">
+                <span className="truncate">Viendo: {confirmed.label}</span>
+              </Badge>
+            ) : null}
+          </div>
+          <DropdownMenu onOpenChange={setHistoryOpen}>
+            <DropdownMenuTrigger
+              render={<Button variant="ghost" size="icon-sm" aria-label="Historial" title="Historial" />}
+            >
+              <HistoryIcon aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem onClick={startNewConversation}>Nueva conversación</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Conversaciones recientes</DropdownMenuLabel>
+              {threads === undefined ? (
+                <DropdownMenuItem disabled>{threadsQuery.isError ? "No se pudo cargar." : "Cargando…"}</DropdownMenuItem>
+              ) : threads.length === 0 ? (
+                <DropdownMenuItem disabled>Aún no hay conversaciones.</DropdownMenuItem>
+              ) : (
+                threads.slice(0, 10).map((thread) => (
+                  <DropdownMenuItem key={thread.id} onClick={() => setThreadId(thread.id)}>
+                    <span className="truncate">{thread.title || "Conversación sin título"}</span>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Link
+            href={fullPageHref}
+            onClick={() => onOpenChange(false)}
+            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+            aria-label="Pantalla completa"
+            title="Pantalla completa"
+          >
+            <Maximize2Icon aria-hidden />
+          </Link>
+          <SheetClose render={<Button variant="ghost" size="icon-sm" aria-label="Cerrar" title="Cerrar" />}>
+            <XIcon aria-hidden />
+          </SheetClose>
+        </SheetHeader>
+
+        {seedMessages ? (
+          <SheetConversation
+            key={conversationId}
+            threadId={conversationId}
+            seedMessages={seedMessages}
+            openingError={loadError}
+            context={effectiveContext}
+            onTurnFinished={onTurnFinished}
+          />
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col justify-center px-4 py-4" aria-live="polite">
+            <p className="text-center text-sm text-muted-foreground">Cargando conversación…</p>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+type SheetConversationProps = {
+  threadId: string;
+  /** The cached messages the chat starts from; `useChat` reads them once, when the conversation mounts. */
+  seedMessages: UIMessage[];
+  /** Shown until the next send: the thread could not be read. */
+  openingError: string | null;
+  context: AssistantContext;
+  onTurnFinished(turn: { threadId: string; message: UIMessage; messages: UIMessage[] }): void;
+};
+
+/**
+ * One conversation of the sheet: the messages, the quick actions and the
+ * composer. Keyed by the thread id, so switching threads starts a fresh
+ * `useChat` seeded from the cache instead of syncing messages by hand.
+ */
+function SheetConversation({ threadId, seedMessages, openingError, context, onTurnFinished }: SheetConversationProps) {
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [threads, setThreads] = useState<AssistantThreadSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(openingError);
   const [listening, setListening] = useState(false);
   // The sheet content only renders on the client (it mounts when opened), so this never hydrates.
   const [canDictate] = useState(() => speechRecognitionCtor() !== null);
@@ -126,65 +288,26 @@ export function AssistantSheet({ open, onOpenChange, context, threadId, finalFoc
   const endRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [contextStore] = useState(() => new AssistantContextStore(context));
+  const onTurnFinishedRef = useRef(onTurnFinished);
+  const pendingPrompt = useAssistantUi((s) => s.pendingPrompt);
 
   useEffect(() => {
     contextStore.set(context);
-  }, [context, contextStore]);
-
-  const confirmed = useConfirmedContext(context, open);
+    onTurnFinishedRef.current = onTurnFinished;
+  }, [context, contextStore, onTurnFinished]);
 
   const transport = useMemo(() => createAssistantChatTransport(ASSISTANT_CHAT_API, contextStore), [contextStore]);
 
-  const { messages, sendMessage, setMessages, status, addToolApprovalResponse } = useChat({
-    id: conversation.id,
-    messages: conversation.messages,
+  const { messages, sendMessage, status, addToolApprovalResponse } = useChat({
+    id: threadId,
+    messages: seedMessages,
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    onFinish: ({ message, messages: all }) => onTurnFinishedRef.current({ threadId, message, messages: all }),
     onError: (err) => setError(actionErrorText(err)),
   });
 
   const isBusy = status === "submitted" || status === "streaming";
-
-  const setMessagesRef = useRef(setMessages);
-  useEffect(() => {
-    setMessagesRef.current = setMessages;
-  }, [setMessages]);
-
-  const applyThread = useCallback((id: string, stored: UIMessage[]) => {
-    setError(null);
-    // A new id recreates the chat with `stored`; the same id keeps the chat, so set them on it.
-    setConversation((prev) => (prev.id === id ? prev : { id, messages: stored }));
-    setMessagesRef.current(stored);
-  }, []);
-
-  const loadThread = useCallback(
-    async (id: string) => {
-      try {
-        const { messages: stored } = await fetchAssistantThreadAction(id);
-        applyThread(id, stored);
-      } catch (err) {
-        setError(actionErrorText(err));
-      }
-    },
-    [applyThread],
-  );
-
-  // A thread handed in by the caller (e.g. the full page) replaces the current one.
-  useEffect(() => {
-    if (!threadId) return;
-    let cancelled = false;
-    fetchAssistantThreadAction(threadId).then(
-      ({ messages: stored }) => {
-        if (!cancelled) applyThread(threadId, stored);
-      },
-      (err: unknown) => {
-        if (!cancelled) setError(actionErrorText(err));
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [threadId, applyThread]);
 
   useEffect(() => {
     if (messages.length > 0) endRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -201,6 +324,25 @@ export function AssistantSheet({ open, onOpenChange, context, threadId, finalFoc
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
+  const applyPrompt = (prompt: string) => {
+    setInput(prompt);
+    requestAnimationFrame(() => focusComposerAtEnd(textareaRef.current, prompt.length));
+  };
+
+  // A prompt handed in with `openAssistant({ prompt })` goes into the composer once; it is never sent on its own.
+  // The text is applied while rendering (the prompt's nonce is the change marker), then the effect focuses the
+  // composer and consumes the prompt from the store.
+  const [appliedPromptNonce, setAppliedPromptNonce] = useState<number | null>(null);
+  if (pendingPrompt && pendingPrompt.nonce !== appliedPromptNonce) {
+    setAppliedPromptNonce(pendingPrompt.nonce);
+    setInput(pendingPrompt.text);
+  }
+  useEffect(() => {
+    if (!pendingPrompt) return;
+    requestAnimationFrame(() => focusComposerAtEnd(textareaRef.current, pendingPrompt.text.length));
+    useAssistantUi.getState().consumePrompt();
+  }, [pendingPrompt]);
+
   const submit = async () => {
     const text = input.trim();
     if ((!text && files.length === 0) || isBusy) return;
@@ -216,22 +358,6 @@ export function AssistantSheet({ open, onOpenChange, context, threadId, finalFoc
     } catch (err) {
       setError(actionErrorText(err));
     }
-  };
-
-  const startNewConversation = () => {
-    setError(null);
-    setConversation({ id: newAssistantThreadId(), messages: [] });
-  };
-
-  const applyPrompt = (prompt: string) => {
-    setInput(prompt);
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(prompt.length, prompt.length);
-      resizeTextarea();
-    });
   };
 
   const addFiles = (list: FileList | null) => {
@@ -264,223 +390,154 @@ export function AssistantSheet({ open, onOpenChange, context, threadId, finalFoc
     recognition.start();
   };
 
-  const onHistoryOpenChange = (next: boolean) => {
-    if (!next) return;
-    fetchAssistantThreadsAction()
-      .then(setThreads)
-      .catch(() => setThreads([]));
-  };
-
   return (
-    <Sheet open={open} onOpenChange={(next) => onOpenChange(next)}>
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        finalFocus={finalFocus}
-        className="gap-0 overflow-hidden rounded-[18px] border p-0 data-[side=right]:inset-y-3 data-[side=right]:right-3 data-[side=right]:h-auto data-[side=right]:w-[calc(100%-1.5rem)] data-[side=right]:sm:max-w-[460px]"
-      >
-        <SheetHeader className="flex-row items-center gap-2 border-b px-4 py-3">
-          <span
-            aria-hidden
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
-          >
-            C
-          </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <SheetTitle>Cincel</SheetTitle>
-            <SheetDescription className="sr-only">
-              Asistente de Cincel. Pregunta sobre tus proyectos, tareas y equipo.
-            </SheetDescription>
-            {confirmed ? (
-              <Badge variant="outline" className="max-w-full" data-testid="asistente-contexto">
-                <span className="truncate">Viendo: {confirmed.label}</span>
-              </Badge>
-            ) : null}
+    <>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4" aria-live="polite">
+        {messages.length === 0 ? (
+          <div className="flex flex-1 flex-col justify-center gap-1 text-center">
+            <p className="text-sm font-medium text-foreground">¿En qué te ayudo?</p>
+            <p className="text-sm text-muted-foreground">
+              Pregunta por tus proyectos, tareas y equipo, o elige una acción rápida.
+            </p>
           </div>
-          <DropdownMenu onOpenChange={onHistoryOpenChange}>
-            <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon-sm" aria-label="Historial" title="Historial" />}
-            >
-              <HistoryIcon aria-hidden />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem onClick={startNewConversation}>Nueva conversación</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>Conversaciones recientes</DropdownMenuLabel>
-              {threads === null ? (
-                <DropdownMenuItem disabled>Cargando…</DropdownMenuItem>
-              ) : threads.length === 0 ? (
-                <DropdownMenuItem disabled>Aún no hay conversaciones.</DropdownMenuItem>
-              ) : (
-                threads.slice(0, 10).map((thread) => (
-                  <DropdownMenuItem key={thread.id} onClick={() => void loadThread(thread.id)}>
-                    <span className="truncate">{thread.title || "Conversación sin título"}</span>
-                  </DropdownMenuItem>
-                ))
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Link
-            href={`/asistente?thread=${encodeURIComponent(conversation.id)}`}
-            onClick={() => onOpenChange(false)}
-            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-            aria-label="Pantalla completa"
-            title="Pantalla completa"
+        ) : null}
+
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={message.role === "user" ? "flex justify-end" : "flex flex-col items-start gap-2"}
           >
-            <Maximize2Icon aria-hidden />
-          </Link>
-          <SheetClose render={<Button variant="ghost" size="icon-sm" aria-label="Cerrar" title="Cerrar" />}>
-            <XIcon aria-hidden />
-          </SheetClose>
-        </SheetHeader>
+            <AssistantMessageParts
+              message={message}
+              userBubble="ink"
+              onToolApproval={(approvalId, approved) => addToolApprovalResponse({ id: approvalId, approved })}
+            />
+          </div>
+        ))}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4" aria-live="polite">
-          {messages.length === 0 ? (
-            <div className="flex flex-1 flex-col justify-center gap-1 text-center">
-              <p className="text-sm font-medium text-foreground">¿En qué te ayudo?</p>
-              <p className="text-sm text-muted-foreground">
-                Pregunta por tus proyectos, tareas y equipo, o elige una acción rápida.
-              </p>
-            </div>
-          ) : null}
+        {status === "submitted" ? <p className="text-sm text-muted-foreground">Pensando…</p> : null}
+        <div ref={endRef} />
+      </div>
 
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={message.role === "user" ? "flex justify-end" : "flex flex-col items-start gap-2"}
-            >
-              <AssistantMessageParts
-                message={message}
-                userBubble="ink"
-                onToolApproval={(approvalId, approved) => addToolApprovalResponse({ id: approvalId, approved })}
-              />
-            </div>
+      <div className="flex flex-col gap-3 border-t px-4 py-3">
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Acciones rápidas">
+          {QUICK_ACTIONS.map((action) => (
+            <Button key={action.label} variant="outline" size="xs" onClick={() => applyPrompt(action.prompt)}>
+              {action.label}
+            </Button>
           ))}
-
-          {status === "submitted" ? <p className="text-sm text-muted-foreground">Pensando…</p> : null}
-          <div ref={endRef} />
         </div>
 
-        <div className="flex flex-col gap-3 border-t px-4 py-3">
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            if (e.dataTransfer.files.length === 0) return;
+            e.preventDefault();
+            addFiles(e.dataTransfer.files);
+          }}
+        >
+          <label htmlFor="asistente-sheet-composer" className="sr-only">
+            Mensaje para Cincel
+          </label>
+          <Textarea
+            id="asistente-sheet-composer"
+            ref={textareaRef}
+            value={input}
+            rows={1}
+            placeholder={COMPOSER_PLACEHOLDER}
+            disabled={isBusy}
+            className="max-h-40 resize-none"
+            onChange={(e) => {
+              setInput(e.target.value);
+              resizeTextarea();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                void submit();
+              }
+            }}
+          />
+          {files.length > 0 ? (
+            <ul className="flex flex-wrap gap-1.5" aria-label="Archivos adjuntos">
+              {files.map((file, index) => (
+                <li key={`${file.name}-${index}`}>
+                  <Badge variant="secondary">
+                    <span className="max-w-40 truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      aria-label={`Quitar ${file.name}`}
+                      onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
+                    >
+                      <XIcon aria-hidden />
+                    </button>
+                  </Badge>
+                </li>
+              ))}
+            </ul>
           ) : null}
-
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Acciones rápidas">
-            {QUICK_ACTIONS.map((action) => (
-              <Button key={action.label} variant="outline" size="xs" onClick={() => applyPrompt(action.prompt)}>
-                {action.label}
-              </Button>
-            ))}
-          </div>
-
-          <form
-            className="flex flex-col gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submit();
-            }}
-            onDragOver={(e) => {
-              if (e.dataTransfer.types.includes("Files")) e.preventDefault();
-            }}
-            onDrop={(e) => {
-              if (e.dataTransfer.files.length === 0) return;
-              e.preventDefault();
-              addFiles(e.dataTransfer.files);
-            }}
-          >
-            <label htmlFor="asistente-sheet-composer" className="sr-only">
-              Mensaje para Cincel
-            </label>
-            <Textarea
-              id="asistente-sheet-composer"
-              ref={textareaRef}
-              value={input}
-              rows={1}
-              placeholder={COMPOSER_PLACEHOLDER}
-              disabled={isBusy}
-              className="max-h-40 resize-none"
+          <div className="flex items-center gap-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden
               onChange={(e) => {
-                setInput(e.target.value);
-                resizeTextarea();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
-                  e.preventDefault();
-                  void submit();
-                }
+                addFiles(e.target.files);
+                e.target.value = "";
               }}
             />
-            {files.length > 0 ? (
-              <ul className="flex flex-wrap gap-1.5" aria-label="Archivos adjuntos">
-                {files.map((file, index) => (
-                  <li key={`${file.name}-${index}`}>
-                    <Badge variant="secondary">
-                      <span className="max-w-40 truncate">{file.name}</span>
-                      <button
-                        type="button"
-                        aria-label={`Quitar ${file.name}`}
-                        onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
-                      >
-                        <XIcon aria-hidden />
-                      </button>
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            <div className="flex items-center gap-1">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden
-                onChange={(e) => {
-                  addFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Adjuntar archivo"
+              title="Adjuntar archivo"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <PaperclipIcon aria-hidden />
+            </Button>
+            {canDictate ? (
               <Button
                 type="button"
-                variant="ghost"
+                variant={listening ? "secondary" : "ghost"}
                 size="icon-sm"
-                aria-label="Adjuntar archivo"
-                title="Adjuntar archivo"
-                onClick={() => fileInputRef.current?.click()}
+                aria-label={listening ? "Detener dictado" : "Dictar"}
+                aria-pressed={listening}
+                title={listening ? "Detener dictado" : "Dictar"}
+                onClick={toggleDictation}
               >
-                <PaperclipIcon aria-hidden />
+                <MicIcon aria-hidden />
               </Button>
-              {canDictate ? (
-                <Button
-                  type="button"
-                  variant={listening ? "secondary" : "ghost"}
-                  size="icon-sm"
-                  aria-label={listening ? "Detener dictado" : "Dictar"}
-                  aria-pressed={listening}
-                  title={listening ? "Detener dictado" : "Dictar"}
-                  onClick={toggleDictation}
-                >
-                  <MicIcon aria-hidden />
-                </Button>
-              ) : null}
-              <Button
-                type="submit"
-                size="icon-sm"
-                className="ml-auto"
-                aria-label="Enviar"
-                title="Enviar"
-                disabled={isBusy || (!input.trim() && files.length === 0)}
-              >
-                <ArrowUpIcon aria-hidden />
-              </Button>
-            </div>
-          </form>
-        </div>
-      </SheetContent>
-    </Sheet>
+            ) : null}
+            <Button
+              type="submit"
+              size="icon-sm"
+              className="ml-auto"
+              aria-label="Enviar"
+              title="Enviar"
+              disabled={isBusy || (!input.trim() && files.length === 0)}
+            >
+              <ArrowUpIcon aria-hidden />
+            </Button>
+          </div>
+        </form>
+      </div>
+    </>
   );
 }

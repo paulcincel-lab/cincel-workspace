@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
 
-import { MiEspacioClient, type MiEspacioClientProps } from "@/components/mi-espacio/MiEspacioClient";
-import { fetchGmailStatusAction, fetchGmailThreadsAction } from "@/lib/actions/gmail-actions";
-import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
-import { fetchChecklistsAction, fetchNotesAction, fetchRemindersAction } from "@/lib/actions/my-space-actions";
-import { fetchNotificationsAction } from "@/lib/actions/notifications-actions";
-import { getSessionAccess } from "@/lib/auth/session";
-import { todayTomorrowRange } from "@/lib/my-space/today-tomorrow";
+import { MiEspacioClient } from "@/components/mi-espacio/MiEspacioClient";
+import { getSessionAccess, requireCapabilityUser } from "@/lib/auth/session";
+import { loadMiEspacio } from "@/lib/loaders/mi-espacio";
+import { Hydrate } from "@/lib/query/hydrate";
+import { seedMiEspacio } from "@/lib/query/options/mi-espacio";
+import { getQueryClient } from "@/lib/query/server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,26 +16,12 @@ function first(value: string | string[] | undefined): string | null {
   return raw ? raw : null;
 }
 
-/** Gmail status + first page of threads (only when connected with the read scope). */
-async function loadGmail(): Promise<MiEspacioClientProps["gmail"]> {
-  if (!GMAIL_IMPLEMENTED.fetchGmailStatusAction) return null;
-  const status = await fetchGmailStatusAction();
-  if (!status.connected || !status.scopeOk || !GMAIL_IMPLEMENTED.fetchGmailThreadsAction) {
-    return { status, threads: [], nextCursor: null };
-  }
-  try {
-    const { threads, nextCursor } = await fetchGmailThreadsAction({});
-    return { status, threads, nextCursor };
-  } catch {
-    // NOT_CONNECTED / SCOPE_MISSING between the two reads: the Bandeja shows the status chip.
-    return { status, threads: [], nextCursor: null };
-  }
-}
-
 /**
- * /mi-espacio (redesign FE §3.3): the private home of each staff member.
- * Every read is owner-scoped on the server (the session decides whose rows load);
- * read stubs return empty data and the client hides their sections.
+ * /mi-espacio (redesign FE §3.3; Query Migration Phase 7, #941): the private
+ * home of each staff member. One loader call reads the viewer's own rows
+ * (owner-scoped on the server) and seeds the granular `me.*` keys, which the
+ * client reads under `<Hydrate>`; mutations then patch that cache instead of
+ * re-rendering the route.
  */
 export default async function MiEspacioPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
@@ -44,22 +29,12 @@ export default async function MiEspacioPage({ searchParams }: { searchParams: Pr
   const access = await getSessionAccess();
   if (!access.user) redirect("/login");
 
-  const [notifications, gmail, reminders, checklists, notes] = await Promise.all([
-    fetchNotificationsAction({}),
-    loadGmail(),
-    fetchRemindersAction(todayTomorrowRange(new Date())),
-    fetchChecklistsAction(),
-    fetchNotesAction(),
-  ]);
+  const qc = getQueryClient();
+  seedMiEspacio(qc, await loadMiEspacio(await requireCapabilityUser()));
 
   return (
-    <MiEspacioClient
-      notifications={notifications}
-      gmail={gmail}
-      reminders={reminders}
-      checklists={checklists}
-      notes={notes}
-      noteParam={first(params.nota)}
-    />
+    <Hydrate qc={qc}>
+      <MiEspacioClient noteParam={first(params.nota)} />
+    </Hydrate>
   );
 }

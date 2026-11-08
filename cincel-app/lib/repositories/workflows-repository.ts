@@ -140,6 +140,52 @@ export async function listWorkflows(
   }));
 }
 
+/**
+ * Active tramos with their active fases, in **one** query, for pickers that
+ * only need the fases (Ajustes › Puestos, `PositionEditorDrawer`). Same order
+ * and fase rows as `listWorkflows({})`, but `templates` is always `[]` and
+ * `readiness` is always `null`: use `listWorkflows` when those matter.
+ */
+export async function listWorkflowPhaseTree(): Promise<WorkflowDetail[]> {
+  const rows = await db
+    .select({
+      workflow: workflows,
+      phase: {
+        id: workflowPhases.id,
+        name: workflowPhases.name,
+        sortOrder: workflowPhases.sortOrder,
+        active: workflowPhases.active,
+      },
+      templateCount: sql<number>`(
+        select count(*)::int from ${workflowTaskTemplates}
+        where ${workflowTaskTemplates.phaseId} = ${workflowPhases.id} and ${workflowTaskTemplates.active}
+      )`,
+    })
+    .from(workflows)
+    .leftJoin(workflowPhases, and(eq(workflowPhases.workflowId, workflows.id), eq(workflowPhases.active, true)))
+    .where(and(isNull(workflows.deletedAt), eq(workflows.active, true)))
+    .orderBy(asc(workflows.sortOrder), asc(workflows.name), asc(workflowPhases.sortOrder), asc(workflowPhases.name));
+  const out = new Map<string, WorkflowDetail>();
+  for (const row of rows) {
+    let detail = out.get(row.workflow.id);
+    if (!detail) {
+      detail = { ...toWorkflow(row.workflow), phases: [], templates: [], readiness: null };
+      out.set(row.workflow.id, detail);
+    }
+    if (row.phase) {
+      detail.phases.push({
+        id: row.phase.id,
+        workflowId: row.workflow.id,
+        name: row.phase.name,
+        sortOrder: row.phase.sortOrder,
+        active: row.phase.active,
+        templateCount: Number(row.templateCount ?? 0),
+      });
+    }
+  }
+  return [...out.values()];
+}
+
 export async function getWorkflow(id: string): Promise<WorkflowDetail | null> {
   const all = await listWorkflows({ includeInactive: true, includeInactiveTemplates: true });
   return all.find((w) => w.id === id) ?? null;
@@ -435,6 +481,27 @@ export async function listTramosNav(): Promise<WorkflowRef[]> {
     .where(and(eq(workflows.active, true), isNull(workflows.deletedAt)))
     .orderBy(asc(workflows.sortOrder), asc(workflows.name));
   return rows.map(toRef);
+}
+
+/**
+ * Whether Presale starts on its own when a project is created: a live,
+ * active `presale` tramo set to `on_create` (the create dialog's copy). One
+ * statement instead of the full `listWorkflows` the page used to read.
+ */
+export async function presaleAutoStart(): Promise<boolean> {
+  const [row] = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(
+      and(
+        eq(workflows.key, "presale"),
+        eq(workflows.active, true),
+        eq(workflows.autoStart, "on_create"),
+        isNull(workflows.deletedAt)
+      )
+    )
+    .limit(1);
+  return row !== undefined;
 }
 
 /**

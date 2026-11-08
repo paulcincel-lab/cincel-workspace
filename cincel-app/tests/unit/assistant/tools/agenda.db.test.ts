@@ -26,15 +26,15 @@ const fakes = vi.hoisted(() => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/actions/projects-actions", () => ({
-  fetchProjectsAction: vi.fn(async () => fakes.projects),
+vi.mock("@/lib/assistant/reads", () => ({
+  listViewerProjects: vi.fn(async () => fakes.projects),
+  listViewerTasks: vi.fn(async () => []),
 }));
 vi.mock("@/lib/actions/staff-actions", () => ({
   fetchStaffAction: vi.fn(async () => fakes.staff),
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   fetchCalendarAction: vi.fn(async () => []),
-  fetchTasksAction: vi.fn(async () => []),
   fetchTaskAction: vi.fn(async () => null),
   createUserTaskAction: vi.fn(),
   addChecklistItemAction: vi.fn(),

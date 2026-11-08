@@ -1,8 +1,7 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useId, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 
 import { SettingsRow } from "@/components/patterns/SettingsRow";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
@@ -12,12 +11,15 @@ import { Input } from "@/components/ui/shadcn/input";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { saveVacationSettingsAction } from "@/lib/actions/vacations-actions";
 import { IMPLEMENTED } from "@/lib/actions/vacations-actions.flags";
-import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { vacationSettingsOptions } from "@/lib/query/options/biblioteca";
 import type { VacationSettingsView } from "@/lib/types/redesign";
 import type { RecordTableData } from "@/lib/types/widgets";
 
 export type VacationSettingsProps = {
-  initial: VacationSettingsView;
+  /** "YYYY-MM" of the page (the strip month its refetch reads). */
+  month: string;
   /** `canDecideVacations`; without it the section is not rendered at all. */
   canDecide: boolean;
 };
@@ -80,26 +82,38 @@ export function parseVacationSettingsDraft(draft: VacationSettingsDraft, staffId
 
 /**
  * "Días de vacaciones" of Mis vacaciones (redesign FE §3.7): the organization's
- * "Días por año" and a per-person override table (empty = default), read with
- * `fetchVacationSettingsAction` and saved with `saveVacationSettingsAction`.
+ * "Días por año" and a per-person override table (empty = default), read from
+ * `vacations.settings` (seeded by the page) and saved with
+ * `saveVacationSettingsAction`, whose result is written back into that query
+ * (and `me.vacations` refetches: the viewer's own entitlement may change).
  * Only for `canDecideVacations` (lives here, not in Ajustes › General, because
  * Dirección decides vacations but can't open General).
  */
-export function VacationSettings({ canDecide, initial }: VacationSettingsProps) {
-  if (!canDecide) return null;
-  return <VacationSettingsForm initial={initial} />;
+export function VacationSettings({ canDecide, month }: VacationSettingsProps) {
+  const { data: view } = useQuery(vacationSettingsOptions(month));
+  if (!canDecide || !view) return null;
+  return <VacationSettingsForm view={view} />;
 }
 
-function VacationSettingsForm({ initial }: { initial: VacationSettingsView }) {
-  const router = useRouter();
+function VacationSettingsForm({ view }: { view: VacationSettingsView }) {
   const daysId = useId();
   const daysErrorId = useId();
   const fieldPrefix = useId();
-  const [view, setView] = useState(initial);
-  const [draft, setDraft] = useState<VacationSettingsDraft>(() => draftFromView(initial));
+  // The form edits a draft of the saved view; a save resets it to what the server stored.
+  const [draft, setDraft] = useState<VacationSettingsDraft>(() => draftFromView(view));
   const [errors, setErrors] = useState<{ daysPerYear?: string; overrides: Record<string, string> }>({ overrides: {} });
   const [formError, setFormError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+
+  const saveSettings = useActionMutation(saveVacationSettingsAction, {
+    setData: (client, saved: VacationSettingsView) => {
+      client.setQueryData(qk.vacations.settings(), saved);
+      setDraft(draftFromView(saved));
+    },
+    invalidate: [qk.me.vacations()],
+    successToast: "Días de vacaciones guardados",
+    onFormError: setFormError,
+  });
+  const pending = saveSettings.isPending;
 
   const canWrite = IMPLEMENTED.saveVacationSettingsAction;
   const staffIds = useMemo(() => view.overrides.map((o) => o.staffId), [view]);
@@ -121,7 +135,7 @@ function VacationSettingsForm({ initial }: { initial: VacationSettingsView }) {
     setDraft((prev) => ({ ...prev, overrides: { ...prev.overrides, [staffId]: value } }));
   }
 
-  async function save() {
+  function save() {
     setFormError(null);
     const parsed = parseVacationSettingsDraft(draft, staffIds);
     if (!parsed.ok) {
@@ -129,18 +143,7 @@ function VacationSettingsForm({ initial }: { initial: VacationSettingsView }) {
       return;
     }
     setErrors({ overrides: {} });
-    setPending(true);
-    try {
-      const saved = await saveVacationSettingsAction(parsed.value);
-      setView(saved);
-      setDraft(draftFromView(saved));
-      toast.success("Días de vacaciones guardados");
-      router.refresh();
-    } catch (err) {
-      setFormError(actionErrorText(err));
-    } finally {
-      setPending(false);
-    }
+    saveSettings.mutate(parsed.value);
   }
 
   return (

@@ -1,56 +1,34 @@
 import { notFound } from "next/navigation";
 
-import { EquipoView } from "@/components/personas/EquipoView";
-import { StyleProvider } from "@/components/shell/StyleProvider";
-import { fetchPeopleOverviewAction } from "@/lib/actions/people-actions";
-import { fetchPositionsAction } from "@/lib/actions/positions-actions";
-import { fetchStaffAction } from "@/lib/actions/staff-actions";
+import { PersonasEquipoScreen } from "@/components/personas/EquipoView";
 import { resolveTeamCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { loadPersonasTabCounts } from "@/lib/personas/tab-counts";
-import { buildTeamPeople, parseEstiloParam } from "@/lib/personas/team";
-import { listTramos } from "@/lib/tramos/compat";
-import type { PeopleOverviewRow } from "@/lib/types/redesign";
-import type { Position, WorkflowRef } from "@/lib/types/core";
-
-type SearchParams = Record<string, string | string[] | undefined>;
+import { loadPersonasCounts, loadPersonasEquipo } from "@/lib/loaders/personas";
+import { Hydrate } from "@/lib/query/hydrate";
+import { STALE, qk } from "@/lib/query/keys";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 /**
  * `/personas` (redesign FE §3.6): the Equipo tab in the new shell. Auth:
- * `team.canViewTeam`. Hours, admin tasks and owner-only data are already
- * filtered by `fetchPeopleOverviewAction` on the server.
+ * `team.canViewTeam`. Prefetches `personas.equipo()` and `personas.counts()`
+ * with their loaders (Query Migration 6), which already strip hours, admin
+ * tasks and owner-only data, and hands them to the client cache.
  */
-export default async function PersonasEquipoPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
-
+export default async function PersonasEquipoPage() {
   const user = await requireCapabilityUser();
-  const teamCaps = resolveTeamCapabilities(user);
-  if (!teamCaps.canViewTeam) notFound();
+  if (!resolveTeamCapabilities(user).canViewTeam) notFound();
 
-  const [staff, overview, tramos, positionOptions] = await Promise.all([
-    fetchStaffAction(),
-    fetchPeopleOverviewAction().catch((): PeopleOverviewRow[] => []),
-    listTramos().catch((): WorkflowRef[] => []),
-    fetchPositionsAction().catch((): Position[] => []),
-  ]);
-  const counts = await loadPersonasTabCounts({ staff });
-  const { people, emails } = buildTeamPeople(staff, overview, tramos);
-
-  const view = (
-    <EquipoView
-      people={people}
-      emails={emails}
-      counts={counts}
-      positionOptions={positionOptions}
-      canCreate={teamCaps.canCreateCollaborator}
-    />
+  const qc = getQueryClient();
+  await prefetch(qc, { queryKey: qk.personas.equipo(), staleTime: STALE.screen }, () => loadPersonasEquipo(user));
+  // The Equipo count is the active team the page just listed: no second COUNT.
+  const equipo = qc.getQueryData<Awaited<ReturnType<typeof loadPersonasEquipo>>>(qk.personas.equipo());
+  await prefetch(qc, { queryKey: qk.personas.counts(), staleTime: STALE.screen }, () =>
+    loadPersonasCounts(user, equipo ? { activeStaff: equipo.people.length } : {}),
   );
-  const estilo = parseEstiloParam(sp.estilo);
-  return estilo ? (
-    <StyleProvider style={estilo} scope="staff" isOverridden>
-      {view}
-    </StyleProvider>
-  ) : (
-    view
+
+  return (
+    <Hydrate qc={qc}>
+      <PersonasEquipoScreen />
+    </Hydrate>
   );
 }

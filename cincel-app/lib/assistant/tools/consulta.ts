@@ -16,7 +16,8 @@ import { IMPLEMENTED as SEARCH_IMPLEMENTED } from "@/lib/actions/search-actions.
 import { fetchProjectAction } from "@/lib/actions/projects-actions";
 import { fetchScheduleAction } from "@/lib/actions/schedule-actions";
 import { searchWorkspaceAction } from "@/lib/actions/search-actions";
-import { fetchMyTasksAction, fetchTaskAction, fetchTasksAction } from "@/lib/actions/tasks-actions";
+import { fetchTaskAction } from "@/lib/actions/tasks-actions";
+import { listViewerMyTasks, listViewerTasks } from "@/lib/assistant/reads";
 import { defineTool, type DefinedTool, type ToolRunContext } from "@/lib/assistant/define-tool";
 import { resolveProject } from "@/lib/assistant/resolvers";
 import { taskStatusLabel, toolSummaries } from "@/lib/assistant/tool-summaries";
@@ -262,7 +263,7 @@ export const get_project = defineTool({
 
     const today = todayInMexico();
     const [openTasks, schedule] = await Promise.all([
-      fetchTasksAction({ projectId: project.id, status: OPEN_STATUSES }),
+      listViewerTasks({ projectId: project.id, status: OPEN_STATUSES }),
       // Only after the scoped read above confirmed the viewer sees the project.
       fetchScheduleAction(project.id),
     ]);
@@ -322,7 +323,7 @@ export async function findTask(
     projectId = ctx.context.projectId;
   }
 
-  const matches = await fetchTasksAction({ search: input.title, projectId });
+  const matches = await listViewerTasks({ search: input.title, projectId });
   const q = input.title.trim().toLowerCase();
   const exact = matches.filter((t) => t.title.trim().toLowerCase() === q);
   const pick = exact.length === 1 ? exact : matches;
@@ -393,7 +394,7 @@ export const list_my_tasks = defineTool({
   write: false,
   summarize: toolSummaries.list_my_tasks,
   async run(ctx, input) {
-    const rows = await fetchMyTasksAction({ status: input.status ?? OPEN_STATUSES });
+    const rows = await listViewerMyTasks({ status: input.status ?? OPEN_STATUSES });
     const visible = canSeeAdminData(ctx.user) ? rows : rows.filter((t) => t.kind !== "admin");
     const due = filterByDue(visible, input.due, todayInMexico());
     const sorted = [...due].sort((a, b) => (a.commitmentDate ?? "9999").localeCompare(b.commitmentDate ?? "9999"));

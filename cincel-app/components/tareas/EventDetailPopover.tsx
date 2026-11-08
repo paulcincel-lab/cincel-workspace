@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useId, useRef, useState, useTransition } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useCallback, useId, useRef, useState } from "react";
 import { CalendarClock, ExternalLink, FolderOpen, ListChecks, MapPin, Pencil, Trash2, Users, X } from "lucide-react";
-import { toast } from "sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/shadcn/avatar";
@@ -13,10 +12,12 @@ import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Popover, PopoverContent } from "@/components/ui/shadcn/popover";
 import { Separator } from "@/components/ui/shadcn/separator";
 import { TramoBadge } from "@/components/v2/status/TramoBadge";
-import { unwrapActionResult } from "@/lib/actions/action-result";
 import { deleteTaskAction } from "@/lib/actions/tasks-actions";
 import { toDate } from "@/lib/calendar/calendar-service";
-import { actionErrorText } from "@/lib/errors";
+import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { taskDeleteInvalidations } from "@/lib/query/options/tareas";
 import type { WorkflowRef } from "@/lib/types/core";
 import type { CalendarItem } from "@/lib/types/redesign";
 
@@ -31,13 +32,13 @@ export function eventTramoRef(event: Pick<CalendarItem, "tramo" | "tramoLabel">)
   return { id: event.tramo, key: event.tramo, name: event.tramoLabel || event.tramo, sortOrder: 0 };
 }
 
+const EVENT_DATE_OPTIONS: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" };
+
 /** "viernes, 6 de noviembre" (FE §13: es-MX, lowercase). */
 export function eventDateLabel(date: string): string {
   const parsed = toDate(date);
   if (!parsed) return date;
-  return new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" })
-    .format(parsed)
-    .toLowerCase();
+  return cachedDateTimeFormat("es-MX", EVENT_DATE_OPTIONS).format(parsed).toLowerCase();
 }
 
 /** Tasks only store dates, so the time is estimated ("≈", as in the calendar). */
@@ -78,24 +79,24 @@ export function taskSheetHref(taskId: string, pathname: string | null, search: s
 }
 
 /**
- * Calendar event detail (redesign FE §3.4, frame `EventoDetalle`): the
- * `UnifiedCalendar` event popover. Calendar events come from tasks, so
+ * Calendar event detail (redesign FE §3.4, frame `EventoDetalle`) of the
+ * Tareas Calendario view. Calendar events come from tasks, so
  * "Editar" opens the task in `TaskSheet` (`?tarea=<id>`, existing task
- * actions) and "Eliminar" calls the existing `deleteTaskAction`. "Abrir en
+ * actions) and "Eliminar" runs `deleteTaskAction` as a mutation: the task's
+ * detail leaves the cache and the calendar, Tareas, project and Inicio keys
+ * refetch, with no server re-render. "Abrir en
  * Cutto" renders only for a stored `meetingUrl` (Cutto is link-only, FE §4.9).
  *
  * Focus: moves into the popover when it opens, Escape or "Cerrar" closes it
  * and returns focus to `anchor`.
  */
 export function EventDetailPopover({ event, anchor, onClose }: EventDetailPopoverProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
 
   const close = useCallback(() => {
     if (anchor.isConnected) anchor.focus();
@@ -108,18 +109,17 @@ export function EventDetailPopover({ event, anchor, onClose }: EventDetailPopove
   const location = event.location?.trim() || null;
   const editHref = taskSheetHref(event.taskId, pathname, searchParams?.toString() ?? "");
 
+  const deleteMutation = useActionMutation<string, void>(deleteTaskAction, {
+    setData: (qc, _data, taskId) => qc.removeQueries({ queryKey: qk.tasks.detail(taskId) }),
+    invalidate: () => taskDeleteInvalidations(event.projectId),
+    successToast: "Tarea eliminada",
+    onFormError: setError,
+  });
+  const pending = deleteMutation.isPending;
+
   function handleDelete() {
     setError(null);
-    startTransition(async () => {
-      try {
-        unwrapActionResult(await deleteTaskAction(event.taskId));
-        toast.success("Tarea eliminada");
-        router.refresh();
-        close();
-      } catch (err) {
-        setError(actionErrorText(err));
-      }
-    });
+    deleteMutation.mutate(event.taskId, { onSuccess: close });
   }
 
   return (

@@ -75,6 +75,10 @@ function localDayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
+// Built once per module: the grid labels every note.
+const EDITED_DAY_FMT = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" });
+const EDITED_DAY_YEAR_FMT = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric" });
+
 /** "editada hoy" / "editada ayer" / "editada 3 nov" (es-MX, lowercase). */
 export function noteEditedLabel(updatedAt: string, now: Date = new Date()): string {
   const at = new Date(updatedAt);
@@ -84,14 +88,7 @@ export function noteEditedLabel(updatedAt: string, now: Date = new Date()): stri
   yesterday.setDate(now.getDate() - 1);
   if (localDayKey(at) === localDayKey(yesterday)) return "editada ayer";
   const sameYear = at.getFullYear() === now.getFullYear();
-  const text = new Intl.DateTimeFormat("es-MX", {
-    day: "numeric",
-    month: "short",
-    ...(sameYear ? {} : { year: "numeric" }),
-  })
-    .format(at)
-    .replace(/\./g, "")
-    .toLowerCase();
+  const text = (sameYear ? EDITED_DAY_FMT : EDITED_DAY_YEAR_FMT).format(at).replace(/\./g, "").toLowerCase();
   return `editada ${text}`;
 }
 

@@ -1,18 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { AuthenticatedUser, TeamMember } from "@/lib/auth/auth-service";
 import { SYSTEM_ACCESS_ROLES, type SystemAccessRole } from "@/lib/data/roles";
 
-const readStorageMock = vi.hoisted(() => vi.fn<(key: string) => string | null>(() => null));
-
-vi.mock("@/lib/repositories/browser-state-repository", () => ({
-  readStorage: readStorageMock,
-  writeStorage: vi.fn(),
-  removeStorage: vi.fn(),
-  readJsonStorage: vi.fn().mockReturnValue(null),
-}));
-
 import {
-  PERMISSIONS_CUSTOM_STORAGE_KEY,
   resolvePortalCapabilities,
   resolvePortalCapabilitiesFromDefaults,
 } from "@/lib/auth/permissions";
@@ -40,17 +30,17 @@ function makeUser(role: SystemAccessRole): AuthenticatedUser {
   return { member, email: "test@cincel.mx", access: role };
 }
 
+/** The old browser-only matrix (#950), written the way the removed editor saved it. */
+const LEGACY_MATRIX_KEY = "cincel.permissions.custom.v1";
+
 function storeOverrides(roles: Record<string, Record<string, unknown>>) {
-  readStorageMock.mockImplementation((key) =>
-    key === PERMISSIONS_CUSTOM_STORAGE_KEY ? JSON.stringify({ version: 1, roles }) : null
-  );
+  window.localStorage.setItem(LEGACY_MATRIX_KEY, JSON.stringify({ version: 1, roles }));
 }
 
 const MANAGE_ACCESS_ROLES: SystemAccessRole[] = ["Administrador", "Dirección", "Jefe de Taller", "Jefe de Construcción"];
 
-beforeEach(() => {
-  readStorageMock.mockReset();
-  readStorageMock.mockReturnValue(null);
+afterEach(() => {
+  window.localStorage.clear();
 });
 
 describe("resolvePortalCapabilitiesFromDefaults", () => {
@@ -77,38 +67,25 @@ describe("resolvePortalCapabilities", () => {
     });
   });
 
-  it("applies stored overrides for the user's role", () => {
+  it("ignores a stored browser override: the client resolves the defaults, as the server does", () => {
     storeOverrides({
       "Arquitecto Senior": { portal: { manageAccess: true } },
       "Jefe de Taller": { portal: { manageAccess: false, disableUsers: true } },
+      Administrador: { portal: { disableUsers: false } },
     });
 
     expect(resolvePortalCapabilities(makeUser("Arquitecto Senior"))).toEqual({
-      manageAccess: true,
+      manageAccess: false,
       disableUsers: false,
     });
     expect(resolvePortalCapabilities(makeUser("Jefe de Taller"))).toEqual({
-      manageAccess: false,
-      disableUsers: true,
+      manageAccess: true,
+      disableUsers: false,
     });
-  });
-
-  it("ignores overrides for other roles or other modules", () => {
-    storeOverrides({
-      Colaborador: { portal: { manageAccess: true } },
-      Administrador: { team: { canViewTeam: false } },
-    });
-
     expect(resolvePortalCapabilities(makeUser("Administrador"))).toEqual({
       manageAccess: true,
       disableUsers: true,
     });
-  });
-
-  it("falls back to the default when an override is not a boolean", () => {
-    storeOverrides({ Administrador: { portal: { disableUsers: "yes" } } });
-
-    expect(resolvePortalCapabilities(makeUser("Administrador")).disableUsers).toBe(true);
   });
 });
 

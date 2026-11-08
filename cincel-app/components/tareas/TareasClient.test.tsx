@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +16,37 @@ const navigation = vi.hoisted(() => ({
   search: "",
 }));
 
+// Next's Link only calls `onNavigate` inside a router; the stand-in calls it on every click.
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    scroll,
+    prefetch,
+    onNavigate,
+    ...rest
+  }: {
+    href: string;
+    children: ReactNode;
+    scroll?: boolean;
+    prefetch?: boolean | null;
+    onNavigate?: (e: { preventDefault(): void }) => void;
+  }) => {
+    void scroll;
+    void prefetch;
+    return (
+      <a
+        href={href}
+        {...rest}
+        onClick={(e) => {
+          onNavigate?.({ preventDefault: () => e.preventDefault() });
+        }}
+      >
+        {children}
+      </a>
+    );
+  },
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: navigation.replace, push: navigation.push, refresh: navigation.refresh }),
   usePathname: () => "/tareas",
@@ -34,16 +66,45 @@ vi.mock("@/lib/tramos/compat", () => ({
   tramoColorVar: (key: string) => `var(--tramo-${key})`,
 }));
 
-// The filters bar pattern: chips are links with `aria-pressed`, then the selects and the search box.
+// Reads never reach the server here: the cache is seeded as `/tareas` hydrates it.
+const pageData = vi.hoisted(() => ({
+  getTareasPageData: vi.fn(),
+  getTareasFacets: vi.fn(),
+  getTareasBoard: vi.fn(),
+  getTareasListPage: vi.fn(),
+  getTareasBoardColumn: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => pageData);
+
+// The filters bar pattern: chips are links with `aria-pressed` and a shallow
+// `onSelect`, then the selects and the search box.
 vi.mock("@/components/patterns/FiltersBar", () => ({
   FiltersBar: (props: {
-    chips?: { key: string; label: string; count?: number; colorVar?: string; pressed: boolean; href: string }[];
+    chips?: {
+      key: string;
+      label: string;
+      count?: number;
+      colorVar?: string;
+      pressed: boolean;
+      href: string;
+      onSelect?(): void;
+    }[];
     selects?: ReactNode[];
     search?: { value: string; placeholder: string; onChange(v: string): void };
   }) => (
     <div role="group" aria-label="Filtros">
       {props.chips?.map((c) => (
-        <a key={c.key} href={c.href} aria-pressed={c.pressed} data-color={c.colorVar ?? ""}>
+        <a
+          key={c.key}
+          href={c.href}
+          aria-pressed={c.pressed}
+          data-color={c.colorVar ?? ""}
+          onClick={(e) => {
+            if (!c.onSelect) return;
+            e.preventDefault();
+            c.onSelect();
+          }}
+        >
           <span>{c.label}</span> <span data-testid={`count-${c.key}`}>{c.count}</span>
         </a>
       ))}
@@ -68,16 +129,16 @@ vi.mock("@/components/shell/EmptyState", () => ({
   ),
 }));
 
-// The views (R3-04 to R3-06) render the header, the filters and, with no tasks, the empty state.
+// The views read their own queries; here they show the props they get: no data, the query, the shell.
 function MockView(props: {
   name: string;
+  query: { vista: string };
   header?: { title: string; description?: string; actions?: ReactNode };
   filters?: ReactNode;
   empty?: { title: string; action?: { label: string; href?: string } };
-  count: number;
 }) {
   return (
-    <section data-testid={`view-${props.name}`}>
+    <section data-testid={`view-${props.name}`} data-props={Object.keys(props).filter((key) => key !== "name").sort().join(",")}>
       {props.header ? (
         <header>
           <h1>{props.header.title}</h1>
@@ -86,8 +147,7 @@ function MockView(props: {
         </header>
       ) : null}
       {props.filters}
-      <span data-testid="view-count">{props.count}</span>
-      {props.count === 0 && props.empty ? (
+      {props.empty ? (
         <div role="status">
           <p>{props.empty.title}</p>
           {props.empty.action?.href ? <a href={props.empty.action.href}>{props.empty.action.label}</a> : null}
@@ -99,36 +159,27 @@ function MockView(props: {
 
 vi.mock("./TareasTablero", () => ({
   TABLERO_DESCRIPTION: "Descripción tablero",
-  TareasTablero: (p: { board: Record<string, unknown[]>; header: never; filters: ReactNode; empty: never }) => (
-    <MockView name="tablero" {...p} count={Object.values(p.board).reduce((n, c) => n + c.length, 0)} />
-  ),
+  TareasTablero: (p: Omit<Parameters<typeof MockView>[0], "name">) => <MockView name="tablero" {...p} />,
 }));
 vi.mock("./TareasLista", () => ({
-  TareasLista: (p: { tasks: unknown[]; header: never; filters: ReactNode; empty: never }) => (
-    <MockView name="lista" {...p} count={p.tasks.length} />
-  ),
+  TareasLista: (p: Omit<Parameters<typeof MockView>[0], "name">) => <MockView name="lista" {...p} />,
 }));
 vi.mock("./TareasCalendario", () => ({
   CALENDARIO_DESCRIPTION: "Descripción calendario",
-  TareasCalendario: (p: { tasks: unknown[]; filters: Record<string, unknown> }) => (
-    <section data-testid="view-calendario" data-filters={JSON.stringify(p.filters)}>
-      {p.tasks.length}
-    </section>
-  ),
+  TareasCalendario: () => <section data-testid="view-calendario" />,
 }));
 // The task sheet (R3-08) opens from `?tarea=`; none here.
 vi.mock("./TaskSheet", () => ({ TaskSheetRoute: () => null }));
-vi.mock("./NewTaskDialog", () => ({
-  NewTaskDialog: (p: { open: boolean; defaults?: { projectId?: string; tramoKey?: string } }) =>
-    p.open ? <div role="dialog" aria-label="Nueva tarea" data-defaults={JSON.stringify(p.defaults ?? {})} /> : null,
-}));
 
-import { DEFAULT_TAREAS_QUERY, type TareasQuery } from "@/lib/tareas/query";
-import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
-import type { StaffOption } from "@/lib/types/redesign";
+import { qk } from "@/lib/query/keys";
+import { tareasListFiltersOf, tareasPageKeyInputOf } from "@/lib/query/options/tareas";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { TareasFacets, TareasPageData } from "@/lib/tareas/page-data";
+import { parseTareasQuery, toTareasSearch, type TareasQuery } from "@/lib/tareas/query";
+import type { WorkflowRef } from "@/lib/types/core";
 
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
-import { TAREAS_SEARCH_DEBOUNCE_MS, TareasClient, calendarTaskFilters } from "./TareasClient";
+import { TAREAS_SEARCH_DEBOUNCE_MS, TareasClient } from "./TareasClient";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 
@@ -144,31 +195,32 @@ const TRAMOS: WorkflowRef[] = [
   { id: "w-construccion", key: "construccion", name: "Construcción", sortOrder: 3 },
 ];
 
-function task(id: string, tramo: WorkflowRef | null, projectId: string, projectName: string): TaskListItem {
-  return {
-    id,
-    title: `Tarea ${id}`,
-    status: "pendiente",
-    workflow: tramo,
-    project: { id: projectId, name: projectName, clientName: null },
-  } as unknown as TaskListItem;
-}
-
-const TASKS: TaskListItem[] = [
-  task("t1", TRAMOS[0], P1, "Guadalajara 83"),
-  task("t2", TRAMOS[1], P1, "Guadalajara 83"),
-  task("t3", TRAMOS[1], P2, "Local Espinopapa"),
-  task("t4", TRAMOS[2], P2, "Local Espinopapa"),
+const STAFF = [
+  { id: ME, name: "Ana Ruiz" },
+  { id: LUIS, name: "Luis Paz" },
 ];
 
-const STAFF: StaffOption[] = [
-  { id: ME, name: "Ana", lastName: "Ruiz", suggested: false },
-  { id: LUIS, name: "Luis", lastName: "Paz", suggested: false },
-] as unknown as StaffOption[];
+const FACETS: TareasFacets = {
+  total: 4,
+  byTramo: { presale: 1, diseno: 2, construccion: 1 },
+  projects: [
+    { id: P1, name: "Guadalajara 83", count: 2 },
+    { id: P2, name: "Local Espinopapa", count: 2 },
+  ],
+};
 
-function renderClient(patch: Partial<TareasQuery> = {}, tasks: TaskListItem[] = TASKS) {
-  const query: TareasQuery = { ...DEFAULT_TAREAS_QUERY, ...patch };
-  return render(<TareasClient query={query} initial={{ tasks }} staff={STAFF} tramos={TRAMOS} />);
+/** The query the URL holds and the cache `/tareas` hydrates for it: the bundle and the facets it seeded. */
+function seed(client: QueryClient, query: TareasQuery, facets: TareasFacets) {
+  const page: TareasPageData = { facets, tramos: TRAMOS, staff: STAFF };
+  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query)), page);
+  client.setQueryData(qk.tareas.facets(tareasListFiltersOf(query)), facets);
+}
+
+function renderClient(patch: Partial<TareasQuery> = {}, facets: TareasFacets = FACETS) {
+  navigation.search = toTareasSearch(patch).replace(/^\?/, "");
+  const client = createTestQueryClient();
+  seed(client, parseTareasQuery(new URLSearchParams(navigation.search)), facets);
+  return renderWithQueryClient(<TareasClient />, { client });
 }
 
 function chip(name: string): HTMLAnchorElement {
@@ -176,6 +228,9 @@ function chip(name: string): HTMLAnchorElement {
   if (!el) throw new Error(`no chip ${name}`);
   return el;
 }
+
+let replaceState: ReturnType<typeof vi.spyOn>;
+let pushState: ReturnType<typeof vi.spyOn>;
 
 beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
@@ -189,16 +244,58 @@ beforeAll(() => {
 beforeEach(() => {
   navigation.search = "";
   caps.canCreateActivity = true;
+  for (const fn of Object.values(pageData)) fn.mockReset();
+  replaceState = vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
+  pushState = vi.spyOn(window.history, "pushState").mockImplementation(() => {});
 });
 
 afterEach(() => {
   cleanup();
+  replaceState.mockRestore();
+  pushState.mockRestore();
   vi.clearAllMocks();
   vi.useRealTimers();
 });
 
+/** Every URL write goes through `history.replaceState`, never the router. */
+function lastReplaced(): string | undefined {
+  expect(navigation.replace).not.toHaveBeenCalled();
+  expect(navigation.refresh).not.toHaveBeenCalled();
+  return replaceState.mock.calls.at(-1)?.[2] as string | undefined;
+}
+
+describe("TareasClient data", () => {
+  it("passes the views no data props: the query and the shell only", () => {
+    renderClient({ vista: "tablero" });
+    expect(screen.getByTestId("view-tablero").getAttribute("data-props")).toBe("empty,filters,header,query");
+    cleanup();
+    renderClient({ vista: "lista" });
+    expect(screen.getByTestId("view-lista").getAttribute("data-props")).toBe("empty,filters,header,query");
+  });
+
+  it("reads the hydrated bundle: no request on mount", () => {
+    renderClient();
+    expect(pageData.getTareasPageData).not.toHaveBeenCalled();
+    expect(pageData.getTareasFacets).not.toHaveBeenCalled();
+  });
+
+  it("a filter change is a new key: one bundle request, no facets request of its own", () => {
+    const { rerender } = renderClient();
+    pageData.getTareasPageData.mockReturnValue(new Promise(() => {}));
+    navigation.search = "tramo=diseno";
+    rerender(<TareasClient />);
+    expect(pageData.getTareasPageData).toHaveBeenCalledTimes(1);
+    expect(pageData.getTareasPageData).toHaveBeenCalledWith(
+      expect.objectContaining({ vista: "tablero", tramo: "diseno", cal: "mes" }),
+    );
+    expect(pageData.getTareasFacets).not.toHaveBeenCalled();
+    // The previous chips stay while the next bundle loads.
+    expect(screen.getByTestId("count-todas").textContent).toBe("4");
+  });
+});
+
 describe("TareasClient filters", () => {
-  it("shows the tramo chips with counts and aria-pressed", () => {
+  it("shows the tramo chips with the facet counts and aria-pressed", () => {
     renderClient();
     expect(chip("Todas").getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByTestId("count-todas").textContent).toBe("4");
@@ -209,55 +306,60 @@ describe("TareasClient filters", () => {
     expect(chip("Diseño").getAttribute("data-color")).toBe("var(--tramo-diseno)");
   });
 
-  it("presses the selected tramo, keeps the other filters in the chip links and narrows the view", () => {
+  it("presses the selected tramo and keeps the other filters in the chip links", () => {
     renderClient({ vista: "lista", tramo: "diseno", responsable: "yo", q: "plano" });
     expect(chip("Diseño").getAttribute("aria-pressed")).toBe("true");
     expect(chip("Todas").getAttribute("aria-pressed")).toBe("false");
     expect(chip("Presale").getAttribute("href")).toBe("/tareas?vista=lista&tramo=presale&responsable=yo&q=plano");
     expect(chip("Todas").getAttribute("href")).toBe("/tareas?vista=lista&responsable=yo&q=plano");
-    expect(screen.getByTestId("view-count").textContent).toBe("2");
   });
 
-  it("counts the tramo chips within the selected project", () => {
-    renderClient({ proyecto: P2 });
+  it("picks a chip with history.replaceState, never the router", () => {
+    renderClient({ vista: "lista" });
+    fireEvent.click(chip("Diseño"));
+    expect(lastReplaced()).toBe("/tareas?vista=lista&tramo=diseno");
+  });
+
+  it("counts a tramo with no facet entry as 0", () => {
+    renderClient({ proyecto: P2 }, { total: 2, byTramo: { diseno: 1, construccion: 1 }, projects: FACETS.projects });
     expect(screen.getByTestId("count-todas").textContent).toBe("2");
     expect(screen.getByTestId("count-presale").textContent).toBe("0");
     expect(screen.getByTestId("count-diseno").textContent).toBe("1");
   });
 
-  it("labels the responsable combobox and writes the choice with router.replace (no scroll)", async () => {
+  it("labels the responsable combobox and writes the choice with history.replaceState", async () => {
     renderClient({ responsable: "yo" });
     const trigger = screen.getByRole("button", { name: "Responsable: Yo" });
     fireEvent.click(trigger);
     fireEvent.click(await screen.findByText("Luis Paz"));
-    expect(navigation.replace).toHaveBeenCalledWith(`/tareas?responsable=${LUIS}`, { scroll: false });
+    expect(lastReplaced()).toBe(`/tareas?responsable=${LUIS}`);
   });
 
-  it("offers Yo and Todos before the people, without the viewer twice", async () => {
+  it("offers Yo and Todos before the people ({id,name} only), without the viewer twice", async () => {
     renderClient();
     fireEvent.click(screen.getByRole("button", { name: "Responsable: Todos" }));
     const list = await screen.findByRole("listbox");
     const options = within(list).getAllByRole("option").map((o) => o.textContent);
     expect(options).toEqual(["Yo", "Todos", "Luis Paz"]);
     fireEvent.click(within(list).getByText("Yo"));
-    expect(navigation.replace).toHaveBeenCalledWith("/tareas?responsable=yo", { scroll: false });
+    expect(lastReplaced()).toBe("/tareas?responsable=yo");
   });
 
-  it("filters by project and clears it with Todos los proyectos", async () => {
+  it("filters by project from the facets and clears it with Todos los proyectos", async () => {
     renderClient({ proyecto: P1 });
     fireEvent.click(screen.getByRole("button", { name: "Proyecto: Guadalajara 83" }));
     fireEvent.click(await screen.findByText("Todos los proyectos"));
-    expect(navigation.replace).toHaveBeenCalledWith("/tareas", { scroll: false });
+    expect(lastReplaced()).toBe("/tareas");
 
     cleanup();
     renderClient();
     fireEvent.click(screen.getByRole("button", { name: "Proyecto" }));
     fireEvent.click(await screen.findByText("Local Espinopapa"));
-    expect(navigation.replace).toHaveBeenCalledWith(`/tareas?proyecto=${P2}`, { scroll: false });
+    expect(lastReplaced()).toBe(`/tareas?proyecto=${P2}`);
   });
 
-  it("lists only the projects of the selected tramo", async () => {
-    renderClient({ tramo: "presale" });
+  it("lists the facet projects (the server keeps only the selected tramo's)", async () => {
+    renderClient({ tramo: "presale" }, { total: 4, byTramo: { presale: 1 }, projects: [FACETS.projects[0]] });
     fireEvent.click(screen.getByRole("button", { name: "Proyecto" }));
     const list = await screen.findByRole("listbox");
     expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual([
@@ -266,24 +368,25 @@ describe("TareasClient filters", () => {
     ]);
   });
 
-  it("writes the search to the URL after a pause, with router.replace and no scroll", () => {
+  it("writes the search to the URL after a pause, with history.replaceState", () => {
     vi.useFakeTimers();
     renderClient({ tramo: "diseno" });
     fireEvent.change(screen.getByRole("textbox", { name: "Buscar tareas" }), { target: { value: " renders " } });
-    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
     act(() => {
       vi.advanceTimersByTime(TAREAS_SEARCH_DEBOUNCE_MS);
     });
-    expect(navigation.replace).toHaveBeenCalledWith("/tareas?tramo=diseno&q=renders", { scroll: false });
+    expect(lastReplaced()).toBe("/tareas?tramo=diseno&q=renders");
   });
 
   it("restores the search box when the URL changes (back / forward)", () => {
-    const query: TareasQuery = { ...DEFAULT_TAREAS_QUERY, q: "renders" };
-    const { rerender } = render(<TareasClient query={query} initial={{ tasks: TASKS }} staff={STAFF} tramos={TRAMOS} />);
+    const { rerender } = renderClient({ q: "renders" });
     const box = screen.getByRole("textbox", { name: "Buscar tareas" }) as HTMLInputElement;
     expect(box.value).toBe("renders");
-    rerender(<TareasClient query={{ ...query, q: null }} initial={{ tasks: TASKS }} staff={STAFF} tramos={TRAMOS} />);
+    navigation.search = "";
+    rerender(<TareasClient />);
     expect(box.value).toBe("");
+    expect(replaceState).not.toHaveBeenCalled();
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 });
@@ -304,6 +407,13 @@ describe("TareasClient view switch", () => {
     expect(links[2].hasAttribute("aria-current")).toBe(false);
   });
 
+  it("switches the view with history.pushState (back returns to it), no server render", () => {
+    renderClient({ vista: "lista", tramo: "presale" });
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Vista" })).getByRole("link", { name: "Tablero" }));
+    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?tramo=presale");
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
   it("renders the selected view with its description", () => {
     renderClient({ vista: "tablero" });
     expect(screen.getByTestId("view-tablero")).toBeTruthy();
@@ -317,28 +427,10 @@ describe("TareasClient view switch", () => {
     expect(screen.getByText("Descripción calendario")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Tareas" })).toBeTruthy();
   });
-
-  it("passes the calendar the same filters the page loaded it with", () => {
-    renderClient({ vista: "calendario", tramo: "diseno", responsable: "yo", proyecto: P1, q: "x", estado: "pendiente" });
-    const filters = JSON.parse(screen.getByTestId("view-calendario").getAttribute("data-filters") ?? "{}");
-    expect(filters).toEqual({
-      search: "x",
-      status: "pendiente",
-      involvesStaffId: ME,
-      workflowId: "w-diseno",
-      projectId: P1,
-    });
-  });
-
-  it("calendarTaskFilters maps a person and ignores an unknown tramo", () => {
-    const q: TareasQuery = { ...DEFAULT_TAREAS_QUERY, responsable: LUIS, tramo: "otro" };
-    expect(calendarTaskFilters(q, TRAMOS, ME)).toEqual({ involvesStaffId: LUIS });
-  });
 });
 
 describe("TareasClient Nueva tarea", () => {
   it("opens the shell's NewTaskDialogHost with the tramo and project as defaults, without a navigation", () => {
-    navigation.search = `tramo=presale&proyecto=${P1}`;
     renderClient({ tramo: "presale", proyecto: P1 });
     fireEvent.click(screen.getByRole("button", { name: "Nueva tarea" }));
     expect(navigation.replace).not.toHaveBeenCalled();
@@ -347,7 +439,7 @@ describe("TareasClient Nueva tarea", () => {
       defaults: { projectId: P1, tramoKey: "presale" },
       source: "tareas",
     });
-    // The host renders the dialog; this screen's own mount stays closed until 4a removes it.
+    // The host renders the dialog; this screen mounts none of its own.
     expect(screen.queryByRole("dialog", { name: "Nueva tarea" })).toBeNull();
   });
 
@@ -359,14 +451,14 @@ describe("TareasClient Nueva tarea", () => {
 });
 
 describe("TareasClient empty state", () => {
-  it("shows No hay tareas con estos filtros and Quitar filtros clears the URL filters", () => {
+  it("hands the views No hay tareas con estos filtros and Quitar filtros clears the URL filters", () => {
     renderClient({ vista: "lista", tramo: "presale", proyecto: P2, q: "nada" });
     expect(screen.getByText("No hay tareas con estos filtros")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Quitar filtros" }).getAttribute("href")).toBe("/tareas?vista=lista");
   });
 
   it("keeps the calendar mode when clearing the filters in Calendario", () => {
-    renderClient({ vista: "calendario", cal: "dia", responsable: LUIS }, []);
+    renderClient({ vista: "calendario", cal: "dia", responsable: LUIS }, { total: 0, byTramo: {}, projects: [] });
     expect(screen.getByText("No hay tareas con estos filtros")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Quitar filtros" }).getAttribute("href")).toBe(
       "/tareas?vista=calendario&cal=dia",
@@ -374,8 +466,13 @@ describe("TareasClient empty state", () => {
     expect(screen.queryByTestId("view-calendario")).toBeNull();
   });
 
+  it("shows the calendar when the selected tramo has tasks", () => {
+    renderClient({ vista: "calendario", tramo: "diseno" });
+    expect(screen.getByTestId("view-calendario")).toBeTruthy();
+  });
+
   it("offers no Quitar filtros without filters", () => {
-    renderClient({ vista: "lista" }, []);
+    renderClient({ vista: "lista" });
     expect(screen.queryByRole("link", { name: "Quitar filtros" })).toBeNull();
   });
 });

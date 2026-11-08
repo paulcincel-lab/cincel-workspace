@@ -1,6 +1,9 @@
+import type { QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import type { TeamRequestRow } from "@/components/biblioteca/TeamRequests";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient } from "@/lib/query/test-utils";
 import type { VacationSettingsView } from "@/lib/types/redesign";
 
 /** Test fixtures of "Solicitudes del equipo" and "Días de vacaciones". */
@@ -116,3 +119,13 @@ export const patternMocks = {
     );
   },
 };
+
+/** A test client with `vacations.pending` and `vacations.settings` seeded, as the Mis vacaciones page leaves them. */
+export function seededDeciderClient(
+  data: { requests?: TeamRequestRow[]; settings?: VacationSettingsView | null } = {},
+): QueryClient {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.vacations.pending(), data.requests ?? pendingRequestsFixture());
+  client.setQueryData(qk.vacations.settings(), data.settings === undefined ? vacationSettingsFixture() : data.settings);
+  return client;
+}

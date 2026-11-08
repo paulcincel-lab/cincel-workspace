@@ -1,21 +1,34 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
+import { bibliotecaLinksOptions } from "@/lib/query/options/biblioteca";
+import type { ResourceLink } from "@/lib/types/resource";
 
-/** One `resource_links` row of section `mis-vacaciones`, as the page passes it. */
+/** One `resource_links` row of section `mis-vacaciones`, as the table shows it. */
 export type VacationDocument = { id: string; title: string; url: string; updatedAt: string };
 
-export type VacationDocumentsProps = { documents: VacationDocument[] };
+/** Shared rows plus the viewer's own personal rows of section `mis-vacaciones`. */
+export function vacationDocuments(links: ResourceLink[], viewerId: string | null): VacationDocument[] {
+  return links
+    .filter((link) => link.section === "mis-vacaciones")
+    .filter((link) => !link.personalFor || link.personalFor.id === viewerId)
+    .map((link) => ({ id: link.id, title: link.title, url: link.url, updatedAt: link.updatedAt }));
+}
 
 /**
  * "Documentos" of Mis vacaciones (redesign FE §3.7, review NB 25): the
  * existing `resource_links` rows of the old `mis-vacaciones` section, so
- * nothing is lost behind the redirect. Links open in a new tab.
+ * nothing is lost behind the redirect. Reads
+ * `biblioteca.links('mis-vacaciones')` (seeded by the page; personal links of
+ * other people never reach it). Links open in a new tab.
  */
-export function VacationDocuments({ documents }: VacationDocumentsProps) {
+export function VacationDocuments() {
+  const { data } = useQuery(bibliotecaLinksOptions("mis-vacaciones"));
+  const documents = data ? vacationDocuments(data.links, data.viewerId) : [];
   const byId = new Map(documents.map((doc) => [doc.id, doc]));
   return (
     <WidgetCard title="Documentos" icon={FileText}>

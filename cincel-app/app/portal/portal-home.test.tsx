@@ -1,13 +1,15 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PortalProjectDTO } from "@/lib/types/portal";
 
 const requirePortalUser = vi.hoisted(() => vi.fn());
 const listPortalProjects = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/portal/session", () => ({ requirePortalUser }));
+vi.mock("@/lib/portal/session", () => ({ requirePortalUser, requirePortalViewer: vi.fn() }));
 vi.mock("@/lib/portal/queries", () => ({ listPortalProjects }));
 
 import PortalHomePage from "./page";
@@ -34,9 +36,13 @@ describe("/portal", () => {
   it("lists one card per project of the signed-in client", async () => {
     listPortalProjects.mockResolvedValue([project("p1", "Casa Lomas"), project("p2", "Depa Roma")]);
 
-    render(await PortalHomePage());
+    const { client } = renderWithQueryClient(await PortalHomePage());
 
     expect(listPortalProjects).toHaveBeenCalledWith("u1");
+    expect(listPortalProjects).toHaveBeenCalledTimes(1);
+    expect(client.getQueryData(qk.portal.projects())).toEqual({
+      projects: [project("p1", "Casa Lomas"), project("p2", "Depa Roma")],
+    });
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByRole("link", { name: "Casa Lomas" }).getAttribute("href")).toBe("/portal/proyectos/p1");
     expect(screen.getByRole("link", { name: "Depa Roma" }).getAttribute("href")).toBe("/portal/proyectos/p2");
@@ -46,7 +52,7 @@ describe("/portal", () => {
   it("shows the empty state without projects", async () => {
     listPortalProjects.mockResolvedValue([]);
 
-    render(await PortalHomePage());
+    renderWithQueryClient(await PortalHomePage());
 
     expect(
       screen.getByText("No tienes proyectos activos. Si crees que es un error, contacta a tu equipo de Cincel."),

@@ -1,8 +1,14 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 
-import DriveBrowser, { driveConsentUrl } from "./DriveBrowser";
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+
+import DriveBrowser, { driveConsentUrl, type DriveListResult } from "./DriveBrowser";
+
+const render = (ui: ReactElement) => renderWithQueryClient(ui);
 
 type JsonResponse = { status: number; body: unknown };
 
@@ -147,5 +153,52 @@ describe("DriveBrowser without the old connect-account UI", () => {
 
     expect(await screen.findByText("No se pudo consultar Google Drive.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Conectar Google Drive" })).toBeNull();
+  });
+});
+
+describe("DriveBrowser queries", () => {
+  const STATUS = { status: 200, body: { configured: true, mode: "staff_token", hasDriveGrant: true, googleLinked: true } };
+  const FOLDER = { ...ENTRY, id: "folder-1", name: "Obras", mimeType: "application/vnd.google-apps.folder", isFolder: true };
+
+  it("fetches nothing while inactive (a closed sheet)", async () => {
+    const fetchMock = mockFetch({ status: STATUS, list: { status: 200, body: { entries: [ENTRY], nextPageToken: null } } });
+    render(<DriveBrowser active={false} />);
+    expect(await screen.findByText("Carpeta vacía.")).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("caches each folder listing under qk.google.driveList(folder, q)", async () => {
+    const fetchMock = mockFetch({ status: STATUS, list: { status: 200, body: { entries: [FOLDER, ENTRY], nextPageToken: null } } });
+    const { client } = render(<DriveBrowser active rootFolderId="root-1" />);
+
+    expect(await screen.findByText("Planos.pdf")).toBeTruthy();
+    expect(client.getQueryData<DriveListResult>(qk.google.driveList("root-1", ""))).toEqual({
+      kind: "ok",
+      entries: [FOLDER, ENTRY],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Obras/ }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain("/api/google/drive/list?folderId=folder-1"),
+    );
+    await waitFor(() => expect(client.getQueryData(qk.google.driveList("folder-1", ""))).toBeDefined());
+
+    // Back to the root: served from the cache, no second request for it.
+    fireEvent.click(screen.getByRole("button", { name: "Inicio" }));
+    expect(await screen.findByText("Planos.pdf")).toBeTruthy();
+    const rootCalls = fetchMock.mock.calls.filter(([input]) => String(input) === "/api/google/drive/list?folderId=root-1");
+    expect(rootCalls).toHaveLength(1);
+  });
+
+  it("searches with the debounced text as the q param", async () => {
+    const fetchMock = mockFetch({ status: STATUS, list: { status: 200, body: { entries: [ENTRY], nextPageToken: null } } });
+    render(<DriveBrowser active rootFolderId="root-1" />);
+    await screen.findByText("Planos.pdf");
+    fireEvent.change(screen.getByPlaceholderText("Buscar por nombre…"), { target: { value: "planos" } });
+    await waitFor(
+      () =>
+        expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain("/api/google/drive/list?folderId=root-1&q=planos"),
+      { timeout: 2_000 },
+    );
   });
 });

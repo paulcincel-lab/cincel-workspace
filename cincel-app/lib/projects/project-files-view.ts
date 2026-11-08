@@ -77,6 +77,26 @@ export function folderContext(result: OkFilesResult): {
   return { root, current, atRoot: result.folderId === root.id };
 }
 
+const LOCAL_ORIGIN = "http://archivos.local";
+
+/**
+ * The folder an Archivos link of `projectId` opens: its id, null for the
+ * root, or undefined for any other link. Folder cards keep a real `href`
+ * (middle click and open in a new tab work); a plain click on one is taken
+ * over with it and opens the folder on the client (Query Migration 5d, #962).
+ */
+export function archivosFolderFromHref(projectId: string, href: string | null | undefined): string | null | undefined {
+  if (!href) return undefined;
+  let url: URL;
+  try {
+    url = new URL(href, LOCAL_ORIGIN);
+  } catch {
+    return undefined;
+  }
+  if (url.origin !== LOCAL_ORIGIN || url.pathname !== archivosHref(projectId)) return undefined;
+  return url.searchParams.get("folder")?.trim() || null;
+}
+
 /** Folders first, then files: one card each (Visual grid). */
 export function toFileCards(projectId: string, result: OkFilesResult): EntityCard[] {
   const { atRoot } = folderContext(result);
@@ -87,6 +107,7 @@ export function toFileCards(projectId: string, result: OkFilesResult): EntityCar
         id: item.id,
         title: item.name,
         subtitle: hint ?? "Carpeta",
+        // A real link; `ProjectFiles` opens it on the client (`archivosFolderFromHref`).
         href: archivosHref(projectId, item.id),
         iconName: "folder",
         meta: [{ label: "Modificado", value: formatFileDate(item.modifiedAt) }],

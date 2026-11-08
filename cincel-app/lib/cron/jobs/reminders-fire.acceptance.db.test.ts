@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { lockReminders } from "@/tests/setup/reminders-lock";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -59,7 +60,7 @@ describe.skipIf(!url)("reminder → tick → in-app row + email (test DB)", asyn
   const { and, eq } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const { createReminderAction } = await import("@/lib/actions/my-space-actions");
+  const { createReminderAction } = unwrapActions(await import("@/lib/actions/my-space-actions"));
   const { reminderDedupeKey } = await import("@/lib/my-space/reminders");
   const { POST } = await import("@/app/api/cron/tick/route");
 

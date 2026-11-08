@@ -1,18 +1,25 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 import type { FiltersBarProps } from "@/components/patterns/FiltersBar";
 import type { ListPageProps } from "@/components/patterns/ListPage";
+import type { BibliotecaData } from "@/lib/biblioteca/load";
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import type { ResourceLink } from "@/lib/types/resource";
 
-import { bibliotecaFixture, makeLink } from "./biblioteca.fixtures";
-import { BibliotecaSection } from "./BibliotecaSection";
+import { bibliotecaData, bibliotecaFixture, makeLink, seededBibliotecaClient } from "./biblioteca.fixtures";
+import { BibliotecaSection, optimisticFavoriteId, type BibliotecaSectionProps } from "./BibliotecaSection";
 
 const actions = vi.hoisted(() => ({
   createResourceLinkAction: vi.fn(),
   deleteResourceLinkAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/resources-actions", () => actions);
+
+const pageData = vi.hoisted(() => ({ getBibliotecaPageData: vi.fn(), getMisVacacionesPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/biblioteca-actions", () => pageData);
 
 // Plain renderings of the pattern inputs: the test reads what the section hands them.
 vi.mock("@/components/patterns/ListPage", () => ({
@@ -65,20 +72,48 @@ vi.mock("@/components/recursos/ResourcePreview", () => ({
   DriveFilePreviewSheet: () => null,
 }));
 
+/** What `biblioteca.links('formatos-obra')` ships: the section's rows plus the viewer's favorites. */
+function sectionLinks(): ResourceLink[] {
+  return bibliotecaFixture().filter((link) => link.section === "formatos-obra" || link.section === "mis-favoritos");
+}
+
+function renderSection(
+  props: Partial<BibliotecaSectionProps> = {},
+  options: { links?: ResourceLink[]; canManageFavorites?: boolean; driveEnabled?: boolean } = {},
+) {
+  const client = seededBibliotecaClient("formatos-obra", options.links ?? sectionLinks(), {
+    canManageFavorites: options.canManageFavorites ?? true,
+    driveEnabled: options.driveEnabled ?? false,
+  });
+  return renderWithQueryClient(<BibliotecaSection section="formatos-obra" {...props} />, { client });
+}
+
+function cachedIds(client: ReturnType<typeof renderSection>["client"]): string[] {
+  return (client.getQueryData<BibliotecaData>(qk.biblioteca.links("formatos-obra"))?.links ?? []).map((link) => link.id);
+}
+
 function rowOf(name: string) {
   return screen.getByRole("button", { name }).closest("tr")!;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 describe("BibliotecaSection", () => {
   beforeEach(() => {
-    window.localStorage.clear();
     actions.createResourceLinkAction.mockReset();
     actions.deleteResourceLinkAction.mockReset();
+    pageData.getBibliotecaPageData.mockReset();
   });
   afterEach(() => cleanup());
 
   it("lists the section rows with breadcrumb and no views / downloads columns", () => {
-    render(<BibliotecaSection section="formatos-obra" links={bibliotecaFixture()} viewerId="staff-ana" canManageFavorites />);
+    renderSection();
     expect(screen.getByRole("heading", { name: "Formatos de obra" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Ruta" }).textContent).toBe("Biblioteca / Recursos / Formatos de obra");
     const headers = screen.getAllByRole("columnheader").map((th) => th.textContent);
@@ -87,7 +122,7 @@ describe("BibliotecaSection", () => {
   });
 
   it("builds tipo and tramo filter chips as links keeping the other filter", () => {
-    render(<BibliotecaSection section="formatos-obra" links={bibliotecaFixture()} tipo="drive_file" tramo={null} />);
+    renderSection({ tipo: "drive_file", tramo: null });
     const carpeta = screen.getByRole("link", { name: "Carpeta" });
     expect(carpeta.getAttribute("href")).toBe("/biblioteca/formatos-obra?tipo=drive_folder");
     expect(screen.getByRole("link", { name: "Archivo" }).getAttribute("aria-pressed")).toBe("true");
@@ -95,53 +130,91 @@ describe("BibliotecaSection", () => {
     expect(screen.queryByRole("button", { name: "Acta de entrega-recepción" })).toBeNull();
   });
 
-  it("marks a row as favorite with a personal 'Mis favoritos' link", async () => {
-    const links = bibliotecaFixture();
-    actions.createResourceLinkAction.mockResolvedValue(
-      makeLink({ id: "fav-new", section: "mis-favoritos", title: "Levantamiento del sitio", url: links[5].url, personalFor: { id: "staff-ana", name: "Ana Ríos" } }),
-    );
-    render(<BibliotecaSection section="formatos-obra" links={links} viewerId="staff-ana" canManageFavorites />);
+  it("marks a row as favorite at once (optimistic), then keeps the created link", async () => {
+    const links = sectionLinks();
+    const levantamiento = links.find((link) => link.id === "levantamiento")!;
+    const created = makeLink({ id: "fav-new", section: "mis-favoritos", title: "Levantamiento del sitio", url: levantamiento.url, personalFor: { id: "staff-ana", name: "Ana Ríos" } });
+    const call = deferred<{ ok: true; data: ResourceLink }>();
+    actions.createResourceLinkAction.mockReturnValue(call.promise);
+    const { client } = renderSection({}, { links });
+
     const toggle = screen.getByRole("button", { name: "Marcar Levantamiento del sitio como favorito" });
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(toggle);
+
+    // Before the server answers: the star is on and the cache holds the optimistic favorite.
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Quitar Levantamiento del sitio de favoritos" }).getAttribute("aria-pressed")).toBe("true"),
     );
+    expect(cachedIds(client)).toContain(optimisticFavoriteId(levantamiento));
+
+    call.resolve({ ok: true, data: created });
+    await waitFor(() => expect(cachedIds(client)).toContain("fav-new"));
+    expect(cachedIds(client)).not.toContain(optimisticFavoriteId(levantamiento));
     expect(actions.createResourceLinkAction).toHaveBeenCalledWith(
       expect.objectContaining({
         section: "mis-favoritos",
         title: "Levantamiento del sitio",
-        url: links[5].url,
+        url: levantamiento.url,
         ownerId: "staff-ana",
         personalForId: "staff-ana",
       }),
     );
+    // One POST: the screen is already exact, nothing refetches.
+    expect(pageData.getBibliotecaPageData).not.toHaveBeenCalled();
   });
 
-  it("removes the favorite link when the star is toggled off", async () => {
-    actions.deleteResourceLinkAction.mockResolvedValue(undefined);
-    render(<BibliotecaSection section="formatos-obra" links={bibliotecaFixture()} viewerId="staff-ana" canManageFavorites />);
+  it("removes the favorite at once when the star is toggled off", async () => {
+    const call = deferred<{ ok: true; data: null }>();
+    actions.deleteResourceLinkAction.mockReturnValue(call.promise);
+    const { client } = renderSection();
     fireEvent.click(screen.getByRole("button", { name: "Quitar Bitácora de obra de favoritos" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Marcar Bitácora de obra como favorito" })).toBeTruthy());
-    expect(actions.deleteResourceLinkAction).toHaveBeenCalledWith("fav-bitacora");
+    expect(cachedIds(client)).not.toContain("fav-bitacora");
+    call.resolve({ ok: true, data: null });
+    await waitFor(() => expect(actions.deleteResourceLinkAction).toHaveBeenCalledWith("fav-bitacora"));
+    expect(cachedIds(client)).not.toContain("fav-bitacora");
   });
 
-  it("shows the mapped error copy when the toggle fails", async () => {
-    actions.createResourceLinkAction.mockRejectedValue(new Error("FORBIDDEN: resource create"));
-    render(<BibliotecaSection section="formatos-obra" links={bibliotecaFixture()} viewerId="staff-ana" canManageFavorites />);
+  it("marks every other Biblioteca screen stale after a toggle (the biblioteca.links prefix)", async () => {
+    actions.deleteResourceLinkAction.mockResolvedValue({ ok: true, data: null });
+    const { client } = renderSection();
+    client.setQueryData(qk.biblioteca.links(null), bibliotecaData(bibliotecaFixture()));
+    client.setQueryData(qk.biblioteca.links("mis-favoritos"), bibliotecaData([]));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar Bitácora de obra de favoritos" }));
+    await waitFor(() => expect(client.getQueryState(qk.biblioteca.links(null))?.isInvalidated).toBe(true));
+    expect(client.getQueryState(qk.biblioteca.links("mis-favoritos"))?.isInvalidated).toBe(true);
+    expect(pageData.getBibliotecaPageData).not.toHaveBeenCalled();
+  });
+
+  it("rolls the star back and shows the mapped error copy when the create fails", async () => {
+    actions.createResourceLinkAction.mockResolvedValue({ ok: false, error: "FORBIDDEN: resource create" });
+    const { client } = renderSection();
+    const before = cachedIds(client);
     fireEvent.click(screen.getByRole("button", { name: "Marcar Levantamiento del sitio como favorito" }));
     expect((await screen.findByRole("alert")).textContent).toBe("No tienes permiso para realizar esta acción.");
+    expect(screen.getByRole("button", { name: "Marcar Levantamiento del sitio como favorito" }).getAttribute("aria-pressed")).toBe("false");
+    expect(cachedIds(client)).toEqual(before);
+  });
+
+  it("rolls the removal back when the delete fails", async () => {
+    actions.deleteResourceLinkAction.mockResolvedValue({ ok: false, error: "FORBIDDEN: resource delete" });
+    const { client } = renderSection();
+    fireEvent.click(screen.getByRole("button", { name: "Quitar Bitácora de obra de favoritos" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Quitar Bitácora de obra de favoritos" }).getAttribute("aria-pressed")).toBe("true");
+    expect(cachedIds(client)).toContain("fav-bitacora");
   });
 
   it("shows the star read-only without the favorites capability and never calls an action", () => {
-    render(<BibliotecaSection section="formatos-obra" links={bibliotecaFixture()} viewerId="staff-ana" canManageFavorites={false} />);
+    renderSection({}, { canManageFavorites: false });
     expect(screen.queryByRole("button", { name: /favorito/ })).toBeNull();
     expect(within(rowOf("Bitácora de obra")).getByRole("img", { name: "Favorito" })).toBeTruthy();
     expect(actions.createResourceLinkAction).not.toHaveBeenCalled();
   });
 
   it("opens a row in the viewer and remembers it as recent; downloads only with Drive", () => {
-    render(<BibliotecaSection section="formatos-obra" links={bibliotecaFixture()} driveEnabled />);
+    renderSection({}, { driveEnabled: true });
     expect(within(rowOf("Bitácora de obra")).getByRole("link", { name: "Descargar PDF: Bitácora de obra" }).getAttribute("href")).toBe(
       "/api/google/drive/file/docbitacora/content",
     );

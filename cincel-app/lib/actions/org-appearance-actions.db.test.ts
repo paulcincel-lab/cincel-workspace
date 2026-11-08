@@ -41,7 +41,15 @@ describe.skipIf(!url)("org appearance actions (test DB)", async () => {
   const { db } = await import("@/lib/db/client");
   const { appSettings } = await import("@/lib/db/schema");
   const repo = await import("@/lib/repositories/org-appearance-repository");
-  const actions = await import("@/lib/actions/org-appearance-actions");
+  const raw = await import("@/lib/actions/org-appearance-actions");
+  const { unwrapActionResult } = await import("@/lib/actions/action-result");
+  /** The actions return `ActionResult`; unwrapped, a failure throws its code as before. */
+  const actions = {
+    saveOrgAppearanceAction: async (input: Parameters<typeof raw.saveOrgAppearanceAction>[0]) =>
+      unwrapActionResult(await raw.saveOrgAppearanceAction(input)),
+    resetOrgAppearanceAction: async (base: Parameters<typeof raw.resetOrgAppearanceAction>[0]) =>
+      unwrapActionResult(await raw.resetOrgAppearanceAction(base)),
+  };
   const { THEME_PRESETS } = await import("@/lib/ui/themes");
   const { DEFAULT_USER_PREFERENCES, resolveAppearance } = await import("@/lib/ui/preferences");
   const { appearanceStyleBlock, toCssVars } = await import("@/lib/ui/appearance-css");
@@ -118,6 +126,8 @@ describe.skipIf(!url)("org appearance actions (test DB)", async () => {
     const edit = structuredClone(THEME_PRESETS.grafito);
     await expect(actions.saveOrgAppearanceAction(edit)).rejects.toThrow(/^FORBIDDEN/);
     await expect(actions.resetOrgAppearanceAction("grafito")).rejects.toThrow(/^FORBIDDEN/);
+    // Returned, not thrown: production keeps the code.
+    await expect(raw.saveOrgAppearanceAction(edit)).resolves.toEqual({ ok: false, error: expect.stringMatching(/^FORBIDDEN/) });
     expect(await rawRow()).toBe(before);
     expect(revalidatePath).not.toHaveBeenCalled();
   });

@@ -48,7 +48,6 @@ const repo = vi.hoisted(() => {
     getTaskForViewer: vi.fn(async () => null),
     listTasks: vi.fn(async () => []),
     listMyTasks: vi.fn(async () => []),
-    listBoard: vi.fn(async () => ({ pendiente: [], en_proceso: [], completado: [], bloqueado: [] })),
     listCalendar: vi.fn(async () => []),
     listSubtasks: vi.fn(async () => []),
     listTaskHistory: vi.fn(async () => [{ id: "h1" }]),
@@ -241,8 +240,6 @@ describe("list reads pass the viewer scope", () => {
     expect(repo.listTasks).toHaveBeenCalledWith({ kind: "admin" }, MEMBER_SCOPE);
     await actions.fetchMyTasksAction();
     expect(repo.listMyTasks).toHaveBeenCalledWith(ACTOR, {}, MEMBER_SCOPE);
-    await actions.fetchBoardAction();
-    expect(repo.listBoard).toHaveBeenCalledWith({}, MEMBER_SCOPE);
     await actions.fetchCalendarAction("2030-01-01", "2030-01-31");
     expect(repo.listCalendar).toHaveBeenCalledWith("2030-01-01", "2030-01-31", {}, MEMBER_SCOPE);
   });

@@ -1,11 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PortalActivityRow } from "@/lib/types/portal";
 
-const actions = vi.hoisted(() => ({ listProjectPortalActivityAction: vi.fn() }));
-vi.mock("@/lib/actions/portal-actions", () => actions);
+const actions = vi.hoisted(() => ({
+  getProyectoClientesActivity: vi.fn(),
+  getProyectoClientesData: vi.fn(),
+  getProyectoArchivosData: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => actions);
 
 import { PortalActivityCard } from "./PortalActivityCard";
 
@@ -27,8 +33,8 @@ afterEach(() => {
 
 describe("PortalActivityCard", () => {
   it("lists the real portal file events of the project", async () => {
-    actions.listProjectPortalActivityAction.mockResolvedValue(rows);
-    render(<PortalActivityCard projectId={PROJECT_ID} />);
+    actions.getProyectoClientesActivity.mockResolvedValue(rows);
+    renderWithQueryClient(<PortalActivityCard projectId={PROJECT_ID} />);
 
     expect(await screen.findByText("Planos.pdf")).toBeTruthy();
     expect(screen.getByText("Foto obra.jpg")).toBeTruthy();
@@ -37,12 +43,12 @@ describe("PortalActivityCard", () => {
     expect(screen.getByText("Descarga")).toBeTruthy();
     expect(screen.getByText("Subida")).toBeTruthy();
     expect(screen.getByText("Vista previa")).toBeTruthy();
-    expect(actions.listProjectPortalActivityAction).toHaveBeenCalledWith(PROJECT_ID);
+    expect(actions.getProyectoClientesActivity).toHaveBeenCalledWith({ id: PROJECT_ID });
   });
 
   it("keeps the order the server returns (newest first)", async () => {
-    actions.listProjectPortalActivityAction.mockResolvedValue(rows);
-    render(<PortalActivityCard projectId={PROJECT_ID} />);
+    actions.getProyectoClientesActivity.mockResolvedValue(rows);
+    renderWithQueryClient(<PortalActivityCard projectId={PROJECT_ID} />);
 
     await screen.findByText("Planos.pdf");
     const times = screen.getAllByRole("row").slice(1).map((row) => row.querySelector("time")?.getAttribute("dateTime"));
@@ -50,16 +56,32 @@ describe("PortalActivityCard", () => {
   });
 
   it("shows an empty state without events", async () => {
-    actions.listProjectPortalActivityAction.mockResolvedValue([]);
-    render(<PortalActivityCard projectId={PROJECT_ID} />);
+    actions.getProyectoClientesActivity.mockResolvedValue([]);
+    renderWithQueryClient(<PortalActivityCard projectId={PROJECT_ID} />);
 
     expect(await screen.findByText("Todavía no hay actividad de clientes en este proyecto.")).toBeTruthy();
   });
 
   it("shows an error when the activity can't load", async () => {
-    actions.listProjectPortalActivityAction.mockRejectedValue(new Error("boom"));
-    render(<PortalActivityCard projectId={PROJECT_ID} />);
+    actions.getProyectoClientesActivity.mockRejectedValue(new Error("boom"));
+    renderWithQueryClient(<PortalActivityCard projectId={PROJECT_ID} />);
 
     expect(await screen.findByText("No se pudo cargar la actividad.")).toBeTruthy();
+  });
+
+  it("renders from the cache with no action call", () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.proyectos.clientesActivity(PROJECT_ID), rows);
+    renderWithQueryClient(<PortalActivityCard projectId={PROJECT_ID} />, { client });
+
+    expect(screen.getByText("Planos.pdf")).toBeTruthy();
+    expect(actions.getProyectoClientesActivity).not.toHaveBeenCalled();
+  });
+
+  it("shows the empty state for a project it can't read (null)", async () => {
+    actions.getProyectoClientesActivity.mockResolvedValue(null);
+    renderWithQueryClient(<PortalActivityCard projectId={PROJECT_ID} />);
+
+    expect(await screen.findByText("Todavía no hay actividad de clientes en este proyecto.")).toBeTruthy();
   });
 });

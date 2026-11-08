@@ -1,18 +1,23 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PortalProjectDTO, PortalScheduleDTO } from "@/lib/types/portal";
 
 const mocks = vi.hoisted(() => {
   class PortalNotFoundError extends Error {}
   return {
     PortalNotFoundError,
+    nav: { search: "" },
     requirePortalUser: vi.fn(),
+    requirePortalViewer: vi.fn(),
     requireProjectAccess: vi.fn(),
     getPortalProject: vi.fn(),
     getPortalSchedule: vi.fn(),
     getPortalProjectTramos: vi.fn(),
+    listPortalProjects: vi.fn(),
     listPortalFolder: vi.fn(),
     notFound: vi.fn(() => {
       throw new Error("NEXT_NOT_FOUND");
@@ -20,9 +25,13 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
+vi.mock("next/navigation", () => ({
+  notFound: mocks.notFound,
+  useSearchParams: () => new URLSearchParams(mocks.nav.search),
+}));
 vi.mock("@/lib/portal/session", () => ({
   requirePortalUser: mocks.requirePortalUser,
+  requirePortalViewer: mocks.requirePortalViewer,
   requireProjectAccess: mocks.requireProjectAccess,
 }));
 vi.mock("@/lib/portal/drive-guard", () => ({
@@ -30,8 +39,8 @@ vi.mock("@/lib/portal/drive-guard", () => ({
   isPortalNotFound: (e: unknown) => e instanceof mocks.PortalNotFoundError,
 }));
 vi.mock("@/components/portal/PortalFileBrowser", () => ({
-  default: ({ projectId, initialFolderId }: { projectId: string; initialFolderId: string | null }) => (
-    <div data-testid="file-browser" data-project={projectId} data-folder={initialFolderId ?? ""} />
+  default: ({ projectId, folderId }: { projectId: string; folderId: string | null }) => (
+    <div data-testid="file-browser" data-project={projectId} data-folder={folderId ?? ""} />
   ),
 }));
 vi.mock("@/components/portal/PortalUploader", () => ({
@@ -41,6 +50,7 @@ vi.mock("@/lib/portal/queries", () => ({
   getPortalProject: mocks.getPortalProject,
   getPortalSchedule: mocks.getPortalSchedule,
   getPortalProjectTramos: mocks.getPortalProjectTramos,
+  listPortalProjects: mocks.listPortalProjects,
 }));
 vi.mock("@/lib/portal/files", () => ({ listPortalFolder: mocks.listPortalFolder }));
 vi.mock("@/components/portal/PortalProjectOverview", () => ({
@@ -73,26 +83,31 @@ const schedule: PortalScheduleDTO = {
   ],
 };
 
+const ACCESS = { accessId: "a1", projectId: PID, driveFolderStatus: "pending", driveClientFolderId: null, currentWorkflowId: null };
+
 function renderPage(tab?: string, id = PID, folder?: string) {
-  return PortalProjectPage({
-    params: Promise.resolve({ id }),
-    searchParams: Promise.resolve({ ...(tab ? { tab } : {}), ...(folder ? { folder } : {}) }),
-  });
+  const query = { ...(tab ? { tab } : {}), ...(folder ? { folder } : {}) };
+  mocks.nav.search = new URLSearchParams(query).toString();
+  return PortalProjectPage({ params: Promise.resolve({ id }), searchParams: Promise.resolve(query) });
+}
+
+async function renderInto(tab?: string, id = PID, folder?: string) {
+  return renderWithQueryClient(await renderPage(tab, id, folder));
 }
 
 describe("/portal/proyectos/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requirePortalUser.mockResolvedValue({ id: "pu1", name: "Ana", email: "ana@example.com", contactId: "c1" });
-    mocks.requireProjectAccess.mockResolvedValue({ accessId: "a1", projectId: PID });
+    mocks.requireProjectAccess.mockResolvedValue(ACCESS);
     mocks.getPortalProject.mockResolvedValue(project);
     mocks.getPortalSchedule.mockResolvedValue(schedule);
     mocks.getPortalProjectTramos.mockResolvedValue([]);
   });
   afterEach(cleanup);
 
-  it("shows both tabs as links that keep the tab in ?tab=", async () => {
-    render(await renderPage());
+  it("shows the tabs as links that keep the tab in ?tab=", async () => {
+    await renderInto();
 
     expect(screen.getByRole("tab", { name: "Resumen" }).getAttribute("href")).toBe(`/portal/proyectos/${PID}`);
     expect(screen.getByRole("tab", { name: "Cronograma" }).getAttribute("href")).toBe(
@@ -100,10 +115,29 @@ describe("/portal/proyectos/[id]", () => {
     );
   });
 
-  it("renders Cronograma grouped by planta, one row per section", async () => {
-    render(await renderPage("cronograma"));
+  it("checks access once and reads the project through that access only", async () => {
+    await renderInto("cronograma");
 
-    expect(mocks.getPortalSchedule).toHaveBeenCalledWith("pu1", PID);
+    expect(mocks.requireProjectAccess).toHaveBeenCalledTimes(1);
+    expect(mocks.requireProjectAccess).toHaveBeenCalledWith(PID, expect.objectContaining({ id: "pu1" }));
+    expect(mocks.getPortalProject).toHaveBeenCalledWith(ACCESS);
+    expect(mocks.getPortalSchedule).toHaveBeenCalledWith(ACCESS);
+  });
+
+  it("seeds portal.project(id, tab) with the page data, DTOs only", async () => {
+    const { client } = await renderInto("cronograma");
+
+    expect(client.getQueryData(qk.portal.project(PID, "cronograma"))).toEqual({
+      project,
+      schedule,
+      tramos: [],
+      documents: null,
+    });
+  });
+
+  it("renders Cronograma grouped by planta, one row per section", async () => {
+    await renderInto("cronograma");
+
     const plantas = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(plantas).toEqual(["PB", "PA"]);
     const pb = screen.getByRole("region", { name: "PB" });
@@ -117,7 +151,7 @@ describe("/portal/proyectos/[id]", () => {
     mocks.getPortalSchedule.mockResolvedValue({
       sections: [{ ...schedule!.sections[0], tarea: "Colado secreto", responsable: "Juan Interno" }],
     });
-    render(await renderPage("cronograma"));
+    await renderInto("cronograma");
 
     expect(document.body.textContent).not.toContain("Colado secreto");
     expect(document.body.textContent).not.toContain("Juan Interno");
@@ -125,7 +159,7 @@ describe("/portal/proyectos/[id]", () => {
 
   it("shows the empty state when there is no schedule", async () => {
     mocks.getPortalSchedule.mockResolvedValue(null);
-    render(await renderPage("cronograma"));
+    await renderInto("cronograma");
 
     expect(screen.getByText("El cronograma aún no está disponible.")).toBeTruthy();
   });
@@ -144,7 +178,7 @@ describe("/portal/proyectos/[id]", () => {
   });
 
   it("renders Archivos with the PortalFileBrowser and the ?folder= it was opened with", async () => {
-    render(await renderPage("archivos", PID, "fold-2"));
+    await renderInto("archivos", PID, "fold-2");
 
     expect(screen.getByRole("tab", { name: "Archivos" }).getAttribute("href")).toBe(`/portal/proyectos/${PID}?tab=archivos`);
     const browser = screen.getByTestId("file-browser");
@@ -154,7 +188,7 @@ describe("/portal/proyectos/[id]", () => {
   });
 
   it("renders Enviar archivos with the PortalUploader", async () => {
-    render(await renderPage("enviar"));
+    await renderInto("enviar");
 
     expect(screen.getByRole("tab", { name: "Enviar archivos" }).getAttribute("href")).toBe(
       `/portal/proyectos/${PID}?tab=enviar`
@@ -164,9 +198,20 @@ describe("/portal/proyectos/[id]", () => {
   });
 
   it("falls back to Resumen for an unknown tab", async () => {
-    render(await renderPage("pagos"));
+    await renderInto("pagos");
 
     expect(screen.getByTestId("overview").getAttribute("data-project")).toBe(PID);
+  });
+
+  it("switches tabs on the client through history.pushState, without a navigation", async () => {
+    const push = vi.spyOn(window.history, "pushState").mockImplementation(() => {});
+    await renderInto("cronograma");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "Archivos" }));
+    });
+    expect(push).toHaveBeenCalledWith(null, "", `/portal/proyectos/${PID}?tab=archivos`);
+    push.mockRestore();
   });
 });
 
@@ -178,16 +223,12 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
   const files = [
     { id: "f1", name: "Contrato.pdf", mimeType: "application/pdf", sizeBytes: 10, modifiedAt: "2026-09-15T00:00:00Z", kind: "file", deliveredAs: "original" },
   ];
+  const READY = { ...ACCESS, driveFolderStatus: "ready", driveClientFolderId: "client-root" };
 
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requirePortalUser.mockResolvedValue({ id: "pu1", name: "Ana", email: "ana@example.com", contactId: "c1" });
-    mocks.requireProjectAccess.mockResolvedValue({
-      accessId: "a1",
-      projectId: PID,
-      driveFolderStatus: "ready",
-      driveClientFolderId: "client-root",
-    });
+    mocks.requireProjectAccess.mockResolvedValue(READY);
     mocks.getPortalProject.mockResolvedValue(project);
     mocks.getPortalSchedule.mockResolvedValue(schedule);
     mocks.getPortalProjectTramos.mockResolvedValue(tramos);
@@ -201,12 +242,13 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
   }
 
   it("renders Resumen through the widget overview, fed by the portal read layer only", async () => {
-    render(await renderPage());
+    await renderInto();
 
     expect(screen.getByTestId("overview").getAttribute("data-project")).toBe(PID);
-    expect(mocks.getPortalSchedule).toHaveBeenCalledWith("pu1", PID);
-    expect(mocks.getPortalProjectTramos).toHaveBeenCalledWith("pu1", PID);
+    expect(mocks.getPortalSchedule).toHaveBeenCalledWith(READY);
+    expect(mocks.getPortalProjectTramos).toHaveBeenCalledWith(READY);
     expect(mocks.listPortalFolder).toHaveBeenCalledWith({ driveClientFolderId: "client-root" });
+    expect(mocks.requireProjectAccess).toHaveBeenCalledTimes(1);
     const data = overview();
     expect(data.tramos).toEqual(tramos);
     expect(data.progress[0]).toMatchObject({ label: "Avance general", real: 42 });
@@ -215,21 +257,21 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
   });
 
   it("drops the documents section when the client folder isn't ready or Drive fails", async () => {
-    mocks.requireProjectAccess.mockResolvedValue({ accessId: "a1", projectId: PID, driveFolderStatus: "pending", driveClientFolderId: null });
-    render(await renderPage());
+    mocks.requireProjectAccess.mockResolvedValue(ACCESS);
+    await renderInto();
     expect(overview().documentos).toBeNull();
     expect(mocks.listPortalFolder).not.toHaveBeenCalled();
     cleanup();
 
     vi.spyOn(console, "error").mockImplementation(() => {});
-    mocks.requireProjectAccess.mockResolvedValue({ accessId: "a1", projectId: PID, driveFolderStatus: "ready", driveClientFolderId: "client-root" });
+    mocks.requireProjectAccess.mockResolvedValue(READY);
     mocks.listPortalFolder.mockRejectedValue(new Error("drive down"));
-    render(await renderPage());
+    await renderInto();
     expect(overview().documentos).toBeNull();
   });
 
   it("keeps the other tabs as they are", async () => {
-    render(await renderPage("cronograma"));
+    await renderInto("cronograma");
     expect(screen.queryByTestId("overview")).toBeNull();
     expect(mocks.getPortalProjectTramos).not.toHaveBeenCalled();
     expect(mocks.listPortalFolder).not.toHaveBeenCalled();
@@ -240,7 +282,7 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
     mocks.getPortalSchedule.mockResolvedValue({
       sections: [{ ...schedule!.sections[1], tarea: "Colado secreto", responsable: "Juan Interno", monto: 99999 }],
     });
-    render(await renderPage());
+    await renderInto();
     const raw = screen.getByTestId("overview").getAttribute("data-overview") ?? "";
     expect(raw).not.toContain("Colado secreto");
     expect(raw).not.toContain("Juan Interno");

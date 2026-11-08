@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import {
   Accordion,
@@ -38,6 +39,8 @@ import {
   previewMondayRemapAction,
 } from "@/lib/actions/monday-import-actions";
 import { canSeeAdminData } from "@/lib/auth/permissions";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import type { BoardDraft } from "@/lib/monday-import/wizard-steps";
 import type { ProjectDetail } from "@/lib/types/core";
@@ -53,6 +56,7 @@ import type {
 export const REMAP_LOAD_ERROR = "No se pudo cargar la importación de este proyecto.";
 export const REMAP_BOARD_MISSING =
   "Este tablero ya no está en la exportación guardada; no se puede reacomodar.";
+const REMAP_ACTION_ERROR = "No se pudo completar la acción. Intenta de nuevo.";
 export const REMAP_EXPORT_GONE =
   "Los archivos de la exportación de monday de este proyecto ya no están en el servidor. Vuelve a exportar sus tableros en Importar de monday para poder reacomodarlo.";
 
@@ -83,6 +87,33 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "export_missing" }
   | { status: "ready"; remap: MondayRemapState };
+
+/** A failed remap result (`{ ok: false, error }`), thrown so the mutation's error branch runs. */
+class RemapResultError extends Error {}
+
+/** The copy for a failed preview or apply: the action's own error, or the generic copy when it threw. */
+function remapFailureText(err: unknown): string {
+  return err instanceof RemapResultError ? remapErrorText(err.message) : REMAP_ACTION_ERROR;
+}
+
+/** The sheet state from the remap query. */
+function loadStateOf(query: {
+  isPending: boolean;
+  isError: boolean;
+  data: Awaited<ReturnType<typeof getMondayRemapAction>> | undefined;
+}): LoadState {
+  if (query.isError) return { status: "error", message: REMAP_LOAD_ERROR };
+  if (query.isPending || !query.data) return { status: "loading" };
+  const result = query.data;
+  if (!result.ok) {
+    return result.error === "EXPORT_MISSING"
+      ? { status: "export_missing" }
+      : { status: "error", message: remapErrorText(result.error) };
+  }
+  return result.remap.boards.every((board) => board.source === null)
+    ? { status: "export_missing" }
+    : { status: "ready", remap: result.remap };
+}
 
 /** The remap board as the wizard's board draft, so the wizard's `GroupTargetsTable` can edit it. */
 function boardDraft(board: MondayRemapBoard, targets: BoardTargets): BoardDraft {
@@ -211,90 +242,88 @@ export function RemapImportSheet({
   /** After a successful apply, with the number of updated tasks; the sheet closes itself. */
   onApplied: (updated: number) => void;
 }) {
-  const [load, setLoad] = useState<LoadState>({ status: "loading" });
-  const [targets, setTargets] = useState<Record<string, BoardTargets>>({});
-  const [preview, setPreview] = useState<MondayRemapPreview | null>(null);
-  const [pending, setPending] = useState<"preview" | "apply" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Read on every open (`staleTime: 0`): the stored export may have changed.
+  const remapQuery = useQuery({
+    queryKey: qk.proyectos.remap(projectId),
+    queryFn: () => getMondayRemapAction(projectId),
+    enabled: open,
+    staleTime: 0,
+  });
+  const load = loadStateOf(remapQuery);
+  const remap = load.status === "ready" ? load.remap : null;
+  // The user's target edits and the preview belong to one load: a new read starts them over.
+  const loadedAt = remapQuery.dataUpdatedAt;
+  const [edits, setEdits] = useState<{ at: number; boards: Record<string, BoardTargets> }>({ at: 0, boards: {} });
+  const [previewState, setPreviewState] = useState<{ at: number; preview: MondayRemapPreview } | null>(null);
+  const [error, setError] = useState<{ at: number; message: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
 
-  const fetchState = useCallback(async () => {
-    setLoad({ status: "loading" });
-    setPreview(null);
-    setError(null);
-    try {
-      const result = await getMondayRemapAction(projectId);
-      if (!result.ok) {
-        if (result.error === "EXPORT_MISSING") setLoad({ status: "export_missing" });
-        else setLoad({ status: "error", message: remapErrorText(result.error) });
-        return;
-      }
-      setTargets(initialTargets(result.remap));
-      setLoad(
-        result.remap.boards.every((board) => board.source === null)
-          ? { status: "export_missing" }
-          : { status: "ready", remap: result.remap },
-      );
-    } catch {
-      setLoad({ status: "error", message: REMAP_LOAD_ERROR });
-    }
-  }, [projectId]);
+  const targets = useMemo<Record<string, BoardTargets>>(
+    () => ({ ...(remap ? initialTargets(remap) : {}), ...(edits.at === loadedAt ? edits.boards : {}) }),
+    [remap, edits, loadedAt],
+  );
+  const preview = previewState && previewState.at === loadedAt ? previewState.preview : null;
+  const errorText = error && error.at === loadedAt ? error.message : null;
+  const showError = (message: string) => setError({ at: loadedAt, message });
 
-  useEffect(() => {
-    // Load when the sheet opens; the fetch sets state once it resolves.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (open) void fetchState();
-  }, [open, fetchState]);
+  // Preview only reads: no invalidation.
+  const previewMutation = useActionMutation<MondayRemapInput, MondayRemapPreview>(
+    async (input) => {
+      const result = await previewMondayRemapAction(projectId, input);
+      if (!result.ok) throw new RemapResultError(result.error);
+      return result.preview;
+    },
+    { onFormError: showError },
+  );
+  // Apply moves tasks between tramos, fases and espacios: the whole project and the list.
+  const applyMutation = useActionMutation<MondayRemapInput, number>(
+    async (input) => {
+      const result = await applyMondayRemapAction(projectId, input);
+      if (!result.ok) throw new RemapResultError(result.error);
+      return result.updated;
+    },
+    {
+      // A refused apply changed nothing, and refetching the project would also reload the remap
+      // (`proyectos.remap` sits under `proyectos.detail`) and drop the error with that load.
+      invalidate: (_input, updated) => (updated === undefined ? [] : [qk.proyectos.detail(projectId), qk.proyectos.list()]),
+      onFormError: showError,
+    },
+  );
+  const pending = previewMutation.isPending ? "preview" : applyMutation.isPending ? "apply" : null;
 
-  const remap = load.status === "ready" ? load.remap : null;
   const workflowChoices = useMemo(
     () => (remap?.choices.workflows ?? []).map((workflow) => ({ value: workflow.id, label: workflow.name })),
     [remap],
   );
 
   function updateBoard(boardId: string, update: (current: BoardTargets) => BoardTargets) {
-    setTargets((current) => ({
-      ...current,
-      [boardId]: update(current[boardId] ?? { workflowId: null, groupTargets: {} }),
-    }));
-    setPreview(null);
+    const current = targets[boardId] ?? { workflowId: null, groupTargets: {} };
+    setEdits({ at: loadedAt, boards: { ...(edits.at === loadedAt ? edits.boards : {}), [boardId]: update(current) } });
+    setPreviewState(null);
     setError(null);
   }
 
-  async function runPreview() {
+  function runPreview() {
     if (!remap) return;
-    setPending("preview");
     setError(null);
-    try {
-      const result = await previewMondayRemapAction(projectId, remapInput(remap, targets));
-      if (result.ok) setPreview(result.preview);
-      else setError(remapErrorText(result.error));
-    } catch {
-      setError("No se pudo completar la acción. Intenta de nuevo.");
-    } finally {
-      setPending(null);
-    }
+    previewMutation.mutate(remapInput(remap, targets), {
+      onSuccess: (next) => setPreviewState({ at: loadedAt, preview: next }),
+      onError: (err) => showError(remapFailureText(err)),
+    });
   }
 
-  async function runApply() {
+  function runApply() {
     if (!remap) return;
     setConfirming(false);
-    setPending("apply");
     setError(null);
-    try {
-      const result = await applyMondayRemapAction(projectId, remapInput(remap, targets));
-      if (result.ok) {
-        setPreview(null);
+    applyMutation.mutate(remapInput(remap, targets), {
+      onSuccess: (updated) => {
+        setPreviewState(null);
         onOpenChange(false);
-        onApplied(result.updated);
-      } else {
-        setError(remapErrorText(result.error));
-      }
-    } catch {
-      setError("No se pudo completar la acción. Intenta de nuevo.");
-    } finally {
-      setPending(null);
-    }
+        onApplied(updated);
+      },
+      onError: (err) => showError(remapFailureText(err)),
+    });
   }
 
   const changed = preview ? remapChangedTasks(preview) : 0;
@@ -324,7 +353,7 @@ export function RemapImportSheet({
               <AlertTitle>{REMAP_LOAD_ERROR}</AlertTitle>
               <AlertDescription className="space-y-2">
                 {load.message !== REMAP_LOAD_ERROR ? <p>{load.message}</p> : null}
-                <Button size="sm" variant="outline" onClick={() => void fetchState()}>
+                <Button size="sm" variant="outline" onClick={() => void remapQuery.refetch()}>
                   Reintentar
                 </Button>
               </AlertDescription>
@@ -375,16 +404,16 @@ export function RemapImportSheet({
 
           {remap && preview ? <PreviewResult preview={preview} /> : null}
 
-          {error ? (
+          {errorText ? (
             <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{errorText}</AlertDescription>
             </Alert>
           ) : null}
         </div>
 
         {remap ? (
           <SheetFooter className="flex-row justify-end gap-2">
-            <Button variant="outline" disabled={pending !== null} onClick={() => void runPreview()}>
+            <Button variant="outline" disabled={pending !== null} onClick={runPreview}>
               {pending === "preview" ? "Calculando…" : "Vista previa"}
             </Button>
             <Button disabled={!preview || pending !== null} onClick={() => setConfirming(true)}>
@@ -406,7 +435,7 @@ export function RemapImportSheet({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => void runApply()}>Reacomodar</AlertDialogAction>
+              <AlertDialogAction onClick={runApply}>Reacomodar</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

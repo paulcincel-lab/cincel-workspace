@@ -1,26 +1,31 @@
-import { BibliotecaIndex } from "@/components/biblioteca/BibliotecaIndex";
-import { StyleProvider } from "@/components/shell/StyleProvider";
-import { parseEstilo } from "@/lib/biblioteca/catalog";
-import { loadBibliotecaData } from "@/lib/biblioteca/load";
+import { notFound } from "next/navigation";
 
-type SearchParams = Record<string, string | string[] | undefined>;
+import { BibliotecaIndex } from "@/components/biblioteca/BibliotecaIndex";
+import { resolveResourcesCapabilities } from "@/lib/auth/permissions";
+import { canViewBibliotecaSection } from "@/lib/biblioteca/catalog";
+import { requireBibliotecaViewer } from "@/lib/biblioteca/load";
+import { loadBibliotecaPageData } from "@/lib/loaders/biblioteca";
+import { Hydrate } from "@/lib/query/hydrate";
+import { bibliotecaLinksOptions } from "@/lib/query/options/biblioteca";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 /**
  * `/biblioteca` (redesign FE §3.7): Empresa + Recursos catalog in the new
- * shell. Reads the existing resource actions; personal links and Empresa are
- * filtered for the viewer on the server.
+ * shell. The links are prefetched with the page-data loader into
+ * `biblioteca.links(null)` (personal links and Empresa filtered for the
+ * viewer in SQL) and the index reads that query. A `?estilo=` preview is
+ * read from the URL on the client (FE §4.2).
  */
-export default async function BibliotecaPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+export default async function BibliotecaPage() {
+  const user = await requireBibliotecaViewer();
+  if (!canViewBibliotecaSection(resolveResourcesCapabilities(user), null)) notFound();
 
-  const { links, capabilities } = await loadBibliotecaData();
-  const view = <BibliotecaIndex links={links} showEmpresa={capabilities.enterprise.canView} />;
-  const estilo = parseEstilo(sp.estilo);
-  return estilo ? (
-    <StyleProvider style={estilo} scope="staff" isOverridden>
-      {view}
-    </StyleProvider>
-  ) : (
-    view
+  const qc = getQueryClient();
+  await prefetch(qc, bibliotecaLinksOptions(null), () => loadBibliotecaPageData(user, { section: null }));
+
+  return (
+    <Hydrate qc={qc}>
+      <BibliotecaIndex />
+    </Hydrate>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useEffectEvent, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -28,22 +29,33 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/shadcn/dialog";
 import { searchWorkspaceAction } from "@/lib/actions/search-actions";
 import { IMPLEMENTED as SEARCH_IMPLEMENTED } from "@/lib/actions/search-actions.flags";
-import { unwrapActionResult } from "@/lib/actions/action-result";
-import { clockInAction, fetchMyTodayAction } from "@/lib/actions/time-tracking-actions";
 import { IMPLEMENTED as TIME_TRACKING_IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
-import { actionErrorText } from "@/lib/errors";
-import type { SearchResult, SearchResultType, TodayStatus } from "@/lib/types/redesign";
-import { canOpenShellOverlay, openAssistant, registerShellOpener } from "@/lib/ui/shell-openers";
+import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
+import { STALE, qk } from "@/lib/query/keys";
+import { mutationErrorText } from "@/lib/query/mutation";
+import { meTodayOptions } from "@/lib/query/options/me";
+import { openAssistant, useAssistantUi } from "@/lib/stores/assistant-ui-store";
+import { useShellUi } from "@/lib/stores/shell-ui-store";
+import type { SearchResult, SearchResultType } from "@/lib/types/redesign";
+
+import { useClockMutation } from "./use-clock-mutation";
 
 /**
  * ⌘K palette (redesign FE §3.12, frame `BuscarCmdK`): `searchWorkspaceAction`
  * results grouped by type plus the static, client-side "Acciones" group.
  *
- * The palette owns its global ⌘K / Ctrl+K shortcut and registers itself as the
- * "search" shell opener (`openCommandPalette()` in `lib/ui/shell-openers.ts`),
- * so the parent only keeps `open`. Below 2 characters no search call is made.
+ * Open state lives in `useShellUi` (zustand.md §2.1): the palette owns the
+ * global ⌘K / Ctrl+K shortcut (`toggleSearch`) and reports itself mounted
+ * (`setSearchAvailable`); the Sidebar button and the 404 "Buscar" button call
+ * `openSearch`. Data comes from the query cache:
+ *
+ * - results: `useQuery(qk.search(q))`, debounced input, previous results kept
+ *   while the next ones load; below 2 characters no search call is made.
+ * - "Registrar entrada": `useQuery(qk.me.today())`; the clock-in writes its
+ *   result into that entry (`useClockMutation`), no router refresh.
+ * - "Preguntar al asistente": shown while `useAssistantUi.available` (the
+ *   launcher is active on this route, so never on /asistente); opens the sheet.
  */
-export type CommandPaletteProps = { open: boolean; onOpenChange(open: boolean): void };
 
 export const SEARCH_DEBOUNCE_MS = 200;
 export const SEARCH_MIN_CHARS = 2;
@@ -110,104 +122,96 @@ function isExternalUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
 
-const CLOCK_TIME = new Intl.DateTimeFormat("es-MX", { hour: "numeric", minute: "2-digit", hourCycle: "h23" });
+const CLOCK_TIME_OPTIONS: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit", hourCycle: "h23" };
 
 /** "9:02" (FE §9 toast copy): 24-hour clock, hour without a leading zero on every ICU build. */
 function formatClockTime(date: Date): string {
-  const parts = CLOCK_TIME.formatToParts(date);
+  const parts = cachedDateTimeFormat("es-MX", CLOCK_TIME_OPTIONS).formatToParts(date);
   const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
   const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
   return `${hour}:${minute}`;
 }
 
-type SearchState = { query: string; results: SearchResult[]; error: string | null };
+/** `value`, once it has stayed the same for `delay` ms. */
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
 
-export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
+/** Search results for `q` (`qk.search(q)`); runs only while `enabled`. */
+function useWorkspaceSearch(q: string, enabled: boolean) {
+  return useQuery<SearchResult[]>({
+    queryKey: qk.search(q),
+    queryFn: () => searchWorkspaceAction({ query: q }),
+    enabled,
+    staleTime: STALE.search,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function CommandPalette() {
   const router = useRouter();
+  const open = useShellUi((s) => s.searchOpen);
+  const setSearchOpen = useShellUi((s) => s.setSearchOpen);
+  const toggleSearch = useShellUi((s) => s.toggleSearch);
+  const setSearchAvailable = useShellUi((s) => s.setSearchAvailable);
+  const assistantAvailable = useAssistantUi((s) => s.available);
   const [query, setQuery] = useState("");
-  const [search, setSearch] = useState<SearchState>({ query: "", results: [], error: null });
-  const [today, setToday] = useState<TodayStatus | null>(null);
-  const [clockingIn, setClockingIn] = useState(false);
 
   const trimmed = query.trim();
   const canSearch = trimmed.length >= SEARCH_MIN_CHARS;
-  /** The last response belongs to the current query (no newer call pending). */
-  const settled = canSearch && search.query === trimmed;
+  const debounced = useDebouncedValue(trimmed, SEARCH_DEBOUNCE_MS);
+  const search = useWorkspaceSearch(debounced, open && canSearch && debounced.length >= SEARCH_MIN_CHARS);
+  /** The shown response belongs to the current query (no newer call pending). */
+  const settled =
+    canSearch && debounced === trimmed && !search.isPlaceholderData && (search.isSuccess || search.isError);
 
-  // ⌘K / Ctrl+K from any page of the shell, plus the "search" opener for other entry points (404 "Buscar").
-  const toggleFromShortcut = useEffectEvent(() => onOpenChange(!open));
-  const openFromElsewhere = useEffectEvent(() => onOpenChange(true));
+  // "Registrar entrada" depends on the viewer's day: the hydrated `me.today` entry.
+  const { data: today } = useQuery({ ...meTodayOptions(), enabled: open });
+  const clockInMutation = useClockMutation({ source: "sidebar" });
+  const clockingIn = clockInMutation.isPending;
+
+  // ⌘K / Ctrl+K from any page of the shell; the palette reports itself mounted.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        toggleFromShortcut();
+        toggleSearch();
       }
     }
     window.addEventListener("keydown", onKeyDown);
-    const unregister = registerShellOpener("search", () => openFromElsewhere());
+    setSearchAvailable(true);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      unregister();
+      setSearchAvailable(false);
     };
-  }, []);
-
-  // Debounced search; nothing is called below the minimum length. A newer query cancels the pending one.
-  useEffect(() => {
-    if (!open || !canSearch) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      searchWorkspaceAction({ query: trimmed })
-        .then((results) => {
-          if (!cancelled) setSearch({ query: trimmed, results, error: null });
-        })
-        .catch((err: unknown) => {
-          if (!cancelled) setSearch({ query: trimmed, results: [], error: actionErrorText(err, "search") });
-        });
-    }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [open, canSearch, trimmed]);
-
-  // "Registrar entrada" depends on the viewer's day; re-read each time the palette opens.
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    fetchMyTodayAction()
-      .then((status) => {
-        if (!cancelled) setToday(status);
-      })
-      .catch(() => {
-        if (!cancelled) setToday(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+  }, [toggleSearch, setSearchAvailable]);
 
   const canClockIn = TIME_TRACKING_IMPLEMENTED.clockInAction && today?.enabled === true;
   const actionIds = visibleActionIds(trimmed, {
-    canAskAssistant: open && canOpenShellOverlay("assistant"),
+    canAskAssistant: open && assistantAvailable,
     canClockIn,
   });
   const visibleActions = ACTIONS.filter((action) => actionIds.includes(action.id));
 
   // While a newer query is pending, the previous results stay on screen.
-  const shownResults = canSearch ? search.results : [];
+  const shownResults = canSearch ? (search.data ?? []) : [];
   const groups = groupSearchResults(shownResults);
-  const searchError = settled ? search.error : null;
+  const searchError = settled && search.isError ? mutationErrorText(search.error, "search") : null;
   const showNoResults = settled && !searchError && shownResults.length === 0 && visibleActions.length === 0;
 
   function close() {
     setQuery("");
-    onOpenChange(false);
+    setSearchOpen(false);
   }
 
   function handleOpenChange(next: boolean) {
     if (!next) setQuery("");
-    onOpenChange(next);
+    setSearchOpen(next);
   }
 
   function openResult(result: SearchResult) {
@@ -219,21 +223,18 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     }
   }
 
-  async function clockIn() {
+  function clockIn() {
     if (clockingIn) return;
-    setClockingIn(true);
-    try {
-      const status = unwrapActionResult(await clockInAction({ source: "sidebar" }));
-      setToday(status);
-      const at = status.startedAt ? ` ${formatClockTime(new Date(status.startedAt))}` : "";
-      toast.success(`Entrada registrada${at}`);
-      close();
-      router.refresh();
-    } catch (err) {
-      toast.error(actionErrorText(err));
-    } finally {
-      setClockingIn(false);
-    }
+    clockInMutation.mutate("clockIn", {
+      onSuccess: (status) => {
+        const at = status.startedAt ? ` ${formatClockTime(new Date(status.startedAt))}` : "";
+        toast.success(`Entrada registrada${at}`);
+        close();
+      },
+      onError: (err) => {
+        toast.error(mutationErrorText(err));
+      },
+    });
   }
 
   function runAction(id: PaletteActionId) {
@@ -248,7 +249,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       openAssistant();
       return;
     }
-    if (id === "registrar-entrada") void clockIn();
+    if (id === "registrar-entrada") clockIn();
   }
 
   const resultCount = shownResults.length;

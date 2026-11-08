@@ -38,15 +38,13 @@ function statusSummary(status: TaskStatusOption): string {
   return `${closes} · ${counts}`;
 }
 
-export type EstatusSettingsProps = { initialStatuses: TaskStatusOption[] };
-
 /**
  * Ajustes › Estatus (redesign FE §3.8, frame `AjustesEstatus`): the custom
  * task statuses grouped under the base status whose color they take, on
- * `SettingsSection` / `SettingsRow`. Same server actions and payloads as the
- * legacy Configuración › Estatus page; only the layout changes.
+ * `SettingsSection` / `SettingsRow`. Reads `qk.ajustes.page('estatus')`,
+ * hydrated by the page, through `useTaskStatusesEditor`.
  */
-export function EstatusSettings({ initialStatuses }: EstatusSettingsProps) {
+export function EstatusSettings() {
   const {
     statuses,
     capabilities,
@@ -64,7 +62,7 @@ export function EstatusSettings({ initialStatuses }: EstatusSettingsProps) {
     openEditor,
     save,
     remove,
-  } = useTaskStatusesEditor(initialStatuses);
+  } = useTaskStatusesEditor();
   const [pendingDelete, setPendingDelete] = useState<TaskStatusOption | null>(null);
   const canManage = capabilities.canManageTaskStatuses;
 

@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { unwrapActions } from "@/tests/helpers/action-result";
 import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -21,7 +22,15 @@ if (url) process.env.DATABASE_URL = url;
 const session = vi.hoisted(() => ({ memberId: "", email: "ana@cincel.example" }));
 const caps = vi.hoisted(() => ({ canViewProjects: true, canCreateActivity: true }));
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+const cache = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => cache);
+// The real repository, with `markGmailThreadRead` observable (the read must never call it).
+const repo = vi.hoisted(() => ({ markGmailThreadRead: vi.fn() }));
+vi.mock("@/lib/repositories/gmail-repository", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/repositories/gmail-repository")>();
+  repo.markGmailThreadRead.mockImplementation(real.markGmailThreadRead);
+  return { ...real, markGmailThreadRead: repo.markGmailThreadRead };
+});
 vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: vi.fn(async () => ({
     member: {
@@ -129,7 +138,8 @@ describe.skipIf(!url)("gmail actions (test DB)", async () => {
   const { and, eq, inArray, isNull } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const actions = await import("@/lib/actions/gmail-actions");
+  const actionsModule = await import("@/lib/actions/gmail-actions");
+  const actions = unwrapActions(actionsModule);
   const { issueConfirmToken } = await import("@/lib/gmail/confirm-token");
 
   const staffIds: string[] = [];
@@ -329,13 +339,21 @@ describe.skipIf(!url)("gmail actions (test DB)", async () => {
     });
   });
 
-  describe("fetchGmailThreadAction", () => {
-    it("returns sanitized html and attachments, marks the thread read in the cache", async () => {
+  async function cachedUnread(staffId: string, id: string): Promise<boolean | undefined> {
+    const [row] = await db
+      .select({ unread: schema.gmailThreads.unread })
+      .from(schema.gmailThreads)
+      .where(and(eq(schema.gmailThreads.staffId, staffId), eq(schema.gmailThreads.id, id)));
+    return row?.unread;
+  }
+
+  describe("fetchGmailThreadAction (read-only)", () => {
+    it("returns sanitized html and attachments, and the cached unread flag", async () => {
       await cacheThread(me, "t1", { unread: true, projectId });
       const result = await actions.fetchGmailThreadAction("t1");
 
       expect(gmail.api.getThread).toHaveBeenCalledWith("t1", "full");
-      expect(result.thread).toMatchObject({ id: "t1", unread: false, projectId });
+      expect(result.thread).toMatchObject({ id: "t1", unread: true, projectId });
       expect(result.messages).toHaveLength(1);
       const [message] = result.messages;
       expect(message!.html).toContain("<b>el plano</b>");
@@ -346,41 +364,66 @@ describe.skipIf(!url)("gmail actions (test DB)", async () => {
       expect(result.attachments).toEqual([
         { messageId: "t1m1", attachmentId: "t1~1", name: "plano.pdf", mime: "application/pdf", size: 1234 },
       ]);
-
-      const [row] = await db
-        .select({ unread: schema.gmailThreads.unread })
-        .from(schema.gmailThreads)
-        .where(and(eq(schema.gmailThreads.staffId, me), eq(schema.gmailThreads.id, "t1")));
-      expect(row!.unread).toBe(false);
     });
 
-    it("marks the thread read in Gmail when the grant allows label changes", async () => {
+    it("has no side effect: called twice it never marks read, in Gmail or the cache, and revalidates nothing", async () => {
       await grant(me, `${GMAIL_SCOPE} ${MODIFY}`);
       await cacheThread(me, "t1", { unread: true });
       await actions.fetchGmailThreadAction("t1");
-      expect(gmail.api.markThreadRead).toHaveBeenCalledWith("t1");
-    });
-
-    it("leaves Gmail labels alone with a read-only grant (the call would be refused)", async () => {
-      await cacheThread(me, "t1", { unread: true });
       await actions.fetchGmailThreadAction("t1");
+      expect(repo.markGmailThreadRead).not.toHaveBeenCalled();
       expect(gmail.api.markThreadRead).not.toHaveBeenCalled();
+      expect(cache.revalidatePath).not.toHaveBeenCalled();
+      expect(await cachedUnread(me, "t1")).toBe(true);
     });
 
-    it("never touches another staff member's cached row with the same id", async () => {
+    it("never returns another staff member's cached row with the same id", async () => {
       await cacheThread(other, "t1", { unread: true, projectId });
       const result = await actions.fetchGmailThreadAction("t1");
       expect(result.thread.projectId).toBeNull();
-      const [row] = await db
-        .select({ unread: schema.gmailThreads.unread })
-        .from(schema.gmailThreads)
-        .where(and(eq(schema.gmailThreads.staffId, other), eq(schema.gmailThreads.id, "t1")));
-      expect(row!.unread).toBe(true);
+      expect(await cachedUnread(other, "t1")).toBe(true);
     });
 
     it("NOT_FOUND when the thread isn't in the caller's mailbox", async () => {
       gmail.api.getThread.mockRejectedValue(new Error("NOT_FOUND"));
       await expect(actions.fetchGmailThreadAction("ajeno")).rejects.toThrow(/^NOT_FOUND/);
+    });
+  });
+
+  describe("markGmailThreadReadAction", () => {
+    it("marks the cached thread read and revalidates nothing", async () => {
+      await cacheThread(me, "t1", { unread: true });
+      await expect(actionsModule.markGmailThreadReadAction("t1")).resolves.toEqual({ ok: true, data: undefined });
+      expect(await cachedUnread(me, "t1")).toBe(false);
+      expect(repo.markGmailThreadRead).toHaveBeenCalledTimes(1);
+      expect(cache.revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("marks the thread read in Gmail when the grant allows label changes", async () => {
+      await grant(me, `${GMAIL_SCOPE} ${MODIFY}`);
+      await cacheThread(me, "t1", { unread: true });
+      await actions.markGmailThreadReadAction("t1");
+      expect(gmail.api.markThreadRead).toHaveBeenCalledWith("t1");
+    });
+
+    it("leaves Gmail labels alone with a read-only grant (the call would be refused)", async () => {
+      await cacheThread(me, "t1", { unread: true });
+      await actions.markGmailThreadReadAction("t1");
+      expect(gmail.api.markThreadRead).not.toHaveBeenCalled();
+    });
+
+    it("never touches another staff member's cached row with the same id", async () => {
+      await cacheThread(other, "t1", { unread: true });
+      await actions.markGmailThreadReadAction("t1");
+      expect(await cachedUnread(other, "t1")).toBe(true);
+    });
+
+    it("returns NOT_CONNECTED as a result after a disconnect", async () => {
+      await actions.disconnectGmailAction();
+      await expect(actionsModule.markGmailThreadReadAction("t1")).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/^NOT_CONNECTED/),
+      });
     });
   });
 

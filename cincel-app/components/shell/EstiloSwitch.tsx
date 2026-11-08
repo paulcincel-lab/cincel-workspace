@@ -2,17 +2,15 @@
 
 import { useId, useRef, type KeyboardEvent } from "react";
 import { ChartPie, LayoutGrid, List, type LucideIcon } from "lucide-react";
-import { toast } from "sonner";
 
 import { useStyle } from "@/components/shell/StyleProvider";
 import { Button } from "@/components/ui/shadcn/button";
-import { unwrapActionResult } from "@/lib/actions/action-result";
-import { updateMyPreferencesAction } from "@/lib/actions/preferences-actions";
 import { IMPLEMENTED as PREFERENCES_IMPLEMENTED } from "@/lib/actions/preferences-actions.flags";
 import { actionErrorText } from "@/lib/errors";
+import { useAppearanceStoreApiOrNull } from "@/lib/stores/appearance-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import { PORTAL_STYLE_COOKIE } from "@/lib/ui/preferences";
-import { writePortalStyleCookie } from "@/lib/ui/style-override";
+import { ESTILO_PARAM, writePortalStyleCookie } from "@/lib/ui/style-override";
 
 /**
  * "Estilo" segmented control (redesign FE §4.2, §16): radiogroup Visual /
@@ -20,12 +18,16 @@ import { writePortalStyleCookie } from "@/lib/ui/style-override";
  *
  * - Arrow keys move and select (Home / End jump), Space or Enter selects the
  *   focused option; one tab stop (roving `tabIndex`).
- * - `scope="staff"` persists through `updateMyPreferencesAction({ style })`
- *   (optimistic, rolls back with a toast on error); `scope="portal"` writes
- *   the `cincel-portal-style` cookie. A `?estilo=` override is a one-render
- *   preview, so a change while overridden is not persisted.
- * - Disabled (still focusable, with the `OVERRIDE_DISABLED` copy) when the
- *   organization fixed the style.
+ * - `scope="staff"` writes the appearance store with
+ *   `setPreference({ style })`: applied at once (store and `html[data-style]`,
+ *   so every page reads it), persisted with `updateMyPreferencesAction`,
+ *   rolled back with a toast on error. `scope="portal"` writes the
+ *   `cincel-portal-style` cookie.
+ * - A `?estilo=` override is a preview: a change while it is active swaps
+ *   the URL parameter in place (no navigation) and is not persisted.
+ * - Staff: hidden when the organization fixed the style (`fixedByOrg`; the
+ *   override is ignored then). Portal: disabled (still focusable, with the
+ *   `OVERRIDE_DISABLED` copy).
  *
  * Renders no per-style markup (guard allowlist, FE §17).
  */
@@ -37,8 +39,16 @@ const OPTIONS: { value: PresentationStyle; label: string; icon: LucideIcon }[] =
   { value: "analitico", label: "Analítico", icon: LayoutGrid },
 ];
 
+/** Swaps `?estilo=` in the address bar without a navigation (Next syncs `useSearchParams`). */
+function replaceEstiloParam(style: PresentationStyle): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set(ESTILO_PARAM, style);
+  window.history.replaceState(window.history.state, "", url);
+}
+
 export function EstiloSwitch(props: EstiloSwitchProps) {
   const ctx = useStyle();
+  const store = useAppearanceStoreApiOrNull();
   const scope = props.scope ?? ctx.scope;
   const disabled = ctx.isFixed;
   const labelId = useId();
@@ -50,9 +60,10 @@ export function EstiloSwitch(props: EstiloSwitchProps) {
     OPTIONS.findIndex((option) => option.value === current),
   );
 
-  async function persist(next: PresentationStyle, previous: PresentationStyle) {
-    if (ctx.isOverridden) return;
+  function select(next: PresentationStyle) {
+    if (disabled || next === current) return;
     if (scope === "portal") {
+      ctx.setStyle(next);
       try {
         writePortalStyleCookie(PORTAL_STYLE_COOKIE, next);
       } catch {
@@ -60,21 +71,20 @@ export function EstiloSwitch(props: EstiloSwitchProps) {
       }
       return;
     }
-    // Phase 1 stub guard: never call a write stub (FE §9, §20 Rule 1).
-    if (!PREFERENCES_IMPLEMENTED.updateMyPreferencesAction) return;
-    try {
-      unwrapActionResult(await updateMyPreferencesAction({ style: next }));
-    } catch (err) {
-      ctx.setStyle(previous);
-      toast.error(actionErrorText(err));
+    if (ctx.isOverridden) {
+      // A preview: a store seeded for it changes in place; the `?estilo=` override follows the
+      // address bar and never touches the shared store, so other pages keep the saved style.
+      if (store?.getState().isStyleOverridden === true) ctx.setStyle(next);
+      else replaceEstiloParam(next);
+      return;
     }
-  }
-
-  function select(next: PresentationStyle) {
-    if (disabled || next === current) return;
-    const previous = current;
-    ctx.setStyle(next);
-    void persist(next, previous);
+    // Phase 1 stub guard: never call a write stub (FE §9, §20 Rule 1).
+    if (!PREFERENCES_IMPLEMENTED.updateMyPreferencesAction || !store) {
+      ctx.setStyle(next);
+      return;
+    }
+    // Optimistic in the store and on <html>; rolls back with the error toast.
+    void store.getState().setPreference({ style: next });
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -108,6 +118,9 @@ export function EstiloSwitch(props: EstiloSwitchProps) {
   }
 
   const disabledCopy = disabled ? actionErrorText("OVERRIDE_DISABLED") : null;
+
+  // Staff: the organization fixed the style, so there is nothing to switch.
+  if (disabled && scope === "staff") return null;
 
   return (
     <div className="flex items-center gap-2" data-slot="estilo-switch">

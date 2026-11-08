@@ -1,6 +1,9 @@
 import type { CalendarEvent, CalendarEventType, CalendarFilterOptions, CalendarFilters, CalendarTypeSummaryRow } from "@/lib/types/calendar";
 import type { TaskListItem } from "@/lib/types/core";
 
+/** What the calendar reads of a task: a `TaskListItem` or a slim `TaskListRow` (no `notes`). */
+type CalendarTask = Omit<TaskListItem, "notes">;
+
 const DEFAULT_FILTERS: CalendarFilters = {
   project: "Todos",
   responsible: "Todos",
@@ -61,7 +64,7 @@ function defaultTimeByType(type: CalendarEventType): string {
  * use the task's own creation time instead, falling back to the old
  * per-type constant only if that timestamp is somehow unparseable.
  */
-function defaultTimeFor(task: TaskListItem, type: CalendarEventType): string {
+function defaultTimeFor(task: CalendarTask, type: CalendarEventType): string {
   const created = new Date(task.createdAt);
   if (Number.isNaN(created.getTime())) {
     return defaultTimeByType(type);
@@ -72,7 +75,7 @@ function defaultTimeFor(task: TaskListItem, type: CalendarEventType): string {
   return `${hours}:${minutes}`;
 }
 
-function inferAdditionalType(task: TaskListItem): CalendarEventType | null {
+function inferAdditionalType(task: CalendarTask): CalendarEventType | null {
   const phase = (task.phase?.name ?? "").toLowerCase();
 
   if (phase.includes("reuni")) {
@@ -86,7 +89,7 @@ function inferAdditionalType(task: TaskListItem): CalendarEventType | null {
   return null;
 }
 
-function eventTitle(task: TaskListItem, type: CalendarEventType): string {
+function eventTitle(task: CalendarTask, type: CalendarEventType): string {
   if (type === "Reunion") {
     return `Reunion: ${task.title}`;
   }
@@ -105,7 +108,7 @@ function eventTitle(task: TaskListItem, type: CalendarEventType): string {
  * review, delivery) plus an inferred meeting/site-visit event, mirroring
  * the mapping the legacy mock-data version used.
  */
-export function buildCalendarEvents(tasks: TaskListItem[]): CalendarEvent[] {
+export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEvent[] {
   const events: CalendarEvent[] = [];
 
   for (const task of tasks) {
@@ -125,6 +128,7 @@ export function buildCalendarEvents(tasks: TaskListItem[]): CalendarEvent[] {
         time: defaultTimeFor(task, type),
         title: eventTitle(task, type),
         project: task.project.name,
+        projectId: task.project.id,
         responsible: task.manager?.name || "Sin responsable",
         tramo,
         tramoLabel,

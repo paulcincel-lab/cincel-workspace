@@ -27,7 +27,20 @@ vi.mock("@/lib/auth/session", () => ({
     if (viewer.value.status !== "active" || !user || !cap({ access: user.access })) navigation.notFound();
     return user;
   }),
+  requireCapabilityUser: vi.fn(async () => {
+    const user = viewer.value.user;
+    if (viewer.value.status !== "active" || !user) throw new Error("FORBIDDEN");
+    return { member: { id: user.id }, email: user.email, access: user.access };
+  }),
 }));
+/** The Tramos and Puestos loaders (Query Migration 9b): the pages prefetch with them. */
+const catalogLoaders = vi.hoisted(() => ({
+  loadAjustesEstatus: vi.fn(),
+  loadAjustesPermisos: vi.fn(),
+  loadAjustesPuestos: vi.fn(),
+  loadAjustesTramos: vi.fn(),
+}));
+vi.mock("@/lib/loaders/ajustes-catalogs", () => catalogLoaders);
 
 const bootstrap = vi.hoisted(() => ({ email: "bootstrap@cincel.mx" }));
 vi.mock("@/lib/onboarding/first-login", () => ({
@@ -41,9 +54,22 @@ const monday = vi.hoisted(() => ({
   getMondayImportHistoryAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/monday-import-actions", () => monday);
+const mondayLoader = vi.hoisted(() => ({ loadAjustesMonday: vi.fn() }));
+vi.mock("@/lib/loaders/ajustes-monday", () => mondayLoader);
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({ getAjustesMondayPageData: vi.fn() }));
 
 const workspace = vi.hoisted(() => ({ listGroupMappingsAction: vi.fn(), getGoogleHealthAction: vi.fn() }));
 vi.mock("@/lib/actions/workspace-access-actions", () => workspace);
+/** What the Google loader (`loadAjustesGoogle`) reads, in one `Promise.all`. */
+const googleReads = vi.hoisted(() => ({ listGroupMappings: vi.fn(), listPositions: vi.fn(), loadGoogleHealth: vi.fn() }));
+vi.mock("@/lib/repositories/workspace-group-mappings-repository", () => ({
+  listGroupMappings: googleReads.listGroupMappings,
+}));
+vi.mock("@/lib/repositories/positions-repository", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/repositories/positions-repository")>()),
+  listPositions: googleReads.listPositions,
+}));
+vi.mock("@/lib/auth/google-health", () => ({ loadGoogleHealth: googleReads.loadGoogleHealth }));
 const positions = vi.hoisted(() => ({ fetchPositionsAction: vi.fn() }));
 vi.mock("@/lib/actions/positions-actions", () => positions);
 const workflows = vi.hoisted(() => ({ fetchWorkflowsAction: vi.fn() }));
@@ -80,6 +106,8 @@ import TramosLayout from "../tramos/layout";
 import TramosPage from "../tramos/page";
 import PuestosLayout from "../puestos/layout";
 import PuestosPage from "../puestos/page";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import { qk } from "@/lib/query/keys";
 
 const ADMIN: Viewer = { status: "active", user: { id: "admin", email: "admin@cincel.mx", access: "Administrador" } };
 const BOOTSTRAP: Viewer = { status: "active", user: { id: "boot", email: "bootstrap@cincel.mx", access: "Administrador" } };
@@ -120,6 +148,12 @@ beforeEach(() => {
     { id: "p-3", name: "Google", active: false, googleManaged: true },
   ]);
   workflows.fetchWorkflowsAction.mockResolvedValue([{ id: "w-1" }]);
+  // The same puestos for every loader that reads the repository directly.
+  googleReads.listPositions.mockResolvedValue([
+    { id: "p-1", name: "Diseño", active: true, googleManaged: false },
+    { id: "p-2", name: "Antiguo", active: false, googleManaged: false },
+    { id: "p-3", name: "Google", active: false, googleManaged: true },
+  ]);
 });
 
 afterEach(() => cleanup());
@@ -143,7 +177,11 @@ describe("Ajustes admin segments: monday, Google, Tramos y fases, Puestos", () =
         }
         expect(monday.getMondayImportHistoryAction).not.toHaveBeenCalled();
         expect(workspace.listGroupMappingsAction).not.toHaveBeenCalled();
+        expect(googleReads.listGroupMappings).not.toHaveBeenCalled();
+        expect(googleReads.loadGoogleHealth).not.toHaveBeenCalled();
         expect(workflows.fetchWorkflowsAction).not.toHaveBeenCalled();
+        expect(catalogLoaders.loadAjustesTramos).not.toHaveBeenCalled();
+        expect(catalogLoaders.loadAjustesPuestos).not.toHaveBeenCalled();
       });
 
       it("sends a guest to /login", async () => {
@@ -155,15 +193,30 @@ describe("Ajustes admin segments: monday, Google, Tramos y fases, Puestos", () =
 });
 
 describe("/ajustes/monday", () => {
-  it("renders the unchanged wizard with the same data as today, between the last import and the history", async () => {
-    await renderPage(MondayPage);
-    expect(seen.props.MondayImportWizard).toEqual({
-      initialRun: RUN,
-      initialChoices: CHOICES,
-      hasServerToken: true,
-      loadError: null,
-    });
-    expect(monday.openMondayImportRunAction).toHaveBeenCalledWith(false);
+  const RUN_STATE = { runId: "run-1", step: "conectar", jobs: {} };
+  const pageData = (patch: Record<string, unknown> = {}) => ({
+    status: { hasServerToken: true },
+    run: RUN_STATE,
+    choices: CHOICES,
+    history: [ENTRY],
+    errors: { load: null, history: null },
+    ...patch,
+  });
+
+  async function renderMondayPage() {
+    renderWithQueryClient(await MondayPage());
+  }
+
+  beforeEach(() => {
+    mondayLoader.loadAjustesMonday.mockResolvedValue(pageData());
+  });
+
+  it("reads the page data through the loader and opens no run (GET writes nothing)", async () => {
+    await renderMondayPage();
+    expect(mondayLoader.loadAjustesMonday).toHaveBeenCalledTimes(1);
+    expect(mondayLoader.loadAjustesMonday).toHaveBeenCalledWith(expect.objectContaining({ id: "admin" }));
+    expect(monday.openMondayImportRunAction).not.toHaveBeenCalled();
+    expect(seen.props.MondayImportWizard).toEqual({ latestRun: RUN_STATE, hasServerToken: true, loadError: null });
     expect(screen.getByRole("region", { name: "Importar de monday" })).toBeTruthy();
     expect(screen.getByText("Trae tableros, grupos y personas de monday a Cincel.")).toBeTruthy();
     expect(seen.props.MondayLastImport).toEqual({ entry: ENTRY });
@@ -174,62 +227,114 @@ describe("/ajustes/monday", () => {
   });
 
   it("shows only the wizard before any import", async () => {
-    monday.getMondayImportHistoryAction.mockResolvedValue({ ok: true, history: [] });
-    await renderPage(MondayPage);
-    expect(screen.getByTestId("MondayImportWizard")).toBeTruthy();
+    mondayLoader.loadAjustesMonday.mockResolvedValue(pageData({ run: null, history: [] }));
+    await renderMondayPage();
+    expect(seen.props.MondayImportWizard).toMatchObject({ latestRun: null });
     expect(screen.queryByTestId("MondayLastImport")).toBeNull();
     expect(screen.queryByTestId("MondayImportHistory")).toBeNull();
   });
 
-  it("passes the load errors to the wizard like the legacy page", async () => {
-    monday.openMondayImportRunAction.mockResolvedValue({ ok: false, error: "Sin acceso" });
-    monday.getMondayImportChoicesAction.mockResolvedValue({ ok: false, error: "Otro" });
-    await renderPage(MondayPage);
-    expect(seen.props.MondayImportWizard).toMatchObject({ initialRun: null, initialChoices: null, loadError: "Sin acceso" });
+  it("passes the load error to the wizard", async () => {
+    mondayLoader.loadAjustesMonday.mockResolvedValue(
+      pageData({ run: null, choices: null, errors: { load: "Sin acceso", history: null } }),
+    );
+    await renderMondayPage();
+    expect(seen.props.MondayImportWizard).toMatchObject({ latestRun: null, loadError: "Sin acceso" });
   });
 
   it("keeps the wizard when the history fails and shows its error", async () => {
-    monday.getMondayImportHistoryAction.mockRejectedValue(new Error("db"));
-    await renderPage(MondayPage);
+    const error = "No se pudo cargar el historial de importaciones. Recarga la página.";
+    mondayLoader.loadAjustesMonday.mockResolvedValue(pageData({ history: [], errors: { load: null, history: error } }));
+    await renderMondayPage();
     expect(screen.getByTestId("MondayImportWizard")).toBeTruthy();
-    expect(seen.props.MondayImportHistory).toEqual({
-      history: [],
-      error: "No se pudo cargar el historial de importaciones. Recarga la página.",
-    });
+    expect(seen.props.MondayImportHistory).toEqual({ history: [], error });
   });
 
   it("sends the bootstrap admin to Permisos (rule unchanged)", async () => {
     viewer.value = BOOTSTRAP;
     await expect(MondayPage()).rejects.toThrow("NEXT_REDIRECT:/ajustes/permisos");
+    expect(mondayLoader.loadAjustesMonday).not.toHaveBeenCalled();
     expect(monday.openMondayImportRunAction).not.toHaveBeenCalled();
   });
 });
 
 describe("/ajustes/google", () => {
-  it("passes the same mappings, positions and health as the legacy page", async () => {
-    await renderPage(GooglePage);
-    expect(seen.props.GoogleSettings).toEqual({
+  const HEALTH = {
+    workspaceDomain: "cincel.mx",
+    oauthClientConfigured: true,
+    groupMappingCount: 1,
+    roleGroupMappingCount: 1,
+    serviceAccountEmail: "cincel@proyecto.iam.gserviceaccount.com",
+    sharedDriveId: "drive",
+    tokenKeyConfigured: true,
+    lastDirectoryError: null,
+    lastDriveError: null,
+    googleLinkedStaff: 4,
+    activeStaff: 9,
+  };
+
+  beforeEach(() => {
+    googleReads.listGroupMappings.mockResolvedValue([{ id: "m-1" }]);
+    googleReads.loadGoogleHealth.mockResolvedValue(HEALTH);
+  });
+
+  /** Renders the page under a client and returns what it hydrated into `qk.ajustes.page('google')`. */
+  async function hydratedGooglePage(Page: Page) {
+    const { client } = renderWithQueryClient(await Page());
+    return client.getQueryData(qk.ajustes.page("google"));
+  }
+
+  it("hydrates the same mappings, positions and health as the legacy page, with no client call", async () => {
+    expect(await hydratedGooglePage(GooglePage)).toEqual({
       mappings: [{ id: "m-1" }],
       positions: [
         { id: "p-1", name: "Diseño" },
         { id: "p-3", name: "Google" },
       ],
-      health: { sharedDriveId: "drive" },
+      health: HEALTH,
     });
+    expect(screen.getByTestId("GoogleSettings")).toBeTruthy();
+    expect(workspace.listGroupMappingsAction).not.toHaveBeenCalled();
+    expect(workspace.getGoogleHealthAction).not.toHaveBeenCalled();
   });
 
-  it("renders with a null health when the health query fails", async () => {
-    workspace.getGoogleHealthAction.mockRejectedValue(new Error("down"));
-    await renderPage(GooglePage);
-    expect(seen.props.GoogleSettings).toMatchObject({ health: null });
+  it("starts the three reads together: the health does not wait for the others", async () => {
+    let releaseMappings: (rows: unknown[]) => void = () => {};
+    googleReads.listGroupMappings.mockReturnValue(new Promise((resolve) => (releaseMappings = resolve)));
+    const page = GooglePage();
+    await vi.waitFor(() => expect(googleReads.loadGoogleHealth).toHaveBeenCalledTimes(1));
+    expect(googleReads.listPositions).toHaveBeenCalledTimes(1);
+    releaseMappings([{ id: "m-1" }]);
+    renderWithQueryClient(await page);
+  });
+
+  it("hydrates a null health when the health read fails", async () => {
+    googleReads.loadGoogleHealth.mockRejectedValue(new Error("down"));
+    expect(await hydratedGooglePage(GooglePage)).toMatchObject({ health: null, mappings: [{ id: "m-1" }] });
+  });
+
+  it("sends only the Estado fields (nothing else the health read carries)", async () => {
+    googleReads.loadGoogleHealth.mockResolvedValue({ ...HEALTH, oauthClientSecret: "secret", tokenKey: "key" });
+    const data = (await hydratedGooglePage(GooglePage)) as { health: Record<string, unknown> };
+    expect(Object.keys(data.health).sort()).toEqual(Object.keys(HEALTH).sort());
   });
 });
 
 describe("/ajustes/google/primeros-pasos", () => {
-  it("renders the unchanged wizard for the bootstrap admin", async () => {
+  beforeEach(() => {
+    googleReads.listGroupMappings.mockResolvedValue([{ id: "m-1" }]);
+    googleReads.listPositions.mockResolvedValue([]);
+    googleReads.loadGoogleHealth.mockResolvedValue({ sharedDriveId: "drive" });
+  });
+
+  it("renders the unchanged wizard for the bootstrap admin, with the Google page data hydrated", async () => {
     viewer.value = BOOTSTRAP;
-    await renderPage(GoogleSetupPage);
-    expect(seen.props.GoogleSetupWizard).toMatchObject({ mappings: [{ id: "m-1" }], health: { sharedDriveId: "drive" } });
+    const { client } = renderWithQueryClient(await GoogleSetupPage());
+    expect(screen.getByTestId("GoogleSetupWizard")).toBeTruthy();
+    expect(client.getQueryData(qk.ajustes.page("google"))).toMatchObject({
+      mappings: [{ id: "m-1" }],
+      health: { sharedDriveId: "drive" },
+    });
   });
 
   it("sends any other admin to Ajustes › Google", async () => {
@@ -245,30 +350,35 @@ describe("/ajustes/google/primeros-pasos", () => {
 });
 
 describe("/ajustes/tramos and /ajustes/puestos", () => {
-  it("render Project Flow's pages with the same data", async () => {
-    await renderPage(TramosPage);
-    expect(workflows.fetchWorkflowsAction).toHaveBeenCalledWith({
-      includeInactive: true,
-      includeInactiveTemplates: true,
-      includeInactivePhases: true,
-    });
-    expect(seen.props.TramosClient).toEqual({ initialWorkflows: [{ id: "w-1" }] });
+  it("prefetch their page data for the viewer and hydrate it (the clients take no props)", async () => {
+    const tramos = { workflows: [{ id: "w-1", key: "diseno", name: "Diseño", sortOrder: 1, active: true }] };
+    catalogLoaders.loadAjustesTramos.mockResolvedValue(tramos);
+    const tramosPage = await TramosPage();
+    renderWithQueryClient(tramosPage);
+    expect(catalogLoaders.loadAjustesTramos).toHaveBeenCalledWith(expect.objectContaining({ access: "Administrador" }));
+    expect(seen.props.TramosClient).toEqual({});
+    const tramosQc = (tramosPage.props as { qc: import("@tanstack/react-query").QueryClient }).qc;
+    expect(tramosQc.getQueryData(qk.ajustes.page("tramos"))).toEqual(tramos);
+    expect(tramosQc.getQueryData(qk.catalog.workflows())).toEqual([
+      { id: "w-1", key: "diseno", name: "Diseño", sortOrder: 1 },
+    ]);
+    expect(workflows.fetchWorkflowsAction).not.toHaveBeenCalled();
 
     cleanup();
-    await renderPage(PuestosPage);
-    expect(seen.props.PuestosClient).toEqual({
-      initialPositions: [
-        { id: "p-1", name: "Diseño", active: true, googleManaged: false },
-        { id: "p-2", name: "Antiguo", active: false, googleManaged: false },
-        { id: "p-3", name: "Google", active: false, googleManaged: true },
-      ],
-      initialWorkflows: [{ id: "w-1" }],
-    });
+    const puestos = { positions: [{ id: "p-1", name: "Diseño", active: true, googleManaged: false }], workflows: [] };
+    catalogLoaders.loadAjustesPuestos.mockResolvedValue(puestos);
+    const puestosPage = await PuestosPage();
+    renderWithQueryClient(puestosPage);
+    expect(seen.props.PuestosClient).toEqual({});
+    const puestosQc = (puestosPage.props as { qc: import("@tanstack/react-query").QueryClient }).qc;
+    expect(puestosQc.getQueryData(qk.ajustes.page("puestos"))).toEqual(puestos);
+    expect(positions.fetchPositionsAction).not.toHaveBeenCalled();
   });
 
-  it("fall back to empty data so the clients hydrate themselves", async () => {
-    workflows.fetchWorkflowsAction.mockRejectedValue(new Error("FORBIDDEN"));
-    await renderPage(TramosPage);
-    expect(seen.props.TramosClient).toEqual({ initialWorkflows: [] });
+  it("still render when the loader fails (the client query then loads or shows the error)", async () => {
+    catalogLoaders.loadAjustesTramos.mockRejectedValue(new Error("FORBIDDEN"));
+    const page = await TramosPage();
+    const qc = (page.props as { qc: import("@tanstack/react-query").QueryClient }).qc;
+    expect(qc.getQueryData(qk.ajustes.page("tramos"))).toBeUndefined();
   });
 });

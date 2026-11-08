@@ -7,7 +7,9 @@ import {
   deviationOf,
   lastDaysIso,
   portfolioProgress,
+  portfolioProgressFromCounts,
   seriesFor,
+  type PortfolioScheduleCounts,
 } from "./portfolio-metrics";
 
 function task(fin: string, status: ScheduleStatus, i: number): ScheduleTask {
@@ -83,6 +85,45 @@ describe("portfolioProgress", () => {
   it("clamps projects.progress to 0–100", () => {
     expect(portfolioProgress({ progress: 140, schedule: null }, today).real).toBe(100);
     expect(portfolioProgress({ progress: -5, schedule: null }, today).real).toBe(0);
+  });
+});
+
+/** What the SQL aggregates return for `tasks` and the payment row in effect this week. */
+function countsOf(rows: ScheduleTask[], paidPct: number | null): PortfolioScheduleCounts {
+  return {
+    total: rows.length,
+    done: rows.filter((t) => t.status === "done").length,
+    progress: rows.filter((t) => t.status === "progress").length,
+    planned: rows.filter((t) => t.fin <= "2026-11-08").length,
+    paidPct,
+  };
+}
+
+describe("portfolioProgressFromCounts", () => {
+  it("equals portfolioProgress for the same schedule (SQL counts instead of rows)", () => {
+    expect(portfolioProgressFromCounts({ progress: 90, schedule: countsOf(tasks, 45.5) })).toEqual(
+      portfolioProgress({ progress: 90, schedule: { tasks, payments } }, today),
+    );
+    const ahead = [task("2026-11-01", "done", 1), task("2026-12-01", "done", 2)];
+    expect(portfolioProgressFromCounts({ progress: 0, schedule: countsOf(ahead, null) })).toEqual(
+      portfolioProgress({ progress: 0, schedule: { tasks: ahead, payments: [] } }, today),
+    );
+  });
+
+  it("falls back to projects.progress without schedule rows, keeping the payment calendar", () => {
+    expect(portfolioProgressFromCounts({ progress: 10, schedule: countsOf([], 45.5) })).toEqual(
+      portfolioProgress({ progress: 10, schedule: { tasks: [], payments } }, today),
+    );
+    expect(portfolioProgressFromCounts({ progress: 63, schedule: null })).toEqual({
+      real: 63,
+      plan: null,
+      deviation: null,
+      budgetSpentPct: null,
+    });
+  });
+
+  it("has no budget without a paid % (no payment rows, or not read for a non-admin)", () => {
+    expect(portfolioProgressFromCounts({ progress: 0, schedule: countsOf(tasks, null) }).budgetSpentPct).toBeNull();
   });
 });
 

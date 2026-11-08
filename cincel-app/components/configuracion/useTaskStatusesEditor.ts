@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
 
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolveTaskStatusesCapabilities } from "@/lib/auth/permissions";
 import {
   createTaskStatusAction,
   deleteTaskStatusAction,
-  fetchTaskStatusesAction,
   updateTaskStatusAction,
 } from "@/lib/actions/task-statuses-actions";
-import type { TaskStatusOption } from "@/lib/types/core";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { ajustesEstatusOptions, type AjustesEstatusPageData } from "@/lib/query/options/ajustes";
+import type { TaskStatusInput, TaskStatusOption } from "@/lib/types/core";
 
 export const TASK_STATUS_ERROR_MESSAGES: Record<string, string> = {
   TASK_STATUS_NAME_REQUIRED: "El nombre del estatus es obligatorio.",
@@ -27,13 +30,54 @@ export function taskStatusErrorMessage(error: unknown, fallback: string): string
 export type TaskStatusDraftDefaults = { closes?: boolean };
 
 /**
- * State and actions of the custom task statuses editor, shared by the legacy
- * Configuración › Estatus page (`EstatusClient`) and Ajustes › Estatus
- * (`EstatusSettings`). Both pages call the same server actions with the same
- * payloads; only the markup differs.
+ * What a status change makes stale (plan §3, Task statuses): the catalog, the
+ * Tareas board columns, every task sheet, the Monday status choices, Inicio
+ * and the Proyectos list. `ajustes.page('estatus')` itself is written from
+ * the result instead (`patchEstatusPage`), so the list is not refetched.
  */
-export function useTaskStatusesEditor(initialStatuses: TaskStatusOption[]) {
-  const [statuses, setStatuses] = useState<TaskStatusOption[]>(initialStatuses);
+export const TASK_STATUS_INVALIDATIONS = [
+  qk.catalog.taskStatuses(),
+  qk.tareas.all,
+  ["tasks"],
+  qk.monday.choices(),
+  qk.inicio(),
+  qk.proyectos.list(),
+] as const;
+
+/** Applies a saved or deleted status to the cached `ajustes.page('estatus')` list. */
+export function patchEstatusPage(
+  qc: QueryClient,
+  change: { saved: TaskStatusOption } | { deletedId: string },
+): void {
+  qc.setQueryData<AjustesEstatusPageData>(qk.ajustes.page("estatus"), (current) => {
+    if (!current) return current;
+    if ("deletedId" in change) {
+      return { statuses: current.statuses.filter((status) => status.id !== change.deletedId) };
+    }
+    const exists = current.statuses.some((status) => status.id === change.saved.id);
+    return {
+      statuses: exists
+        ? current.statuses.map((status) => (status.id === change.saved.id ? change.saved : status))
+        : [...current.statuses, change.saved],
+    };
+  });
+}
+
+type SaveVars = { id: string | null; input: TaskStatusInput };
+
+/** One save: an update when `id` is set, else a create. */
+function saveTaskStatus({ id, input }: SaveVars) {
+  return id ? updateTaskStatusAction(id, input) : createTaskStatusAction(input);
+}
+
+/**
+ * State and actions of the custom task statuses editor (Ajustes › Estatus).
+ * The list is `qk.ajustes.page('estatus')`, hydrated by the page: no fetch on
+ * mount, and each save or delete is one POST that writes its result into the
+ * cache and invalidates `TASK_STATUS_INVALIDATIONS`.
+ */
+export function useTaskStatusesEditor() {
+  const { statuses } = useSuspenseQuery(ajustesEstatusOptions()).data;
   const authenticatedUser = useSessionStore(selectCurrentUser);
   const capabilities = useMemo(
     () => resolveTaskStatusesCapabilities(authenticatedUser),
@@ -46,16 +90,18 @@ export function useTaskStatusesEditor(initialStatuses: TaskStatusOption[]) {
   const [closes, setCloses] = useState(false);
   const [countsAsCompleted, setCountsAsCompleted] = useState(false);
   const [formError, setFormError] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
 
-  async function refresh() {
-    setStatuses(await fetchTaskStatusesAction());
-  }
+  const saveMutation = useActionMutation(saveTaskStatus, {
+    setData: (qc, saved) => patchEstatusPage(qc, { saved }),
+    invalidate: TASK_STATUS_INVALIDATIONS,
+    // The editor shows the error inline with the status copy (`save()`), not as a toast.
+    onFormError: () => undefined,
+  });
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh();
-  }, []);
+  const removeMutation = useActionMutation((id: string) => deleteTaskStatusAction(id), {
+    setData: (qc, _data, id) => patchEstatusPage(qc, { deletedId: id }),
+    invalidate: TASK_STATUS_INVALIDATIONS,
+  });
 
   function openEditor(status: TaskStatusOption | null, defaults: TaskStatusDraftDefaults = {}) {
     const initialCloses = status?.closes ?? defaults.closes ?? false;
@@ -80,37 +126,27 @@ export function useTaskStatusesEditor(initialStatuses: TaskStatusOption[]) {
       setFormError(TASK_STATUS_ERROR_MESSAGES.TASK_STATUS_NAME_REQUIRED);
       return false;
     }
-    setIsSaving(true);
     setFormError("");
+    const input = { name, closes, countsAsCompleted: closes && countsAsCompleted };
     try {
-      if (editing)
-        await updateTaskStatusAction(editing.id, {
-          name,
-          closes,
-          countsAsCompleted: closes && countsAsCompleted,
-        });
-      else
-        await createTaskStatusAction({
-          name,
-          closes,
-          countsAsCompleted: closes && countsAsCompleted,
-          sortOrder: statuses.length,
-        });
-      await refresh();
+      await saveMutation.mutateAsync(
+        editing ? { id: editing.id, input } : { id: null, input: { ...input, sortOrder: statuses.length } },
+      );
       setShowEditor(false);
       return true;
     } catch (error) {
       setFormError(taskStatusErrorMessage(error, "No se pudo guardar el estatus."));
       return false;
-    } finally {
-      setIsSaving(false);
     }
   }
 
-  /** Deletes a status (no confirmation here: each page asks in its own way). */
+  /** Deletes a status (no confirmation here: the page asks). A failure shows as a toast. */
   async function remove(status: TaskStatusOption) {
-    await deleteTaskStatusAction(status.id);
-    await refresh();
+    try {
+      await removeMutation.mutateAsync(status.id);
+    } catch {
+      // `useActionMutation` already showed the error toast.
+    }
   }
 
   return {
@@ -126,7 +162,7 @@ export function useTaskStatusesEditor(initialStatuses: TaskStatusOption[]) {
     countsAsCompleted,
     setCountsAsCompleted,
     formError,
-    isSaving,
+    isSaving: saveMutation.isPending,
     openEditor,
     save,
     remove,

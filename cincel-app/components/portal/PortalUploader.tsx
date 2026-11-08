@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, CircleCheck, Upload } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { Progress } from "@/components/ui/shadcn/progress";
+import { qk } from "@/lib/query/keys";
+import { isPortalSignedOut, portalUploadsOptions, portalUploadsUrl } from "@/lib/query/options/portal";
 import type { PortalUploadDTO } from "@/lib/types/portal";
 
 /**
@@ -91,10 +94,6 @@ export type PortalUploadResult =
 
 export type XhrFactory = () => XMLHttpRequest;
 
-function uploadsUrl(projectId: string): string {
-  return `/api/portal/projects/${encodeURIComponent(projectId)}/uploads`;
-}
-
 function parseJson(text: string): unknown {
   try {
     return JSON.parse(text);
@@ -112,7 +111,7 @@ export function uploadPortalFile(
 ): Promise<PortalUploadResult> {
   return new Promise((resolve) => {
     const xhr = createXhr();
-    xhr.open("POST", uploadsUrl(projectId));
+    xhr.open("POST", portalUploadsUrl(projectId));
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
     };
@@ -152,42 +151,24 @@ function goTo(path: string) {
 
 /**
  * Enviar archivos tab (FE §3.3): drop zone + file button, one request per file with its own progress and error,
- * then **Mis envíos** from `GET /api/portal/projects/[pid]/uploads`.
+ * then **Mis envíos** from `portal.uploads(id)` (`GET /api/portal/projects/[pid]/uploads`). Each finished
+ * upload invalidates `portal.uploads(id)`, which refetches the list. The upload queue and the drag state stay
+ * local to this component.
  */
 export default function PortalUploader({ projectId, createXhr, onUnauthorized = goTo }: Props) {
+  const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const nextId = useRef(0);
   const [items, setItems] = useState<ItemState[]>([]);
   const [dragging, setDragging] = useState(false);
-  const [uploads, setUploads] = useState<PortalUploadDTO[] | null>(null);
-  const [uploadsFailed, setUploadsFailed] = useState(false);
+  const uploadsQuery = useQuery(portalUploadsOptions(projectId));
+  const uploads = uploadsQuery.data ?? null;
 
-  const loadUploads = useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        const response = await fetch(uploadsUrl(projectId), { signal, cache: "no-store" });
-        if (response.status === 401) {
-          const body = (await response.json().catch(() => null)) as { redirect?: string } | null;
-          onUnauthorized(body?.redirect ?? "/portal/login");
-          return;
-        }
-        if (!response.ok) throw new Error(String(response.status));
-        setUploads((await response.json()) as PortalUploadDTO[]);
-        setUploadsFailed(false);
-      } catch (error) {
-        if ((error as Error)?.name === "AbortError") return;
-        setUploadsFailed(true);
-      }
-    },
-    [projectId, onUnauthorized]
-  );
-
+  const signedOut = isPortalSignedOut(uploadsQuery.error) ? uploadsQuery.error.redirect : null;
+  const uploadsFailed = uploadsQuery.isError && signedOut === null;
   useEffect(() => {
-    const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadUploads(controller.signal);
-    return () => controller.abort();
-  }, [loadUploads]);
+    if (signedOut) onUnauthorized(signedOut);
+  }, [signedOut, onUnauthorized]);
 
   const update = useCallback((id: number, next: ItemState) => {
     setItems((current) => current.map((item) => (item.id === id ? next : item)));
@@ -208,7 +189,7 @@ export default function PortalUploader({ projectId, createXhr, onUnauthorized = 
           (result) => {
             if (result.ok) {
               update(id, { ...base, status: "done" });
-              void loadUploads();
+              void queryClient.invalidateQueries({ queryKey: qk.portal.uploads(projectId) });
               return;
             }
             if (result.redirect) {
@@ -220,7 +201,7 @@ export default function PortalUploader({ projectId, createXhr, onUnauthorized = 
         );
       }
     },
-    [projectId, createXhr, update, loadUploads, onUnauthorized]
+    [projectId, createXhr, update, queryClient, onUnauthorized]
   );
 
   function onDrop(event: DragEvent<HTMLDivElement>) {

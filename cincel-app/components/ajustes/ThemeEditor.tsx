@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition, type CSSProperties } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
+import { useMemo, useState, type CSSProperties } from "react";
+import type { StoreApi } from "zustand";
 
 import { ContrastBadge } from "@/components/ajustes/ContrastBadge";
 import { TokenRow } from "@/components/ajustes/TokenRow";
@@ -21,8 +21,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { resetOrgAppearanceAction, saveOrgAppearanceAction } from "@/lib/actions/org-appearance-actions";
 import { IMPLEMENTED } from "@/lib/actions/org-appearance-actions.flags";
 import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { ajustesTemaOptions, type AjustesTemaPageData } from "@/lib/query/options/ajustes";
+import {
+  applyAppearanceToDocument,
+  useAppearanceStoreApiOrNull,
+  type AppearanceState,
+} from "@/lib/stores/appearance-store";
 import type { OrgAppearance, ThemeId, TokenName, TypeRole } from "@/lib/types/redesign";
 import { toCssVars } from "@/lib/ui/appearance-css";
+import { resolveAppearance } from "@/lib/ui/preferences";
 import {
   applyPreset,
   contrastResults,
@@ -41,7 +50,7 @@ import { THEME_CSS_FILENAME, themeCss } from "@/lib/ui/theme-export";
 import { chartTintCss, type ChartSlot } from "@/lib/ui/tints";
 import { SHAPE_BOUNDS, THEME_IDS, THEME_LABELS, TYPE_SCALE_BOUNDS } from "@/lib/ui/themes";
 
-export type ThemeEditorProps = { initial: OrgAppearance; presets: Record<ThemeId, OrgAppearance> };
+export type ThemeEditorProps = { presets: Record<ThemeId, OrgAppearance> };
 
 const LOW_CONTRAST_HINT_ID = "theme-low-contrast";
 const FONT_ITEMS = Object.fromEntries(FONT_FAMILIES.map((f) => [f, f]));
@@ -61,21 +70,56 @@ function downloadText(filename: string, text: string, type: string) {
 }
 
 /**
+ * The viewer's appearance after the organization published `org`: the
+ * `useAppearance` store (org part: `fixedByOrg`, the resolved tokens) and the
+ * `<html>` attributes and `<style id="appearance">`, at once. The root layout
+ * re-render that follows the action's `revalidatePath('/','layout')` confirms
+ * it with the server's version.
+ */
+export function applyPublishedOrgAppearance(store: StoreApi<AppearanceState> | null, org: OrgAppearance): void {
+  if (!store) return;
+  const { appearance, preferences } = store.getState();
+  const next = { ...resolveAppearance(org, preferences), version: appearance.version + 1 };
+  store.setState({ fixedByOrg: !org.allowUserOverride, overridesAllowed: org.allowUserOverride });
+  store.getState().applyServer(next);
+  applyAppearanceToDocument(next, true);
+}
+
+/**
  * Ajustes › Tema y estilo (redesign FE §3.8): org theme editor with "Partir
  * de" presets, token / type / shape rows, a sticky live preview of the draft
  * and `ContrastBadge`. "Publicar para todos" stays disabled while any pair of
  * `CONTRAST_PAIRS` fails in either mode; failing rows are marked.
+ *
+ * The published theme is `qk.ajustes.page('tema')` (hydrated by the page);
+ * the draft is local. Publish and reset write the result into that key and
+ * into the appearance store, with no `router.refresh()`.
  */
-export function ThemeEditor({ initial, presets }: ThemeEditorProps) {
-  const router = useRouter();
-  const [draft, setDraft] = useState<OrgAppearance>(initial);
-  const [published, setPublished] = useState<OrgAppearance>(initial);
+export function ThemeEditor({ presets }: ThemeEditorProps) {
+  const published = useSuspenseQuery(ajustesTemaOptions()).data.org;
+  const appearanceStore = useAppearanceStoreApiOrNull();
+  const [draft, setDraft] = useState<OrgAppearance>(() => published);
   const [mode, setMode] = useState<EditMode>("light");
   const [error, setError] = useState<string | null>(null);
-  const [publishing, startPublish] = useTransition();
   const [resetOpen, setResetOpen] = useState(false);
-  const [resetPending, setResetPending] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+
+  const writePublished = (qc: QueryClient, org: OrgAppearance) => {
+    qc.setQueryData<AjustesTemaPageData>(qk.ajustes.page("tema"), { org });
+    applyPublishedOrgAppearance(appearanceStore, org);
+  };
+  const publishMutation = useActionMutation(saveOrgAppearanceAction, {
+    setData: (qc, saved) => writePublished(qc, saved),
+    onFormError: setError,
+    successToast: "Tema publicado para todos",
+  });
+  const resetMutation = useActionMutation(resetOrgAppearanceAction, {
+    setData: (qc, next) => writePublished(qc, next),
+    onFormError: setResetError,
+    successToast: "Tema restablecido",
+  });
+  const publishing = publishMutation.isPending;
+  const resetPending = resetMutation.isPending;
 
   const results = useMemo(() => contrastResults(draft.tokens), [draft.tokens]);
   const failingCount = { light: results.light.filter((r) => !r.ok).length, dark: results.dark.filter((r) => !r.ok).length };
@@ -103,34 +147,18 @@ export function ThemeEditor({ initial, presets }: ThemeEditorProps) {
 
   function publish() {
     setError(null);
-    startPublish(async () => {
-      try {
-        const saved = await saveOrgAppearanceAction(draft);
-        setDraft(saved);
-        setPublished(saved);
-        toast.success("Tema publicado para todos");
-        router.refresh();
-      } catch (err) {
-        setError(actionErrorText(err));
-      }
-    });
+    publishMutation.mutate(draft, { onSuccess: (saved) => setDraft(saved) });
   }
 
   async function reset() {
     setResetError(null);
-    setResetPending(true);
     try {
-      const next = await resetOrgAppearanceAction(draft.baseTheme);
+      const next = await resetMutation.mutateAsync(draft.baseTheme);
       setDraft(next);
-      setPublished(next);
       setResetOpen(false);
       setError(null);
-      toast.success("Tema restablecido");
-      router.refresh();
-    } catch (err) {
-      setResetError(actionErrorText(err));
-    } finally {
-      setResetPending(false);
+    } catch {
+      // The copy is already in the dialog (`onFormError`).
     }
   }
 

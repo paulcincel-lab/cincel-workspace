@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { RecordTableData } from "@/lib/types/widgets";
@@ -20,6 +20,8 @@ const flags = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/vacations-actions", () => actions);
 vi.mock("@/lib/actions/vacations-actions.flags", () => flags);
+const pageData = vi.hoisted(() => ({ getBibliotecaPageData: vi.fn(), getMisVacacionesPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/biblioteca-actions", () => pageData);
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 vi.mock("@/components/widgets/WidgetCard", () => ({
@@ -72,12 +74,32 @@ vi.mock("@/components/patterns/FormDialog", () => ({
     ) : null,
 }));
 
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import type { MyVacations } from "@/lib/vacations/reads";
+
 import { VacationHistory } from "./VacationHistory";
-import { APPROVED_FUTURE, APPROVED_PAST, PENDING_FUTURE, REJECTED, REQUESTS } from "./vacaciones.fixtures";
+import {
+  APPROVED_FUTURE,
+  APPROVED_PAST,
+  PENDING_FUTURE,
+  REJECTED,
+  REQUESTS,
+  misVacacionesData,
+  seededVacacionesClient,
+} from "./vacaciones.fixtures";
+
+function renderHistory() {
+  const client = seededVacacionesClient();
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  const view = renderWithQueryClient(<VacationHistory requests={REQUESTS} />, { client });
+  return { ...view, invalidate };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
   flags.IMPLEMENTED.cancelVacationRequestAction = true;
+  pageData.getMisVacacionesPageData.mockResolvedValue(misVacacionesData());
 });
 
 afterEach(() => {
@@ -90,7 +112,7 @@ function row(id: string) {
 
 describe("VacationHistory", () => {
   it("lists every request with its status, kind and work days", () => {
-    render(<VacationHistory requests={REQUESTS} onCancelled={vi.fn()} />);
+    renderHistory();
 
     expect(row(PENDING_FUTURE.id).getByText("Pendiente")).toBeTruthy();
     expect(row(PENDING_FUTURE.id).getByText("14 – 18 dic")).toBeTruthy();
@@ -100,7 +122,7 @@ describe("VacationHistory", () => {
   });
 
   it("offers Cancelar only for pending requests and approved ones still in the future", () => {
-    render(<VacationHistory requests={REQUESTS} onCancelled={vi.fn()} />);
+    renderHistory();
 
     expect(row(PENDING_FUTURE.id).queryByRole("button", { name: /Cancelar/ })).toBeTruthy();
     expect(row(APPROVED_FUTURE.id).queryByRole("button", { name: /Cancelar/ })).toBeTruthy();
@@ -108,23 +130,28 @@ describe("VacationHistory", () => {
     expect(row(REJECTED.id).queryByRole("button", { name: /Cancelar/ })).toBeNull();
   });
 
-  it("cancels a pending request after confirming", async () => {
-    actions.cancelVacationRequestAction.mockResolvedValue(undefined);
-    const onCancelled = vi.fn();
-    render(<VacationHistory requests={REQUESTS} onCancelled={onCancelled} />);
+  it("cancels a pending request after confirming and invalidates the vacation keys", async () => {
+    actions.cancelVacationRequestAction.mockResolvedValue({ ok: true, data: null });
+    const { client, invalidate } = renderHistory();
 
     fireEvent.click(row(PENDING_FUTURE.id).getByRole("button", { name: /Cancelar/ }));
     fireEvent.click(screen.getByRole("button", { name: "Cancelar solicitud" }));
 
-    await waitFor(() => expect(onCancelled).toHaveBeenCalledWith(PENDING_FUTURE.id));
-    expect(actions.cancelVacationRequestAction).toHaveBeenCalledWith(PENDING_FUTURE.id);
+    await waitFor(() => expect(actions.cancelVacationRequestAction).toHaveBeenCalledWith(PENDING_FUTURE.id));
+    await waitFor(() =>
+      expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+        qk.me.vacations(),
+        ["vacations", "absences"],
+        qk.vacations.pending(),
+      ]),
+    );
+    expect(client.getQueryData<MyVacations>(qk.me.vacations())).toBeDefined();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("shows the STARTED copy when an approved request already started", async () => {
-    actions.cancelVacationRequestAction.mockRejectedValue(new Error("STARTED: req-approved-future"));
-    const onCancelled = vi.fn();
-    render(<VacationHistory requests={REQUESTS} onCancelled={onCancelled} />);
+    actions.cancelVacationRequestAction.mockResolvedValue({ ok: false, error: "STARTED: req-approved-future" });
+    const { client } = renderHistory();
 
     fireEvent.click(row(APPROVED_FUTURE.id).getByRole("button", { name: /Cancelar/ }));
     fireEvent.click(screen.getByRole("button", { name: "Cancelar solicitud" }));
@@ -132,12 +159,14 @@ describe("VacationHistory", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Esa solicitud ya empezó; ya no se puede cancelar. Habla con quien la aprobó.",
     );
-    expect(onCancelled).not.toHaveBeenCalled();
+    expect(client.getQueryData<MyVacations>(qk.me.vacations())?.requests.find((r) => r.id === APPROVED_FUTURE.id)?.status).toBe(
+      "aprobada",
+    );
   });
 
   it("hides cancel while cancelVacationRequestAction is not implemented", () => {
     flags.IMPLEMENTED.cancelVacationRequestAction = false;
-    render(<VacationHistory requests={REQUESTS} onCancelled={vi.fn()} />);
+    renderHistory();
 
     expect(screen.queryByRole("button", { name: /Cancelar/ })).toBeNull();
     expect(screen.queryByText("Acciones")).toBeNull();

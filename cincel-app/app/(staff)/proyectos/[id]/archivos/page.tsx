@@ -1,27 +1,17 @@
 import Link from "next/link";
 
-import { ProjectFiles } from "@/components/proyectos/ProjectFiles";
-import { ProjectTabs } from "@/components/proyectos/ProjectTabs";
-import { StyleProvider } from "@/components/shell/StyleProvider";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
+import { ProjectArchivosView } from "@/components/proyectos/ProjectArchivosView";
 import { buttonVariants } from "@/components/ui/shadcn/button";
-import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { getStaffFilesProject, listStaffProjectFiles } from "@/lib/google/staff-files-app";
-import { isStaffFolderNotFound } from "@/lib/google/staff-files";
-import { filesCount } from "@/lib/projects/project-files-view";
-import { loadProjectTabShell } from "@/lib/projects/project-tab-shell";
-import type { PresentationStyle } from "@/lib/types/redesign";
-import type { StaffFilesResult } from "@/lib/types/workspace-access";
-import { getResolvedAppearance } from "@/lib/ui/preferences-server";
-
-const STYLES: readonly PresentationStyle[] = ["visual", "esencial", "analitico"];
-
-/** `?estilo=visual|esencial|analitico` overrides the style for this render only (FE §4.2). */
-function estiloOverride(value: string | string[] | undefined): PresentationStyle | null {
-  const raw = Array.isArray(value) ? value[0] : value;
-  return STYLES.find((s) => s === raw) ?? null;
-}
+import { loadProyectoArchivos, type ProyectoArchivosData } from "@/lib/loaders/proyectos";
+import { loadProyectoShell } from "@/lib/loaders/proyectos-shell";
+import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
+import { Hydrate } from "@/lib/query/hydrate";
+import { qk } from "@/lib/query/keys";
+import { proyectoArchivosOptions } from "@/lib/query/options/proyectos";
+import { seedArchivosCount } from "@/lib/query/options/proyectos-archivos-clientes";
+import { proyectoShellOptions } from "@/lib/query/options/proyectos-shell";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 type CapabilityUser = Awaited<ReturnType<typeof requireCapabilityUser>>;
 
@@ -35,42 +25,20 @@ async function loadUser(): Promise<CapabilityUser | null> {
   }
 }
 
-type Loaded = { kind: "ok"; result: StaffFilesResult } | { kind: "not_found" } | { kind: "drive_error" };
-
-async function loadFiles(staffId: string, projectId: string, folderId: string | null): Promise<Loaded> {
-  const project = await getStaffFilesProject(projectId);
-  if (!project) return { kind: "not_found" };
-  try {
-    return { kind: "ok", result: await listStaffProjectFiles(staffId, project, folderId) };
-  } catch (error) {
-    if (isStaffFolderNotFound(error)) return { kind: "not_found" };
-    console.error("[archivos] Drive request failed", error);
-    return { kind: "drive_error" };
-  }
-}
-
-/** `/proyectos/[id]/archivos?folder=` (FE §2.3): the project's Drive folder. Every staff member can view it. */
+/** `/proyectos/[id]/archivos?folder=` (FE §2.3): the project's Drive folder, for staff who can see the project. */
 export default async function ProjectArchivosPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ folder?: string | string[]; estilo?: string | string[] }>;
+  searchParams: Promise<{ folder?: string | string[] }>;
 }) {
   const [{ id: projectId }, query] = await Promise.all([params, searchParams]);
   const rawFolder = Array.isArray(query.folder) ? query.folder[0] : query.folder;
   const folderId = rawFolder?.trim() || null;
 
-  const [user, appearance] = await Promise.all([loadUser(), getResolvedAppearance()]);
-  return (
-    <ArchivosTab
-      user={user}
-      projectId={projectId}
-      folderId={folderId}
-      estilo={estiloOverride(query.estilo)}
-      style={appearance.style}
-    />
-  );
+  const user = await loadUser();
+  return renderArchivosTab({ user, projectId, folderId });
 }
 
 /** Card for the tab's own states (the layout mounts `AppShell`). */
@@ -88,59 +56,44 @@ function StateCard({ title, message }: { title: string; message: string }) {
   );
 }
 
-/** `ProjectTabs` + the Archivos tab in three styles (FE §3.5). */
-async function ArchivosTab({
+/**
+ * `ProjectTabs` + the Archivos tab in three styles (FE §3.5), prefetched in
+ * parallel (Query Migration 5d, #962): `proyectos.shell(id)` and
+ * `proyectos.archivos(id, folder)`. The root listing seeds the shell's
+ * Archivos count, so Drive is listed once per page (none with `?folder=` for
+ * the count). Folder navigation then runs on the client.
+ */
+async function renderArchivosTab({
   user,
   projectId,
   folderId,
-  estilo,
-  style,
 }: {
   user: CapabilityUser | null;
   projectId: string;
   folderId: string | null;
-  estilo: PresentationStyle | null;
-  style: PresentationStyle;
 }) {
   if (!user) {
     return <StateCard title="Sin permiso" message="Inicia sesión para ver los archivos del proyecto." />;
   }
 
-  const loaded = await loadFiles(user.member.id, projectId, folderId);
-  if (loaded.kind === "not_found") {
+  const qc = getQueryClient();
+  await Promise.all([
+    prefetch(qc, proyectoShellOptions(projectId), () => loadProyectoShell(user, { id: projectId })),
+    prefetch(qc, proyectoArchivosOptions(projectId, folderId), () =>
+      loadProyectoArchivos(user, { id: projectId, folderId }),
+    ),
+  ]);
+  const shell = qc.getQueryData<ProjectTabShell | null>(qk.proyectos.shell(projectId));
+  const files = qc.getQueryData<ProyectoArchivosData>(qk.proyectos.archivos(projectId, folderId));
+  if (!shell || files?.kind === "not_found") {
     return <StateCard title="Carpeta no encontrada" message="El proyecto o la carpeta no existen." />;
   }
-
-  // The tab count is the folder the tab opens on: reuse this listing when it is the root.
-  const archivos = loaded.kind === "ok" && !folderId ? filesCount(loaded.result) : undefined;
-  const shell = await loadProjectTabShell(projectId, user, { archivos });
-  if (!shell) {
-    return <StateCard title="Carpeta no encontrada" message="El proyecto o la carpeta no existen." />;
-  }
+  if (!folderId) seedArchivosCount(qc, projectId, files);
 
   // `ListPage` renders the tab's `EstiloSwitch` (FE §4.11), so `ProjectTabs` doesn't repeat it.
   return (
-    <StyleProvider style={estilo ?? style} isOverridden={estilo !== null} scope="staff">
-      <div className="flex flex-col gap-4">
-        <ProjectTabs
-          project={shell.project}
-          active="archivos"
-          counts={shell.counts}
-          canManagePortal={shell.canManagePortal}
-        />
-        {loaded.kind === "drive_error" ? (
-          <Alert variant="destructive">
-            <AlertTitle>No se pudo leer la carpeta en Drive.</AlertTitle>
-            <AlertDescription>Intenta de nuevo en unos minutos.</AlertDescription>
-          </Alert>
-        ) : (
-          <ProjectFiles
-            projectId={projectId}
-            result={loaded.result}
-            canRetry={resolveProjectsCapabilities(user).canEditProjectGeneral}
-          />
-        )}
-      </div>
-    </StyleProvider>
+    <Hydrate qc={qc}>
+      <ProjectArchivosView projectId={projectId} />
+    </Hydrate>
   );
 }

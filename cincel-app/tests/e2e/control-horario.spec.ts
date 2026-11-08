@@ -96,6 +96,11 @@ test.describe("Control de horario", () => {
     await expect(toggle).not.toBeChecked();
     await toggle.click();
     await expect(toggle).toBeChecked();
+    // Saving is one action POST and no `router.refresh()` (no `_rsc` request).
+    let rscRequests = 0;
+    page.on("request", (request) => {
+      if (request.url().includes("_rsc=")) rscRequests += 1;
+    });
     await saveHorario(page);
 
     await expect
@@ -104,9 +109,37 @@ test.describe("Control de horario", () => {
         return (JSON.parse(row.value as string) as { data: { enabled: boolean } }).data.enabled;
       }), { timeout: 15_000 })
       .toBe(true);
+    await page.waitForLoadState("networkidle");
+    expect(rscRequests, "_rsc requests after saving").toBe(0);
 
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByRole("switch", { name: SWITCH_NAME })).toBeChecked({ timeout: 30_000 });
+  });
+
+  test("the team report changes week with one page-data call and no route refresh", async ({ page }) => {
+    await loginAsAdmin(page, BASE_URL);
+    await openHorario(page);
+    await page.waitForLoadState("networkidle");
+    const report = page.getByRole("region", { name: /Horas del equipo · semana del/ });
+    const titleBefore = await report.getByRole("heading").first().textContent();
+
+    let actionPosts = 0;
+    let rscRequests = 0;
+    page.on("request", (request) => {
+      if (request.method() === "POST" && request.headers()["next-action"]) actionPosts += 1;
+      else if (request.url().includes("_rsc=")) rscRequests += 1;
+    });
+    await page.getByRole("button", { name: "Semana anterior" }).click();
+    await expect(report.getByRole("heading").first()).not.toHaveText(titleBefore ?? "", { timeout: 15_000 });
+    await page.waitForLoadState("networkidle");
+    expect(actionPosts, "page-data POSTs for the previous week").toBe(1);
+
+    await page.getByRole("button", { name: "Semana siguiente" }).click();
+    await expect(report.getByRole("heading").first()).toHaveText(titleBefore ?? "", { timeout: 15_000 });
+    await page.waitForLoadState("networkidle");
+    // The current week is still cached.
+    expect(actionPosts, "page-data POSTs after coming back").toBe(1);
+    expect(rscRequests, "_rsc requests while changing weeks").toBe(0);
   });
 
   test("clock in, pause, resume and clock out from the sidebar", async ({ browser }) => {
@@ -117,6 +150,15 @@ test.describe("Control de horario", () => {
       await expect(prompt(page)).toBeVisible({ timeout: 30_000 });
       await prompt(page).getByRole("button", { name: "Ahora no" }).click();
       await expect(prompt(page)).toHaveCount(0);
+
+      // Every clock write is one `next-action` POST and no RSC request: the result goes into qk.me.today.
+      const rscRequests: string[] = [];
+      const actionPosts: string[] = [];
+      page.on("request", (request) => {
+        const headers = request.headers();
+        if (headers["rsc"] === "1" || new URL(request.url()).searchParams.has("_rsc")) rscRequests.push(request.url());
+        if (request.method() === "POST" && headers["next-action"]) actionPosts.push(request.url());
+      });
 
       // Sidebar clock: Sin iniciar → En curso → En pausa → En curso → Cerrada.
       await expect(page.getByRole("timer").first()).toBeVisible();
@@ -133,6 +175,8 @@ test.describe("Control de horario", () => {
       await page.getByRole("button", { name: "Salida" }).first().click();
       await expect(page.getByText("Cerrada").first()).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole("button", { name: "Registrar entrada" }).first()).toBeVisible();
+      expect(rscRequests).toEqual([]);
+      expect(actionPosts).toHaveLength(4);
 
       await expect.poll(() => entriesOf(worker.staffId), { timeout: 15_000 }).toEqual([
         { source: "sidebar", ended: true, closedBy: "user", pauses: 1 },

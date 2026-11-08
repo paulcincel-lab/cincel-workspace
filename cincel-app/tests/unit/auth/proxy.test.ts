@@ -37,7 +37,12 @@ describe("proxy", () => {
   });
 
   it("lets a protected path with a cookie through to the server checks", () => {
-    expect(redirectTarget(run("/dashboard", true))).toBeNull();
+    expect(redirectTarget(run("/inicio", true))).toBeNull();
+  });
+
+  it("redirects an old route with a cookie straight to its new page (no staff layout render)", () => {
+    expect(redirectTarget(run("/dashboard", true))).toBe("/inicio");
+    expect(redirectTarget(run("/equipo", true))).toBe("/personas");
   });
 
   it("never touches /api routes", () => {

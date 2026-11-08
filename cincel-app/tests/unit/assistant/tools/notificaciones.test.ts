@@ -478,7 +478,7 @@ describe("schedule_digest", () => {
       ],
       quietHours: { from: "22:00", to: "07:00" },
     });
-    actions.updateNotificationPreferencesAction.mockImplementation(async (prefs: unknown) => prefs);
+    actions.updateNotificationPreferencesAction.mockImplementation(async (prefs: unknown) => ({ ok: true, data: prefs }));
     const result = await run("schedule_digest", { time: "07:30", scope: "diario" });
     expect(actions.updateNotificationPreferencesAction).toHaveBeenCalledWith({
       rows: [
@@ -524,7 +524,7 @@ describe("audit (BE §9.9)", () => {
     actions.resolveStaff.mockResolvedValue({ ok: true, value: { id: STAFF_B, name: "Luis" } });
     actions.notify.mockResolvedValue({ created: 1 });
     actions.fetchNotificationPreferencesAction.mockResolvedValue({ rows: [], quietHours: null });
-    actions.updateNotificationPreferencesAction.mockResolvedValue({ rows: [], quietHours: null });
+    actions.updateNotificationPreferencesAction.mockResolvedValue({ ok: true, data: { rows: [], quietHours: null } });
 
     for (const name of TOOL_NAMES) await run(name, SAMPLE_INPUT[name]);
 

@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, screen, within } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
+
+const actions = vi.hoisted(() => ({ getInicioPageData: vi.fn(), fetchMyProfileAction: vi.fn() }));
+vi.mock("@/lib/actions/page-data/inicio-actions", () => ({ getInicioPageData: actions.getInicioPageData }));
+vi.mock("@/lib/actions/page-data/me-actions", () => ({ fetchMyProfileAction: actions.fetchMyProfileAction }));
 
 // The photo button writes me.profile in the query cache; these tests render it without one.
 vi.mock("@/components/shell/photo-upload", async (importOriginal) => ({
@@ -18,7 +23,12 @@ vi.mock("@/lib/actions/preferences-actions", () => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import type { InicioPageData } from "@/lib/loaders/inicio";
+import { qk } from "@/lib/query/keys";
+import { inicioPageOptions } from "@/lib/query/options/inicio";
+import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { InicioData, PresentationStyle } from "@/lib/types/redesign";
+import type { MyProfile } from "@/lib/types/shell";
 
 import { InicioClient } from "./InicioClient";
 import { ADMIN_TASK_TITLE, INICIO_ADMIN, INICIO_EMPTY, INICIO_NON_ADMIN, KPI_VALUES } from "./inicio-fixtures";
@@ -27,22 +37,85 @@ const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 // 09:00 on Friday 6 November 2026 in Mexico City.
 const NOW = "2026-11-06T15:00:00Z";
 
-function renderInicio(style: PresentationStyle, data: InicioData = INICIO_NON_ADMIN) {
-  return render(
-    <StyleProvider style={style} scope="staff">
-      <InicioClient
-        data={data}
-        photoUrl={null}
-        me={{ firstName: "Ana", name: "Ana López", role: "Arquitecta de proyecto" }}
-        now={NOW}
-      />
-    </StyleProvider>,
-  );
+const PROFILE: MyProfile = { id: "s-1", name: "Ana López", photoUrl: null };
+
+function pageData(inicio: InicioData, showGoogleSetupBanner = false): InicioPageData {
+  return { inicio, firstLogin: { showGoogleSetupBanner } };
 }
+
+const ui = (style: PresentationStyle) => (
+  <StyleProvider style={style} scope="staff">
+    <InicioClient me={{ firstName: "Ana", name: "Ana López", role: "Arquitecta de proyecto" }} now={NOW} />
+  </StyleProvider>
+);
+
+/** Renders with `qk.inicio()` and `qk.me.profile()` in the cache, as after the page prefetch and the shell seed. */
+function renderInicio(
+  style: PresentationStyle,
+  data: InicioData = INICIO_NON_ADMIN,
+  options: { banner?: boolean; profile?: MyProfile; client?: QueryClient } = {},
+) {
+  const client = options.client ?? createTestQueryClient();
+  client.setQueryData(qk.inicio(), pageData(data, options.banner));
+  client.setQueryData(qk.me.profile(), options.profile ?? PROFILE);
+  return renderWithQueryClient(ui(style), { client });
+}
+
+beforeEach(() => {
+  actions.getInicioPageData.mockReset();
+  actions.fetchMyProfileAction.mockReset();
+});
 
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+});
+
+describe("InicioClient query", () => {
+  it("keys the page query qk.inicio() with a 30 s stale time and no input", async () => {
+    const options = inicioPageOptions();
+    expect(options.queryKey).toEqual(["inicio"]);
+    expect(options.staleTime).toBe(30_000);
+    actions.getInicioPageData.mockResolvedValue(pageData(INICIO_EMPTY));
+    await createTestQueryClient().fetchQuery(options);
+    expect(actions.getInicioPageData).toHaveBeenCalledWith({});
+  });
+
+  it("renders the hydrated data with no client action call on mount", async () => {
+    const loader = vi.fn(async () => pageData(INICIO_NON_ADMIN));
+    const { client, state } = await hydrationRoundtrip(async (server) => {
+      await server.prefetchQuery({ queryKey: inicioPageOptions().queryKey, queryFn: loader });
+    });
+    // The shell seeds me.profile from the layout session.
+    client.setQueryData(qk.me.profile(), PROFILE);
+    renderWithQueryClient(ui("visual"), { client, hydrate: state });
+
+    expect(screen.getByRole("heading", { level: 1, name: "Buenos días, Ana" })).toBeTruthy();
+    await act(async () => {});
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(actions.getInicioPageData).not.toHaveBeenCalled();
+    expect(actions.fetchMyProfileAction).not.toHaveBeenCalled();
+  });
+
+  it("shows the Google setup banner only when the page data asks for it", () => {
+    renderInicio("visual");
+    expect(screen.queryByText("Nadie puede entrar con Google todavía")).toBeNull();
+    cleanup();
+    renderInicio("visual", INICIO_NON_ADMIN, { banner: true });
+    expect(screen.getByText("Nadie puede entrar con Google todavía")).toBeTruthy();
+  });
+
+  it("reads the photo from me.profile and follows its updates", async () => {
+    const { client } = renderInicio("visual", INICIO_NON_ADMIN, {
+      profile: { ...PROFILE, photoUrl: "/api/staff/s-1/photo?v=1" },
+    });
+    expect(screen.getByRole("button", { name: "Cambiar foto de perfil" })).toBeTruthy();
+    await act(async () => {
+      client.setQueryData<MyProfile>(qk.me.profile(), { ...PROFILE, photoUrl: null });
+    });
+    // Query observers are notified on the next tick.
+    expect(await screen.findByRole("button", { name: "Subir foto de perfil" })).toBeTruthy();
+  });
 });
 
 describe("InicioClient header block", () => {

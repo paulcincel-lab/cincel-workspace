@@ -16,19 +16,21 @@ import { buildAssistantTools } from "@/lib/assistant/tools";
 import { buildSystemPrompt } from "@/lib/assistant/prompt";
 import {
   logAssistantAction,
-  recordActionDecision,
+  recordActionDecisions,
   recordActionOutcome,
-  recordProposedAction,
+  recordProposedActions,
 } from "@/lib/assistant/approvals";
 import { buildChatTools } from "@/lib/assistant/chat-tools";
 import { resolveAssistantContext } from "@/lib/assistant/context";
 import {
   applyApprovalResponses,
+  changedMessages,
   denyPendingApprovals,
   loadThreadMessages,
   pendingApprovalRequests,
   sanitizeUserMessage,
   saveThreadMessages,
+  threadSnapshot,
   upsertOwnedThread,
   type AppliedApproval,
 } from "@/lib/assistant/threads";
@@ -43,6 +45,10 @@ import { actionErrorCode, actionErrorText } from "@/lib/errors";
  * server (client uuid, owner check before any write), the history is loaded
  * from `assistant_messages` (client history is ignored), approval-gated tools
  * use the native approval round trip and are audited in `assistant_actions`.
+ *
+ * Each turn writes only the messages that are new or changed (the user's
+ * message, an answered approval, the response), never the whole history,
+ * and the approval audit of a turn is written in batches.
  *
  * A bare `{ messages }` body (no thread id) is still answered statelessly,
  * as before; no page of the app sends it any more.
@@ -182,6 +188,7 @@ async function serverThreadChat(request: Request, user: AuthenticatedUser, body:
   }
 
   let messages = await loadThreadMessages(db, threadId);
+  const stored = threadSnapshot(messages);
   const decisions: AppliedApproval[] = [];
 
   if (approvals.length > 0) {
@@ -202,36 +209,41 @@ async function serverThreadChat(request: Request, user: AuthenticatedUser, body:
   if (!message && decisions.length === 0) return invalid();
 
   const approvedCallIds = new Set<string>();
-  for (const decision of decisions) {
-    // Idempotent: makes sure the `proposed` row exists before the transition.
-    await recordProposedAction(db, {
-      threadId,
-      staffId,
-      toolCallId: decision.toolCallId,
-      tool: decision.toolName,
-      input: decision.input,
-      summary: summarizeToolCall(decision.toolName, decision.input),
-    });
-    const changed = await recordActionDecision(db, {
-      threadId,
-      toolCallId: decision.toolCallId,
-      approved: decision.approved,
-    });
-    if (changed) {
-      logAssistantAction({
-        traceId,
+  if (decisions.length > 0) {
+    // Idempotent: makes sure every `proposed` row exists before the transition.
+    await recordProposedActions(
+      db,
+      decisions.map((decision) => ({
         threadId,
         staffId,
         toolCallId: decision.toolCallId,
         tool: decision.toolName,
-        status: decision.approved ? "confirmed" : "cancelled",
-      });
+        input: decision.input,
+        summary: summarizeToolCall(decision.toolName, decision.input),
+      })),
+    );
+    const changed = await recordActionDecisions(db, {
+      threadId,
+      decisions: decisions.map((decision) => ({ toolCallId: decision.toolCallId, approved: decision.approved })),
+    });
+    for (const decision of decisions) {
+      if (changed.has(decision.toolCallId)) {
+        logAssistantAction({
+          traceId,
+          threadId,
+          staffId,
+          toolCallId: decision.toolCallId,
+          tool: decision.toolName,
+          status: decision.approved ? "confirmed" : "cancelled",
+        });
+      }
+      if (decision.approved) approvedCallIds.add(decision.toolCallId);
     }
-    if (decision.approved) approvedCallIds.add(decision.toolCallId);
   }
 
-  // The user's message and decisions are stored before the model runs.
-  await saveThreadMessages(db, threadId, messages);
+  // The user's message and decisions are stored before the model runs: only what is new or changed.
+  await saveThreadMessages(db, threadId, changedMessages(messages, stored), { titleFrom: messages });
+  const saved = threadSnapshot(messages);
 
   const { tools, toolApproval } = buildChatTools({
     user,
@@ -278,26 +290,29 @@ async function serverThreadChat(request: Request, user: AuthenticatedUser, body:
     generateMessageId: () => randomUUID(),
     onEnd: async ({ messages: finalMessages, responseMessage }) => {
       try {
-        await saveThreadMessages(db, threadId, finalMessages);
-        for (const pending of pendingApprovalRequests(responseMessage)) {
-          const created = await recordProposedAction(db, {
+        await saveThreadMessages(db, threadId, changedMessages(finalMessages, saved), { titleFrom: finalMessages });
+        const pending = pendingApprovalRequests(responseMessage);
+        const created = await recordProposedActions(
+          db,
+          pending.map((request) => ({
             threadId,
             staffId,
-            toolCallId: pending.toolCallId,
-            tool: pending.toolName,
-            input: pending.input,
-            summary: summarizeToolCall(pending.toolName, pending.input),
+            toolCallId: request.toolCallId,
+            tool: request.toolName,
+            input: request.input,
+            summary: summarizeToolCall(request.toolName, request.input),
+          })),
+        );
+        for (const request of pending) {
+          if (!created.has(request.toolCallId)) continue;
+          logAssistantAction({
+            traceId,
+            threadId,
+            staffId,
+            toolCallId: request.toolCallId,
+            tool: request.toolName,
+            status: "proposed",
           });
-          if (created) {
-            logAssistantAction({
-              traceId,
-              threadId,
-              staffId,
-              toolCallId: pending.toolCallId,
-              tool: pending.toolName,
-              status: "proposed",
-            });
-          }
         }
       } catch (err) {
         logRouteError(traceId, threadId, "assistant.persist_failed", err);

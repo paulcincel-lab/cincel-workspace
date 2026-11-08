@@ -23,6 +23,7 @@ import { z } from "zod";
 import { defineTool, type DefinedTool, type ToolRunContext } from "@/lib/assistant/define-tool";
 import { summarizeInviteClientToPortal, toolSummaries } from "@/lib/assistant/tool-summaries";
 import { loadOwnerMail } from "@/lib/assistant/owner-mail";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { fetchContactsAction } from "@/lib/actions/contacts-actions";
 import { createGmailDraftAction, fetchGmailThreadAction, fetchGmailThreadsAction } from "@/lib/actions/gmail-actions";
 import { IMPLEMENTED as GMAIL } from "@/lib/actions/gmail-actions.flags";
@@ -30,7 +31,8 @@ import { fetchPersonaDetailAction } from "@/lib/actions/people-actions";
 import { IMPLEMENTED as PEOPLE } from "@/lib/actions/people-actions.flags";
 import { invitePortalClientAction } from "@/lib/actions/portal-actions";
 import { listInvitablePortalContactsAction } from "@/lib/actions/portal-contacts-actions";
-import { fetchProjectAction, fetchProjectsAction } from "@/lib/actions/projects-actions";
+import { fetchProjectAction } from "@/lib/actions/projects-actions";
+import { listViewerProjects } from "@/lib/assistant/reads";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolvePortalCapabilities, resolveTeamCapabilities } from "@/lib/auth/permissions";
@@ -109,7 +111,7 @@ type ProjectRef = { id: string; name: string };
  */
 async function resolveProjectRef(ctx: ToolRunContext, name: string | undefined): Promise<Match<ProjectRef>> {
   if (name && name.trim()) {
-    const rows = await fetchProjectsAction({ search: name.trim() });
+    const rows = await listViewerProjects({ search: name.trim() });
     const match = matchByName(rows, name, (row) => row.name, "el proyecto");
     return match.ok ? { ok: true, value: { id: match.value.id, name: match.value.name } } : match;
   }
@@ -180,7 +182,8 @@ const get_person = defineTool({
       if (!resolved.ok) return resolved;
       // The action applies the field rules: hours only for canViewTeamHours or
       // self, admin tasks only with canSeeAdminData (BE §7.11, §9.7).
-      const detail = await fetchPersonaDetailAction(resolved.value.id);
+      const detail = await fetchPersonaDetailAction({ staffId: resolved.value.id });
+      if (!detail) throw new Error("NOT_FOUND");
       // Whitelist: never the access audit (revocations, last sign-in) or profile data.
       return {
         ok: true as const,
@@ -509,7 +512,7 @@ const request_quotes = defineTool({
         let draftId: string | undefined;
         if (useGmail) {
           try {
-            draftId = (await createGmailDraftAction({ to: [email], subject, body })).draftId;
+            draftId = unwrapActionResult(await createGmailDraftAction({ to: [email], subject, body })).draftId;
             status = "borrador";
           } catch {
             status = "fallido";

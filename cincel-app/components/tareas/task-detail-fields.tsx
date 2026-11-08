@@ -3,13 +3,31 @@
 /**
  * Task detail fields shared by `TaskSheet` (redesign FE §3.4): tramo, fase and
  * espacio selects, the checklist editor, the attachment grid and their helpers.
+ * The select options come from the catalog keys the sheet's one call seeds
+ * (`useTaskSheetCatalogs`).
  */
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import type { ProjectSpaceRef, TaskChecklistItem, TaskDetail, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
+import type {
+  ProjectSpaceRef,
+  TaskChecklistItem,
+  TaskDetail,
+  TaskStatusOption,
+  WorkflowPhaseRef,
+  WorkflowRef,
+} from "@/lib/types/core";
+import type { CatalogAssignableStaffOption } from "@/lib/types/catalog";
 import { Button } from "@/components/ui/shadcn/button";
 import { ChecklistAddItemInput, ChecklistItemRow } from "@/components/tareas/ChecklistItemRow";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import {
+  catalogAssignableStaffOptions,
+  catalogProjectSpacesOptions,
+  catalogTaskStatusesOptions,
+  catalogWorkflowsOptions,
+} from "@/lib/query/options/catalog";
+import { taskPhasesOptions } from "@/lib/query/options/tareas";
 
 /** Select values for "Sin fase" / "Sin espacio" (Select items can't carry null). */
 const NO_PHASE = "__none__";
@@ -43,6 +61,52 @@ export function taskAttachmentError(file: { type: string; size: number }, option
 /** A task's bitácora in chronological order (oldest first). */
 export function sortTaskHistory(history: TaskDetail["history"]): TaskDetail["history"] {
   return [...history].sort((a, b) => a.eventAt.localeCompare(b.eventAt));
+}
+
+const NO_STATUSES: TaskStatusOption[] = [];
+const NO_TRAMOS: WorkflowRef[] = [];
+const NO_STAFF: CatalogAssignableStaffOption[] = [];
+const NO_PHASES: WorkflowPhaseRef[] = [];
+const NO_SPACES: ProjectSpaceRef[] = [];
+
+export type TaskSheetCatalogs = {
+  statuses: TaskStatusOption[];
+  tramos: WorkflowRef[];
+  /** Responsable and "@" mentions: `{id,name,suggested}`, suggested for the task's tramo first. */
+  staff: CatalogAssignableStaffOption[];
+  /** The active fases of the task's tramo; empty without one. */
+  phases: WorkflowPhaseRef[];
+  /** The project's espacios; empty for an admin task. */
+  spaces: ProjectSpaceRef[];
+};
+
+/**
+ * The options of the sheet's selects, from the catalog keys `getTaskSheetData`
+ * seeded (`catalog.taskStatuses`, `catalog.workflows`,
+ * `catalog.assignableStaff(workflowId)`, `catalog.projectSpaces(pid)` and the
+ * tramo's fases): no request while they are fresh, a refetch of only the
+ * stale one otherwise.
+ */
+export function useTaskSheetCatalogs(
+  task: Pick<TaskDetail, "kind" | "workflowId" | "projectId"> | null,
+): TaskSheetCatalogs {
+  // Nothing is read before the task loads: its one call seeds these keys first.
+  const loaded = task !== null;
+  const workflowId = task?.workflowId ?? null;
+  const withSpaces = loaded && task.kind !== "admin";
+  const withPhases = withSpaces && workflowId !== null;
+  const statuses = useQuery({ ...catalogTaskStatusesOptions(), enabled: loaded }).data ?? NO_STATUSES;
+  const tramos = useQuery({ ...catalogWorkflowsOptions(), enabled: loaded }).data ?? NO_TRAMOS;
+  const staff = useQuery({ ...catalogAssignableStaffOptions(workflowId), enabled: loaded }).data ?? NO_STAFF;
+  const phases = useQuery({ ...taskPhasesOptions(workflowId ?? ""), enabled: withPhases }).data ?? NO_PHASES;
+  const spaces = useQuery({ ...catalogProjectSpacesOptions(task?.projectId ?? ""), enabled: withSpaces }).data ?? NO_SPACES;
+  return {
+    statuses,
+    tramos,
+    staff,
+    phases: withPhases ? phases : NO_PHASES,
+    spaces: withSpaces ? spaces : NO_SPACES,
+  };
 }
 
 /** Download/preview URL of a task attachment. */

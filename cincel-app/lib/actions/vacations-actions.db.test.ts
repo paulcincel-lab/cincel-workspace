@@ -69,7 +69,9 @@ describe.skipIf(!url)("vacations (test DB)", async () => {
   const { and, eq, inArray } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const actions = await import("@/lib/actions/vacations-actions");
+  const { unwrapActions } = await import("@/tests/helpers/action-result");
+  // The mutations return ActionResult; unwrapped they reject with the code as before.
+  const actions = unwrapActions(await import("@/lib/actions/vacations-actions"));
   const { approvedAbsences } = await import("@/lib/vacations/approved-absences");
   const { VACATIONS_SETTING_KEY } = await import("@/lib/vacations/balance");
 

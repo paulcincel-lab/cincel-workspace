@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import type { ReactNode } from "react";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 const mocks = vi.hoisted(() => ({
@@ -23,6 +24,13 @@ vi.mock("@/lib/actions/time-tracking-actions", () => ({
   fetchMyTodayAction: async () => ({ enabled: false }),
 }));
 vi.mock("@/lib/profile-photo/photo-url", () => ({ getStaffPhotoUrl: async () => null }));
+vi.mock("@/lib/shell/badges", () => ({
+  loadShellBadges: async () => ({ tareasOpen: 0, bandeja: { unreadCount: 0, dueReminders: [], renderedAt: 1 } }),
+  capabilityUserOf: (user: { id: string; name: string; access: string }) => ({
+    member: { id: user.id, name: user.name },
+    access: user.access,
+  }),
+}));
 vi.mock("@/components/shell/AppShell", () => ({
   AppShell: ({ children }: { children: ReactNode }) => (
     <div>
@@ -73,7 +81,8 @@ describe("app/(staff)/layout accessibility", () => {
       cssVars: { light: {}, dark: {} },
       version: 1,
     });
-    const { container } = render(await StaffLayout({ children: page }));
+    // The layout hydrates the shell queries, so it renders inside a query client.
+    const { container } = renderWithQueryClient(await StaffLayout({ children: page }));
     expect(await seriousViolations(container)).toEqual([]);
   });
 });

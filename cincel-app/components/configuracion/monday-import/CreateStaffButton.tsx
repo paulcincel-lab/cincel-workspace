@@ -1,12 +1,16 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/shadcn/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { ChoiceSelect, type Choice } from "@/components/configuracion/monday-import/ChoiceSelect";
-import { createMondayStaffAction, suggestMondayPositionAction } from "@/lib/actions/monday-import-actions";
+import { mondayErrorText, useMondayMutation } from "@/components/configuracion/monday-import/monday-mutations";
+import { createMondayStaffAction } from "@/lib/actions/monday-import-actions";
+import { qk } from "@/lib/query/keys";
+import { mondayPositionSuggestionOptions } from "@/lib/query/options/monday";
 import type { MondayPositionSuggestion } from "@/lib/types/monday-import";
 import type { CreatedStaff } from "@/scripts/monday/created-staff";
 
@@ -22,8 +26,8 @@ export function suggestionReason(suggestion: MondayPositionSuggestion): string {
 
 /**
  * "Crear integrante" (#689, project flow §4.8): a two-step control. The button opens a popover with a "Puesto"
- * select, preselected with the puesto `suggestMondayPositionAction` suggests from where the person's tasks land,
- * and its reason underneath. "Crear integrante" there creates the staff member of the monday person (name and email
+ * select, preselected with the puesto `suggestMondayPositionAction` suggests from where the person's tasks land
+ * (`monday.positionSuggestion`, read while the popover is open), and its reason underneath. "Crear integrante" there creates the staff member of the monday person (name and email
  * from monday, pending until their first Google sign-in) with that puesto and hands it back. Errors show inline.
  */
 export function CreateStaffButton({
@@ -39,54 +43,36 @@ export function CreateStaffButton({
   onCreated: (staff: CreatedStaff) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [suggestion, setSuggestion] = useState<MondayPositionSuggestion | null>(null);
-  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
-  const [suggestionError, setSuggestionError] = useState("");
-  const [positionId, setPositionId] = useState(NO_POSITION);
-  // Set once the person picks a puesto, so a late suggestion never overrides it.
-  const picked = useRef(false);
+  // null until the person picks a puesto, so the suggestion preselects it and never overrides a pick.
+  const [pickedPositionId, setPickedPositionId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
-
-  async function loadSuggestion() {
-    setLoadingSuggestion(true);
-    setSuggestionError("");
-    try {
-      const result = await suggestMondayPositionAction(runId, user.id);
-      if (!result.ok) {
-        setSuggestionError(result.error);
-        return;
-      }
-      setSuggestion(result.suggestion);
-      const suggested = result.suggestion.position?.id;
-      if (suggested && !picked.current) setPositionId(suggested);
-    } catch {
-      setSuggestionError("No se pudo cargar la sugerencia de puesto.");
-    } finally {
-      setLoadingSuggestion(false);
-    }
-  }
+  const suggestionQuery = useQuery({ ...mondayPositionSuggestionOptions(runId, user.id), enabled: open });
+  const suggestion = suggestionQuery.data ?? null;
+  const loadingSuggestion = open && suggestionQuery.isLoading;
+  const suggestionError = suggestionQuery.error
+    ? mondayErrorText(suggestionQuery.error, "No se pudo cargar la sugerencia de puesto.")
+    : "";
+  const positionId = pickedPositionId ?? suggestion?.position?.id ?? NO_POSITION;
+  const createMutation = useMondayMutation(
+    (positionIds: string[]) => createMondayStaffAction(runId, user.id, { positionIds }),
+    { invalidate: [qk.catalog.staff(), qk.ajustes.page("puestos")] },
+  );
+  const isPending = createMutation.isPending;
 
   function changeOpen(next: boolean) {
     setOpen(next);
-    if (next) {
-      setError("");
-      if (!suggestion && !loadingSuggestion) void loadSuggestion();
-    }
+    if (next) setError("");
   }
 
-  function create() {
+  async function create() {
     setError("");
-    startTransition(async () => {
-      const positionIds = positionId === NO_POSITION ? [] : [positionId];
-      const result = await createMondayStaffAction(runId, user.id, { positionIds });
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
+    try {
+      const result = await createMutation.mutateAsync(positionId === NO_POSITION ? [] : [positionId]);
       setOpen(false);
       onCreated(result.staff);
-    });
+    } catch (err) {
+      setError(mondayErrorText(err));
+    }
   }
 
   // The suggested puesto is listed even if the catalog given here lacks it.
@@ -114,10 +100,7 @@ export function CreateStaffButton({
             value={positionId}
             choices={choices}
             disabled={isPending}
-            onChange={(next) => {
-              picked.current = true;
-              setPositionId(next);
-            }}
+            onChange={setPickedPositionId}
           />
           {loadingSuggestion ? (
             <Skeleton className="h-4 w-full" data-testid="position-suggestion-loading" />
@@ -133,7 +116,7 @@ export function CreateStaffButton({
           </p>
         ) : null}
         <div className="flex justify-end">
-          <Button type="button" size="sm" disabled={isPending} onClick={create}>
+          <Button type="button" size="sm" disabled={isPending} onClick={() => void create()}>
             {isPending ? "Creando integrante…" : "Crear integrante"}
           </Button>
         </div>

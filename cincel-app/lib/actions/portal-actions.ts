@@ -1,7 +1,5 @@
 "use server";
 
-import { revalidateProyectoClientesScreen } from "@/lib/cache/screens/proyectos";
-
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolvePortalCapabilities, type PortalCapabilities } from "@/lib/auth/permissions";
 import { getAppOrigin } from "@/lib/auth/safe-return-to";
@@ -24,7 +22,8 @@ import type {
  * and the access and activity lists. Errors are codes; the frontend maps them
  * to Spanish copy. Invite, resend and revoke need `portal.manageAccess`;
  * disable and enable need `portal.disableUsers`. Every mutation writes a
- * `portal_audit_events` row.
+ * `portal_audit_events` row. No revalidation: the Clientes tab invalidates its
+ * query keys (Query Migration 5d, #962).
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -77,10 +76,6 @@ async function sendInvite(to: string, staffName: string, projectName: string): P
   return result.sent;
 }
 
-function revalidateClientes(): void {
-  revalidateProyectoClientesScreen();
-}
-
 export async function invitePortalClientAction(input: InvitePortalClientInput): Promise<InvitePortalClientResult> {
   const actor = await requireManageAccess();
   if (!actor) return { ok: false, error: "forbidden" };
@@ -115,7 +110,6 @@ export async function invitePortalClientAction(input: InvitePortalClientInput): 
   if (outcome.status === "disabled") return { ok: false, error: "disabled" };
   if (outcome.status === "already_active") return { ok: false, error: "already_active" };
 
-  revalidateClientes();
   // A failed send doesn't roll back the invite: the UI offers "Reenviar invitación".
   const emailSent = await sendInvite(email, actor.user.member.name, project.name);
   return { ok: true, emailSent };
@@ -147,7 +141,6 @@ export async function revokePortalAccessAction(accessId: string): Promise<Portal
   const revoked = await portalRepository.revokeAccess(accessId, actor.user.member.id);
   if (!revoked) return { ok: false, error: "not_found" };
 
-  revalidateClientes();
   return { ok: true };
 }
 
@@ -160,7 +153,6 @@ export async function disablePortalUserAction(portalUserId: string): Promise<Por
   if (!(await portalRepository.disablePortalUser(portalUserId, actor.user.member.id))) {
     return { ok: false, error: "not_found" };
   }
-  revalidateClientes();
   return { ok: true };
 }
 
@@ -173,7 +165,6 @@ export async function enablePortalUserAction(portalUserId: string): Promise<Port
   if (!(await portalRepository.enablePortalUser(portalUserId, actor.user.member.id))) {
     return { ok: false, error: "not_found" };
   }
-  revalidateClientes();
   return { ok: true };
 }
 

@@ -1,13 +1,17 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download, Eye, FileIcon, FileImage, FileText, Folder, Loader2 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/shadcn/breadcrumb";
 import { Button } from "@/components/ui/shadcn/button";
-import type { PortalFileDTO, PortalFolderDTO } from "@/lib/types/portal";
+import { isPortalSignedOut, PORTAL_SIGN_IN_FALLBACK, portalFilesOptions } from "@/lib/query/options/portal";
+import type { PortalFileDTO } from "@/lib/types/portal";
+
+export { portalFilesUrl } from "@/lib/query/options/portal";
 
 export const PORTAL_FILES_PENDING = "Los archivos estarán disponibles pronto.";
 export const PORTAL_FILES_EMPTY = "Esta carpeta está vacía.";
@@ -39,33 +43,23 @@ export function formatModified(iso: string): string {
   return Number.isNaN(date.getTime()) ? "—" : MODIFIED_FORMAT.format(date);
 }
 
-export function portalFilesUrl(projectId: string, folderId: string | null): string {
-  const base = `/api/portal/projects/${encodeURIComponent(projectId)}/files`;
-  return folderId ? `${base}?folder=${encodeURIComponent(folderId)}` : base;
-}
-
 export function portalFileUrl(projectId: string, fileId: string, kind: "download" | "preview"): string {
   return `/api/portal/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileId)}/${kind}`;
 }
 
-type ListState =
-  | { status: "loading" }
-  | { status: "pending" }
-  | { status: "not_found" }
-  | { status: "error" }
-  | { status: "ok"; folder: PortalFolderDTO };
-
 type Props = {
   projectId: string;
-  /** `?folder=` the page was opened with; null is the project's client folder. */
-  initialFolderId?: string | null;
+  /** The open folder (`?folder=`); null is the project's client folder. */
+  folderId: string | null;
+  /** Opens a folder (the page keeps it in the URL). */
+  onOpenFolder: (folderId: string) => void;
 };
 
 /** Every portal call answers 401 `{ redirect }` without a session (FE §7.2); follow it. */
 async function followPortalRedirect(res: Response): Promise<boolean> {
   if (res.status !== 401) return false;
   const body = (await res.json().catch(() => null)) as { redirect?: unknown } | null;
-  const target = typeof body?.redirect === "string" && body.redirect.startsWith("/") ? body.redirect : "/portal/login";
+  const target = typeof body?.redirect === "string" && body.redirect.startsWith("/") ? body.redirect : PORTAL_SIGN_IN_FALLBACK;
   window.location.assign(target);
   return true;
 }
@@ -78,48 +72,27 @@ function fileIcon(file: PortalFileDTO) {
 }
 
 /**
- * Archivos tab (FE §3.3): breadcrumbs plus the contents of the project's client folder.
- * Folders navigate in place; the list is fetched on each folder change and the previous request aborted (FE §8).
+ * Archivos tab (FE §3.3): breadcrumbs plus the contents of the project's client folder, from
+ * `portal.files(id, folder)`. Folders navigate in place; a folder change cancels the previous request (FE §8)
+ * and keeps the last breadcrumbs while the next folder loads, so the client can switch again mid-request.
  */
-export default function PortalFileBrowser({ projectId, initialFolderId = null }: Props) {
-  const [folderId, setFolderId] = useState<string | null>(initialFolderId);
-  const [state, setState] = useState<ListState>({ status: "loading" });
-  const [reloadKey, setReloadKey] = useState(0);
-  /** Last loaded breadcrumbs, kept while the next folder loads so the client can switch again mid-request. */
-  const [breadcrumbs, setBreadcrumbs] = useState<PortalFolderDTO["breadcrumbs"]>([]);
+export default function PortalFileBrowser({ projectId, folderId, onOpenFolder }: Props) {
+  const query = useQuery({ ...portalFilesOptions(projectId, folderId), placeholderData: keepPreviousData });
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [fileError, setFileError] = useState<{ fileId: string; message: string } | null>(null);
 
+  const signedOut = isPortalSignedOut(query.error) ? query.error.redirect : null;
   useEffect(() => {
-    const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setState({ status: "loading" });
-    setFileError(null);
-    (async () => {
-      try {
-        const res = await fetch(portalFilesUrl(projectId, folderId), {
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-        });
-        if (controller.signal.aborted) return;
-        if (await followPortalRedirect(res)) return;
-        if (res.status === 404) return setState({ status: "not_found" });
-        if (!res.ok) return setState({ status: "error" });
-        const body = (await res.json()) as PortalFolderDTO | { pending: true };
-        if (controller.signal.aborted) return;
-        if ("pending" in body && body.pending) return setState({ status: "pending" });
-        const folder = body as PortalFolderDTO;
-        setBreadcrumbs(folder.breadcrumbs);
-        setState({ status: "ok", folder });
-      } catch (error) {
-        if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
-        setState({ status: "error" });
-      }
-    })();
-    return () => controller.abort();
-  }, [projectId, folderId, reloadKey]);
+    if (signedOut) window.location.assign(signedOut);
+  }, [signedOut]);
 
-  const openFolder = useCallback((id: string) => setFolderId(id), []);
+  const openFolder = useCallback(
+    (id: string) => {
+      setFileError(null);
+      onOpenFolder(id);
+    },
+    [onOpenFolder]
+  );
 
   /**
    * Google-native files are exported to PDF on download and can answer 422 `export_too_large`, so they are
@@ -157,9 +130,13 @@ export default function PortalFileBrowser({ projectId, initialFolderId = null }:
     [projectId]
   );
 
-  if (state.status === "pending") {
+  const data = query.data;
+  const loading = query.isPending || query.isPlaceholderData || signedOut !== null;
+  if (!loading && data?.status === "pending") {
     return <p className="py-6 text-sm text-muted-foreground">{PORTAL_FILES_PENDING}</p>;
   }
+  /** Last loaded breadcrumbs (the placeholder's while the next folder loads). */
+  const breadcrumbs = data?.status === "ok" ? data.folder.breadcrumbs : [];
 
   return (
     <section aria-label="Archivos" className="flex min-w-0 flex-col gap-4">
@@ -188,29 +165,29 @@ export default function PortalFileBrowser({ projectId, initialFolderId = null }:
         </Breadcrumb>
       ) : null}
 
-      {state.status === "loading" ? (
+      {loading ? (
         <p role="status" className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
           <Loader2 aria-hidden="true" className="size-4 animate-spin" />
           Cargando archivos…
         </p>
-      ) : state.status === "not_found" ? (
-        <Alert>
-          <AlertDescription>{PORTAL_FILES_NOT_FOUND}</AlertDescription>
-        </Alert>
-      ) : state.status === "error" ? (
+      ) : query.isError ? (
         <Alert variant="destructive">
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             {PORTAL_FILES_ERROR}
-            <Button variant="outline" size="sm" className="min-h-11" onClick={() => setReloadKey((k) => k + 1)}>
+            <Button variant="outline" size="sm" className="min-h-11" onClick={() => void query.refetch()}>
               Reintentar
             </Button>
           </AlertDescription>
         </Alert>
-      ) : state.folder.items.length === 0 ? (
+      ) : data?.status !== "ok" ? (
+        <Alert>
+          <AlertDescription>{PORTAL_FILES_NOT_FOUND}</AlertDescription>
+        </Alert>
+      ) : data.folder.items.length === 0 ? (
         <p className="py-6 text-sm text-muted-foreground">{PORTAL_FILES_EMPTY}</p>
       ) : (
         <ul className="flex flex-col divide-y rounded-lg border">
-          {state.folder.items.map((item) => {
+          {data.folder.items.map((item) => {
             const Icon = fileIcon(item);
             const meta = [formatModified(item.modifiedAt), item.kind === "file" ? formatFileSize(item.sizeBytes) : null]
               .filter(Boolean)

@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 
 import { FiltersBar, type FiltersBarProps } from "@/components/patterns/FiltersBar";
@@ -10,41 +10,34 @@ import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState"
 import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader, type PageHeaderProps } from "@/components/shell/PageHeader";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
-import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { tareasFacetsOptions } from "@/lib/query/options/tareas";
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
+import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
+import type { TareasFacets, TareasStaffOption } from "@/lib/tareas/page-data";
 import {
   clearTareasFilters,
   hasTareasFilters,
-  tareasCalendarRange,
   tareasHref,
   type TareasQuery,
   type TareasVista,
 } from "@/lib/tareas/query";
 import { tramoColorVar } from "@/lib/tramos/compat";
-import type { TaskFilters, TaskListItem, TaskStatus, TaskStatusOption, WorkflowRef } from "@/lib/types/core";
-import type { CalendarData, StaffOption, TaskBoard } from "@/lib/types/redesign";
+import type { WorkflowRef } from "@/lib/types/core";
 
-import { NewTaskDialog } from "./NewTaskDialog";
 import { CALENDARIO_DESCRIPTION, TareasCalendario } from "./TareasCalendario";
 import { TareasFilterCombobox, type TareasFilterOption } from "./TareasFilterCombobox";
 import { TareasLista } from "./TareasLista";
 import { TABLERO_DESCRIPTION, TareasTablero } from "./TareasTablero";
 import { TaskSheetRoute } from "./TaskSheet";
-import { useNewTaskParam } from "./use-new-task-param";
-
-export type TareasClientProps = {
-  query: TareasQuery;
-  /**
-   * `tasks`: the tasks matching every filter except tramo and proyecto (they
-   * feed the tramo chip counts and the Proyecto options; the views get them
-   * narrowed by tramo and proyecto). `board` (Tablero) and `calendar`
-   * (Calendario) come with every filter applied. `statuses` (Tablero): every
-   * configured custom status, so its column shows even when empty.
-   */
-  initial: { tasks?: TaskListItem[]; board?: TaskBoard; calendar?: CalendarData; statuses?: TaskStatusOption[] };
-  staff: StaffOption[];
-  tramos: WorkflowRef[];
-};
+import {
+  pushTareasUrl,
+  replaceTareasUrl,
+  useTareasFilters,
+  useTareasPage,
+  useTareasPageReady,
+  useTareasQuery,
+} from "./use-tareas-page";
 
 /** Header description per view (FE §3.4). */
 export const TAREAS_DESCRIPTIONS: Record<TareasVista, string> = {
@@ -72,28 +65,27 @@ const RESPONSABLE_YO = "yo";
 const RESPONSABLE_TODOS = "todos";
 const PROYECTO_TODOS = "todos";
 
-function staffName(s: Pick<StaffOption, "name" | "lastName">): string {
-  return [s.name, s.lastName].filter(Boolean).join(" ").trim();
-}
+const NO_TRAMOS: WorkflowRef[] = [];
+const NO_STAFF: TareasStaffOption[] = [];
+const NO_FACETS: TareasFacets = { total: 0, byTramo: {}, projects: [] };
 
-function boardOf(tasks: TaskListItem[]): TaskBoard {
-  const board: TaskBoard = { pendiente: [], en_proceso: [], completado: [], bloqueado: [] };
-  for (const task of tasks) board[task.status].push(task);
-  return board;
-}
-
-/** Segmented view switch: links that keep every other filter (FE §3.4). */
+/** Segmented view switch: links that keep every other filter (FE §3.4), followed without a server render. */
 function ViewSwitch({ query }: { query: TareasQuery }) {
   return (
     <nav aria-label="Vista" className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
       {VISTAS.map((vista) => {
         const active = vista === query.vista;
+        const href = tareasHref({ ...query, nueva: false, vista });
         return (
           <Link
             key={vista}
-            href={tareasHref({ ...query, nueva: false, vista })}
+            href={href}
             aria-current={active ? "page" : undefined}
             scroll={false}
+            onNavigate={(e) => {
+              e.preventDefault();
+              if (!active) pushTareasUrl(href);
+            }}
             className={buttonVariants({ variant: active ? "outline" : "ghost", size: "sm" })}
           >
             {VISTA_LABELS[vista]}
@@ -105,29 +97,33 @@ function ViewSwitch({ query }: { query: TareasQuery }) {
 }
 
 /**
- * /tareas client (redesign FE §3.4, §4.5; evolves `MisTareasClient` /
- * `ActividadesClient`): header with the view switch and "Nueva tarea",
- * URL-synced filters (tramo chips, "Responsable: Yo", Proyecto, search) and
- * the selected view: Tablero (`TareasTablero`), Lista (`TareasLista`) or
- * Calendario (`TareasCalendario`). Filters write the URL with
- * `router.replace` (no scroll); the page re-renders with the new query, so
- * back / forward restore them.
+ * /tareas client (redesign FE §3.4, §4.5; Query Migration 4a): header with
+ * the view switch and "Nueva tarea", URL-synced filters (tramo chips,
+ * "Responsable: Yo", Proyecto, search) and the selected view: Tablero
+ * (`TareasTablero`), Lista (`TareasLista`) or Calendario
+ * (`TareasCalendario`). It takes no data: the query comes from the URL, the
+ * chip counts and options from `tareas.facets(f)` and `tareas.page(q)`, and
+ * each view reads its own query. Filters write the URL with
+ * `history.replaceState` (no server render); the key change refetches.
  */
-export function TareasClient({ query, initial, staff, tramos }: TareasClientProps) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
-  const newTask = useNewTaskParam();
-  const authenticatedUser = useSessionStore(selectCurrentUser);
+export function TareasClient() {
+  const query = useTareasQuery();
+  const filtersKey = useTareasFilters(query);
+  const page = useTareasPage(query);
+  const ready = useTareasPageReady(query);
+  const facetsQuery = useQuery({ ...tareasFacetsOptions(filtersKey), enabled: ready });
+  const facets = facetsQuery.data ?? page.data?.facets ?? NO_FACETS;
+  const tramos = page.data?.tramos ?? NO_TRAMOS;
+  const staff = page.data?.staff ?? NO_STAFF;
+
+  const openNewTask = useNewTaskUi((s) => s.openNewTask);
+  const authenticatedUser = useSessionStore(selectAuthenticatedUser);
   const capabilities = useMemo(() => resolveActivitiesCapabilities(authenticatedUser), [authenticatedUser]);
   const viewerId = authenticatedUser?.member.id ?? null;
 
   const replaceQuery = useCallback(
-    (patch: Partial<TareasQuery>) => {
-      startTransition(() => {
-        router.replace(tareasHref({ ...query, nueva: false, ...patch }), { scroll: false });
-      });
-    },
-    [router, query],
+    (patch: Partial<TareasQuery>) => replaceTareasUrl(tareasHref({ ...query, nueva: false, ...patch })),
+    [query],
   );
 
   // ── Search: local text, written to `q` after a pause. A URL change from
@@ -153,38 +149,23 @@ export function TareasClient({ query, initial, staff, tramos }: TareasClientProp
     return () => window.clearTimeout(id);
   }, [search, sentSearch, replaceQuery]);
 
-  // ── Facets: the tasks without the tramo / proyecto filters give the counts and options.
-  const tasks = useMemo(() => initial.tasks ?? [], [initial.tasks]);
-  const inTramo = useCallback(
-    (t: TaskListItem) => query.tramo === null || t.workflow?.key === query.tramo,
-    [query.tramo],
-  );
-  const inProject = useCallback(
-    (t: TaskListItem) => query.proyecto === null || t.project.id === query.proyecto,
-    [query.proyecto],
-  );
-  const viewTasks = useMemo(() => tasks.filter((t) => inTramo(t) && inProject(t)), [tasks, inTramo, inProject]);
-
+  // ── Facets: counted on the server without the tramo / proyecto filters.
   const chips = useMemo<NonNullable<FiltersBarProps["chips"]>>(() => {
-    const inScope = tasks.filter(inProject);
+    const chip = (tramo: string | null) => {
+      const href = tareasHref({ ...query, nueva: false, tramo });
+      return { href, pressed: query.tramo === tramo, onSelect: () => replaceTareasUrl(href) };
+    };
     return [
-      {
-        key: "todas",
-        label: "Todas",
-        count: inScope.length,
-        pressed: query.tramo === null,
-        href: tareasHref({ ...query, nueva: false, tramo: null }),
-      },
+      { key: "todas", label: "Todas", count: facets.total, ...chip(null) },
       ...tramos.map((tramo) => ({
         key: tramo.key,
         label: tramo.name,
-        count: inScope.filter((t) => t.workflow?.key === tramo.key).length,
+        count: facets.byTramo[tramo.key] ?? 0,
         colorVar: tramoColorVar(tramo.key),
-        pressed: query.tramo === tramo.key,
-        href: tareasHref({ ...query, nueva: false, tramo: tramo.key }),
+        ...chip(tramo.key),
       })),
     ];
-  }, [tasks, tramos, query, inProject]);
+  }, [facets, tramos, query]);
 
   const responsableOptions = useMemo<TareasFilterOption[]>(
     () => [
@@ -192,26 +173,21 @@ export function TareasClient({ query, initial, staff, tramos }: TareasClientProp
       { value: RESPONSABLE_TODOS, label: "Todos" },
       ...staff
         .filter((s) => s.id !== viewerId)
-        .map((s) => ({ value: s.id, label: staffName(s) }))
+        .map((s) => ({ value: s.id, label: s.name }))
         .sort((a, b) => a.label.localeCompare(b.label, "es")),
     ],
     [staff, viewerId],
   );
 
-  const projectOptions = useMemo<TareasFilterOption[]>(() => {
-    const projects = new Map<string, string>();
-    for (const task of tasks) if (inTramo(task)) projects.set(task.project.id, task.project.name);
-    if (query.proyecto && !projects.has(query.proyecto)) {
-      const name = tasks.find((t) => t.project.id === query.proyecto)?.project.name;
-      if (name) projects.set(query.proyecto, name);
-    }
-    return [
+  const projectOptions = useMemo<TareasFilterOption[]>(
+    () => [
       { value: PROYECTO_TODOS, label: "Todos los proyectos" },
-      ...[...projects.entries()]
-        .map(([value, label]) => ({ value, label }))
+      ...facets.projects
+        .map((p) => ({ value: p.id, label: p.name }))
         .sort((a, b) => a.label.localeCompare(b.label, "es")),
-    ];
-  }, [tasks, inTramo, query.proyecto]);
+    ],
+    [facets.projects],
+  );
 
   const filters = (
     <FiltersBar
@@ -245,7 +221,11 @@ export function TareasClient({ query, initial, staff, tramos }: TareasClientProp
     <>
       <ViewSwitch query={query} />
       {canCreate ? (
-        <Button onClick={() => newTask.setOpen(true)}>
+        <Button
+          onClick={() =>
+            openNewTask({ projectId: query.proyecto ?? undefined, tramoKey: query.tramo ?? undefined }, "tareas")
+          }
+        >
           <Plus aria-hidden="true" data-icon="inline-start" />
           Nueva tarea
         </Button>
@@ -265,38 +245,18 @@ export function TareasClient({ query, initial, staff, tramos }: TareasClientProp
   // ── The selected view.
   let view: ReactNode;
   if (query.vista === "tablero") {
-    view = (
-      <TareasTablero
-        board={initial.board ?? boardOf(viewTasks)}
-        customStatuses={initial.statuses}
-        header={header}
-        filters={filters}
-        empty={empty}
-      />
-    );
+    view = <TareasTablero query={query} header={header} filters={filters} empty={empty} />;
   } else if (query.vista === "lista") {
-    view = (
-      <TareasLista
-        tasks={viewTasks}
-        header={header}
-        filters={filters}
-        empty={empty}
-        tramo={query.tramo}
-        proyecto={query.proyecto}
-        tramos={tramos}
-      />
-    );
+    view = <TareasLista query={query} header={header} filters={filters} empty={empty} />;
   } else {
-    const calendar = initial.calendar ?? [];
+    // The facets count every filter but tramo: the selected tramo's count is the view's.
+    const viewCount = query.tramo ? (facets.byTramo[query.tramo] ?? 0) : facets.total;
     view = (
       <TareasCalendarioView
-        query={query}
         header={header}
         filters={filters}
-        empty={filtered && viewTasks.length === 0 && calendar.length === 0 ? empty : null}
-        calendar={calendar}
+        empty={filtered && ready && viewCount === 0 ? empty : null}
         tramos={tramos}
-        viewerId={viewerId}
       />
     );
   }
@@ -306,58 +266,27 @@ export function TareasClient({ query, initial, staff, tramos }: TareasClientProp
       {view}
       {/* `?tarea=<id>` opens the task sheet over the view, which stays mounted. */}
       <TaskSheetRoute />
-      {canCreate ? (
-        <NewTaskDialog
-          open={newTask.open}
-          onOpenChange={newTask.setOpen}
-          defaults={{ projectId: query.proyecto ?? undefined, tramoKey: query.tramo ?? undefined }}
-        />
-      ) : null}
     </>
   );
-}
-
-/** The filters the RSC loaded the calendar with, for the ranges the view fetches itself. */
-export function calendarTaskFilters(query: TareasQuery, tramos: WorkflowRef[], viewerId: string | null): TaskFilters {
-  const filters: TaskFilters = {};
-  if (query.q) filters.search = query.q;
-  if (query.estado) filters.status = query.estado as TaskStatus;
-  if (query.responsable === "yo") {
-    if (viewerId) filters.involvesStaffId = viewerId;
-  } else if (query.responsable) {
-    filters.involvesStaffId = query.responsable;
-  }
-  const tramo = query.tramo ? tramos.find((t) => t.key === query.tramo) : null;
-  if (tramo) filters.workflowId = tramo.id;
-  if (query.proyecto) filters.projectId = query.proyecto;
-  return filters;
 }
 
 /**
  * Calendario has no `ListPage` spec: the shell renders the header (with the
  * `EstiloSwitch` that `ListPage` renders for the other views) and the filters
- * above `TareasCalendario`.
+ * above `TareasCalendario`, which reads its mode, date and filters from the
+ * URL and its rows from `tareas.calendar`.
  */
 function TareasCalendarioView({
-  query,
   header,
   filters,
   empty,
-  calendar,
   tramos,
-  viewerId,
 }: {
-  query: TareasQuery;
   header: PageHeaderProps;
   filters: ReactNode;
   empty: EmptyStateProps | null;
-  calendar: CalendarData;
   tramos: WorkflowRef[];
-  viewerId: string | null;
 }) {
-  const initialRange = useMemo(() => tareasCalendarRange(query.cal, new Date()), [query.cal]);
-  const taskFilters = useMemo(() => calendarTaskFilters(query, tramos, viewerId), [query, tramos, viewerId]);
-
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -373,13 +302,7 @@ function TareasCalendarioView({
       {empty ? (
         <EmptyState {...empty} />
       ) : (
-        <TareasCalendario
-          cal={query.cal}
-          tasks={calendar}
-          initialRange={initialRange}
-          tramos={tramos}
-          filters={taskFilters}
-        />
+        <TareasCalendario tramos={tramos} />
       )}
     </div>
   );

@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/proyectos/p1/tareas",
   useSearchParams: () => new URLSearchParams(),
 }));
-vi.mock("@/components/tareas/NewTaskDialog", () => ({ NewTaskDialog: () => null }));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectoTareasData: vi.fn() }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { THEME_IDS } from "@/lib/ui/themes";

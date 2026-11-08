@@ -13,7 +13,11 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/repositories/task-statuses-repository", () => repo);
 
-import { createTaskStatusAction, updateTaskStatusAction } from "./task-statuses-actions";
+import { unwrapActions } from "@/tests/helpers/action-result";
+
+import * as taskStatusesActionsModule from "./task-statuses-actions";
+
+const { createTaskStatusAction, updateTaskStatusAction } = unwrapActions(taskStatusesActionsModule);
 
 const ADMIN = { member: { role: "Administrador" }, access: "Administrador" };
 const COLLABORATOR = { member: { role: "Arquitecto" }, access: "Colaborador" };

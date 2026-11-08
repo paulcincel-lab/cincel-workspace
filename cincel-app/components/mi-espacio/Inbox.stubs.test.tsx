@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import type { MouseEvent, ReactNode } from "react";
 
 import type { EmptyStateProps } from "@/components/shell/EmptyState";
@@ -15,13 +15,15 @@ const mocks = vi.hoisted(() => ({
   linkThread: vi.fn(),
   createTask: vi.fn(),
   fetchThreads: vi.fn(),
+  fetchStatus: vi.fn(),
   fetchProjects: vi.fn(),
+  fetchProjectOptions: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
   usePathname: () => "/mi-espacio",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams("bandeja=gmail"),
 }));
 vi.mock("next/link", () => ({
   default: (props: { href: string; children?: ReactNode; onClick?: (e: MouseEvent<HTMLAnchorElement>) => void } & Record<string, unknown>) => {
@@ -47,11 +49,29 @@ vi.mock("@/lib/actions/notifications-actions", () => ({
   markNotificationsReadAction: mocks.markRead,
 }));
 vi.mock("@/lib/actions/gmail-actions", () => ({
+  fetchGmailStatusAction: mocks.fetchStatus,
   fetchGmailThreadsAction: mocks.fetchThreads,
+  fetchGmailThreadAction: vi.fn(),
+  markGmailThreadReadAction: vi.fn(),
   linkGmailThreadToProjectAction: mocks.linkThread,
   createTaskFromGmailThreadAction: mocks.createTask,
 }));
 vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectsAction: mocks.fetchProjects }));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogProjectOptions: mocks.fetchProjectOptions,
+  fetchCatalogWorkflows: vi.fn(),
+  fetchCatalogTaskStatuses: vi.fn(),
+  fetchCatalogStaff: vi.fn(),
+  fetchCatalogAssignableStaff: vi.fn(),
+  fetchCatalogProjectSpaces: vi.fn(),
+  fetchCatalogContacts: vi.fn(),
+}));
+vi.mock("@/lib/actions/my-space-actions", () => ({ fetchRemindersAction: vi.fn() }));
+vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
+  getMiEspacioPageData: vi.fn(),
+  fetchMiEspacioNotesPage: vi.fn(),
+  fetchMiEspacioChecklistsPage: vi.fn(),
+}));
 vi.mock("@/lib/actions/notifications-actions.flags", () => ({
   IMPLEMENTED: new Proxy({} as Record<string, boolean>, { get: () => false }),
 }));
@@ -86,6 +106,8 @@ vi.mock("@/components/widgets/RecordTable", () => ({
 }));
 
 import { Inbox, INBOX_POLL_MS } from "@/components/mi-espacio/Inbox";
+import { seedMiEspacio } from "@/lib/query/options/mi-espacio";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 
 const ITEM: NotificationItem = {
   id: "n1",
@@ -118,13 +140,17 @@ afterEach(() => {
 describe("Inbox while the actions are stubs", () => {
   it("hides the Gmail tab, chip, footer and row actions, and never polls or marks read", async () => {
     vi.useFakeTimers();
-    render(
-      <Inbox
-        tab="gmail"
-        notifications={{ items: [ITEM], nextCursor: "c1", unreadCount: 1 }}
-        gmail={{ status: { connected: true, scopeOk: true, lastSyncedAt: null, lastError: null }, threads: [THREAD], nextCursor: null }}
-      />,
-    );
+    const client = createTestQueryClient();
+    seedMiEspacio(client, {
+      notifications: { items: [ITEM], nextCursor: "c1", unreadCount: 1 },
+      gmail: { status: { connected: true, scopeOk: true, lastSyncedAt: null, lastError: null }, threads: [THREAD], nextCursor: null },
+      reminders: [],
+      checklists: [],
+      checklistsCursor: null,
+      notes: [],
+      notesCursor: null,
+    });
+    renderWithQueryClient(<Inbox />, { client });
 
     expect(screen.queryByText("Gmail")).toBeNull();
     expect(screen.queryByText(/Gmail conectado|Conectar Gmail|Ajustes de Gmail/)).toBeNull();
@@ -140,6 +166,9 @@ describe("Inbox while the actions are stubs", () => {
       await vi.advanceTimersByTimeAsync(INBOX_POLL_MS * 2);
     });
     expect(mocks.fetchNotifications).not.toHaveBeenCalled();
+    expect(mocks.fetchStatus).not.toHaveBeenCalled();
+    expect(mocks.fetchThreads).not.toHaveBeenCalled();
     expect(mocks.fetchProjects).not.toHaveBeenCalled();
+    expect(mocks.fetchProjectOptions).not.toHaveBeenCalled();
   });
 });

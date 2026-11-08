@@ -7,7 +7,7 @@
  * (`needsApproval`, plus the dynamic rule after untrusted content, BE §10.1)
  * lives here too.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { ModelMessage, ToolApprovalStatus, ToolSet } from "ai";
 
 import { turnHasUntrustedResult } from "@/lib/assistant/threads";
@@ -53,6 +53,64 @@ export async function recordActionDecision(
     )
     .returning({ id: assistantActions.id });
   return rows.length > 0;
+}
+
+/**
+ * `recordProposedAction` for several tool calls of one turn in one insert.
+ * Returns the tool call ids whose `proposed` row was created now (repeats are
+ * no-ops and left out).
+ */
+export async function recordProposedActions(
+  db: OwnerDb,
+  rows: readonly { threadId: string; staffId: string; toolCallId: string; tool: string; input: unknown; summary: string }[],
+): Promise<Set<string>> {
+  if (rows.length === 0) return new Set();
+  const inserted = await db
+    .insert(assistantActions)
+    .values(
+      rows.map((row) => ({
+        threadId: row.threadId,
+        staffId: row.staffId,
+        toolCallId: row.toolCallId,
+        tool: row.tool,
+        input: (row.input ?? {}) as object,
+        summary: row.summary,
+        status: "proposed" as const,
+      })),
+    )
+    .onConflictDoNothing({ target: [assistantActions.threadId, assistantActions.toolCallId] })
+    .returning({ toolCallId: assistantActions.toolCallId });
+  return new Set(inserted.map((row) => row.toolCallId));
+}
+
+/**
+ * `recordActionDecision` for several tool calls of one thread: one update per
+ * outcome (confirmed, cancelled). Only `proposed` rows change; returns the
+ * tool call ids that did.
+ */
+export async function recordActionDecisions(
+  db: OwnerDb,
+  input: { threadId: string; decisions: readonly { toolCallId: string; approved: boolean }[] },
+): Promise<Set<string>> {
+  const changed = new Set<string>();
+  const decidedAt = new Date();
+  for (const approved of [true, false]) {
+    const ids = input.decisions.filter((d) => d.approved === approved).map((d) => d.toolCallId);
+    if (ids.length === 0) continue;
+    const rows = await db
+      .update(assistantActions)
+      .set({ status: approved ? "confirmed" : "cancelled", decidedAt })
+      .where(
+        and(
+          eq(assistantActions.threadId, input.threadId),
+          inArray(assistantActions.toolCallId, ids),
+          eq(assistantActions.status, "proposed"),
+        ),
+      )
+      .returning({ toolCallId: assistantActions.toolCallId });
+    for (const row of rows) changed.add(row.toolCallId);
+  }
+  return changed;
 }
 
 /** `confirmed` → `done` (with the result) or `failed` (with the error). Other statuses: no-op (false). */

@@ -53,6 +53,18 @@ describe("proyectoShellOptions", () => {
 });
 
 describe("withCachedArchivosCount", () => {
+  it("reads the Archivos query's wrapped root listing (5d)", () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.proyectos.archivos(ID, null), {
+      kind: "ok",
+      canRetry: false,
+      result: { status: "ok", folderId: "root", breadcrumbs: [], items: [{}, {}] },
+    });
+    expect(withCachedArchivosCount(client, shell)?.counts.archivos).toBe(2);
+    client.setQueryData(qk.proyectos.archivos(ID, null), { kind: "drive_error" });
+    expect(withCachedArchivosCount(client, shell)).toBe(shell);
+  });
+
   it("leaves null and uncached or non-ok listings as they are", () => {
     const client = createTestQueryClient();
     expect(withCachedArchivosCount(client, null)).toBeNull();

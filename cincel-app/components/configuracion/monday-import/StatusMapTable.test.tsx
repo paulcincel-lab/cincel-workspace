@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 import type { StatusMapLabel } from "@/lib/monday-import/status-map";
 import type { MondayImportChoices, MondayStatusMap } from "@/lib/types/monday-import";
@@ -53,7 +55,7 @@ const choices: Pick<MondayImportChoices, "statuses" | "statusMap"> = { statuses:
 function renderTable(overrides: Partial<Parameters<typeof StatusMapTable>[0]> = {}) {
   const onSaved = vi.fn();
   const onStatusCreated = vi.fn();
-  render(
+  renderWithQueryClient(
     <StatusMapTable labels={labels} choices={choices} onSaved={onSaved} onStatusCreated={onStatusCreated} {...overrides} />,
   );
   return { onSaved, onStatusCreated };
@@ -147,6 +149,7 @@ describe("StatusMapTable (FE §4.6 item 5)", () => {
     });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+      await vi.advanceTimersByTimeAsync(0);
     });
     expect(saveMondayStatusMapAction).toHaveBeenCalledTimes(2);
     expect(saveMondayStatusMapAction).toHaveBeenLastCalledWith({ raro: { target: { status: "bloqueado" }, priority: null } });
@@ -188,6 +191,8 @@ describe("StatusMapTable (FE §4.6 item 5)", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Cuenta como completada" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Crear estatus" }));
+      // The create mutation settles on microtasks; let them run under the fake timers.
+      await vi.advanceTimersByTimeAsync(0);
     });
 
     expect(createTaskStatusAction).toHaveBeenCalledWith({ name: "Raro", closes: true, countsAsCompleted: true });
@@ -207,6 +212,8 @@ describe("StatusMapTable (FE §4.6 item 5)", () => {
     });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Crear estatus" }));
+      // The create mutation settles on microtasks; let them run under the fake timers.
+      await vi.advanceTimersByTimeAsync(0);
     });
     expect(createTaskStatusAction).toHaveBeenCalledWith({ name: "Raro", closes: false, countsAsCompleted: false });
   });

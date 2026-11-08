@@ -13,6 +13,8 @@ import { Textarea } from "@/components/ui/shadcn/textarea";
 import { createGmailDraftAction, sendGmailDraftAction } from "@/lib/actions/gmail-actions";
 import { IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
 import type { GmailDraft } from "@/lib/types/redesign";
 
 import { parseRecipients, recipientsLabel } from "./gmail-format";
@@ -33,7 +35,9 @@ const TOKEN_CODES = new Set(["EXPIRED", "CONFIRM_REQUIRED"]);
  * `createGmailDraftAction` with the current `draftId`, so Gmail keeps one
  * draft. "Enviar" never sends: it saves the latest text and opens the
  * `FormDialog` "¿Enviar este correo a {destinatarios}?", whose confirm button
- * is the only caller of `sendGmailDraftAction(draftId, confirmToken)`.
+ * is the only caller of `sendGmailDraftAction(draftId, confirmToken)`. A sent
+ * reply refreshes the thread and the Bandeja list (`me.gmail.*`); saving a
+ * draft changes no cached data.
  */
 export function GmailDraftSheet({ open, replyToThreadId, to, subject, onOpenChange }: GmailDraftSheetProps) {
   const fieldId = useId();
@@ -71,11 +75,26 @@ export function GmailDraftSheet({ open, replyToThreadId, to, subject, onOpenChan
 
   const canSend = IMPLEMENTED.sendGmailDraftAction;
 
+  // Errors stay in the sheet / dialog (the handlers below), never as a toast.
+  const draftMutation = useActionMutation<Parameters<typeof createGmailDraftAction>[0], GmailDraft>(
+    createGmailDraftAction,
+    { onFormError: () => undefined },
+  );
+  const sendMutation = useActionMutation<{ draftId: string; confirmToken: string }, { messageId: string }>(
+    ({ draftId, confirmToken }) => sendGmailDraftAction(draftId, confirmToken),
+    {
+      invalidate: replyToThreadId
+        ? [qk.me.gmail.thread(replyToThreadId), qk.me.gmail.threads()]
+        : [qk.me.gmail.threads()],
+      onFormError: () => undefined,
+    },
+  );
+
   async function saveDraft(): Promise<GmailDraft> {
     const recipients = parseRecipients(toText);
     if (recipients.length === 0) throw new Error("INVALID: to");
     const draftId = draftIdRef.current?.opening === opening ? draftIdRef.current.id : undefined;
-    const saved = await createGmailDraftAction({
+    const saved: GmailDraft = await draftMutation.mutateAsync({
       to: recipients,
       subject: subjectText.trim(),
       body,
@@ -123,7 +142,7 @@ export function GmailDraftSheet({ open, replyToThreadId, to, subject, onOpenChan
     setConfirmPending(true);
     setConfirmError(null);
     try {
-      await sendGmailDraftAction(draft.draftId, draft.confirmToken);
+      await sendMutation.mutateAsync({ draftId: draft.draftId, confirmToken: draft.confirmToken });
       setConfirmOpen(false);
       draftIdRef.current = null;
       setDraft(null);

@@ -1,16 +1,21 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PortalInvitableContact } from "@/lib/repositories/portal-contacts-repository";
 
 const actions = vi.hoisted(() => ({ invitePortalClientAction: vi.fn() }));
 
 vi.mock("@/lib/actions/portal-actions", () => actions);
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
 
 import { INVITE_EMAIL_FAILED_MESSAGE, INVITE_SENT_MESSAGE, InvitePortalClientSheet } from "./InvitePortalClientSheet";
 
 const PROJECT_ID = "00000000-0000-4000-8000-000000000001";
+const OTHER_ID = "00000000-0000-4000-8000-000000000002";
 const cliente: PortalInvitableContact = {
   id: "00000000-0000-4000-8000-0000000000c1",
   name: "Familia Ruiz",
@@ -29,7 +34,17 @@ const socio: PortalInvitableContact = {
 const SOCIO_CHECKBOX = "Entiendo que es un socio, no el cliente";
 
 function renderSheet(onOpenChange = vi.fn(), onInvited = vi.fn()) {
-  render(
+  const client = createTestQueryClient();
+  for (const key of [
+    qk.proyectos.tab(PROJECT_ID, "clientes"),
+    qk.proyectos.clientesActivity(PROJECT_ID),
+    qk.proyectos.shell(PROJECT_ID),
+    qk.proyectos.tab(OTHER_ID, "clientes"),
+  ]) {
+    client.setQueryData(key, { seeded: true });
+  }
+  const spy = vi.spyOn(client, "invalidateQueries");
+  renderWithQueryClient(
     <InvitePortalClientSheet
       projectId={PROJECT_ID}
       contacts={[cliente, socio]}
@@ -37,8 +52,13 @@ function renderSheet(onOpenChange = vi.fn(), onInvited = vi.fn()) {
       onOpenChange={onOpenChange}
       onInvited={onInvited}
     />,
+    { client },
   );
-  return { onOpenChange, onInvited };
+  return { onOpenChange, onInvited, client, spy };
+}
+
+function invalidated(client: ReturnType<typeof createTestQueryClient>, key: readonly unknown[]): boolean {
+  return client.getQueryState(key)?.isInvalidated ?? false;
 }
 
 async function pickContact(name: string) {
@@ -61,7 +81,9 @@ beforeAll(() => {
 });
 
 describe("InvitePortalClientSheet", () => {
-  beforeEach(() => actions.invitePortalClientAction.mockReset());
+  beforeEach(() => {
+    actions.invitePortalClientAction.mockReset();
+  });
   afterEach(cleanup);
 
   it("prefills email and name from a cliente contact and invites without the socio checkbox", async () => {
@@ -139,5 +161,42 @@ describe("InvitePortalClientSheet", () => {
 
     expect(await screen.findByText(INVITE_EMAIL_FAILED_MESSAGE)).toBeTruthy();
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false), { timeout: 3000 });
+  });
+
+  it("invalidates the Clientes tab (with its activity) and the shell after an invite (5d)", async () => {
+    actions.invitePortalClientAction.mockResolvedValue({ ok: true, emailSent: true });
+    const { client, spy } = renderSheet();
+    await pickContact(cliente.name);
+    fireEvent.click(submitButton());
+
+    expect(await screen.findByText(INVITE_SENT_MESSAGE)).toBeTruthy();
+    await waitFor(() => expect(invalidated(client, qk.proyectos.tab(PROJECT_ID, "clientes"))).toBe(true));
+    expect(invalidated(client, qk.proyectos.shell(PROJECT_ID))).toBe(true);
+    expect(invalidated(client, qk.proyectos.clientesActivity(PROJECT_ID))).toBe(true);
+    expect(invalidated(client, qk.proyectos.tab(OTHER_ID, "clientes"))).toBe(false);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the form and invalidates nothing when the invite fails", async () => {
+    actions.invitePortalClientAction.mockResolvedValue({ ok: false, error: "already_active" });
+    const { client, spy, onInvited } = renderSheet();
+    await pickContact(cliente.name);
+    fireEvent.click(submitButton());
+
+    expect(await screen.findByText("Este cliente ya tiene acceso a este proyecto.")).toBeTruthy();
+    expect((screen.getByLabelText("Correo") as HTMLInputElement).value).toBe("ruiz@example.test");
+    expect(spy).not.toHaveBeenCalled();
+    expect(invalidated(client, qk.proyectos.tab(PROJECT_ID, "clientes"))).toBe(false);
+    expect(onInvited).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("shows the generic copy when the action throws", async () => {
+    actions.invitePortalClientAction.mockRejectedValue(new Error("boom"));
+    renderSheet();
+    await pickContact(cliente.name);
+    fireEvent.click(submitButton());
+
+    expect(await screen.findByText("No se pudo enviar la invitación.")).toBeTruthy();
   });
 });

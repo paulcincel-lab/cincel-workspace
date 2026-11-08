@@ -3,27 +3,35 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   usePathname: () => "/proyectos/p1/cronograma",
 }));
 
-
-const fetchScheduleAction = vi.fn();
+const getProyectoCronogramaData = vi.fn();
 const setTaskStatusAction = vi.fn();
 const toggleTaskFlagAction = vi.fn();
 
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
+  getProyectoCronogramaData: (...args: unknown[]) => getProyectoCronogramaData(...args),
+}));
+
 vi.mock("@/lib/actions/schedule-actions", () => ({
-  fetchScheduleAction: (...args: unknown[]) => fetchScheduleAction(...args),
   setTaskStatusAction: (...args: unknown[]) => setTaskStatusAction(...args),
   toggleTaskFlagAction: (...args: unknown[]) => toggleTaskFlagAction(...args),
+  addImprevistoAction: vi.fn(),
+  deleteImprevistoAction: vi.fn(),
+  previewImportScheduleAction: vi.fn(),
+  commitImportScheduleAction: vi.fn(),
+  importLegacyStateAction: vi.fn(),
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import md22Tasks from "@/lib/cronograma/__fixtures__/md22-schedule-tasks.json";
 import rawPagos from "@/scripts/data/md22-pagos-calendar.json";
 import rawAdicionales from "@/scripts/data/md22-adicionales.json";
@@ -47,15 +55,22 @@ const data: CronogramaData = {
   imprevistos: [],
   adicionales: rawAdicionales as Adicional[],
 };
-const initialView = { data, today: "2026-09-18" };
+const cachedView = { data, today: "2026-09-18" };
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
-function renderTab(style: PresentationStyle, ui: ReactNode = <CronogramaView projectId="p1" initialView={initialView} contractEnd="2026-10-15" />) {
-  return render(
+/** Renders over a cache that already holds the schedule, as after the page's prefetch. */
+function renderSeeded(ui: ReactNode) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.proyectos.cronograma("p1"), cachedView);
+  return renderWithQueryClient(<>{ui}</>, { client });
+}
+
+function renderTab(style: PresentationStyle, ui: ReactNode = <CronogramaView projectId="p1" contractEnd="2026-10-15" />) {
+  return renderSeeded(
     <StyleProvider style={style} scope="staff">
       {ui}
     </StyleProvider>,
@@ -93,11 +108,12 @@ describe("Proyecto · Cronograma tab", () => {
     expect(within(schedule as HTMLElement).getAllByText("Preliminares").length).toBeGreaterThan(0);
   });
 
-  it("never calls a write action on render", () => {
+  it("never calls an action on render (the schedule comes from the cache)", () => {
     for (const style of ["visual", "esencial", "analitico"] as const) {
       renderTab(style);
       cleanup();
     }
+    expect(getProyectoCronogramaData).not.toHaveBeenCalled();
     expect(setTaskStatusAction).not.toHaveBeenCalled();
     expect(toggleTaskFlagAction).not.toHaveBeenCalled();
   });
@@ -105,7 +121,7 @@ describe("Proyecto · Cronograma tab", () => {
 
 describe("Proyecto · Reporte (sheet)", () => {
   it("prints a token-styled sheet with a screen-only toolbar and no style switch", () => {
-    const { container } = render(<CronogramaReport data={data} asOf={new Date("2026-09-18T00:00:00")} />);
+    const { container } = renderSeeded(<CronogramaReport projectId="p1" asOf="2026-09-18" />);
     expect(screen.getByRole("heading", { level: 1, name: "Reporte de avance" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Imprimir" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Hoja del reporte" })).toBeTruthy();

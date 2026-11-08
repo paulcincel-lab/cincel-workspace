@@ -1,13 +1,16 @@
 "use server";
 
 import type { UIMessage } from "ai";
-import { revalidateAsistenteScreen } from "@/lib/cache/screens/asistente";
+
+import { toActionResult } from "@/lib/actions/action-result";
 
 import { LEGACY_IMPORT_SOURCE, normalizeLegacyMessages, titleFromMessages } from "@/lib/assistant/legacy-import";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
+import { loadAsistenteThreads } from "@/lib/loaders/asistente";
 import * as assistantRepository from "@/lib/repositories/assistant-repository";
 import type { AssistantActionRecord, AssistantContext, AssistantThreadSummary } from "@/lib/types/redesign";
+import type { ActionResult } from "@/lib/types/schedule";
 import { parseInput } from "@/lib/validation/project-flow";
 import { AssistantActionsQuerySchema, LegacyAssistantMessagesSchema, UuidSchema } from "@/lib/validation/redesign";
 
@@ -15,7 +18,9 @@ import { AssistantActionsQuerySchema, LegacyAssistantMessagesSchema, UuidSchema 
  * Server-side assistant threads and the approval audit (redesign BE §7.9,
  * §8.10). Owner-only: every query is scoped to the session staff id, so
  * another user's thread id reads as `NOT_FOUND`. None of these call the
- * model. The chat route `POST /api/asistente/chat` is separate.
+ * model. The chat route `POST /api/asistente/chat` is separate. Nothing here
+ * revalidates a path: the client updates `qk.asistente.*` (Query Migration
+ * Phase 10, #944).
  */
 
 const ASSISTANT_PATH = "/asistente";
@@ -32,14 +37,12 @@ function threadIdOrNotFound(id: unknown): string {
   return parsed.data;
 }
 
-/** Live threads, newest first, max 50. */
+/** Live threads, newest first, max 50 (`qk.asistente.threads()`). */
 export async function fetchAssistantThreadsAction(): Promise<AssistantThreadSummary[]> {
-  const staffId = await sessionStaffId();
-  const rows = await assistantRepository.listLiveAssistantThreads(db, staffId, assistantRepository.ASSISTANT_THREADS_KEEP);
-  return rows.map((row) => ({ id: row.id, title: row.title, updatedAt: row.updatedAt.toISOString() }));
+  return loadAsistenteThreads(await requireCapabilityUser());
 }
 
-/** The caller's live thread with its messages in order. Errors: `NOT_FOUND`. */
+/** The caller's live thread with its last messages in order. Errors: `NOT_FOUND`. */
 export async function fetchAssistantThreadAction(id: string): Promise<{
   thread: { id: string; title: string; context: AssistantContext; updatedAt: string };
   messages: UIMessage[];
@@ -49,11 +52,11 @@ export async function fetchAssistantThreadAction(id: string): Promise<{
   const thread = await assistantRepository.findOwnedAssistantThread(db, staffId, threadId);
   if (!thread) throw new Error("NOT_FOUND");
   const rows = await assistantRepository.listAssistantThreadMessages(db, thread.id);
-  const messages: UIMessage[] = [];
-  for (const row of rows) {
-    if (row.role === "tool") continue;
-    messages.push({ id: row.id, role: row.role, parts: row.parts as UIMessage["parts"] });
-  }
+  const messages: UIMessage[] = rows.map((row) => ({
+    id: row.id,
+    role: row.role as UIMessage["role"],
+    parts: row.parts as UIMessage["parts"],
+  }));
   return {
     thread: {
       id: thread.id,
@@ -65,19 +68,24 @@ export async function fetchAssistantThreadAction(id: string): Promise<{
   };
 }
 
-/** Soft delete. Errors: `NOT_FOUND`. Revalidates `/asistente`. */
-export async function deleteAssistantThreadAction(id: string): Promise<void> {
-  const staffId = await sessionStaffId();
-  const threadId = threadIdOrNotFound(id);
-  const deleted = await assistantRepository.softDeleteOwnedAssistantThread(db, staffId, threadId);
-  if (!deleted) throw new Error("NOT_FOUND");
-  revalidateAsistenteScreen();
+/**
+ * Soft delete. Returns `ActionResult` (`{ ok: false, error: "NOT_FOUND" }`
+ * for a thread the caller doesn't have). The client removes it from
+ * `qk.asistente.threads()` optimistically.
+ */
+export async function deleteAssistantThreadAction(id: string): Promise<ActionResult<void>> {
+  return toActionResult(async () => {
+    const staffId = await sessionStaffId();
+    const threadId = threadIdOrNotFound(id);
+    const deleted = await assistantRepository.softDeleteOwnedAssistantThread(db, staffId, threadId);
+    if (!deleted) throw new Error("NOT_FOUND");
+  });
 }
 
 /**
  * Store previously saved chat messages (≤ 200) as a new thread; no model
  * call. No page calls it since the browser copy of the thread was retired. Tool parts are kept for display
- * only (`lib/assistant/legacy-import.ts`). Errors: `INVALID`. Revalidates `/asistente`.
+ * only (`lib/assistant/legacy-import.ts`). Errors: `INVALID`.
  */
 export async function importLegacyAssistantThreadAction(messages: UIMessage[]): Promise<{ id: string }> {
   const staffId = await sessionStaffId();
@@ -90,7 +98,6 @@ export async function importLegacyAssistantThreadAction(messages: UIMessage[]): 
     importedFrom: LEGACY_IMPORT_SOURCE,
     messages: rows,
   });
-  revalidateAsistenteScreen();
   return { id: created.id };
 }
 

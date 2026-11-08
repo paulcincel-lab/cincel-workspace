@@ -1,13 +1,19 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 const actions = vi.hoisted(() => ({ retryProjectFolderAction: vi.fn() }));
 vi.mock("@/lib/actions/projects-actions", () => actions);
 
 const router = vi.hoisted(() => ({ refresh: vi.fn(), push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { StaffFileItem, StaffFilesResult } from "@/lib/types/workspace-access";
 
 import { ProjectFilesBrowser, formatSize } from "./ProjectFilesBrowser";
@@ -52,12 +58,34 @@ const nestedOk: StaffFilesResult = {
   items: [item({ id: "r1", name: "Renders", kind: "folder", sizeBytes: null })],
 };
 
+const OTHER_ID = "00000000-0000-4000-8000-000000000002";
+
+/** Keys the retry touches (or must not), seeded so their invalidation shows. */
+const SEEDED = {
+  root: qk.proyectos.archivos(PROJECT_ID, null),
+  sub: qk.proyectos.archivos(PROJECT_ID, "cli"),
+  resumen: qk.proyectos.resumen(PROJECT_ID),
+  shell: qk.proyectos.shell(PROJECT_ID),
+  clientes: qk.proyectos.tab(PROJECT_ID, "clientes"),
+  otherRoot: qk.proyectos.archivos(OTHER_ID, null),
+};
+
 function renderBrowser(result: StaffFilesResult, canRetry = true) {
-  return render(<ProjectFilesBrowser projectId={PROJECT_ID} result={result} canRetry={canRetry} />);
+  const client = createTestQueryClient();
+  for (const key of Object.values(SEEDED)) client.setQueryData(key, { seeded: true });
+  const view = renderWithQueryClient(<ProjectFilesBrowser projectId={PROJECT_ID} result={result} canRetry={canRetry} />, {
+    client,
+  });
+  return { ...view, client };
+}
+
+function invalidated(client: ReturnType<typeof createTestQueryClient>, key: readonly unknown[]): boolean {
+  return client.getQueryState(key)?.isInvalidated ?? false;
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.history.replaceState(null, "", ARCHIVOS);
 });
 
 afterEach(() => {
@@ -77,25 +105,73 @@ describe("ProjectFilesBrowser", () => {
     expect(screen.queryByRole("button", { name: "Reintentar carpeta" })).toBeNull();
   });
 
-  it("shows the failure with its error and retries the folder", async () => {
+  it("shows the failure with its error and retries the folder, invalidating Archivos, Resumen and the shell", async () => {
     actions.retryProjectFolderAction.mockResolvedValue({ ok: true, status: "ready" });
-    renderBrowser({ status: "failed", error: "Drive quota exceeded" });
+    const { client } = renderBrowser({ status: "failed", error: "Drive quota exceeded" });
 
     expect(screen.getByText("No se pudo crear la carpeta del proyecto en Drive.")).toBeTruthy();
     expect(screen.getByText("Drive quota exceeded")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Reintentar carpeta" }));
-    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+    await waitFor(() => expect(invalidated(client, SEEDED.root)).toBe(true));
     expect(actions.retryProjectFolderAction).toHaveBeenCalledWith(PROJECT_ID);
+    // The whole `proyectos.archivos(id)` prefix, plus Resumen and the shell; nothing else.
+    expect(invalidated(client, SEEDED.sub)).toBe(true);
+    expect(invalidated(client, SEEDED.resumen)).toBe(true);
+    expect(invalidated(client, SEEDED.shell)).toBe(true);
+    expect(invalidated(client, SEEDED.clientes)).toBe(false);
+    expect(invalidated(client, SEEDED.otherRoot)).toBe(false);
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 
-  it("shows the retry error when the action refuses", async () => {
+  it("shows the retry error when the action refuses, and invalidates nothing", async () => {
     actions.retryProjectFolderAction.mockResolvedValue({ ok: false, error: "forbidden" });
-    renderBrowser({ status: "failed" });
+    const { client } = renderBrowser({ status: "failed" });
 
     fireEvent.click(screen.getByRole("button", { name: "Reintentar carpeta" }));
     expect(await screen.findByText("No tienes permiso para crear la carpeta.")).toBeTruthy();
+    expect(invalidated(client, SEEDED.root)).toBe(false);
+    expect(invalidated(client, SEEDED.shell)).toBe(false);
+    expect(toast.error).not.toHaveBeenCalled();
     expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("opens a folder on the client: pushState with ?folder=, no router.push", () => {
+    const push = vi.spyOn(window.history, "pushState");
+    renderBrowser(rootOk);
+
+    fireEvent.click(screen.getByRole("link", { name: "02 Cliente" }));
+    expect(push).toHaveBeenCalledWith(null, "", `${ARCHIVOS}?folder=cli`);
+    expect(window.location.search).toBe("?folder=cli");
+    expect(router.push).not.toHaveBeenCalled();
+    push.mockRestore();
+  });
+
+  it("leaves middle and modified clicks to the real link", () => {
+    const push = vi.spyOn(window.history, "pushState");
+    renderBrowser(rootOk);
+
+    const folder = screen.getByRole("link", { name: "02 Cliente" });
+    fireEvent.click(folder, { ctrlKey: true });
+    fireEvent.click(folder, { metaKey: true });
+    fireEvent.click(folder, { button: 1 });
+    expect(push).not.toHaveBeenCalled();
+    push.mockRestore();
+  });
+
+  it("goes back to the root through the breadcrumb on the client", () => {
+    const push = vi.spyOn(window.history, "pushState");
+    renderBrowser(nestedOk);
+
+    fireEvent.click(screen.getByRole("link", { name: "P-001 · Casa Ruiz" }));
+    expect(push).toHaveBeenCalledWith(null, "", ARCHIVOS);
+    push.mockRestore();
+  });
+
+  it("never refreshes the route", () => {
+    const source = readFileSync(resolve(__dirname, "ProjectFilesBrowser.tsx"), "utf8");
+    expect(source).not.toContain("router.refresh");
+    expect(source).not.toContain("useRouter");
   });
 
   it("links Conectar Google Drive to the Drive consent start with a return to this tab", () => {

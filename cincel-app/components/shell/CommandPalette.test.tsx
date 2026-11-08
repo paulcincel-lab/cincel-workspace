@@ -1,13 +1,18 @@
 // @vitest-environment happy-dom
-import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 import type { SearchResult, TodayStatus } from "@/lib/types/redesign";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }));
 const search = vi.hoisted(() => ({ searchWorkspaceAction: vi.fn() }));
-const time = vi.hoisted(() => ({ fetchMyTodayAction: vi.fn(), clockInAction: vi.fn() }));
+const time = vi.hoisted(() => ({
+  fetchMyTodayAction: vi.fn(),
+  clockInAction: vi.fn(),
+  pauseWorkAction: vi.fn(),
+  resumeWorkAction: vi.fn(),
+  clockOutAction: vi.fn(),
+}));
 const timeFlags = vi.hoisted(() => ({ IMPLEMENTED: { clockInAction: false, fetchMyTodayAction: false } }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 
@@ -18,7 +23,10 @@ vi.mock("@/lib/actions/time-tracking-actions", () => time);
 vi.mock("@/lib/actions/time-tracking-actions.flags", () => timeFlags);
 
 import { IMPLEMENTED as SEARCH_IMPLEMENTED } from "@/lib/actions/search-actions.flags";
-import { openCommandPalette, registerShellOpener } from "@/lib/ui/shell-openers";
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
+import { openCommandPalette, useShellUi } from "@/lib/stores/shell-ui-store";
 
 import {
   CommandPalette,
@@ -52,14 +60,21 @@ const RESULTS: SearchResult[] = [
   { type: "persona", id: "s1", title: "Juanma", subtitle: "Líder de proyecto", url: "/personas/equipo/s1" },
 ];
 
-function Harness({ initialOpen = false }: { initialOpen?: boolean }) {
-  const [open, setOpen] = useState(initialOpen);
+/** The palette plus a probe of `useShellUi.searchOpen`, the state every entry point shares. */
+function Harness() {
+  const open = useShellUi((s) => s.searchOpen);
   return (
     <>
       <span data-testid="state">{open ? "open" : "closed"}</span>
-      <CommandPalette open={open} onOpenChange={setOpen} />
+      <CommandPalette />
     </>
   );
+}
+
+function renderPalette(initialOpen = false) {
+  const view = renderWithQueryClient(<Harness />);
+  if (initialOpen) act(() => useShellUi.getState().openSearch());
+  return view;
 }
 
 function input() {
@@ -95,7 +110,7 @@ afterEach(() => {
 
 describe("CommandPalette shortcut and opening", () => {
   it("opens with ⌘K and Ctrl+K and closes with esc", async () => {
-    render(<Harness />);
+    renderPalette();
     expect(screen.queryByRole("dialog")).toBeNull();
 
     fireEvent.keyDown(window, { key: "k", metaKey: true });
@@ -109,16 +124,29 @@ describe("CommandPalette shortcut and opening", () => {
     await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("open"));
   });
 
-  it("opens from other entry points through openCommandPalette()", async () => {
-    render(<Harness />);
-    act(() => {
-      expect(openCommandPalette()).toBe(true);
-    });
+  it("⌘K toggles useShellUi.searchOpen", async () => {
+    renderPalette();
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    await waitFor(() => expect(useShellUi.getState().searchOpen).toBe(true));
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    await waitFor(() => expect(useShellUi.getState().searchOpen).toBe(false));
+  });
+
+  it("opens from other entry points through openCommandPalette() (the store)", async () => {
+    renderPalette();
+    act(() => openCommandPalette());
     await screen.findByRole("dialog");
   });
 
+  it("reports itself mounted while it is (searchAvailable)", () => {
+    const view = renderPalette();
+    expect(useShellUi.getState().searchAvailable).toBe(true);
+    view.unmount();
+    expect(useShellUi.getState().searchAvailable).toBe(false);
+  });
+
   it("shows the placeholder and the footer hints", async () => {
-    render(<Harness initialOpen />);
+    renderPalette(true);
     expect(input()).toBeTruthy();
     const footer = screen.getByTestId("command-palette-footer");
     expect(footer.textContent).toContain("↑↓navegar");
@@ -129,7 +157,7 @@ describe("CommandPalette shortcut and opening", () => {
 
 describe("CommandPalette search", () => {
   it("makes no call under 2 characters and shows the hint plus the actions group", async () => {
-    render(<Harness initialOpen />);
+    renderPalette(true);
     expect(screen.getByText("Escribe al menos 2 letras.")).toBeTruthy();
     expect(groupHeadings()).toEqual(["Acciones"]);
 
@@ -144,7 +172,7 @@ describe("CommandPalette search", () => {
   });
 
   it("debounces 200 ms and only searches the last query", async () => {
-    render(<Harness initialOpen />);
+    renderPalette(true);
     type("en");
     type("ens");
     type("ense");
@@ -158,7 +186,7 @@ describe("CommandPalette search", () => {
 
   it("groups results by type in a fixed order", async () => {
     search.searchWorkspaceAction.mockResolvedValue(RESULTS);
-    render(<Harness initialOpen />);
+    renderPalette(true);
     type("ensenada");
 
     await screen.findByText("Juanma");
@@ -169,7 +197,7 @@ describe("CommandPalette search", () => {
   it("opens internal results with the router and Drive files in a new tab", async () => {
     search.searchWorkspaceAction.mockResolvedValue(RESULTS);
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
-    render(<Harness initialOpen />);
+    renderPalette(true);
     type("ensenada");
 
     fireEvent.click(await screen.findByText("Medir muro del fondo de cocina"));
@@ -185,14 +213,14 @@ describe("CommandPalette search", () => {
   });
 
   it("shows the empty line when nothing matches", async () => {
-    render(<Harness initialOpen />);
+    renderPalette(true);
     type("zzzz");
     await screen.findByText("Sin resultados para “zzzz”.");
   });
 
   it("shows the rate-limit copy and the generic copy", async () => {
     search.searchWorkspaceAction.mockRejectedValueOnce(new Error("RATE_LIMITED"));
-    render(<Harness initialOpen />);
+    renderPalette(true);
     type("ensenada");
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Demasiados intentos seguidos. Espera unos segundos e intenta de nuevo.",
@@ -208,7 +236,7 @@ describe("CommandPalette search", () => {
 
 describe("CommandPalette actions group", () => {
   it("filters the actions by the query, accents ignored", async () => {
-    render(<Harness initialOpen />);
+    renderPalette(true);
     const labels = () => within(actionsGroup()).getAllByRole("option").map((o) => o.textContent);
     expect(labels()).toEqual(["Crear tarea", "Nuevo proyecto", "Nueva nota"]);
 
@@ -220,7 +248,7 @@ describe("CommandPalette actions group", () => {
   });
 
   it("navigates to the action urls", async () => {
-    render(<Harness initialOpen />);
+    renderPalette(true);
     fireEvent.click(screen.getByText("Crear tarea"));
     expect(router.push).toHaveBeenCalledWith("/tareas?nueva=1");
 
@@ -235,7 +263,7 @@ describe("CommandPalette actions group", () => {
 
   it("hides Registrar entrada while fetchMyTodayAction().enabled is false", async () => {
     timeFlags.IMPLEMENTED.clockInAction = true;
-    render(<Harness initialOpen />);
+    renderPalette(true);
     await waitFor(() => expect(time.fetchMyTodayAction).toHaveBeenCalled());
     await sleep(10);
     expect(screen.queryByText("Registrar entrada")).toBeNull();
@@ -250,41 +278,61 @@ describe("CommandPalette actions group", () => {
       state: "on",
       startedAt: new Date(2026, 10, 6, 9, 2).toISOString(),
     });
-    render(<Harness initialOpen />);
+    renderPalette(true);
 
     fireEvent.click(await screen.findByText("Registrar entrada"));
     await waitFor(() => expect(time.clockInAction).toHaveBeenCalledWith({ source: "sidebar" }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Entrada registrada 9:02"));
-    expect(router.refresh).toHaveBeenCalled();
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("writes the clock-in result into me.today and closes", async () => {
+    timeFlags.IMPLEMENTED.clockInAction = true;
+    time.fetchMyTodayAction.mockResolvedValue({ ...DISABLED_TODAY, enabled: true });
+    const on = { ...DISABLED_TODAY, enabled: true, state: "on" as const, startedAt: new Date().toISOString() };
+    time.clockInAction.mockResolvedValue(on);
+    const { client } = renderPalette(true);
+
+    fireEvent.click(await screen.findByText("Registrar entrada"));
+    await waitFor(() => expect(client.getQueryData(qk.me.today())).toEqual(on));
+    await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("closed"));
+  });
+
+  it("caches search results per query (qk.search)", async () => {
+    search.searchWorkspaceAction.mockResolvedValue(RESULTS);
+    const { client } = renderPalette(true);
+    type("ensenada");
+    await screen.findByText("Juanma");
+    expect(client.getQueryData(qk.search("ensenada"))).toEqual(RESULTS);
   });
 
   it("shows clock-in errors as a toast", async () => {
     timeFlags.IMPLEMENTED.clockInAction = true;
     time.fetchMyTodayAction.mockResolvedValue({ ...DISABLED_TODAY, enabled: true });
     time.clockInAction.mockRejectedValue(new Error("boom"));
-    render(<Harness initialOpen />);
+    renderPalette(true);
 
     fireEvent.click(await screen.findByText("Registrar entrada"));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("No se pudo completar la acción. Intenta de nuevo."));
   });
 
-  it("offers Preguntar al asistente only when the assistant sheet is mounted", async () => {
-    const openSheet = vi.fn();
-    const unregister = registerShellOpener("assistant", openSheet);
-    render(<Harness initialOpen />);
+  it("offers Preguntar al asistente only while useAssistantUi.available, and opens the sheet", async () => {
+    act(() => useAssistantUi.getState().setAvailable(true));
+    renderPalette(true);
     fireEvent.click(screen.getByText("Preguntar al asistente"));
-    expect(openSheet).toHaveBeenCalledTimes(1);
-    unregister();
+    expect(useAssistantUi.getState().open).toBe(true);
+    await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("closed"));
 
     cleanup();
-    render(<Harness initialOpen />);
+    act(() => useAssistantUi.getState().setAvailable(false));
+    renderPalette(true);
     expect(screen.queryByText("Preguntar al asistente")).toBeNull();
   });
 });
 
 describe("CommandPalette keyboard", () => {
   it("moves with ↑↓ and opens with ↵", async () => {
-    render(<Harness initialOpen />);
+    renderPalette(true);
     const options = () => within(actionsGroup()).getAllByRole("option");
     await waitFor(() => expect(options()[0].getAttribute("aria-selected")).toBe("true"));
 

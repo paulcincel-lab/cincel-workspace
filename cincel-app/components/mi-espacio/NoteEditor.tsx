@@ -5,7 +5,6 @@ import { Archive, Bold, Check, Italic, Link, List, ListChecks, ListTodo } from "
 import { toast } from "sonner";
 
 import { FormSheet } from "@/components/patterns/FormSheet";
-import { NewTaskDialog } from "@/components/tareas/NewTaskDialog";
 import { Button } from "@/components/ui/shadcn/button";
 import { FormField } from "@/components/ui/shadcn/form-field";
 import { Input } from "@/components/ui/shadcn/input";
@@ -30,19 +29,32 @@ import {
   noteToTaskDefaults,
   type MarkdownCommand,
 } from "@/lib/my-space/note-ui";
+import { useActionMutation } from "@/lib/query/mutation";
+import {
+  patchCachedNote,
+  removeCachedNote,
+  restoreSnapshot,
+  snapshotNotes,
+  upsertCachedNote,
+  type NotesData,
+  type Snapshot,
+} from "@/lib/query/options/mi-espacio";
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { NOT_IMPLEMENTED } from "@/lib/stubs";
 import type { Note, NoteColor } from "@/lib/types/redesign";
 
+/**
+ * The editor writes `me.notes` itself (optimistic edit and archive, the saved
+ * note on create and restore); the callbacks only move the URL.
+ */
 export type NoteEditorProps = {
   note: Note | null;
   open: boolean;
   onOpenChange(open: boolean): void;
   onSaved(note: Note): void;
-  /** The note left the list (archived); the parent removes it and remembers its place. */
+  /** The note left the list (archived). */
   onArchived?(note: Note): void;
-  /** "Deshacer" brought the note back; the parent puts it back in place. */
-  onRestored?(note: Note): void;
-  /** "Convertir en tarea" (opens `NewTaskDialog` prefilled); off until the Tareas dialog ships. */
+  /** "Convertir en tarea": opens the shared new-task dialog (`useNewTaskUi`) prefilled from the note. */
   canConvertToTask?: boolean;
 };
 
@@ -62,21 +74,14 @@ const TOOLBAR: { command: MarkdownCommand; label: string; Icon: typeof Bold }[] 
   { command: "link", label: "Enlace", Icon: Link },
 ];
 
-/** Undo of an archive from the toast: restore, put the note back, report errors as a toast. */
-async function undoArchive(id: string, onRestored: NoteEditorProps["onRestored"]): Promise<void> {
-  try {
-    const restored = await restoreNoteAction(id);
-    onRestored?.(restored);
-  } catch (err) {
-    toast(actionErrorText(err));
-  }
-}
+type NoteInput = { title: string; body: string; color: NoteColor; pinned: boolean };
 
 /**
  * Note editor sheet, 560 px (redesign FE §3.3) on `FormSheet`: title, a
  * markdown toolbar over the body, color swatches, pin switch, "Convertir en
- * tarea" and "Archivar" (toast with "Deshacer" for 10 s). Ignores the
- * presentation style.
+ * tarea" and "Archivar" (toast with "Deshacer" for 10 s). Edits and archive
+ * patch `me.notes` at once and roll back on error. Ignores the presentation
+ * style.
  */
 export function NoteEditor(props: NoteEditorProps) {
   // Remount the form per note, so a different note starts from its own values.
@@ -89,19 +94,52 @@ function NoteEditorForm({
   onOpenChange,
   onSaved,
   onArchived,
-  onRestored,
   canConvertToTask = false,
 }: NoteEditorProps) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(note));
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-  const [taskOpen, setTaskOpen] = useState(false);
+  const openNewTask = useNewTaskUi((s) => s.openNewTask);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const colorLabelId = useId();
   const pinnedId = useId();
 
   const canSave = note ? IMPLEMENTED.updateNoteAction : IMPLEMENTED.createNoteAction;
   const canArchive = Boolean(note) && IMPLEMENTED.archiveNoteAction;
+
+  const createMutation = useActionMutation<NoteInput, Note>(createNoteAction, {
+    setData: (qc, saved) => upsertCachedNote(qc, saved),
+    onFormError: setError,
+  });
+  const updateMutation = useActionMutation<{ id: string; input: NoteInput }, Note, Snapshot<NotesData>>(
+    ({ id, input }) => updateNoteAction(id, input),
+    {
+      optimistic: {
+        async onMutate(qc, { id, input }) {
+          const snap = await snapshotNotes(qc);
+          patchCachedNote(qc, id, input);
+          return snap;
+        },
+        rollback: restoreSnapshot,
+      },
+      setData: (qc, saved) => upsertCachedNote(qc, saved),
+      onFormError: setError,
+    },
+  );
+  const restoreMutation = useActionMutation<string, Note>(restoreNoteAction, {
+    setData: (qc, restored) => upsertCachedNote(qc, restored),
+  });
+  const archiveMutation = useActionMutation<string, void, Snapshot<NotesData>>(archiveNoteAction, {
+    optimistic: {
+      async onMutate(qc, id) {
+        const snap = await snapshotNotes(qc);
+        removeCachedNote(qc, id);
+        return snap;
+      },
+      rollback: restoreSnapshot,
+    },
+    onFormError: setError,
+  });
+  const pending = createMutation.isPending || updateMutation.isPending || archiveMutation.isPending;
 
   function reset() {
     setDraft(draftOf(note));
@@ -128,42 +166,45 @@ function NoteEditorForm({
       setError(actionErrorText(new Error(NOT_IMPLEMENTED)));
       return;
     }
-    setPending(true);
     setError(null);
+    const input: NoteInput = { title: draft.title.trim(), body: draft.body, color: draft.color, pinned: draft.pinned };
+    let saved: Note;
     try {
-      const input = { title: draft.title.trim(), body: draft.body, color: draft.color, pinned: draft.pinned };
-      const saved = note ? await updateNoteAction(note.id, input) : await createNoteAction(input);
-      toast("Nota guardada");
-      onSaved(saved);
-      if (!note) setDraft(draftOf(null));
-      onOpenChange(false);
-    } catch (err) {
-      setError(actionErrorText(err));
-    } finally {
-      setPending(false);
+      saved = note ? await updateMutation.mutateAsync({ id: note.id, input }) : await createMutation.mutateAsync(input);
+    } catch {
+      // The mutation already put the error copy in the sheet (`onFormError`) and rolled the edit back.
+      return;
     }
+    toast("Nota guardada");
+    onSaved(saved);
+    if (!note) setDraft(draftOf(null));
+    onOpenChange(false);
   }
 
-  async function handleArchive() {
+  function handleArchive() {
     if (!note || !canArchive) return;
-    setPending(true);
     setError(null);
-    try {
-      await archiveNoteAction(note.id);
-      onArchived?.(note);
-      onOpenChange(false);
-      const id = note.id;
-      toast("Nota archivada", {
-        duration: NOTE_UNDO_MS,
-        action: IMPLEMENTED.restoreNoteAction
-          ? { label: "Deshacer", onClick: () => void undoArchive(id, onRestored) }
-          : undefined,
-      });
-    } catch (err) {
-      setError(actionErrorText(err));
-    } finally {
-      setPending(false);
-    }
+    const archived = note;
+    archiveMutation.mutate(archived.id, {
+      onSuccess: () => {
+        onArchived?.(archived);
+        onOpenChange(false);
+        toast("Nota archivada", {
+          duration: NOTE_UNDO_MS,
+          action: IMPLEMENTED.restoreNoteAction
+            ? { label: "Deshacer", onClick: () => restoreMutation.mutate(archived.id) }
+            : undefined,
+        });
+      },
+    });
+  }
+
+  function handleConvert() {
+    const defaults = noteToTaskDefaults(draft);
+    openNewTask(
+      { title: defaults.title, description: defaults.description, projectId: note?.projectId ?? undefined },
+      "nota",
+    );
   }
 
   function runCommand(command: MarkdownCommand) {
@@ -284,14 +325,14 @@ function NoteEditorForm({
                   type="button"
                   variant="outline"
                   disabled={!taskDefaults.title}
-                  onClick={() => setTaskOpen(true)}
+                  onClick={handleConvert}
                 >
                   <ListTodo aria-hidden="true" />
                   Convertir en tarea
                 </Button>
               ) : null}
               {canArchive ? (
-                <Button type="button" variant="ghost" disabled={pending} onClick={() => void handleArchive()}>
+                <Button type="button" variant="ghost" disabled={pending} onClick={handleArchive}>
                   <Archive aria-hidden="true" />
                   Archivar
                 </Button>
@@ -300,17 +341,6 @@ function NoteEditorForm({
           ) : null}
         </div>
       </FormSheet>
-      {canConvertToTask ? (
-        <NewTaskDialog
-          open={taskOpen}
-          onOpenChange={setTaskOpen}
-          defaults={{
-            title: taskDefaults.title,
-            description: taskDefaults.description,
-            projectId: note?.projectId ?? undefined,
-          }}
-        />
-      ) : null}
     </>
   );
 }

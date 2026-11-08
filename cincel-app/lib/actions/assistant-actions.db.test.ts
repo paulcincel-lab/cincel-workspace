@@ -126,7 +126,7 @@ describe.skipIf(!url)("assistant actions (test DB)", async () => {
     await makeAction(foreign, otherId, new Date(), 900);
 
     await expect(actions.fetchAssistantThreadAction(foreign)).rejects.toThrow("NOT_FOUND");
-    await expect(actions.deleteAssistantThreadAction(foreign)).rejects.toThrow("NOT_FOUND");
+    await expect(actions.deleteAssistantThreadAction(foreign)).resolves.toEqual({ ok: false, error: "NOT_FOUND" });
     await expect(actions.fetchAssistantActionsAction({ threadId: foreign })).rejects.toThrow("NOT_FOUND");
     expect((await actions.fetchAssistantThreadsAction()).map((t) => t.id)).not.toContain(foreign);
     expect((await actions.fetchAssistantActionsAction({})).map((a) => a.threadId)).not.toContain(foreign);
@@ -139,16 +139,16 @@ describe.skipIf(!url)("assistant actions (test DB)", async () => {
   it("returns NOT_FOUND for a missing or malformed id", async () => {
     await expect(actions.fetchAssistantThreadAction(randomUUID())).rejects.toThrow("NOT_FOUND");
     await expect(actions.fetchAssistantThreadAction("no-es-uuid")).rejects.toThrow("NOT_FOUND");
-    await expect(actions.deleteAssistantThreadAction("no-es-uuid")).rejects.toThrow("NOT_FOUND");
+    await expect(actions.deleteAssistantThreadAction("no-es-uuid")).resolves.toEqual({ ok: false, error: "NOT_FOUND" });
   });
 
-  it("soft-deletes a thread, hides it from the list and revalidates /asistente", async () => {
+  it("soft-deletes a thread and hides it from the list, without revalidating a path", async () => {
     const threadId = await makeThread(ownerId, new Date(Date.now() + 60_000), "Para borrar");
     expect((await actions.fetchAssistantThreadsAction()).map((t) => t.id)).toContain(threadId);
 
-    await actions.deleteAssistantThreadAction(threadId);
+    await expect(actions.deleteAssistantThreadAction(threadId)).resolves.toEqual({ ok: true, data: undefined });
 
-    expect(revalidatePath).toHaveBeenCalledWith("/asistente");
+    expect(revalidatePath).not.toHaveBeenCalled();
     const [row] = await db
       .select({ deletedAt: schema.assistantThreads.deletedAt })
       .from(schema.assistantThreads)
@@ -156,7 +156,7 @@ describe.skipIf(!url)("assistant actions (test DB)", async () => {
     expect(row?.deletedAt).toBeInstanceOf(Date);
     expect((await actions.fetchAssistantThreadsAction()).map((t) => t.id)).not.toContain(threadId);
     await expect(actions.fetchAssistantThreadAction(threadId)).rejects.toThrow("NOT_FOUND");
-    await expect(actions.deleteAssistantThreadAction(threadId)).rejects.toThrow("NOT_FOUND");
+    await expect(actions.deleteAssistantThreadAction(threadId)).resolves.toEqual({ ok: false, error: "NOT_FOUND" });
   });
 
   it("lists at most 50 live threads, newest first", async () => {

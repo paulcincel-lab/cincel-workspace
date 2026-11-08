@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
@@ -20,16 +21,22 @@ import {
 import {
   createTemplateAction,
   deactivateTemplateAction,
-  fetchWorkflowsAction,
   reorderTemplatesAction,
   reorderWorkflowPhasesAction,
   setWorkflowAutoStartAction,
   updateTemplateAction,
   updateWorkflowPhaseAction,
 } from "@/lib/actions/workflows-actions";
+import { useActionMutation } from "@/lib/query/mutation";
+import { ajustesTramosOptions } from "@/lib/query/options/ajustes";
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
 import { tramosErrorText } from "@/lib/tramos/tramos-error-text";
+import {
+  AUTO_START_INVALIDATIONS,
+  PHASE_INVALIDATIONS,
+  TEMPLATE_INVALIDATIONS,
+} from "@/lib/tramos/invalidations";
 import type {
   WorkflowDetail,
   WorkflowPhase,
@@ -43,12 +50,6 @@ const PRIORITY_LABEL: Record<string, string> = {
   media: "Media",
   baja: "Baja",
 };
-
-const FETCH_OPTIONS = {
-  includeInactive: true,
-  includeInactiveTemplates: true,
-  includeInactivePhases: true,
-} as const;
 
 function toDraft(template: WorkflowTaskTemplate): TemplateDraft {
   const offset = (value: number | null) => (value === null ? "" : String(value));
@@ -101,17 +102,29 @@ export function sortTemplatesByPhase(
   return [...templates].sort((a, b) => rank(a) - rank(b) || a.sortOrder - b.sortOrder);
 }
 
-interface TramosClientProps {
-  initialWorkflows: WorkflowDetail[];
+/** The mutation options every Tramos write shares: its invalidations, and the copy shown by the caller (`tramosErrorText`). */
+function tramosMutation(invalidate: readonly (readonly unknown[])[]) {
+  return { invalidate, onFormError: () => undefined } as const;
 }
 
-export function TramosClient({ initialWorkflows }: TramosClientProps) {
-  const [workflows, setWorkflows] = useState<WorkflowDetail[]>(initialWorkflows);
-  // The first tramo in flow order starts selected.
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(
-    () => [...initialWorkflows].sort((a, b) => a.sortOrder - b.sortOrder)[0]?.id ?? null,
-  );
+type TemplateSaveVars = { workflowId: string; templateId: string | null; input: WorkflowTaskTemplateInput };
+
+function saveTemplateAction({ workflowId, templateId, input }: TemplateSaveVars) {
+  return templateId === null ? createTemplateAction(workflowId, input) : updateTemplateAction(templateId, input);
+}
+
+/**
+ * Ajustes › Tramos y fases. Reads `qk.ajustes.page('tramos')`, hydrated by
+ * the page (no fetch on mount). Each write is one POST plus the targeted
+ * invalidations in `lib/tramos/invalidations.ts`; the active page query
+ * refetches once.
+ */
+export function TramosClient() {
+  const { workflows } = useSuspenseQuery(ajustesTramosOptions()).data;
+  // The first tramo in flow order starts selected (`selectedWorkflow` falls back to it).
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [pageError, setPageError] = useState("");
+  const autoStartInFlight = useRef(false);
 
   const [phaseEditorOpen, setPhaseEditorOpen] = useState(false);
   const [editingPhase, setEditingPhase] = useState<WorkflowPhase | null>(null);
@@ -120,8 +133,31 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TemplateDraft>(emptyTemplateDraft);
   const [formError, setFormError] = useState("");
-  const [savingTemplate, setSavingTemplate] = useState(false);
-  const [savingAutoStart, setSavingAutoStart] = useState(false);
+
+  const autoStartMutation = useActionMutation(
+    ({ workflowId, autoStart }: { workflowId: string; autoStart: boolean }) =>
+      setWorkflowAutoStartAction(workflowId, autoStart),
+    tramosMutation(AUTO_START_INVALIDATIONS),
+  );
+  const phaseActiveMutation = useActionMutation(
+    ({ phaseId, active }: { phaseId: string; active: boolean }) => updateWorkflowPhaseAction(phaseId, { active }),
+    tramosMutation(PHASE_INVALIDATIONS),
+  );
+  const phaseOrderMutation = useActionMutation(
+    ({ workflowId, orderedIds }: { workflowId: string; orderedIds: string[] }) =>
+      reorderWorkflowPhasesAction(workflowId, orderedIds),
+    tramosMutation(PHASE_INVALIDATIONS),
+  );
+  const templateSaveMutation = useActionMutation(saveTemplateAction, tramosMutation(TEMPLATE_INVALIDATIONS));
+  const templateDeactivateMutation = useActionMutation(
+    (templateId: string) => deactivateTemplateAction(templateId),
+    tramosMutation(TEMPLATE_INVALIDATIONS),
+  );
+  const templateOrderMutation = useActionMutation(
+    ({ workflowId, orderedIds }: { workflowId: string; orderedIds: string[] }) =>
+      reorderTemplatesAction(workflowId, orderedIds),
+    tramosMutation(TEMPLATE_INVALIDATIONS),
+  );
 
   const authenticatedUser = useSessionStore(selectCurrentUser);
   const capabilities = useMemo(
@@ -156,14 +192,7 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
     return phases.filter((p) => p.active || p.id === draft.phaseId);
   }, [phases, draft.phaseId]);
 
-  async function refresh() {
-    try {
-      setWorkflows(await fetchWorkflowsAction(FETCH_OPTIONS));
-    } catch (err) {
-      setPageError(tramosErrorText(err));
-    }
-  }
-
+  /** Runs one write; its error shows in the page alert with the Tramos copy. */
   async function runPageAction(action: () => Promise<unknown>) {
     setPageError("");
     try {
@@ -171,16 +200,19 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
     } catch (err) {
       setPageError(tramosErrorText(err));
     }
-    await refresh();
   }
 
   // ── Inicio ──────────────────────────────────────────────────────────────
   async function toggleAutoStart(next: boolean) {
-    if (!selectedWorkflow) return;
+    // The switch sits in a <label>, so one click can report twice before `isPending` renders: send one POST.
+    if (!selectedWorkflow || autoStartInFlight.current) return;
     const workflowId = selectedWorkflow.id;
-    setSavingAutoStart(true);
-    await runPageAction(() => setWorkflowAutoStartAction(workflowId, next));
-    setSavingAutoStart(false);
+    autoStartInFlight.current = true;
+    try {
+      await runPageAction(() => autoStartMutation.mutateAsync({ workflowId, autoStart: next }));
+    } finally {
+      autoStartInFlight.current = false;
+    }
   }
 
   // ── Fases ───────────────────────────────────────────────────────────────
@@ -194,19 +226,19 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
     setPhaseEditorOpen(true);
   }
 
-  async function onPhaseSaved() {
+  /** The drawer already saved and invalidated; only close it. */
+  function onPhaseSaved() {
     setPhaseEditorOpen(false);
-    await refresh();
   }
 
   function setPhaseActive(phase: WorkflowPhase, active: boolean) {
-    void runPageAction(() => updateWorkflowPhaseAction(phase.id, { active }));
+    void runPageAction(() => phaseActiveMutation.mutateAsync({ phaseId: phase.id, active }));
   }
 
   function reorderPhases(orderedIds: string[]) {
     if (!selectedWorkflow) return;
     const workflowId = selectedWorkflow.id;
-    void runPageAction(() => reorderWorkflowPhasesAction(workflowId, orderedIds));
+    void runPageAction(() => phaseOrderMutation.mutateAsync({ workflowId, orderedIds }));
   }
 
   // ── Tareas de plantilla ─────────────────────────────────────────────────
@@ -236,21 +268,16 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
     }
 
     const phaseName = phases.find((p) => p.id === draft.phaseId)?.name ?? "";
-    setSavingTemplate(true);
     setFormError("");
     try {
-      const input = toInput(draft);
-      if (editingTemplateId === null) {
-        await createTemplateAction(selectedWorkflow.id, input);
-      } else {
-        await updateTemplateAction(editingTemplateId, input);
-      }
+      await templateSaveMutation.mutateAsync({
+        workflowId: selectedWorkflow.id,
+        templateId: editingTemplateId,
+        input: toInput(draft),
+      });
       setShowTemplateEditor(false);
-      await refresh();
     } catch (err) {
       setFormError(tramosErrorText(err, { kind: "template", phaseName }));
-    } finally {
-      setSavingTemplate(false);
     }
   }
 
@@ -261,7 +288,7 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
       )
     )
       return;
-    void runPageAction(() => deactivateTemplateAction(template.id));
+    void runPageAction(() => templateDeactivateMutation.mutateAsync(template.id));
   }
 
   function moveTemplate(template: WorkflowTaskTemplate, direction: "up" | "down") {
@@ -274,7 +301,9 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
     const reordered = [...templates];
     [reordered[index], reordered[swapWith]] = [reordered[swapWith], reordered[index]];
     const workflowId = selectedWorkflow.id;
-    void runPageAction(() => reorderTemplatesAction(workflowId, reordered.map((t) => t.id)));
+    void runPageAction(() =>
+      templateOrderMutation.mutateAsync({ workflowId, orderedIds: reordered.map((t) => t.id) }),
+    );
   }
 
   const phaseColumns = useMemo<ColumnDef<WorkflowPhase, unknown>[]>(
@@ -428,7 +457,7 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
               <label className="mt-3 flex items-start gap-3 text-sm">
                 <Switch
                   checked={autoStartOn}
-                  disabled={!canManage || savingAutoStart}
+                  disabled={!canManage || autoStartMutation.isPending}
                   onCheckedChange={(checked) => void toggleAutoStart(Boolean(checked))}
                 />
                 <span>
@@ -480,7 +509,7 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
           workflow={selectedWorkflow}
           phase={editingPhase}
           onClose={() => setPhaseEditorOpen(false)}
-          onSaved={() => void onPhaseSaved()}
+          onSaved={onPhaseSaved}
         />
       ) : null}
 
@@ -495,7 +524,7 @@ export function TramosClient({ initialWorkflows }: TramosClientProps) {
         formError={formError}
         onSave={() => void saveTemplate()}
         canSave={canManage}
-        isSaving={savingTemplate}
+        isSaving={templateSaveMutation.isPending}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/shadcn/button";
 import {
@@ -14,35 +14,33 @@ import {
 } from "@/components/ui/shadcn/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { Textarea } from "@/components/ui/shadcn/textarea";
-import {
-  commitImportScheduleAction,
-  importLegacyStateAction,
-  previewImportScheduleAction,
-} from "@/lib/actions/schedule-actions";
 import type { ImportDiffSummary, LegacyStateApplyResult } from "@/lib/types/schedule";
+
+import { useScheduleImportMutations } from "./schedule-mutations";
 
 interface ImportDialogProps {
   projectId: string;
   scheduleId: string | null;
-  onImported?: () => void;
 }
 
-export function ImportDialog({ projectId, scheduleId, onImported }: ImportDialogProps) {
+/**
+ * Excel/CSV import (preview, then commit) and the legacy JSON apply. The
+ * preview is a read with no invalidation; a commit or an apply invalidates the
+ * schedule, Resumen, the project list and the project header, so the tab
+ * shows the new schedule without a reload.
+ */
+export function ImportDialog({ projectId, scheduleId }: ImportDialogProps) {
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportDiffSummary | null>(null);
   const [excelError, setExcelError] = useState("");
-  // Separate transitions per action — a shared one's `isPending` can still read
-  // true for a tick after the visible state update it gates has already
-  // rendered, transiently disabling the *other* button right when it appears.
-  const [isPreviewPending, startPreviewTransition] = useTransition();
-  const [isConfirmPending, startConfirmTransition] = useTransition();
 
   const [legacyJson, setLegacyJson] = useState("");
   const [legacyResult, setLegacyResult] = useState<LegacyStateApplyResult | null>(null);
   const [legacyError, setLegacyError] = useState("");
-  const [isLegacyPending, startLegacyTransition] = useTransition();
+
+  const mutations = useScheduleImportMutations(projectId, { excel: setExcelError, legacy: setLegacyError });
 
   function resetExcelState() {
     setPreview(null);
@@ -58,14 +56,9 @@ export function ImportDialog({ projectId, scheduleId, onImported }: ImportDialog
     setExcelError("");
     const formData = new FormData();
     formData.set("file", file);
-    startPreviewTransition(async () => {
-      const result = await previewImportScheduleAction(projectId, formData);
-      if (!result.ok) {
-        setExcelError(result.error);
-        setPreview(null);
-        return;
-      }
-      setPreview(result.data);
+    mutations.preview.mutate(formData, {
+      onSuccess: (summary) => setPreview(summary),
+      onError: () => setPreview(null),
     });
   }
 
@@ -74,17 +67,14 @@ export function ImportDialog({ projectId, scheduleId, onImported }: ImportDialog
     if (!file) return;
     const formData = new FormData();
     formData.set("file", file);
-    startConfirmTransition(async () => {
-      const result = await commitImportScheduleAction(projectId, formData);
-      if (!result.ok) {
-        setExcelError(result.error);
-        return;
-      }
-      resetExcelState();
-      setSelectedFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      setOpen(false);
-      onImported?.();
+    setExcelError("");
+    mutations.commit.mutate(formData, {
+      onSuccess: () => {
+        resetExcelState();
+        setSelectedFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        setOpen(false);
+      },
     });
   }
 
@@ -92,15 +82,7 @@ export function ImportDialog({ projectId, scheduleId, onImported }: ImportDialog
     if (!scheduleId) return;
     setLegacyError("");
     setLegacyResult(null);
-    startLegacyTransition(async () => {
-      const result = await importLegacyStateAction(scheduleId, legacyJson);
-      if (!result.ok) {
-        setLegacyError(result.error);
-        return;
-      }
-      setLegacyResult(result.data);
-      onImported?.();
-    });
+    mutations.applyLegacy.mutate({ scheduleId, rawJson: legacyJson }, { onSuccess: (result) => setLegacyResult(result) });
   }
 
   return (
@@ -167,11 +149,11 @@ export function ImportDialog({ projectId, scheduleId, onImported }: ImportDialog
 
             <DialogFooter>
               {preview ? (
-                <Button onClick={handleConfirm} disabled={isConfirmPending}>
+                <Button onClick={handleConfirm} disabled={mutations.commit.isPending}>
                   Confirmar importación
                 </Button>
               ) : (
-                <Button onClick={handlePreview} disabled={isPreviewPending}>
+                <Button onClick={handlePreview} disabled={mutations.preview.isPending}>
                   Vista previa
                 </Button>
               )}
@@ -209,7 +191,7 @@ export function ImportDialog({ projectId, scheduleId, onImported }: ImportDialog
                   </div>
                 ) : null}
                 <DialogFooter>
-                  <Button onClick={handleApplyLegacy} disabled={isLegacyPending || !legacyJson.trim()}>
+                  <Button onClick={handleApplyLegacy} disabled={mutations.applyLegacy.isPending || !legacyJson.trim()}>
                     Aplicar
                   </Button>
                 </DialogFooter>

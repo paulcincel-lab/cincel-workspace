@@ -214,11 +214,17 @@ export async function reorderPositions(orderedIds: string[]): Promise<void> {
 /**
  * Replaces the person's `source = 'manual'` rows only; `workspace` rows stay
  * (a puesto already held from Workspace is not duplicated). NOT_FOUND for an
- * unknown person or puesto.
+ * unknown person or puesto. Pass a transaction as `executor` to make the
+ * change part of it.
  */
-export async function setStaffPositions(staffId: string, positionIds: string[]): Promise<void> {
+export async function setStaffPositions(
+  staffId: string,
+  positionIds: string[],
+  executor: FlowExecutor = db
+): Promise<void> {
   const wanted = [...new Set(positionIds)];
-  await db.transaction(async (tx) => {
+  // Inside a caller's transaction (`saveMemberAction`) the writes join it; alone they get their own.
+  const write = async (tx: FlowExecutor) => {
     const [person] = await tx
       .select({ id: staff.id })
       .from(staff)
@@ -247,7 +253,9 @@ export async function setStaffPositions(staffId: string, positionIds: string[]):
         .values(wanted.map((positionId) => ({ staffId, positionId, source: "manual" })))
         .onConflictDoNothing({ target: [staffPositions.staffId, staffPositions.positionId] });
     }
-  });
+  };
+  if (executor === db) await db.transaction(write);
+  else await write(executor);
 }
 
 /**

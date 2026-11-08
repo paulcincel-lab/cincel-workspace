@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { QueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 
 const nav = vi.hoisted(() => ({
@@ -8,86 +9,100 @@ const nav = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => nav);
 
-const session = vi.hoisted(() => ({ getSessionAccess: vi.fn() }));
+const USER = { member: { id: "s1", name: "Ana" }, email: "ana@cincel.example", access: "Colaborador" };
+
+const session = vi.hoisted(() => ({ getSessionAccess: vi.fn(), requireCapabilityUser: vi.fn() }));
 vi.mock("@/lib/auth/session", () => session);
 
-const gmailFlags = vi.hoisted(() => ({ fetchGmailStatusAction: true, fetchGmailThreadsAction: true }));
-vi.mock("@/lib/actions/gmail-actions.flags", () => ({ IMPLEMENTED: gmailFlags }));
+const loader = vi.hoisted(() => ({ loadMiEspacio: vi.fn() }));
+vi.mock("@/lib/loaders/mi-espacio", () => loader);
 
-const actions = vi.hoisted(() => ({
-  fetchNotificationsAction: vi.fn(),
-  fetchGmailStatusAction: vi.fn(),
-  fetchGmailThreadsAction: vi.fn(),
-  fetchRemindersAction: vi.fn(),
-  fetchChecklistsAction: vi.fn(),
-  fetchNotesAction: vi.fn(),
-}));
-vi.mock("@/lib/actions/notifications-actions", () => ({ fetchNotificationsAction: actions.fetchNotificationsAction }));
-vi.mock("@/lib/actions/gmail-actions", () => ({
-  fetchGmailStatusAction: actions.fetchGmailStatusAction,
-  fetchGmailThreadsAction: actions.fetchGmailThreadsAction,
-}));
-vi.mock("@/lib/actions/my-space-actions", () => ({
-  fetchRemindersAction: actions.fetchRemindersAction,
-  fetchChecklistsAction: actions.fetchChecklistsAction,
-  fetchNotesAction: actions.fetchNotesAction,
-}));
+// The page prefetches into one request-scoped client; the test hands it a fresh one.
+const server = vi.hoisted(() => ({ client: null as QueryClient | null }));
+vi.mock("@/lib/query/server", () => ({ getQueryClient: () => server.client }));
+
+// Client query functions are never called on the server; only their keys are used to seed.
+vi.mock("@/lib/actions/gmail-actions", () => ({}));
+vi.mock("@/lib/actions/my-space-actions", () => ({}));
+vi.mock("@/lib/actions/notifications-actions", () => ({}));
+vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({}));
 
 vi.mock("@/components/mi-espacio/MiEspacioClient", () => ({ MiEspacioClient: () => null }));
 
 import type { MiEspacioClientProps } from "@/components/mi-espacio/MiEspacioClient";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient } from "@/lib/query/test-utils";
+import type { MiEspacioPageData } from "@/lib/types/mi-espacio";
 
 import MiEspacioPage from "./page";
 
 const CONNECTED = { connected: true, scopeOk: true, lastSyncedAt: null, lastError: null };
-const THREAD = { id: "t1", subject: "Re: planta baja" };
+const THREAD = {
+  id: "t1",
+  subject: "Re: planta baja",
+  from: "Luis <luis@cliente.mx>",
+  snippet: "",
+  receivedAt: "2026-11-07T10:00:00.000Z",
+  unread: true,
+  projectId: null,
+  suggestedProjectId: null,
+};
+
+const DATA: MiEspacioPageData = {
+  notifications: { items: [], nextCursor: null, unreadCount: 2 },
+  gmail: { status: CONNECTED, threads: [THREAD], nextCursor: "c2" },
+  reminders: [],
+  checklists: [],
+  checklistsCursor: null,
+  notes: [],
+  notesCursor: "24",
+};
+
+type HydrateElement = ReactElement<{ qc: QueryClient; children: ReactElement<MiEspacioClientProps> }>;
 
 async function renderPage(search: Record<string, string | string[] | undefined> = {}) {
-  const element = (await MiEspacioPage({ searchParams: Promise.resolve(search) })) as ReactElement<MiEspacioClientProps>;
-  return element.props;
+  const element = (await MiEspacioPage({ searchParams: Promise.resolve(search) })) as HydrateElement;
+  return { qc: element.props.qc, client: element.props.children.props };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  Object.assign(gmailFlags, { fetchGmailStatusAction: true, fetchGmailThreadsAction: true });
-  session.getSessionAccess.mockResolvedValue({ user: { id: "s1" }, status: "ok" });
-  actions.fetchNotificationsAction.mockResolvedValue({ items: [], nextCursor: null, unreadCount: 2 });
-  actions.fetchGmailStatusAction.mockResolvedValue(CONNECTED);
-  actions.fetchGmailThreadsAction.mockResolvedValue({ threads: [THREAD], nextCursor: "c2" });
-  actions.fetchRemindersAction.mockResolvedValue([]);
-  actions.fetchChecklistsAction.mockResolvedValue([]);
-  actions.fetchNotesAction.mockResolvedValue([]);
+  server.client = createTestQueryClient();
+  session.getSessionAccess.mockResolvedValue({ user: { id: "s1" }, status: "active" });
+  session.requireCapabilityUser.mockResolvedValue(USER);
+  loader.loadMiEspacio.mockResolvedValue(DATA);
 });
 
 describe("/mi-espacio page", () => {
   it("sends a visitor without a session to the login", async () => {
-    session.getSessionAccess.mockResolvedValue({ user: null, status: "anonymous" });
+    session.getSessionAccess.mockResolvedValue({ user: null, status: "guest" });
     await expect(renderPage()).rejects.toThrow("NEXT_REDIRECT:/login");
+    expect(loader.loadMiEspacio).not.toHaveBeenCalled();
   });
 
-  it("loads notifications, Gmail, today and tomorrow's reminders, checklists and notes", async () => {
-    const props = await renderPage({ nota: "n1" });
-    expect(actions.fetchNotificationsAction).toHaveBeenCalledWith({});
-    expect(props.notifications.unreadCount).toBe(2);
-    expect(props.gmail).toEqual({ status: CONNECTED, threads: [THREAD], nextCursor: "c2" });
-    const range = actions.fetchRemindersAction.mock.calls[0][0] as { from: string; to: string };
-    expect(Date.parse(range.to) - Date.parse(range.from)).toBeGreaterThan(47 * 60 * 60 * 1000);
-    expect(props.noteParam).toBe("n1");
+  it("loads the page data once, as the viewer, and seeds every granular key", async () => {
+    const { qc, client } = await renderPage({ nota: "n1" });
+    expect(loader.loadMiEspacio).toHaveBeenCalledTimes(1);
+    expect(loader.loadMiEspacio).toHaveBeenCalledWith(USER);
+    expect(qc).toBe(server.client);
+
+    expect(qc.getQueryData(qk.me.notifications({}))).toEqual({ pages: [DATA.notifications], pageParams: [null] });
+    expect(qc.getQueryData(qk.me.gmail.status())).toEqual(CONNECTED);
+    expect(qc.getQueryData(qk.me.gmail.threads())).toEqual({
+      pages: [{ threads: [THREAD], nextCursor: "c2" }],
+      pageParams: [null],
+    });
+    expect(qc.getQueryData(qk.me.reminders("today-tomorrow"))).toEqual([]);
+    expect(qc.getQueryData(qk.me.checklists())).toEqual({ pages: [{ items: [], nextCursor: null }], pageParams: [null] });
+    expect(qc.getQueryData(qk.me.notes())).toEqual({ pages: [{ items: [], nextCursor: "24" }], pageParams: [null] });
+    expect(client.noteParam).toBe("n1");
   });
 
-  it("skips the thread read when Gmail is not connected", async () => {
-    const disconnected = { ...CONNECTED, connected: false };
-    actions.fetchGmailStatusAction.mockResolvedValue(disconnected);
-    const props = await renderPage();
-    expect(actions.fetchGmailThreadsAction).not.toHaveBeenCalled();
-    expect(props.gmail).toEqual({ status: disconnected, threads: [], nextCursor: null });
-    expect(props.noteParam).toBeNull();
-  });
-
-  it("passes no Gmail block while the Gmail status read is a stub", async () => {
-    gmailFlags.fetchGmailStatusAction = false;
-    const props = await renderPage();
-    expect(actions.fetchGmailStatusAction).not.toHaveBeenCalled();
-    expect(props.gmail).toBeNull();
+  it("seeds no Gmail keys while the Gmail read is a stub", async () => {
+    loader.loadMiEspacio.mockResolvedValue({ ...DATA, gmail: null });
+    const { qc, client } = await renderPage();
+    expect(qc.getQueryData(qk.me.gmail.status())).toBeUndefined();
+    expect(qc.getQueryData(qk.me.gmail.threads())).toBeUndefined();
+    expect(client.noteParam).toBeNull();
   });
 });

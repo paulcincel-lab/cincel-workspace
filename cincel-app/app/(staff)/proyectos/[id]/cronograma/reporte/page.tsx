@@ -1,8 +1,28 @@
 import { CronogramaReport } from "@/components/cronograma/cronograma-report";
-import { fetchScheduleAction } from "@/lib/actions/schedule-actions";
+import { requireCapabilityUser } from "@/lib/auth/session";
+import { loadProyectoCronograma } from "@/lib/loaders/proyectos";
+import { Hydrate } from "@/lib/query/hydrate";
+import { proyectoCronogramaOptions } from "@/lib/query/options/proyectos";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+type CapabilityUser = Awaited<ReturnType<typeof requireCapabilityUser>>;
 
+/** The signed-in staff member; null without a usable session. Redirects propagate. */
+async function loadUser(): Promise<CapabilityUser | null> {
+  try {
+    return await requireCapabilityUser();
+  } catch (error) {
+    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "FORBIDDEN")) return null;
+    throw error;
+  }
+}
+
+/**
+ * `/proyectos/[id]/cronograma/reporte` (Query Migration 5c, #961): prefetches
+ * the same `proyectos.cronograma(id)` as the Cronograma tab (one source, with
+ * payments stripped by the loader for non-admins), so the client reuses the
+ * cache. `?asOf=` is render-only.
+ */
 export default async function CronogramaReportPage({
   params,
   searchParams,
@@ -10,13 +30,12 @@ export default async function CronogramaReportPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ asOf?: string }>;
 }) {
-  const { id: projectId } = await params;
-  const { asOf: asOfParam } = await searchParams;
+  const [{ id: projectId }, { asOf }, user] = await Promise.all([params, searchParams, loadUser()]);
 
-  const view = await fetchScheduleAction(projectId);
-  const asOf = view
-    ? new Date(`${asOfParam && ISO_DATE.test(asOfParam) ? asOfParam : view.today}T00:00:00`)
-    : null;
+  const qc = getQueryClient();
+  await prefetch(qc, proyectoCronogramaOptions(projectId), () =>
+    user ? loadProyectoCronograma(user, { id: projectId }) : Promise.resolve(null)
+  );
 
   // Only the report sheet prints; the shell around it (sidebar, assistant
   // button, toolbar) is hidden on paper (redesign FE §3.5).
@@ -31,13 +50,9 @@ export default async function CronogramaReportPage({
           section, [data-slot="card"] { break-inside: avoid; }
         }
       `}</style>
-      {!view || !asOf ? (
-        <p className="py-6 text-sm text-muted-foreground">
-          Este proyecto todavía no tiene un cronograma importado, o no tienes acceso a él.
-        </p>
-      ) : (
-        <CronogramaReport data={view.data} asOf={asOf} />
-      )}
+      <Hydrate qc={qc}>
+        <CronogramaReport projectId={projectId} asOf={asOf ?? null} />
+      </Hydrate>
     </>
   );
 }

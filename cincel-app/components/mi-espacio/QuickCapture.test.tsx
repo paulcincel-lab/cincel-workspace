@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 
 import type { ReminderDialogProps } from "./ReminderDialog";
@@ -18,7 +18,14 @@ const actions = vi.hoisted(() => ({
   createChecklistAction: vi.fn(),
   parseReminderTextAction: vi.fn(),
 }));
-vi.mock("@/lib/actions/my-space-actions", () => actions);
+vi.mock("@/lib/actions/my-space-actions", () => ({ ...actions, fetchRemindersAction: vi.fn() }));
+vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
+  getMiEspacioPageData: vi.fn(),
+  fetchMiEspacioNotesPage: vi.fn(),
+  fetchMiEspacioChecklistsPage: vi.fn(),
+}));
+vi.mock("@/lib/actions/gmail-actions", () => ({}));
+vi.mock("@/lib/actions/notifications-actions", () => ({}));
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
@@ -58,7 +65,20 @@ vi.mock("./ReminderDialog", () => ({
     ) : null,
 }));
 
+import { qk } from "@/lib/query/keys";
+import type { ChecklistsData, NotesData } from "@/lib/query/options/mi-espacio";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+
 import { QuickCapture, QUICK_CAPTURE_PLACEHOLDER, isChecklistText, parseChecklistText } from "./QuickCapture";
+
+/** Renders under a query client; the created note / checklist lands in `me.notes` / `me.checklists`. */
+function renderCapture() {
+  const result = renderWithQueryClient(<QuickCapture />);
+  const notes = () => result.client.getQueryData<NotesData>(qk.me.notes())?.pages.flatMap((p) => p.items) ?? [];
+  const checklists = () =>
+    result.client.getQueryData<ChecklistsData>(qk.me.checklists())?.pages.flatMap((p) => p.items) ?? [];
+  return { ...result, notes, checklists };
+}
 
 const DUE = "2026-11-08T15:00:00.000Z";
 
@@ -114,7 +134,7 @@ describe("parseChecklistText", () => {
 
 describe("QuickCapture", () => {
   it("renders the input with the capture placeholder and the three buttons", () => {
-    render(<QuickCapture onCreated={vi.fn()} />);
+    renderCapture();
     expect(input().getAttribute("placeholder")).toBe(QUICK_CAPTURE_PLACEHOLDER);
     for (const name of ["Nota", "Checklist", "Recordatorio"]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();
@@ -122,12 +142,11 @@ describe("QuickCapture", () => {
   });
 
   it("routes “- [ ] …” to a checklist, toasts and clears the input", async () => {
-    const onCreated = vi.fn();
-    render(<QuickCapture onCreated={onCreated} />);
+    const view = renderCapture();
     type("- [ ] Visita de obra - [ ] planos - [ ] fotos");
     enter();
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("checklist"));
+    await waitFor(() => expect(view.checklists()).toEqual([{ id: "c1" }]));
     expect(actions.createChecklistAction).toHaveBeenCalledWith({ title: "Visita de obra", items: ["planos", "fotos"] });
     expect(actions.parseReminderTextAction).not.toHaveBeenCalled();
     expect(actions.createNoteAction).not.toHaveBeenCalled();
@@ -137,8 +156,7 @@ describe("QuickCapture", () => {
 
   it("opens the reminder dialog prefilled when the text has a date", async () => {
     actions.parseReminderTextAction.mockResolvedValue({ cleanText: "llamar a Juanma", dueAt: DUE, repeat: "none" });
-    const onCreated = vi.fn();
-    render(<QuickCapture onCreated={onCreated} />);
+    const view = renderCapture();
     type("recuérdame mañana 9am llamar a Juanma");
     enter();
 
@@ -148,21 +166,19 @@ describe("QuickCapture", () => {
     expect(screen.getByTestId("reminder-due").textContent).toBe(DUE);
     expect(actions.parseReminderTextAction).toHaveBeenCalledWith("recuérdame mañana 9am llamar a Juanma");
     expect(actions.createNoteAction).not.toHaveBeenCalled();
-    expect(onCreated).not.toHaveBeenCalled();
+    expect(view.notes()).toEqual([]);
 
     fireEvent.click(screen.getByRole("button", { name: "Crear recordatorio" }));
-    expect(onCreated).toHaveBeenCalledWith("recordatorio");
     expect(input().value).toBe("");
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("saves anything else as a note, toasts and clears the input", async () => {
-    const onCreated = vi.fn();
-    render(<QuickCapture onCreated={onCreated} />);
+    const view = renderCapture();
     type("Ideas para la recepción");
     enter();
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("nota"));
+    await waitFor(() => expect(view.notes()).toEqual([{ id: "n1" }]));
     expect(actions.parseReminderTextAction).toHaveBeenCalledWith("Ideas para la recepción");
     expect(actions.createNoteAction).toHaveBeenCalledWith({ body: "Ideas para la recepción" });
     expect(toast.success).toHaveBeenCalledWith("Nota guardada");
@@ -170,8 +186,7 @@ describe("QuickCapture", () => {
   });
 
   it("does nothing on Enter with an empty input", async () => {
-    const onCreated = vi.fn();
-    render(<QuickCapture onCreated={onCreated} />);
+    const view = renderCapture();
     type("   ");
     enter();
 
@@ -179,13 +194,12 @@ describe("QuickCapture", () => {
     expect(actions.createNoteAction).not.toHaveBeenCalled();
     expect(actions.createChecklistAction).not.toHaveBeenCalled();
     expect(actions.parseReminderTextAction).not.toHaveBeenCalled();
-    expect(onCreated).not.toHaveBeenCalled();
+    expect(view.notes()).toEqual([]);
   });
 
   it("shows the INVALID copy inline and keeps the text when a save fails", async () => {
     actions.createNoteAction.mockRejectedValue(new Error("INVALID"));
-    const onCreated = vi.fn();
-    render(<QuickCapture onCreated={onCreated} />);
+    const view = renderCapture();
     type("Una nota");
     enter();
 
@@ -194,18 +208,28 @@ describe("QuickCapture", () => {
     );
     expect(input().value).toBe("Una nota");
     expect(input().getAttribute("aria-invalid")).toBe("true");
-    expect(onCreated).not.toHaveBeenCalled();
+    expect(view.notes()).toEqual([]);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("shows an { ok: false } result inline too", async () => {
+    actions.createChecklistAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
+    const view = renderCapture();
+    type("- [ ] Visita");
+    enter();
+    expect((await screen.findByRole("alert")).textContent).toBe("No tienes permiso para realizar esta acción.");
+    expect(view.checklists()).toEqual([]);
   });
 
   it("“Nota” with an empty input opens the editor through ?nota=nueva", () => {
-    render(<QuickCapture onCreated={vi.fn()} />);
+    renderCapture();
     fireEvent.click(screen.getByRole("button", { name: "Nota" }));
     expect(params.replaceMiEspacioParam).toHaveBeenCalledWith("nota", "nueva");
     expect(actions.createNoteAction).not.toHaveBeenCalled();
   });
 
   it("“Recordatorio” opens the dialog with the parsed text even without a date", async () => {
-    render(<QuickCapture onCreated={vi.fn()} />);
+    renderCapture();
     type("llamar a Juanma");
     fireEvent.click(screen.getByRole("button", { name: "Recordatorio" }));
     expect(await screen.findByRole("dialog", { name: "Nuevo recordatorio" })).toBeTruthy();
@@ -214,13 +238,12 @@ describe("QuickCapture", () => {
 
   it("falls back to a note when the reminder actions are stubs", async () => {
     flags.parseReminderTextAction = false;
-    const onCreated = vi.fn();
-    render(<QuickCapture onCreated={onCreated} />);
+    const view = renderCapture();
     expect(screen.queryByRole("button", { name: "Recordatorio" })).toBeNull();
     type("mañana 9am llamar a Juanma");
     enter();
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("nota"));
+    await waitFor(() => expect(view.notes()).toEqual([{ id: "n1" }]));
     expect(actions.parseReminderTextAction).not.toHaveBeenCalled();
   });
 
@@ -231,12 +254,12 @@ describe("QuickCapture", () => {
       parseReminderTextAction: false,
       createReminderAction: false,
     });
-    const { container } = render(<QuickCapture onCreated={vi.fn()} />);
+    const { container } = renderCapture();
     expect(container.innerHTML).toBe("");
   });
 
   it("has no serious axe violations", async () => {
-    const { container } = render(<QuickCapture onCreated={vi.fn()} />);
+    const { container } = renderCapture();
     const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
     expect(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical")).toEqual([]);
   });

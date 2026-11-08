@@ -4,7 +4,7 @@
  * false and the read actions disabled / empty, the shell renders no nav item,
  * slot or button that would call a write stub. One test per domain.
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const { allFalse } = vi.hoisted(() => ({
@@ -55,25 +55,17 @@ vi.mock("@/components/asistente/AssistantButton", () => ({
   AssistantButton: () => <div data-testid="assistant-button" />,
 }));
 vi.mock("@/components/asistente/AssistantSheet", () => ({ AssistantSheet: () => <div data-testid="assistant-sheet" /> }));
-vi.mock("@/components/shell/SidebarSlotOutlet", () => ({
-  SidebarSlotOutlet: ({ slot }: { slot: { name: string } }) => <div data-testid={`slot-${slot.name}`} />,
+vi.mock("@/lib/shell/sidebar-slots/bandeja-badge-view", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/shell/sidebar-slots/bandeja-badge-view")>()),
+  BandejaBadge: () => <div data-testid="slot-bandeja-badge" />,
 }));
 
 import { AppShell } from "../AppShell";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { buildNavModel, type NavModel } from "@/lib/ui/nav";
-import type { ResolvedAppearance } from "@/lib/types/redesign";
 
 import { ADMIN_SESSION, TODAY_ON } from "./shell-fixtures";
-
-const APPEARANCE: ResolvedAppearance = {
-  theme: "azul",
-  mode: "light",
-  style: "visual",
-  density: "comoda",
-  textSize: 14,
-  cssVars: { light: {}, dark: {} },
-  version: 1,
-};
 
 let nav: NavModel;
 
@@ -84,10 +76,15 @@ beforeAll(async () => {
 
 function renderShell() {
   // Worst case: the day status says enabled even though the clock is a stub.
-  render(
-    <AppShell appearance={APPEARANCE} session={ADMIN_SESSION} nav={nav} today={TODAY_ON}>
+  // The cache holds what the layout hydrates, so nothing is fetched.
+  const client = createTestQueryClient();
+  client.setQueryData(qk.me.today(), TODAY_ON);
+  client.setQueryData(qk.shell.badges(), { tareasOpen: 3, bandeja: { unreadCount: 2, dueReminders: [] } });
+  renderWithQueryClient(
+    <AppShell session={ADMIN_SESSION} nav={nav} today={TODAY_ON}>
       <h1>Proyectos</h1>
     </AppShell>,
+    { client },
   );
 }
 

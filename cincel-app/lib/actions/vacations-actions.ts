@@ -1,38 +1,39 @@
 "use server";
 
-import { revalidateVacacionesScreen } from "@/lib/cache/screens/biblioteca";
-import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
 import { after } from "next/server";
 import { z } from "zod";
 
+import { toActionResult } from "@/lib/actions/action-result";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
-import { canDecideVacations } from "@/lib/auth/permissions";
 import { getAppOrigin } from "@/lib/auth/safe-return-to";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { localIsoDate } from "@/lib/dashboard/task-trend";
 import { db } from "@/lib/db/client";
 import { sendMail } from "@/lib/email";
 import { vacacionesDecisionEmail, vacacionesSolicitudEmail } from "@/lib/email/templates";
 import { notify } from "@/lib/notifications/notify";
 import * as vacationsRepository from "@/lib/repositories/vacations-repository";
 import type { VacationRequestRow } from "@/lib/repositories/vacations-repository";
-import { getTimeTrackingSettings, TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/settings";
+import { getTimeTrackingSettings } from "@/lib/time-tracking/settings";
+import type { ActionResult } from "@/lib/types/schedule";
 import type {
   PendingVacationRequest,
   TeamAbsence,
-  VacationBalance,
   VacationKind,
   VacationRequest,
   VacationSettingsView,
 } from "@/lib/types/redesign";
+import { calendarDaysInRange, MAX_REQUEST_CALENDAR_DAYS, workDaysInRange } from "@/lib/vacations/balance";
 import {
-  calendarDaysInRange,
-  entitledDays,
-  MAX_REQUEST_CALENDAR_DAYS,
-  monthRange,
-  vacationBalance,
-  workDaysInRange,
-} from "@/lib/vacations/balance";
+  assertVacationDecider,
+  loadVacationSettingsView,
+  readMyVacations,
+  readPendingVacationRequests,
+  readTeamAbsences,
+  readVacationSettings,
+  toVacationDto,
+  vacationsToday,
+  type MyVacations,
+} from "@/lib/vacations/reads";
 import {
   TeamAbsencesInputSchema,
   UuidSchema,
@@ -45,30 +46,17 @@ import {
 /**
  * Vacations (redesign BE §7.8, §8.8). The absence `kind` is returned only to
  * the requester and to `canDecideVacations`; everyone else gets "ausencia".
- * Writes revalidate `/biblioteca/vacaciones`.
+ * The reads live in `lib/vacations/reads.ts`. The writes return
+ * `ActionResult` (production strips thrown messages) and revalidate no
+ * path: the client updates its query cache (Query Migration Phase 8).
  */
 
 const VACATIONS_PATH = "/biblioteca/vacaciones";
 const DecisionNoteSchema = z.string().trim().max(1000).optional();
 
-function toDto(row: VacationRequestRow): VacationRequest {
-  return {
-    id: row.id,
-    from: row.fromDate,
-    to: row.toDate,
-    kind: row.kind,
-    comment: row.comment,
-    status: row.status,
-  };
-}
-
-function today(): string {
-  return localIsoDate(new Date(), TIME_TRACKING_TIME_ZONE);
-}
-
 async function requireDecider(): Promise<AuthenticatedUser> {
   const user = await requireCapabilityUser();
-  if (!canDecideVacations(user)) throw new Error("FORBIDDEN");
+  assertVacationDecider(user);
   return user;
 }
 
@@ -164,31 +152,18 @@ async function notifyRequesterOfDecision(decider: AuthenticatedUser, row: Vacati
 }
 
 /** The caller's balance and requests of the current year. Auth: owner. */
-export async function fetchMyVacationsAction(): Promise<{ balance: VacationBalance; requests: VacationRequest[] }> {
-  const user = await requireCapabilityUser();
-  const staffId = user.member.id;
-  const now = today();
-  const year = now.slice(0, 4);
-  const [rows, settings, me, daysPerYear] = await Promise.all([
-    vacationsRepository.listVacationRequests(db, { from: `${year}-01-01`, to: `${year}-12-31`, staffIds: [staffId] }),
-    getTimeTrackingSettings(),
-    vacationsRepository.getStaffForVacations(db, staffId),
-    vacationsRepository.getOrgDaysPerYear(db),
-  ]);
-  const balance = vacationBalance({
-    entitled: entitledDays(me?.vacationDays, daysPerYear),
-    requests: rows.map((r) => ({ from: r.fromDate, to: r.toDate, status: r.status, days: r.days })),
-    today: now,
-    workDays: settings.workDays,
-  });
-  const requests = [...rows]
-    .sort((a, b) => (a.fromDate === b.fromDate ? 0 : a.fromDate < b.fromDate ? 1 : -1))
-    .map(toDto);
-  return { balance, requests };
+export async function fetchMyVacationsAction(): Promise<MyVacations> {
+  return readMyVacations(await requireCapabilityUser());
 }
 
 /** Notifies deciders (`sistema`). Errors: `INVALID` (to < from; > 30 days; 0 work days), `OVERLAP`. */
-export async function requestVacationAction(input: {
+export async function requestVacationAction(
+  ...args: Parameters<typeof requestVacationActionImpl>
+): Promise<ActionResult<VacationRequest>> {
+  return toActionResult(() => requestVacationActionImpl(...args));
+}
+
+async function requestVacationActionImpl(input: {
   from: string;
   to: string;
   kind: VacationKind;
@@ -217,15 +192,20 @@ export async function requestVacationAction(input: {
   });
 
   after(() => notifyDecidersOfRequest(user, row));
-  revalidateVacacionesScreen();
-  return toDto(row);
+  return toVacationDto(row);
 }
 
 /** → cancelada (pendiente, or aprobada starting in the future). Errors: `NOT_FOUND`, `FORBIDDEN`, `STARTED`. */
-export async function cancelVacationRequestAction(id: string): Promise<void> {
+export async function cancelVacationRequestAction(
+  ...args: Parameters<typeof cancelVacationRequestActionImpl>
+): Promise<ActionResult<void>> {
+  return toActionResult(() => cancelVacationRequestActionImpl(...args));
+}
+
+async function cancelVacationRequestActionImpl(id: string): Promise<void> {
   const user = await requireCapabilityUser();
   const requestId = parseInput(UuidSchema, id);
-  const now = today();
+  const now = vacationsToday();
 
   await db.transaction(async (tx) => {
     const row = await vacationsRepository.lockVacationRequest(tx, requestId);
@@ -238,24 +218,25 @@ export async function cancelVacationRequestAction(id: string): Promise<void> {
     }
     await vacationsRepository.updateVacationRequest(tx, row.id, { status: "cancelada" });
   });
-
-  revalidateVacacionesScreen();
 }
 
 /** Pending requests, oldest first ("Solicitudes del equipo"). Auth: `canDecideVacations`. Errors: `FORBIDDEN`. */
 export async function fetchPendingVacationRequestsAction(): Promise<PendingVacationRequest[]> {
-  const user = await requireDecider();
-  // A decider never decides their own request, so it is not listed here.
-  const rows = await vacationsRepository.listPendingRequests(db, { excludeStaffId: user.member.id });
-  return rows.map((r) => ({ ...toDto(r), staffId: r.staffId, name: r.name, days: r.days }));
+  return readPendingVacationRequests(await requireCapabilityUser());
 }
 
 /**
  * Approve or reject; notifies the requester (in-app + email). Auth:
  * `canDecideVacations`, never the requester. Errors: `FORBIDDEN`, `NOT_FOUND`,
- * `INVALID` (not pendiente). Also revalidates `/personas`.
+ * `INVALID` (not pendiente).
  */
 export async function decideVacationAction(
+  ...args: Parameters<typeof decideVacationActionImpl>
+): Promise<ActionResult<VacationRequest>> {
+  return toActionResult(() => decideVacationActionImpl(...args));
+}
+
+async function decideVacationActionImpl(
   id: string,
   decision: "aprobada" | "rechazada",
   note?: string,
@@ -279,46 +260,29 @@ export async function decideVacationAction(
   });
 
   after(() => notifyRequesterOfDecision(user, row));
-  revalidateVacacionesScreen();
-  revalidatePersonasScreen(["personas"]);
-  return toDto(row);
+  return toVacationDto(row);
 }
 
 /** Approved absences of the month (pending too for deciders). Auth: staff. Errors: `INVALID`. */
 export async function fetchTeamAbsencesAction(input: { month: string }): Promise<TeamAbsence[]> {
   const user = await requireCapabilityUser();
   const { month } = parseInput(TeamAbsencesInputSchema, input);
-  const decider = canDecideVacations(user);
-  const rows = await vacationsRepository.listTeamRequests(
-    db,
-    monthRange(month),
-    decider ? ["aprobada", "pendiente"] : ["aprobada"],
-  );
-  return rows.map((r) => ({
-    staffId: r.staffId,
-    name: r.name,
-    from: r.fromDate,
-    to: r.toDate,
-    kind: decider || r.staffId === user.member.id ? r.kind : "ausencia",
-  }));
-}
-
-async function loadSettingsView(): Promise<VacationSettingsView> {
-  const [daysPerYear, overrides] = await Promise.all([
-    vacationsRepository.getOrgDaysPerYear(db),
-    vacationsRepository.listVacationOverrides(db),
-  ]);
-  return { daysPerYear, overrides };
+  return readTeamAbsences(user, month);
 }
 
 /** Org default and per-person overrides (active staff). Auth: `canDecideVacations`. Errors: `FORBIDDEN`. */
 export async function fetchVacationSettingsAction(): Promise<VacationSettingsView> {
-  await requireDecider();
-  return loadSettingsView();
+  return readVacationSettings(await requireCapabilityUser());
 }
 
 /** Auth: `canDecideVacations`. Errors: `FORBIDDEN`, `INVALID`. */
-export async function saveVacationSettingsAction(input: {
+export async function saveVacationSettingsAction(
+  ...args: Parameters<typeof saveVacationSettingsActionImpl>
+): Promise<ActionResult<VacationSettingsView>> {
+  return toActionResult(() => saveVacationSettingsActionImpl(...args));
+}
+
+async function saveVacationSettingsActionImpl(input: {
   daysPerYear: number;
   overrides: { staffId: string; days: number | null }[];
 }): Promise<VacationSettingsView> {
@@ -330,6 +294,5 @@ export async function saveVacationSettingsAction(input: {
 
   await db.transaction((tx) => vacationsRepository.saveVacationSettings(tx, parsed));
 
-  revalidateVacacionesScreen();
-  return loadSettingsView();
+  return loadVacationSettingsView();
 }

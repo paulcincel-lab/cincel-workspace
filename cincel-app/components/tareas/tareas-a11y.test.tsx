@@ -1,13 +1,22 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import axe from "axe-core";
 import type { ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+const nav = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
   usePathname: () => "/tareas",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(nav.search),
+}));
+
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
+  getTareasPageData: vi.fn(),
+  getTareasFacets: vi.fn(),
+  getTareasBoard: vi.fn(),
+  getTareasListPage: vi.fn(),
+  getTareasBoardColumn: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/auth-service", () => ({
@@ -52,16 +61,17 @@ vi.mock("./TareasLista", async () => {
 });
 // The task sheet (R3-08) opens from `?tarea=`; none here.
 vi.mock("./TaskSheet", () => ({ TaskSheetRoute: () => null }));
-// The dialog (R3-09) has its own a11y test; closed here.
-vi.mock("./NewTaskDialog", () => ({ NewTaskDialog: () => null }));
 vi.mock("./TareasCalendario", () => ({
   CALENDARIO_DESCRIPTION: "Fechas de entrega y agenda del equipo. Las horas con ≈ son estimadas.",
   TareasCalendario: () => <div />,
 }));
 
-import { DEFAULT_TAREAS_QUERY, type TareasQuery } from "@/lib/tareas/query";
-import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
-import type { StaffOption } from "@/lib/types/redesign";
+import { qk } from "@/lib/query/keys";
+import { tareasListFiltersOf, tareasPageKeyInputOf } from "@/lib/query/options/tareas";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { TareasFacets, TareasPageData } from "@/lib/tareas/page-data";
+import { parseTareasQuery, toTareasSearch, type TareasQuery } from "@/lib/tareas/query";
+import type { WorkflowRef } from "@/lib/types/core";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 import { TareasClient } from "./TareasClient";
@@ -77,17 +87,14 @@ const TRAMOS: WorkflowRef[] = [
   { id: "w3", key: "construccion", name: "Construcción", sortOrder: 3 },
 ];
 
-const TASKS = [
-  {
-    id: "t1",
-    title: "Plano de acabados",
-    status: "pendiente",
-    workflow: TRAMOS[0],
-    project: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Guadalajara 83", clientName: null },
-  },
-] as unknown as TaskListItem[];
+const FACETS: TareasFacets = {
+  total: 1,
+  byTramo: { presale: 1 },
+  projects: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Guadalajara 83", count: 1 }],
+};
+const NO_FACETS: TareasFacets = { total: 0, byTramo: {}, projects: [] };
 
-const STAFF = [{ id: "22222222-2222-4222-8222-222222222222", name: "Luis", lastName: "Paz", suggested: false }] as unknown as StaffOption[];
+const STAFF = [{ id: "22222222-2222-4222-8222-222222222222", name: "Luis Paz" }];
 
 async function seriousViolations(container: HTMLElement) {
   // Color contrast needs real layout and rendering, which happy-dom doesn't provide.
@@ -97,10 +104,15 @@ async function seriousViolations(container: HTMLElement) {
     .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
 }
 
-function renderClient(patch: Partial<TareasQuery>, tasks: TaskListItem[] = TASKS) {
-  return render(
-    <TareasClient query={{ ...DEFAULT_TAREAS_QUERY, ...patch }} initial={{ tasks }} staff={STAFF} tramos={TRAMOS} />,
-  );
+/** The URL holds `patch`; the cache is what `/tareas` hydrates for it. */
+function renderClient(patch: Partial<TareasQuery>, facets: TareasFacets = FACETS) {
+  nav.search = toTareasSearch(patch).replace(/^\?/, "");
+  const query = parseTareasQuery(new URLSearchParams(nav.search));
+  const client = createTestQueryClient();
+  const page: TareasPageData = { facets, tramos: TRAMOS, staff: STAFF };
+  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query)), page);
+  client.setQueryData(qk.tareas.facets(tareasListFiltersOf(query)), facets);
+  return renderWithQueryClient(<TareasClient />, { client });
 }
 
 beforeAll(() => {
@@ -143,7 +155,7 @@ describe("Tareas shell accessibility", () => {
   });
 
   it("has no serious axe violations on the empty state", async () => {
-    const { container } = renderClient({ vista: "calendario", tramo: "diseno" }, []);
+    const { container } = renderClient({ vista: "calendario", tramo: "diseno" }, NO_FACETS);
     expect(await seriousViolations(container)).toEqual([]);
   });
 

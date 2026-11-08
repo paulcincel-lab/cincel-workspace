@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 
 import { FormDialog } from "@/components/patterns/FormDialog";
@@ -24,6 +25,8 @@ import { IMPLEMENTED } from "@/lib/actions/my-space-actions.flags";
 import { searchWorkspaceAction } from "@/lib/actions/search-actions";
 import { IMPLEMENTED as SEARCH_IMPLEMENTED } from "@/lib/actions/search-actions.flags";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
+import { STALE, qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
 import {
   REMINDER_CHANNEL_LABELS,
   REMINDER_REPEAT_LABELS,
@@ -63,8 +66,33 @@ const CHANNEL_ORDER: ReminderChannel[] = ["app", "email"];
 const DEBOUNCE_MS = 300;
 const DEFAULT_TIME = "09:00";
 const EMPTY_PARSE: ParsedReminder = { cleanText: "", dueAt: null, repeat: "none" };
+/** "Vincular a tarea o proyecto" searches these result types. */
+const LINK_TYPES: SearchResult["type"][] = ["tarea", "proyecto"];
 
-function initialForm(initialText: string | undefined, parsed: ParsedReminder | undefined): FormState {
+/** `value`, once it has stopped changing for `ms`. */
+function useDebouncedValue<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return settled;
+}
+
+/** The form after a parse of `text`: date, time and Repetir follow it unless the user set them. */
+function withParse(f: FormState, text: string, result: ParsedReminder): FormState {
+  if (f.text !== text) return f;
+  const when = result.dueAt ? toZonedInputs(result.dueAt) : null;
+  return {
+    ...f,
+    parse: { forText: text, result },
+    date: !f.whenTouched && when ? when.date : f.date,
+    time: !f.whenTouched && when ? when.time : f.time,
+    repeat: !f.repeatTouched && result.dueAt ? result.repeat : f.repeat,
+  };
+}
+
+function formFrom(initialText: string | undefined, parsed: ParsedReminder | undefined): FormState {
   const text = initialText ?? parsed?.cleanText ?? "";
   const when = parsed?.dueAt ? toZonedInputs(parsed.dueAt) : null;
   return {
@@ -87,55 +115,50 @@ function initialForm(initialText: string | undefined, parsed: ParsedReminder | u
  */
 export function ReminderDialog({ open, initialText, parsed, onOpenChange, onCreated }: ReminderDialogProps) {
   const ids = useId();
-  const [form, setForm] = useState<FormState>(() => initialForm(initialText, parsed));
+  const [form, setForm] = useState<FormState>(() => formFrom(initialText, parsed));
   const [wasOpen, setWasOpen] = useState(open);
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [whenError, setWhenError] = useState<string | null>(null);
+
+  // A new reminder shows in Recordatorios, the sidebar badge and Inicio.
+  const createMutation = useActionMutation<Parameters<typeof createReminderAction>[0], Reminder>(createReminderAction, {
+    invalidate: [qk.me.reminders("today-tomorrow"), qk.shell.badges(), qk.inicio()],
+    onFormError: () => undefined,
+  });
+  const pending = createMutation.isPending;
 
   // Reset the form each time the dialog opens (prefilled from QuickCapture).
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setForm(initialForm(initialText, parsed));
+      setForm(formFrom(initialText, parsed));
       setError(null);
       setWhenError(null);
-      setPending(false);
     }
   }
 
-  // Parse the text as the user types (debounced; stale answers are dropped).
-  const parseSeq = useRef(0);
+  // Parse the text as the user types: a query per settled text (debounced, cached per text).
   const text = form.text;
-  const alreadyParsed = form.parse?.forText === text;
-  useEffect(() => {
-    if (!open || !IMPLEMENTED.parseReminderTextAction || alreadyParsed) return;
-    const seq = ++parseSeq.current;
-    const timer = setTimeout(() => {
-      const trimmed = text.trim();
-      const run: Promise<ParsedReminder> = trimmed ? parseReminderTextAction(trimmed) : Promise.resolve(EMPTY_PARSE);
-      run
-        .then((result) => {
-          if (seq !== parseSeq.current) return;
-          setForm((f) => {
-            if (f.text !== text) return f;
-            const when = result.dueAt ? toZonedInputs(result.dueAt) : null;
-            return {
-              ...f,
-              parse: { forText: text, result },
-              date: !f.whenTouched && when ? when.date : f.date,
-              time: !f.whenTouched && when ? when.time : f.time,
-              repeat: !f.repeatTouched && result.dueAt ? result.repeat : f.repeat,
-            };
-          });
-        })
-        .catch(() => {
-          if (seq !== parseSeq.current) return;
-          setForm((f) => (f.text === text ? { ...f, parse: { forText: text, result: { ...EMPTY_PARSE, cleanText: text } } } : f));
-        });
-    }, DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [open, text, alreadyParsed]);
+  const trimmed = text.trim();
+  const settledText = useDebouncedValue(trimmed, DEBOUNCE_MS);
+  const needsParse = open && IMPLEMENTED.parseReminderTextAction && form.parse?.forText !== text;
+  const parseQuery = useQuery({
+    queryKey: qk.me.reminderParse(settledText),
+    queryFn: () => parseReminderTextAction(settledText),
+    enabled: needsParse && settledText !== "" && settledText === trimmed,
+    staleTime: STALE.screen,
+    retry: false,
+  });
+  if (needsParse && settledText === trimmed) {
+    const result =
+      trimmed === ""
+        ? EMPTY_PARSE
+        : parseQuery.isError
+          ? { ...EMPTY_PARSE, cleanText: text }
+          : parseQuery.data;
+    // React's "adjust state during render": applied once, then `form.parse.forText === text`.
+    if (result) setForm((f) => withParse(f, text, result));
+  }
 
   const currentParse = form.parse && form.parse.forText === form.text ? form.parse.result : null;
   const chip = currentParse?.dueAt ? formatReminderWhen(currentParse.dueAt, new Date()) : null;
@@ -163,9 +186,9 @@ export function ReminderDialog({ open, initialText, parsed, onOpenChange, onCrea
       setWhenError(actionErrorText("PAST_TIME"));
       return;
     }
-    setPending(true);
+    let reminder: Reminder;
     try {
-      const reminder = await createReminderAction({
+      reminder = await createMutation.mutateAsync({
         text: cleanText,
         dueAt,
         repeat: form.repeat,
@@ -173,15 +196,14 @@ export function ReminderDialog({ open, initialText, parsed, onOpenChange, onCrea
         ...(form.link?.type === "tarea" ? { taskId: form.link.id } : {}),
         ...(form.link?.type === "proyecto" ? { projectId: form.link.id } : {}),
       });
-      toast.success(`Recordatorio creado para ${formatReminderWhen(reminder.dueAt, new Date())}`);
-      onCreated(reminder);
-      onOpenChange(false);
     } catch (err) {
       if (actionErrorCode(err) === "PAST_TIME") setWhenError(actionErrorText(err));
       else setError(actionErrorText(err));
-    } finally {
-      setPending(false);
+      return;
     }
+    toast.success(`Recordatorio creado para ${formatReminderWhen(reminder.dueAt, new Date())}`);
+    onCreated(reminder);
+    onOpenChange(false);
   }
 
   const whenErrorId = `${ids}-when-error`;
@@ -306,27 +328,17 @@ function LinkPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const seq = useRef(0);
-
-  useEffect(() => {
-    const q = query.trim();
-    const current = ++seq.current;
-    const timer = setTimeout(() => {
-      if (q.length < 2) {
-        if (current === seq.current) setResults([]);
-        return;
-      }
-      searchWorkspaceAction({ query: q, types: ["tarea", "proyecto"], limit: 8 })
-        .then((found) => {
-          if (current === seq.current) setResults(found.filter((r) => r.type === "tarea" || r.type === "proyecto"));
-        })
-        .catch(() => {
-          if (current === seq.current) setResults([]);
-        });
-    }, DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [query]);
+  const q = useDebouncedValue(query.trim(), DEBOUNCE_MS);
+  const searchable = q.length >= 2;
+  const search = useQuery({
+    queryKey: qk.search(q, LINK_TYPES),
+    queryFn: () => searchWorkspaceAction({ query: q, types: LINK_TYPES, limit: 8 }),
+    enabled: searchable,
+    staleTime: STALE.search,
+  });
+  const results: SearchResult[] = searchable
+    ? (search.data ?? []).filter((r) => r.type === "tarea" || r.type === "proyecto")
+    : [];
 
   return (
     <div className="space-y-2">

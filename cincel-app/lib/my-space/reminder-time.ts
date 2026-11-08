@@ -91,6 +91,18 @@ export function formatReminderTime(dueAt: string, tz: string = REMINDER_TIME_ZON
   return `${p.hour}:${pad(p.minute)}`;
 }
 
+const dayLabelFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** One "vie 15 nov" formatter per time zone (a list labels every reminder). */
+function dayLabelFormatter(tz: string): Intl.DateTimeFormat {
+  let formatter = dayLabelFormatters.get(tz);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("es-MX", { timeZone: tz, weekday: "short", day: "numeric", month: "short" });
+    dayLabelFormatters.set(tz, formatter);
+  }
+  return formatter;
+}
+
 /** es-MX lowercase label: "hoy 9:00", "mañana 9:00", else "vie 15 nov 9:00". */
 export function formatReminderWhen(dueAt: string, now: Date, tz: string = REMINDER_TIME_ZONE): string {
   const time = formatReminderTime(dueAt, tz);
@@ -98,8 +110,7 @@ export function formatReminderWhen(dueAt: string, now: Date, tz: string = REMIND
   if (offset === 0) return `hoy ${time}`;
   if (offset === 1) return `mañana ${time}`;
   // Built from parts: ICU versions differ in the literals ("vie 15 nov" vs "vie, 15 de nov.").
-  const parts = new Intl.DateTimeFormat("es-MX", { timeZone: tz, weekday: "short", day: "numeric", month: "short" })
-    .formatToParts(new Date(dueAt));
+  const parts = dayLabelFormatter(tz).formatToParts(new Date(dueAt));
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     (parts.find((x) => x.type === type)?.value ?? "").replace(/\./g, "").trim().toLowerCase();
   return `${part("weekday")} ${part("day")} ${part("month")} ${time}`;

@@ -169,11 +169,11 @@ describe("project flow monday actions", () => {
   });
 
   describe("saveMondayStatusMapAction", () => {
-    it("saves the whole map and revalidates the wizard", async () => {
+    it("saves the whole map and revalidates no route (the wizard updates monday.choices)", async () => {
       const result = await saveMondayStatusMapAction(statusMap);
       expect(result).toEqual({ ok: true, statusMap });
       expect(service.saveStatusMap).toHaveBeenCalledWith(expect.anything(), statusMap);
-      expect(revalidatePath).toHaveBeenCalledWith("/configuracion/importar-monday");
+      expect(revalidatePath).not.toHaveBeenCalled();
     });
 
     it("fills a missing priority with null", async () => {
@@ -273,14 +273,18 @@ describe("project flow monday actions", () => {
       expect(remap.planRemap).not.toHaveBeenCalled();
     });
 
-    it("applies as the signed-in admin and revalidates the ficha, layout, Proyectos and Dashboard", async () => {
+    it("applies as the signed-in admin, with no Proyectos, ficha, Tareas or Inicio route revalidated", async () => {
       remap.applyRemap.mockResolvedValueOnce({ updated: 12 });
       expect(await applyMondayRemapAction(PROJECT, remapInput)).toEqual({ ok: true, updated: 12 });
       expect(remap.applyRemap).toHaveBeenCalledWith(expect.anything(), PROJECT, remapInput, "admin");
-      expect(revalidatePath).toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
-      expect(revalidatePath).toHaveBeenCalledWith("/actividades", "layout");
-      expect(revalidatePath).toHaveBeenCalledWith("/proyectos");
-      expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
+      // The ficha reads its own query (5b, #960): it is not revalidated.
+      expect(revalidatePath).not.toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
+      // Tareas reads `qk.tareas.*` (Phase 4): the Actividades layout stub is not revalidated.
+      expect(revalidatePath).not.toHaveBeenCalledWith("/actividades", "layout");
+      // `/proyectos` reads `qk.proyectos.list()` (5a, #959).
+      expect(revalidatePath).not.toHaveBeenCalledWith("/proyectos");
+      // Inicio reads `qk.inicio()` (#937): the `/dashboard` stub is not revalidated.
+      expect(revalidatePath).not.toHaveBeenCalledWith("/dashboard");
     });
 
     it("is idempotent: the same input applied twice reaches the core with the same arguments and the second changes nothing", async () => {

@@ -1,13 +1,17 @@
 /**
  * Test fixtures for `TaskSheet` (TaskSheet.test.tsx, TaskSheet.a11y.test.tsx).
- * Not a test file: plain data plus a `FormSheet` test double that keeps its
- * contract (FE §4.11) so the sheet's own content is what the tests exercise.
+ * Not a test file: plain data (a task and the `getTaskSheetData` payload the
+ * tests seed the query cache with) plus a `FormSheet` test double that keeps
+ * its contract (FE §4.11) so the sheet's own content is what the tests
+ * exercise. It imports no query or action module, so `vi.mock` factories can
+ * load it.
  */
 import type { ReactNode } from "react";
 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import type { FormSheetProps } from "@/components/patterns/FormSheet";
 import type { TaskDetail, WorkflowDetail } from "@/lib/types/core";
+import type { TaskSheetData } from "@/lib/types/task-sheet";
 
 export const DISENO_REF = { id: "w-diseno", key: "diseno", name: "Diseño", sortOrder: 2 };
 
@@ -105,6 +109,22 @@ export function makeTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
     ],
     ...overrides,
   } as TaskDetail;
+}
+
+/** `catalog.assignableStaff`: `{id,name,suggested}` only. */
+export const ASSIGNABLE = STAFF.map(({ id, name, suggested }) => ({ id, name, suggested }));
+
+/** What `getTaskSheetData` returns for `task`: the catalogs it seeds (no espacios unless given). */
+export function makeSheetData(task: TaskDetail = makeTask(), overrides: Partial<Omit<TaskSheetData, "task">> = {}): TaskSheetData {
+  return {
+    task,
+    statuses: [],
+    workflows: [DISENO_REF],
+    assignable: ASSIGNABLE,
+    spaces: [],
+    phases: task.workflowId ? PHASES : [],
+    ...overrides,
+  };
 }
 
 /** `FormSheet` double: right `Sheet`, title, a `<form>` body, inline error and the "Cancelar" + submit footer. */

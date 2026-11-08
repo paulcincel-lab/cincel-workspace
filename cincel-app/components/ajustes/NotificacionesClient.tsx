@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useId, useState, useTransition, type ReactNode } from "react";
-import { toast } from "sonner";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { useId, type ReactNode } from "react";
 
 import { SettingsRow } from "@/components/patterns/SettingsRow";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
@@ -20,7 +20,19 @@ import {
 } from "@/components/ui/shadcn/table";
 import { updateNotificationPreferencesAction } from "@/lib/actions/notifications-actions";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
-import type { NotificationKind, NotificationPreferences } from "@/lib/types/redesign";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { ajustesNotificacionesOptions, type AjustesNotificacionesPageData } from "@/lib/query/options/ajustes";
+import {
+  NOTIFICATION_MATRIX_CHANNELS,
+  NOTIFICATION_MATRIX_KINDS,
+  NotificacionesFormStoreProvider,
+  notificacionesInput,
+  useNotificacionesForm,
+  useNotificacionesFormApi,
+  type NotificationChannel,
+} from "@/lib/stores/ajustes/notificaciones-form-store";
+import type { NotificationKind } from "@/lib/types/redesign";
 import { NotificationPreferencesSchema } from "@/lib/validation/redesign";
 
 /** Matrix rows in order, with their labels (FE §3.8). */
@@ -34,7 +46,7 @@ export const NOTIFICATION_KIND_LABELS: Readonly<Record<NotificationKind, string>
   sistema: "Sistema",
 };
 
-type Channel = "inApp" | "email" | "digest";
+type Channel = NotificationChannel;
 
 /** Matrix columns (FE §3.8). There is no Cutto column (RD-9). */
 export const NOTIFICATION_CHANNEL_LABELS: Readonly<Record<Channel, string>> = {
@@ -43,160 +55,106 @@ export const NOTIFICATION_CHANNEL_LABELS: Readonly<Record<Channel, string>> = {
   digest: "Resumen diario",
 };
 
-const KINDS = Object.keys(NOTIFICATION_KIND_LABELS) as NotificationKind[];
-const CHANNELS = Object.keys(NOTIFICATION_CHANNEL_LABELS) as Channel[];
+const KINDS = NOTIFICATION_MATRIX_KINDS;
+const CHANNELS = NOTIFICATION_MATRIX_CHANNELS;
 
 /** Fixed digest time (R3-1). */
 export const DIGEST_NOTE = "Resumen diario a las 07:30";
 
-const DEFAULT_QUIET_FROM = "20:00";
-const DEFAULT_QUIET_TO = "08:00";
-
-type ChannelValues = Record<Channel, boolean>;
-type Matrix = Record<NotificationKind, ChannelValues>;
-
-function toMatrix(prefs: NotificationPreferences): Matrix {
-  const byKind = new Map(prefs.rows.map((row) => [row.kind, row]));
-  return Object.fromEntries(
-    KINDS.map((kind) => {
-      const row = byKind.get(kind);
-      return [kind, { inApp: row?.inApp ?? false, email: row?.email ?? false, digest: row?.digest ?? false }];
-    }),
-  ) as Matrix;
-}
-
-type FormContextValue = {
-  matrix: Matrix;
-  setChannel(kind: NotificationKind, channel: Channel, value: boolean): void;
-  quietEnabled: boolean;
-  setQuietEnabled(value: boolean): void;
-  quietFrom: string;
-  setQuietFrom(value: string): void;
-  quietTo: string;
-  setQuietTo(value: string): void;
-  timeError: string | null;
-  pending: boolean;
-};
-
-const NotificacionesFormContext = createContext<FormContextValue | null>(null);
-
 export type NotificacionesClientProps = {
-  /** One row per kind with defaults filled (`withNotificationDefaults`). */
-  initial: NotificationPreferences;
   /** The page's visible settings sections (`settingsSectionsFor("notificaciones")`); defaults to both. */
   children?: ReactNode;
 };
 
 /**
  * Ajustes › Notificaciones (redesign FE §3.8): kind × channel matrix and
- * quiet hours. Holds the form state the two settings sections edit and saves
- * it with "Guardar". Ignores the presentation style.
+ * quiet hours. The saved preferences are the hydrated
+ * `qk.ajustes.page('notificaciones')`; the draft the two settings sections
+ * edit lives in a page-scoped store (reset when the page unmounts) and
+ * "Guardar" saves it through a mutation. Ignores the presentation style.
  */
-export function NotificacionesClient({ initial, children }: NotificacionesClientProps) {
-  const [matrix, setMatrix] = useState<Matrix>(() => toMatrix(initial));
-  const [quietEnabled, setQuietEnabledState] = useState(initial.quietHours !== null);
-  const [quietFrom, setQuietFromState] = useState(initial.quietHours?.from ?? DEFAULT_QUIET_FROM);
-  const [quietTo, setQuietToState] = useState(initial.quietHours?.to ?? DEFAULT_QUIET_TO);
-  const [timeError, setTimeError] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+export function NotificacionesClient({ children }: NotificacionesClientProps) {
+  const { preferences } = useSuspenseQuery(ajustesNotificacionesOptions()).data;
+  return (
+    <NotificacionesFormStoreProvider initial={preferences}>
+      <NotificacionesForm>{children}</NotificacionesForm>
+    </NotificacionesFormStoreProvider>
+  );
+}
 
-  function clearErrors() {
-    setTimeError(null);
-    setFormError(null);
-  }
+function NotificacionesForm({ children }: { children?: ReactNode }) {
+  const form = useNotificacionesFormApi();
+  const formError = useNotificacionesForm((s) => s.formError);
+  const pending = useNotificacionesForm((s) => s.pending);
 
-  const value: FormContextValue = {
-    matrix,
-    setChannel(kind, channel, checked) {
-      setFormError(null);
-      setMatrix((prev) => ({ ...prev, [kind]: { ...prev[kind], [channel]: checked } }));
-    },
-    quietEnabled,
-    setQuietEnabled(checked) {
-      clearErrors();
-      setQuietEnabledState(checked);
-    },
-    quietFrom,
-    setQuietFrom(v) {
-      clearErrors();
-      setQuietFromState(v);
-    },
-    quietTo,
-    setQuietTo(v) {
-      clearErrors();
-      setQuietToState(v);
-    },
-    timeError,
-    pending,
-  };
+  const save = useActionMutation(updateNotificationPreferencesAction, {
+    // The action answers one row per kind (defaults filled), the shape the page data holds.
+    setData: (qc, saved) =>
+      qc.setQueryData<AjustesNotificacionesPageData>(qk.ajustes.page("notificaciones"), { preferences: saved }),
+    invalidate: [qk.me.notificationPrefs(), qk.me.preferences()],
+    successToast: "Notificaciones guardadas",
+    onFormError: (text) => form.getState().setFormError(text),
+  });
 
-  function save() {
-    clearErrors();
-    const input: NotificationPreferences = {
-      rows: KINDS.map((kind) => ({ kind, ...matrix[kind] })),
-      quietHours: quietEnabled ? { from: quietFrom, to: quietTo } : null,
-    };
-    const parsed = NotificationPreferencesSchema.safeParse(input);
-    if (!parsed.success) {
-      setTimeError(actionErrorText(new Error("INVALID")));
+  function submit() {
+    const state = form.getState();
+    state.setTimeError(null);
+    state.setFormError(null);
+    const input = notificacionesInput(state);
+    if (!NotificationPreferencesSchema.safeParse(input).success) {
+      state.setTimeError(actionErrorText(new Error("INVALID")));
       return;
     }
-    startTransition(async () => {
-      try {
-        const saved = await updateNotificationPreferencesAction(input);
-        setMatrix(toMatrix(saved));
-        setQuietEnabledState(saved.quietHours !== null);
-        if (saved.quietHours) {
-          setQuietFromState(saved.quietHours.from);
-          setQuietToState(saved.quietHours.to);
-        }
-        toast.success("Notificaciones guardadas");
-      } catch (err) {
-        const text = actionErrorText(err);
+    state.setPending(true);
+    save.mutate(input, {
+      onSuccess: (saved) => form.getState().replace(saved),
+      onError: (err) => {
+        // An invalid quiet-hours range shows under the times, not as the form error.
         const aboutTimes =
-          quietEnabled && actionErrorCode(err) === "INVALID" && err instanceof Error && err.message.includes("quietHours");
-        if (aboutTimes) setTimeError(text);
-        else setFormError(text);
-      }
+          input.quietHours !== null && actionErrorCode(err) === "INVALID" && err.message.includes("quietHours");
+        if (aboutTimes) {
+          form.getState().setFormError(null);
+          form.getState().setTimeError(actionErrorText(err));
+        }
+      },
+      onSettled: () => form.getState().setPending(false),
     });
   }
 
   return (
-    <NotificacionesFormContext.Provider value={value}>
-      <form
-        className="flex flex-col gap-4"
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          save();
-        }}
-      >
-        {children ?? (
-          <>
-            <NotificacionesCanales />
-            <NotificacionesHorasSilencio />
-          </>
-        )}
-        {formError ? (
-          <Alert variant="destructive">
-            <AlertDescription>{formError}</AlertDescription>
-          </Alert>
-        ) : null}
-        <div className="flex justify-end">
-          <Button type="submit" disabled={pending}>
-            {pending ? "Guardando…" : "Guardar"}
-          </Button>
-        </div>
-      </form>
-    </NotificacionesFormContext.Provider>
+    <form
+      className="flex flex-col gap-4"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      {children ?? (
+        <>
+          <NotificacionesCanales />
+          <NotificacionesHorasSilencio />
+        </>
+      )}
+      {formError ? (
+        <Alert variant="destructive">
+          <AlertDescription>{formError}</AlertDescription>
+        </Alert>
+      ) : null}
+      <div className="flex justify-end">
+        <Button type="submit" disabled={pending}>
+          {pending ? "Guardando…" : "Guardar"}
+        </Button>
+      </div>
+    </form>
   );
 }
 
 /** Section "Qué te avisamos y por dónde": the kind × channel matrix. Renders inside `NotificacionesClient`. */
 export function NotificacionesCanales() {
-  const form = useContext(NotificacionesFormContext);
-  if (!form) return null;
+  const matrix = useNotificacionesForm((s) => s.matrix);
+  const pending = useNotificacionesForm((s) => s.pending);
+  const setChannel = useNotificacionesForm((s) => s.setChannel);
   return (
     <SettingsSection title="Qué te avisamos y por dónde" description="Marca los canales para cada evento.">
       <Table>
@@ -221,9 +179,9 @@ export function NotificacionesCanales() {
                 <TableCell key={channel} className="text-center">
                   <Checkbox
                     aria-label={`${NOTIFICATION_KIND_LABELS[kind]} por ${NOTIFICATION_CHANNEL_LABELS[channel]}`}
-                    checked={form.matrix[kind][channel]}
-                    disabled={form.pending}
-                    onCheckedChange={(checked) => form.setChannel(kind, channel, checked === true)}
+                    checked={matrix[kind][channel]}
+                    disabled={pending}
+                    onCheckedChange={(checked) => setChannel(kind, channel, checked === true)}
                   />
                 </TableCell>
               ))}
@@ -237,9 +195,17 @@ export function NotificacionesCanales() {
 
 /** Section "Horario silencioso" plus the fixed daily digest note. Renders inside `NotificacionesClient`. */
 export function NotificacionesHorasSilencio() {
-  const form = useContext(NotificacionesFormContext);
+  const form = {
+    quietEnabled: useNotificacionesForm((s) => s.quietEnabled),
+    quietFrom: useNotificacionesForm((s) => s.quietFrom),
+    quietTo: useNotificacionesForm((s) => s.quietTo),
+    timeError: useNotificacionesForm((s) => s.timeError),
+    pending: useNotificacionesForm((s) => s.pending),
+    setQuietEnabled: useNotificacionesForm((s) => s.setQuietEnabled),
+    setQuietFrom: useNotificacionesForm((s) => s.setQuietFrom),
+    setQuietTo: useNotificacionesForm((s) => s.setQuietTo),
+  };
   const baseId = useId();
-  if (!form) return null;
   const switchId = `${baseId}-quiet`;
   const fromId = `${baseId}-from`;
   const toId = `${baseId}-to`;

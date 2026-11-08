@@ -1,36 +1,27 @@
 import { GoogleSettings } from "@/components/ajustes/GoogleSettings";
-import { fetchPositionsAction } from "@/lib/actions/positions-actions";
-import { getGoogleHealthAction, listGroupMappingsAction } from "@/lib/actions/workspace-access-actions";
 import { requireSettingsAdminPage } from "@/lib/auth/settings-admin-page";
-import type { GoogleHealth, GroupMapping } from "@/lib/types/workspace-access";
+import { loadAjustesGoogle } from "@/lib/loaders/ajustes";
+import { Hydrate } from "@/lib/query/hydrate";
+import { ajustesGoogleOptions } from "@/lib/query/options/ajustes";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Ajustes › Google (redesign FE §3.8): the existing Google settings and group
  * mappings, restyled. Administrador only (today's rule), checked by the
- * segment layout, here and again by every action.
+ * segment layout, here and again by the loader and every action.
+ *
+ * Prefetches `qk.ajustes.page('google')`: mappings, puestos and Estado in one
+ * `Promise.all` (no waterfall), and hydrates it.
  */
 export default async function AjustesGooglePage() {
-  await requireSettingsAdminPage();
-
-  let mappings: GroupMapping[] = [];
-  let positions: { id: string; name: string }[] = [];
-  let health: GoogleHealth | null = null;
-  try {
-    const [mappingRows, positionRows] = await Promise.all([listGroupMappingsAction(), fetchPositionsAction()]);
-    mappings = mappingRows;
-    positions = positionRows
-      .filter((position) => position.active || position.googleManaged)
-      .map((position) => ({ id: position.id, name: position.name }));
-  } catch {
-    // Lost the session mid-request: nothing is loaded and the actions report their own errors.
-  }
-  try {
-    health = await getGoogleHealthAction();
-  } catch {
-    // The health query failed: Estado shows its error state.
-  }
-
-  return <GoogleSettings mappings={mappings} positions={positions} health={health} />;
+  const user = await requireSettingsAdminPage();
+  const qc = getQueryClient();
+  await prefetch(qc, ajustesGoogleOptions(), () => loadAjustesGoogle(user));
+  return (
+    <Hydrate qc={qc}>
+      <GoogleSettings />
+    </Hydrate>
+  );
 }

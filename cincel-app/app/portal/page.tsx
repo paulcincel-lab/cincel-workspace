@@ -1,31 +1,22 @@
-import PortalProjectCard, { PORTAL_NO_PROJECTS_MESSAGE } from "@/components/portal/PortalProjectCard";
-import { Card, CardContent } from "@/components/ui/shadcn/card";
-import { listPortalProjects } from "@/lib/portal/queries";
+import PortalHomeView from "@/components/portal/PortalHomeView";
+import { loadPortalHomeData } from "@/lib/loaders/portal";
 import { requirePortalUser } from "@/lib/portal/session";
+import { Hydrate } from "@/lib/query/hydrate";
+import { portalHomeOptions } from "@/lib/query/options/portal";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
-/** Portal landing page (FE §3.2): one card per project the signed-in client can see, or the empty state. */
+/**
+ * Portal landing page (FE §3.2): one card per project the signed-in client can see, or the empty state.
+ * One page-data read (Query Migration Phase 11) seeds `portal.projects()`; `PortalHomeView` renders from it.
+ */
 export default async function PortalHomePage() {
   const user = await requirePortalUser();
-  const projects = await listPortalProjects(user.id);
+  const qc = getQueryClient();
+  await prefetch(qc, portalHomeOptions(), () => loadPortalHomeData(user));
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold tracking-tight">Mis proyectos</h1>
-      {projects.length === 0 ? (
-        <Card>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">{PORTAL_NO_PROJECTS_MESSAGE}</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <ul className="flex flex-col gap-4" aria-label="Proyectos">
-          {projects.map((project) => (
-            <li key={project.id}>
-              <PortalProjectCard project={project} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <Hydrate qc={qc}>
+      <PortalHomeView />
+    </Hydrate>
   );
 }

@@ -1,6 +1,10 @@
+"use client";
+
+import { useSuspenseQuery } from "@tanstack/react-query";
+
 import { computeProgress } from "@/lib/cronograma/metrics";
 import { fmtShort } from "@/lib/cronograma/week";
-import type { CronogramaData } from "@/lib/types/schedule";
+import { proyectoCronogramaOptions } from "@/lib/query/options/proyectos";
 
 import { GanttChart } from "./gantt-chart";
 import { ProgressDonut } from "./progress-donut";
@@ -12,17 +16,33 @@ import { AdicionalesPanel } from "./adicionales-panel";
 import { ImprevistosPanel } from "./imprevistos-panel";
 import { ReportToolbar } from "./report-toolbar";
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 interface CronogramaReportProps {
-  data: CronogramaData;
-  asOf: Date;
+  projectId: string;
+  /** `?asOf=` (YYYY-MM-DD), render-only; the schedule's today when missing or malformed. */
+  asOf?: string | null;
 }
 
 /**
  * Read-only snapshot of the schedule as of a given date (redesign FE §3.5,
  * canvas `ProyectoReporte`): a screen-only toolbar and a printable sheet built
- * from tokens; no style switch and no interactive controls.
+ * from tokens; no style switch and no interactive controls. Reads the same
+ * `qk.proyectos.cronograma(id)` as the Cronograma tab, so opening it from
+ * there reuses the cache (payments already stripped by the loader).
  */
-export function CronogramaReport({ data, asOf }: CronogramaReportProps) {
+export function CronogramaReport({ projectId, asOf: asOfParam = null }: CronogramaReportProps) {
+  const { data: view } = useSuspenseQuery(proyectoCronogramaOptions(projectId));
+  if (!view) {
+    return (
+      <p className="py-6 text-sm text-muted-foreground">
+        Este proyecto todavía no tiene un cronograma importado, o no tienes acceso a él.
+      </p>
+    );
+  }
+
+  const { data } = view;
+  const asOf = new Date(`${asOfParam && ISO_DATE.test(asOfParam) ? asOfParam : view.today}T00:00:00`);
   const metrics = computeProgress({ tasks: data.tasks, payments: data.payments }, asOf);
 
   const sections = (
@@ -37,7 +57,7 @@ export function CronogramaReport({ data, asOf }: CronogramaReportProps) {
       <WeekBoards tasks={data.tasks} today={asOf} weekOffset={0} readOnly />
       <AlertasPanel tasks={data.tasks} today={asOf} readOnly />
       <ResumenCards metrics={metrics} />
-      <ImprevistosPanel scheduleId={data.schedule.id} imprevistos={data.imprevistos} readOnly />
+      <ImprevistosPanel projectId={projectId} readOnly />
       <AdicionalesPanel adicionales={data.adicionales} defaultOpen />
     </>
   );

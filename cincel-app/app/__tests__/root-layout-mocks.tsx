@@ -43,6 +43,7 @@ export const preferencesServerMock = {
     allowUserOverride: orgPolicyState.allowUserOverride,
     v: 1,
   })),
+  getMyPreferences: vi.fn(async () => null),
 };
 
 export const preferencesActionsMock = {

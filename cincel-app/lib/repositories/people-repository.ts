@@ -4,7 +4,7 @@
  * Admin tasks (`kind = 'admin'`) are left out unless `includeAdmin`; the
  * caller decides that from `canSeeAdminData` (BE §9.7).
  */
-import { and, asc, desc, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -44,18 +44,6 @@ export type StaffActiveProject = {
   role: StaffProjectRole;
 };
 
-/** Manual order first (#452), then by name, like Equipo. */
-const STAFF_ORDER = [sql`${staff.sortOrder} is null`, asc(staff.sortOrder), asc(staff.name)];
-
-/** Active, live staff in Equipo order. */
-export async function listActiveStaffRows(): Promise<StaffRow[]> {
-  return db
-    .select()
-    .from(staff)
-    .where(and(isNull(staff.deletedAt), eq(staff.active, true)))
-    .orderBy(...STAFF_ORDER);
-}
-
 /** One live staff row (active or not), or null. */
 export async function getStaffRow(id: string): Promise<StaffRow | null> {
   const [row] = await db
@@ -89,7 +77,9 @@ const taskColumns = {
 
 /**
  * Open tasks per staff id, each task once per person: tasks the person is
- * responsable of plus tasks they support.
+ * responsable of plus tasks they support. One statement (Query Migration 6):
+ * the support rows of the asked staff are joined in, so a task comes back
+ * once per supporter and counts for its responsable too.
  */
 export async function listAssignedOpenTasks(
   staffIds: string[],
@@ -98,32 +88,28 @@ export async function listAssignedOpenTasks(
   const out = new Map<string, AssignedOpenTask[]>(staffIds.map((id) => [id, []]));
   if (staffIds.length === 0) return out;
 
-  const [managed, supported] = await Promise.all([
-    db
-      .select({ ...taskColumns, staffId: tasks.managerId })
-      .from(tasks)
-      .innerJoin(projects, eq(projects.id, tasks.projectId))
-      .leftJoin(taskStatuses, eq(taskStatuses.id, tasks.customStatusId))
-      .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
-      .where(and(inArray(tasks.managerId, staffIds), openTaskConditions(options.includeAdmin))),
-    db
-      .select({ ...taskColumns, staffId: taskSupport.staffId })
-      .from(taskSupport)
-      .innerJoin(tasks, eq(tasks.id, taskSupport.taskId))
-      .innerJoin(projects, eq(projects.id, tasks.projectId))
-      .leftJoin(taskStatuses, eq(taskStatuses.id, tasks.customStatusId))
-      .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
-      .where(and(inArray(taskSupport.staffId, staffIds), openTaskConditions(options.includeAdmin))),
-  ]);
+  const rows = await db
+    .select({ ...taskColumns, managerId: tasks.managerId, supportId: taskSupport.staffId })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(taskStatuses, eq(taskStatuses.id, tasks.customStatusId))
+    .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+    .leftJoin(taskSupport, and(eq(taskSupport.taskId, tasks.id), inArray(taskSupport.staffId, staffIds)))
+    .where(
+      and(
+        or(inArray(tasks.managerId, staffIds), isNotNull(taskSupport.staffId)),
+        openTaskConditions(options.includeAdmin)
+      )
+    );
 
   const seen = new Set<string>();
-  for (const row of [...managed, ...supported]) {
-    if (!row.staffId) continue;
-    const key = `${row.staffId}:${row.id}`;
-    if (seen.has(key)) continue;
+  const add = (staffId: string | null, row: (typeof rows)[number]) => {
+    if (!staffId || !out.has(staffId)) return;
+    const key = `${staffId}:${row.id}`;
+    if (seen.has(key)) return;
     seen.add(key);
-    out.get(row.staffId)?.push({
-      staffId: row.staffId,
+    out.get(staffId)!.push({
+      staffId,
       id: row.id,
       title: row.title,
       status: row.status,
@@ -131,7 +117,10 @@ export async function listAssignedOpenTasks(
       projectName: row.projectName,
       tramo: row.tramo ?? null,
     });
-  }
+  };
+  // Responsable first, then support, as two reads used to return them.
+  for (const row of rows) add(row.managerId, row);
+  for (const row of rows) add(row.supportId, row);
   return out;
 }
 
@@ -139,7 +128,9 @@ const ROLE_RANK: Record<StaffProjectRole, number> = { responsable: 0, coordinado
 
 /**
  * Live projects in status `activo` per staff id, with the person's strongest
- * role on each (responsable > coordinador > miembro), by project name.
+ * role on each (responsable > coordinador > miembro), by project name. One
+ * statement (Query Migration 6): the memberships of the asked staff are
+ * joined in and the roles are read from each row.
  */
 export async function listActiveProjectsByStaff(staffIds: string[]): Promise<Map<string, StaffActiveProject[]>> {
   const out = new Map<string, StaffActiveProject[]>(staffIds.map((id) => [id, []]));
@@ -148,21 +139,33 @@ export async function listActiveProjectsByStaff(staffIds: string[]): Promise<Map
   const live = and(isNull(projects.deletedAt), eq(projects.status, "activo"));
   const columns = { projectId: projects.id, name: projects.name, progress: projects.progress };
 
-  const [asManager, asCoordinator, asMember] = await Promise.all([
-    db
-      .select({ ...columns, staffId: projects.managerId })
-      .from(projects)
-      .where(and(live, inArray(projects.managerId, staffIds))),
-    db
-      .select({ ...columns, staffId: projects.coordinatorId })
-      .from(projects)
-      .where(and(live, inArray(projects.coordinatorId, staffIds))),
-    db
-      .select({ ...columns, staffId: projectMembers.staffId })
-      .from(projectMembers)
-      .innerJoin(projects, eq(projects.id, projectMembers.projectId))
-      .where(and(live, inArray(projectMembers.staffId, staffIds))),
-  ]);
+  const rows = await db
+    .select({
+      ...columns,
+      managerId: projects.managerId,
+      coordinatorId: projects.coordinatorId,
+      memberId: projectMembers.staffId,
+    })
+    .from(projects)
+    .leftJoin(projectMembers, and(eq(projectMembers.projectId, projects.id), inArray(projectMembers.staffId, staffIds)))
+    .where(
+      and(
+        live,
+        or(
+          inArray(projects.managerId, staffIds),
+          inArray(projects.coordinatorId, staffIds),
+          isNotNull(projectMembers.staffId)
+        )
+      )
+    );
+  const wanted = new Set(staffIds);
+  const asRole = (pick: (row: (typeof rows)[number]) => string | null) =>
+    rows
+      .map((row) => ({ ...row, staffId: pick(row) }))
+      .filter((row) => row.staffId !== null && wanted.has(row.staffId));
+  const asManager = asRole((row) => row.managerId);
+  const asCoordinator = asRole((row) => row.coordinatorId);
+  const asMember = asRole((row) => row.memberId);
 
   const byKey = new Map<string, StaffActiveProject>();
   const add = (

@@ -1,17 +1,17 @@
 /**
  * Shared resource model of the Recursos workspace and the Biblioteca
- * (redesign FE §3.7, §4.11.1): section labels and order, the "Abiertos
- * recientemente" localStorage list (`cincel.resources.recent-docs.v1`) and
- * the preview resolution of the resource viewer. `ResourcesWorkspace` and the
- * `components/biblioteca/*` screens both read these, so the two never drift.
+ * (redesign FE §3.7, §4.11.1): section labels and order, the pure helpers
+ * of the "Abiertos recientemente" list (stored by `useRecentDocs`,
+ * `lib/stores/recent-docs-store.ts`, under `cincel.resources.recent-docs.v1`)
+ * and the preview resolution of the resource viewer. Pure: no storage access.
  */
 import { getDriveId, getDrivePreviewUrl, hasDriveUrl } from "@/lib/google/drive-url";
-import { readStorage, removeStorage, writeStorage } from "@/lib/repositories/browser-state-repository";
 import type { ResourceLink, ResourceSection } from "@/lib/types/resource";
 
 export const RECENT_DOCS_STORAGE_KEY = "cincel.resources.recent-docs.v1";
 
-const RECENT_DOCS_LIMIT = 8;
+/** How many entries "Abiertos recientemente" keeps. */
+export const RECENT_DOCS_LIMIT = 8;
 
 export const SECTION_ORDER: ResourceSection[] = [
   "mis-documentos",
@@ -63,60 +63,38 @@ export type RecentDocument = {
   section: ResourceSection;
 };
 
-export function loadRecentDocuments(): RecentDocument[] {
-  const stored = readStorage(RECENT_DOCS_STORAGE_KEY);
-
-  if (!stored) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as RecentDocument[];
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .map((item) => ({
-        ...item,
-        url: item.url ?? item.href,
-      }))
-      .filter((item) => hasDriveUrl(item.url))
-      .slice(0, RECENT_DOCS_LIMIT);
-  } catch {
-    removeStorage(RECENT_DOCS_STORAGE_KEY);
-    return [];
-  }
-}
-
-export function saveRecentDocuments(next: RecentDocument[]): void {
-  writeStorage(RECENT_DOCS_STORAGE_KEY, JSON.stringify(next.slice(0, RECENT_DOCS_LIMIT)));
-}
+/** What a writer passes to remember a document: the resource link's own fields. */
+export type RecentDocumentInput = Pick<ResourceLink, "id" | "title" | "url" | "section">;
 
 /**
- * Puts `link` first in the recent list (same key and shape as always) and
- * returns the new list. Storage failures (private mode, quota) are ignored.
+ * The stored list as it should be read: entries with a Drive URL (older
+ * entries kept it in `href`), at most `RECENT_DOCS_LIMIT`. Anything that is
+ * not an array reads as empty.
  */
-export function rememberRecentDocument(
-  link: Pick<ResourceLink, "id" | "title" | "url" | "section">,
+export function normalizeRecentDocuments(value: unknown): RecentDocument[] {
+  if (!Array.isArray(value)) return [];
+  return (value as RecentDocument[])
+    .filter((item) => typeof item === "object" && item !== null)
+    .map((item) => ({ ...item, url: item.url ?? item.href }))
+    .filter((item) => typeof item.url === "string" && hasDriveUrl(item.url))
+    .slice(0, RECENT_DOCS_LIMIT);
+}
+
+/** `doc` first in `list` (an older entry of the same id dropped), at most `RECENT_DOCS_LIMIT`. */
+export function withRecentDocument(
+  list: RecentDocument[],
+  doc: RecentDocumentInput,
   options: { href?: string; now?: Date } = {},
 ): RecentDocument[] {
   const entry: RecentDocument = {
-    id: link.id,
-    title: link.title,
-    url: link.url,
+    id: doc.id,
+    title: doc.title,
+    url: doc.url,
     ...(options.href ? { href: options.href } : {}),
     openedAt: (options.now ?? new Date()).toISOString(),
-    section: link.section,
+    section: doc.section,
   };
-  try {
-    const next = [entry, ...loadRecentDocuments().filter((item) => item.id !== link.id)].slice(0, RECENT_DOCS_LIMIT);
-    saveRecentDocuments(next);
-    return next;
-  } catch {
-    return [entry];
-  }
+  return [entry, ...list.filter((item) => item.id !== doc.id)].slice(0, RECENT_DOCS_LIMIT);
 }
 
 /** The recent list, or (when nothing was opened yet) the first Drive files of `links`. */

@@ -9,9 +9,9 @@ import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
-import { unwrapActionResult } from "@/lib/actions/action-result";
 import { setProjectCurrentTramoAction } from "@/lib/actions/projects-actions";
-import { fichaFlowErrorText } from "@/lib/proyectos/flow-error-text";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
 import type { ProjectDetail, WorkflowRef } from "@/lib/types/core";
 
 export interface ProjectTramosCardProps {
@@ -20,7 +20,6 @@ export interface ProjectTramosCardProps {
   workflows: WorkflowRef[];
   /** `projects.canChangeProjectStage`. */
   canChangeTramo: boolean;
-  onChanged: (p: ProjectDetail) => void;
   /** Administrators see "Asignar tramo" (`canSeeAdminData`). */
   isAdmin?: boolean;
   /** The project has tasks without a tramo; also shows "Asignar tramo" to admins. */
@@ -39,17 +38,28 @@ export function startTramoHref(tramo: Pick<WorkflowRef, "key">, projectId: strin
   return `/actividades/${tramo.key}?project=${encodeURIComponent(projectId)}`;
 }
 
+/**
+ * The ficha's Tramos card. Changing the current tramo is one mutation that
+ * invalidates the project (`proyectos.detail(id)` prefix), the list and
+ * Tareas; the ficha re-reads the project from its own query.
+ */
 export function ProjectTramosCard({
   project,
   workflows,
   canChangeTramo,
-  onChanged,
   isAdmin = false,
   hasTasksWithoutTramo = false,
 }: ProjectTramosCardProps) {
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assignId, setAssignId] = useState<string | null>(null);
+  const setTramo = useActionMutation<string, ProjectDetail>(
+    (workflowId) => setProjectCurrentTramoAction(project.id, workflowId),
+    {
+      invalidate: [qk.proyectos.detail(project.id), qk.proyectos.list(), qk.tareas.all],
+      onFormError: setError,
+    },
+  );
+  const pending = setTramo.isPending;
 
   const started = project.tramos.filter((t) => t.startedAt);
   const startedIds = new Set(started.map((t) => t.id));
@@ -58,19 +68,10 @@ export function ProjectTramosCard({
   const showAssign = isAdmin && (project.needsTramo || hasTasksWithoutTramo);
   const assignTramo = workflows.find((w) => w.id === assignId) ?? null;
 
-  async function setCurrent(workflowId: string) {
+  function setCurrent(workflowId: string) {
     if (workflowId === currentId) return;
-    setPending(true);
     setError(null);
-    try {
-      const updated = unwrapActionResult(await setProjectCurrentTramoAction(project.id, workflowId));
-      onChanged(updated);
-      setAssignId(null);
-    } catch (err) {
-      setError(fichaFlowErrorText(err));
-    } finally {
-      setPending(false);
-    }
+    setTramo.mutate(workflowId, { onSuccess: () => setAssignId(null) });
   }
 
   return (
@@ -117,7 +118,7 @@ export function ProjectTramosCard({
               value={currentId}
               disabled={pending}
               onValueChange={(v) => {
-                if (typeof v === "string") void setCurrent(v);
+                if (typeof v === "string") setCurrent(v);
               }}
             >
               <SelectTrigger id="ficha-tramo-actual" aria-label="Tramo actual" className="w-full sm:w-64">
@@ -175,7 +176,7 @@ export function ProjectTramosCard({
                   Iniciar
                 </Link>
               ) : (
-                <Button disabled={!assignTramo || pending} onClick={() => assignTramo && void setCurrent(assignTramo.id)}>
+                <Button disabled={!assignTramo || pending} onClick={() => assignTramo && setCurrent(assignTramo.id)}>
                   Iniciar
                 </Button>
               )}

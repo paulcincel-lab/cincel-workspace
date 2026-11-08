@@ -24,6 +24,7 @@ import type {
   ContactType,
   HistoryEvent,
   ProviderProfile,
+  ProviderSubtype,
 } from "@/lib/types/core";
 
 type ContactRow = typeof contacts.$inferSelect;
@@ -89,13 +90,24 @@ const CONTACT_TRACKED_FIELDS = [
   "notes",
 ] as const;
 
+/**
+ * Live contacts by name. `type` / `types` narrow by contact type and
+ * `providerSubtype` to proveedores of that subtype, all in SQL (the Personas
+ * tabs ship only their own rows, Query Migration 6).
+ */
 export async function listContacts(
-  options: { type?: ContactType; search?: string } = {}
+  options: { type?: ContactType; types?: readonly ContactType[]; providerSubtype?: ProviderSubtype; search?: string } = {}
 ): Promise<ContactListItem[]> {
   const rows = await db.query.contacts.findMany({
     where: and(
       isNull(contacts.deletedAt),
       options.type ? eq(contacts.type, options.type) : undefined,
+      options.types ? inArray(contacts.type, [...options.types]) : undefined,
+      // Written as SQL with its own alias: inside the relational query every `contacts` / profile
+      // column reference is rewritten to the outer "contacts" alias.
+      options.providerSubtype
+        ? sql`exists (select 1 from ${providerProfiles} pp where pp.${sql.identifier(providerProfiles.contactId.name)} = ${contacts.id} and pp.${sql.identifier(providerProfiles.subtype.name)} = ${options.providerSubtype})`
+        : undefined,
       options.search ? sql`${contacts.name} ilike ${"%" + options.search.trim() + "%"}` : undefined
     ),
     orderBy: asc(contacts.name),
@@ -111,6 +123,26 @@ export async function listContacts(
     tags: r.tags.map((t) => ({ kind: t.kind as ContactTag["kind"], value: t.value })),
     providerProfile: r.providerProfile ? toProviderProfile(r.providerProfile) : null,
   }));
+}
+
+/** Live contacts per Personas tab: one `GROUP BY type` (+ contratista subtype) statement. */
+export async function countByType(): Promise<{ cliente: number; socio: number; proveedor: number; contratista: number }> {
+  const rows = await db
+    .select({
+      type: contacts.type,
+      total: sql<number>`count(*)::int`,
+      contratistas: sql<number>`count(*) filter (where ${providerProfiles.subtype} = 'contratista')::int`,
+    })
+    .from(contacts)
+    .leftJoin(providerProfiles, eq(providerProfiles.contactId, contacts.id))
+    .where(isNull(contacts.deletedAt))
+    .groupBy(contacts.type);
+  const out = { cliente: 0, socio: 0, proveedor: 0, contratista: 0 };
+  for (const row of rows) {
+    out[row.type] = Number(row.total);
+    if (row.type === "proveedor") out.contratista = Number(row.contratistas);
+  }
+  return out;
 }
 
 export async function getContact(id: string): Promise<ContactDetail | null> {

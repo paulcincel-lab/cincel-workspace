@@ -3,7 +3,10 @@ import type { ReactNode } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ResolvedAppearance, TodayStatus } from "@/lib/types/redesign";
+import type { QueryClient } from "@tanstack/react-query";
+
+import { qk } from "@/lib/query/keys";
+import type { TodayStatus } from "@/lib/types/redesign";
 
 const mocks = vi.hoisted(() => ({
   redirect: vi.fn((url: string) => {
@@ -15,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   fetchMyTodayAction: vi.fn(),
   clockInAction: vi.fn(),
   getStaffPhotoUrl: vi.fn(),
+  loadShellBadges: vi.fn(),
+  hydrated: vi.fn(),
   appShellProps: vi.fn(),
 }));
 
@@ -27,6 +32,20 @@ vi.mock("@/lib/actions/time-tracking-actions", () => ({
   clockInAction: mocks.clockInAction,
 }));
 vi.mock("@/lib/profile-photo/photo-url", () => ({ getStaffPhotoUrl: mocks.getStaffPhotoUrl }));
+vi.mock("@/lib/shell/badges", () => ({
+  loadShellBadges: mocks.loadShellBadges,
+  capabilityUserOf: (user: { id: string; name: string; access: string }) => ({
+    member: { id: user.id, name: user.name },
+    access: user.access,
+  }),
+}));
+// The boundary hands the shell's cache to the browser; the test reads what it carries.
+vi.mock("@/lib/query/hydrate", () => ({
+  Hydrate: ({ qc, children }: { qc: QueryClient; children: ReactNode }) => {
+    mocks.hydrated(qc);
+    return <>{children}</>;
+  },
+}));
 
 // The real shell reads actions and settings; this stand-in keeps one landmark.
 vi.mock("@/components/shell/AppShell", () => ({
@@ -55,16 +74,11 @@ const ACTIVE_USER = {
   access: "Colaborador",
 };
 
-function appearance(): ResolvedAppearance {
-  return {
-    theme: "azul",
-    mode: "light",
-    style: "visual",
-    density: "comoda",
-    textSize: 14,
-    cssVars: { light: {}, dark: {} },
-    version: 1,
-  };
+const BADGES = { tareasOpen: 4, bandeja: { unreadCount: 2, dueReminders: [], renderedAt: 1 } };
+
+/** The query client the layout hydrated (shell keys only). */
+function hydratedClient(): QueryClient {
+  return mocks.hydrated.mock.calls[0][0] as QueryClient;
 }
 
 const DISABLED_TODAY: TodayStatus = {
@@ -87,7 +101,7 @@ async function renderLayout(children: ReactNode) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getSessionAccess.mockResolvedValue({ status: "active", user: ACTIVE_USER });
-  mocks.getResolvedAppearance.mockResolvedValue(appearance());
+  mocks.loadShellBadges.mockResolvedValue(BADGES);
   mocks.buildNavModel.mockResolvedValue(NAV);
   mocks.fetchMyTodayAction.mockResolvedValue(DISABLED_TODAY);
   mocks.getStaffPhotoUrl.mockResolvedValue(null);
@@ -118,10 +132,50 @@ describe("app/(staff)/layout", () => {
       photoUrl: null,
     });
     expect(props.nav).toEqual(NAV);
-    expect(props.appearance).toEqual(appearance());
+    // The style comes from the appearance store the root layout seeds.
+    expect(props).not.toHaveProperty("appearance");
+    expect(mocks.getResolvedAppearance).not.toHaveBeenCalled();
     // Time tracking disabled: the sidebar clock stays hidden.
     expect(props.today).toBeNull();
-    expect(mocks.buildNavModel).toHaveBeenCalledWith(props.session);
+    // The nav never reads the photo, so it runs next to the photo read.
+    expect(mocks.buildNavModel).toHaveBeenCalledWith({ ...props.session, photoUrl: null });
+  });
+
+  it("starts the photo, nav, day and badge reads together (one Promise.all)", async () => {
+    let releasePhoto: (url: string | null) => void = () => {};
+    mocks.getStaffPhotoUrl.mockReturnValue(new Promise((resolve) => (releasePhoto = resolve)));
+    const pending = StaffLayout({ children: <p>Contenido</p> });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mocks.buildNavModel).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchMyTodayAction).toHaveBeenCalledTimes(1);
+    expect(mocks.loadShellBadges).toHaveBeenCalledTimes(1);
+    releasePhoto(null);
+    render(await pending);
+    expect(screen.getByText("Contenido")).toBeTruthy();
+  });
+
+  it("hydrates shell.badges, me.profile and me.today for the client, and nothing else", async () => {
+    mocks.getStaffPhotoUrl.mockResolvedValue("/api/staff/staff-1/photo?v=abcdef01");
+    const today = { ...DISABLED_TODAY, enabled: true };
+    mocks.fetchMyTodayAction.mockResolvedValue(today);
+    await renderLayout(<p>Contenido</p>);
+
+    expect(mocks.loadShellBadges).toHaveBeenCalledWith(expect.objectContaining({ member: expect.objectContaining({ id: "staff-1" }) }));
+    const qc = hydratedClient();
+    expect(qc.getQueryData(qk.shell.badges())).toEqual(BADGES);
+    expect(qc.getQueryData(qk.me.profile())).toEqual({
+      id: "staff-1",
+      name: "Ana López",
+      photoUrl: "/api/staff/staff-1/photo?v=abcdef01",
+    });
+    expect(qc.getQueryData(qk.me.today())).toEqual(today);
+    expect(qc.getQueryCache().getAll().map((q) => q.queryKey[0]).sort()).toEqual(["me", "me", "shell"]);
+  });
+
+  it("seeds a disabled day too (the palette reads it), while the shell gets no clock", async () => {
+    await renderLayout(<p>Contenido</p>);
+    expect(hydratedClient().getQueryData(qk.me.today())).toEqual(DISABLED_TODAY);
+    expect(mocks.appShellProps.mock.calls[0][0].today).toBeNull();
   });
 
   it("passes the admin flag, the photo url and an enabled day to AppShell", async () => {
@@ -149,6 +203,7 @@ describe("app/(staff)/layout", () => {
     expect(props.today).toBeNull();
     expect(props.session.photoUrl).toBeNull();
     expect(screen.getByText("Contenido")).toBeTruthy();
+    expect(hydratedClient().getQueryData(qk.me.today())).toBeUndefined();
   });
 
   it("renders a first-access session bare (the route guard moves it on)", async () => {

@@ -9,7 +9,11 @@ import { personasTabHref, type PersonasTab } from "@/lib/personas/team";
 
 export type { PersonasTab } from "@/lib/personas/team";
 
-export type PersonasTabsProps = { active: PersonasTab; counts: Record<PersonasTab, number> };
+export type PersonasTabsProps = {
+  active: PersonasTab;
+  /** `personas.counts()`; undefined while it loads (the badges wait). */
+  counts: Record<PersonasTab, number> | undefined;
+};
 
 const TABS: { key: PersonasTab; label: string }[] = [
   { key: "equipo", label: "Equipo" },
@@ -22,7 +26,9 @@ const TABS: { key: PersonasTab; label: string }[] = [
  * Personas tabs as links with counts (redesign FE §3.6, §4.7; §16: tabs that
  * navigate are links with `aria-current="page"`). The style is the saved
  * preference, so every tab renders with it; a `?estilo=` override is carried
- * in the hrefs so switching tabs keeps it too.
+ * in the hrefs so switching tabs keeps it too. The links are client
+ * navigations: a tab whose page data is cached (30 s) renders without a new
+ * page-data call.
  */
 export function PersonasTabs({ active, counts }: PersonasTabsProps) {
   const { style, isOverridden } = useStyle();
@@ -39,7 +45,7 @@ export function PersonasTabs({ active, counts }: PersonasTabsProps) {
             className={buttonVariants({ variant: current ? "secondary" : "ghost", size: "sm" })}
           >
             {tab.label}
-            <Badge variant="outline">{counts[tab.key]}</Badge>
+            {counts ? <Badge variant="outline">{counts[tab.key]}</Badge> : null}
           </Link>
         );
       })}

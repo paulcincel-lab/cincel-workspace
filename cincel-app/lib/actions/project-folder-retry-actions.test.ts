@@ -37,11 +37,11 @@ describe("retryProjectFolderAction", () => {
     expect(folders.retryProjectFolders).not.toHaveBeenCalled();
   });
 
-  it("returns ready once the folders exist and refreshes the ficha", async () => {
+  it("returns ready once the folders exist, with no revalidation (the caller invalidates its keys)", async () => {
     folders.retryProjectFolders.mockResolvedValue({ status: "ready" });
     expect(await retryProjectFolderAction(PROJECT)).toEqual({ ok: true, status: "ready" });
     expect(folders.retryProjectFolders).toHaveBeenCalledWith(PROJECT);
-    expect(cache.revalidatePath).toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("returns the Drive error when the retry fails again", async () => {

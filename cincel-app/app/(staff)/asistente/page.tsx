@@ -1,9 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 
-import { AsistentePageClient, type AsistentePageThread } from "@/components/asistente/AsistentePageClient";
-import { fetchAssistantThreadAction, fetchAssistantThreadsAction } from "@/lib/actions/assistant-actions";
+import { AsistentePageClient } from "@/components/asistente/AsistentePageClient";
 import { assistantThreadsReady } from "@/lib/assistant/threads-ready";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireCapabilityUser } from "@/lib/auth/session";
+import { loadAsistentePageData } from "@/lib/loaders/asistente";
+import { Hydrate } from "@/lib/query/hydrate";
+import { asistenteThreadOptions, asistenteThreadsOptions } from "@/lib/query/options/asistente";
+import { getQueryClient } from "@/lib/query/server";
+import { UuidSchema } from "@/lib/validation/project-flow";
 
 type AsistentePageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -13,6 +17,11 @@ type AsistentePageProps = {
  * `/asistente` (redesign FE §3.9): the full page with server history and the
  * Herramientas panel, inside `AppShell`. 404 while any assistant thread
  * action is still a stub (FE §9 stubs rule; its nav item is hidden too).
+ *
+ * One page-data load (Query Migration Phase 10, #944) seeds
+ * `asistente.threads()` and, for `?thread=`, `asistente.thread(id)`. Only the
+ * caller's own threads are loaded: the dehydrated state is public HTML.
+ * Switching threads later reads the cache, never this page again.
  */
 export default async function AsistentePage({ searchParams }: AsistentePageProps = {}) {
   const session = await getSession();
@@ -21,27 +30,24 @@ export default async function AsistentePage({ searchParams }: AsistentePageProps
   if (!assistantThreadsReady()) notFound();
 
   const params = (await searchParams) ?? {};
-  const requested = typeof params.thread === "string" && params.thread.trim() !== "" ? params.thread.trim() : null;
+  const raw = typeof params.thread === "string" ? params.thread.trim() : "";
+  const requested = raw === "" ? null : raw;
+  // A `?thread=` that isn't a uuid can't name a thread: missing, without a read.
+  const threadId = requested && UuidSchema.safeParse(requested).success ? requested.toLowerCase() : null;
 
-  const [threads, initialThread] = await Promise.all([
-    fetchAssistantThreadsAction(),
-    requested ? loadThread(requested) : Promise.resolve(null),
-  ]);
+  const user = await requireCapabilityUser();
+  const data = await loadAsistentePageData(user, { threadId });
+
+  const qc = getQueryClient();
+  qc.setQueryData(asistenteThreadsOptions().queryKey, data.threads);
+  if (data.initialThread) qc.setQueryData(asistenteThreadOptions(data.initialThread.id).queryKey, data.initialThread);
 
   return (
-    <AsistentePageClient
-      threads={threads}
-      initialThread={initialThread}
-      missingThread={requested !== null && initialThread === null}
-    />
+    <Hydrate qc={qc}>
+      <AsistentePageClient
+        threadId={data.initialThread?.id ?? null}
+        missingThread={requested !== null && data.initialThread === null}
+      />
+    </Hydrate>
   );
-}
-
-async function loadThread(id: string): Promise<AsistentePageThread | null> {
-  try {
-    const { thread, messages } = await fetchAssistantThreadAction(id);
-    return { id: thread.id, title: thread.title, messages };
-  } catch {
-    return null;
-  }
 }

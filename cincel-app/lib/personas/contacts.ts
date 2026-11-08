@@ -1,7 +1,8 @@
 /**
  * Personas · Clientes / Contratistas / Proveedores (redesign FE §3.6): the
- * pure data side of the external directory tabs. The server page sanitizes
- * `fetchContactsAction` rows with `toPersonasContact` (origin only for
+ * pure data side of the external directory tabs. The Personas loader
+ * (`lib/loaders/personas.ts`) reads each tab's own contact types in SQL and
+ * sanitizes the rows with `toPersonasContact` (origin only for
  * `canSeeAdminData`), and the client builds the `ListPage` spec from the
  * result with the helpers below. Client-safe: no server imports.
  */

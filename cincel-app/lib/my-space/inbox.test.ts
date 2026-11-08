@@ -1,6 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { publishBandejaUnread, readBandejaUnread, resetBandejaUnread } from "./bandeja-unread";
 import {
   formatInboxTime,
   gmailSenderName,
@@ -41,8 +40,6 @@ function t(id: string, over: Partial<GmailThreadSummary> = {}): GmailThreadSumma
     ...over,
   };
 }
-
-afterEach(() => resetBandejaUnread());
 
 describe("Bandeja tabs", () => {
   it("parses the tab param and falls back to todo", () => {
@@ -108,15 +105,5 @@ describe("Bandeja labels", () => {
     expect(gmailSyncLabel("2026-11-06T11:55:00.000Z", now)).toBe("Gmail conectado · sincronizado hace 5 min");
     expect(gmailSyncLabel("2026-11-06T09:00:00.000Z", now)).toBe("Gmail conectado · sincronizado hace 3 h");
     expect(gmailSyncLabel(null, now)).toBe("Gmail conectado");
-  });
-});
-
-describe("Bandeja unread store", () => {
-  it("keeps the last published count, clamped at zero", () => {
-    expect(readBandejaUnread()).toBeNull();
-    publishBandejaUnread(4);
-    expect(readBandejaUnread()).toBe(4);
-    publishBandejaUnread(-2);
-    expect(readBandejaUnread()).toBe(0);
   });
 });

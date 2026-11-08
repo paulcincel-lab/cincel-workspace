@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Check } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/shadcn/button";
 import { FormField } from "@/components/ui/shadcn/form-field";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
+import { mondayErrorText, useMondayMutation } from "@/components/configuracion/monday-import/monday-mutations";
 import { connectMondayAction } from "@/lib/actions/monday-import-actions";
 import type { MondayConnection } from "@/lib/types/monday-import";
 
@@ -28,23 +29,19 @@ export function ConnectStep({
   connection: MondayConnection | null;
   onConnected: (connection: MondayConnection) => void;
 }) {
-  const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  // Reads monday's account; nothing in Cincel's cache changes.
+  const connectMutation = useMondayMutation((value: string | null) => connectMondayAction(value));
+  const isPending = connectMutation.isPending;
 
-  function connect() {
+  async function connect() {
     setError("");
-    startTransition(async () => {
-      try {
-        const result = await connectMondayAction(token.trim() || null);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        onConnected(result.connection);
-      } catch {
-        setError("No se pudo conectar con monday. Intenta de nuevo.");
-      }
-    });
+    try {
+      const result = await connectMutation.mutateAsync(token.trim() || null);
+      onConnected(result.connection);
+    } catch (err) {
+      setError(mondayErrorText(err, "No se pudo conectar con monday. Intenta de nuevo."));
+    }
   }
 
   return (
@@ -54,7 +51,7 @@ export function ConnectStep({
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          connect();
+          void connect();
         }}
       >
         <FormField className="space-y-2">

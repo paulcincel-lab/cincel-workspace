@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
@@ -26,7 +28,13 @@ import { DistributionWidget } from "@/components/widgets/DistributionWidget";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { actionErrorText } from "@/lib/errors";
+import { qk, type TareasListFilters } from "@/lib/query/keys";
+import { tareasBoardColumnOptions, type TareasBoardColumnPages } from "@/lib/query/options/tareas";
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
+import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
+import { listItemOfRow } from "@/lib/tareas/page-data";
 import {
   BASE_STATUS_COLOR,
   isTaskClosed,
@@ -47,11 +55,17 @@ import { formatDateDMY } from "@/lib/utils/date";
  * board: the columns, grouping and drag-and-drop come from
  * `components/tablero` (shared with `TableroClient`).
  *
- * - Visual: kanban columns with drag-and-drop (optimistic move, rollback and
- *   error toast when `onMove` rejects), empty columns collapsed to strips, and
- *   a keyboard "Mover a…" menu on every card. The columns always render, even
+ * - Visual: kanban columns with drag-and-drop, empty columns collapsed to
+ *   strips, and a keyboard "Mover a…" menu on every card. A drop calls
+ *   `onMove`; the move shows through the `board` the page hands back (the
+ *   Tareas query cache, patched optimistically and rolled back on error), so
+ *   the widget keeps no copy of its own. The columns always render, even
  *   when the filters leave no task: every column then shows its 0 count and a
  *   small "Sin tareas" drop zone, so a card can still be dropped or added.
+ *   "+ Agregar" opens the shell's new-task dialog in that column's estatus
+ *   (`useNewTaskUi`) for viewers who can create tasks. With `columnPages`,
+ *   each column counts every matching task and loads the rest with
+ *   "Cargar más" (`tareas.board(f, columnId)`).
  * - Esencial: `RecordTable` per estatus ("Pendiente · 4"); Completado
  *   collapsed with a link to the list view.
  * - Analítico: estatus summary (`DistributionWidget`) + dense `RecordTable`.
@@ -62,16 +76,16 @@ export type TaskBoardWidgetProps = {
   table: RecordTableData;
   /**
    * Moves a task to a column. `statusId` is the column key: a base status
-   * (`pendiente`, …) or `custom:<id>` for a custom status. Rejecting rolls
-   * the move back.
+   * (`pendiente`, …) or `custom:<id>` for a custom status. The page moves
+   * the card in the data it hands back; a rejection only shows the error.
    */
-  onMove(taskId: string, statusId: string): Promise<void>;
+  onMove(taskId: string, statusId: string): void | Promise<void>;
   /**
-   * Visual "+ Agregar" at the end of each open column: called with the column
-   * key (same keys as `onMove`) so the page opens a new task in that estatus.
-   * Without it the button isn't shown.
+   * The Tareas filters and, per column key, every matching task (`total`)
+   * and the cursor after the loaded cards. With it the counts are the totals
+   * and a column with more tasks shows "Cargar más".
    */
-  onQuickAdd?(statusId: string): void;
+  columnPages?: BoardColumnPages;
   /**
    * Every configured custom status, so its column shows even with no task in
    * it. Custom statuses found on the tasks are always added.
@@ -83,14 +97,31 @@ export type TaskBoardWidgetProps = {
   loading?: boolean;
 };
 
+export type BoardColumnPages = {
+  filters: TareasListFilters;
+  columns: Record<string, { total: number; nextCursor: string | null }>;
+};
+
+/** "Cargar más" of a board column. */
+export const BOARD_COLUMN_MORE = "Cargar más";
+
+/**
+ * Where a board card opens its task: the current URL (view and every filter)
+ * with `tarea=<id>`, the param `TaskSheetRoute` opens the sheet from (same
+ * rule as the sheet's `taskSheetHref`), so the board stays as it is under it.
+ */
+export function boardCardHref(pathname: string, search: string, taskId: string): string {
+  const params = new URLSearchParams(search);
+  params.set("tarea", taskId);
+  return `${pathname}?${params.toString()}`;
+}
+
 const DEFAULT_EMPTY: EmptyStateProps = { title: "No hay tareas con estos filtros" };
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = { alta: "Alta", media: "Media", baja: "Baja" };
 
 /** Where Esencial's collapsed Completado group links to. */
 const COMPLETED_LIST_HREF = "/tareas?vista=lista&estado=completado";
-
-const NO_MOVES: Record<string, string> = {};
 
 const NO_CUSTOM_STATUSES: Pick<TaskStatusOption, "id" | "name">[] = [];
 
@@ -151,7 +182,7 @@ export function TaskBoardWidget({
   board,
   table,
   onMove,
-  onQuickAdd,
+  columnPages,
   customStatuses = NO_CUSTOM_STATUSES,
   emptyState,
   loading,
@@ -179,7 +210,7 @@ export function TaskBoardWidget({
   return (
     <StyleView
       visual={() => (
-        <BoardVisual board={board} tasks={tasks} columns={columns} onMove={onMove} onQuickAdd={onQuickAdd} />
+        <BoardVisual tasks={tasks} columns={columns} onMove={onMove} columnPages={columnPages} />
       )}
       esencial={() => empty ?? <BoardEsencial tasks={tasks} columns={columns} table={table} />}
       analitico={() => empty ?? <BoardAnalitico board={board} table={table} />}
@@ -194,47 +225,37 @@ function StatusRing({ token }: { token: StatusColorToken }) {
 }
 
 function BoardVisual({
-  board,
   tasks,
   columns,
   onMove,
-  onQuickAdd,
+  columnPages,
 }: {
-  board: TaskBoard;
   tasks: TaskListItem[];
   columns: BoardColumn[];
   onMove: TaskBoardWidgetProps["onMove"];
-  onQuickAdd?: TaskBoardWidgetProps["onQuickAdd"];
+  columnPages?: BoardColumnPages;
 }) {
-  // Optimistic moves, keyed by task, valid for the board they were made on: a
-  // new `board` from the page (after the server confirmed) replaces them.
-  const [moves, setMoves] = useState<{ board: TaskBoard; byTask: Record<string, string> }>({ board, byTask: {} });
-  const byTask = moves.board === board ? moves.byTask : NO_MOVES;
-  const columnOf = (t: TaskListItem) => byTask[t.id] ?? statusSelectValue(t);
-  const grouped = groupTasksByColumn(tasks, columns, columnOf);
+  const grouped = groupTasksByColumn(tasks, columns);
   const today = todayIso();
+  const pathname = usePathname() ?? "/tareas";
+  const search = useSearchParams()?.toString() ?? "";
+  const user = useSessionStore(selectAuthenticatedUser);
+  const canCreate = useMemo(() => resolveActivitiesCapabilities(user).canCreateActivity, [user]);
+  const openNewTask = useNewTaskUi((s) => s.openNewTask);
+  const countOf = (key: string) => columnPages?.columns[key]?.total ?? (grouped[key] ?? []).length;
   // With no task at all every column stays open (count 0 and a drop zone) so
   // the board keeps its shape; otherwise empty columns collapse to strips.
-  const boardEmpty = tasks.length === 0;
+  const boardEmpty = tasks.length === 0 && columns.every((c) => countOf(c.key) === 0);
 
-  async function move(taskId: string, columnKey: string) {
+  function move(taskId: string, columnKey: string) {
     const task = tasks.find((t) => t.id === taskId);
-    if (!task) return;
-    const previous = byTask[taskId];
-    if ((previous ?? statusSelectValue(task)) === columnKey) return;
-
-    setMoves((cur) => ({ board, byTask: { ...(cur.board === board ? cur.byTask : {}), [taskId]: columnKey } }));
+    if (task && statusSelectValue(task) === columnKey) return;
+    const showError = (err: unknown) => toast.error(actionErrorText(err));
     try {
-      await onMove(taskId, columnKey);
+      const pending = onMove(taskId, columnKey);
+      if (pending) pending.catch(showError);
     } catch (err) {
-      setMoves((cur) => {
-        if (cur.board !== board || cur.byTask[taskId] !== columnKey) return cur;
-        const next = { ...cur.byTask };
-        if (previous === undefined) delete next[taskId];
-        else next[taskId] = previous;
-        return { board, byTask: next };
-      });
-      toast.error(actionErrorText(err));
+      showError(err);
     }
   }
 
@@ -243,15 +264,30 @@ function BoardVisual({
     onDrop: move,
   });
 
+  const renderCard = (task: TaskListItem) => (
+    <BoardCard
+      key={task.id}
+      task={task}
+      href={boardCardHref(pathname, search, task.id)}
+      today={today}
+      dragging={draggingTaskId === task.id}
+      dragProps={cardProps(task)}
+      targets={columns.filter((c) => c.key !== statusSelectValue(task))}
+      onMoveTo={(key) => move(task.id, key)}
+    />
+  );
+
   return (
     <div data-testid="task-board" className="flex w-full min-w-0 items-start gap-3.5 overflow-x-auto pb-2">
       {columns.map((column) => {
         const inColumn = grouped[column.key] ?? [];
+        const count = countOf(column.key);
         const token = columnColor(column, inColumn);
         const isDragOver = dragOverKey === column.key;
         const dropTarget = columnProps(column.key);
+        const nextCursor = columnPages?.columns[column.key]?.nextCursor ?? null;
 
-        if (inColumn.length === 0 && !boardEmpty) {
+        if (inColumn.length === 0 && count === 0 && !boardEmpty) {
           return (
             <div
               key={column.key}
@@ -275,7 +311,7 @@ function BoardVisual({
           <div
             key={column.key}
             role="group"
-            aria-label={`${column.label} · ${inColumn.length}`}
+            aria-label={`${column.label} · ${count}`}
             {...dropTarget}
             className={cn(
               "flex w-[290px] shrink-0 flex-col gap-2 rounded-[14px] border bg-muted p-2.5 text-foreground transition-colors",
@@ -285,9 +321,9 @@ function BoardVisual({
             <div className="flex items-center gap-2 px-1.5 py-1">
               <StatusRing token={token} />
               <h3 className="flex-1 text-[13.5px] font-semibold">{column.label}</h3>
-              <span className="font-mono text-xs text-muted-foreground">{inColumn.length}</span>
+              <span className="font-mono text-xs text-muted-foreground">{count}</span>
             </div>
-            {inColumn.length === 0 ? (
+            {inColumn.length === 0 && !nextCursor ? (
               <p
                 data-testid="board-column-empty"
                 className={cn(
@@ -298,26 +334,24 @@ function BoardVisual({
                 {BOARD_COLUMN_EMPTY}
               </p>
             ) : null}
-            <ul className="flex flex-col gap-2">
-              {inColumn.map((task) => (
-                <BoardCard
-                  key={task.id}
-                  task={task}
-                  today={today}
-                  dragging={draggingTaskId === task.id}
-                  dragProps={cardProps(task)}
-                  targets={columns.filter((c) => c.key !== columnOf(task))}
-                  onMoveTo={(key) => void move(task.id, key)}
-                />
-              ))}
-            </ul>
-            {onQuickAdd ? (
+            <ul className="flex flex-col gap-2">{inColumn.map(renderCard)}</ul>
+            {columnPages && nextCursor ? (
+              <BoardColumnMore
+                key={nextCursor}
+                filters={columnPages.filters}
+                column={column}
+                firstCursor={nextCursor}
+                loadedIds={inColumn.map((t) => t.id)}
+                renderCard={renderCard}
+              />
+            ) : null}
+            {canCreate ? (
               <Button
                 type="button"
                 variant="ghost"
                 className="justify-start px-2 text-[13px] font-normal text-muted-foreground"
                 aria-label={`Agregar tarea en ${column.label}`}
-                onClick={() => onQuickAdd(column.key)}
+                onClick={() => openNewTask({ status: column.key }, "tablero-quick-add")}
               >
                 + Agregar
               </Button>
@@ -329,8 +363,71 @@ function BoardVisual({
   );
 }
 
+/**
+ * The rest of one column, page by page (`tareas.board(f, columnId)`), from
+ * the board's cursor. Nothing loads or shows until the first "Cargar más";
+ * pages cached from an older cursor (the board reloaded since) are dropped
+ * then. A card the board already shows, or one moved to another column, is
+ * left out.
+ */
+function BoardColumnMore({
+  filters,
+  column,
+  firstCursor,
+  loadedIds,
+  renderCard,
+}: {
+  filters: TareasListFilters;
+  column: BoardColumn;
+  firstCursor: string;
+  loadedIds: string[];
+  renderCard(task: TaskListItem): ReactNode;
+}) {
+  const qc = useQueryClient();
+  const [requested, setRequested] = useState(false);
+  const pages = useInfiniteQuery({
+    ...tareasBoardColumnOptions(filters, column.key, firstCursor),
+    enabled: requested,
+  });
+  const loaded = new Set(loadedIds);
+  const extra = (requested ? (pages.data?.pages ?? []) : [])
+    .flatMap((p) => p.rows)
+    .filter((row) => !loaded.has(row.id) && statusSelectValue(row) === column.key)
+    .map(listItemOfRow);
+  const hasMore = !requested || pages.hasNextPage;
+  const busy = pages.isFetching;
+
+  return (
+    <>
+      {extra.length > 0 ? <ul className="flex flex-col gap-2">{extra.map(renderCard)}</ul> : null}
+      {hasMore ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          aria-label={`${BOARD_COLUMN_MORE} en ${column.label}`}
+          onClick={() => {
+            if (requested) {
+              void pages.fetchNextPage();
+              return;
+            }
+            const key = qk.tareas.board(filters, column.key);
+            const cached = qc.getQueryData<TareasBoardColumnPages>(key);
+            if (cached && cached.pageParams[0] !== firstCursor) void qc.resetQueries({ queryKey: key, exact: true });
+            setRequested(true);
+          }}
+        >
+          {busy ? "Cargando…" : BOARD_COLUMN_MORE}
+        </Button>
+      ) : null}
+    </>
+  );
+}
+
 function BoardCard({
   task,
+  href,
   today,
   dragging,
   dragProps,
@@ -338,6 +435,7 @@ function BoardCard({
   onMoveTo,
 }: {
   task: TaskListItem;
+  href: string;
   today: string;
   dragging: boolean;
   dragProps: BoardCardDragProps;
@@ -365,7 +463,16 @@ function BoardCard({
       </div>
 
       <div className="min-w-0">
-        <Link href={`/tareas?tarea=${task.id}`} className="font-medium hover:underline">
+        <Link
+          href={href}
+          scroll={false}
+          onNavigate={(e) => {
+            // Shallow: the sheet opens from `?tarea=` and the board under it stays as it is.
+            e.preventDefault();
+            window.history.pushState(null, "", href);
+          }}
+          className="font-medium hover:underline"
+        >
           {task.title}
         </Link>
         <p className="truncate text-xs text-muted-foreground">{task.project.name}</p>

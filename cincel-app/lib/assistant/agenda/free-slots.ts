@@ -4,6 +4,7 @@
  * when any person has an approved absence, minus busy intervals, intersected
  * for every person. Pure: callers pass settings, absences and busy times.
  */
+import { zonedIsoDate, zonedIsoMinute } from "@/lib/dates/zoned-formatters";
 
 export type BusyInterval = { start: string; end: string };
 
@@ -67,21 +68,18 @@ export function minutesOf(value: string): number {
   return minutes;
 }
 
-/** Offset of `timeZone` from UTC at `instant`, in ms (local − UTC). */
+/**
+ * Offset of `timeZone` from UTC at `instant`, in ms (local − UTC). Reads the
+ * cached minute formatter (`lib/dates/zoned-formatters.ts`); zone offsets are
+ * whole minutes, so minute precision is exact.
+ */
 function zoneOffsetMs(instant: number, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(new Date(instant));
-  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
-  return asUtc - Math.floor(instant / 1000) * 1000;
+  const local = zonedIsoMinute(new Date(instant), timeZone);
+  const [date, time] = local.split("T");
+  const { y, m, d } = parseDate(date);
+  const [hour, minute] = time.split(":").map(Number);
+  const asUtc = Date.UTC(y, m - 1, d, hour, minute);
+  return asUtc - Math.floor(instant / 60_000) * 60_000;
 }
 
 /** The UTC instant of local `date` + `minutes` after midnight in `timeZone`. */
@@ -96,19 +94,12 @@ export function zonedTimeToUtc(date: string, minutes: number, timeZone: string):
 
 /** Local `YYYY-MM-DD` of an instant in `timeZone`. */
 export function localDateOf(instant: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instant);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
+  return zonedIsoDate(instant, timeZone);
 }
 
 /** Local `HH:MM` of an instant in `timeZone`. */
 export function localTimeOf(instant: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant);
+  return zonedIsoMinute(instant, timeZone).slice(11);
 }
 
 /** Every local date of `[from, to]`; throws INVALID when to < from or the range is too long. */

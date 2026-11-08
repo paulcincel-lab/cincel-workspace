@@ -55,7 +55,7 @@ describe.skipIf(!url)("puestos (test DB)", async () => {
   const schema = await import("@/lib/db/schema");
   const repo = await import("@/lib/repositories/positions-repository");
   const staffRepo = await import("@/lib/repositories/staff-repository");
-  const actions = await import("@/lib/actions/positions-actions");
+  const actions = unwrapActions(await import("@/lib/actions/positions-actions"));
   const { setStaffPositionsAction } = unwrapActions(await import("@/lib/actions/staff-actions"));
   const { GOOGLE_MANAGED_REFUSAL } = await import("@/lib/types/workspace-access");
 

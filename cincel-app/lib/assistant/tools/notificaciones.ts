@@ -15,6 +15,7 @@ import "server-only";
 
 import { z } from "zod";
 
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import { IMPLEMENTED as MY_SPACE } from "@/lib/actions/my-space-actions.flags";
 import { IMPLEMENTED as NOTIFICATIONS } from "@/lib/actions/notifications-actions.flags";
 import {
@@ -204,7 +205,9 @@ const mark_notifications_read = defineTool({
   summarize: toolSummaries.mark_notifications_read,
   async run(_ctx, input) {
     try {
-      const { unreadCount } = await markNotificationsReadAction(input.all ? "all" : (input.ids ?? []));
+      const { unreadCount } = unwrapActionResult(
+        await markNotificationsReadAction(input.all ? "all" : (input.ids ?? [])),
+      );
       return { ok: true, unreadCount };
     } catch (err) {
       return failure(err);
@@ -253,14 +256,16 @@ const create_reminder = defineTool({
         }
       }
 
-      const reminder = await createReminderAction({
-        text,
-        dueAt,
-        repeat,
-        channels: input.channels,
-        taskId: input.link?.taskId,
-        projectId,
-      });
+      const reminder = unwrapActionResult(
+        await createReminderAction({
+          text,
+          dueAt,
+          repeat,
+          channels: input.channels,
+          taskId: input.link?.taskId,
+          projectId,
+        }),
+      );
       return { ok: true, reminder: reminderRow(reminder) };
     } catch (err) {
       return failure(err);
@@ -375,10 +380,12 @@ const schedule_digest = defineTool({
     }
     try {
       const current = await fetchNotificationPreferencesAction();
-      const saved = await updateNotificationPreferencesAction({
-        ...current,
-        rows: current.rows.map((row) => ({ ...row, digest: true })),
-      });
+      const saved = unwrapActionResult(
+        await updateNotificationPreferencesAction({
+          ...current,
+          rows: current.rows.map((row) => ({ ...row, digest: true })),
+        }),
+      );
       return {
         ok: true,
         time: DIGEST_TIME,

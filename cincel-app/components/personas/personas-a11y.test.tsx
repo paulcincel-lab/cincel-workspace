@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
@@ -22,12 +22,9 @@ vi.mock("@/lib/auth/auth-service", async (importOriginal) => ({
 }));
 vi.mock("@/lib/actions/staff-actions", () => ({
   fetchStaffDetailAction: vi.fn(),
-  createStaffAction: vi.fn(),
-  updateStaffAction: vi.fn(),
-  upsertStaffProfileAction: vi.fn(),
-  setStaffCredentialAction: vi.fn(),
-  setStaffPositionsAction: vi.fn(),
+  saveMemberAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/positions-actions", () => ({ fetchPositionsAction: vi.fn(async () => []) }));
 vi.mock("@/lib/actions/workspace-access-actions", () => ({ recheckStaffAccessAction: vi.fn() }));
 vi.mock("@/lib/tramos/compat", () => ({
   tramoLabel: (key: string) => ({ presale: "Presale", diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
@@ -43,6 +40,8 @@ import { buildTeamPeople, countPersonasTabs } from "@/lib/personas/team";
 import { appearanceStyleBlock, toCssVars } from "@/lib/ui/appearance-css";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
+// EquipoView reads the puestos catalog and saves through TanStack Query.
+import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 
 import { EquipoView } from "./EquipoView";
@@ -126,7 +125,7 @@ describe("Personas · Equipo accessibility", () => {
           const { container } = render(
             <main>
               <StyleProvider style={style} scope="staff">
-                <EquipoView people={people} emails={emails} counts={counts} positionOptions={[]} canCreate />
+                <EquipoView people={people} emails={emails} counts={counts} canCreate />
               </StyleProvider>
             </main>,
           );
@@ -138,7 +137,7 @@ describe("Personas · Equipo accessibility", () => {
         applyTheme(theme, mode);
         const { container } = render(
           <main>
-            <EquipoView people={[]} emails={{}} counts={countPersonasTabs([], [])} positionOptions={[]} canCreate={false} />
+            <EquipoView people={[]} emails={{}} counts={countPersonasTabs([], [])} canCreate={false} />
           </main>,
         );
         expect(await seriousViolations(container)).toEqual([]);

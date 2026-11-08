@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
@@ -25,9 +26,10 @@ import {
   SheetTitle,
 } from "@/components/ui/shadcn/sheet";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
-import { previewStartTramoAction, startTramoAction } from "@/lib/actions/tramo-start-actions";
+import { startTramoAction } from "@/lib/actions/tramo-start-actions";
+import { useActionMutation } from "@/lib/query/mutation";
+import { startTramoPreviewOptions, tramoStartInvalidations } from "@/lib/query/options/tareas";
 import type {
-  Staff,
   StaffCandidate,
   StartTramoAssignment,
   StartTramoInput,
@@ -35,8 +37,7 @@ import type {
   StartTramoResult,
   WorkflowRef,
 } from "@/lib/types/core";
-
-import { actionErrorText } from "@/lib/errors";
+import type { StartSlotCandidate } from "@/lib/types/tareas-start-slot";
 
 export interface StartTramoSheetProps {
   open: boolean;
@@ -46,9 +47,10 @@ export interface StartTramoSheetProps {
   viewerId: string;
   /** Shows the auto-start checkbox. */
   isAdmin: boolean;
-  staff: Array<Staff & { suggested: boolean }>;
+  /** Active staff `{id,name,suggested}` from the start slot (`qk.tareas.startSlot`). */
+  staff: StartSlotCandidate[];
   onClose: () => void;
-  /** The parent refreshes and shows the toast. */
+  /** The parent shows the toast; the start mutation already invalidated the caches. */
   onStarted: (result: StartTramoResult) => void;
 }
 
@@ -81,10 +83,6 @@ export function candidatesText(candidates: StaffCandidate[]): string {
   return `Candidatos: ${names.join(", ")}`;
 }
 
-function staffName(member: Staff): string {
-  return [member.name, member.lastName].filter(Boolean).join(" ");
-}
-
 function pendingPhases(preview: StartTramoPreview | null): PreviewPhase[] {
   if (!preview) return [];
   return [...preview.phases]
@@ -99,7 +97,14 @@ function completePhases(preview: StartTramoPreview | null): PreviewPhase[] {
     .sort((a, b) => a.phase.sortOrder - b.phase.sortOrder);
 }
 
-/** Iniciar tramo sheet (FE §3.3, §4.3). */
+/**
+ * Iniciar tramo sheet (FE §3.3, §4.3). The preview is a query
+ * (`qk.tareas.startPreview`, staleTime 0) enabled while the sheet is open, so
+ * every opening reflects the current board; "Crear N tareas" is a mutation
+ * that invalidates the start slot, Tareas, the project and Inicio
+ * (`tramoStartInvalidations`). The form (fases, mode, managers, autoStart)
+ * stays local and starts fresh each time the sheet opens.
+ */
 export function StartTramoSheet({
   open,
   projectId,
@@ -110,58 +115,146 @@ export function StartTramoSheet({
   onClose,
   onStarted,
 }: StartTramoSheetProps) {
-  const [preview, setPreview] = useState<StartTramoPreview | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [checkedPhaseIds, setCheckedPhaseIds] = useState<Set<string>>(new Set());
-  const [mode, setMode] = useState<AssignmentMode>(isAdmin ? "by_phase" : "self");
-  const [managers, setManagers] = useState<Record<string, string | null>>({});
-  const [autoStart, setAutoStart] = useState(false);
   const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
+  const start = useActionMutation<StartTramoInput, StartTramoResult>(startTramoAction, {
+    // A failed start writes nothing: keep the screen (and the form) as it is.
+    invalidate: (vars, data) => (data ? tramoStartInvalidations(vars) : []),
+    errorContext: { tramoName: workflow.name },
+    onFormError: setError,
+  });
+  const previewQuery = useQuery({
+    ...startTramoPreviewOptions(projectId ?? "", workflow.id),
+    enabled: open && Boolean(projectId),
+  });
+  // Every opening (and "Reintentar") waits for a fresh preview; the refetch a
+  // successful start triggers keeps the form on screen until the sheet closes.
+  const loading = previewQuery.isFetching && !start.isPending;
+  const preview = !loading && previewQuery.isSuccess ? previewQuery.data : null;
+  const loadError = !loading && previewQuery.isError;
 
-  useEffect(() => {
-    if (!open || !projectId) return;
-    let cancelled = false;
-    // A fresh form every time the sheet opens for a project.
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setPreview(null);
-    setLoading(true);
-    setLoadError(false);
+  const projectName = preview?.project.name ?? "";
+  const title = projectName ? `Iniciar ${workflow.name} · ${projectName}` : `Iniciar ${workflow.name}`;
+
+  function close() {
     setError("");
-    setMode(isAdmin ? "by_phase" : "self");
-    /* eslint-enable react-hooks/set-state-in-effect */
-    previewStartTramoAction(projectId, workflow.id)
-      .then((next) => {
-        if (cancelled) return;
-        const phases = pendingPhases(next);
-        setPreview(next);
-        setCheckedPhaseIds(new Set(phases.map((p) => p.phase.id)));
-        setManagers(
-          Object.fromEntries(phases.map((p) => [p.phase.id, sortCandidates(p.candidates)[0]?.id ?? null])),
-        );
-        setAutoStart(next.autoStart);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setLoadError(true);
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, projectId, workflow.id, isAdmin, reloadKey]);
+    onClose();
+  }
 
+  function submit(input: StartTramoInput) {
+    setError("");
+    start.mutate(input, {
+      onSuccess: (result) => {
+        onStarted(result);
+        close();
+      },
+    });
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(next) => (!next ? close() : undefined)}>
+      <SheetContent side="right" className="overflow-y-auto sm:max-w-xl">
+        <SheetHeader>
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription>Elige las fases contratadas y quién las hará.</SheetDescription>
+        </SheetHeader>
+
+        {preview && projectId ? (
+          <StartTramoForm
+            key={projectId}
+            preview={preview}
+            projectId={projectId}
+            workflow={workflow}
+            viewerId={viewerId}
+            isAdmin={isAdmin}
+            staff={staff}
+            error={error}
+            pending={start.isPending}
+            onSubmit={submit}
+            onClose={close}
+          />
+        ) : (
+          <>
+            <div className="px-4">
+              {loading ? (
+                <div className="space-y-3" data-testid="start-tramo-loading">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : loadError ? (
+                <Alert variant="destructive">
+                  <AlertDescription className="flex items-center justify-between gap-2">
+                    <span>No se pudo cargar la plantilla de {workflow.name}.</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void previewQuery.refetch()}>
+                      Reintentar
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+            </div>
+            <SheetFooter>
+              {loadError ? (
+                <Button type="button" variant="outline" onClick={close}>
+                  Cerrar
+                </Button>
+              ) : (
+                <>
+                  <Button type="button" disabled>
+                    Crear 0 tareas
+                  </Button>
+                  <Button type="button" variant="outline" onClick={close}>
+                    Cancelar
+                  </Button>
+                </>
+              )}
+            </SheetFooter>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+type StartTramoFormProps = {
+  preview: StartTramoPreview;
+  projectId: string;
+  workflow: WorkflowRef;
+  viewerId: string;
+  isAdmin: boolean;
+  staff: StartSlotCandidate[];
+  error: string;
+  pending: boolean;
+  onSubmit: (input: StartTramoInput) => void;
+  onClose: () => void;
+};
+
+/** The sheet's form for one loaded preview; its defaults come from that preview. */
+function StartTramoForm({
+  preview,
+  projectId,
+  workflow,
+  viewerId,
+  isAdmin,
+  staff,
+  error,
+  pending,
+  onSubmit,
+  onClose,
+}: StartTramoFormProps) {
   const phases = useMemo(() => pendingPhases(preview), [preview]);
   const complete = useMemo(() => completePhases(preview), [preview]);
+  const [checkedPhaseIds, setCheckedPhaseIds] = useState<Set<string>>(() => new Set(phases.map((p) => p.phase.id)));
+  const [mode, setMode] = useState<AssignmentMode>(isAdmin ? "by_phase" : "self");
+  const [managers, setManagers] = useState<Record<string, string | null>>(() =>
+    Object.fromEntries(phases.map((p) => [p.phase.id, sortCandidates(p.candidates)[0]?.id ?? null])),
+  );
+  const [autoStart, setAutoStart] = useState(() => preview.autoStart);
+
   const count = phases
     .filter((p) => checkedPhaseIds.has(p.phase.id))
     .reduce((sum, p) => sum + p.templates.length, 0);
-  const nothingToCreate = Boolean(preview?.alreadyStarted) && phases.length === 0;
-  const projectName = preview?.project.name ?? "";
-  const title = projectName ? `Iniciar ${workflow.name} · ${projectName}` : `Iniciar ${workflow.name}`;
+  const nothingToCreate = preview.alreadyStarted && phases.length === 0;
+  const projectName = preview.project.name;
 
   const staffById = useMemo(() => new Map(staff.map((s) => [s.id, s])), [staff]);
 
@@ -182,24 +275,14 @@ export function StartTramoSheet({
   }
 
   function submit() {
-    if (!projectId || !preview || count === 0) return;
+    if (count === 0 || pending) return;
     const phaseIds = phases.filter((p) => checkedPhaseIds.has(p.phase.id)).map((p) => p.phase.id);
-    const input: StartTramoInput = {
+    onSubmit({
       projectId,
       workflowId: workflow.id,
       phaseIds,
       assignment: buildAssignment(phaseIds),
       ...(isAdmin && autoStart !== preview.autoStart ? { autoStart } : {}),
-    };
-    setError("");
-    startTransition(async () => {
-      try {
-        const result = await startTramoAction(input);
-        onStarted(result);
-        onClose();
-      } catch (err) {
-        setError(actionErrorText(err, { tramoName: workflow.name }));
-      }
     });
   }
 
@@ -207,11 +290,11 @@ export function StartTramoSheet({
     const candidates = sortCandidates(entry.candidates);
     const candidateIds = new Set(candidates.map((c) => c.id));
     const others = staff
-      .filter((s) => s.active && !candidateIds.has(s.id))
-      .sort((a, b) => staffName(a).localeCompare(staffName(b), "es"));
+      .filter((s) => !candidateIds.has(s.id))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
     const items: Record<string, string> = { [UNASSIGNED]: "Sin asignar" };
     for (const c of candidates) items[c.id] = c.name;
-    for (const s of others) items[s.id] = staffName(s);
+    for (const s of others) items[s.id] = s.name;
     const value = managers[entry.phase.id] ?? UNASSIGNED;
     const fieldId = `start-tramo-manager-${entry.phase.id}`;
     return (
@@ -249,7 +332,7 @@ export function StartTramoSheet({
                 <SelectLabel>Todo el equipo</SelectLabel>
                 {others.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {staffName(s)}
+                    {s.name}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -261,28 +344,6 @@ export function StartTramoSheet({
   }
 
   function body() {
-    if (loading) {
-      return (
-        <div className="space-y-3" data-testid="start-tramo-loading">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-      );
-    }
-    if (loadError) {
-      return (
-        <Alert variant="destructive">
-          <AlertDescription className="flex items-center justify-between gap-2">
-            <span>No se pudo cargar la plantilla de {workflow.name}.</span>
-            <Button type="button" size="sm" variant="outline" onClick={() => setReloadKey((k) => k + 1)}>
-              Reintentar
-            </Button>
-          </AlertDescription>
-        </Alert>
-      );
-    }
-    if (!preview) return null;
     if (nothingToCreate) {
       return (
         <Alert>
@@ -358,9 +419,7 @@ export function StartTramoSheet({
             </label>
           </RadioGroup>
           {mode === "self" && viewerId && staffById.get(viewerId) ? (
-            <p className="text-xs text-muted-foreground">
-              Responsable: {staffName(staffById.get(viewerId) as Staff)}
-            </p>
+            <p className="text-xs text-muted-foreground">Responsable: {staffById.get(viewerId)?.name}</p>
           ) : null}
         </fieldset>
 
@@ -386,32 +445,25 @@ export function StartTramoSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
-      <SheetContent side="right" className="overflow-y-auto sm:max-w-xl">
-        <SheetHeader>
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>Elige las fases contratadas y quién las hará.</SheetDescription>
-        </SheetHeader>
+    <>
+      <div className="px-4">{body()}</div>
 
-        <div className="px-4">{body()}</div>
-
-        <SheetFooter>
-          {nothingToCreate || loadError ? (
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cerrar
+      <SheetFooter>
+        {nothingToCreate ? (
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
+        ) : (
+          <>
+            <Button type="button" disabled={count === 0 || pending} onClick={submit}>
+              {pending ? "Creando…" : `Crear ${count} tareas`}
             </Button>
-          ) : (
-            <>
-              <Button type="button" disabled={!preview || count === 0 || isPending} onClick={submit}>
-                {isPending ? "Creando…" : `Crear ${count} tareas`}
-              </Button>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancelar
-              </Button>
-            </>
-          )}
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+          </>
+        )}
+      </SheetFooter>
+    </>
   );
 }

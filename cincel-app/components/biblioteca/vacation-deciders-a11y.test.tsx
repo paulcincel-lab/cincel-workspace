@@ -1,12 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import axe from "axe-core";
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
-  usePathname: () => "/biblioteca/vacaciones",
-  useSearchParams: () => new URLSearchParams(),
+vi.mock("@/lib/actions/page-data/biblioteca-actions", () => ({
+  getBibliotecaPageData: vi.fn(),
+  getMisVacacionesPageData: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/actions/vacations-actions", () => ({
@@ -30,6 +29,7 @@ vi.mock("@/components/shell/EmptyState", async () => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { appearanceStyleBlock, toCssVars } from "@/lib/ui/appearance-css";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
@@ -37,7 +37,7 @@ import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 
 import { TeamRequests } from "./TeamRequests";
 import { VacationSettings } from "./VacationSettings";
-import { pendingRequestsFixture, vacationSettingsFixture, VIEWER_ID } from "./vacation-deciders.fixtures";
+import { seededDeciderClient, VIEWER_ID } from "./vacation-deciders.fixtures";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
@@ -85,13 +85,14 @@ async function seriousViolations(container: HTMLElement) {
 }
 
 function renderSections(style: PresentationStyle) {
-  return render(
+  return renderWithQueryClient(
     <main>
       <StyleProvider style={style} scope="staff">
-        <TeamRequests requests={pendingRequestsFixture()} viewerStaffId={VIEWER_ID} canDecide />
-        <VacationSettings initial={vacationSettingsFixture()} canDecide />
+        <TeamRequests month="2026-11" viewerStaffId={VIEWER_ID} canDecide />
+        <VacationSettings month="2026-11" canDecide />
       </StyleProvider>
     </main>,
+    { client: seededDeciderClient() },
   );
 }
 

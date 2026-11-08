@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TaskStatusOption } from "@/lib/types/core";
 import { THEME_IDS } from "@/lib/ui/themes";
 
@@ -23,6 +25,9 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/task-statuses-actions", () => actions);
 
+const pageData = vi.hoisted(() => ({ getAjustesEstatusPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
+
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 vi.mock("@/components/patterns/SettingsRow", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 vi.mock("@/components/patterns/FormDialog", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
@@ -40,6 +45,13 @@ async function seriousViolations(container: HTMLElement) {
   return results.violations
     .filter((v) => v.impact === "critical" || v.impact === "serious")
     .map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.html) }));
+}
+
+/** Renders the page under a client hydrated with the statuses, as the page's prefetch leaves it. */
+function renderPage(statuses: TaskStatusOption[] = STATUSES) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.ajustes.page("estatus"), { statuses });
+  return renderWithQueryClient(<EstatusSettings />, { client });
 }
 
 function section(name: string) {
@@ -75,22 +87,21 @@ describe("Ajustes › Estatus", () => {
     for (const mode of ["light", "dark"] as const) {
       it(`has no serious or critical axe violations (${theme}, ${mode})`, async () => {
         applyTheme(theme, mode);
-        const { container } = render(<EstatusSettings initialStatuses={STATUSES} />);
-        await waitFor(() => expect(actions.fetchTaskStatusesAction).toHaveBeenCalled());
+        const { container } = renderPage();
         expect(await seriousViolations(container)).toEqual([]);
       });
     }
   }
 
   it("has no serious or critical axe violations with the editor open", async () => {
-    render(<EstatusSettings initialStatuses={STATUSES} />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Editar Entregado" }));
     expect(screen.getByRole("dialog", { name: "Editar estatus" })).toBeTruthy();
     expect(await seriousViolations(document.body)).toEqual([]);
   });
 
   it("groups the custom statuses under the base whose color they take", () => {
-    render(<EstatusSettings initialStatuses={STATUSES} />);
+    renderPage();
 
     for (const base of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
       expect(section(base)).toBeTruthy();
@@ -105,7 +116,7 @@ describe("Ajustes › Estatus", () => {
   });
 
   it("'Agregar estatus en Completado' creates a closing status with the same payload as before", async () => {
-    render(<EstatusSettings initialStatuses={STATUSES} />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Agregar estatus en Completado" }));
 
     const dialog = screen.getByRole("dialog", { name: "Nuevo estatus" });
@@ -128,7 +139,7 @@ describe("Ajustes › Estatus", () => {
   });
 
   it("'Agregar estatus en En proceso' starts as an open status", () => {
-    render(<EstatusSettings initialStatuses={STATUSES} />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Agregar estatus en En proceso" }));
 
     const dialog = screen.getByRole("dialog", { name: "Nuevo estatus" });
@@ -139,7 +150,7 @@ describe("Ajustes › Estatus", () => {
   });
 
   it("edits a status with the existing update action", async () => {
-    render(<EstatusSettings initialStatuses={STATUSES} />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Editar Entregado" }));
 
     const dialog = screen.getByRole("dialog", { name: "Editar estatus" });
@@ -157,7 +168,7 @@ describe("Ajustes › Estatus", () => {
 
   it("shows the existing copy when the name is taken", async () => {
     actions.createTaskStatusAction.mockRejectedValueOnce(new Error("TASK_STATUS_NAME_TAKEN"));
-    render(<EstatusSettings initialStatuses={STATUSES} />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Agregar estatus en En proceso" }));
 
     const dialog = screen.getByRole("dialog", { name: "Nuevo estatus" });
@@ -168,7 +179,7 @@ describe("Ajustes › Estatus", () => {
   });
 
   it("asks before deleting and then calls the existing delete action", async () => {
-    render(<EstatusSettings initialStatuses={STATUSES} />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Eliminar Cancelado" }));
 
     const dialog = screen.getByRole("dialog", { name: '¿Eliminar el estatus "Cancelado"?' });
@@ -180,9 +191,51 @@ describe("Ajustes › Estatus", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
+  it("reads the hydrated list: no client call on mount", () => {
+    renderPage();
+    expect(screen.getByRole("group", { name: "En revisión" })).toBeTruthy();
+    expect(pageData.getAjustesEstatusPageData).not.toHaveBeenCalled();
+    expect(actions.fetchTaskStatusesAction).not.toHaveBeenCalled();
+  });
+
+  it("shows a created status from the result, without refetching the list", async () => {
+    const APROBADO: TaskStatusOption = { id: "s4", name: "Aprobado", closes: true, countsAsCompleted: true, sortOrder: 3 };
+    actions.createTaskStatusAction.mockResolvedValueOnce({ ok: true, data: APROBADO });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Agregar estatus en Completado" }));
+    const dialog = screen.getByRole("dialog", { name: "Nuevo estatus" });
+    fireEvent.change(within(dialog).getByLabelText("Nombre"), { target: { value: "Aprobado" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(within(section("Completado")).getByRole("group", { name: "Aprobado" })).toBeTruthy());
+    expect(pageData.getAjustesEstatusPageData).not.toHaveBeenCalled();
+    expect(actions.fetchTaskStatusesAction).not.toHaveBeenCalled();
+  });
+
+  it("shows the status copy for a failed result (production keeps the code)", async () => {
+    actions.createTaskStatusAction.mockResolvedValueOnce({ ok: false, error: "TASK_STATUS_NAME_TAKEN" });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Agregar estatus en En proceso" }));
+    const dialog = screen.getByRole("dialog", { name: "Nuevo estatus" });
+    fireEvent.change(within(dialog).getByLabelText("Nombre"), { target: { value: "En revisión" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(within(dialog).getByRole("alert").textContent).toBe("Ya existe un estatus con ese nombre."));
+  });
+
+  it("removes a deleted status from the list", async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar Cancelado" }));
+    const dialog = screen.getByRole("dialog", { name: '¿Eliminar el estatus "Cancelado"?' });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Cancelado" })).toBeNull());
+    expect(pageData.getAjustesEstatusPageData).not.toHaveBeenCalled();
+  });
+
   it("renders no edit entry point without the manage capability", () => {
     caps.canManageTaskStatuses = false;
-    render(<EstatusSettings initialStatuses={STATUSES} />);
+    renderPage();
 
     expect(screen.queryByRole("button", { name: /Agregar estatus/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Editar|Eliminar/ })).toBeNull();

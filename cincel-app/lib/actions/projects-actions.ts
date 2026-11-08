@@ -3,8 +3,6 @@
 import { toActionResult } from "@/lib/actions/action-result";
 import type { ActionResult } from "@/lib/types/schedule";
 import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
-import { revalidateProyectoFichaScreen, revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
-import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -36,17 +34,9 @@ async function requireProjectsCapabilities() {
   return resolveProjectsCapabilities(await requireCapabilityUser());
 }
 
-function revalidateProyectos(id?: string) {
-  revalidateProyectosListScreen(["proyectos"]);
-  if (id) revalidateProyectoFichaScreen(id, ["ficha"]);
-}
-
-/** Changes that move a project between tramos also show on Actividades, Dashboard and Tablero (BE §7.3). */
-function revalidateProjectFlow(id: string) {
-  revalidateProyectos(id);
-  revalidateTareasScreen(["actividadesLayout"]);
+/** Changes that move a project between tramos also show on Inicio (BE §7.3). Tareas reads `qk.tareas.*` (Phase 4). */
+function revalidateProjectFlow() {
   revalidateInicioScreen();
-  revalidateTareasScreen(["tablero"]);
 }
 
 export async function fetchProjectsAction(filters: ProjectFilters = {}): Promise<ProjectListItem[]> {
@@ -62,12 +52,9 @@ export async function fetchProjectAction(id: string): Promise<ProjectDetail | nu
   return projectsRepository.getProject(id, viewerScopeOf(user));
 }
 
-/** Create/update revalidation (BE §7.3): Proyectos, the ficha, Actividades layout, Dashboard and Tablero. */
-function revalidateProjectEdit(id: string) {
-  revalidateProyectos(id);
-  revalidateTareasScreen(["actividadesLayout"]);
+/** Create/update revalidation (BE §7.3): Inicio. Proyectos reads `qk.proyectos.*` (5a, #959) and Tareas `qk.tareas.*` (Phase 4). */
+function revalidateProjectEdit() {
   revalidateInicioScreen();
-  revalidateTareasScreen(["tablero"]);
 }
 
 /** Patch keys only administrators may send (BE §7.3). */
@@ -95,7 +82,7 @@ async function createProjectActionImpl(input: ProjectCreateInput | ProjectInput)
   // Drive runs after the response; no client yet, so only the internal folders.
   // A failure leaves the project with drive_folder_status = failed.
   after(() => syncProjectFolders(row.id));
-  revalidateProjectEdit(row.id);
+  revalidateProjectEdit();
   return row;
 }
 
@@ -145,7 +132,7 @@ async function updateProjectActionImpl(
   if (patch.name !== undefined || patch.code !== undefined) after(() => syncProjectFolderName(id));
   // Setting a client adds "02 Cliente" and "03 Del cliente" to the Drive tree (BE §8.8).
   if (typeof patch.clientId === "string" && patch.clientId) after(() => syncProjectFolders(id));
-  revalidateProjectEdit(id);
+  revalidateProjectEdit();
   return row;
 }
 
@@ -166,7 +153,7 @@ export async function retryProjectFolderAction(projectId: string): Promise<Retry
 
   const result = await retryProjectFolders(projectId);
   if (result.status === "not_found") return { ok: false, error: "not_found" };
-  revalidateProyectos(projectId);
+  // No revalidation: the caller invalidates the Archivos, Resumen and shell keys (5d, #962).
   if (result.status === "ready") return { ok: true, status: "ready" };
   return { ok: true, status: "failed", error: result.error };
 }
@@ -177,7 +164,6 @@ export async function archiveProjectAction(id: string, status: "completado" | "c
     throw new Error("FORBIDDEN: project archive");
   }
   const row = await projectsRepository.updateProject(id, { status }, user.member.id, viewerOf(user));
-  revalidateProyectos(id);
   return row;
 }
 
@@ -187,7 +173,6 @@ export async function deleteProjectAction(id: string): Promise<void> {
     throw new Error("FORBIDDEN: project delete");
   }
   await projectsRepository.softDeleteProject(id, user.member.id);
-  revalidateProyectos(id);
 }
 
 export async function setProjectMembersAction(
@@ -205,7 +190,6 @@ async function setProjectMembersActionImpl(
     throw new Error("FORBIDDEN: project members edit");
   }
   await projectsRepository.setProjectMembers(projectId, members, user.member.id);
-  revalidateProyectos(projectId);
 }
 
 export async function setProjectContactsAction(
@@ -223,7 +207,6 @@ async function setProjectContactsActionImpl(
     throw new Error("FORBIDDEN: project contacts edit");
   }
   await projectsRepository.setProjectContacts(projectId, contacts);
-  revalidateProyectos(projectId);
 }
 
 const PROJECT_LINK_ERROR_MESSAGES: Record<string, string> = {
@@ -245,7 +228,6 @@ async function addProjectLinkActionImpl(projectId: string, input: ProjectLinkInp
   }
   try {
     const row = await projectsRepository.addProjectLink(projectId, input);
-    revalidateProyectos(projectId);
     return row;
   } catch (err) {
     const message = err instanceof Error ? PROJECT_LINK_ERROR_MESSAGES[err.message] : undefined;
@@ -265,7 +247,6 @@ async function removeProjectLinkActionImpl(projectId: string, linkId: string): P
     throw new Error("FORBIDDEN: project links edit");
   }
   await projectsRepository.removeProjectLink(projectId, linkId);
-  revalidateProyectos(projectId);
 }
 
 /** Project bitácora (comments and changes), newest first; same shape as fetchTaskHistoryAction. */
@@ -296,7 +277,6 @@ async function addProjectCommentActionImpl(projectId: string, text: string): Pro
   if (!comment) throw new Error("EMPTY");
   if (!(await projectsRepository.projectExists(projectId))) throw new Error("NOT_FOUND");
   await projectsRepository.addProjectComment(projectId, comment, user.member.id);
-  revalidateProyectos(projectId);
 }
 
 // ── Current tramo and espacios (project flow BE §7.3) ───────────────────────
@@ -328,7 +308,7 @@ async function setProjectCurrentTramoActionImpl(id: string, workflowId: string):
     if (!(err instanceof Error && err.message === "NOT_STARTED" && canSeeAdminData(user))) throw err;
     row = await projectsRepository.assignProjectTramo(id, workflowId, user.member.id);
   }
-  revalidateProjectFlow(id);
+  revalidateProjectFlow();
   return scopeProjectDto(row, viewerScopeOf(user));
 }
 
@@ -337,13 +317,6 @@ async function requireProjectEditor() {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canEditProjectGeneral) throw flowError(FLOW_ERROR.FORBIDDEN);
   return user;
-}
-
-/** Espacios show on the ficha and filter the Actividades views. Without a project id, every ficha. */
-function revalidateSpaces(projectId?: string) {
-  if (projectId) revalidateProyectoFichaScreen(projectId, ["ficha"]);
-  else revalidateProyectosListScreen(["proyectosLayout"]);
-  revalidateTareasScreen(["actividadesLayout"]);
 }
 
 /** By `sortOrder`, with live task counts. `canViewProjects`. */
@@ -364,7 +337,6 @@ async function createProjectSpaceActionImpl(projectId: string, name: string): Pr
   await requireProjectEditor();
   const id = parseInput(UuidSchema, projectId);
   const row = await projectSpacesRepository.createSpace(id, parseInput(ProjectSpaceNameSchema, name));
-  revalidateSpaces(id);
   return row;
 }
 
@@ -379,7 +351,6 @@ async function renameProjectSpaceActionImpl(id: string, name: string): Promise<P
   await requireProjectEditor();
   const spaceId = parseInput(UuidSchema, id);
   const row = await projectSpacesRepository.renameSpace(spaceId, parseInput(ProjectSpaceNameSchema, name));
-  revalidateSpaces(row.projectId);
   return row;
 }
 
@@ -394,7 +365,6 @@ async function reorderProjectSpacesActionImpl(projectId: string, orderedIds: str
   await requireProjectEditor();
   const id = parseInput(UuidSchema, projectId);
   await projectSpacesRepository.reorderSpaces(id, parseInput(OrderedIdsSchema, orderedIds));
-  revalidateSpaces(id);
 }
 
 /** Its tasks keep their fase and lose the espacio. Errors: FORBIDDEN, NOT_FOUND. */
@@ -407,7 +377,6 @@ export async function deleteProjectSpaceAction(
 async function deleteProjectSpaceActionImpl(id: string): Promise<void> {
   const user = await requireProjectEditor();
   await projectSpacesRepository.deleteSpace(parseInput(UuidSchema, id), user.member.id);
-  revalidateSpaces();
 }
 
 /**

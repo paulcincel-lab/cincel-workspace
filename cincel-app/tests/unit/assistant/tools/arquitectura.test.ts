@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({
   loadVisionFiles: vi.fn(),
   askVision: vi.fn(),
   driveFileRef: vi.fn(),
-  fetchProjectsAction: vi.fn(),
+  listViewerProjects: vi.fn(),
   fetchProjectAction: vi.fn(),
   addProjectCommentAction: vi.fn(),
   fetchScheduleAction: vi.fn(),
@@ -33,8 +33,8 @@ vi.mock("@/lib/assistant/vision", () => ({
   askVision: h.askVision,
   driveFileRef: h.driveFileRef,
 }));
+vi.mock("@/lib/assistant/reads", () => ({ listViewerProjects: h.listViewerProjects }));
 vi.mock("@/lib/actions/projects-actions", () => ({
-  fetchProjectsAction: h.fetchProjectsAction,
   fetchProjectAction: h.fetchProjectAction,
   addProjectCommentAction: h.addProjectCommentAction,
 }));
@@ -177,7 +177,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.isVisionAvailable.mockReturnValue(true);
   h.driveCallerFor.mockResolvedValue({ ok: true, caller: { staffId: "staff-1", email: "ana@cincel.mx", accessToken: "tok" } });
-  h.fetchProjectsAction.mockResolvedValue([PROJECT]);
+  h.listViewerProjects.mockResolvedValue([PROJECT]);
   h.fetchProjectAction.mockResolvedValue(DETAIL);
   h.fetchScheduleAction.mockResolvedValue(SCHEDULE);
   h.driveFileRef.mockImplementation(async (_caller: unknown, id: string) => ({ id, name: `${id}.jpg`, url: `https://drive.google.com/file/d/${id}/view` }));
@@ -353,7 +353,7 @@ describe("calculators", () => {
   it("defaults to the page's project when no project is named", async () => {
     const result = await run("zoning_check", {});
     expect(result.project).toEqual(PROJECT);
-    expect(h.fetchProjectsAction).not.toHaveBeenCalled();
+    expect(h.listViewerProjects).not.toHaveBeenCalled();
   });
 
   it("asks for the project when there is neither a name nor a page project", async () => {
@@ -362,7 +362,7 @@ describe("calculators", () => {
   });
 
   it("returns the candidates of an ambiguous project", async () => {
-    h.fetchProjectsAction.mockResolvedValue([{ id: "a", name: "Casa Lomas Norte" }, { id: "b", name: "Casa Lomas Sur" }]);
+    h.listViewerProjects.mockResolvedValue([{ id: "a", name: "Casa Lomas Norte" }, { id: "b", name: "Casa Lomas Sur" }]);
     const result = await run("zoning_check", { project: "Lomas" });
     expect(result).toMatchObject({ ok: false, error: "AMBIGUOUS", candidates: ["Casa Lomas Norte", "Casa Lomas Sur"] });
   });

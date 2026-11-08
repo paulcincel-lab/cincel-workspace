@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import type { FetchQueryOptions, QueryClient, QueryKey } from "@tanstack/react-query";
 
 import { makeQueryClient } from "./client";
 
@@ -28,10 +28,10 @@ export const getQueryClient = cache(makeQueryClient);
  */
 export function prefetch<TData>(
   qc: QueryClient,
-  options: { queryKey: QueryKey; staleTime?: number },
-  loader: () => Promise<TData>,
+  options: { queryKey: QueryKey; staleTime?: FetchQueryOptions<TData, Error, TData, QueryKey>["staleTime"] },
+  loader: () => Promise<NoInfer<TData>>,
 ): Promise<void> {
-  return qc.prefetchQuery({
+  return qc.prefetchQuery<TData, Error, TData, QueryKey>({
     queryKey: options.queryKey,
     queryFn: loader,
     ...(options.staleTime !== undefined ? { staleTime: options.staleTime } : {}),

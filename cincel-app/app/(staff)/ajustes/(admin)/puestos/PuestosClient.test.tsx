@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { Position, WorkflowDetail } from "@/lib/types/core";
 
 const state = vi.hoisted(() => ({ access: "Administrador" as string }));
@@ -14,7 +16,7 @@ const actions = vi.hoisted(() => ({
   reorderPositionsAction: vi.fn(),
   setPositionPhasesAction: vi.fn(),
 }));
-const workflowActions = vi.hoisted(() => ({ fetchWorkflowsAction: vi.fn() }));
+const pageData = vi.hoisted(() => ({ getAjustesPuestosPageData: vi.fn() }));
 
 vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => ({
@@ -24,7 +26,7 @@ vi.mock("@/lib/auth/auth-service", () => ({
   }),
 }));
 vi.mock("@/lib/actions/positions-actions", () => actions);
-vi.mock("@/lib/actions/workflows-actions", () => workflowActions);
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
 
 import { PuestosClient } from "./PuestosClient";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
@@ -64,10 +66,13 @@ function makePosition(overrides: Partial<Position>): Position {
 const arquitecto = makePosition({});
 const residente = makePosition({ id: "p2", name: "Residente de obra", sortOrder: 1, staffCount: 0, phases: [] });
 
+/** Renders under a client hydrated with the page data, as the page's prefetch leaves it. */
 function renderPuestos(positions: Position[] = [arquitecto, residente]) {
-  actions.fetchPositionsAction.mockResolvedValue(positions);
-  workflowActions.fetchWorkflowsAction.mockResolvedValue(workflows);
-  return render(<PuestosClient initialPositions={positions} initialWorkflows={workflows} />);
+  const client = createTestQueryClient();
+  client.setQueryData(qk.ajustes.page("puestos"), { positions, workflows });
+  // The refetch an invalidation triggers.
+  pageData.getAjustesPuestosPageData.mockResolvedValue({ positions, workflows });
+  return renderWithQueryClient(<PuestosClient />, { client });
 }
 
 function rowOf(name: string): HTMLElement {
@@ -92,9 +97,10 @@ afterEach(() => {
 });
 
 describe("PuestosClient table", () => {
-  it("lists puestos with their candidate fases and member count", async () => {
+  it("lists puestos with their candidate fases and member count, with no call on mount", async () => {
     renderPuestos();
-    await waitFor(() => expect(actions.fetchPositionsAction).toHaveBeenCalled());
+    expect(pageData.getAjustesPuestosPageData).not.toHaveBeenCalled();
+    expect(actions.fetchPositionsAction).not.toHaveBeenCalled();
     const headers = screen.getAllByRole("columnheader").map((th) => th.textContent?.replace(/[▲▼]/g, "").trim());
     expect(headers).toEqual(expect.arrayContaining(["Orden", "Puesto", "Fases candidatas", "Integrantes"]));
     expect(within(rowOf("Arquitecto proyectista")).getByText("Diseño · Ejecutivo")).toBeTruthy();
@@ -117,7 +123,6 @@ describe("PuestosClient table", () => {
     state.access = "Colaborador";
     seedSessionUser(getCurrentAuthenticatedUser());
     renderPuestos();
-    await waitFor(() => expect(actions.fetchPositionsAction).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: "+ Nuevo puesto" })).toBeNull();
     expect(screen.queryByLabelText("Acciones")).toBeNull();
   });
@@ -144,6 +149,28 @@ describe("PuestosClient editor", () => {
     await waitFor(() => expect(actions.setPositionPhasesAction).toHaveBeenCalledWith("p9", ["f2"]));
     expect(actions.createPositionAction).toHaveBeenCalledWith({ name: "Dibujante" });
     expect(actions.updatePositionAction).not.toHaveBeenCalled();
+  });
+
+  it("a save invalidates Puestos, Personas, the assignee pickers and Google, and refetches only this page once", async () => {
+    actions.createPositionAction.mockResolvedValue({ ok: true, data: makePosition({ id: "p9", name: "Dibujante" }) });
+    actions.setPositionPhasesAction.mockResolvedValue({ ok: true, data: makePosition({ id: "p9", name: "Dibujante" }) });
+    const { client } = renderPuestos();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Nuevo puesto" }));
+    const sheet = await screen.findByRole("dialog");
+    fireEvent.change(within(sheet).getByLabelText("Nombre"), { target: { value: "Dibujante" } });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(4));
+    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toEqual([
+      qk.ajustes.page("puestos"),
+      qk.personas.equipo(),
+      ["catalog", "assignable-staff"],
+      qk.ajustes.page("google"),
+    ]);
+    await waitFor(() => expect(pageData.getAjustesPuestosPageData).toHaveBeenCalledTimes(1));
+    expect(actions.fetchPositionsAction).not.toHaveBeenCalled();
   });
 
   it("shows the NAME_TAKEN copy", async () => {

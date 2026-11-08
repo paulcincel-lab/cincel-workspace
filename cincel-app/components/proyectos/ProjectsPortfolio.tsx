@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { FolderKanban, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,11 +12,12 @@ import type { ProjectAdminValue } from "@/components/proyectos/ProjectAdminField
 import { Button } from "@/components/ui/shadcn/button";
 import { DistributionStripWidget } from "@/components/widgets/DistributionStripWidget";
 import { EntityCardFooter } from "@/components/widgets/EntityCardFooter";
-import { unwrapActionResult } from "@/lib/actions/action-result";
 import { submitProjectCreateAction, updateProjectAction } from "@/lib/actions/projects-actions";
-import { actionErrorText } from "@/lib/errors";
-import type { ProjectCreateInput, ProjectListItem, WorkflowRef } from "@/lib/types/core";
-import type { PortfolioRow } from "@/lib/types/redesign";
+import { isStrippedActionError, useActionMutation } from "@/lib/query/mutation";
+import { qk } from "@/lib/query/keys";
+import { catalogOptions } from "@/lib/query/options/catalog";
+import { proyectosPageOptions } from "@/lib/query/options/proyectos";
+import type { ProjectCreateInput, ProjectInput } from "@/lib/types/core";
 import type { EntityCard } from "@/lib/types/widgets";
 
 import { NewProjectDialog } from "./NewProjectDialog";
@@ -36,59 +38,70 @@ import {
   tramoSteps,
 } from "./projects-portfolio-data";
 
-export type ProjectsPortfolioProps = {
-  projects: ProjectListItem[];
-  portfolio: PortfolioRow[];
-  /** Tramos in order (`listTramos`); without them the tramos the projects carry. */
-  tramos?: WorkflowRef[];
-  /**
-   * `canSeeAdminData` of the viewer, decided on the server: adds the
-   * "Presup. ejercido" column and the client/origin fields of the dialog.
-   */
-  canSeeAdminData?: boolean;
-  /** `projects.canCreateProject`: shows "Nuevo proyecto" and honors `?nuevo=1`. */
-  canCreateProject?: boolean;
-  /** Presale starts on its own when a project is created (dialog copy). */
-  presaleAutoStart?: boolean;
-  /** Clients and staff for the admin fields of the dialog (admins only). */
-  adminOptions?: ProjectCreateAdminOptions | null;
-};
-
 export const EMPTY_PROJECTS_TITLE = "Aún no hay proyectos";
 export const NEW_PROJECT_LABEL = "Nuevo proyecto";
 export const SEARCH_PLACEHOLDER = "Buscar proyecto o lugar";
+
+/** The URL param of the portfolio search. */
+export const SEARCH_PARAM = "q";
+/** The URL param that opens the create dialog. */
+export const NEW_PROJECT_PARAM = "nuevo";
+/** How long typing waits before the search reaches the URL. */
+export const SEARCH_DEBOUNCE_MS = 300;
 
 function hasAdminValues(admin: ProjectAdminValue | undefined): admin is ProjectAdminValue {
   return Boolean(admin && (admin.clientId || admin.origin || admin.originStaffId));
 }
 
 /**
+ * Sets (or removes) one search param of the current URL with
+ * `history.replaceState`: the App Router mirrors it into `useSearchParams`
+ * without a server render.
+ */
+function replaceSearchParam(pathname: string, key: string, value: string | null): void {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  if (value) params.set(key, value);
+  else params.delete(key);
+  const search = params.toString();
+  window.history.replaceState(window.history.state, "", `${pathname}${search ? `?${search}` : ""}${window.location.hash}`);
+}
+
+type UpdateVars = { id: string; patch: Partial<ProjectInput> };
+
+/**
  * /proyectos in three styles (redesign FE §3.5, §4.6): `ListPage` with
  * `spec.kind = "cards"` (`EntityCardGrid`: Visual cards with tinted head,
  * ring, tramo step bar and team; Esencial text cards / list; Analítico
  * portfolio table with totals) plus "Proyectos por tramo" (strip in Visual,
- * summary line or table in the other styles). Builds one set of data shapes;
- * every per-style difference lives in the widgets. "Nuevo proyecto" and
- * `?nuevo=1` open `NewProjectDialog`.
+ * summary line or table in the other styles). Reads `qk.proyectos.list()`
+ * (prefetched by the page). The search lives in `?q=` (written with
+ * `history.replaceState` after a short debounce, so it survives opening a
+ * project and going back); "Nuevo proyecto" and `?nuevo=1` open
+ * `NewProjectDialog`, whose admin options load only while it is open.
  */
-export function ProjectsPortfolio({
-  projects,
-  portfolio,
-  tramos,
-  canSeeAdminData = false,
-  canCreateProject = false,
-  presaleAutoStart = false,
-  adminOptions = null,
-}: ProjectsPortfolioProps) {
+export function ProjectsPortfolio() {
+  const { data } = useSuspenseQuery(proyectosPageOptions());
+  const { projects, portfolio, tramos, canSeeAdminData, canCreateProject, presaleAutoStart } = data;
+
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/proyectos";
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState("");
+  // The local draft filters right away; the URL follows after the debounce.
+  const [query, setQuery] = useState(() => searchParams?.get(SEARCH_PARAM) ?? "");
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  // Set once a create navigates away, so closing the dialog doesn't replace that navigation.
+  // Set once a create navigates away, so closing the dialog doesn't touch the URL of that navigation.
   const navigating = useRef(false);
 
-  const wantsNew = searchParams?.get("nuevo") === "1";
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    },
+    [],
+  );
+
+  const wantsNew = searchParams?.get(NEW_PROJECT_PARAM) === "1";
   // `?nuevo=1` opens the dialog; closing it hides it right away, before the URL drops the param.
   const [newDismissed, setNewDismissed] = useState(false);
   const [prevWantsNew, setPrevWantsNew] = useState(wantsNew);
@@ -97,6 +110,40 @@ export function ProjectsPortfolio({
     if (wantsNew) setNewDismissed(false);
   }
   const open = canCreateProject && (dialogOpen || (wantsNew && !newDismissed));
+
+  // Admin create options: lazy catalog queries, only for admins and only while the dialog is open.
+  const loadAdminOptions = open && canSeeAdminData;
+  const clientsQuery = useQuery({ ...catalogOptions.contacts("cliente"), enabled: loadAdminOptions });
+  const staffQuery = useQuery({ ...catalogOptions.staff(), enabled: loadAdminOptions });
+  const adminOptions = useMemo<ProjectCreateAdminOptions | null>(
+    () =>
+      canSeeAdminData
+        ? {
+            clients: (clientsQuery.data ?? []).map((c) => ({ id: c.id, name: c.name })),
+            staff: (staffQuery.data ?? []).map((s) => ({ id: s.id, name: s.name })),
+          }
+        : null,
+    [canSeeAdminData, clientsQuery.data, staffQuery.data],
+  );
+
+  // The dialog shows create errors inline (its own copy), so the mutation shows no toast.
+  const createProject = useActionMutation(submitProjectCreateAction, {
+    invalidate: [qk.proyectos.list(), qk.catalog.projectOptions(), qk.inicio()],
+    onFormError: () => undefined,
+  });
+  const updateProject = useActionMutation(({ id, patch }: UpdateVars) => updateProjectAction(id, patch), {
+    invalidate: ({ id, patch }) => [
+      qk.proyectos.detail(id),
+      qk.proyectos.list(),
+      qk.catalog.projectOptions(),
+      qk.inicio(),
+      // A client set on the new project changes its Clientes tab.
+      ...(patch.clientId ? [qk.proyectos.tab(id, "clientes")] : []),
+    ],
+    errorContext: { entity: "project" },
+    // The project exists; the client and origin can be set from the ficha.
+    onFormError: (text) => toast.error(`Proyecto creado, pero no se guardaron el cliente y el origen. ${text}`),
+  });
 
   const listed = useMemo(() => listedProjects(projects), [projects]);
   const visible = useMemo(() => searchProjects(listed, query), [listed, query]);
@@ -108,6 +155,15 @@ export function ProjectsPortfolio({
   const table = useMemo(() => buildPortfolioTable(visible, rows, { canSeeAdminData }), [visible, rows, canSeeAdminData]);
   const segments = useMemo(() => buildTramoSegments(visible, rows, tramoOrder), [visible, rows, tramoOrder]);
 
+  function handleSearch(value: string) {
+    setQuery(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      searchTimer.current = null;
+      replaceSearchParam(pathname, SEARCH_PARAM, value.trim() || null);
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
   function openDialog() {
     setDialogOpen(true);
   }
@@ -115,25 +171,25 @@ export function ProjectsPortfolio({
   function handleOpenChange(next: boolean) {
     setDialogOpen(next);
     if (!next && wantsNew) setNewDismissed(true);
-    if (!next && wantsNew && !navigating.current) {
-      const params = new URLSearchParams(searchParams?.toString() ?? "");
-      params.delete("nuevo");
-      const search = params.toString();
-      router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
-    }
+    // Dropping `?nuevo` is a URL change only: no server render.
+    if (!next && wantsNew && !navigating.current) replaceSearchParam(pathname, NEW_PROJECT_PARAM, null);
   }
 
   async function handleCreate(input: ProjectCreateInput, admin?: ProjectAdminValue) {
-    const result = await submitProjectCreateAction(input);
-    // The dialog maps the code to copy (FE §9).
-    if (!result.ok) throw new Error(result.error);
+    let result: Awaited<ReturnType<typeof createProject.mutateAsync>>;
+    try {
+      // An `{ ok: false, error }` result is thrown as `Error(error)` by the mutation.
+      result = await createProject.mutateAsync(input);
+    } catch (err) {
+      // The dialog maps the code to copy (FE §9); a production-stripped message gets the generic copy.
+      throw isStrippedActionError(err) ? new Error("") : err;
+    }
     const id = result.project.id;
     if (canSeeAdminData && hasAdminValues(admin)) {
       try {
-        unwrapActionResult(await updateProjectAction(id, admin));
-      } catch (err) {
-        // The project exists; the client and origin can be set from the ficha.
-        toast.error(`Proyecto creado, pero no se guardaron el cliente y el origen. ${actionErrorText(err)}`);
+        await updateProject.mutateAsync({ id, patch: admin });
+      } catch {
+        // The error toast is shown by the mutation; the ficha has the fields.
         navigating.current = true;
         router.push(`/proyectos/${id}/ficha`);
         return;
@@ -183,7 +239,7 @@ export function ProjectsPortfolio({
         filters={
           listed.length > 0 ? (
             <div className="flex flex-col gap-4">
-              <FiltersBar search={{ value: query, placeholder: SEARCH_PLACEHOLDER, onChange: setQuery }} />
+              <FiltersBar search={{ value: query, placeholder: SEARCH_PLACEHOLDER, onChange: handleSearch }} />
               {visible.length > 0 ? (
                 <DistributionStripWidget
                   title={PROJECTS_BY_TRAMO_TITLE}
@@ -204,7 +260,7 @@ export function ProjectsPortfolio({
           onOpenChange={handleOpenChange}
           onConfirm={handleCreate}
           presaleAutoStart={presaleAutoStart}
-          adminOptions={canSeeAdminData ? adminOptions : null}
+          adminOptions={adminOptions}
         />
       ) : null}
     </>

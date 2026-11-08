@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import {
   AtSignIcon,
   CameraIcon,
@@ -74,6 +74,10 @@ const LINK_ICONS = { instagram: AtSignIcon, website: GlobeIcon, email: MailIcon 
  * §7.3): Perfil, Apariencia, the company contact links, photo upload / remove
  * and "Cerrar sesión". Entry points backed by an
  * action stay hidden while its `IMPLEMENTED` flag is false.
+ *
+ * The photo is `qk.me.profile()` (hydrated by the `(staff)` layout); upload
+ * and removal write it with `setQueryData`. Logout clears the client state
+ * through the session store, then goes to /login.
  */
 export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
   const router = useRouter();
@@ -84,15 +88,13 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
   const uploadPhoto = usePhotoUploadMutation();
   const removePhoto = useRemovePhotoMutation();
   const [busy, setBusy] = useState(false);
-  const [, startTransition] = useTransition();
 
   const showPhotoItems = PHOTO_IMPLEMENTED.removeMyPhotoAction;
   const initials = nameInitials(session.name);
 
-  // `me.profile` already holds the new URL (the mutations set it).
+  // `me.profile` already holds the new URL (the mutations set it), so every avatar shows it; no server render.
   function applyPhoto(url: string | null) {
     onPhotoChange?.(url);
-    startTransition(() => router.refresh());
   }
 
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
@@ -126,9 +128,10 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
   async function handleSignOut() {
     try {
       await logoutAction();
+      // The identity change runs `resetClientState`: the query cache and the UI stores are emptied.
       useSessionStore.getState().setAccess({ status: "guest", user: null });
       router.push("/login");
-      startTransition(() => router.refresh());
+      router.refresh(); // data-patterns: auth
     } catch (err) {
       toast.error(actionErrorText(err));
     }

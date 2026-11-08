@@ -5,6 +5,7 @@ vi.mock("@/lib/actions/projects-actions", () => ({ retryProjectFolderAction: vi.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import {
+  archivosFolderFromHref,
   fileIconName,
   fileTypeLabel,
   filesCount,
@@ -109,5 +110,20 @@ describe("one listing, three styles", () => {
   it("counts the entries of a readable folder only", () => {
     expect(filesCount(listing())).toBe(4);
     expect(filesCount({ status: "needs_consent" })).toBe(0);
+  });
+});
+
+describe("archivosFolderFromHref (5d)", () => {
+  it("reads the folder of this project's Archivos links, null for the root", () => {
+    expect(archivosFolderFromHref("p1", "/proyectos/p1/archivos?folder=f1")).toBe("f1");
+    expect(archivosFolderFromHref("p1", "/proyectos/p1/archivos")).toBeNull();
+    expect(archivosFolderFromHref("p1", "/proyectos/p1/archivos?folder=%20")).toBeNull();
+  });
+
+  it("ignores every other link", () => {
+    expect(archivosFolderFromHref("p1", null)).toBeUndefined();
+    expect(archivosFolderFromHref("p1", "/proyectos/p2/archivos?folder=f1")).toBeUndefined();
+    expect(archivosFolderFromHref("p1", "/proyectos/p1/ficha")).toBeUndefined();
+    expect(archivosFolderFromHref("p1", "https://drive.example/a")).toBeUndefined();
   });
 });

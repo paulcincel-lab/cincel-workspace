@@ -5,47 +5,52 @@ import { bandejaBadgeSlot } from "@/lib/shell/sidebar-slots/bandeja-badge";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
 import { timeClockSlot } from "@/lib/shell/sidebar-slots/time-clock";
 import { isBandejaBadgeVisible, isTimeClockVisible } from "@/lib/shell/visibility";
-import type { ResolvedAppearance, TodayStatus } from "@/lib/types/redesign";
+import type { TodayStatus } from "@/lib/types/redesign";
 import type { NavModel } from "@/lib/ui/nav";
 import { toClientNavModel } from "@/lib/ui/nav-client";
 
 import { AppShellClient } from "./AppShellClient";
 import { ClockInPrompt } from "./ClockInPrompt";
-import { SidebarSlotOutlet } from "./SidebarSlotOutlet";
 
 /**
  * The new staff shell (redesign FE §3.1, §4.1): `Sidebar`, `AssistantButton`,
  * `CommandPalette` and `BottomTabs` around the page. Mounted by
- * `app/(staff)/layout.tsx` only when the flag is on.
+ * `app/(staff)/layout.tsx` for every active session.
  *
- * Server part: renders the sidebar slots (`lib/shell/sidebar-slots/*`) and
- * hands a serializable nav model to the client part.
+ * Server part: decides which sidebar slots mount and hands a serializable
+ * nav model to the client part. The live parts (badges, clock, avatar) read
+ * the query cache the layout hydrates (`qk.shell.badges()`, `qk.me.today()`,
+ * `qk.me.profile()`).
+ *
+ * The presentation style comes from the `useAppearance` store the root
+ * layout seeds, `fixedByOrg` included (`EstiloSwitch` hides and `?estilo=`
+ * is ignored when the organization fixes the style); there is no nested
+ * style provider in the shell or its pages.
  *
  * Below 768 px the client part renders the compact top bar (`MobileTopBar`)
  * and pads the page so the fixed `BottomTabs` never cover it.
  */
 export type AppShellProps = {
   children: ReactNode;
-  /** Unused here: the shell style comes from the `useAppearance` store the root layout seeds. */
-  appearance: ResolvedAppearance;
   session: { staffId: string; name: string; role: string; isAdmin: boolean; photoUrl: string | null };
   /** From `buildNavModel(session)` in `lib/ui/nav.ts`. */
   nav: NavModel;
-  /** Null when time tracking is disabled or the viewer is exempt. */
+  /** The layout's `TodayStatus` seed; null when time tracking is disabled or the viewer is exempt. */
   today: TodayStatus | null;
   /** True on /asistente. */
   hideAssistant?: boolean;
 };
 
-/** Server-rendered slot nodes; a slot stays out while its gate is closed. */
-export function renderSidebarSlots(session: AppShellProps["session"], today: TodayStatus | null): SidebarSlotNodes {
+/** The slot nodes; a slot stays out while its gate is closed. */
+export function renderSidebarSlots(today: TodayStatus | null): SidebarSlotNodes {
   const slots: SidebarSlotNodes = {};
-  if (today && isTimeClockVisible(today)) {
+  if (isTimeClockVisible(today)) {
     const TimeClockSlot = timeClockSlot.Component;
-    slots["time-clock"] = <TimeClockSlot data={today} />;
+    slots["time-clock"] = <TimeClockSlot />;
   }
   if (isBandejaBadgeVisible()) {
-    slots["bandeja-badge"] = <SidebarSlotOutlet slot={bandejaBadgeSlot} session={session} />;
+    const BandejaBadgeSlot = bandejaBadgeSlot.Component;
+    slots["bandeja-badge"] = <BandejaBadgeSlot />;
   }
   return slots;
 }
@@ -58,16 +63,14 @@ export function AppShell({ children, session, nav, today, hideAssistant }: AppSh
         session={session}
         today={today}
         hideAssistant={hideAssistant}
-        slots={renderSidebarSlots(session, today)}
+        slots={renderSidebarSlots(today)}
       >
         {children}
       </AppShellClient>
       <Suspense fallback={null}>
         <AssistantLauncher hidden={hideAssistant} />
       </Suspense>
-      {today ? (
-        <ClockInPrompt status={today} requiredFrom={today.requiredFrom} now={new Date()} name={session.name} />
-      ) : null}
+      {today ? <ClockInPrompt now={new Date()} name={session.name} /> : null}
     </>
   );
 }

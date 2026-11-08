@@ -2,13 +2,16 @@
  * Inicio header block copy (redesign FE §3.2, §13): greeting by hour, the
  * lowercase es-MX date line and initials. Pure and client-safe; server and
  * client format in the organization time zone so both render the same text.
+ * The `Intl` formatters are cached per time zone (`cachedDateTimeFormat`).
  */
+
+import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
 
 /** The organization's time zone (General settings default). */
 export const INICIO_TIME_ZONE = "America/Mexico_City";
 
 function hourIn(date: Date, timeZone: string): number {
-  const hour = new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone }).format(date);
+  const hour = cachedDateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone }).format(date);
   return Number.parseInt(hour, 10) % 24;
 }
 
@@ -22,7 +25,7 @@ export function greetingFor(date: Date, timeZone: string = INICIO_TIME_ZONE): st
 
 /** "viernes, 6 de noviembre" (`Intl.DateTimeFormat("es-MX")`, lowercase, no title case). */
 export function formatInicioDate(date: Date, timeZone: string = INICIO_TIME_ZONE): string {
-  return new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone })
+  return cachedDateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone })
     .format(date)
     .toLocaleLowerCase("es-MX");
 }

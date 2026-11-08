@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { renderWithQueryClient } from "@/lib/query/test-utils";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { BookOpen, Folder, House, Inbox, SlidersHorizontal, Sparkles, SquareCheck, Users } from "lucide-react";
 
 const state = vi.hoisted(() => ({
@@ -117,6 +119,15 @@ function mockViewport(initialWidth: number) {
   };
 }
 
+/** The badges the `(staff)` layout hydrates into `qk.shell.badges()` (Mi espacio 5, Tareas 3). */
+let badges = { tareasOpen: 3, bandeja: { unreadCount: 5, dueReminders: [] as string[] } };
+
+function render(ui: ReactElement) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.shell.badges(), badges);
+  return renderWithQueryClient(ui, { client });
+}
+
 function renderTabs(activeKey: NavItem["key"] | null = "tareas") {
   return render(<BottomTabs activeKey={activeKey} items={TABS.items} more={TABS.more} />);
 }
@@ -124,6 +135,7 @@ function renderTabs(activeKey: NavItem["key"] | null = "tareas") {
 beforeEach(() => {
   state.pathname = "/tareas";
   state.clockImplemented = false;
+  badges = { tareasOpen: 3, bandeja: { unreadCount: 5, dueReminders: [] } };
 });
 
 afterEach(() => {
@@ -205,7 +217,14 @@ describe("BottomTabs below 768 px", () => {
     for (const link of screen.getAllByRole("link")) expect(link.getAttribute("aria-current")).toBeNull();
   });
 
-  it("shows the unread and overdue badges from the nav model", () => {
+  it("hides a badge at 0 (the query's count wins over the nav model)", () => {
+    badges = { tareasOpen: 0, bandeja: { unreadCount: 0, dueReminders: [] } };
+    renderTabs();
+    expect(screen.getByRole("link", { name: /^Tareas/ }).querySelector("[data-slot=bottom-tabs-badge]")).toBeNull();
+    expect(screen.getByRole("link", { name: /^Mi espacio/ }).querySelector("[data-slot=bottom-tabs-badge]")).toBeNull();
+  });
+
+  it("shows the unread and open-task badges from qk.shell.badges()", () => {
     renderTabs();
     const miEspacio = screen.getByRole("link", { name: /^Mi espacio/ });
     expect(miEspacio.textContent).toContain("5");
@@ -352,13 +371,11 @@ describe("MobileTopBar", () => {
 });
 
 describe("AppShell mobile chrome", () => {
-  const appearance = {} as Parameters<typeof AppShell>[0]["appearance"];
-
   it("renders the compact top bar and pads the page for the tabs below 768 px", () => {
     mockViewport(390);
     state.pathname = "/inicio";
-    renderWithQueryClient(
-      <AppShell appearance={appearance} session={session} nav={NAV} today={null}>
+    render(
+      <AppShell session={session} nav={NAV} today={null}>
         <p>Contenido</p>
       </AppShell>,
     );
@@ -371,8 +388,8 @@ describe("AppShell mobile chrome", () => {
 
   it("leaves the page unpadded from 768 px up and renders no top bar", () => {
     mockViewport(1280);
-    renderWithQueryClient(
-      <AppShell appearance={appearance} session={session} nav={NAV} today={null}>
+    render(
+      <AppShell session={session} nav={NAV} today={null}>
         <p>Contenido</p>
       </AppShell>,
     );

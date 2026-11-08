@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/shadcn/sheet";
 import DriveBrowser, { type DriveBrowserEntry } from "@/components/recursos/DriveBrowser";
 import { resolveResourcePreview } from "@/components/recursos/resources-model";
 import { canPreviewInline, driveContentUrl } from "@/lib/google/drive-url";
+import { useDriveStatus } from "@/lib/google/use-drive-status";
 import type { ResourceLink } from "@/lib/types/resource";
 
 /**
@@ -12,18 +13,17 @@ import type { ResourceLink } from "@/lib/types/resource";
  * folder opens in the Drive browser, a Drive file streams through the app as
  * the caller's account (download-only when it can't render inline), any other
  * Drive/Docs link embeds its preview. Shared by `ResourcesWorkspace` and the
- * Biblioteca (`DocumentReader`, the sección preview sheet).
+ * Biblioteca (`DocumentReader`, the sección preview sheet). Whether the Drive
+ * integration is configured comes from `useDriveStatus()`.
  */
 export function ResourcePreview({
   link,
-  driveEnabled,
   title,
   unavailableReason,
   onDriveFileClick,
   heightClass = "h-[620px]",
 }: {
   link: ResourceLink | null;
-  driveEnabled: boolean;
   /** iframe title when the link has none. */
   title: string;
   /** Shown when there is nothing to preview. */
@@ -31,6 +31,7 @@ export function ResourcePreview({
   onDriveFileClick(entry: DriveBrowserEntry): void;
   heightClass?: string;
 }) {
+  const { configured: driveEnabled } = useDriveStatus();
   const { previewUrl, driveFileId } = resolveResourcePreview(link, driveEnabled);
 
   if (driveFileId && link?.linkType === "drive_folder") {

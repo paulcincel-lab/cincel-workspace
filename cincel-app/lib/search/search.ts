@@ -143,7 +143,7 @@ const time = (d: Date | string | null | undefined) => (d ? new Date(d).getTime()
 
 type Viewer = { staffId: string; isAdmin: boolean };
 
-/** Live projects by name and code, like `fetchProjectsAction` (no client data). */
+/** Live projects by name and code, the same scope as the Proyectos list (no client data). */
 async function searchProjects(q: SearchTerms, limit: number): Promise<RankedResult[]> {
   const rank = rankOf([projects.name, projects.code], q);
   const rows = await db
@@ -171,7 +171,7 @@ async function searchProjects(q: SearchTerms, limit: number): Promise<RankedResu
   }));
 }
 
-/** Live, unarchived tasks of live projects, like `fetchTasksAction`; admin tasks only for administrators. */
+/** Live, unarchived tasks of live projects, the same scope as the Tareas list; admin tasks only for administrators. */
 async function searchTasks(q: SearchTerms, limit: number, viewer: Viewer): Promise<RankedResult[]> {
   const rank = rankOf([tasks.title], q);
   const rows = await db

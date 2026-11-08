@@ -91,6 +91,8 @@ export type PortalProjectAccess = {
   driveFolderStatus: DriveFolderStatus;
   driveClientFolderId: string | null;
   driveInboundFolderId: string | null;
+  /** The project's current tramo, so the tramo read after the access check needs no project query. */
+  currentWorkflowId: string | null;
 };
 
 /**
@@ -113,6 +115,7 @@ export async function findPortalProjectAccess(
       driveFolderStatus: projects.driveFolderStatus,
       driveClientFolderId: projects.driveClientFolderId,
       driveInboundFolderId: projects.driveInboundFolderId,
+      currentWorkflowId: projects.currentWorkflowId,
     })
     .from(projectPortalAccess)
     .innerJoin(projects, eq(projects.id, projectPortalAccess.projectId))

@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
+import { toActionResult } from "@/lib/actions/action-result";
 import { canManageAppearance } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import * as orgAppearanceRepository from "@/lib/repositories/org-appearance-repository";
 import type { OrgAppearance, ThemeId } from "@/lib/types/redesign";
+import type { ActionResult } from "@/lib/types/schedule";
 import { checkContrast } from "@/lib/ui/contrast";
 import { getStoredOrgAppearance, withoutVersion } from "@/lib/ui/preferences-server";
 import { DEFAULT_ORG_APPEARANCE, THEME_PRESETS } from "@/lib/ui/themes";
@@ -26,9 +28,15 @@ export async function fetchOrgAppearanceAction(): Promise<OrgAppearance> {
 /**
  * Store the full org appearance (no partial merge) and bump its version `v`.
  * Auth: `canManageAppearance`. Errors: `FORBIDDEN`, `INVALID`,
- * `LOW_CONTRAST: <pair> <mode> <ratio>[, …]`. Revalidates `/` (layout).
+ * `LOW_CONTRAST: <pair> <mode> <ratio>[, …]`, returned as `{ ok: false, error }`
+ * (`ActionResult`) so production keeps the code. Revalidates `/` (layout):
+ * the theme `<style>` and `<html>` attributes are server-rendered.
  */
-export async function saveOrgAppearanceAction(input: OrgAppearance): Promise<OrgAppearance> {
+export async function saveOrgAppearanceAction(input: OrgAppearance): Promise<ActionResult<OrgAppearance>> {
+  return toActionResult(() => saveOrgAppearance(input));
+}
+
+async function saveOrgAppearance(input: OrgAppearance): Promise<OrgAppearance> {
   const user = await requireCapabilityUser();
   if (!canManageAppearance(user)) throw new Error("FORBIDDEN: appearance edit");
   const appearance = parseInput(OrgAppearanceSchema, input);
@@ -47,9 +55,14 @@ export async function saveOrgAppearanceAction(input: OrgAppearance): Promise<Org
 
 /**
  * Reset tokens, type scale and shape to the `base` preset, keeping the style
- * settings. Auth: `canManageAppearance`. Errors: `FORBIDDEN`.
+ * settings. Auth: `canManageAppearance`. Errors: `FORBIDDEN`, returned as
+ * `{ ok: false, error }` (`ActionResult`). Revalidates `/` (layout).
  */
-export async function resetOrgAppearanceAction(base: ThemeId): Promise<OrgAppearance> {
+export async function resetOrgAppearanceAction(base: ThemeId): Promise<ActionResult<OrgAppearance>> {
+  return toActionResult(() => resetOrgAppearance(base));
+}
+
+async function resetOrgAppearance(base: ThemeId): Promise<OrgAppearance> {
   const user = await requireCapabilityUser();
   if (!canManageAppearance(user)) throw new Error("FORBIDDEN: appearance edit");
   const theme = parseInput(ThemeIdSchema, base);

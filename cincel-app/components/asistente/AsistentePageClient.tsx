@@ -1,124 +1,151 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import type { UIMessage } from "ai";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlusIcon, Trash2Icon } from "lucide-react";
-import { toast } from "sonner";
 
 import { AssistantChat } from "@/components/asistente/AssistantChat";
+import {
+  useAssistantTurnFinished,
+  useDeleteAssistantThread,
+  type AssistantTurn,
+} from "@/components/asistente/use-asistente-cache";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
-import {
-  deleteAssistantThreadAction,
-  fetchAssistantThreadAction,
-  fetchAssistantThreadsAction,
-} from "@/lib/actions/assistant-actions";
 import { ASSISTANT_TOOL_GROUPS } from "@/lib/assistant/starter-prompts";
 import { groupAssistantThreads, threadTimeLabel } from "@/lib/assistant/thread-groups";
-import { actionErrorCode, actionErrorText } from "@/lib/errors";
+import { actionErrorText } from "@/lib/errors";
 import { CUTTO_LINK_LABELS, CUTTO_LINK_TARGET, cuttoBaseUrl } from "@/lib/integrations/cutto-links";
+import { qk } from "@/lib/query/keys";
+import { mutationErrorText } from "@/lib/query/mutation";
+import { asistenteThreadOptions, asistenteThreadsOptions } from "@/lib/query/options/asistente";
+import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
 import type { AssistantContext, AssistantThreadSummary } from "@/lib/types/redesign";
 
-export type AsistentePageThread = { id: string; title: string; messages: UIMessage[] };
+export type { AsistentePageThread } from "@/lib/types/asistente";
 
 export type AsistentePageClientProps = {
-  /** From `fetchAssistantThreadsAction()` (newest first). */
-  threads: AssistantThreadSummary[];
-  /** The thread of `?thread=<id>`, loaded on the server; null starts a new conversation. */
-  initialThread: AsistentePageThread | null;
-  /** True when `?thread=<id>` named a thread that no longer exists. */
+  /** The `?thread=<id>` thread the page seeded into `qk.asistente.thread(id)`; null starts a new conversation. */
+  threadId: string | null;
+  /** True when `?thread=<id>` named a thread the caller doesn't have. */
   missingThread?: boolean;
 };
 
 const PAGE_CONTEXT: AssistantContext = { route: "/asistente" };
 const UNTITLED = "Conversación sin título";
+const NOT_FOUND_TEXT = () => actionErrorText(new Error("NOT_FOUND"));
 
 function newThreadId(): string {
   return crypto.randomUUID();
 }
 
-type Conversation = AsistentePageThread & { isNew: boolean };
+/** The open conversation: a stored thread, or a new one the route creates on its first message. */
+type Active = { id: string; isNew: boolean };
+
+/** `/asistente?thread=` without an RSC request (Next keeps `useSearchParams` in sync with `history`). */
+function replaceThreadInUrl(threadId: string | null): void {
+  const url = threadId ? `/asistente?thread=${encodeURIComponent(threadId)}` : "/asistente";
+  window.history.replaceState(window.history.state, "", url);
+}
 
 /**
  * Full assistant page (redesign FE §3.9, frame `AsistentePagina`): history
  * grouped Hoy / Esta semana / Anteriores with delete, the conversation
  * (`AssistantChat` in server-thread mode) and the "Herramientas" panel of
  * starter prompts. The floating assistant button is not part of this page.
+ *
+ * Data (Query Migration Phase 10, #944): the list is `qk.asistente.threads()`
+ * and each conversation `qk.asistente.thread(id)`, both seeded by the page.
+ * Switching threads replaces `?thread=` with `history.replaceState` and
+ * reads the cache (one thread call when it isn't cached), so the page never
+ * re-renders on the server. The selected thread also goes to
+ * `useAssistantUi.threadId`, so the floating sheet elsewhere continues it.
  */
-export function AsistentePageClient({ threads: initialThreads, initialThread, missingThread = false }: AsistentePageClientProps) {
-  const router = useRouter();
-  const [threads, setThreads] = useState<AssistantThreadSummary[]>(initialThreads);
-  const [conversation, setConversation] = useState<Conversation>(() =>
-    initialThread
-      ? { ...initialThread, isNew: false }
-      : { id: newThreadId(), title: "Nueva conversación", messages: [], isNew: true },
+export function AsistentePageClient({ threadId: seededThreadId, missingThread = false }: AsistentePageClientProps) {
+  const qc = useQueryClient();
+  const setStoreThreadId = useAssistantUi((s) => s.setThreadId);
+  const [active, setActive] = useState<Active>(() =>
+    seededThreadId ? { id: seededThreadId, isNew: false } : { id: newThreadId(), isNew: true },
   );
-  const [notice, setNotice] = useState<string | null>(missingThread ? actionErrorText(new Error("NOT_FOUND")) : null);
+  const [notice, setNotice] = useState<string | null>(missingThread ? NOT_FOUND_TEXT() : null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ text: string; nonce: number } | undefined>(undefined);
   const cuttoUrl = cuttoBaseUrl();
 
+  const threadsQuery = useQuery(asistenteThreadsOptions());
+  const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data]);
+  const threadQuery = useQuery({ ...asistenteThreadOptions(active.id), enabled: !active.isNew });
   const groups = useMemo(() => groupAssistantThreads(threads), [threads]);
 
-  const refreshThreads = useCallback(async () => {
-    try {
-      setThreads(await fetchAssistantThreadsAction());
-    } catch (err) {
-      toast.error(actionErrorText(err));
-    }
-  }, []);
+  // The deep-linked thread is the one the floating sheet continues after leaving the page.
+  useEffect(() => {
+    if (seededThreadId) useAssistantUi.getState().setThreadId(seededThreadId);
+  }, [seededThreadId]);
+
+  const startNewConversation = useCallback(() => {
+    setNotice(null);
+    setActive({ id: newThreadId(), isNew: true });
+    replaceThreadInUrl(null);
+    setStoreThreadId(null);
+  }, [setStoreThreadId]);
 
   const selectThread = async (id: string) => {
-    if (id === conversation.id && !conversation.isNew) return;
+    if (id === active.id && !active.isNew) return;
     setNotice(null);
     setLoadingId(id);
     try {
-      const { thread, messages } = await fetchAssistantThreadAction(id);
-      setConversation({ id: thread.id, title: thread.title, messages, isNew: false });
-      router.replace(`/asistente?thread=${encodeURIComponent(thread.id)}`, { scroll: false });
+      // Cached threads (staleTime Infinity) resolve without a request.
+      const thread = await qc.fetchQuery(asistenteThreadOptions(id));
+      if (!thread) {
+        qc.setQueryData<AssistantThreadSummary[]>(qk.asistente.threads(), (prev) => prev?.filter((t) => t.id !== id));
+        qc.removeQueries({ queryKey: qk.asistente.thread(id), exact: true });
+        setNotice(NOT_FOUND_TEXT());
+        return;
+      }
+      setActive({ id: thread.id, isNew: false });
+      replaceThreadInUrl(thread.id);
+      setStoreThreadId(thread.id);
     } catch (err) {
-      if (actionErrorCode(err) === "NOT_FOUND") setThreads((prev) => prev.filter((t) => t.id !== id));
-      setNotice(actionErrorText(err));
+      setNotice(mutationErrorText(err));
     } finally {
       setLoadingId(null);
     }
   };
 
-  const startNewConversation = () => {
-    setNotice(null);
-    setConversation({ id: newThreadId(), title: "Nueva conversación", messages: [], isNew: true });
-    router.replace("/asistente", { scroll: false });
-  };
-
-  const deleteThread = async (thread: AssistantThreadSummary) => {
-    const previous = threads;
-    setThreads((prev) => prev.filter((t) => t.id !== thread.id));
-    try {
-      await deleteAssistantThreadAction(thread.id);
-      if (thread.id === conversation.id) startNewConversation();
-    } catch (err) {
-      if (actionErrorCode(err) !== "NOT_FOUND") setThreads(previous);
-      toast.error(actionErrorText(err));
-    }
-  };
-
-  const onTurnFinished = useCallback(
-    (threadId: string) => {
-      setConversation((prev) => (prev.id === threadId && prev.isNew ? { ...prev, isNew: false } : prev));
-      router.replace(`/asistente?thread=${encodeURIComponent(threadId)}`, { scroll: false });
-      void refreshThreads();
+  const deleteMutation = useDeleteAssistantThread({
+    onDeleted: (id) => {
+      if (id === active.id) startNewConversation();
     },
-    [router, refreshThreads],
+  });
+
+  const turnFinished = useAssistantTurnFinished();
+  const onTurnFinished = useCallback(
+    (turn: AssistantTurn) => {
+      turnFinished(turn);
+      setActive((prev) => (prev.id === turn.threadId && prev.isNew ? { ...prev, isNew: false } : prev));
+      replaceThreadInUrl(turn.threadId);
+      setStoreThreadId(turn.threadId);
+    },
+    [turnFinished, setStoreThreadId],
   );
 
   const insertPrompt = (text: string) => {
     setDraft((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }));
   };
 
-  const activeTitle = conversation.isNew
+  const stored = active.isNew ? null : threadQuery.data;
+  const activeTitle = active.isNew
     ? "Nueva conversación"
-    : threads.find((t) => t.id === conversation.id)?.title || conversation.title || UNTITLED;
+    : threads.find((t) => t.id === active.id)?.title || stored?.title || UNTITLED;
+  const threadNotice = active.isNew
+    ? null
+    : threadQuery.isError
+      ? mutationErrorText(threadQuery.error)
+      : threadQuery.data === null
+        ? NOT_FOUND_TEXT()
+        : null;
+  const shownNotice = notice ?? threadNotice;
+  const chatMessages = active.isNew ? [] : (threadQuery.data?.messages ?? null);
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col lg:h-dvh lg:flex-row">
@@ -140,14 +167,14 @@ export function AsistentePageClient({ threads: initialThreads, initialThread, mi
               </h2>
               <ul className="flex flex-col gap-0.5">
                 {group.threads.map((thread) => {
-                  const active = thread.id === conversation.id && !conversation.isNew;
+                  const current = thread.id === active.id && !active.isNew;
                   const title = thread.title || UNTITLED;
                   return (
                     <li key={thread.id} className="flex items-center gap-1">
                       <Button
-                        variant={active ? "secondary" : "ghost"}
+                        variant={current ? "secondary" : "ghost"}
                         className="h-auto min-w-0 flex-1 justify-between gap-2 py-2"
-                        aria-current={active ? "page" : undefined}
+                        aria-current={current ? "page" : undefined}
                         aria-busy={loadingId === thread.id || undefined}
                         onClick={() => void selectThread(thread.id)}
                       >
@@ -161,7 +188,7 @@ export function AsistentePageClient({ threads: initialThreads, initialThread, mi
                         size="icon-sm"
                         aria-label={`Eliminar conversación ${title}`}
                         title="Eliminar conversación"
-                        onClick={() => void deleteThread(thread)}
+                        onClick={() => deleteMutation.mutate(thread.id)}
                       >
                         <Trash2Icon aria-hidden />
                       </Button>
@@ -181,19 +208,25 @@ export function AsistentePageClient({ threads: initialThreads, initialThread, mi
           </h1>
           <p className="truncate text-sm text-muted-foreground">{activeTitle}</p>
         </div>
-        {notice ? (
+        {shownNotice ? (
           <Alert variant="destructive">
-            <AlertDescription>{notice}</AlertDescription>
+            <AlertDescription>{shownNotice}</AlertDescription>
           </Alert>
         ) : null}
         <div className="flex min-h-[28rem] flex-1 flex-col">
-          <AssistantChat
-            key={conversation.id}
-            thread={{ id: conversation.id, messages: conversation.messages }}
-            context={PAGE_CONTEXT}
-            draft={draft}
-            onTurnFinished={onTurnFinished}
-          />
+          {chatMessages ? (
+            <AssistantChat
+              key={active.id}
+              thread={{ id: active.id, messages: chatMessages }}
+              context={PAGE_CONTEXT}
+              draft={draft}
+              onTurnFinished={onTurnFinished}
+            />
+          ) : threadQuery.isPending ? (
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              Cargando conversación…
+            </p>
+          ) : null}
         </div>
       </section>
 

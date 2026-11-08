@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, render as rtlRender, screen, within } from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   pathname: "/inicio" as string | null,
@@ -10,6 +11,8 @@ const state = vi.hoisted(() => ({
   notifications: { fetchNotificationsAction: false },
   assistant: { fetchAssistantThreadAction: false },
   bottomTabs: [] as { activeKey: string | null; items: { key: string }[]; more: { key: string }[] }[],
+  inicioPage: vi.fn(async () => ({ inicio: {} })),
+  tareasPage: vi.fn(async () => ({ facets: {}, tramos: [], staff: [] })),
 }));
 
 // The avatar reads me.profile from the query cache; these tests render it without one.
@@ -39,8 +42,20 @@ vi.mock("@/components/shell/BottomTabs", () => ({
     return null;
   },
 }));
-vi.mock("@/components/shell/CommandPalette", () => ({
-  CommandPalette: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Buscar en Cincel" /> : null),
+vi.mock("@/components/shell/CommandPalette", async () => {
+  const { useShellUi } = await import("@/lib/stores/shell-ui-store");
+  return {
+    CommandPalette: () =>
+      useShellUi((s) => s.searchOpen) ? <div role="dialog" aria-label="Buscar en Cincel" /> : null,
+  };
+});
+// Inicio's page-data query, warmed by the hover prefetch.
+vi.mock("@/lib/query/options/inicio", () => ({
+  inicioPageOptions: () => ({ queryKey: ["inicio"], queryFn: state.inicioPage, staleTime: 30_000 }),
+}));
+vi.mock("@/lib/query/options/tareas", () => ({
+  tareasPageKeyInputOf: (query: { vista: string }) => ({ vista: query.vista }),
+  tareasPageOptions: (q: { vista: string }) => ({ queryKey: ["tareas", "page", q], queryFn: state.tareasPage, staleTime: 30_000 }),
 }));
 vi.mock("@/components/asistente/AssistantButton", () => ({
   AssistantButton: ({ onOpen }: { onOpen(): void }) => (
@@ -54,20 +69,35 @@ vi.mock("@/components/asistente/AssistantSheet", () => ({ AssistantSheet: () => 
 import { AppShell } from "../AppShell";
 import { AppShellClient } from "../AppShellClient";
 import { Sidebar, type SidebarProps } from "../Sidebar";
+import { NAV_PREFETCH_DEBOUNCE_MS } from "@/lib/shell/nav-prefetch";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient } from "@/lib/query/test-utils";
+import { useShellUi } from "@/lib/stores/shell-ui-store";
 import { toClientNavModel } from "@/lib/ui/nav-client";
-import type { ResolvedAppearance } from "@/lib/types/redesign";
+import type { ShellBadges } from "@/lib/types/shell";
 
 import { ADMIN_SESSION, EMPTY_NAV, FULL_NAV, navItem, STAFF_SESSION, TODAY_ON, WithSidebarProvider } from "./shell-fixtures";
 
-const APPEARANCE: ResolvedAppearance = {
-  theme: "azul",
-  mode: "light",
-  style: "visual",
-  density: "comoda",
-  textSize: 14,
-  cssVars: { light: {}, dark: {} },
-  version: 1,
-};
+/** The cache the `(staff)` layout hydrates: the frame's badges (Mi espacio 5, Tareas 31) and the day. */
+let client: QueryClient;
+
+function setBadges(patch: { tareasOpen?: number; unreadCount?: number; dueReminders?: string[] } = {}) {
+  const badges: ShellBadges = {
+    tareasOpen: patch.tareasOpen ?? 31,
+    bandeja: { unreadCount: patch.unreadCount ?? 5, dueReminders: patch.dueReminders ?? [] },
+  };
+  client.setQueryData(qk.shell.badges(), badges);
+}
+
+function render(ui: ReactElement) {
+  return rtlRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
+beforeEach(() => {
+  client = createTestQueryClient();
+  setBadges();
+  client.setQueryData(qk.me.today(), TODAY_ON);
+});
 
 function renderSidebar(overrides: Partial<SidebarProps> = {}) {
   const props: SidebarProps = {
@@ -75,7 +105,6 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}) {
     activeKey: "inicio",
     session: ADMIN_SESSION,
     today: null,
-    onOpenSearch: vi.fn(),
     ...overrides,
   };
   render(
@@ -98,6 +127,8 @@ afterEach(() => {
   state.notifications.fetchNotificationsAction = false;
   state.assistant.fetchAssistantThreadAction = false;
   state.bottomTabs = [];
+  state.inicioPage.mockClear();
+  state.tareasPage.mockClear();
 });
 
 describe("Sidebar", () => {
@@ -181,7 +212,8 @@ describe("Sidebar", () => {
   });
 
   it("caps long badges at 99+", () => {
-    renderSidebar({ nav: { ...FULL_NAV, items: [navItem("tareas", 250)] } });
+    setBadges({ tareasOpen: 250 });
+    renderSidebar({ nav: { ...FULL_NAV, items: [navItem("tareas")] } });
     expect(screen.getByText("99+")).toBeTruthy();
   });
 
@@ -221,12 +253,12 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("button", { name: /Buscar/ })).toBeNull();
   });
 
-  it("shows the search button once search is implemented and opens the palette", () => {
+  it("shows the search button once search is implemented and opens the palette through useShellUi", () => {
     state.search.searchWorkspaceAction = true;
-    const props = renderSidebar();
+    renderSidebar();
 
     fireEvent.click(screen.getByRole("button", { name: /Buscar/ }));
-    expect(props.onOpenSearch).toHaveBeenCalledTimes(1);
+    expect(useShellUi.getState().searchOpen).toBe(true);
   });
 
   it("hides the time clock slot while clockInAction is not implemented", () => {
@@ -253,6 +285,90 @@ describe("Sidebar", () => {
     renderSidebar({ slots: { "bandeja-badge": <span>7</span> } });
     expect(screen.getByText("7")).toBeTruthy();
     expect(screen.queryByText("5")).toBeNull();
+  });
+});
+
+describe("Sidebar badges from qk.shell.badges()", () => {
+  const plainNav = { ...FULL_NAV, items: FULL_NAV.items.map((item) => navItem(item.key)) };
+
+  it("shows the query's counts on a nav model without badges", () => {
+    setBadges({ tareasOpen: 4, unreadCount: 2, dueReminders: [new Date(Date.now() + 3_600_000).toISOString()] });
+    renderSidebar({ nav: plainNav });
+    expect(screen.getByText("4")).toBeTruthy();
+    // Mi espacio: 2 unread + 1 reminder still due today.
+    expect(screen.getByRole("link", { name: /Mi espacio/ }).textContent).toContain("3 pendientes");
+  });
+
+  it("hides both badges at 0", () => {
+    setBadges({ tareasOpen: 0, unreadCount: 0 });
+    renderSidebar({ nav: FULL_NAV });
+    expect(screen.queryByText("31")).toBeNull();
+    expect(screen.queryByText("5")).toBeNull();
+    expect(screen.getByRole("link", { name: "Mi espacio" }).textContent).not.toContain("pendientes");
+  });
+
+  it("follows a cache update (poll or Bandeja patch) without a new render from the server", async () => {
+    renderSidebar({ nav: plainNav });
+    expect(screen.getByText("31")).toBeTruthy();
+    act(() => setBadges({ tareasOpen: 30 }));
+    // Query observers are notified on the next tick.
+    expect(await screen.findByText("30")).toBeTruthy();
+  });
+});
+
+describe("Sidebar hover prefetch", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("prefetches Inicio's page data once, 100 ms after hover or focus", async () => {
+    vi.useFakeTimers();
+    renderSidebar({ activeKey: "proyectos" });
+    const inicio = screen.getByRole("link", { name: "Inicio" });
+
+    fireEvent.mouseEnter(inicio);
+    fireEvent.mouseLeave(inicio);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NAV_PREFETCH_DEBOUNCE_MS * 2);
+    });
+    // Passing over the link calls nothing.
+    expect(state.inicioPage).not.toHaveBeenCalled();
+
+    fireEvent.mouseEnter(inicio);
+    fireEvent.focus(inicio);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NAV_PREFETCH_DEBOUNCE_MS);
+    });
+    expect(state.inicioPage).toHaveBeenCalledTimes(1);
+
+    // Fresh data: a second hover issues no call.
+    fireEvent.mouseLeave(inicio);
+    fireEvent.mouseEnter(inicio);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NAV_PREFETCH_DEBOUNCE_MS);
+    });
+    expect(state.inicioPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefetches the default Tareas view the same way", async () => {
+    vi.useFakeTimers();
+    renderSidebar();
+    fireEvent.focus(screen.getByRole("link", { name: /^Tareas/ }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NAV_PREFETCH_DEBOUNCE_MS);
+    });
+    expect(state.tareasPage).toHaveBeenCalledTimes(1);
+    expect(client.getQueryData(["tareas", "page", { vista: "tablero" }])).toBeTruthy();
+  });
+
+  it("prefetches nothing for the other links", async () => {
+    vi.useFakeTimers();
+    renderSidebar();
+    for (const name of ["Proyectos", "Personas", "Biblioteca"]) fireEvent.mouseEnter(screen.getByRole("link", { name }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NAV_PREFETCH_DEBOUNCE_MS * 2);
+    });
+    expect(state.inicioPage).not.toHaveBeenCalled();
+    expect(client.getQueryData(["inicio"])).toBeUndefined();
+    expect(state.tareasPage).not.toHaveBeenCalled();
   });
 });
 
@@ -320,7 +436,7 @@ describe("AppShellClient", () => {
     const renderFullShell = (pathname: string, hideAssistant?: boolean) => {
       state.pathname = pathname;
       render(
-        <AppShell appearance={APPEARANCE} session={ADMIN_SESSION} nav={FULL_NAV} today={null} hideAssistant={hideAssistant}>
+        <AppShell session={ADMIN_SESSION} nav={FULL_NAV} today={null} hideAssistant={hideAssistant}>
           <h1>Contenido</h1>
         </AppShell>,
       );
@@ -353,7 +469,7 @@ describe("AppShellClient", () => {
 describe("AppShell", () => {
   function Shell({ children, today = null }: { children: ReactNode; today?: typeof TODAY_ON | null }) {
     return (
-      <AppShell appearance={APPEARANCE} session={ADMIN_SESSION} nav={FULL_NAV} today={today}>
+      <AppShell session={ADMIN_SESSION} nav={FULL_NAV} today={today}>
         {children}
       </AppShell>
     );

@@ -1,18 +1,30 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Download, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { AssistantSheet } from "@/components/asistente/AssistantSheet";
-import { notifyRecentDocumentsChanged } from "@/components/biblioteca/use-recent-documents";
 import type { DriveBrowserEntry } from "@/components/recursos/DriveBrowser";
 import { DriveFilePreviewSheet, ResourcePreview } from "@/components/recursos/ResourcePreview";
-import { rememberRecentDocument } from "@/components/recursos/resources-model";
+import { EmptyState } from "@/components/shell/EmptyState";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { IMPLEMENTED as ASSISTANT_IMPLEMENTED } from "@/lib/actions/assistant-actions.flags";
-import { empresaDocHref, resourceDownload, shortDate, type EmpresaDocSlug } from "@/lib/biblioteca/catalog";
+import {
+  documentToc,
+  empresaDoc,
+  empresaDocHref,
+  empresaDocLinks,
+  pickDocumentPart,
+  resourceDownload,
+  shortDate,
+  type EmpresaDocSlug,
+} from "@/lib/biblioteca/catalog";
+import { useDriveStatus } from "@/lib/google/use-drive-status";
+import { bibliotecaLinksOptions } from "@/lib/query/options/biblioteca";
+import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
+import { useRecentDocs } from "@/lib/stores/recent-docs-store";
 import type { ResourceLink } from "@/lib/types/resource";
 import { cn } from "@/lib/utils";
 
@@ -23,8 +35,6 @@ export type DocumentReaderProps = {
   toc: { id: string; label: string }[];
   /** The company document the parts belong to (breadcrumb, title, links). */
   companyDoc?: { slug: EmpresaDocSlug; title: string; description?: string };
-  /** Drive integration configured (in-app preview and download). */
-  driveEnabled?: boolean;
 };
 
 /**
@@ -41,11 +51,15 @@ export function isAssistantAvailable(): boolean {
  * extends the Recursos workspace viewer with a left TOC (one entry per part,
  * linked by `?parte=`), the reading column (the workspace preview of the part)
  * and a right panel (actualizado, por, estado, "Descargar PDF", and
- * "Preguntar al asistente sobre este documento" while the assistant flags are on).
+ * "Preguntar al asistente sobre este documento" while the assistant flags are
+ * on). "Preguntar" opens the shell's one assistant sheet (`useAssistantUi`)
+ * with the document's route as context; the reader mounts no sheet of its
+ * own. Drive (preview, download) comes from `useDriveStatus()`.
  */
-export function DocumentReader({ doc, toc, companyDoc, driveEnabled = false }: DocumentReaderProps) {
+export function DocumentReader({ doc, toc, companyDoc }: DocumentReaderProps) {
   const [drivePreview, setDrivePreview] = useState<DriveBrowserEntry | null>(null);
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const { configured: driveEnabled } = useDriveStatus();
+  const remember = useRecentDocs((state) => state.remember);
 
   const title = companyDoc?.title ?? doc.title;
   const hrefFor = (id: string) => (companyDoc ? empresaDocHref(companyDoc.slug, id) : `?parte=${encodeURIComponent(id)}`);
@@ -57,10 +71,10 @@ export function DocumentReader({ doc, toc, companyDoc, driveEnabled = false }: D
   const route = companyDoc ? empresaDocHref(companyDoc.slug, doc.id) : "/biblioteca";
 
   // Remember the part in "Abiertos recientemente" each time one is opened.
+  const companySlug = companyDoc?.slug;
   useEffect(() => {
-    rememberRecentDocument(doc, companyDoc ? { href: empresaDocHref(companyDoc.slug, doc.id) } : {});
-    notifyRecentDocumentsChanged();
-  }, [doc, companyDoc]);
+    remember(doc, companySlug ? { href: empresaDocHref(companySlug, doc.id) } : {});
+  }, [remember, doc, companySlug]);
 
   const downloadButton = download ? (
     <a href={download.href} className={buttonVariants({ variant: "outline" })}>
@@ -119,7 +133,6 @@ export function DocumentReader({ doc, toc, companyDoc, driveEnabled = false }: D
             </CardHeader>
             <ResourcePreview
               link={doc}
-              driveEnabled={driveEnabled}
               title={title}
               unavailableReason={
                 doc.linkType === "web"
@@ -195,7 +208,10 @@ export function DocumentReader({ doc, toc, companyDoc, driveEnabled = false }: D
                 <CardDescription>Haz preguntas sobre este documento y recibe la respuesta con la sección exacta.</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full whitespace-normal" onClick={() => setAssistantOpen(true)}>
+                <Button
+                  className="w-full whitespace-normal"
+                  onClick={() => useAssistantUi.getState().openAssistant({ context: { route } })}
+                >
                   Preguntar al asistente sobre este documento
                 </Button>
               </CardContent>
@@ -204,10 +220,53 @@ export function DocumentReader({ doc, toc, companyDoc, driveEnabled = false }: D
         </aside>
       </div>
 
-      {assistant ? (
-        <AssistantSheet open={assistantOpen} onOpenChange={setAssistantOpen} context={{ route }} />
-      ) : null}
       <DriveFilePreviewSheet entry={drivePreview} onClose={() => setDrivePreview(null)} />
     </div>
+  );
+}
+
+const NO_LINKS: ResourceLink[] = [];
+
+export type EmpresaDocumentProps = {
+  slug: EmpresaDocSlug;
+  /** `?parte=`: the part to show; the first one when absent or not part of the document. */
+  parte: string | null;
+};
+
+/**
+ * `/biblioteca/empresa/[doc]` (redesign FE §3.7): the company document's
+ * parts from `biblioteca.links('empresa')` (prefetched by the page) in
+ * `DocumentReader`, or an empty state while Dirección has added none.
+ */
+export function EmpresaDocument({ slug, parte }: EmpresaDocumentProps) {
+  const { data } = useQuery(bibliotecaLinksOptions("empresa"));
+  const doc = empresaDoc(slug);
+  if (!doc) return null;
+  const parts = empresaDocLinks(data?.links ?? NO_LINKS, doc.slug);
+  const current = pickDocumentPart(parts, parte);
+
+  if (!current) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader
+          title={doc.title}
+          description={doc.description}
+          breadcrumb={[{ label: "Biblioteca", href: "/biblioteca" }, { label: "Empresa", href: "/biblioteca" }, { label: doc.title }]}
+        />
+        <EmptyState
+          title={`Aún no hay documentos en ${doc.title}`}
+          description="Cuando Dirección agregue el documento aparecerá aquí."
+          action={{ label: "Volver a la biblioteca", href: "/biblioteca" }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <DocumentReader
+      doc={current}
+      toc={documentToc(parts, doc)}
+      companyDoc={{ slug: doc.slug, title: doc.title, description: doc.description }}
+    />
   );
 }

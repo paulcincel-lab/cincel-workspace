@@ -13,12 +13,12 @@ const grant = vi.hoisted(() => ({ calendarEvents: false }));
 
 const mocks = vi.hoisted(() => ({
   fetchCalendarAction: vi.fn(),
-  fetchTasksAction: vi.fn(),
+  listViewerTasks: vi.fn(),
   fetchTaskAction: vi.fn(),
   createUserTaskAction: vi.fn(),
   addChecklistItemAction: vi.fn(),
   fetchStaffAction: vi.fn(),
-  fetchProjectsAction: vi.fn(),
+  listViewerProjects: vi.fn(),
   fetchTimeTrackingSettingsAction: vi.fn(),
   fetchWorkflowsAction: vi.fn(),
   approvedAbsences: vi.fn(),
@@ -33,13 +33,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   fetchCalendarAction: mocks.fetchCalendarAction,
-  fetchTasksAction: mocks.fetchTasksAction,
   fetchTaskAction: mocks.fetchTaskAction,
   createUserTaskAction: mocks.createUserTaskAction,
   addChecklistItemAction: mocks.addChecklistItemAction,
 }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffAction: mocks.fetchStaffAction }));
-vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectsAction: mocks.fetchProjectsAction }));
+vi.mock("@/lib/assistant/reads", () => ({ listViewerProjects: mocks.listViewerProjects, listViewerTasks: mocks.listViewerTasks }));
 vi.mock("@/lib/actions/time-tracking-actions", () => ({
   fetchTimeTrackingSettingsAction: mocks.fetchTimeTrackingSettingsAction,
 }));
@@ -216,7 +215,7 @@ beforeEach(() => {
   flags.vacations.fetchTeamAbsencesAction = true;
   grant.calendarEvents = false;
   mocks.fetchStaffAction.mockResolvedValue(STAFF_ROWS);
-  mocks.fetchProjectsAction.mockResolvedValue([PROJECT]);
+  mocks.listViewerProjects.mockResolvedValue([PROJECT]);
   mocks.fetchCalendarAction.mockResolvedValue([]);
   mocks.fetchTimeTrackingSettingsAction.mockResolvedValue({ ...DEFAULT_TIME_TRACKING_SETTINGS, enabled: true });
   mocks.approvedAbsences.mockResolvedValue([]);
@@ -495,7 +494,7 @@ describe("event writes", () => {
 
     it("schedule_site_visit copies the checklist of a template task", async () => {
       mocks.fetchStaffAction.mockResolvedValue(STAFF_ROWS.map((s) => ({ ...s, email: s.email ?? `${s.id}@cincel.mx` })));
-      mocks.fetchTasksAction.mockResolvedValue([{ id: TEMPLATE_TASK_ID, title: "Visita tipo" }]);
+      mocks.listViewerTasks.mockResolvedValue([{ id: TEMPLATE_TASK_ID, title: "Visita tipo" }]);
       mocks.fetchTaskAction.mockResolvedValue({ checklistItems: [{ title: "Medir muros" }, { title: "Revisar losas" }] });
       mocks.insertPrimaryEvent.mockResolvedValue({ id: "visit2" });
       mocks.createUserTaskAction.mockResolvedValue({ id: TASK_ID, title: "Visita" });

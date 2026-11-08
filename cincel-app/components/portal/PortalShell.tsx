@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 
+import PortalSignOutLink from "@/components/portal/PortalSignOutLink";
 import { buttonVariants } from "@/components/ui/shadcn/button";
 import { Separator } from "@/components/ui/shadcn/separator";
 import { PORTAL_LOGIN_ROUTE, PORTAL_ROUTE } from "@/lib/auth/public-routes";
@@ -43,10 +44,13 @@ export default function PortalShell({ clientName, styleSwitch, children }: Porta
               </span>
               <Separator orientation="vertical" className="h-6" />
               {/* Plain anchor, not next/link: a prefetch of the logout route would sign the client out. */}
-              <a href={PORTAL_SIGN_OUT_URL} className={cn(buttonVariants({ variant: "ghost", size: "lg" }), "min-h-11")}>
+              <PortalSignOutLink
+                href={PORTAL_SIGN_OUT_URL}
+                className={cn(buttonVariants({ variant: "ghost", size: "lg" }), "min-h-11")}
+              >
                 <LogOut aria-hidden="true" />
                 Salir
-              </a>
+              </PortalSignOutLink>
             </div>
           ) : null}
         </div>

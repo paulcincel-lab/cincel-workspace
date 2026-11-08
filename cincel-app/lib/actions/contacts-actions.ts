@@ -1,7 +1,6 @@
 "use server";
 
-import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
-
+import { toActionResult } from "@/lib/actions/action-result";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { canSeeAdminData, resolveClientsCapabilities } from "@/lib/auth/permissions";
 import * as contactsRepository from "@/lib/repositories/contacts-repository";
@@ -14,18 +13,19 @@ import type {
   ContactType,
   HistoryEvent,
 } from "@/lib/types/core";
+import type { ActionResult } from "@/lib/types/schedule";
 
 /**
  * One capability gate (clients) covers the whole contacts module for now —
  * clientes, socios and proveedores share the same directory screen. A finer
  * per-type gate can be added in Phase 4 if the client asks for it.
+ *
+ * No path revalidation (Query Migration 6): the Personas screens read through
+ * TanStack Query and the caller's mutation invalidates its keys. The writes
+ * the UI calls return `ActionResult` (production strips thrown messages).
  */
 async function requireContactsCapabilities() {
   return resolveClientsCapabilities(await requireCapabilityUser());
-}
-
-function revalidateDirectorio() {
-  revalidatePersonasScreen(["directorio"]);
 }
 
 export async function fetchContactsAction(
@@ -34,6 +34,11 @@ export async function fetchContactsAction(
   const caps = await requireContactsCapabilities();
   if (!caps.canViewClients) return [];
   return contactsRepository.listContacts(options);
+}
+
+/** What a viewer may see of a contact sheet: the project list is admin-only (BE §12, B2). */
+function sheetFor(user: Awaited<ReturnType<typeof requireCapabilityUser>>, contact: ContactDetail): ContactDetail {
+  return canSeeAdminData(user) ? contact : { ...contact, projects: [] };
 }
 
 /**
@@ -55,36 +60,40 @@ export async function fetchContactHistoryAction(contactId: string): Promise<Hist
   return contactsRepository.listContactHistory(contactId);
 }
 
-export async function createContactAction(input: ContactInput): Promise<ContactDetail> {
-  const user = await requireCapabilityUser();
-  if (!resolveClientsCapabilities(user).canCreateClient) {
-    throw new Error("FORBIDDEN: contact create");
-  }
-  const row = await contactsRepository.createContact(input, user.member.id);
-  revalidateDirectorio();
-  return row;
+/** Creates a contact; the result is the viewer's sheet of it. Errors (as results): FORBIDDEN. */
+export async function createContactAction(input: ContactInput): Promise<ActionResult<ContactDetail>> {
+  return toActionResult(async () => {
+    const user = await requireCapabilityUser();
+    if (!resolveClientsCapabilities(user).canCreateClient) {
+      throw new Error("FORBIDDEN: contact create");
+    }
+    return sheetFor(user, await contactsRepository.createContact(input, user.member.id));
+  });
 }
 
+/** Updates a contact; the result is the viewer's sheet of it. Errors (as results): FORBIDDEN. */
 export async function updateContactAction(
   id: string,
   patch: Partial<ContactInput>
-): Promise<ContactDetail> {
-  const user = await requireCapabilityUser();
-  if (!resolveClientsCapabilities(user).canEditClient) {
-    throw new Error("FORBIDDEN: contact edit");
-  }
-  const row = await contactsRepository.updateContact(id, patch, user.member.id);
-  revalidateDirectorio();
-  return row;
+): Promise<ActionResult<ContactDetail>> {
+  return toActionResult(async () => {
+    const user = await requireCapabilityUser();
+    if (!resolveClientsCapabilities(user).canEditClient) {
+      throw new Error("FORBIDDEN: contact edit");
+    }
+    return sheetFor(user, await contactsRepository.updateContact(id, patch, user.member.id));
+  });
 }
 
-export async function deleteContactAction(id: string): Promise<void> {
-  const user = await requireCapabilityUser();
-  if (!resolveClientsCapabilities(user).canDeleteClient) {
-    throw new Error("FORBIDDEN: contact delete");
-  }
-  await contactsRepository.softDeleteContact(id, user.member.id);
-  revalidateDirectorio();
+/** Soft-deletes a contact. Errors (as results): FORBIDDEN. */
+export async function deleteContactAction(id: string): Promise<ActionResult<void>> {
+  return toActionResult(async () => {
+    const user = await requireCapabilityUser();
+    if (!resolveClientsCapabilities(user).canDeleteClient) {
+      throw new Error("FORBIDDEN: contact delete");
+    }
+    await contactsRepository.softDeleteContact(id, user.member.id);
+  });
 }
 
 export async function setContactPeopleAction(
@@ -96,7 +105,6 @@ export async function setContactPeopleAction(
     throw new Error("FORBIDDEN: contact edit");
   }
   await contactsRepository.setContactPeople(contactId, people);
-  revalidateDirectorio();
 }
 
 export async function setContactTagsAction(contactId: string, tags: ContactTag[]): Promise<void> {
@@ -105,7 +113,6 @@ export async function setContactTagsAction(contactId: string, tags: ContactTag[]
     throw new Error("FORBIDDEN: contact edit");
   }
   await contactsRepository.setContactTags(contactId, tags);
-  revalidateDirectorio();
 }
 
 /**
@@ -123,6 +130,5 @@ export async function mergeContactsAction(
     throw new Error("FORBIDDEN: contact merge");
   }
   const row = await contactsRepository.mergeContacts(keepId, duplicateIds, user.member.id);
-  revalidateDirectorio();
   return row;
 }

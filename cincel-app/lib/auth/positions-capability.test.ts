@@ -55,9 +55,12 @@ describe("positions capability without the areas alias", () => {
     expect(resolvePositionsCapabilities(makeUser("Dirección")).canManagePositions).toBe(true);
   });
 
-  it("still reads a stored `positions` module", () => {
+  it("ignores a stored `positions` module too: the browser override is gone (#964)", () => {
     storeRoles({ "Jefe de Taller": { positions: { canManagePositions: true } } });
-    expect(resolvePositionsCapabilities(makeUser("Jefe de Taller")).canManagePositions).toBe(true);
+    expect(resolvePositionsCapabilities(makeUser("Jefe de Taller")).canManagePositions).toBe(
+      permissions.resolvePositionsCapabilitiesFromDefaults(makeUser("Jefe de Taller")).canManagePositions,
+    );
+    expect(resolvePositionsCapabilities(makeUser("Jefe de Taller")).canManagePositions).toBe(false);
   });
 
   it("exports no legacy module mapper", () => {

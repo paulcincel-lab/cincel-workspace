@@ -22,6 +22,11 @@ export type FiltersBarChip = {
   colorVar?: string;
   pressed: boolean;
   href: string;
+  /**
+   * Client-side filter: a plain click calls it instead of following `href`
+   * (no server render); the link still opens in a new tab with a modifier.
+   */
+  onSelect?(): void;
 };
 
 export type FiltersBarProps = {
@@ -45,7 +50,22 @@ function FilterChip({ chip }: { chip: FiltersBarChip }) {
       nativeButton={false}
       aria-pressed={chip.pressed}
       data-state={chip.pressed ? "on" : "off"}
-      render={<Link href={chip.href} replace scroll={false} />}
+      render={
+        <Link
+          href={chip.href}
+          replace
+          scroll={false}
+          onClick={
+            chip.onSelect
+              ? (event) => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                  event.preventDefault();
+                  chip.onSelect?.();
+                }
+              : undefined
+          }
+        />
+      }
     >
       {swatch ? <span aria-hidden="true" data-slot="chip-swatch" className="size-2.5 rounded-sm" style={swatch} /> : null}
       <span>{chip.label}</span>

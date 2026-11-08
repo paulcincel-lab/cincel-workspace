@@ -1,10 +1,13 @@
 import "server-only";
 
+import { and, eq, isNotNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
+import { db } from "@/lib/db/client";
+import { googleOauthAccounts } from "@/lib/db/schema";
 import type { DriveCaller } from "@/lib/google/drive-repository";
-import { staffOauthConfig } from "@/lib/google/staff-oauth";
+import { hasGrantedScope, staffOauthConfig } from "@/lib/google/staff-oauth";
 import { getStaffAccessToken } from "@/lib/google/staff-token";
 
 /**
@@ -92,4 +95,29 @@ export async function getPickerDriveStatus(user: {
     oauthAvailable: false,
     connectedEmail: null,
   };
+}
+
+/**
+ * The Drive status for a page render (Ajustes › Integraciones): **DB only**.
+ * It reads the staff token row and never refreshes a token, so no OAuth HTTP
+ * call and no DB write happen during render. `hasDriveGrant` is true when the
+ * row holds the `drive.readonly` grant and either an unexpired access token
+ * or a refresh token (the picker routes refresh it when they run).
+ */
+export async function getPickerDriveGrant(staffId: string): Promise<Pick<PickerDriveStatus, "configured" | "hasDriveGrant">> {
+  const configured = isPickerDriveConfigured();
+  if (!configured) return { configured, hasDriveGrant: false };
+  const [row] = await db
+    .select({
+      accessToken: googleOauthAccounts.accessToken,
+      refreshToken: googleOauthAccounts.refreshToken,
+      scope: googleOauthAccounts.scope,
+      expiresAt: googleOauthAccounts.expiresAt,
+    })
+    .from(googleOauthAccounts)
+    .where(and(eq(googleOauthAccounts.staffId, staffId), isNotNull(googleOauthAccounts.googleSub)))
+    .limit(1);
+  if (!row || !row.accessToken || !hasGrantedScope(row.scope, "drive")) return { configured, hasDriveGrant: false };
+  const usable = row.expiresAt.getTime() > Date.now() || Boolean(row.refreshToken);
+  return { configured, hasDriveGrant: usable };
 }

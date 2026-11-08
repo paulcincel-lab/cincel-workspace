@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { FileText, ListChecks, Users, Wallet } from "lucide-react";
 
 import { EntityCardGrid } from "@/components/widgets/EntityCardGrid";
@@ -10,15 +11,22 @@ import { ProgressListWidget } from "@/components/widgets/ProgressListWidget";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { TramoStepperWidget } from "@/components/widgets/TramoStepperWidget";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
+import { ErrorState } from "@/components/shell/ErrorState";
 import { buildProjectSummary, type ProjectSummaryInput } from "@/lib/proyectos/project-summary";
+import { proyectoResumenOptions } from "@/lib/query/options/proyectos";
+
+/** The Resumen tab of one project, read from `qk.proyectos.resumen(id)`. */
+export type ProjectSummaryProps = { projectId: string };
 
 /**
- * Everything the Resumen needs, loaded on the server (see
- * `lib/proyectos/project-summary.ts`). `showClientContacts` is
+ * Everything the Resumen renders, loaded on the server (see
+ * `lib/proyectos/project-resumen.ts`). `showClientContacts` is
  * `canSeeAdminData`, or a project member with `clients.canViewClients`;
  * `showBudget` is `canSeeAdminData`.
  */
-export type ProjectSummaryProps = ProjectSummaryInput;
+export type ProjectSummaryContentProps = { data: ProjectSummaryInput };
+
+export const RESUMEN_NOT_FOUND_TITLE = "Proyecto no encontrado";
 
 /** Cutto chat link of a staff contact: opens cutto.cloudketer.dev in a new tab, never embedded (FE §4.9). */
 function renderContactCell(columnKey: string, row: Record<string, unknown>) {
@@ -40,6 +48,19 @@ function renderContactCell(columnKey: string, row: Record<string, unknown>) {
 }
 
 /**
+ * Proyecto · Resumen: reads `qk.proyectos.resumen(id)` (prefetched by the
+ * page, so the first render makes no call) and renders `ProjectSummaryContent`.
+ * Null data (the project is gone or out of reach) shows the not-found state.
+ */
+export function ProjectSummary({ projectId }: ProjectSummaryProps) {
+  const { data } = useSuspenseQuery(proyectoResumenOptions(projectId));
+  if (!data) {
+    return <ErrorState title={RESUMEN_NOT_FOUND_TITLE} description="El proyecto no existe o ya no tienes acceso." />;
+  }
+  return <ProjectSummaryContent data={data} />;
+}
+
+/**
  * Proyecto · Resumen (redesign FE §3.5, §4.10.2): one composition of library
  * widgets fed the same data in every style. Visual, Esencial and Analítico
  * differ only inside the widgets: tramos (`TramoStepperWidget` over
@@ -49,10 +70,11 @@ function renderContactCell(columnKey: string, row: Record<string, unknown>) {
  * absent without `showBudget`; "Cliente y contactos" is absent without
  * `showClientContacts` (the team alone shows under "Equipo").
  */
-export function ProjectSummary(props: ProjectSummaryProps) {
-  const data = useMemo(() => buildProjectSummary(props), [props]);
-  const archivosHref = `/proyectos/${encodeURIComponent(props.project.id)}/archivos`;
-  const cronogramaHref = `/proyectos/${encodeURIComponent(props.project.id)}/cronograma`;
+export function ProjectSummaryContent({ data: input }: ProjectSummaryContentProps) {
+  // Keyed on the query data: a re-render with the same cached object reuses the build.
+  const data = useMemo(() => buildProjectSummary(input), [input]);
+  const archivosHref = `/proyectos/${encodeURIComponent(input.project.id)}/archivos`;
+  const cronogramaHref = `/proyectos/${encodeURIComponent(input.project.id)}/cronograma`;
 
   return (
     <div className="flex flex-col gap-4">

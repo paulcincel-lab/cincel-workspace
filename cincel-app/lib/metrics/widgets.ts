@@ -144,7 +144,7 @@ const TONE_RANK: Record<Tone, number> = { critical: 0, warn: 1, default: 2, ok: 
  * por vencer (today … +2 días) → default. Others are left out. Ordered by
  * tone, then most days late, then soonest due.
  */
-export function toAttentionItems(tasks: TaskListItem[], now: Date): AttentionItem[] {
+export function toAttentionItems(tasks: Omit<TaskListItem, "notes">[], now: Date): AttentionItem[] {
   const today = localIsoDate(now, TASK_TREND_TIME_ZONE);
   const items: AttentionItem[] = [];
 
@@ -251,7 +251,7 @@ export function toAgendaItems(
   source:
     | { kind: "events"; items: CalendarEvent[] }
     | { kind: "reminders"; items: Reminder[] }
-    | { kind: "tasks"; items: TaskListItem[] }
+    | { kind: "tasks"; items: Omit<TaskListItem, "notes">[] }
     | { kind: "absences"; items: TeamAbsence[] },
 ): AgendaItem[] {
   let items: AgendaItem[];

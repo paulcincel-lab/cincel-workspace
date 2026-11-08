@@ -21,7 +21,6 @@
  *   "Correo vinculado: <asunto>". Drafts and sends write nothing to
  *   `history_events`; their audit is the `assistant_actions` row.
  */
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { defineTool, type DefinedTool, type ToolRunContext } from "@/lib/assistant/define-tool";
@@ -35,7 +34,8 @@ import {
   linkGmailThreadToProjectAction,
 } from "@/lib/actions/gmail-actions";
 import { unwrapActionResult } from "@/lib/actions/action-result";
-import { addProjectCommentAction, fetchProjectAction, fetchProjectsAction } from "@/lib/actions/projects-actions";
+import { addProjectCommentAction, fetchProjectAction } from "@/lib/actions/projects-actions";
+import { listViewerProjects } from "@/lib/assistant/reads";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
 import { sendDraft } from "@/lib/gmail/client";
 import type { ProjectListItem } from "@/lib/types/core";
@@ -101,7 +101,7 @@ function byName<T extends { name: string }>(rows: T[], query: string): Resolved<
 
 /** A project the caller can see, by name (viewer-scoped read). */
 async function resolveProject(name: string): Promise<Resolved<ProjectListItem>> {
-  const rows = await fetchProjectsAction({ search: name });
+  const rows = await listViewerProjects({ search: name });
   return byName(rows, name);
 }
 
@@ -109,7 +109,7 @@ async function resolveProject(name: string): Promise<Resolved<ProjectListItem>> 
 async function projectNames(ids: (string | null)[]): Promise<Map<string, string>> {
   const wanted = new Set(ids.filter((id): id is string => Boolean(id)));
   if (wanted.size === 0) return new Map();
-  const rows = await fetchProjectsAction({});
+  const rows = await listViewerProjects({});
   return new Map(rows.filter((p) => wanted.has(p.id)).map((p) => [p.id, p.name]));
 }
 
@@ -276,12 +276,14 @@ export async function runSummarizeEmailThread(_ctx: ToolRunContext, input: z.out
 
 export async function runDraftEmail(_ctx: ToolRunContext, input: z.output<typeof draftEmailSchema>) {
   try {
-    const draft = await createGmailDraftAction({
-      to: input.to,
-      subject: input.subject,
-      body: input.body,
-      ...(input.replyToThreadId ? { replyToThreadId: input.replyToThreadId } : {}),
-    });
+    const draft = unwrapActionResult(
+      await createGmailDraftAction({
+        to: input.to,
+        subject: input.subject,
+        body: input.body,
+        ...(input.replyToThreadId ? { replyToThreadId: input.replyToThreadId } : {}),
+      }),
+    );
     // The confirm token belongs to the Mi espacio send flow; the assistant
     // sends through the approval of `send_email`, so the model never sees it.
     return {
@@ -299,7 +301,6 @@ export async function runDraftEmail(_ctx: ToolRunContext, input: z.output<typeof
 export async function runSendEmail(ctx: ToolRunContext, input: z.output<typeof sendEmailSchema>) {
   try {
     const { messageId } = await sendDraft(ctx.user.member.id, input.draftId);
-    revalidatePath("/mi-espacio");
     return { ok: true as const, messageId, message: "Correo enviado desde tu Gmail." };
   } catch (err) {
     return failure(err);
@@ -326,7 +327,7 @@ export async function runLinkEmailToProject(ctx: ToolRunContext, input: z.output
       return { ok: false as const, error: "INVALID", message: "Dime a qué proyecto vinculo el correo." };
     }
 
-    await linkGmailThreadToProjectAction(input.threadId, project.id);
+    unwrapActionResult(await linkGmailThreadToProjectAction(input.threadId, project.id));
     const summary = summarizeLinkEmailToProject({ threadId: input.threadId, project: project.name });
     unwrapActionResult(await addProjectCommentAction(project.id, `${summary} (vía asistente)`));
     return {

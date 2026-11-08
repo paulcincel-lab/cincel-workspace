@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
-import { approxTime, buildMonthCells, CalendarWeekdayHeader, type MonthCell } from "@/components/calendario/UnifiedCalendar";
+import { approxTime, buildMonthCells, CalendarWeekdayHeader, type MonthCell } from "@/components/calendario/calendar-grid";
 import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import type { LoadingSkeletonProps } from "@/components/shell/LoadingSkeleton";
 import { useStyle } from "@/components/shell/StyleProvider";
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 /**
  * Agenda in three styles (redesign FE §4.10.1, §15.3 "Calendario", frames
  * `Calendario`, `CalendarioSemana`, `CalendarioEsencial`,
- * `CalendarioAnalitico`). Wraps `components/calendario/UnifiedCalendar` for the
+ * `CalendarioAnalitico`). Uses `components/calendario/calendar-grid` for the
  * month grid (`buildMonthCells`, `CalendarWeekdayHeader`) and its estimated
  * time mark (`approxTime`); presentation only, filters and navigation stay with
  * the page.

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/shadcn/button";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import DriveBrowser, { type DriveBrowserEntry } from "@/components/recursos/DriveBrowser";
+import { useDriveStatus } from "@/lib/google/use-drive-status";
 
 export type DrivePickerEntry = DriveBrowserEntry;
 
@@ -15,8 +16,13 @@ type Props = {
   rootFolderId?: string;
 };
 
+/**
+ * "Elegir de Google Drive": the Drive browser in a sheet. It lists only while
+ * the sheet is open and the Drive picker is configured (`useDriveStatus()`).
+ */
 export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId }: Props) {
   const [selected, setSelected] = useState<DrivePickerEntry | null>(null);
+  const { configured } = useDriveStatus();
 
   return (
     <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -29,7 +35,7 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
         </SheetHeader>
 
         <DriveBrowser
-          active={open}
+          active={open && configured}
           rootFolderId={rootFolderId}
           selectedId={selected?.id ?? null}
           onFileClick={setSelected}

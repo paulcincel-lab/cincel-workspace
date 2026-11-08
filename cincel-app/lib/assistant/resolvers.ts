@@ -1,7 +1,7 @@
 import "server-only";
 
-import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
+import { listViewerProjects } from "@/lib/assistant/reads";
 import type { ProjectListItem, Staff } from "@/lib/types/core";
 
 /**
@@ -30,7 +30,7 @@ export function byNameIlike<T extends { name: string }>(rows: T[], query: string
 }
 
 export async function resolveProject(name: string): Promise<Resolved<ProjectListItem>> {
-  const rows = await fetchProjectsAction({ search: name });
+  const rows = await listViewerProjects({ search: name });
   return byNameIlike(rows, name);
 }
 

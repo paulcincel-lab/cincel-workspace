@@ -56,3 +56,36 @@ describe("names", () => {
     expect(initialsOf("")).toBe("");
   });
 });
+
+describe("cached formatters keep the same output", () => {
+  // The header used to build a new `Intl.DateTimeFormat` per call; the cached
+  // ones must render the same text, also across repeated calls and zones.
+  const instants = ["2026-11-06T06:00:00Z", "2026-11-06T18:00:00Z", "2026-11-07T01:30:00Z", "2026-12-31T23:59:00Z"];
+
+  it("renders the same greetings and dates across calls", () => {
+    const render = () =>
+      instants.map((iso) => [greetingFor(at(iso)), formatInicioDate(at(iso)), greetingFor(at(iso), "Europe/Madrid")]);
+    const first = render();
+    expect(render()).toEqual(first);
+    expect(first).toEqual([
+      ["Buenos días", "viernes, 6 de noviembre", "Buenos días"],
+      ["Buenas tardes", "viernes, 6 de noviembre", "Buenas noches"],
+      ["Buenas noches", "viernes, 6 de noviembre", "Buenos días"],
+      ["Buenas tardes", "jueves, 31 de diciembre", "Buenos días"],
+    ]);
+  });
+
+  it("matches a freshly built es-MX formatter", () => {
+    for (const iso of instants) {
+      const fresh = new Intl.DateTimeFormat("es-MX", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        timeZone: "America/Mexico_City",
+      })
+        .format(at(iso))
+        .toLocaleLowerCase("es-MX");
+      expect(formatInicioDate(at(iso))).toBe(fresh);
+    }
+  });
+});

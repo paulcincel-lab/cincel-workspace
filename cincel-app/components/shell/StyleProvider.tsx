@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useMemo, type ReactNode } from "react";
 import { useStore, type StoreApi } from "zustand";
 import { useShallow } from "zustand/react/shallow";
@@ -13,15 +14,19 @@ import {
 } from "@/lib/stores/appearance-store";
 import type { PresentationStyle, ResolvedAppearance } from "@/lib/types/redesign";
 import { resolveAppearance } from "@/lib/ui/preferences";
+import { ESTILO_PARAM, parsePresentationStyle } from "@/lib/ui/style-override";
 import { DEFAULT_ORG_APPEARANCE } from "@/lib/ui/themes";
 
 /**
  * The presentation style of the page (redesign FE §4.2, §15.1), read from the
  * `useAppearance` store (zustand.md §2.6, decision D2). There is no style
  * context: `style` and `fixedByOrg` come from the store the root layout
- * seeds; `setStyle` switches the style client-side; persisting it
- * (`updateMyPreferencesAction` for staff, the `cincel-portal-style` cookie for
- * the portal) belongs to `EstiloSwitch`.
+ * seeds, and a staff page's `?estilo=` override is read from the URL
+ * (`useSearchParams`, never mirrored into the store; ignored when the
+ * organization fixed the style). So a style saved on one page is what the
+ * next page shows, without a reload. `setStyle` switches the style
+ * client-side; persisting it (`setPreference` for staff, the
+ * `cincel-portal-style` cookie for the portal) belongs to `EstiloSwitch`.
  *
  * Reads and sets the style but renders no per-style markup (guard allowlist,
  * FE §17).
@@ -61,10 +66,19 @@ const selectStyle = (s: AppearanceState): StyleContextValue => ({
   isFixed: s.fixedByOrg,
 });
 
-/** The current style from the nearest appearance store; Visual outside any store. */
+/**
+ * The current style: a staff page's `?estilo=` override when the organization
+ * allows one, else the nearest appearance store's; Visual outside any store.
+ */
 export function useStyle(): StyleContextValue {
   const store = useAppearanceStoreApiOrNull() ?? getFallbackStore();
-  return useStore(store, useShallow(selectStyle));
+  const base = useStore(store, useShallow(selectStyle));
+  const override = parsePresentationStyle(useSearchParams()?.get(ESTILO_PARAM) ?? null);
+  return useMemo(() => {
+    // A store seeded for an override (or the portal's cookie style) already decided.
+    if (!override || base.isOverridden || base.isFixed || base.scope !== "staff") return base;
+    return { ...base, style: override, isOverridden: true };
+  }, [base, override]);
 }
 
 export type StyleProviderProps = {
@@ -78,16 +92,17 @@ export type StyleProviderProps = {
 };
 
 /**
- * Transitional seed for the nested page wrappers (Phase 2, #936, deletes
- * them). It holds no context of its own:
+ * Seeds a style for a subtree that does not follow the staff preference: the
+ * portal (its style is the cookie), a widget preview fixed to one style
+ * (`TeamHoursTable`) and tests. Staff pages never wrap themselves: their
+ * style is the root store plus the `?estilo=` URL override (`useStyle`). It
+ * holds no context of its own:
  *
- * - Inside the root store, a staff wrapper without an active `?estilo=`
- *   override renders its children as they are: the page reads the root
- *   store, so a style change on one page is seen by the next one. When the
- *   organization fixed the style, the override is ignored the same way.
- * - With an active override, on the portal (its style is the cookie, not the
- *   staff preference) or outside any store, it seeds a store for its subtree
- *   from the surrounding appearance with `style` in place.
+ * - Inside the root store, a staff wrapper without `isOverridden` renders its
+ *   children as they are (they read the root store). When the organization
+ *   fixed the style, an override is ignored the same way.
+ * - With an override, on the portal or outside any store, it seeds a store
+ *   for its subtree from the surrounding appearance with `style` in place.
  */
 export function StyleProvider(props: StyleProviderProps) {
   const parent = useAppearanceStoreApiOrNull();

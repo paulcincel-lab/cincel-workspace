@@ -3,6 +3,10 @@
  * The reminder fires through a test call to `/api/cron/tick` and shows up in
  * the Bandeja.
  *
+ * Query Migration Phase 7 (#941): a checklist toggle, a mark-read and opening
+ * an email are each one server-action POST with no RSC request (no route
+ * re-render); the Bandeja tab is the URL only.
+ *
  * Needs `CRON_SECRET` in the environment (the same value the web server
  * reads). Run locally with `CI=1 npm run test:e2e -- mi-espacio`.
  *
@@ -38,6 +42,28 @@ function localNow(): { date: string; time: string } {
       .map((p) => [p.type, p.value])
   );
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+/**
+ * Counts the server-action POSTs (`Next-Action` header) and the RSC requests
+ * (`RSC: 1` or `?_rsc=`, a route render) the page sends from now on.
+ */
+function trackRequests(page: Page): { actions: string[]; rsc: string[]; reset(): void } {
+  const actions: string[] = [];
+  const rsc: string[] = [];
+  page.on("request", (req) => {
+    const headers = req.headers();
+    if (req.method() === "POST" && headers["next-action"]) actions.push(headers["next-action"]);
+    else if (headers["rsc"] === "1" || req.url().includes("_rsc=")) rsc.push(req.url());
+  });
+  return {
+    actions,
+    rsc,
+    reset() {
+      actions.length = 0;
+      rsc.length = 0;
+    },
+  };
 }
 
 /** Opens /mi-espacio. */
@@ -106,5 +132,136 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
     await page.reload({ waitUntil: "load" });
     await expect(page.getByText("Bandeja").first()).toBeVisible();
     await expect(page.getByText(reminderText).first()).toBeVisible({ timeout: 15_000 });
+
+    // The sidebar badge reads qk.shell.badges: mark-read on Mi espacio lowers it at once, and
+    // navigating to Tareas shows the same count (no server render, no reload).
+    const badge = page.locator("[data-slot=bandeja-badge]").first();
+    await expect(badge).toBeVisible({ timeout: 15_000 });
+    const count = async () => {
+      if ((await page.locator("[data-slot=bandeja-badge]").count()) === 0) return 0;
+      const text = await page.locator("[data-slot=bandeja-badge]").first().innerText();
+      return Number(text.replace(/[^0-9]/g, "")) || 0;
+    };
+    const before = await count();
+    expect(before).toBeGreaterThan(0);
+
+    const unread = page.getByRole("link", { name: new RegExp(reminderText) }).first();
+    await unread.click();
+    await expect.poll(count, { timeout: 15_000 }).toBe(before - 1);
+
+    await page.getByRole("navigation", { name: "Principal" }).getByRole("link", { name: /^Tareas/ }).click();
+    await expect(page).toHaveURL(/\/tareas/);
+    await expect.poll(count, { timeout: 15_000 }).toBe(before - 1);
+  });
+
+  test("the badges come from one private GET route, polled every 60 s", async ({ page }) => {
+    test.setTimeout(120_000);
+    const badgeGets: { url: string; cacheControl: string | undefined }[] = [];
+    page.on("response", (response) => {
+      if (response.request().method() === "GET" && new URL(response.url()).pathname === "/api/shell/badges") {
+        badgeGets.push({ url: response.url(), cacheControl: response.headers()["cache-control"] });
+      }
+    });
+    await page.goto(`${BASE_URL}/tareas`, { waitUntil: "load" });
+    // Hydrated by the layout: no GET on load.
+    expect(badgeGets).toEqual([]);
+    await expect.poll(() => badgeGets.length, { timeout: 75_000, intervals: [5_000] }).toBeGreaterThanOrEqual(1);
+    expect(badgeGets[0].cacheControl).toBe("private, no-store");
+  });
+
+  test("toggling a checklist item is one action POST, optimistic, with no RSC request", async ({ page }) => {
+    const stamp = Date.now().toString(36);
+    const title = `Visita ${stamp}`;
+    const point = `Medir vanos ${stamp}`;
+
+    await openMiEspacio(page);
+    const capture = page.getByLabel("Captura rápida");
+    await capture.fill(`- [ ] ${title} - [ ] ${point}`);
+    await capture.press("Enter");
+    await expect(page.getByText("Checklist creado")).toBeVisible();
+    const box = page.getByRole("checkbox", { name: point });
+    await expect(box).toBeVisible();
+    await expect(box).toHaveAttribute("aria-checked", "false");
+
+    const requests = trackRequests(page);
+    await box.click();
+    await expect(box).toHaveAttribute("aria-checked", "true");
+    await expect.poll(() => requests.actions.length).toBe(1);
+    // Give a stray revalidation time to show up.
+    await page.waitForTimeout(1_500);
+    expect(requests.actions).toHaveLength(1);
+    expect(requests.rsc).toEqual([]);
+
+    // The saved state survives a reload.
+    await page.reload({ waitUntil: "load" });
+    await expect(page.getByRole("checkbox", { name: point })).toHaveAttribute("aria-checked", "true");
+  });
+
+  test("the Bandeja tab is the URL only: switching tabs sends no request", async ({ page }) => {
+    await openMiEspacio(page);
+    const tabs = page.getByRole("navigation", { name: "Pestañas de la bandeja" });
+    const requests = trackRequests(page);
+    await tabs.getByRole("link", { name: /Notificaciones/ }).click();
+    await expect(page).toHaveURL(/bandeja=notificaciones/);
+    await expect(tabs.getByRole("link", { name: /Notificaciones/ })).toHaveAttribute("aria-current", "page");
+    await page.waitForTimeout(1_000);
+    expect(requests.rsc).toEqual([]);
+    expect(requests.actions).toEqual([]);
+  });
+
+  test("marking a notification read is one action POST and the counts drop at once", async ({ page }) => {
+    await openMiEspacio(page);
+    const tabs = page.getByRole("navigation", { name: "Pestañas de la bandeja" });
+    await tabs.getByRole("link", { name: /Notificaciones/ }).click();
+    await expect(page).toHaveURL(/bandeja=notificaciones/);
+
+    const unread = page.locator("a, button").filter({ hasText: /^Sin leer: / }).first();
+    test.skip((await unread.count()) === 0, "This user has no unread notification to mark read.");
+    const count = page.getByTestId("inbox-count-notificaciones");
+    const before = Number((await count.textContent())?.match(/\d+/)?.[0] ?? "0");
+
+    const requests = trackRequests(page);
+    // Ctrl/Cmd+click: the row marks itself read while its link opens in another tab, so this page stays.
+    await unread.click({ modifiers: ["ControlOrMeta"] });
+    await expect.poll(() => requests.actions.length).toBe(1);
+    if (before > 1) await expect(count).toContainText(String(before - 1));
+    else await expect(count).toBeHidden();
+    await page.waitForTimeout(1_000);
+    expect(requests.rsc).toEqual([]);
+  });
+
+  test("opening an unread email is one read + one mark-read POST, with no RSC request", async ({ page }) => {
+    await openMiEspacio(page);
+    const tabs = page.getByRole("navigation", { name: "Pestañas de la bandeja" });
+    const gmailTab = tabs.getByRole("link", { name: /Gmail/ });
+    test.skip((await gmailTab.count()) === 0, "Gmail is not enabled.");
+    await gmailTab.click();
+    await expect(page).toHaveURL(/bandeja=gmail/);
+    const connect = page.getByRole("link", { name: "Conectar Gmail" });
+    test.skip((await connect.count()) > 0, "Gmail is not connected for this user.");
+
+    const unread = page.getByRole("button").filter({ hasText: /^Sin leer: / }).first();
+    test.skip((await unread.count()) === 0, "No unread Gmail thread to open.");
+
+    const subject = ((await unread.textContent()) ?? "").replace(/^Sin leer: /, "").trim();
+
+    const requests = trackRequests(page);
+    await unread.click();
+    await expect(page).toHaveURL(/correo=/);
+    await expect(page.locator('section[aria-label="Correo abierto"]').first()).toBeVisible();
+    // The live read, then the mark-read mutation.
+    await expect.poll(() => requests.actions.length, { timeout: 15_000 }).toBe(2);
+    await page.waitForTimeout(1_000);
+    expect(requests.actions).toHaveLength(2);
+    expect(requests.rsc).toEqual([]);
+
+    // Back and open again within the stale time: no call.
+    await page.getByRole("button", { name: "Volver a la bandeja" }).click();
+    requests.reset();
+    await page.getByRole("button").filter({ hasText: subject }).first().click();
+    await expect(page).toHaveURL(/correo=/);
+    await page.waitForTimeout(1_000);
+    expect(requests.actions).toEqual([]);
+    expect(requests.rsc).toEqual([]);
   });
 });

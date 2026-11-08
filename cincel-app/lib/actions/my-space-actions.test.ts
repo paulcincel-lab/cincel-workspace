@@ -12,6 +12,8 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { unwrapActions } from "@/tests/helpers/action-result";
+
 const url = process.env.TEST_DATABASE_URL;
 
 // `lib/db/client` reads DATABASE_URL when it is first imported.
@@ -45,7 +47,8 @@ describe.skipIf(!url)("Mi espacio notes and checklists (test DB)", async () => {
   const { eq, inArray } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const actions = await import("@/lib/actions/my-space-actions");
+  const actionsModule = await import("@/lib/actions/my-space-actions");
+  const actions = unwrapActions(actionsModule);
   const { IMPLEMENTED } = await import("@/lib/actions/my-space-actions.flags");
 
   const staffIds: string[] = [];
@@ -115,11 +118,22 @@ describe.skipIf(!url)("Mi espacio notes and checklists (test DB)", async () => {
   // ── Notes ────────────────────────────────────────────────────────────────
 
   describe("notes", () => {
-    it("creates a note with defaults and revalidates /mi-espacio", async () => {
+    it("creates a note with defaults and revalidates nothing (the client patches me.notes)", async () => {
       const note = await actions.createNoteAction({ title: "Llamar a Juanma" });
       expect(note).toMatchObject({ title: "Llamar a Juanma", body: "", color: "neutral", pinned: false, projectId: null });
       expect(typeof note.updatedAt).toBe("string");
-      expect(cache.revalidatePath).toHaveBeenCalledWith("/mi-espacio");
+      expect(cache.revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("returns { ok: false, error } instead of throwing (production strips thrown messages)", async () => {
+      await expect(actionsModule.createNoteAction({})).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/^INVALID/),
+      });
+      await expect(actionsModule.toggleChecklistItemAction(randomUUID(), true)).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/^NOT_FOUND/),
+      });
     });
 
     it("links a visible project", async () => {
@@ -152,7 +166,7 @@ describe.skipIf(!url)("Mi espacio notes and checklists (test DB)", async () => {
       await expect(actions.updateNoteAction(note.id, { title: "", body: "" })).rejects.toThrow(/^INVALID/);
       await expect(actions.updateNoteAction(note.id, { body: "b".repeat(20_001) })).rejects.toThrow(/^INVALID/);
       await expect(actions.updateNoteAction(note.id, { projectId: archivedProjectId })).rejects.toThrow(/^INVALID/);
-      expect(cache.revalidatePath).toHaveBeenCalledWith("/mi-espacio");
+      expect(cache.revalidatePath).not.toHaveBeenCalled();
     });
 
     it("returns NOT_FOUND for a missing or malformed id", async () => {
@@ -198,7 +212,7 @@ describe.skipIf(!url)("Mi espacio notes and checklists (test DB)", async () => {
         ["Medir", 0, false],
         ["Cotizar", 1, false],
       ]);
-      expect(cache.revalidatePath).toHaveBeenCalledWith("/mi-espacio");
+      expect(cache.revalidatePath).not.toHaveBeenCalled();
     });
 
     it("rejects an empty title, an empty item or an invisible project", async () => {
@@ -242,7 +256,7 @@ describe.skipIf(!url)("Mi espacio notes and checklists (test DB)", async () => {
       const listed = (await actions.fetchChecklistsAction()).find((l) => l.id === checklist.id)!;
       expect(listed.items.map((i) => i.text)).toEqual(["C", "A", "B"]);
       expect(listed.items.map((i) => i.sortOrder)).toEqual([0, 1, 2]);
-      expect(cache.revalidatePath).toHaveBeenCalledWith("/mi-espacio");
+      expect(cache.revalidatePath).not.toHaveBeenCalled();
     });
 
     it("rejects an id list that is not exactly the checklist's items", async () => {

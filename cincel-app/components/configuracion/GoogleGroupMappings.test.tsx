@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { GroupMapping } from "@/lib/types/workspace-access";
 
 const actions = vi.hoisted(() => ({
@@ -42,8 +45,25 @@ const positionMapping: GroupMapping = {
   rank: 0,
 };
 
+let invalidate: ReturnType<typeof vi.fn>;
+
+function render(ui: ReactElement) {
+  const client = createTestQueryClient();
+  invalidate = vi.fn(client.invalidateQueries.bind(client));
+  client.invalidateQueries = invalidate as typeof client.invalidateQueries;
+  return renderWithQueryClient(ui, { client });
+}
+
 function renderMappings(mappings: GroupMapping[] = [roleMapping, positionMapping]) {
   return render(<GoogleGroupMappings mappings={mappings} positions={[{ id: POSITION_ID, name: "Diseñador" }]} />);
+}
+
+/** A mapping change refreshes Google, Puestos and the staff catalog through the cache, never the route. */
+function expectMappingInvalidations() {
+  for (const queryKey of [qk.ajustes.page("google"), qk.ajustes.page("puestos"), qk.catalog.staff()]) {
+    expect(invalidate).toHaveBeenCalledWith({ queryKey });
+  }
+  expect(router.refresh).not.toHaveBeenCalled();
 }
 
 async function openRowMenu(groupEmail: string, label: string) {
@@ -84,7 +104,7 @@ describe("GoogleGroupMappings", () => {
     fireEvent.change(screen.getByLabelText("Rango"), { target: { value: "80" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
-    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+    await waitFor(() => expectMappingInvalidations());
     expect(actions.createGroupMappingAction).toHaveBeenCalledWith({
       groupEmail: "cincel-admins@example.test",
       kind: "role",
@@ -122,7 +142,7 @@ describe("GoogleGroupMappings", () => {
     await openRowMenu(positionMapping.groupEmail, "Editar");
     fireEvent.click(await screen.findByRole("button", { name: "Guardar" }));
 
-    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+    await waitFor(() => expectMappingInvalidations());
     expect(actions.updateGroupMappingAction).toHaveBeenCalledWith(positionMapping.id, {
       groupEmail: positionMapping.groupEmail,
       kind: "position",
@@ -161,7 +181,7 @@ describe("GoogleGroupMappings", () => {
     expect(screen.queryByLabelText("Rango")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
-    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+    await waitFor(() => expectMappingInvalidations());
     expect(actions.updateGroupMappingAction).toHaveBeenCalledWith(positionMapping.id, {
       groupEmail: positionMapping.groupEmail,
       kind: "position",
@@ -181,7 +201,7 @@ describe("GoogleGroupMappings", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
     await waitFor(() => expect(actions.deleteGroupMappingAction).toHaveBeenCalledWith(roleMapping.id));
-    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+    await waitFor(() => expectMappingInvalidations());
   });
 
   it("cancelling the dialog deletes nothing", async () => {

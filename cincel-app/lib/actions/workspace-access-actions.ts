@@ -1,9 +1,5 @@
 "use server";
 
-import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
-import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
-import { revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
-
 import { recheckStaffAccess } from "@/lib/auth/access-recheck";
 import { recordDirectoryError } from "@/lib/auth/directory-error-log";
 import { loadGoogleHealth } from "@/lib/auth/google-health";
@@ -56,12 +52,6 @@ function isUniqueViolation(err: unknown): boolean {
     current = (current as { cause?: unknown }).cause;
   }
   return false;
-}
-
-/** Mappings show on Google and set the `googleManaged` flag on Puestos. */
-function revalidateMappingPaths(): void {
-  revalidateAjustesScreen("google");
-  revalidateAjustesScreen("puestos");
 }
 
 /** Shape checks that don't need Google; the group id comes later from `groups.get`. */
@@ -132,7 +122,6 @@ export async function createGroupMappingAction(input: GroupMappingInput): Promis
   if ("ok" in values) return values;
   try {
     const mapping = await mappingsRepository.insertGroupMapping(values);
-    revalidateMappingPaths();
     return { ok: true, mapping };
   } catch (error) {
     if (isUniqueViolation(error)) return fail("duplicate");
@@ -149,7 +138,6 @@ export async function updateGroupMappingAction(id: string, input: GroupMappingIn
   try {
     const mapping = await mappingsRepository.updateGroupMapping(id, values);
     if (!mapping) return fail("invalid");
-    revalidateMappingPaths();
     return { ok: true, mapping };
   } catch (error) {
     if (isUniqueViolation(error)) return fail("duplicate");
@@ -163,7 +151,6 @@ export async function deleteGroupMappingAction(
   if (!(await isAdministrator())) return { ok: false, error: "forbidden" };
   if (!isUuid(id)) return { ok: false, error: "invalid" };
   await mappingsRepository.deleteGroupMapping(id);
-  revalidateMappingPaths();
   return { ok: true };
 }
 
@@ -178,10 +165,8 @@ export async function recheckStaffAccessAction(staffId: string): Promise<Recheck
   const outcome = await recheckStaffAccess(staffId, { force: true });
   switch (outcome.status) {
     case "kept":
-      revalidatePersonasScreen(["equipo"]);
       return { ok: true, allowed: true };
     case "revoked":
-      revalidatePersonasScreen(["equipo"]);
       return { ok: true, allowed: false, reason: outcome.reason };
     case "error":
       return { ok: false, error: "directory_error" };
@@ -203,7 +188,5 @@ export async function getGoogleHealthAction(): Promise<GoogleHealth> {
 export async function ensureMissingProjectFoldersAction(): Promise<EnsureMissingProjectFoldersCounts> {
   if (!(await isAdministrator())) throw new Error("FORBIDDEN: ensure project folders");
   const counts = await ensureMissingProjectFolders();
-  revalidateAjustesScreen("google");
-  revalidateProyectosListScreen(["proyectos"]);
   return counts;
 }

@@ -91,7 +91,8 @@ describe("importLegacyAssistantThreadAction", () => {
       ["a", "user"],
       ["b", "assistant"],
     ]);
-    expect(revalidatePath).toHaveBeenCalledWith("/asistente");
+    // The /asistente screen reads through TanStack Query (#944): no revalidatePath.
+    expect(revalidatePath).not.toHaveBeenCalled();
 
     expect(mocks.streamText).not.toHaveBeenCalled();
     expect(mocks.generateText).not.toHaveBeenCalled();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, type ReactNode } from "react";
-import { Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 
 import { TeamHoursTable } from "@/components/ajustes/TeamHoursTable";
 import { SettingsRow } from "@/components/patterns/SettingsRow";
@@ -26,6 +26,7 @@ import {
   WORK_DAY_TOGGLES,
   type TimelineSegment,
 } from "@/lib/time-tracking/horario-copy";
+import { addDays, mondayOf } from "@/lib/time-tracking/local-time";
 import type { TimeTrackingSettings } from "@/lib/types/redesign";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +34,8 @@ import { useHorario } from "./horario-context";
 
 /**
  * The sections of Ajustes › Control de horario (redesign FE §3.8). Each reads
- * the page state from `HorarioClient`, checks its own capability and is
+ * the page state with `useHorario()` (the page-scoped form store of
+ * `HorarioClient` plus the hydrated page data), checks its own capability and is
  * registered in `lib/shell/settings-sections/horario/*`. Only the team report
  * changes with the presentation style, through `TeamHoursTable`.
  */
@@ -452,24 +454,57 @@ export function HorarioVistaPrevia() {
 
 // ── Horas del equipo ───────────────────────────────────────────────────────
 
+/**
+ * The team report of one week. "Semana anterior" / "Semana siguiente" change
+ * the week in the page store, which is the page-data key input: one page-data
+ * call per new week, no route refresh. The current week is the last one.
+ */
 export function HorarioHorasEquipo() {
-  const { canViewReport, weekStart, rows, saved } = useHorario();
+  const { canViewReport, weekStart, setWeekStart, rows, saved, today, loadingWeek } = useHorario();
   const { style } = useStyle();
   if (!canViewReport || !IMPLEMENTED.fetchTeamHoursAction) return null;
+  const isCurrentWeek = weekStart >= mondayOf(today);
   return (
     <SettingsSection
       title={`Horas del equipo · semana del ${formatDayMonth(weekStart)}`}
       actions={
-        <a
-          href={horarioExportHref(weekStart)}
-          download={`horario-${weekStart}.csv`}
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          Exportar CSV
-        </a>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label="Semana anterior"
+            onClick={() => setWeekStart(addDays(weekStart, -7))}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label="Semana siguiente"
+            disabled={isCurrentWeek}
+            onClick={() => setWeekStart(addDays(weekStart, 7))}
+          >
+            <ChevronRight aria-hidden="true" />
+          </Button>
+          <a
+            href={horarioExportHref(weekStart)}
+            download={`horario-${weekStart}.csv`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Exportar CSV
+          </a>
+        </div>
       }
     >
-      <TeamHoursTable weekStart={weekStart} rows={rows} style={style} requiredFrom={saved.requiredFrom} />
+      <TeamHoursTable
+        weekStart={weekStart}
+        rows={rows}
+        style={style}
+        requiredFrom={saved.requiredFrom}
+        loading={loadingWeek}
+      />
     </SettingsSection>
   );
 }

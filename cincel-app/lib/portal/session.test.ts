@@ -46,6 +46,7 @@ import {
   createPortalSession,
   destroyPortalSession,
   getPortalUser,
+  getPortalViewer,
   PORTAL_SESSION_COOKIE,
   PORTAL_SESSION_REFRESH_MS,
   PORTAL_SESSION_TTL_MS,
@@ -54,6 +55,7 @@ import {
   PortalUnauthorizedError,
   requirePortalApiUser,
   requirePortalUser,
+  requirePortalViewer,
   requireProjectAccess,
 } from "./session";
 
@@ -160,6 +162,25 @@ describe("sliding expiry", () => {
     store.findActivePortalSession.mockResolvedValue(record(PORTAL_SESSION_REFRESH_MS + HOUR));
     expect(await getPortalUser()).toEqual(user);
     expect(store.slidePortalSession).toHaveBeenCalledOnce();
+  });
+});
+
+describe("getPortalViewer / requirePortalViewer (page-data actions)", () => {
+  it("reads the session without sliding it, even after 24 h", async () => {
+    jar.values.set(PORTAL_SESSION_COOKIE, "tok-1");
+    store.findActivePortalSession.mockResolvedValue(record(PORTAL_SESSION_REFRESH_MS + HOUR));
+
+    expect(await getPortalViewer()).toEqual(user);
+    expect(await requirePortalViewer()).toEqual(user);
+    expect(store.findActivePortalSession).toHaveBeenCalledWith(hashPortalToken("tok-1"), expect.any(Date));
+    expect(store.slidePortalSession).not.toHaveBeenCalled();
+    expect(jar.set).not.toHaveBeenCalled();
+  });
+
+  it("is null without a cookie, and requirePortalViewer redirects through the sign-out", async () => {
+    expect(await getPortalViewer()).toBeNull();
+    expect(store.findActivePortalSession).not.toHaveBeenCalled();
+    await expect(requirePortalViewer()).rejects.toThrow("NEXT_REDIRECT /api/portal/auth/logout?next=%2Fportal%2Flogin");
   });
 });
 

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 
 import type { FormDialogProps } from "@/components/patterns/FormDialog";
@@ -46,6 +46,8 @@ vi.mock("@/components/patterns/FormDialog", () => ({
 }));
 
 import { ReminderDialog } from "@/components/mi-espacio/ReminderDialog";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import {
   addDaysToDateKey,
   snoozeTomorrowTarget,
@@ -75,7 +77,11 @@ function reminderFor(dueAt: string, text = "llamar a Juanma"): Reminder {
 function renderDialog(props: Partial<Parameters<typeof ReminderDialog>[0]> = {}) {
   const onOpenChange = vi.fn();
   const onCreated = vi.fn();
-  const utils = render(<ReminderDialog open onOpenChange={onOpenChange} onCreated={onCreated} {...props} />);
+  const client = createTestQueryClient();
+  const utils = renderWithQueryClient(
+    <ReminderDialog open onOpenChange={onOpenChange} onCreated={onCreated} {...props} />,
+    { client },
+  );
   return { ...utils, onOpenChange, onCreated };
 }
 
@@ -182,6 +188,41 @@ describe("ReminderDialog", () => {
     expect(mocks.create).toHaveBeenCalledWith({ text: "llamar a Juanma", dueAt, repeat: "weekly", channels: ["app"] });
     expect(mocks.toastSuccess).toHaveBeenCalledWith("Recordatorio creado para mañana 9:00");
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("refreshes Recordatorios, the sidebar badge and Inicio after creating", async () => {
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const dueAt = snoozeTomorrowTarget(new Date());
+    renderWithQueryClient(
+      <ReminderDialog
+        open
+        onOpenChange={vi.fn()}
+        onCreated={vi.fn()}
+        initialText="llamar"
+        parsed={{ cleanText: "llamar", dueAt, repeat: "none" }}
+      />,
+      { client },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Crear recordatorio" }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(3));
+    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+      qk.me.reminders("today-tomorrow"),
+      qk.shell.badges(),
+      qk.inicio(),
+    ]);
+  });
+
+  it("shows an { ok: false } result as the inline error", async () => {
+    mocks.create.mockResolvedValueOnce({ ok: false, error: "PAST_TIME" });
+    const { onCreated } = renderDialog({
+      initialText: "llamar",
+      parsed: { cleanText: "llamar", dueAt: snoozeTomorrowTarget(new Date()), repeat: "none" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Crear recordatorio" }));
+    expect(await screen.findByText(PAST_COPY)).toBeTruthy();
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(mocks.toastError).not.toHaveBeenCalled();
   });
 
   it("maps other action errors through actionErrorText above the footer", async () => {

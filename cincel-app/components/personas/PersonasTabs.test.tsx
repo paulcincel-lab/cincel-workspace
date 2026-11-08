@@ -25,6 +25,11 @@ describe("PersonasTabs", () => {
     expect(hrefs()).toEqual(["/personas", "/personas/clientes", "/personas/contratistas", "/personas/proveedores"]);
   });
 
+  it("renders the tabs without badges while the counts load", () => {
+    render(<PersonasTabs active="equipo" counts={undefined} />);
+    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual(["Equipo", "Clientes", "Contratistas", "Proveedores"]);
+  });
+
   it.each<PresentationStyle>(["visual", "esencial", "analitico"])(
     "keeps a ?estilo=%s override when switching tabs",
     (style) => {

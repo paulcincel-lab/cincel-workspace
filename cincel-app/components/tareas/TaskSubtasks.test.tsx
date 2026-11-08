@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
 } from "@testing-library/react";
 
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TaskDetail, TaskRef } from "@/lib/types/core";
 
 const actions = vi.hoisted(() => ({
@@ -17,9 +17,17 @@ const actions = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/actions/tasks-actions", () => actions);
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
+  getTaskSheetData: vi.fn(),
+  searchProjectTasksAction: vi.fn(async () => []),
+}));
+vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowAction: vi.fn(async () => null) }));
+vi.mock("@/lib/actions/tramo-start-actions", () => ({ previewStartTramoAction: vi.fn() }));
 vi.mock("@/lib/actions/import-actions", () => ({
   getImportDataAction: vi.fn().mockResolvedValue(null),
 }));
+
+import { qk } from "@/lib/query/keys";
 
 import TaskSubtasks, { subtaskErrorMessage } from "./TaskSubtasks";
 
@@ -96,14 +104,21 @@ const childTask = makeTask({
   parentTitle: "Planos arquitectónicos",
 });
 
-function renderSubtasks(task: TaskDetail, onOpenSubtask: (subtask: TaskRef) => void = vi.fn()) {
-  return render(<TaskSubtasks parentId={task.id} onOpenSubtask={onOpenSubtask} />);
+function renderSubtasks(
+  task: TaskDetail,
+  onOpenSubtask: (subtask: TaskRef) => void = vi.fn(),
+  client = createTestQueryClient(),
+) {
+  return renderWithQueryClient(
+    <TaskSubtasks parentId={task.id} projectId={task.projectId} onOpenSubtask={onOpenSubtask} />,
+    { client },
+  );
 }
 
 describe("TaskSubtasks", () => {
   beforeEach(() => {
     actions.listSubtasksAction.mockResolvedValue([childRef]);
-    actions.createSubtaskAction.mockResolvedValue(childTask);
+    actions.createSubtaskAction.mockResolvedValue({ ok: true, data: childTask });
   });
 
   afterEach(() => {
@@ -111,8 +126,9 @@ describe("TaskSubtasks", () => {
     vi.clearAllMocks();
   });
 
-  it("lists the subtasks with status, title, manager and commitment date", async () => {
-    renderSubtasks(parentTask);
+  it("lists the subtasks (qk.tasks.subtasks) with status, title, manager and commitment date", async () => {
+    const client = createTestQueryClient();
+    renderSubtasks(parentTask, vi.fn(), client);
 
     expect(screen.getByText("Subtareas")).toBeTruthy();
     expect(await screen.findByText("Fachada norte")).toBeTruthy();
@@ -120,6 +136,15 @@ describe("TaskSubtasks", () => {
     expect(screen.getAllByText("En proceso").length).toBeGreaterThan(0);
     expect(screen.getByText("LP")).toBeTruthy();
     expect(screen.getByText("05-11-2026")).toBeTruthy();
+    expect(client.getQueryData(qk.tasks.subtasks(PARENT_ID))).toEqual([childRef]);
+  });
+
+  it("reads a seeded subtasks key without a request", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.tasks.subtasks(PARENT_ID), [childRef]);
+    renderSubtasks(parentTask, vi.fn(), client);
+    expect(await screen.findByText("Fachada norte")).toBeTruthy();
+    expect(actions.listSubtasksAction).not.toHaveBeenCalled();
   });
 
   it("shows an empty state", async () => {
@@ -128,11 +153,13 @@ describe("TaskSubtasks", () => {
     expect(await screen.findByText("Sin subtareas.")).toBeTruthy();
   });
 
-  it("adds a subtask and reloads the list", async () => {
+  it("adds a subtask, then refetches the subtasks key and invalidates the parent and the Tareas views", async () => {
     actions.listSubtasksAction
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([childRef]);
-    renderSubtasks(parentTask);
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    renderSubtasks(parentTask, vi.fn(), client);
     await screen.findByText("Sin subtareas.");
 
     fireEvent.change(screen.getByLabelText("Título de la subtarea"), {
@@ -147,10 +174,21 @@ describe("TaskSubtasks", () => {
     );
     expect(await screen.findByText("Fachada norte")).toBeTruthy();
     expect(actions.listSubtasksAction).toHaveBeenCalledTimes(2);
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        qk.tasks.subtasks(PARENT_ID),
+        qk.tasks.detail(PARENT_ID),
+        qk.tareas.all,
+        qk.proyectos.tab(parentTask.projectId, "tareas"),
+        qk.inicio(),
+        qk.shell.badges(),
+      ]),
+    );
   });
 
   it("shows Spanish copy when adding fails", async () => {
-    actions.createSubtaskAction.mockRejectedValue(new Error("NESTED"));
+    actions.createSubtaskAction.mockResolvedValue({ ok: false, error: "NESTED" });
     renderSubtasks(parentTask);
     await screen.findByText("Fachada norte");
 

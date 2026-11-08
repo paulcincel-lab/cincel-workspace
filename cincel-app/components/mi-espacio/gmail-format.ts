@@ -151,12 +151,16 @@ export function attachmentKind(name: string, mime: string): string {
   return sub ? sub.split(/[.+-]/)[0].slice(0, 4).toUpperCase() : "ARCH";
 }
 
+// Built once per module: a thread renders one date per message.
+const MESSAGE_DAY_FMT = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" });
+const MESSAGE_TIME_FMT = new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+
 /** es-MX, lowercase: "6 nov · 10:42". */
 export function formatMessageDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  const day = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" }).format(d).replace(/\./g, "");
-  const time = new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+  const day = MESSAGE_DAY_FMT.format(d).replace(/\./g, "");
+  const time = MESSAGE_TIME_FMT.format(d);
   return `${day} · ${time}`.toLowerCase();
 }
 

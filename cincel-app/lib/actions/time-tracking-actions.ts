@@ -3,7 +3,6 @@
 import { toActionResult } from "@/lib/actions/action-result";
 import type { ActionResult } from "@/lib/types/schedule";
 import { revalidatePath } from "next/cache";
-import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
 
 import { canManageTimeTracking, canViewTeamHours } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -70,7 +69,8 @@ export async function fetchTimeTrackingSettingsAction(): Promise<TimeTrackingSet
 /**
  * Auth: `canManageTimeTracking`. Errors: `FORBIDDEN`, `INVALID` (dayEnd ≤
  * dayStart; hoursPerDay ∉ 1–12; workDays empty or ∉ 0–6; unknown exempt role;
- * a changed `requiredFrom` earlier than tomorrow). Revalidates `/` (layout), `/ajustes/horario`.
+ * a changed `requiredFrom` earlier than tomorrow). Revalidates `/` (layout) only: the TimeClock
+ * gate is server-rendered; Ajustes › Horario reads through TanStack Query (`ajustes.page('horario')`).
  */
 export async function saveTimeTrackingSettingsAction(
   ...args: Parameters<typeof saveTimeTrackingSettingsActionImpl>
@@ -85,7 +85,6 @@ async function saveTimeTrackingSettingsActionImpl(input: TimeTrackingSettings): 
   const settings = validateTimeTrackingSettings(input, previous, new Date());
   await writeTimeTrackingSettings(settings);
   revalidatePath("/", "layout");
-  revalidateAjustesScreen("horario");
   return settings;
 }
 

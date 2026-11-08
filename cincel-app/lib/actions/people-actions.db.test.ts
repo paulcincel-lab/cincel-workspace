@@ -194,13 +194,13 @@ describe.skipIf(!url)("people actions (test DB)", async () => {
   it("counts admin tasks only for callers with canSeeAdminData", async () => {
     session.access = "Administrador";
     expect(await rowOf(workerId)).toMatchObject({ open: 3, overdue: 2, activeProjects: 1, occupancyPct: 30 });
-    const adminDetail = await actions.fetchPersonaDetailAction(workerId);
+    const adminDetail = (await actions.fetchPersonaDetailAction({ staffId: workerId }))!;
     expect(adminDetail.tasks.map((t) => t.title)).toContain(`Admin ${run}`);
 
     session.access = "Dirección";
     session.memberId = directorId;
     expect(await rowOf(workerId)).toMatchObject({ open: 2, overdue: 1, occupancyPct: 20 });
-    const detail = await actions.fetchPersonaDetailAction(workerId);
+    const detail = (await actions.fetchPersonaDetailAction({ staffId: workerId }))!;
     expect(detail.tasks.map((t) => t.title)).toEqual([`Vencida ${run}`, `Abierta ${run}`]);
     expect(detail.tasks[0]).toMatchObject({ tone: "critical", daysLate: 3 });
     expect(detail.stats.find((s) => s.key === "abiertas")!.value).toBe(2);
@@ -211,19 +211,19 @@ describe.skipIf(!url)("people actions (test DB)", async () => {
     session.access = "Dirección";
     session.memberId = directorId;
     expect((await rowOf(workerId))!.weekHours).toBe(0);
-    expect((await actions.fetchPersonaDetailAction(workerId)).weekHours).toHaveLength(5);
+    expect((await actions.fetchPersonaDetailAction({ staffId: workerId }))!.weekHours).toHaveLength(5);
 
     session.access = "Colaborador";
     session.memberId = colaboradorId;
     expect((await rowOf(workerId))!.weekHours).toBeNull();
     expect((await rowOf(colaboradorId))!.weekHours).toBe(0);
-    const other = await actions.fetchPersonaDetailAction(workerId);
+    const other = (await actions.fetchPersonaDetailAction({ staffId: workerId }))!;
     expect(other.weekHours).toBeNull();
     expect(other.person.weekHours).toBeNull();
     expect(other.stats.some((s) => s.key === "horas_semana")).toBe(false);
 
     session.memberId = workerId;
-    const self = await actions.fetchPersonaDetailAction(workerId);
+    const self = (await actions.fetchPersonaDetailAction({ staffId: workerId }))!;
     expect(self.weekHours).toHaveLength(5);
     expect(self.stats.some((s) => s.key === "horas_semana")).toBe(true);
   });
@@ -234,23 +234,23 @@ describe.skipIf(!url)("people actions (test DB)", async () => {
   });
 
   it("lists active projects with the person's role", async () => {
-    const worker = await actions.fetchPersonaDetailAction(workerId);
+    const worker = (await actions.fetchPersonaDetailAction({ staffId: workerId }))!;
     expect(worker.projects).toEqual([
       expect.objectContaining({ id: projectId, sublabel: "responsable", real: 30, href: `/proyectos/${projectId}` }),
     ]);
-    const vacationer = await actions.fetchPersonaDetailAction(vacationerId);
+    const vacationer = (await actions.fetchPersonaDetailAction({ staffId: vacationerId }))!;
     expect(vacationer.projects.map((p) => p.sublabel)).toEqual(["miembro"]);
     expect(vacationer.tasks.map((t) => t.title)).toEqual([`Apoyo ${run}`]);
   });
 
-  it("returns NOT_FOUND for an unknown staff id", async () => {
-    await expect(actions.fetchPersonaDetailAction(randomUUID())).rejects.toThrow("NOT_FOUND");
+  it("returns null for an unknown or deleted staff id", async () => {
+    await expect(actions.fetchPersonaDetailAction({ staffId: randomUUID() })).resolves.toBeNull();
     const [deleted] = await db
       .update(schema.staff)
       .set({ deletedAt: new Date() })
       .where(eq(schema.staff.id, inactiveId))
       .returning({ id: schema.staff.id });
-    await expect(actions.fetchPersonaDetailAction(deleted!.id)).rejects.toThrow("NOT_FOUND");
+    await expect(actions.fetchPersonaDetailAction({ staffId: deleted!.id })).resolves.toBeNull();
   });
 
   it("lists the person's recent activity, admin items only with canSeeAdminData", async () => {
@@ -271,7 +271,7 @@ describe.skipIf(!url)("people actions (test DB)", async () => {
     ]);
 
     session.access = "Administrador";
-    const admin = await actions.fetchPersonaDetailAction(workerId);
+    const admin = (await actions.fetchPersonaDetailAction({ staffId: workerId }))!;
     expect(admin.recentActivity.map((a) => a.text)).toEqual([
       `Movió “Vencida ${run}” a En proceso`,
       `Movió “Personas ${run} A” a 90%`,
@@ -284,7 +284,7 @@ describe.skipIf(!url)("people actions (test DB)", async () => {
 
     session.access = "Dirección";
     session.memberId = directorId;
-    const director = await actions.fetchPersonaDetailAction(workerId);
+    const director = (await actions.fetchPersonaDetailAction({ staffId: workerId }))!;
     expect(director.recentActivity.map((a) => a.text)).toEqual([
       `Movió “Vencida ${run}” a En proceso`,
       `Movió “Personas ${run} A” a 90%`,

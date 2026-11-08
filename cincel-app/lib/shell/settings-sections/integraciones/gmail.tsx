@@ -3,7 +3,7 @@
  *
  * Hidden while `fetchGmailStatusAction` is a stub; the card shows "Sincronizar
  * ahora" and "Desconectar" only once their own actions are implemented.
- * Renders inside `IntegracionesClient`, which holds the Gmail status.
+ * Renders inside `IntegracionesClient`; the status is `qk.ajustes.page('integraciones')`.
  */
 import { IntegracionesGmail } from "@/components/ajustes/IntegracionesClient";
 import { IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";

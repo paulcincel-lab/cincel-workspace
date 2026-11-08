@@ -1,13 +1,14 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 
 import { NewTaskDialogHost } from "@/components/tareas/NewTaskDialogHost";
 import { SidebarInset, SidebarProvider } from "@/components/ui/shadcn/sidebar";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
 import { pageContentClass } from "@/lib/shell/page-padding";
 import { isSearchVisible } from "@/lib/shell/visibility";
+import { useShellUi } from "@/lib/stores/shell-ui-store";
 import type { TodayStatus } from "@/lib/types/redesign";
 import { BOTTOM_TABS_CONTENT_CLASS } from "@/lib/ui/mobile-nav";
 import type { NavItem, NavItemKey, NavModel } from "@/lib/ui/nav";
@@ -21,7 +22,7 @@ import { OfflineBanner } from "./OfflineBanner";
 import { Sidebar } from "./Sidebar";
 import { UiStoresHydrator } from "./UiStoresHydrator";
 
-/** Client part of `AppShell`: active item, search and assistant open state. */
+/** Client part of `AppShell`: active item and the mobile/desktop chrome; the palette opens through `useShellUi`. */
 export type AppShellClientProps = {
   children: ReactNode;
   nav: ClientNavModel;
@@ -49,8 +50,13 @@ export function AppShellClient({ children, nav: clientNav, session, today, slots
   const nav = useMemo(() => withNavIcons(clientNav), [clientNav]);
   const activeKey = activeNavKey(pathname, nav);
   const tabs = useMemo(() => bottomTabsOf(nav), [nav]);
-  const [searchOpen, setSearchOpen] = useState(false);
   const showSearch = isSearchVisible();
+  const closeSearch = useShellUi((s) => s.closeSearch);
+
+  // A navigation closes the palette (a result click already does).
+  useEffect(() => {
+    closeSearch();
+  }, [pathname, closeSearch]);
 
   return (
     <SidebarProvider style={SIDEBAR_STYLE}>
@@ -59,7 +65,6 @@ export function AppShellClient({ children, nav: clientNav, session, today, slots
         activeKey={activeKey}
         session={session}
         today={today}
-        onOpenSearch={() => setSearchOpen(true)}
         slots={slots}
       />
       <SidebarInset id="contenido" className="min-w-0">
@@ -72,7 +77,7 @@ export function AppShellClient({ children, nav: clientNav, session, today, slots
         </div>
       </SidebarInset>
       <BottomTabs activeKey={activeKey} items={tabs.items} more={tabs.more} />
-      {showSearch ? <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} /> : null}
+      {showSearch ? <CommandPalette /> : null}
       <NewTaskDialogHost />
       <UiStoresHydrator />
     </SidebarProvider>

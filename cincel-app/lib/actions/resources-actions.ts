@@ -1,11 +1,17 @@
 "use server";
 
-import { revalidateBibliotecaScreen } from "@/lib/cache/screens/biblioteca";
-
+import { toActionResult } from "@/lib/actions/action-result";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveResourcesCapabilities } from "@/lib/auth/permissions";
 import * as resourcesRepository from "@/lib/repositories/resources-repository";
 import type { ResourceLink, ResourceLinkInput, ResourceSection } from "@/lib/types/resource";
+import type { ActionResult } from "@/lib/types/schedule";
+
+/**
+ * Resource links (Biblioteca). The writes return `ActionResult` (production
+ * strips thrown messages) and revalidate no path: the Biblioteca updates its
+ * `biblioteca.links` query cache (Query Migration Phase 8).
+ */
 
 async function requireResourcesCapabilities() {
   return resolveResourcesCapabilities(await requireCapabilityUser());
@@ -22,10 +28,6 @@ function canWriteResources(caps: Awaited<ReturnType<typeof requireResourcesCapab
   );
 }
 
-function revalidateRecursos() {
-  revalidateBibliotecaScreen();
-}
-
 export async function fetchResourceLinksAction(
   options: { section?: ResourceSection; personalForId?: string | null } = {}
 ): Promise<ResourceLink[]> {
@@ -34,34 +36,44 @@ export async function fetchResourceLinksAction(
   return resourcesRepository.listResourceLinks(options);
 }
 
-export async function createResourceLinkAction(input: ResourceLinkInput): Promise<ResourceLink> {
+export async function createResourceLinkAction(
+  ...args: Parameters<typeof createResourceLinkActionImpl>
+): Promise<ActionResult<ResourceLink>> {
+  return toActionResult(() => createResourceLinkActionImpl(...args));
+}
+
+async function createResourceLinkActionImpl(input: ResourceLinkInput): Promise<ResourceLink> {
   const user = await requireCapabilityUser();
   if (!canWriteResources(resolveResourcesCapabilities(user))) {
     throw new Error("FORBIDDEN: resource create");
   }
-  const row = await resourcesRepository.createResourceLink(input, user.member.id);
-  revalidateRecursos();
-  return row;
+  return resourcesRepository.createResourceLink(input, user.member.id);
 }
 
 export async function updateResourceLinkAction(
-  id: string,
-  patch: Partial<ResourceLinkInput>
-): Promise<ResourceLink> {
+  ...args: Parameters<typeof updateResourceLinkActionImpl>
+): Promise<ActionResult<ResourceLink>> {
+  return toActionResult(() => updateResourceLinkActionImpl(...args));
+}
+
+async function updateResourceLinkActionImpl(id: string, patch: Partial<ResourceLinkInput>): Promise<ResourceLink> {
   const user = await requireCapabilityUser();
   if (!canWriteResources(resolveResourcesCapabilities(user))) {
     throw new Error("FORBIDDEN: resource edit");
   }
-  const row = await resourcesRepository.updateResourceLink(id, patch, user.member.id);
-  revalidateRecursos();
-  return row;
+  return resourcesRepository.updateResourceLink(id, patch, user.member.id);
 }
 
-export async function deleteResourceLinkAction(id: string): Promise<void> {
+export async function deleteResourceLinkAction(
+  ...args: Parameters<typeof deleteResourceLinkActionImpl>
+): Promise<ActionResult<void>> {
+  return toActionResult(() => deleteResourceLinkActionImpl(...args));
+}
+
+async function deleteResourceLinkActionImpl(id: string): Promise<void> {
   const user = await requireCapabilityUser();
   if (!canWriteResources(resolveResourcesCapabilities(user))) {
     throw new Error("FORBIDDEN: resource delete");
   }
   await resourcesRepository.softDeleteResourceLink(id, user.member.id);
-  revalidateRecursos();
 }

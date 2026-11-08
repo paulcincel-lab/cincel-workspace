@@ -9,9 +9,9 @@ const actions = vi.hoisted(() => ({
   searchWorkspaceAction: vi.fn(),
   fetchProjectAction: vi.fn(),
   fetchScheduleAction: vi.fn(),
-  fetchTasksAction: vi.fn(),
+  listViewerTasks: vi.fn(),
   fetchTaskAction: vi.fn(),
-  fetchMyTasksAction: vi.fn(),
+  listViewerMyTasks: vi.fn(),
   resolveProject: vi.fn(),
   resolveStaff: vi.fn(),
 }));
@@ -25,11 +25,8 @@ vi.mock("@/lib/repositories/browser-state-repository", () => ({
 vi.mock("@/lib/actions/search-actions", () => ({ searchWorkspaceAction: actions.searchWorkspaceAction }));
 vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectAction: actions.fetchProjectAction }));
 vi.mock("@/lib/actions/schedule-actions", () => ({ fetchScheduleAction: actions.fetchScheduleAction }));
-vi.mock("@/lib/actions/tasks-actions", () => ({
-  fetchTasksAction: actions.fetchTasksAction,
-  fetchTaskAction: actions.fetchTaskAction,
-  fetchMyTasksAction: actions.fetchMyTasksAction,
-}));
+vi.mock("@/lib/actions/tasks-actions", () => ({ fetchTaskAction: actions.fetchTaskAction }));
+vi.mock("@/lib/assistant/reads", () => ({ listViewerTasks: actions.listViewerTasks, listViewerMyTasks: actions.listViewerMyTasks }));
 vi.mock("@/lib/assistant/resolvers", () => ({
   resolveProject: actions.resolveProject,
   resolveStaff: actions.resolveStaff,
@@ -287,7 +284,7 @@ describe("search_workspace", () => {
 describe("get_project", () => {
   beforeEach(() => {
     actions.resolveProject.mockResolvedValue({ ok: true, value: { id: PROJECT_ID, name: "Casa Ensenada" } });
-    actions.fetchTasksAction.mockResolvedValue([task({ commitmentDate: "2000-01-01" }), task({ id: "t2", status: "bloqueado" })]);
+    actions.listViewerTasks.mockResolvedValue([task({ commitmentDate: "2000-01-01" }), task({ id: "t2", status: "bloqueado" })]);
     actions.fetchScheduleAction.mockResolvedValue(null);
   });
 
@@ -335,15 +332,15 @@ describe("get_task", () => {
 
   it("accepts a title plus project", async () => {
     actions.resolveProject.mockResolvedValue({ ok: true, value: { id: PROJECT_ID, name: "Casa Ensenada" } });
-    actions.fetchTasksAction.mockResolvedValue([task()]);
+    actions.listViewerTasks.mockResolvedValue([task()]);
     actions.fetchTaskAction.mockResolvedValue(detail());
     const result = (await run("get_task", { title: "planos", project: "Ensenada" })) as { ok: boolean };
-    expect(actions.fetchTasksAction).toHaveBeenCalledWith({ search: "planos", projectId: PROJECT_ID });
+    expect(actions.listViewerTasks).toHaveBeenCalledWith({ search: "planos", projectId: PROJECT_ID });
     expect(result.ok).toBe(true);
   });
 
   it("lists candidates when the title is ambiguous", async () => {
-    actions.fetchTasksAction.mockResolvedValue([task(), task({ id: "t2", title: "Revisar planos eléctricos" })]);
+    actions.listViewerTasks.mockResolvedValue([task(), task({ id: "t2", title: "Revisar planos eléctricos" })]);
     const result = (await run("get_task", { title: "planos" })) as { ok: boolean; candidates: string[] };
     expect(result.ok).toBe(false);
     expect(result.candidates).toHaveLength(2);
@@ -364,9 +361,9 @@ describe("get_task", () => {
 
 describe("list_my_tasks", () => {
   it("lists open tasks by default and drops admin tasks for non-admins", async () => {
-    actions.fetchMyTasksAction.mockResolvedValue([task(), task({ id: "a1", kind: "admin", title: "Factura" })]);
+    actions.listViewerMyTasks.mockResolvedValue([task(), task({ id: "a1", kind: "admin", title: "Factura" })]);
     const result = (await run("list_my_tasks", {})) as { count: number; tasks: Array<{ title: string }> };
-    expect(actions.fetchMyTasksAction).toHaveBeenCalledWith({ status: ["pendiente", "en_proceso", "bloqueado"] });
+    expect(actions.listViewerMyTasks).toHaveBeenCalledWith({ status: ["pendiente", "en_proceso", "bloqueado"] });
     expect(result.tasks.map((t) => t.title)).toEqual(["Revisar planos"]);
   });
 

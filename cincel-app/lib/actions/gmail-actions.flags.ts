@@ -3,6 +3,7 @@ export const IMPLEMENTED = {
   fetchGmailStatusAction: true,
   fetchGmailThreadsAction: true,
   fetchGmailThreadAction: true,
+  markGmailThreadReadAction: true,
   syncGmailAction: true,
   linkGmailThreadToProjectAction: true,
   createGmailDraftAction: true,

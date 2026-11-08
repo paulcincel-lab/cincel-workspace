@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/shadcn/button";
 import { fmtRange, weekBounds } from "@/lib/cronograma/week";
 import { ImportDialog } from "./import-dialog";
@@ -13,11 +13,15 @@ interface CronogramaHeaderProps {
   address: string | null;
   today: Date;
   weekOffset: number;
-  onImported?: () => void;
   readOnly?: boolean;
 }
 
-/** Project title, week navigation, and the actions menu (Exportar / Importar / Generar reporte). Exportar and Generar reporte are wired in Phase 4. */
+/**
+ * Project title, week navigation, and the actions menu (Exportar / Importar /
+ * Generar reporte). The week lives in `?week=` (shareable) but is written with
+ * `history.replaceState`: Next syncs `useSearchParams` with it, so changing
+ * the week is client state only, with no server render and no refetch.
+ */
 export function CronogramaHeader({
   projectId,
   scheduleId,
@@ -25,10 +29,8 @@ export function CronogramaHeader({
   address,
   today,
   weekOffset,
-  onImported,
   readOnly = false,
 }: CronogramaHeaderProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   function setOffset(next: number) {
@@ -36,7 +38,7 @@ export function CronogramaHeader({
     if (next === 0) params.delete("week");
     else params.set("week", String(next));
     const qs = params.toString();
-    router.push(qs ? `?${qs}` : "?", { scroll: false });
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
   }
 
   const { start, end } = weekBounds(today, weekOffset);
@@ -69,7 +71,7 @@ export function CronogramaHeader({
             >
               Exportar
             </Button>
-            <ImportDialog projectId={projectId} scheduleId={scheduleId} onImported={onImported} />
+            <ImportDialog projectId={projectId} scheduleId={scheduleId} />
             <Button variant="outline" size="sm" render={<Link href={`/proyectos/${projectId}/cronograma/reporte`} />}>
               Generar reporte
             </Button>

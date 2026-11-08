@@ -9,6 +9,7 @@ import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { DataTable } from "@/components/ui/DataTable";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { Badge } from "@/components/ui/shadcn/badge";
+import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { TableCell, TableRow } from "@/components/ui/shadcn/table";
 import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
@@ -45,6 +46,8 @@ import { StyleView } from "./StyleView";
  *   right-aligned numbers, heat cells and the totals row.
  *
  * With `selectable`, the selected rows can be exported (Excel / PDF).
+ * With `onEndReached` (opt-in pagination), a "Cargar más" button under the
+ * rows asks the page for the next rows while `hasMore`.
  */
 export type RecordTableProps = {
   data: RecordTableData;
@@ -53,7 +56,16 @@ export type RecordTableProps = {
   selectable?: boolean;
   rowActions?: RowAction<Record<string, unknown>>[];
   emptyState?: EmptyStateProps;
+  /** Opt-in pagination: called by "Cargar más" under the rows. */
+  onEndReached?: () => void;
+  /** More rows after these; without it "Cargar más" isn't shown. */
+  hasMore?: boolean;
+  /** The next rows are loading: "Cargar más" is disabled. */
+  loadingMore?: boolean;
 };
+
+/** "Cargar más" under a paginated `RecordTable`. */
+export const RECORD_TABLE_LOAD_MORE = "Cargar más";
 
 type Row = Record<string, unknown>;
 
@@ -72,12 +84,23 @@ export function RecordTable(props: RecordTableProps) {
   if (props.data.rows.length === 0) {
     return <EmptyState {...(props.emptyState ?? { title: RECORD_TABLE_EMPTY_TITLE })} />;
   }
-  return (
+  const view = (
     <StyleView
       visual={() => <TableView {...props} style="visual" />}
       esencial={() => <ListView {...props} />}
       analitico={() => <TableView {...props} style="analitico" />}
     />
+  );
+  if (!props.onEndReached || !props.hasMore) return view;
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      {view}
+      <div className="flex justify-center">
+        <Button type="button" variant="outline" size="sm" disabled={props.loadingMore} onClick={props.onEndReached}>
+          {props.loadingMore ? "Cargando…" : RECORD_TABLE_LOAD_MORE}
+        </Button>
+      </div>
+    </div>
   );
 }
 

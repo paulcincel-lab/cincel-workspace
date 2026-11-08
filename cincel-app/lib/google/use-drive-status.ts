@@ -4,7 +4,8 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 
 import { qk } from "@/lib/query/keys";
 
-export type DriveStatus = { configured: boolean };
+/** `hasDriveGrant` is present only when the route sent it (the Drive browser's consent check). */
+export type DriveStatus = { configured: boolean; hasDriveGrant?: boolean };
 
 /**
  * Reads GET /api/google/drive/status. Side-effect free: one GET, no writes.
@@ -13,8 +14,11 @@ export type DriveStatus = { configured: boolean };
 export async function fetchDriveStatus(): Promise<DriveStatus> {
   const res = await fetch("/api/google/drive/status");
   if (!res.ok) return { configured: false };
-  const body = (await res.json()) as { configured?: unknown } | null;
-  return { configured: Boolean(body?.configured) };
+  const body = (await res.json()) as { configured?: unknown; hasDriveGrant?: unknown } | null;
+  return {
+    configured: Boolean(body?.configured),
+    ...(typeof body?.hasDriveGrant === "boolean" ? { hasDriveGrant: body.hasDriveGrant } : {}),
+  };
 }
 
 /** `qk.google.driveStatus()`, 5 min stale. */

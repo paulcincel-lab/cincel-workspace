@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { Dispatch, SetStateAction } from "react";
 
 import { Button } from "@/components/ui/shadcn/button";
 import { FormField } from "@/components/ui/shadcn/form-field";
@@ -11,7 +12,7 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/com
 import { StarRating } from "@/components/proveedores/StarRating";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { CONTACT_TYPE_LABEL, PROVIDER_STATUS_LABEL } from "@/lib/directorio/types";
-import { fetchStaffAction } from "@/lib/actions/staff-actions";
+import { catalogOptions } from "@/lib/query/options/catalog";
 import type {
   ContactDetail,
   ContactInput,
@@ -20,7 +21,6 @@ import type {
   ContactType,
   ProviderStatus,
   ProviderSubtype,
-  Staff,
 } from "@/lib/types/core";
 
 const NO_STAFF_VALUE = "__none__";
@@ -199,7 +199,11 @@ function set<K extends keyof ContactDraft>(
   onChangeDraft((d) => ({ ...d, [key]: value }));
 }
 
-/** Create/edit Sheet for a Directorio contact — one shared form, provider-only fields shown conditionally. */
+/**
+ * Create/edit Sheet for a Directorio contact — one shared form, provider-only
+ * fields shown conditionally. The "Staff vinculado" options are
+ * `catalog.staff` (`{id,name}` only), read only while the sheet is open.
+ */
 export function ContactEditorSheet({
   show,
   onClose,
@@ -210,11 +214,7 @@ export function ContactEditorSheet({
   onSave,
 }: ContactEditorSheetProps) {
   const isEditing = editingId !== null;
-  const [staffOptions, setStaffOptions] = useState<Staff[]>([]);
-
-  useEffect(() => {
-    void fetchStaffAction().then((rows) => setStaffOptions(rows.filter((s) => s.active)));
-  }, []);
+  const { data: staffOptions = [] } = useQuery({ ...catalogOptions.staff(), enabled: show });
 
   return (
     <Sheet open={show} onOpenChange={(next) => { if (!next) onClose(); }}>

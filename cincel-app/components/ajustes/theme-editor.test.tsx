@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 
 import type { OrgAppearance, ThemeId } from "@/lib/types/redesign";
 import { THEME_IDS, THEME_LABELS, THEME_PRESETS } from "@/lib/ui/themes";
@@ -16,6 +17,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh, push: vi.fn() }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({ getAjustesTemaPageData: vi.fn() }));
+vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn() }));
 vi.mock("@/lib/actions/org-appearance-actions", () => ({
   saveOrgAppearanceAction: mocks.save,
   resetOrgAppearanceAction: mocks.reset,
@@ -67,12 +70,23 @@ vi.mock("@/components/patterns/FormDialog", () => ({
     ) : null,
 }));
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { AppearanceStoreProvider } from "@/lib/stores/appearance-store";
+import type { ResolvedAppearance } from "@/lib/types/redesign";
+import { resolveAppearance } from "@/lib/ui/preferences";
+
 import { ThemeEditor } from "./ThemeEditor";
 
 const initial: OrgAppearance = THEME_PRESETS.azul;
 
-function renderEditor(start: OrgAppearance = initial) {
-  return render(<ThemeEditor initial={start} presets={THEME_PRESETS} />);
+let client: QueryClient;
+
+/** The page as it hydrates: the published theme in `qk.ajustes.page('tema')`. */
+function renderEditor(start: OrgAppearance = initial, wrap: (node: ReactNode) => ReactNode = (node) => node) {
+  client = createTestQueryClient();
+  client.setQueryData(qk.ajustes.page("tema"), { org: start });
+  return renderWithQueryClient(<>{wrap(<ThemeEditor presets={THEME_PRESETS} />)}</>, { client });
 }
 
 function preview(): HTMLElement {
@@ -124,7 +138,7 @@ describe("ThemeEditor live preview", () => {
     expect(preview().style.getPropertyValue("--background")).toBe(initial.tokens.background.light);
   });
 
-  it("applies type roles and shape values to the preview", () => {
+  it("applies type roles and shape values to the preview", async () => {
     renderEditor();
     const title = within(preview()).getByText("Buenos días");
     expect(title.style.fontSize).toBe(`${initial.typeScale.pageTitle.size}px`);
@@ -141,11 +155,13 @@ describe("ThemeEditor live preview", () => {
 
     fireEvent.click(screen.getByRole("radio", { name: "Marcada" }));
     fireEvent.click(publishButton());
-    expect(mocks.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        typeScale: expect.objectContaining({ pageTitle: { ...initial.typeScale.pageTitle, size: 30 } }),
-        shape: { ...initial.shape, radius: 4, cardPadding: 8, shadow: "marcada" },
-      }),
+    await waitFor(() =>
+      expect(mocks.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          typeScale: expect.objectContaining({ pageTitle: { ...initial.typeScale.pageTitle, size: 30 } }),
+          shape: { ...initial.shape, radius: 4, cardPadding: 8, shadow: "marcada" },
+        }),
+      ),
     );
   });
 });
@@ -199,29 +215,82 @@ describe("ThemeEditor presets", () => {
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
     const start = THEME_PRESETS[id === "azul" ? "grafito" : "azul"];
     expect(mocks.save).toHaveBeenCalledWith(applyPreset(start, THEME_PRESETS[id]));
-    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+    // Published: the cache holds the saved theme, the draft matches it, no route refresh.
+    await waitFor(() =>
+      expect(client.getQueryData(qk.ajustes.page("tema"))).toEqual({ org: applyPreset(start, THEME_PRESETS[id]) }),
+    );
+    await waitFor(() => expect(screen.queryByText("Cambios sin publicar")).toBeNull());
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it("keeps the organization style settings when a preset is applied", () => {
+  it("keeps the organization style settings when a preset is applied", async () => {
     renderEditor({ ...initial, styleDefault: "analitico", allowUserOverride: false });
     fireEvent.click(screen.getByRole("button", { name: /Grafito/ }));
     fireEvent.click(publishButton());
-    expect(mocks.save).toHaveBeenCalledWith(
-      expect.objectContaining({ baseTheme: "grafito", styleDefault: "analitico", allowUserOverride: false }),
+    await waitFor(() =>
+      expect(mocks.save).toHaveBeenCalledWith(
+        expect.objectContaining({ baseTheme: "grafito", styleDefault: "analitico", allowUserOverride: false }),
+      ),
     );
   });
 
-  it("binds the style cards and the organization checkbox", () => {
+  it("binds the style cards and the organization checkbox", async () => {
     renderEditor();
     fireEvent.click(screen.getByRole("radio", { name: /Esencial/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Permitir que cada persona elija su estilo y tema" }));
     fireEvent.click(publishButton());
-    expect(mocks.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        styleDefault: "esencial",
-        allowUserOverride: !initial.allowUserOverride,
-      }),
+    await waitFor(() =>
+      expect(mocks.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          styleDefault: "esencial",
+          allowUserOverride: !initial.allowUserOverride,
+        }),
+      ),
     );
+  });
+});
+
+describe("ThemeEditor publish updates the page theme at once", () => {
+  afterEach(() => {
+    document.getElementById("appearance")?.remove();
+    const root = document.documentElement;
+    for (const attr of ["data-mode", "data-theme", "data-theme-id", "data-style", "data-density"]) root.removeAttribute(attr);
+    root.classList.remove("dark");
+  });
+
+  function withAppearance(org: OrgAppearance) {
+    const resolved: ResolvedAppearance = resolveAppearance({ ...org, v: 1 }, null);
+    return function WithAppearance(node: ReactNode) {
+      return <AppearanceStoreProvider initial={resolved}>{node}</AppearanceStoreProvider>;
+    };
+  }
+
+  it("publish → the appearance store and <html> (<style id=appearance>, data-theme-id) follow the new theme, no refresh", async () => {
+    renderEditor(initial, withAppearance(initial));
+    fireEvent.change(tokenInput("primary"), { target: { value: "#1d4ed8" } });
+    fireEvent.click(publishButton());
+
+    await waitFor(() => expect(document.getElementById("appearance")?.textContent).toContain("#1d4ed8"));
+    expect(document.documentElement.getAttribute("data-theme-id")).toBe(initial.baseTheme);
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("reset → <html> shows the preset of the base theme", async () => {
+    const customized = structuredClone(THEME_PRESETS.calido);
+    customized.tokens.primary.light = "#123456";
+    mocks.reset.mockResolvedValue(THEME_PRESETS.calido);
+    renderEditor(customized, withAppearance(customized));
+
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Restablecer" }));
+
+    await waitFor(() =>
+      expect(document.getElementById("appearance")?.textContent).toContain(THEME_PRESETS.calido.tokens.primary.light),
+    );
+    expect(document.getElementById("appearance")?.textContent).not.toContain("#123456");
+    expect(document.documentElement.getAttribute("data-theme-id")).toBe("calido");
+    expect(client.getQueryData(qk.ajustes.page("tema"))).toEqual({ org: THEME_PRESETS.calido });
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 });
 

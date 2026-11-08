@@ -19,7 +19,14 @@ import type { EntityCard, PersonDatum, RecordTableData } from "@/lib/types/widge
  * the style itself and pages never pass per-style markup.
  */
 export type ListSpec =
-  | { kind: "table"; data: RecordTableData; renderCell?: RecordTableProps["renderCell"]; rowActions?: RecordTableProps["rowActions"] }
+  | {
+      kind: "table";
+      data: RecordTableData;
+      renderCell?: RecordTableProps["renderCell"];
+      rowActions?: RecordTableProps["rowActions"];
+      /** Opt-in "Cargar más" under the table (`RecordTable.onEndReached`). */
+      pagination?: Pick<RecordTableProps, "onEndReached" | "hasMore" | "loadingMore">;
+    }
   | { kind: "cards"; items: EntityCard[]; table: RecordTableData; footer?: EntityCardGridProps["footer"] }
   | { kind: "people"; people: PersonDatum[]; show: PeopleWidgetProps["show"] }
   | {
@@ -28,8 +35,8 @@ export type ListSpec =
       table: RecordTableData;
       /** Status change on drop; without it the board is read-only and drops are ignored. */
       onMove?: TaskBoardWidgetProps["onMove"];
-      /** "+ Agregar" in each column; without it the button isn't shown. */
-      onQuickAdd?: TaskBoardWidgetProps["onQuickAdd"];
+      /** Per-column totals and "Cargar más" (Tareas). */
+      columnPages?: TaskBoardWidgetProps["columnPages"];
       /** Every configured custom status, so its column shows even when empty. */
       customStatuses?: TaskBoardWidgetProps["customStatuses"];
     };
@@ -66,7 +73,9 @@ const readOnlyMove: TaskBoardWidgetProps["onMove"] = () => Promise.resolve();
 function ListWidget({ spec, empty }: { spec: ListSpec; empty?: EmptyStateProps }) {
   switch (spec.kind) {
     case "table":
-      return <RecordTable data={spec.data} renderCell={spec.renderCell} rowActions={spec.rowActions} />;
+      return (
+        <RecordTable data={spec.data} renderCell={spec.renderCell} rowActions={spec.rowActions} {...spec.pagination} />
+      );
     case "cards":
       return <EntityCardGrid items={spec.items} table={spec.table} footer={spec.footer} />;
     case "people":
@@ -77,7 +86,7 @@ function ListWidget({ spec, empty }: { spec: ListSpec; empty?: EmptyStateProps }
           board={spec.board}
           table={spec.table}
           onMove={spec.onMove ?? readOnlyMove}
-          onQuickAdd={spec.onQuickAdd}
+          columnPages={spec.columnPages}
           customStatuses={spec.customStatuses}
           emptyState={empty}
         />

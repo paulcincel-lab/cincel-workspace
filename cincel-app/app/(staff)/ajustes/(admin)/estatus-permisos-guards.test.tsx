@@ -20,15 +20,19 @@ vi.mock("next/navigation", () => navigation);
 const viewer = vi.hoisted(() => ({ current: null as AuthenticatedUser | null }));
 const session = vi.hoisted(() => ({
   requirePageCapability: vi.fn(),
+  requireCapabilityUser: vi.fn(),
 }));
 vi.mock("@/lib/auth/session", () => session);
 
-
-const statusActions = vi.hoisted(() => ({ fetchTaskStatusesAction: vi.fn(async () => []) }));
-vi.mock("@/lib/actions/task-statuses-actions", () => statusActions);
-
-const staffActions = vi.hoisted(() => ({ fetchStaffAction: vi.fn(async () => []) }));
-vi.mock("@/lib/actions/staff-actions", () => staffActions);
+const loaders = vi.hoisted(() => ({
+  loadAjustesEstatus: vi.fn(),
+  loadAjustesPermisos: vi.fn(),
+}));
+vi.mock("@/lib/loaders/ajustes", () => loaders);
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
+  getAjustesEstatusPageData: vi.fn(),
+  getAjustesPermisosPageData: vi.fn(),
+}));
 
 vi.mock("@/components/ajustes/EstatusSettings", () => ({ EstatusSettings: () => null }));
 vi.mock("@/components/ajustes/PermisosSettings", () => ({ PermisosSettings: () => null }));
@@ -39,6 +43,9 @@ import AjustesPermisosLayout from "./permisos/layout";
 import AjustesPermisosPage from "./permisos/page";
 import { EstatusSettings } from "@/components/ajustes/EstatusSettings";
 import { PermisosSettings } from "@/components/ajustes/PermisosSettings";
+import { Hydrate } from "@/lib/query/hydrate";
+import { qk } from "@/lib/query/keys";
+import type { QueryClient } from "@tanstack/react-query";
 
 type SegmentLayout = (props: { children: ReactNode }) => Promise<ReactNode>;
 
@@ -118,33 +125,47 @@ describe("Ajustes › Estatus / Permisos segment guards", () => {
 });
 
 describe("Ajustes › Estatus / Permisos pages", () => {
-  beforeEach(() => vi.clearAllMocks());
+  type HydratedPage = ReactElement<{ qc: QueryClient; children: ReactElement }>;
+  const ADMIN = user("Administrador");
 
-  it("/ajustes/estatus hands the statuses to the client", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    session.requireCapabilityUser.mockResolvedValue(ADMIN);
+  });
+
+  it("/ajustes/estatus prefetches the statuses for the viewer and hydrates them", async () => {
     const statuses = [{ id: "s1", name: "En revisión", closes: false, countsAsCompleted: false, sortOrder: 0 }];
-    statusActions.fetchTaskStatusesAction.mockResolvedValueOnce(statuses as never);
+    loaders.loadAjustesEstatus.mockResolvedValueOnce({ statuses });
 
-    const page = (await AjustesEstatusPage()) as ReactElement<{ initialStatuses: unknown }>;
+    const page = (await AjustesEstatusPage()) as HydratedPage;
 
-    expect(page.type).toBe(EstatusSettings);
-    expect(page.props.initialStatuses).toEqual(statuses);
+    expect(page.type).toBe(Hydrate);
+    expect(page.props.children.type).toBe(EstatusSettings);
+    expect(loaders.loadAjustesEstatus).toHaveBeenCalledWith(ADMIN);
+    expect(page.props.qc.getQueryData(qk.ajustes.page("estatus"))).toEqual({ statuses });
+    // The status catalog is seeded from the same rows.
+    expect(page.props.qc.getQueryData(qk.catalog.taskStatuses())).toEqual(statuses);
   });
 
-  it("/ajustes/permisos hands staff + defaults to the client", async () => {
-    const staff = [{ id: "a1", name: "Alejandro", role: "Administrador" }];
-    staffActions.fetchStaffAction.mockResolvedValueOnce(staff as never);
+  it("/ajustes/permisos prefetches the summary for the viewer and hydrates it", async () => {
+    const data = {
+      staff: [{ id: "a1", name: "Alejandro", lastName: null, active: true, access: "Administrador" }],
+      defaultPermissions: { Dirección: {} },
+    };
+    loaders.loadAjustesPermisos.mockResolvedValueOnce(data);
 
-    const page = (await AjustesPermisosPage()) as ReactElement<{ initialStaff: unknown; defaultPermissions: unknown }>;
+    const page = (await AjustesPermisosPage()) as HydratedPage;
 
-    expect(staffActions.fetchStaffAction).toHaveBeenCalledWith({ includeInactive: true });
-    expect(page.type).toBe(PermisosSettings);
-    expect(page.props.initialStaff).toEqual(staff);
-    expect(page.props.defaultPermissions).toHaveProperty("Dirección");
+    expect(page.type).toBe(Hydrate);
+    expect(page.props.children.type).toBe(PermisosSettings);
+    expect(loaders.loadAjustesPermisos).toHaveBeenCalledWith(ADMIN);
+    expect(page.props.qc.getQueryData(qk.ajustes.page("permisos"))).toEqual(data);
   });
 
-  it("/ajustes/permisos still renders when the staff list can't be read", async () => {
-    staffActions.fetchStaffAction.mockRejectedValueOnce(new Error("FORBIDDEN"));
-    const page = (await AjustesPermisosPage()) as ReactElement<{ initialStaff: unknown }>;
-    expect(page.props.initialStaff).toEqual([]);
+  it("/ajustes/permisos still renders when the loader fails (the client query shows the error)", async () => {
+    loaders.loadAjustesPermisos.mockRejectedValueOnce(new Error("FORBIDDEN"));
+    const page = (await AjustesPermisosPage()) as HydratedPage;
+    expect(page.props.children.type).toBe(PermisosSettings);
+    expect(page.props.qc.getQueryData(qk.ajustes.page("permisos"))).toBeUndefined();
   });
 });

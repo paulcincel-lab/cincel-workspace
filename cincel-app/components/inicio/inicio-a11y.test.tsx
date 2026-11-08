@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 
 // The photo button writes me.profile in the query cache; these tests render it without one.
@@ -13,12 +13,16 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/inicio",
   useSearchParams: () => new URLSearchParams(),
 }));
+vi.mock("@/lib/actions/page-data/inicio-actions", () => ({ getInicioPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/me-actions", () => ({ fetchMyProfileAction: vi.fn() }));
 vi.mock("@/lib/actions/preferences-actions", () => ({
   fetchMyPreferencesAction: vi.fn(),
   updateMyPreferencesAction: vi.fn(async () => ({ preferences: {}, appearance: {} })),
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import type { InicioData, PresentationStyle, ThemeId } from "@/lib/types/redesign";
@@ -68,10 +72,14 @@ async function seriousViolations() {
 }
 
 function renderInicio(style: PresentationStyle, data: InicioData) {
-  render(
+  const client = createTestQueryClient();
+  client.setQueryData(qk.inicio(), { inicio: data, firstLogin: { showGoogleSetupBanner: false } });
+  client.setQueryData(qk.me.profile(), { id: "s-1", name: "Ana López", photoUrl: null });
+  renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
-      <InicioClient data={data} photoUrl={null} me={{ firstName: "Ana", name: "Ana López", role: "Arquitecta" }} now="2026-11-06T15:00:00Z" />
+      <InicioClient me={{ firstName: "Ana", name: "Ana López", role: "Arquitecta" }} now="2026-11-06T15:00:00Z" />
     </StyleProvider>,
+    { client },
   );
 }
 

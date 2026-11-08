@@ -1,25 +1,26 @@
 import { PermisosSettings } from "@/components/ajustes/PermisosSettings";
-import { fetchStaffAction } from "@/lib/actions/staff-actions";
-import { buildDefaultPermissionsState } from "@/lib/auth/permissionsState";
+import { requireCapabilityUser } from "@/lib/auth/session";
+import { loadAjustesPermisos } from "@/lib/loaders/ajustes";
+import { Hydrate } from "@/lib/query/hydrate";
+import { ajustesPermisosOptions } from "@/lib/query/options/ajustes";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Ajustes › Permisos (redesign FE §3.8): the existing permissions editor,
- * restyled; storage unchanged. The segment layout guards it; the Ajustes
- * layout renders the header and `AjustesNav`.
+ * Ajustes › Permisos (redesign FE §3.8, #950): a read-only summary of the
+ * people per access with the default permissions, which are the ones the
+ * server enforces. The segment layout guards it; the Ajustes layout renders
+ * the header and `AjustesNav`. Prefetches `qk.ajustes.page('permisos')`.
  */
 export default async function AjustesPermisosPage() {
+  const user = await requireCapabilityUser();
+  const qc = getQueryClient();
+  await prefetch(qc, ajustesPermisosOptions(), () => loadAjustesPermisos(user));
 
-  let initialStaff: Awaited<ReturnType<typeof fetchStaffAction>> = [];
-  try {
-    initialStaff = await fetchStaffAction({ includeInactive: true });
-  } catch {
-    // The client hydrates itself on mount, like the legacy page.
-  }
-
-  // Built here so the client receives plain data instead of running every capability resolver for every role.
-  const defaultPermissions = buildDefaultPermissionsState();
-
-  return <PermisosSettings initialStaff={initialStaff} defaultPermissions={defaultPermissions} />;
+  return (
+    <Hydrate qc={qc}>
+      <PermisosSettings />
+    </Hydrate>
+  );
 }

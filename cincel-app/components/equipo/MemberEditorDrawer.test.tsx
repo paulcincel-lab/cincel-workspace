@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 import type { TeamCapabilities } from "@/lib/auth/permissions";
 import type { GoogleAccessState } from "@/lib/equipo/google-access";
@@ -10,6 +10,9 @@ import type { Position } from "@/lib/types/core";
 
 const actions = vi.hoisted(() => ({ recheckStaffAccessAction: vi.fn() }));
 vi.mock("@/lib/actions/workspace-access-actions", () => actions);
+
+// Revisar acceso ahora runs through TanStack Query's mutation (Query Migration 6).
+import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 
 import { MemberEditorDrawer } from "./MemberEditorDrawer";
 

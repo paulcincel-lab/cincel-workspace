@@ -11,8 +11,8 @@ vi.mock("@/lib/actions/search-actions.flags", () => ({ IMPLEMENTED: flags.search
 
 const actions = vi.hoisted(() => ({
   fetchTaskAction: vi.fn(),
-  fetchTasksAction: vi.fn(),
-  fetchMyTasksAction: vi.fn(),
+  listViewerTasks: vi.fn(),
+  listViewerMyTasks: vi.fn(),
   setTaskStatusAction: vi.fn(),
   setTaskCustomStatusAction: vi.fn(),
   updateTaskAction: vi.fn(),
@@ -40,8 +40,6 @@ vi.mock("@/lib/repositories/browser-state-repository", () => ({
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   fetchTaskAction: actions.fetchTaskAction,
-  fetchTasksAction: actions.fetchTasksAction,
-  fetchMyTasksAction: actions.fetchMyTasksAction,
   setTaskStatusAction: actions.setTaskStatusAction,
   setTaskCustomStatusAction: actions.setTaskCustomStatusAction,
   updateTaskAction: actions.updateTaskAction,
@@ -52,6 +50,7 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   assignTaskAction: actions.assignTaskAction,
 }));
 vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectAction: actions.fetchProjectAction }));
+vi.mock("@/lib/assistant/reads", () => ({ listViewerTasks: actions.listViewerTasks, listViewerMyTasks: actions.listViewerMyTasks }));
 vi.mock("@/lib/actions/schedule-actions", () => ({ fetchScheduleAction: vi.fn() }));
 vi.mock("@/lib/actions/search-actions", () => ({ searchWorkspaceAction: vi.fn() }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchAssignableStaffAction: actions.fetchAssignableStaffAction }));
@@ -485,11 +484,11 @@ describe("rebalance_workload", () => {
 
   it("reassigns through assignTaskAction and audits every move", async () => {
     actions.fetchWorkflowsAction.mockResolvedValue([{ id: "w1", key: "diseno", name: "Diseño", phases: [] }]);
-    actions.fetchTasksAction.mockResolvedValue([openTask("1", "a"), openTask("2", "a"), openTask("3", "a", { priority: "baja" })]);
+    actions.listViewerTasks.mockResolvedValue([openTask("1", "a"), openTask("2", "a"), openTask("3", "a", { priority: "baja" })]);
     actions.fetchAssignableStaffAction.mockResolvedValue(people.map((p) => ({ ...p, active: true, suggested: !!p.suggested })));
     actions.assignTaskAction.mockResolvedValue({});
     const result = (await run("rebalance_workload", { tramo: "diseno" })) as { moved: unknown[] };
-    expect(actions.fetchTasksAction).toHaveBeenCalledWith({ status: ["pendiente", "en_proceso", "bloqueado"], workflowId: "w1" });
+    expect(actions.listViewerTasks).toHaveBeenCalledWith({ status: ["pendiente", "en_proceso", "bloqueado"], workflowId: "w1" });
     expect(actions.assignTaskAction).toHaveBeenCalledWith("3", "c");
     expect(result.moved).toHaveLength(1);
     expect(auditComments()).toEqual(["Responsable de «Tarea 3»: Ana → Caro (reparto de carga) (vía asistente)"]);

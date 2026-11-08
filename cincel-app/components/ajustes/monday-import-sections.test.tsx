@@ -1,15 +1,68 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 
+import type { AjustesMondayPageData } from "@/lib/loaders/ajustes-monday";
 import type { MondayImportHistoryEntry } from "@/lib/monday-import/history";
+import type { MondayImportJob, MondayImportRunState } from "@/lib/types/monday-import";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 vi.mock("@/components/patterns/SettingsRow", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
+/** What the "server" holds: the page data and the run polls read it. */
+const server = vi.hoisted(() => ({ run: null as unknown, polls: [] as unknown[] }));
+const mondayActions = vi.hoisted(() => {
+  const failed = async () => ({ ok: false as const, error: "No disponible en la prueba." });
+  return {
+    getMondayImportStatusAction: vi.fn(failed),
+    openMondayImportRunAction: vi.fn(failed),
+    getMondayImportRunAction: vi.fn(async () => {
+      if (server.polls.length > 0) server.run = server.polls.shift();
+      return { ok: true as const, run: server.run };
+    }),
+    saveMondayImportStepAction: vi.fn(failed),
+    connectMondayAction: vi.fn(failed),
+    startMondayExportAction: vi.fn(failed),
+    getMondayExportSourceAction: vi.fn(failed),
+    getMondayImportChoicesAction: vi.fn(failed),
+    createMondayStaffAction: vi.fn(failed),
+    saveMondayMappingDraftAction: vi.fn(failed),
+    downloadMondayMappingAction: vi.fn(failed),
+    uploadMondayMappingAction: vi.fn(failed),
+    getMondayImportOptionsAction: vi.fn(failed),
+    previewMondayImportAction: vi.fn(failed),
+    startMondayApplyAction: vi.fn(failed),
+    getMondayImportedProjectsAction: vi.fn(async () => ({ ok: true as const, projects: [] })),
+    checkMondayRollbackAction: vi.fn(async () => ({
+      ok: true as const,
+      check: { canRollback: true, blockers: [] },
+    })),
+    startMondayRollbackAction: vi.fn(failed),
+    getMondayImportHistoryAction: vi.fn(async () => ({ ok: true as const, history: [] })),
+    suggestMondayPositionAction: vi.fn(failed),
+    saveMondayStatusMapAction: vi.fn(failed),
+    getMondayRemapAction: vi.fn(failed),
+    previewMondayRemapAction: vi.fn(failed),
+    applyMondayRemapAction: vi.fn(failed),
+  };
+});
+const pageData = vi.hoisted(() => ({ getAjustesMondayPageData: vi.fn() }));
+vi.mock("@/lib/actions/monday-import-actions", () => mondayActions);
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
+vi.mock("@/lib/actions/onboarding-actions", () => ({ completeOnboardingAction: vi.fn(async () => ({ ok: true })) }));
+vi.mock("@/lib/actions/task-statuses-actions", () => ({ createTaskStatusAction: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+import { AjustesMondayScreen } from "./AjustesMondayScreen";
 import { MondayImportHistory, MondayLastImport } from "./MondayImportSections";
+import { qk } from "@/lib/query/keys";
+import { seedMondayQueries } from "@/lib/query/options/monday";
+import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
 
 const APPLIED: MondayImportHistoryEntry = {
   batchId: "00000000-0000-4000-8000-000000000001",
@@ -58,6 +111,7 @@ function applyTheme(theme: string, mode: "light" | "dark") {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   const root = document.documentElement;
   root.removeAttribute("data-theme-id");
@@ -119,5 +173,169 @@ describe("MondayImportHistory", () => {
         unmount();
       }
     }
+  });
+});
+
+// --- Ajustes › Importar de monday on TanStack Query (#966) ---------------------------------------------------------
+
+const RUN_ID = "12345678-1234-4234-8234-123456789012";
+
+function job(kind: MondayImportJob["kind"], status: MondayImportJob["status"]): MondayImportJob {
+  return {
+    kind,
+    status,
+    startedAt: "2026-11-01T00:00:00.000Z",
+    finishedAt: status === "running" ? null : "2026-11-01T00:05:00.000Z",
+    progress: { done: 1, total: 4, label: "Importando" },
+    log: [],
+    notes: [],
+    error: null,
+  };
+}
+
+function runState(patch: Partial<MondayImportRunState> = {}): MondayImportRunState {
+  return {
+    runId: RUN_ID,
+    createdAt: "2026-11-01T00:00:00.000Z",
+    updatedAt: "2026-11-01T00:00:00.000Z",
+    step: "equivalencias",
+    account: null,
+    boardIds: [],
+    exportOptions: { updates: true, files: true },
+    exported: false,
+    mapping: null,
+    jobs: {},
+    batchId: null,
+    batchStatus: null,
+    ...patch,
+  };
+}
+
+const APPLYING = runState({ batchId: "b-1", batchStatus: "applying", jobs: { apply: job("apply", "running") } });
+const APPLIED_RUN = runState({ batchId: "b-1", batchStatus: "applied", jobs: { apply: job("apply", "succeeded") } });
+
+function page(run: MondayImportRunState | null): AjustesMondayPageData {
+  return {
+    status: { hasServerToken: true },
+    run,
+    choices: null,
+    history: [],
+    errors: { load: null, history: null },
+  };
+}
+
+/** Every server action the screen can call; none may run on a hydrated mount. */
+function actionCalls(): number {
+  return (
+    Object.values(mondayActions).reduce((sum, fn) => sum + fn.mock.calls.length, 0) +
+    pageData.getAjustesMondayPageData.mock.calls.length
+  );
+}
+
+function resetServer(run: MondayImportRunState | null, polls: MondayImportRunState[] = []) {
+  vi.clearAllMocks();
+  server.run = run;
+  server.polls = polls;
+  pageData.getAjustesMondayPageData.mockImplementation(async () => page(server.run as MondayImportRunState | null));
+}
+
+/** Seeds the client as the page's prefetch does and renders the screen. */
+function renderScreen(run: MondayImportRunState | null) {
+  const client = createTestQueryClient();
+  const data = page(run);
+  client.setQueryData(qk.ajustes.page("monday"), data);
+  seedMondayQueries(client, data);
+  return renderWithQueryClient(<AjustesMondayScreen />, { client });
+}
+
+/** Lets pending promises (mutations, query fetches) settle under fake timers. */
+async function flush(ms = 0) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
+describe("AjustesMondayScreen: hydration", () => {
+  it("renders from the dehydrated page data with 0 client action calls on mount", async () => {
+    resetServer(null);
+    const data = page(null);
+    const { client, state } = await hydrationRoundtrip(async (serverClient) => {
+      serverClient.setQueryData(qk.ajustes.page("monday"), data);
+      seedMondayQueries(serverClient, data);
+    });
+    renderWithQueryClient(<AjustesMondayScreen />, { client, hydrate: state });
+    expect(screen.getByRole("button", { name: "Iniciar importación" })).toBeTruthy();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(actionCalls()).toBe(0);
+  });
+
+  it("puts no Monday token in the dehydrated status", () => {
+    expect(Object.keys(page(null).status)).toEqual(["hasServerToken"]);
+  });
+});
+
+describe("MondayImportWizard: start / continue button", () => {
+  it("offers Iniciar importación with no run and creates one with a single call", async () => {
+    resetServer(null);
+    mondayActions.openMondayImportRunAction.mockImplementation(async () => {
+      server.run = runState({ step: "conectar" });
+      return { ok: true, run: server.run } as never;
+    });
+    renderScreen(null);
+    expect(screen.queryByRole("button", { name: "Continuar importación" })).toBeNull();
+    expect(mondayActions.openMondayImportRunAction).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar importación" }));
+    expect(await screen.findByRole("list", { name: "Pasos" })).toBeTruthy();
+    expect(mondayActions.openMondayImportRunAction).toHaveBeenCalledTimes(1);
+    expect(mondayActions.openMondayImportRunAction).toHaveBeenCalledWith(true);
+  });
+
+  it("offers Continuar importación with the current step for an open run and resumes it", async () => {
+    const run = runState({ jobs: { export: job("export", "running") }, step: "tableros" });
+    resetServer(run);
+    mondayActions.openMondayImportRunAction.mockImplementation(async () => ({ ok: true, run }) as never);
+    renderScreen(run);
+    expect(screen.queryByRole("button", { name: "Iniciar importación" })).toBeNull();
+    expect(screen.getByText("Tableros")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continuar importación" }));
+    expect(await screen.findByRole("list", { name: "Pasos" })).toBeTruthy();
+    expect(mondayActions.openMondayImportRunAction).toHaveBeenCalledTimes(1);
+    // Resuming never starts a fresh run.
+    expect(mondayActions.openMondayImportRunAction).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("MondayImportWizard: run poll", () => {
+  it("polls every 2 s while the apply runs, stops when it is done and invalidates what the import changed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    resetServer(APPLYING, [APPLYING, APPLIED_RUN]);
+    mondayActions.openMondayImportRunAction.mockImplementation(async () => ({ ok: true, run: APPLYING }) as never);
+    const { client } = renderScreen(APPLYING);
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+
+    fireEvent.click(screen.getByRole("button", { name: "Continuar importación" }));
+    await flush();
+    expect(screen.getByRole("list", { name: "Pasos" })).toBeTruthy();
+    const poll = mondayActions.getMondayImportRunAction;
+    expect(poll).not.toHaveBeenCalled();
+
+    await flush(2000);
+    expect(poll).toHaveBeenCalledTimes(1);
+    expect(poll).toHaveBeenLastCalledWith(RUN_ID);
+    await flush(2000);
+    expect(poll).toHaveBeenCalledTimes(2);
+
+    const keys = invalidate.mock.calls.map(([filters]) => JSON.stringify(filters?.queryKey));
+    for (const key of [qk.proyectos.all, qk.tareas.all, qk.catalog.staff(), qk.inicio(), qk.monday.history()]) {
+      expect(keys).toContain(JSON.stringify(key));
+    }
+
+    // Done: no more polls.
+    await flush(30_000);
+    expect(poll).toHaveBeenCalledTimes(2);
   });
 });

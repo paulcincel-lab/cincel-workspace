@@ -17,6 +17,16 @@ vi.mock("@/lib/actions/projects-actions", () => ({
   updateProjectAction: vi.fn(async () => undefined),
 }));
 vi.mock("@/lib/tramos/compat", () => ({ tramoColorVar: () => "var(--chart-1)" }));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectosPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogContacts: vi.fn(async () => [{ id: "c1", name: "Familia Gómez", type: "cliente" }]),
+  fetchCatalogStaff: vi.fn(async () => [{ id: "s1", name: "Ana López" }]),
+  fetchCatalogAssignableStaff: vi.fn(),
+  fetchCatalogProjectOptions: vi.fn(),
+  fetchCatalogProjectSpaces: vi.fn(),
+  fetchCatalogTaskStatuses: vi.fn(),
+  fetchCatalogWorkflows: vi.fn(),
+}));
 vi.mock("@/components/patterns/ListPage", () => ({ ListPage: () => null }));
 
 // The shell has its own tests (focus, Escape, alert); this one renders the
@@ -44,8 +54,20 @@ vi.mock("@/components/patterns/FormDialog", () => ({
     ) : null,
 }));
 
+import type { ProyectosPageData } from "@/lib/loaders/proyectos";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ProjectsPortfolio } from "./ProjectsPortfolio";
+import { portfolioPageData } from "./projects-portfolio.fixtures";
+
+/** `/proyectos` over a seeded `qk.proyectos.list()`, with no projects. */
+function renderPortfolio(patch: Partial<ProyectosPageData> = {}) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.proyectos.list(), portfolioPageData({ projects: [], portfolio: [], ...patch }));
+  return renderWithQueryClient(<ProjectsPortfolio />, { client });
+}
 
 const ADMIN_OPTIONS = {
   clients: [{ id: "c1", name: "Familia Gómez" }],
@@ -136,7 +158,7 @@ describe("NewProjectDialog", () => {
 describe("/proyectos?nuevo=1", () => {
   it("opens NewProjectDialog on load; non-admins see the name only", () => {
     nav.params = new URLSearchParams("nuevo=1");
-    render(<ProjectsPortfolio projects={[]} portfolio={[]} canCreateProject />);
+    renderPortfolio();
     expect(screen.getByRole("dialog", { name: "Nuevo proyecto" })).toBeTruthy();
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
     expect(screen.queryByRole("combobox")).toBeNull();
@@ -144,12 +166,12 @@ describe("/proyectos?nuevo=1", () => {
 
   it("shows the admin fields to admins", () => {
     nav.params = new URLSearchParams("nuevo=1");
-    render(<ProjectsPortfolio projects={[]} portfolio={[]} canCreateProject canSeeAdminData adminOptions={ADMIN_OPTIONS} />);
+    renderPortfolio({ canSeeAdminData: true });
     expect(screen.getByRole("combobox", { name: "Cliente" })).toBeTruthy();
   });
 
   it("stays closed without ?nuevo=1", () => {
-    render(<ProjectsPortfolio projects={[]} portfolio={[]} canCreateProject />);
+    renderPortfolio();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

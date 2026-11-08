@@ -1,12 +1,62 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import type { TaskListRow } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { DistributionSegment, RecordTableData } from "@/lib/types/widgets";
 
 const toastError = vi.fn();
 vi.mock("sonner", () => ({ toast: { error: (msg: string) => toastError(msg) } }));
+
+const nav = vi.hoisted(() => ({ pathname: "/tareas", search: "" }));
+// Next's Link only calls `onNavigate` inside a router; the stand-in calls it on every click.
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    scroll,
+    prefetch,
+    onNavigate,
+    ...rest
+  }: {
+    href: string;
+    children: ReactNode;
+    scroll?: boolean;
+    prefetch?: boolean | null;
+    onNavigate?: (e: { preventDefault(): void }) => void;
+  }) => {
+    void scroll;
+    void prefetch;
+    return (
+      <a
+        href={href}
+        {...rest}
+        onClick={(e) => {
+          onNavigate?.({ preventDefault: () => e.preventDefault() });
+        }}
+      >
+        {children}
+      </a>
+    );
+  },
+}));
+vi.mock("next/navigation", () => ({
+  usePathname: () => nav.pathname,
+  useSearchParams: () => new URLSearchParams(nav.search),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+}));
+
+const caps = vi.hoisted(() => ({ canCreateActivity: true }));
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
+  resolveActivitiesCapabilities: () => ({ canCreateActivity: caps.canCreateActivity }),
+}));
+
+const pageData = vi.hoisted(() => ({ getTareasBoardColumn: vi.fn() }));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => pageData);
 
 // Sibling widgets and shell states are rendered as plain markup so this file
 // checks what TaskBoardWidget hands them, independent of their own styling.
@@ -47,14 +97,21 @@ vi.mock("@/components/shell/LoadingSkeleton", () => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
-import { BOARD_COLUMN_EMPTY, TaskBoardWidget, boardSegments } from "@/components/widgets/TaskBoardWidget";
+import {
+  BOARD_COLUMN_EMPTY,
+  TaskBoardWidget,
+  boardCardHref,
+  boardSegments,
+} from "@/components/widgets/TaskBoardWidget";
 import {
   emptyTaskBoardFixture,
   taskBoardExpected,
   taskBoardFixture,
   taskBoardTableFixture,
 } from "@/components/widgets/fixtures/task-board";
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import type { TaskBoard } from "@/lib/types/redesign";
+import { seedSessionUser } from "@/tests/helpers/session-user";
 
 const LABELS: Record<keyof typeof taskBoardExpected.counts, string> = {
   pendiente: "Pendiente",
@@ -69,12 +126,13 @@ function renderBoard(
   props: Partial<Parameters<typeof TaskBoardWidget>[0]> = {},
 ) {
   const onMove = props.onMove ?? vi.fn(() => Promise.resolve());
-  const utils = render(
+  const ui = (next: Partial<Parameters<typeof TaskBoardWidget>[0]>) => (
     <StyleProvider style={style} scope="staff">
-      <TaskBoardWidget board={taskBoardFixture} table={taskBoardTableFixture} onMove={onMove} {...props} />
-    </StyleProvider>,
+      <TaskBoardWidget board={taskBoardFixture} table={taskBoardTableFixture} onMove={onMove} {...next} />
+    </StyleProvider>
   );
-  return { ...utils, onMove };
+  const utils = renderWithQueryClient(ui(props));
+  return { ...utils, onMove, rerenderWith: (next: Partial<Parameters<typeof TaskBoardWidget>[0]>) => utils.rerender(ui(next)) };
 }
 
 function card(container: HTMLElement, taskId: string): HTMLElement {
@@ -83,18 +141,26 @@ function card(container: HTMLElement, taskId: string): HTMLElement {
   return el;
 }
 
-function deferred() {
-  let resolve!: () => void;
-  let reject!: (err: unknown) => void;
-  const promise = new Promise<void>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
+/** `board` with one task moved to another base status, as the page's cache hands it back. */
+function withTaskIn(board: TaskBoard, taskId: string, status: keyof TaskBoard): TaskBoard {
+  const all = Object.values(board).flat();
+  const task = all.find((t) => t.id === taskId)!;
+  const next: TaskBoard = { pendiente: [], en_proceso: [], completado: [], bloqueado: [] };
+  for (const t of all) {
+    if (t.id === taskId) continue;
+    next[t.status].push(t);
+  }
+  next[status].push({ ...task, status, customStatus: null });
+  return next;
 }
 
 beforeEach(() => {
   toastError.mockReset();
+  pageData.getTareasBoardColumn.mockReset();
+  nav.pathname = "/tareas";
+  nav.search = "";
+  caps.canCreateActivity = true;
+  seedSessionUser({ member: { id: "s-1", name: "Ana" }, access: "Colaborador" });
 });
 
 describe("TaskBoardWidget · same fixture in every style", () => {
@@ -172,9 +238,8 @@ describe("TaskBoardWidget · same fixture in every style", () => {
 });
 
 describe("TaskBoardWidget · Visual moves", () => {
-  it("moves a card optimistically on drop and rolls it back with a toast when onMove fails", async () => {
-    const pending = deferred();
-    const onMove = vi.fn(() => pending.promise);
+  it("hands a drop to onMove and keeps no copy of its own: the card stays until the board changes", () => {
+    const onMove = vi.fn();
     const { container } = renderBoard("visual", { onMove });
 
     fireEvent.dragStart(card(container, "t2"));
@@ -183,31 +248,41 @@ describe("TaskBoardWidget · Visual moves", () => {
     fireEvent.drop(target);
 
     expect(onMove).toHaveBeenCalledWith("t2", "en_proceso");
-    expect(screen.getByRole("group", { name: "En proceso · 3" }).contains(card(container, "t2"))).toBe(true);
-    expect(screen.getByRole("group", { name: "Pendiente · 2" })).toBeTruthy();
-
-    await act(async () => {
-      pending.reject(new Error("FORBIDDEN"));
-      await pending.promise.catch(() => {});
-    });
-
     expect(screen.getByRole("group", { name: "Pendiente · 3" }).contains(card(container, "t2"))).toBe(true);
-    expect(screen.getByRole("group", { name: "En proceso · 2" })).toBeTruthy();
-    expect(toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción.");
   });
 
-  it("keeps the move when onMove resolves and expands a collapsed column it drops into", async () => {
-    const onMove = vi.fn(() => Promise.resolve());
+  it("shows the board it is handed: the moved card (the cache's optimistic patch) lands in its column", () => {
+    const { container, rerenderWith } = renderBoard("visual");
+    rerenderWith({ board: withTaskIn(taskBoardFixture, "t2", "en_proceso") });
+    expect(screen.getByRole("group", { name: "En proceso · 3" }).contains(card(container, "t2"))).toBe(true);
+    expect(screen.getByRole("group", { name: "Pendiente · 2" })).toBeTruthy();
+  });
+
+  it("shows the mapped error when onMove rejects", async () => {
+    const onMove = vi.fn(() => Promise.reject(new Error("FORBIDDEN")));
     const { container } = renderBoard("visual", { onMove });
+
+    fireEvent.dragStart(card(container, "t2"));
+    const target = screen.getByRole("group", { name: "En proceso · 2" });
+    fireEvent.dragOver(target);
+    await act(async () => {
+      fireEvent.drop(target);
+    });
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción."));
+  });
+
+  it("expands a collapsed column once the board has a card in it", async () => {
+    const onMove = vi.fn();
+    const { container, rerenderWith } = renderBoard("visual", { onMove });
 
     fireEvent.dragStart(card(container, "t3"));
     const strip = screen.getByRole("group", { name: "Bloqueado · 0" });
     fireEvent.dragOver(strip);
-    await act(async () => {
-      fireEvent.drop(strip);
-    });
-
+    fireEvent.drop(strip);
     expect(onMove).toHaveBeenCalledWith("t3", "bloqueado");
+
+    rerenderWith({ onMove, board: withTaskIn(taskBoardFixture, "t3", "bloqueado") });
     const column = screen.getByRole("group", { name: "Bloqueado · 1" });
     expect(column.getAttribute("data-collapsed")).toBeNull();
     expect(column.contains(card(container, "t3"))).toBe(true);
@@ -238,6 +313,67 @@ describe("TaskBoardWidget · Visual moves", () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Bloqueado" }));
     });
     expect(onMove).toHaveBeenCalledWith("t2", "bloqueado");
+  });
+});
+
+describe("TaskBoardWidget · card link", () => {
+  it("keeps the view and every filter and adds tarea", () => {
+    nav.search = "vista=tablero&tramo=diseno&responsable=yo&q=planos";
+    renderBoard("visual");
+    expect(screen.getByRole("link", { name: "Planos ejecutivos" }).getAttribute("href")).toBe(
+      "/tareas?vista=tablero&tramo=diseno&responsable=yo&q=planos&tarea=t2",
+    );
+  });
+
+  it("boardCardHref replaces an open tarea", () => {
+    expect(boardCardHref("/tareas", "vista=tablero&estado=pendiente&tarea=old", "t9")).toBe(
+      "/tareas?vista=tablero&estado=pendiente&tarea=t9",
+    );
+  });
+
+  it("opens the sheet shallowly (history.pushState, no navigation)", () => {
+    const pushState = vi.spyOn(window.history, "pushState");
+    nav.search = "vista=tablero&tramo=diseno";
+    renderBoard("visual");
+    fireEvent.click(screen.getByRole("link", { name: "Planos ejecutivos" }));
+    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?vista=tablero&tramo=diseno&tarea=t2");
+    pushState.mockRestore();
+  });
+});
+
+describe("TaskBoardWidget · column totals and Cargar más", () => {
+  const FILTERS = { tramo: null, proyecto: null, responsable: null, estado: null, q: null };
+
+  it("counts every matching task and loads the rest of a column page by page", async () => {
+    const t1 = Object.values(taskBoardFixture).flat().find((t) => t.id === "t1")!;
+    const extra: TaskListRow = {
+      ...t1,
+      id: "t-extra",
+      title: "Tarea de la segunda página",
+      subtaskDone: 0,
+      commentCount: 0,
+      attachmentCount: 0,
+      checklistTotal: 0,
+      checklistDone: 0,
+    };
+    pageData.getTareasBoardColumn.mockResolvedValue({ rows: [extra], total: 30, nextCursor: null });
+
+    const { container } = renderBoard("visual", {
+      columnPages: { filters: FILTERS, columns: { pendiente: { total: 30, nextCursor: "c-1" } } },
+    });
+    const column = screen.getByRole("group", { name: "Pendiente · 30" });
+    fireEvent.click(within(column).getByRole("button", { name: "Cargar más en Pendiente" }));
+
+    await waitFor(() => expect(container.querySelector('[data-task-id="t-extra"]')).toBeTruthy());
+    expect(pageData.getTareasBoardColumn).toHaveBeenCalledWith({ filters: FILTERS, columnId: "pendiente", cursor: "c-1" });
+    expect(within(column).queryByRole("button", { name: "Cargar más en Pendiente" })).toBeNull();
+  });
+
+  it("loads nothing until asked", () => {
+    renderBoard("visual", {
+      columnPages: { filters: FILTERS, columns: { pendiente: { total: 30, nextCursor: "c-1" } } },
+    });
+    expect(pageData.getTareasBoardColumn).not.toHaveBeenCalled();
   });
 });
 
@@ -279,7 +415,6 @@ describe("TaskBoardWidget · empty and loading", () => {
     });
 
     expect(onMove).toHaveBeenCalledWith("t1", "custom:cs-qa");
-    expect(screen.getByRole("group", { name: "QA en revisión · 1" }).contains(card(container, "t1"))).toBe(true);
   });
 
   it("lists a configured custom status once when tasks are also in it", () => {
@@ -314,14 +449,14 @@ describe("TaskBoardWidget · empty and loading", () => {
 });
 
 describe("TaskBoardWidget · quick-add", () => {
-  it("has no “+ Agregar” without onQuickAdd", () => {
+  it("has no “+ Agregar” for a viewer who can't create tasks", () => {
+    caps.canCreateActivity = false;
     renderBoard("visual");
     expect(screen.queryByRole("button", { name: /^Agregar tarea en / })).toBeNull();
   });
 
-  it("ends every open column in “+ Agregar” and calls onQuickAdd with its key", () => {
-    const onQuickAdd = vi.fn();
-    renderBoard("visual", { onQuickAdd });
+  it("ends every open column in “+ Agregar”, which opens the shell's dialog in that column's estatus", () => {
+    renderBoard("visual");
 
     for (const [key, count] of Object.entries(taskBoardExpected.counts)) {
       const label = LABELS[key as keyof typeof LABELS];
@@ -333,20 +468,24 @@ describe("TaskBoardWidget · quick-add", () => {
         continue;
       }
       expect(button?.textContent).toBe("+ Agregar");
-      fireEvent.click(button!);
-      expect(onQuickAdd).toHaveBeenLastCalledWith(key);
+      act(() => fireEvent.click(button!));
+      expect(useNewTaskUi.getState()).toMatchObject({
+        open: true,
+        defaults: { status: key },
+        source: "tablero-quick-add",
+      });
     }
   });
 
   it("shows “+ Agregar” in every column of an empty board", () => {
-    renderBoard("visual", { board: emptyTaskBoardFixture as TaskBoard, onQuickAdd: vi.fn() });
+    renderBoard("visual", { board: emptyTaskBoardFixture as TaskBoard });
     for (const label of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
       expect(screen.getByRole("button", { name: `Agregar tarea en ${label}` })).toBeTruthy();
     }
   });
 
   it.each<PresentationStyle>(["esencial", "analitico"])("has no quick-add in %s", (style) => {
-    renderBoard(style, { onQuickAdd: vi.fn() });
+    renderBoard(style);
     expect(screen.queryByRole("button", { name: /^Agregar tarea en / })).toBeNull();
   });
 });

@@ -5,15 +5,13 @@ import { useId, useRef, useState, type ChangeEvent } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
 import { Button } from "@/components/ui/shadcn/button";
-import { usePhotoUploadMutation } from "@/components/shell/photo-upload";
+import { uploadMyPhoto, usePhotoUploadMutation } from "@/components/shell/photo-upload";
 import { actionErrorText } from "@/lib/errors";
 
 import { PHOTO_ACCEPT, PHOTO_MAX_BYTES, PHOTO_TYPES, reencodeToJpeg } from "./reencode-photo";
 
-/** `onChange(null)` after the photo is removed. */
-export type ProfilePhotoButtonProps = { photoUrl: string | null; initials: string; onChange(url: string | null): void };
-
-const PHOTO_ROUTE = "/api/staff/me/photo";
+/** `onChange(url)` after an upload; the new URL is already in `qk.me.profile()`. */
+export type ProfilePhotoButtonProps = { photoUrl: string | null; initials: string; onChange?(url: string): void };
 
 /** Copy of the photo route's own codes (FE §9); every other code goes through `actionErrorText`. */
 const PHOTO_ERROR_COPY: Record<string, string> = {
@@ -21,52 +19,35 @@ const PHOTO_ERROR_COPY: Record<string, string> = {
   INVALID_TYPE: "Ese archivo no es una imagen. Usa JPG, PNG o WebP.",
 };
 
-/** The route's statuses when its body carries no code. */
-const STATUS_CODES: Record<number, string> = { 401: "FORBIDDEN", 413: "TOO_LARGE", 415: "INVALID_TYPE", 429: "RATE_LIMITED" };
-
 /** Spanish copy for a photo upload error code. */
 export function photoErrorText(code: string): string {
   return PHOTO_ERROR_COPY[code] ?? actionErrorText(code);
 }
 
-async function errorCodeOf(response: Response): Promise<string> {
-  try {
-    const body = (await response.json()) as { error?: unknown };
-    if (typeof body.error === "string" && body.error) return body.error;
-  } catch {
-    // No JSON body: fall back to the status.
-  }
-  return STATUS_CODES[response.status] ?? "";
-}
-
 /**
- * Re-encode, check the size and POST to the photo route; resolves with the new
- * URL and throws `Error(code)` (`""` when the route answers without one).
+ * Re-encode (EXIF orientation applied, metadata dropped), check the size and
+ * POST through the shared `uploadMyPhoto`; resolves with the new URL and
+ * throws `Error(code)`.
  */
 async function uploadInicioPhoto(file: File): Promise<string> {
   const jpeg = await reencodeToJpeg(file);
   if (jpeg.size > PHOTO_MAX_BYTES) throw new Error("TOO_LARGE");
-  const form = new FormData();
-  form.append("file", jpeg, "foto.jpg");
-  const response = await fetch(PHOTO_ROUTE, { method: "POST", body: form });
-  if (!response.ok) throw new Error(await errorCodeOf(response));
-  const body = (await response.json()) as { url?: unknown };
-  if (typeof body.url !== "string" || !body.url) throw new Error("");
-  return body.url;
+  return uploadMyPhoto(jpeg);
 }
 
 /**
  * Avatar 72 px with the camera button (redesign FE §3.2): re-encodes through
  * `<canvas>` to JPEG ≤ 1024 px (drops EXIF) and uploads to
- * `POST /api/staff/me/photo`; the new URL also lands in `qk.me.profile()`
- * (`usePhotoUploadMutation`). Errors show inline under the avatar.
+ * `POST /api/staff/me/photo` through `usePhotoUploadMutation`, which writes
+ * the new URL into `qk.me.profile()`: the Inicio and shell avatars update
+ * together, with no refresh. Errors show inline under the avatar.
  */
 export function ProfilePhotoButton({ photoUrl, initials, onChange }: ProfilePhotoButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const errorId = useId();
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const uploadPhoto = usePhotoUploadMutation(uploadInicioPhoto);
+  const pending = uploadPhoto.isPending;
 
   async function upload(file: File) {
     setError(null);
@@ -74,13 +55,10 @@ export function ProfilePhotoButton({ photoUrl, initials, onChange }: ProfilePhot
       setError(photoErrorText("INVALID_TYPE"));
       return;
     }
-    setPending(true);
     try {
-      onChange(await uploadPhoto.mutateAsync(file));
+      onChange?.(await uploadPhoto.mutateAsync(file));
     } catch (err) {
       setError(photoErrorText(err instanceof Error ? err.message : ""));
-    } finally {
-      setPending(false);
     }
   }
 

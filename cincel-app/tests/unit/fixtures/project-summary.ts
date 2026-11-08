@@ -158,10 +158,11 @@ export function fixtureSummaryInput(overrides: Partial<ProjectSummaryInput> = {}
       },
     ],
     spaces: [{ id: "e1", name: "Planta baja" }],
+    // Only the project's team; `email` is admin-only (the loader drops it for everyone else).
     staff: {
-      s1: { email: "paul@cincel.mx", puesto: "Arquitecto" },
-      s2: { email: "alejandro@cincel.mx", puesto: "Dirección de proyecto" },
-      s3: { email: null, puesto: null },
+      s1: { id: "s1", name: "Paul Langarica", email: "paul@cincel.mx", puesto: "Arquitecto" },
+      s2: { id: "s2", name: "Alejandro Riofrio", email: "alejandro@cincel.mx", puesto: "Dirección de proyecto" },
+      s3: { id: "s3", name: "Ana López" },
     },
     showBudget: true,
     showClientContacts: true,

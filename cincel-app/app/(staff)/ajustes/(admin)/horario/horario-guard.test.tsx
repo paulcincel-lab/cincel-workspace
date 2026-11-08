@@ -46,6 +46,7 @@ const flags = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/time-tracking-actions.flags", () => flags);
 vi.mock("@/lib/actions/time-tracking-actions", () => ({}));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({}));
 
 import HorarioSegmentLayout from "./layout";
 import { requirePageCapability } from "@/lib/auth/session";

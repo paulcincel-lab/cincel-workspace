@@ -1,37 +1,40 @@
 import { MisVacacionesClient } from "@/components/biblioteca/MisVacacionesClient";
-import { VacationDeciders } from "@/components/biblioteca/VacationDeciders";
-import { StyleProvider } from "@/components/shell/StyleProvider";
-import type { PresentationStyle } from "@/lib/types/redesign";
-
-import { loadMisVacaciones } from "./load-mis-vacaciones";
-
-type SearchParams = Record<string, string | string[] | undefined>;
-
-const STYLES: readonly PresentationStyle[] = ["visual", "esencial", "analitico"];
-
-function styleOverride(value: SearchParams[string]): PresentationStyle | null {
-  const raw = Array.isArray(value) ? value[0] : value;
-  return STYLES.find((s) => s === raw) ?? null;
-}
+import { TeamRequests } from "@/components/biblioteca/TeamRequests";
+import { VacationSettings } from "@/components/biblioteca/VacationSettings";
+import { requireBibliotecaViewer } from "@/lib/biblioteca/load";
+import { loadMisVacacionesPageData } from "@/lib/loaders/biblioteca";
+import { Hydrate } from "@/lib/query/hydrate";
+import { seedMisVacaciones } from "@/lib/query/options/biblioteca";
+import { getQueryClient } from "@/lib/query/server";
 
 /**
- * `/biblioteca/vacaciones` (redesign FE §3.7): Mis vacaciones.
- * `?estilo=` overrides the style for this render only (FE §4.2).
+ * `/biblioteca/vacaciones` (redesign FE §3.7): Mis vacaciones, loaded in one
+ * wave. The page-data loader reads everything in one `Promise.all` and the
+ * bundle is seeded into `me.vacations`, `vacations.absences(month)`,
+ * `vacations.pending`, `vacations.settings` and
+ * `biblioteca.links('mis-vacaciones')`; the sections read those queries.
+ * "Solicitudes del equipo" and "Días de vacaciones" render only for deciders
+ * (`deciders` is null otherwise). A `?estilo=` preview is read from the URL
+ * on the client (FE §4.2).
  */
-export default async function MisVacacionesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const params = await searchParams;
-  const data = await loadMisVacaciones();
-  const page = (
-    <div className="flex flex-col gap-6">
-      <MisVacacionesClient {...data} />
-      <VacationDeciders />
-    </div>
-  );
-  const override = styleOverride(params.estilo);
-  if (!override) return page;
+export default async function MisVacacionesPage() {
+  const user = await requireBibliotecaViewer();
+  const data = await loadMisVacacionesPageData(user, {});
+
+  const qc = getQueryClient();
+  seedMisVacaciones(qc, data);
+
   return (
-    <StyleProvider style={override} scope="staff" isOverridden>
-      {page}
-    </StyleProvider>
+    <Hydrate qc={qc}>
+      <div className="flex flex-col gap-6">
+        <MisVacacionesClient month={data.month} year={data.year} />
+        {data.deciders ? (
+          <div className="flex flex-col gap-6">
+            <TeamRequests month={data.month} viewerStaffId={data.deciders.viewerStaffId} canDecide />
+            {data.deciders.settings ? <VacationSettings month={data.month} canDecide /> : null}
+          </div>
+        ) : null}
+      </div>
+    </Hydrate>
   );
 }

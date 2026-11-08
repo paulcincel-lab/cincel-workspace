@@ -1,36 +1,17 @@
 import { notFound, redirect } from "next/navigation";
 
 import { HorarioClient } from "@/components/ajustes/HorarioClient";
-import { fetchTeamHoursAction, fetchTimeTrackingSettingsAction } from "@/lib/actions/time-tracking-actions";
-import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
 import { canManageTimeTracking, canViewTeamHours } from "@/lib/auth/permissions";
 import { getSessionAccess, requireCapabilityUser } from "@/lib/auth/session";
+import { loadAjustesHorario } from "@/lib/loaders/ajustes";
+import { Hydrate } from "@/lib/query/hydrate";
+import { ajustesHorarioOptions } from "@/lib/query/options/ajustes";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 import { HORARIO_SECTIONS } from "@/lib/shell/settings-sections/horario";
 import { visibleSettingsSections } from "@/lib/shell/settings-sections/visible";
 import { localDate, mondayOf } from "@/lib/time-tracking/local-time";
-import { DEFAULT_TIME_TRACKING_SETTINGS } from "@/lib/time-tracking/settings";
-import type { TeamHoursRow, TimeTrackingSettings } from "@/lib/types/redesign";
 
 export const dynamic = "force-dynamic";
-
-async function loadSettings(): Promise<TimeTrackingSettings> {
-  try {
-    return await fetchTimeTrackingSettingsAction();
-  } catch (error) {
-    console.error("[ajustes/horario] could not load the settings", error);
-    return { ...DEFAULT_TIME_TRACKING_SETTINGS, workDays: [...DEFAULT_TIME_TRACKING_SETTINGS.workDays], exemptRoles: [] };
-  }
-}
-
-async function loadRows(canViewReport: boolean, weekStart: string): Promise<TeamHoursRow[]> {
-  if (!canViewReport || !IMPLEMENTED.fetchTeamHoursAction) return [];
-  try {
-    return await fetchTeamHoursAction({ weekStart });
-  } catch (error) {
-    console.error("[ajustes/horario] could not load the team hours", error);
-    return [];
-  }
-}
 
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? "";
@@ -41,33 +22,30 @@ function firstName(name: string): string {
  * `canManageTimeTracking` or `canViewTeamHours`; the page renders the visible
  * sections of `lib/shell/settings-sections/horario/*` inside `HorarioClient`.
  * The Ajustes layout renders the header and `AjustesNav`.
+ *
+ * Prefetches this week's `qk.ajustes.page('horario', { weekStart })` with the
+ * loader (the settings are read once per request) and hydrates it; changing
+ * the week on the client is one page-data call.
  */
 export default async function AjustesHorarioPage() {
-
   const access = await getSessionAccess();
   if (!access.user) redirect("/login");
   const user = await requireCapabilityUser();
 
-  const canManage = canManageTimeTracking(user);
-  const canViewReport = canViewTeamHours(user);
-  if (!canManage && !canViewReport) notFound();
+  if (!canManageTimeTracking(user) && !canViewTeamHours(user)) notFound();
 
   const weekStart = mondayOf(localDate(new Date()));
   const sections = visibleSettingsSections(HORARIO_SECTIONS, user);
-  const [settings, rows] = await Promise.all([loadSettings(), loadRows(canViewReport, weekStart)]);
+  const qc = getQueryClient();
+  await prefetch(qc, ajustesHorarioOptions(weekStart), () => loadAjustesHorario(user, { weekStart }));
 
   return (
-    <HorarioClient
-      settings={settings}
-      canManage={canManage}
-      canViewReport={canViewReport}
-      weekStart={weekStart}
-      rows={rows}
-      viewerName={firstName(user.member.name)}
-    >
-      {sections.map(({ name, Component }) => (
-        <Component key={name} />
-      ))}
-    </HorarioClient>
+    <Hydrate qc={qc}>
+      <HorarioClient weekStart={weekStart} viewerName={firstName(user.member.name)}>
+        {sections.map(({ name, Component }) => (
+          <Component key={name} />
+        ))}
+      </HorarioClient>
+    </Hydrate>
   );
 }

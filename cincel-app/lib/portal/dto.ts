@@ -130,3 +130,18 @@ export function toPortalTramosDTO(rows: PortalTramoRow[], currentWorkflowId: str
       return { key: r.key, name: r.name, state };
     });
 }
+
+/**
+ * The exact keys each portal DTO may carry (Query Migration Phase 11, plan §4.8 rule 2): everything a portal
+ * loader returns is dehydrated into the page HTML. No payments, no internal notes, no staff other than the
+ * project's manager (name and contact email). `lib/portal/dto-allow-list.test.ts` pins these lists against
+ * the mappers, so a new field is a reviewed change here.
+ */
+export const PORTAL_DTO_ALLOWED_KEYS = {
+  project: ["address", "code", "endDate", "id", "manager", "name", "progressPct", "startDate", "status"],
+  projectManager: ["email", "name"],
+  schedule: ["sections"],
+  scheduleSection: ["end", "key", "planta", "progressPct", "seccion", "start"],
+  tramo: ["key", "name", "state"],
+  file: ["deliveredAs", "id", "kind", "mimeType", "modifiedAt", "name", "sizeBytes"],
+} as const;

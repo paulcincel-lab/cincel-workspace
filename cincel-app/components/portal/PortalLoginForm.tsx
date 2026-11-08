@@ -54,11 +54,11 @@ async function requestLink(email: string): Promise<string | null> {
 /**
  * Portal sign-in (FE §3.1, replaced by the magic link in issue 534): email → **Enviar enlace** → "Revisa tu correo"
  * with the address and a 60 s countdown before **Reenviar enlace**. The same message is shown whether or not
- * the email has access; the route answers the same way for both.
+ * the email has access; the route answers the same way for both. A plain POST: nothing is cached before the
+ * client signs in. The field is uncontrolled (`?email=` prefill, or the last address after **Cambiar correo**).
  */
 export default function PortalLoginForm({ linkError, initialEmail = "" }: PortalLoginFormProps) {
   const [step, setStep] = useState<Step>("request");
-  const [email, setEmail] = useState(initialEmail);
   const [sentTo, setSentTo] = useState("");
   // The expired-link notice is shown from the first render, so it never shifts the form; every other error goes
   // under the field (or under the resend buttons) in a slot that keeps its height.
@@ -90,7 +90,8 @@ export default function PortalLoginForm({ linkError, initialEmail = "" }: Portal
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const address = email.trim();
+    const value = new FormData(event.currentTarget).get("email");
+    const address = typeof value === "string" ? value.trim() : "";
     if (!address) {
       setError(PORTAL_INVALID_EMAIL_MESSAGE);
       return;
@@ -139,8 +140,8 @@ export default function PortalLoginForm({ linkError, initialEmail = "" }: Portal
                   type="email"
                   inputMode="email"
                   autoComplete="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  name="email"
+                  defaultValue={sentTo || initialEmail}
                   placeholder="tu@correo.com"
                   aria-invalid={error ? true : undefined}
                   aria-describedby={error ? EMAIL_ERROR_ID : undefined}

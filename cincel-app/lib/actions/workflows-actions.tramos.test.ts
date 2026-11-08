@@ -56,7 +56,11 @@ vi.mock("@/lib/repositories/workflow-phases-repository", async (importOriginal) 
   ...phasesRepo,
 }));
 
-import {
+import { unwrapActions } from "@/tests/helpers/action-result";
+
+import * as workflowsActionsModule from "./workflows-actions";
+
+const {
   createTemplateAction,
   createWorkflowPhaseAction,
   fetchTramosNavAction,
@@ -64,7 +68,7 @@ import {
   setWorkflowAutoStartAction,
   updateTemplateAction,
   updateWorkflowPhaseAction,
-} from "./workflows-actions";
+} = unwrapActions(workflowsActionsModule);
 
 const activeRows = [
   { id: WORKFLOW, key: "presale", name: "Presale", active: true, phases: [], templates: [] },

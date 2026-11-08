@@ -1,11 +1,16 @@
 // @vitest-environment node
 /**
- * `fetchInicioAction` against a real Postgres (redesign BE §7.10, §9.7, §16):
- * the `InicioData` shape, KPI values against fixtures, the dashboard scope and
- * the admin-only filter (no admin task and no client / origin data for a
- * caller without `canSeeAdminData`). Runs only when TEST_DATABASE_URL points
- * at a migrated database (`npm run db:migrate`). Every row a test creates
- * carries a per-run marker and is deleted afterwards.
+ * Inicio against a real Postgres (redesign BE §7.10, §9.7, §16; Query
+ * Migration Phase 3, #937): `getInicioPageData` and its loader
+ * `loadInicioPage`. The `InicioData` shape, KPI values against fixtures, the
+ * dashboard scope and the admin-only filter (no admin task, no `budgetPct`
+ * and no client / origin data for a caller without `canSeeAdminData`), a
+ * guest → FORBIDDEN, Mi día limited to the caller, the #917 regression
+ * (equal to the pre-migration `fetchInicioAction` output), the slim task
+ * read (`listTaskRows` only) and the loader's statement count (≤ 18).
+ * Runs only when TEST_DATABASE_URL points at a migrated database
+ * (`npm run db:migrate`). Every row a test creates carries a per-run marker
+ * and is deleted afterwards.
  */
 import { randomUUID } from "node:crypto";
 
@@ -23,7 +28,8 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   requireCapabilityUser: vi.fn(async () => {
     const actor = session.actor;
-    if (!actor) throw new Error("no test actor");
+    // A guest: the real `requireCapabilityUser` throws FORBIDDEN.
+    if (!actor) throw new Error("FORBIDDEN");
     return {
       member: {
         id: actor.id,
@@ -53,17 +59,31 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => {
   };
 });
 
+/** Spies on the task reads, so a test can assert the loader only uses the slim projection. */
+vi.mock("@/lib/repositories/tasks-repository", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/repositories/tasks-repository")>();
+  return { ...actual, listTasks: vi.fn(actual.listTasks), listTaskRows: vi.fn(actual.listTaskRows) };
+});
+
 const run = randomUUID().slice(0, 8);
 const TZ = "America/Mexico_City";
 
-describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
+describe.skipIf(!url)("Inicio page data (test DB)", async () => {
   const { eq, inArray } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
   const { localIsoDate } = await import("@/lib/dashboard/task-trend");
   const { shiftIsoDate } = await import("@/lib/dashboard/inicio");
-  const { fetchInicioAction } = await import("./dashboard-actions");
+  const { getInicioPageData } = await import("./page-data/inicio-actions");
+  const { loadInicioPage } = await import("@/lib/loaders/inicio");
+  const { requireCapabilityUser } = await import("@/lib/auth/session");
+  const tasksRepository = await import("@/lib/repositories/tasks-repository");
+  const { countQueries } = await import("../../tests/helpers/count-queries");
+  const { legacyFetchInicio } = await import("../../tests/helpers/inicio-legacy");
   const { IMPLEMENTED } = await import("./dashboard-actions.flags");
+
+  /** What the Inicio query returns for the current test actor. */
+  const fetchInicio = async () => (await getInicioPageData({})).inicio;
 
   const today = localIsoDate(new Date(), TZ);
   const clientName = `Cliente inicio ${run}`;
@@ -72,6 +92,9 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
   const t = {} as Record<"overdue" | "blocked" | "review" | "dueToday" | "done" | "admin" | "adminToday", string>;
   let colab: Actor;
   let admin: Actor;
+  /** A second colaborador with no tasks, only a reminder of today. */
+  let other: Actor;
+  const reminders = { colab: "", other: "" };
   let projectId = "";
 
   async function addStaff(label: string, access: Actor["access"]): Promise<Actor> {
@@ -106,6 +129,7 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
   beforeAll(async () => {
     colab = await addStaff("colab", "Colaborador");
     admin = await addStaff("jefa", "Administrador");
+    other = await addStaff("otra", "Colaborador");
 
     const [contact] = await db
       .insert(schema.contacts)
@@ -158,6 +182,20 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
     ]);
   });
 
+  beforeAll(async () => {
+    // Reminders of today (Mexico City noon, so the local day matches).
+    const dueAt = new Date(`${today}T18:00:00Z`);
+    const rows = await db
+      .insert(schema.reminders)
+      .values([
+        { staffId: colab.id, text: `Inicio ${run} recordatorio colab`, dueAt },
+        { staffId: other.id, text: `Inicio ${run} recordatorio otra`, dueAt },
+      ])
+      .returning({ id: schema.reminders.id });
+    reminders.colab = rows[0].id;
+    reminders.other = rows[1].id;
+  });
+
   beforeEach(() => {
     session.actor = colab;
     session.dataScope = "managed_projects";
@@ -186,14 +224,14 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
   });
 
   it("returns every InicioData field", async () => {
-    const data = await fetchInicioAction();
+    const data = await fetchInicio();
     expect(Object.keys(data).sort()).toEqual(
       ["attention", "kpis", "myDay", "projectsProgress", "tasksByTramo", "weeklyPace", "workload"].sort()
     );
   });
 
   it("computes the KPIs from the fixtures; completadas_semana only in Analítico", async () => {
-    const { kpis } = await fetchInicioAction();
+    const { kpis } = await fetchInicio();
     expect(kpis.map((k) => k.key)).toEqual([
       "proyectos_activos",
       "vencidas",
@@ -223,7 +261,7 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
   });
 
   it("returns 8 ascending weeks of pace and tramo groups with diasProm", async () => {
-    const { weeklyPace, tasksByTramo } = await fetchInicioAction();
+    const { weeklyPace, tasksByTramo } = await fetchInicio();
     expect(weeklyPace).toHaveLength(8);
     for (let i = 1; i < weeklyPace.length; i++) expect(weeklyPace[i].weekStart > weeklyPace[i - 1].weekStart).toBe(true);
     expect(weeklyPace[7]).toMatchObject({ created: 5, completed: 1 });
@@ -235,7 +273,7 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
   });
 
   it("builds attention, Mi día, progress and workload from the caller's scope", async () => {
-    const data = await fetchInicioAction();
+    const data = await fetchInicio();
 
     expect(data.attention.map((a) => a.id).sort()).toEqual([t.overdue, t.blocked, t.dueToday].sort());
     expect(data.attention.find((a) => a.id === t.overdue)).toMatchObject({ tone: "critical", daysLate: 3 });
@@ -259,7 +297,7 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
   it("never gives a non-admin an admin task or client / origin data", async () => {
     for (const scope of ["managed_projects", "global"]) {
       session.dataScope = scope;
-      const data = await fetchInicioAction();
+      const data = await fetchInicio();
       for (const field of ["kpis", "attention", "myDay", "projectsProgress", "workload", "tasksByTramo"] as const) {
         expect(mentionsAny(data[field], [...adminIds(), `Inicio ${run} admin`]), `${scope} ${field}`).toEqual([]);
         expect(mentionsAny(data[field], [clientName, origin]), `${scope} ${field}`).toEqual([]);
@@ -272,7 +310,7 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
   it("includes admin tasks for a caller with canSeeAdminData", async () => {
     session.actor = admin;
     session.dataScope = "global";
-    const data = await fetchInicioAction();
+    const data = await fetchInicio();
     expect(data.attention.map((a) => a.id)).toEqual(expect.arrayContaining([t.overdue, t.admin, t.adminToday]));
     expect(data.tasksByTramo.some((s) => s.key === "admin")).toBe(true);
     // Shapes never carry client or origin fields, even for admins.
@@ -282,12 +320,87 @@ describe.skipIf(!url)("fetchInicioAction (test DB)", async () => {
   it("drops the deleted project from the scope", async () => {
     await db.update(schema.projects).set({ deletedAt: new Date() }).where(eq(schema.projects.id, projectId));
     try {
-      const data = await fetchInicioAction();
+      const data = await fetchInicio();
       expect(data.projectsProgress).toEqual([]);
       expect(data.attention).toEqual([]);
       expect(data.kpis.find((k) => k.key === "proyectos_activos")?.value).toBe(0);
     } finally {
       await db.update(schema.projects).set({ deletedAt: null }).where(eq(schema.projects.id, projectId));
     }
+  });
+
+  it("returns the page data: the widgets and the banner flag", async () => {
+    const page = await getInicioPageData({});
+    expect(Object.keys(page).sort()).toEqual(["firstLogin", "inicio"]);
+    expect(page.firstLogin).toEqual({ showGoogleSetupBanner: false });
+  });
+
+  it("rejects a guest with FORBIDDEN", async () => {
+    session.actor = null;
+    await expect(getInicioPageData({})).rejects.toThrow("FORBIDDEN");
+  });
+
+  it("gives a staff member only their own Mi día reminders", async () => {
+    const mine = (await fetchInicio()).myDay.map((item) => item.id).join(" ");
+    expect(mine).toContain(reminders.colab);
+    expect(mine).not.toContain(reminders.other);
+
+    session.actor = other;
+    const theirs = (await fetchInicio()).myDay.map((item) => item.id).join(" ");
+    expect(theirs).toContain(reminders.other);
+    expect(theirs).not.toContain(reminders.colab);
+    // `other` is involved in no task: no task reaches their agenda.
+    for (const id of ids.tasks) expect(theirs).not.toContain(id);
+  });
+
+  it("strips the admin-only fields from a non-admin's dehydrated data", async () => {
+    for (const scope of ["managed_projects", "global"]) {
+      session.dataScope = scope;
+      const page = await loadInicioPage(await requireCapabilityUser());
+      // What `<Hydrate>` serializes into the HTML.
+      const html = JSON.stringify(page);
+      expect(mentionsAny(html, [...adminIds(), `Inicio ${run} admin`, clientName, origin]), scope).toEqual([]);
+      expect(page.inicio.projectsProgress.length).toBeGreaterThan(0);
+      for (const item of page.inicio.projectsProgress) expect(item.budgetPct).toBeNull();
+    }
+  });
+
+  it.each(["colab", "admin"] as const)(
+    "equals the pre-migration fetchInicioAction output for the %s (#917)",
+    async (who) => {
+      session.actor = who === "admin" ? admin : colab;
+      session.dataScope = who === "admin" ? "global" : "managed_projects";
+      const user = await requireCapabilityUser();
+      const before = await legacyFetchInicio(user);
+      const after = (await loadInicioPage(user)).inicio;
+      expect(after).toEqual(before);
+      // The parts #917 lost: delta chips, context lines and sparklines.
+      expect(after.kpis.map((k) => [k.key, k.delta, k.caption, k.series7])).toEqual(
+        before.kpis.map((k) => [k.key, k.delta, k.caption, k.series7])
+      );
+      for (const kpi of after.kpis) {
+        expect(kpi.delta?.label).toBeTruthy();
+        expect(kpi.caption).toBeTruthy();
+        expect(kpi.series7).toHaveLength(7);
+      }
+    }
+  );
+
+  it("reads tasks only through the slim listTaskRows projection", async () => {
+    const listTasks = vi.mocked(tasksRepository.listTasks);
+    const listTaskRows = vi.mocked(tasksRepository.listTaskRows);
+    listTasks.mockClear();
+    listTaskRows.mockClear();
+    await loadInicioPage(await requireCapabilityUser());
+    expect(listTasks).not.toHaveBeenCalled();
+    expect(listTaskRows).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs at most 18 statements per load", async () => {
+    const user = await requireCapabilityUser();
+    const { count, statements } = await countQueries(() => loadInicioPage(user));
+    // Recorded in the PR; today's fetchInicioAction runs ≤ 18.
+    console.info(`[inicio] loadInicioPage statements: ${count}`);
+    expect(count, statements.map((st) => st.sql).join("\n")).toBeLessThanOrEqual(18);
   });
 });

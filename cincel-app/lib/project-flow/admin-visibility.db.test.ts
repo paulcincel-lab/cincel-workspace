@@ -145,6 +145,14 @@ describe.skipIf(!url)("admin visibility across every reader (test DB)", async ()
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
   const tasksActions = unwrapActions(await import("@/lib/actions/tasks-actions"));
+  const tareasPageData = await import("@/lib/actions/page-data/tareas-actions");
+  /** Every row of the Tablero (`getTareasBoard`) of one project. */
+  const boardRows = async (projectId: string) => {
+    const board = await tareasPageData.getTareasBoard({
+      filters: { tramo: null, proyecto: projectId, responsable: null, estado: null, q: null },
+    });
+    return Object.values(board.columns).flatMap((c) => c.rows);
+  };
   const projectsActions = unwrapActions(await import("@/lib/actions/projects-actions"));
   const contactsActions = await import("@/lib/actions/contacts-actions");
   const importActions = await import("@/lib/actions/import-actions");
@@ -433,8 +441,7 @@ describe.skipIf(!url)("admin visibility across every reader (test DB)", async ()
 
     it("non-admin: board has no admin task and no client name", async () => {
       asNonAdmin();
-      const board = await tasksActions.fetchBoardAction({ projectId: ids.project });
-      const rows = Object.values(board).flat();
+      const rows = await boardRows(ids.project);
       expect(rows.map((t) => t.id)).toContain(ids.visibleTask);
       expect(rows.map((t) => t.id)).not.toContain(ids.adminTask);
       for (const row of rows) expect(row.project.clientName).toBeNull();
@@ -466,8 +473,8 @@ describe.skipIf(!url)("admin visibility across every reader (test DB)", async ()
       const admin = await tasksActions.fetchTasksAction({ projectId: ids.project, kind: "admin" });
       expect(admin.map((t) => t.id)).toContain(ids.adminTask);
 
-      const board = await tasksActions.fetchBoardAction({ projectId: ids.project });
-      expect(Object.values(board).flat().find((t) => t.id === ids.visibleTask)?.project.clientName).toBe(clientName);
+      const board = await boardRows(ids.project);
+      expect(board.find((t) => t.id === ids.visibleTask)?.project.clientName).toBe(clientName);
 
       const calendar = await tasksActions.fetchCalendarAction(today(), today(), { projectId: ids.project });
       expect(calendar.find((t) => t.id === ids.visibleTask)?.project.clientName).toBe(clientName);

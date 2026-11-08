@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
+import type { ReactElement } from "react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +23,7 @@ vi.mock("@/lib/settings/use-general-settings", async () => {
 });
 vi.mock("next/navigation", () => ({
   usePathname: () => "/tareas",
+  useSearchParams: () => new URLSearchParams(),
   // The user block's avatar menu routes on sign-out and photo changes.
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }));
@@ -35,6 +37,8 @@ vi.mock("@/components/asistente/AssistantButton", () => ({ AssistantButton: () =
 vi.mock("@/components/asistente/AssistantSheet", () => ({ AssistantSheet: () => null }));
 
 import { AppShellClient } from "../AppShellClient";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import { toClientNavModel } from "@/lib/ui/nav-client";
@@ -42,6 +46,14 @@ import { toClientNavModel } from "@/lib/ui/nav-client";
 import { ADMIN_SESSION, FULL_NAV, STAFF_SESSION, TODAY_ON } from "./shell-fixtures";
 
 const MODES = ["light", "dark"] as const;
+
+/** Renders with the cache the `(staff)` layout hydrates (badges and the day), so nothing is fetched. */
+function render(ui: ReactElement) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.shell.badges(), { tareasOpen: 31, bandeja: { unreadCount: 5, dueReminders: [] } });
+  client.setQueryData(qk.me.today(), TODAY_ON);
+  return renderWithQueryClient(ui, { client });
+}
 
 /** The token pairs the sidebar paints text with. */
 const SIDEBAR_PAIRS = CONTRAST_PAIRS.filter((p) => p.pair.startsWith("sidebar-")).map((p) => p.pair);

@@ -13,8 +13,13 @@ vi.mock("@/lib/actions/workflows-actions", () => ({
   fetchWorkflowsAction: vi.fn(async () => [{ id: "w1", name: "Presale" }]),
 }));
 vi.mock("@/lib/actions/workspace-access-actions", () => ({ recheckStaffAccessAction: vi.fn() }));
+// ContactEditorSheet's "Staff vinculado" options are `catalog.staff` (Query Migration 6).
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogStaff: vi.fn(async () => [{ id: "s1", name: "Ana López" }]),
+}));
 
 import { ContactEditorSheet, emptyContactDraft } from "@/components/directorio/ContactEditorSheet";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { NewProjectDialog } from "@/components/proyectos/NewProjectDialog";
 import type { TeamCapabilities } from "@/lib/auth/permissions";
@@ -35,7 +40,7 @@ afterEach(() => {
 
 describe("form fields have accessible names", () => {
   it("Directorio: Nuevo contacto", async () => {
-    render(
+    renderWithQueryClient(
       <ContactEditorSheet
         show
         onClose={() => undefined}

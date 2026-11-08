@@ -63,14 +63,15 @@ vi.mock("@/lib/time-tracking/week-hours", () => ({
 vi.mock("@/lib/vacations/approved-absences", () => ({
   approvedAbsences: vi.fn(async () => []),
 }));
+const staffRepo = vi.hoisted(() => ({ listStaff: vi.fn() }));
 vi.mock("@/lib/repositories/staff-repository", () => ({
   loadStaffPositions: vi.fn(async (ids: string[]) => new Map(ids.map((id) => [id, { positions: [{ id: "p1", name: "Diseñadora" }], candidatePhases: [] }]))),
   toStaff: vi.fn((row: { id: string; name: string; capacity: number }) => ({ id: row.id, name: row.name, capacity: row.capacity })),
+  listStaff: staffRepo.listStaff,
 }));
 
 const repo = vi.hoisted(() => ({
   getStaffRow: vi.fn(),
-  listActiveStaffRows: vi.fn(),
   listAssignedOpenTasks: vi.fn(),
   listActiveProjectsByStaff: vi.fn(),
   staffIdsWithPhoto: vi.fn(),
@@ -180,7 +181,10 @@ describe("people actions", async () => {
     state.canViewTeam = true;
     state.teamHours = true;
     repo.getStaffRow.mockReset().mockImplementation(async (id: string) => (id === OTHER ? staffRow(OTHER) : null));
-    repo.listActiveStaffRows.mockReset().mockResolvedValue([staffRow(state.memberId), staffRow(OTHER, 0)]);
+    // One `listStaff` read feeds the overview (Query Migration 6); inactive members get no row.
+    staffRepo.listStaff
+      .mockReset()
+      .mockResolvedValue([staffRow(state.memberId), staffRow(OTHER, 0), { ...staffRow("44444444-4444-4444-8444-444444444444"), active: false }]);
     repo.listAssignedOpenTasks.mockReset().mockImplementation(async (ids: string[]) => {
       return new Map(ids.map((id) => [id, [{ staffId: id, id: `t-${id}`, title: "T", status: "pendiente", due: null, projectName: "Casa", tramo: "diseno" }]]));
     });
@@ -194,7 +198,7 @@ describe("people actions", async () => {
   it("refuses viewers without team.canViewTeam", async () => {
     state.canViewTeam = false;
     await expect(fetchPeopleOverviewAction()).rejects.toThrow("FORBIDDEN");
-    await expect(fetchPersonaDetailAction(OTHER)).rejects.toThrow("FORBIDDEN");
+    await expect(fetchPersonaDetailAction({ staffId: OTHER })).rejects.toThrow("FORBIDDEN");
   });
 
   it("returns one row per active staff with occupancy", async () => {
@@ -212,7 +216,7 @@ describe("people actions", async () => {
     expect(rows.find((r) => r.staffId === state.memberId)!.weekHours).toBe(7.5);
     expect(rows.find((r) => r.staffId === OTHER)!.weekHours).toBeNull();
 
-    const detail = await fetchPersonaDetailAction(OTHER);
+    const detail = (await fetchPersonaDetailAction({ staffId: OTHER }))!;
     expect(detail.weekHours).toBeNull();
     expect(detail.person.weekHours).toBeNull();
     expect(detail.stats.map((s) => s.key)).toEqual(["abiertas", "vencidas", "proyectos_activos"]);
@@ -226,13 +230,18 @@ describe("people actions", async () => {
     expect(repo.listAssignedOpenTasks).toHaveBeenLastCalledWith(expect.any(Array), { includeAdmin: false });
   });
 
-  it("returns NOT_FOUND for unknown or malformed ids", async () => {
-    await expect(fetchPersonaDetailAction("33333333-3333-4333-8333-333333333333")).rejects.toThrow("NOT_FOUND");
-    await expect(fetchPersonaDetailAction("nope")).rejects.toThrow("NOT_FOUND");
+  it("returns null for unknown or malformed ids", async () => {
+    await expect(fetchPersonaDetailAction({ staffId: "33333333-3333-4333-8333-333333333333" })).resolves.toBeNull();
+    await expect(fetchPersonaDetailAction({ staffId: "nope" })).resolves.toBeNull();
+  });
+
+  it("reads the staff list once for the overview", async () => {
+    await fetchPeopleOverviewAction();
+    expect(staffRepo.listStaff).toHaveBeenCalledTimes(1);
   });
 
   it("builds the persona detail with role sublabels and hours for team-hours viewers", async () => {
-    const detail = await fetchPersonaDetailAction(OTHER);
+    const detail = (await fetchPersonaDetailAction({ staffId: OTHER }))!;
     expect(detail.person).toMatchObject({ id: OTHER, name: "Ana López", initials: "AL", puesto: "Diseñadora", tramo: "diseno" });
     expect(detail.projects).toEqual([
       { id: "p", label: "Casa", sublabel: "coordinador", real: 40, href: "/proyectos/p" },
@@ -253,7 +262,7 @@ describe("people actions", async () => {
       customStatusNames: new Map([["cs-qa", "QA en revisión"]]),
     });
 
-    const admin = await fetchPersonaDetailAction(OTHER);
+    const admin = (await fetchPersonaDetailAction({ staffId: OTHER }))!;
     expect(repo.listRecentActivity).toHaveBeenLastCalledWith(OTHER, { includeAdmin: true });
     expect(admin.recentActivity.map((a) => a.text)).toEqual([
       "Movió “Casa Lomas” a 90%",
@@ -264,7 +273,7 @@ describe("people actions", async () => {
     expect(admin.recentActivity[0]!.when).toMatch(/^(hoy|ayer) \d{1,2}:\d{2}$/);
 
     state.access = "Dirección";
-    const director = await fetchPersonaDetailAction(OTHER);
+    const director = (await fetchPersonaDetailAction({ staffId: OTHER }))!;
     expect(repo.listRecentActivity).toHaveBeenLastCalledWith(OTHER, { includeAdmin: false });
     expect(director.recentActivity.map((a) => a.id)).toEqual(["e1", "e3"]);
   });

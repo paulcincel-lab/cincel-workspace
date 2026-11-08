@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
@@ -20,14 +20,14 @@ vi.mock("@/lib/actions/contacts-actions", () => ({
   updateContactAction: vi.fn(),
   deleteContactAction: vi.fn(),
 }));
-vi.mock("@/lib/actions/staff-actions", () => ({
-  fetchStaffAction: vi.fn(() => Promise.resolve([])),
-}));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({ fetchCatalogStaff: vi.fn(() => Promise.resolve([])) }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { appearanceStyleBlock, toCssVars } from "@/lib/ui/appearance-css";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
+// The tabs read the contact sheet and save through TanStack Query.
+import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 import type { PersonasContactsTab } from "@/lib/personas/contacts";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 

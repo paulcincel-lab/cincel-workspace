@@ -2,17 +2,18 @@
 
 /**
  * Puestos (project flow BE §7.2). Reads: any staff session. Writes:
- * `positions.canManagePositions`. Revalidates
- * `/configuracion/puestos` and `/equipo` (+ `/configuracion/google` on delete).
+ * `positions.canManagePositions`, returning `ActionResult`. Ajustes › Puestos
+ * and Personas read through TanStack Query: the caller invalidates
+ * `ajustes.page('puestos')`, `personas.equipo` and `catalog.assignableStaff`.
+ * Ajustes › Google reads through TanStack Query too (`ajustes.page('google')`).
  */
-import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
-import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
-
+import { toActionResult } from "@/lib/actions/action-result";
 import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { flowError } from "@/lib/project-flow/errors";
 import * as positionsRepository from "@/lib/repositories/positions-repository";
 import type { Position, PositionInput } from "@/lib/types/core";
+import type { ActionResult } from "@/lib/types/schedule";
 import {
   OrderedIdsSchema,
   parseInput,
@@ -27,11 +28,6 @@ async function requirePositionsManager(): Promise<void> {
   if (!resolvePositionsCapabilities(user).canManagePositions) throw flowError("FORBIDDEN");
 }
 
-function revalidatePositions(): void {
-  revalidateAjustesScreen("puestos");
-  revalidatePersonasScreen(["equipo"]);
-}
-
 /** Live puestos by `sortOrder` (active and inactive), with phases, staffCount and googleManaged. */
 export async function fetchPositionsAction(): Promise<Position[]> {
   await requireCapabilityUser();
@@ -39,45 +35,66 @@ export async function fetchPositionsAction(): Promise<Position[]> {
 }
 
 /** Errors: FORBIDDEN, NAME_TAKEN, EMPTY. */
-export async function createPositionAction(input: PositionInput): Promise<Position> {
+export async function createPositionAction(
+  ...args: Parameters<typeof createPositionActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createPositionActionImpl>>>> {
+  return toActionResult(() => createPositionActionImpl(...args));
+}
+
+async function createPositionActionImpl(input: PositionInput): Promise<Position> {
   await requirePositionsManager();
   const parsed = parseInput(PositionInputSchema, input);
-  const row = await positionsRepository.createPosition(parsed);
-  revalidatePositions();
-  return row;
+  return positionsRepository.createPosition(parsed);
 }
 
 /** Errors: FORBIDDEN, NOT_FOUND, NAME_TAKEN, EMPTY. */
-export async function updatePositionAction(id: string, patch: Partial<PositionInput>): Promise<Position> {
+export async function updatePositionAction(
+  ...args: Parameters<typeof updatePositionActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof updatePositionActionImpl>>>> {
+  return toActionResult(() => updatePositionActionImpl(...args));
+}
+
+async function updatePositionActionImpl(id: string, patch: Partial<PositionInput>): Promise<Position> {
   await requirePositionsManager();
   const positionId = parseInput(UuidSchema, id);
   const parsed = parseInput(PositionInputSchema.partial(), patch);
-  const row = await positionsRepository.updatePosition(positionId, parsed);
-  revalidatePositions();
-  return row;
+  return positionsRepository.updatePosition(positionId, parsed);
 }
 
 /** Errors: FORBIDDEN, NOT_FOUND, IN_USE (a Google group mapping references it). */
-export async function deletePositionAction(id: string): Promise<void> {
+export async function deletePositionAction(
+  ...args: Parameters<typeof deletePositionActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof deletePositionActionImpl>>>> {
+  return toActionResult(() => deletePositionActionImpl(...args));
+}
+
+async function deletePositionActionImpl(id: string): Promise<void> {
   await requirePositionsManager();
   await positionsRepository.softDeletePosition(parseInput(UuidSchema, id));
-  revalidatePositions();
-  revalidateAjustesScreen("google");
 }
 
 /** Replaces the candidate fases (any tramo). Errors: FORBIDDEN, NOT_FOUND (unknown ids). */
-export async function setPositionPhasesAction(id: string, phaseIds: string[]): Promise<Position> {
+export async function setPositionPhasesAction(
+  ...args: Parameters<typeof setPositionPhasesActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setPositionPhasesActionImpl>>>> {
+  return toActionResult(() => setPositionPhasesActionImpl(...args));
+}
+
+async function setPositionPhasesActionImpl(id: string, phaseIds: string[]): Promise<Position> {
   await requirePositionsManager();
   const positionId = parseInput(UuidSchema, id);
   const ids = parseInput(UuidArraySchema, phaseIds);
-  const row = await positionsRepository.setPositionPhases(positionId, [...new Set(ids)]);
-  revalidatePositions();
-  return row;
+  return positionsRepository.setPositionPhases(positionId, [...new Set(ids)]);
 }
 
-/** Errors: FORBIDDEN. */
-export async function reorderPositionsAction(orderedIds: string[]): Promise<void> {
+/** Errors: FORBIDDEN, INVALID. */
+export async function reorderPositionsAction(
+  ...args: Parameters<typeof reorderPositionsActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderPositionsActionImpl>>>> {
+  return toActionResult(() => reorderPositionsActionImpl(...args));
+}
+
+async function reorderPositionsActionImpl(orderedIds: string[]): Promise<void> {
   await requirePositionsManager();
   await positionsRepository.reorderPositions(parseInput(OrderedIdsSchema, orderedIds));
-  revalidatePositions();
 }

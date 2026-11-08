@@ -1,34 +1,30 @@
 import "server-only";
 
+import type { QueryClient } from "@tanstack/react-query";
 import { notFound, redirect } from "next/navigation";
 
-import type { PersonasContactsProps } from "@/components/personas/PersonasContacts";
-import type { PersonasTab } from "@/components/personas/PersonasTabs";
-import { fetchContactsAction } from "@/lib/actions/contacts-actions";
-import { fetchStaffAction } from "@/lib/actions/staff-actions";
-import { canSeeAdminData, resolveClientsCapabilities } from "@/lib/auth/permissions";
+import { resolveClientsCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import {
-  parseProveedoresSubfilter,
-  toPersonasContact,
-  type PersonasContactsTab,
-} from "@/lib/personas/contacts";
-import { countPersonasTabs } from "@/lib/personas/team";
+import { loadPersonasContacts, loadPersonasCounts } from "@/lib/loaders/personas";
+import { parseProveedoresSubfilter, type PersonasContactsTab } from "@/lib/personas/contacts";
+import { STALE, qk } from "@/lib/query/keys";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
 /**
- * Server loader shared by `/personas/{clientes,contratistas,proveedores}`
- * (redesign FE §3.6, §2.1): session, the
- * `clients.canViewClients` route rule (404 otherwise), the contacts from
- * `fetchContactsAction` with admin-only origin data stripped for viewers
- * without `canSeeAdminData`, and the tab counts.
+ * Server side of `/personas/{clientes,contratistas,proveedores}` (redesign FE
+ * §3.6, §2.1; Query Migration 6): session, the `clients.canViewClients`
+ * route rule (404 otherwise), then the prefetch of the tab's
+ * `personas.contacts(tab, tipo)` (its own contact types only, origin data
+ * stripped for viewers without `canSeeAdminData`, in the loader) and the
+ * shared `personas.counts()`. The page renders `PersonasContactsScreen`
+ * under `<Hydrate qc>`.
  */
-export async function loadPersonasContactsPage(
+export async function preparePersonasContactsPage(
   tab: PersonasContactsTab,
   searchParams: SearchParams,
-): Promise<PersonasContactsProps> {
-
+): Promise<{ qc: QueryClient; tab: PersonasContactsTab; tipo: string | null }> {
   let user: Awaited<ReturnType<typeof requireCapabilityUser>>;
   try {
     user = await requireCapabilityUser();
@@ -36,27 +32,15 @@ export async function loadPersonasContactsPage(
     redirect("/login");
   }
 
-  const caps = resolveClientsCapabilities(user);
-  if (!caps.canViewClients) notFound();
-  const isAdmin = canSeeAdminData(user);
+  if (!resolveClientsCapabilities(user).canViewClients) notFound();
 
-  const [rows, staff] = await Promise.all([
-    fetchContactsAction(),
-    fetchStaffAction().catch(() => []),
+  const tipo = tab === "proveedores" ? parseProveedoresSubfilter(searchParams.tipo) : null;
+  const qc = getQueryClient();
+  await Promise.all([
+    prefetch(qc, { queryKey: qk.personas.contacts(tab, tipo), staleTime: STALE.screen }, () =>
+      loadPersonasContacts(user, { tab, tipo }),
+    ),
+    prefetch(qc, { queryKey: qk.personas.counts(), staleTime: STALE.screen }, () => loadPersonasCounts(user)),
   ]);
-  const contacts = rows.map((row) => toPersonasContact(row, { canSeeAdminData: isAdmin }));
-  const counts: Record<PersonasTab, number> = countPersonasTabs(staff, rows);
-
-  return {
-    tab,
-    contacts,
-    counts,
-    subfilter: tab === "proveedores" ? parseProveedoresSubfilter(searchParams.tipo) : null,
-    capabilities: {
-      canCreate: caps.canCreateClient,
-      canEdit: caps.canEditClient,
-      canDelete: caps.canDeleteClient,
-      isAdmin,
-    },
-  };
+  return { qc, tab, tipo };
 }

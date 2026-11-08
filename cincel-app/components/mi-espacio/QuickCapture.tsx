@@ -15,12 +15,12 @@ import {
 } from "@/lib/actions/my-space-actions";
 import { IMPLEMENTED } from "@/lib/actions/my-space-actions.flags";
 import { actionErrorText } from "@/lib/errors";
-import type { ParsedReminder } from "@/lib/types/redesign";
+import { useActionMutation } from "@/lib/query/mutation";
+import { insertCachedChecklist, upsertCachedNote } from "@/lib/query/options/mi-espacio";
+import type { Checklist, Note, ParsedReminder } from "@/lib/types/redesign";
 
 import { ReminderDialog } from "./ReminderDialog";
 import { NEW_NOTE, NOTE_PARAM, replaceMiEspacioParam } from "./search-params";
-
-export type QuickCaptureProps = { onCreated(kind: "nota" | "checklist" | "recordatorio"): void };
 
 export const QUICK_CAPTURE_PLACEHOLDER =
   "Escribe una nota, “recuérdame mañana 9am llamar a Juanma” o “- [ ] checklist”";
@@ -52,8 +52,6 @@ export function parseChecklistText(text: string): { title: string; items: string
   return { title, items };
 }
 
-type Kind = "nota" | "checklist" | "recordatorio";
-
 type ReminderState = { open: boolean; text?: string; parsed?: ParsedReminder };
 
 /**
@@ -61,9 +59,10 @@ type ReminderState = { open: boolean; text?: string; parsed?: ParsedReminder };
  * text with a parsed `dueAt` to `ReminderDialog` (prefilled) and anything
  * else to a note. A kind and its button exist only while its actions are
  * implemented (FE §9 stubs rule); with none implemented nothing renders.
- * Forms ignore the presentation style.
+ * A created note or checklist goes straight into `me.notes` / `me.checklists`
+ * (no refetch, no route re-render). Forms ignore the presentation style.
  */
-export function QuickCapture({ onCreated }: QuickCaptureProps) {
+export function QuickCapture() {
   const inputId = useId();
   const errorId = useId();
   const [text, setText] = useState("");
@@ -71,16 +70,25 @@ export function QuickCapture({ onCreated }: QuickCaptureProps) {
   const [error, setError] = useState<string | null>(null);
   const [reminder, setReminder] = useState<ReminderState>({ open: false });
 
+  // Errors reach the inline alert through `run` (mutateAsync rejects), so no toast here.
+  const createNote = useActionMutation<{ body: string }, Note>(createNoteAction, {
+    setData: (qc, note) => upsertCachedNote(qc, note),
+    onFormError: () => undefined,
+  });
+  const createChecklist = useActionMutation<{ title: string; items?: string[] }, Checklist>(createChecklistAction, {
+    setData: (qc, checklist) => insertCachedChecklist(qc, checklist),
+    onFormError: () => undefined,
+  });
+
   const canNote = IMPLEMENTED.createNoteAction;
   const canChecklist = IMPLEMENTED.createChecklistAction;
   const canReminder = IMPLEMENTED.parseReminderTextAction && IMPLEMENTED.createReminderAction;
 
   if (!canNote && !canChecklist && !canReminder) return null;
 
-  function done(kind: Kind) {
+  function done() {
     setText("");
     setError(null);
-    onCreated(kind);
   }
 
   async function run(task: () => Promise<void>) {
@@ -96,17 +104,17 @@ export function QuickCapture({ onCreated }: QuickCaptureProps) {
   }
 
   async function saveNote(value: string) {
-    await createNoteAction({ body: value });
+    await createNote.mutateAsync({ body: value });
     toast.success("Nota guardada");
-    done("nota");
+    done();
   }
 
   async function saveChecklist(value: string) {
     const parsed = parseChecklistText(value);
     if (!parsed) return;
-    await createChecklistAction(parsed.items.length > 0 ? parsed : { title: parsed.title });
+    await createChecklist.mutateAsync(parsed.items.length > 0 ? parsed : { title: parsed.title });
     toast.success("Checklist creado");
-    done("checklist");
+    done();
   }
 
   /** The parse of the text, or null when it is too long to be a reminder. */
@@ -238,7 +246,7 @@ export function QuickCapture({ onCreated }: QuickCaptureProps) {
           onOpenChange={(open) => setReminder((current) => (open ? { ...current, open } : { open: false }))}
           onCreated={() => {
             setReminder({ open: false });
-            done("recordatorio");
+            done();
           }}
         />
       ) : null}

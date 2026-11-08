@@ -1,3 +1,11 @@
+import type { QueryClient } from "@tanstack/react-query";
+
+import type { ResourcesCapabilities } from "@/lib/auth/permissions";
+import type { BibliotecaLinksSection } from "@/lib/biblioteca/catalog";
+import type { BibliotecaData } from "@/lib/biblioteca/load";
+import type { DriveStatus } from "@/lib/google/use-drive-status";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient } from "@/lib/query/test-utils";
 import type { ResourceLink } from "@/lib/types/resource";
 
 let seq = 0;
@@ -38,4 +46,48 @@ export function bibliotecaFixture(): ResourceLink[] {
     makeLink({ id: "mis-docs", section: "mis-documentos", title: "Mis documentos", linkType: "drive_folder", url: "https://drive.google.com/drive/folders/misDocs", personalFor: { id: "staff-ana", name: "Ana Ríos" } }),
     makeLink({ id: "fav-bitacora", section: "mis-favoritos", title: "Bitácora de obra", url: "https://docs.google.com/document/d/docbitacora/edit", personalFor: { id: "staff-ana", name: "Ana Ríos" } }),
   ];
+}
+
+/** Resource capabilities of a collaborator who sees everything (tests override what they need). */
+export function resourcesCapabilities(overrides: { canViewEmpresa?: boolean; canManageFavorites?: boolean } = {}): ResourcesCapabilities {
+  return {
+    canViewResources: true,
+    canManageFavoritesSection: overrides.canManageFavorites ?? true,
+    enterprise: {
+      canView: overrides.canViewEmpresa ?? true,
+      canCreate: false,
+      canEdit: false,
+      canDelete: false,
+      canCreateCategory: false,
+    },
+    corporate: { canCreate: true, canDelete: false, editScope: "owned_or_personal" },
+  };
+}
+
+/** A `biblioteca.links(section)` value, as `getBibliotecaPageData` returns it. */
+export function bibliotecaData(
+  links: ResourceLink[],
+  options: { viewerId?: string; canViewEmpresa?: boolean; canManageFavorites?: boolean; driveEnabled?: boolean } = {},
+): BibliotecaData {
+  return {
+    viewerId: options.viewerId ?? "staff-ana",
+    capabilities: resourcesCapabilities(options),
+    links,
+    driveEnabled: options.driveEnabled ?? false,
+  };
+}
+
+/**
+ * A test client with `biblioteca.links(section)` seeded, as the page's
+ * prefetch leaves it, plus the Drive status the page knows.
+ */
+export function seededBibliotecaClient(
+  section: BibliotecaLinksSection | null,
+  links: ResourceLink[],
+  options: Parameters<typeof bibliotecaData>[1] = {},
+): QueryClient {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.biblioteca.links(section), bibliotecaData(links, options));
+  client.setQueryData<DriveStatus>(qk.google.driveStatus(), { configured: options.driveEnabled ?? false });
+  return client;
 }

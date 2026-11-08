@@ -1,7 +1,7 @@
 /** Assistant threads, messages and the approval audit (redesign BE §3.10, §8.10). Owner-only. */
 import { randomUUID } from "node:crypto";
 
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 
 import { assistantActions, assistantMessages, assistantThreads } from "@/lib/db/schema";
 import type { FlowDb } from "@/lib/project-flow/db";
@@ -51,13 +51,27 @@ export async function findOwnedAssistantThread(
   return row ?? null;
 }
 
-/** A thread's messages in conversation order. */
-export async function listAssistantThreadMessages(db: OwnerDb, threadId: string): Promise<AssistantMessageRow[]> {
-  return db
+/** Messages a thread read returns: the most recent ones (`listAssistantThreadMessages`). */
+export const ASSISTANT_THREAD_MESSAGES_PAGE = 100;
+
+/**
+ * A thread's last `limit` displayable messages (no `tool` rows), in
+ * conversation order. Reads newest first with the limit, then reverses, so
+ * a long thread never loads its whole history. The chat route reads the full
+ * history separately (`loadThreadMessages`), so the model still sees it all.
+ */
+export async function listAssistantThreadMessages(
+  db: OwnerDb,
+  threadId: string,
+  opts: { limit?: number } = {},
+): Promise<AssistantMessageRow[]> {
+  const rows = await db
     .select()
     .from(assistantMessages)
-    .where(eq(assistantMessages.threadId, threadId))
-    .orderBy(asc(assistantMessages.createdAt), asc(assistantMessages.id));
+    .where(and(eq(assistantMessages.threadId, threadId), ne(assistantMessages.role, "tool")))
+    .orderBy(desc(assistantMessages.createdAt), desc(assistantMessages.id))
+    .limit(opts.limit ?? ASSISTANT_THREAD_MESSAGES_PAGE);
+  return rows.reverse();
 }
 
 /** Soft-deletes the caller's live thread; false when there is none to delete. */

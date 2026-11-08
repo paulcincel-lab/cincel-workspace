@@ -83,16 +83,19 @@ describe("fetchAdminTasksAction", () => {
 });
 
 describe("createAdminTaskAction", () => {
-  it("creates the task as the session user and revalidates", async () => {
+  it("creates the task as the session user, with no Tareas or Inicio route revalidated", async () => {
     const row = await createAdminTaskAction({ projectId: PROJECT, title: "  Asignar cliente  ", managerId: ACTOR });
     expect(row).toMatchObject({ id: TASK, kind: "admin" });
     expect(repo.createAdminTask).toHaveBeenCalledWith(
       { projectId: PROJECT, title: "Asignar cliente", managerId: ACTOR },
       ACTOR
     );
-    expect(revalidatePath).toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
-    expect(revalidatePath).toHaveBeenCalledWith("/actividades", "layout");
-    expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
+    // The ficha reads its own query (5b, #960): it is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
+    // Tareas reads `qk.tareas.*` (Phase 4): the Actividades layout stub is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith("/actividades", "layout");
+    // Inicio reads `qk.inicio()` (#937): the `/dashboard` stub is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith("/dashboard");
   });
 
   it("throws FORBIDDEN for a non-administrator", async () => {

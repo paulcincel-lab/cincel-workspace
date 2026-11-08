@@ -6,6 +6,11 @@
  * the first request gets an approval request for `create_note`, the next one
  * (carrying `approvals`) gets the tool result.
  *
+ * Query Migration Phase 10 (#944): the request body carries only the thread
+ * id, the message or approvals and the context ids (no profile fields); the
+ * sheet keeps its conversation across client navigation (store + query
+ * cache) but a reload starts with no thread; only one sheet is mounted.
+ *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { test, expect, type Page, type Request } from "@playwright/test";
@@ -85,6 +90,13 @@ test.describe("Asistente · sheet", () => {
     expect(bodies[0].context).toEqual({ route: "/inicio" });
     expect(bodies[1].id).toBe(bodies[0].id);
     expect(bodies[1].approvals).toEqual([{ toolCallId: "call-1", approved: true }]);
+    for (const body of bodies) {
+      for (const key of Object.keys(body)) expect(["id", "message", "approvals", "context"]).toContain(key);
+      for (const key of Object.keys(body.context as object)) {
+        expect(["route", "projectId", "taskId", "personId"]).toContain(key);
+      }
+    }
+    await expect(page.getByPlaceholder(COMPOSER)).toHaveCount(1);
 
     const fullscreen = page.getByRole("link", { name: "Pantalla completa" });
     await expect(fullscreen).toHaveAttribute("href", `/asistente?thread=${bodies[0].id}`);
@@ -92,5 +104,38 @@ test.describe("Asistente · sheet", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByPlaceholder(COMPOSER)).toBeHidden();
     await expect(trigger).toBeFocused();
+  });
+
+  test("keeps the conversation across navigation, not across a reload", async ({ page }) => {
+    const bodies = await stubChatRoute(page);
+    await page.goto(`${BASE_URL}/inicio`, { waitUntil: "load" });
+
+    await page.getByRole("button", { name: /Pregúntale a Cincel/ }).click();
+    await page.getByPlaceholder(COMPOSER).fill("Crea una nota de compras");
+    await page.getByRole("button", { name: "Enviar" }).click();
+    await page.getByRole("button", { name: "Confirmar" }).click();
+    await expect(page.getByText("Creé la nota.")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByPlaceholder(COMPOSER)).toBeHidden();
+
+    // Client navigation: the same conversation reopens.
+    await page.getByRole("link", { name: "Tareas", exact: true }).first().click();
+    await page.waitForURL(/\/tareas/);
+    await page.keyboard.press("ControlOrMeta+j");
+    await expect(page.getByPlaceholder(COMPOSER)).toBeVisible();
+    await expect(page.getByText("Creé la nota.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Pantalla completa" })).toHaveAttribute(
+      "href",
+      `/asistente?thread=${bodies[0].id}`,
+    );
+    await expect(page.getByPlaceholder(COMPOSER)).toHaveCount(1);
+
+    // A reload starts with no thread in the sheet (not persisted).
+    await page.reload({ waitUntil: "load" });
+    await page.keyboard.press("ControlOrMeta+j");
+    await expect(page.getByPlaceholder(COMPOSER)).toBeVisible();
+    await expect(page.getByText("Creé la nota.")).toHaveCount(0);
+    await expect(page.getByText("¿En qué te ayudo?")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Pantalla completa" })).toHaveAttribute("href", "/asistente");
   });
 });

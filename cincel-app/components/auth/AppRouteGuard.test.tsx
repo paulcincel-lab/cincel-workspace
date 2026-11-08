@@ -92,10 +92,10 @@ describe("AppRouteGuard", () => {
     expect(nav.replace).not.toHaveBeenCalled();
   });
 
-  it("moves an active session away from /login to /dashboard", () => {
+  it("moves an active session away from /login to /inicio", () => {
     renderAt("/login", { status: "active", user: activeUser() });
 
-    expect(nav.replace).toHaveBeenCalledWith("/dashboard");
+    expect(nav.replace).toHaveBeenCalledWith("/inicio");
     expect(assign).not.toHaveBeenCalled();
   });
 
@@ -127,13 +127,13 @@ describe("AppRouteGuard", () => {
   it("redirects a non-admin away from /configuracion", () => {
     renderAt("/configuracion", { status: "active", user: activeUser() });
 
-    expect(nav.replace).toHaveBeenCalledWith("/dashboard");
+    expect(nav.replace).toHaveBeenCalledWith("/inicio");
   });
 
   it("keeps /configuracion/google for Administrador only", () => {
     const view = renderAt("/configuracion/google", { status: "active", user: activeUser() });
     expect(screen.queryByText("contenido")).toBeNull();
-    expect(nav.replace).toHaveBeenCalledWith("/dashboard");
+    expect(nav.replace).toHaveBeenCalledWith("/inicio");
     view.unmount();
 
     renderAt("/configuracion/google", { status: "active", user: activeUser("Administrador") });
@@ -155,7 +155,7 @@ describe("AppRouteGuard", () => {
     expect(screen.getByText("contenido")).toBeTruthy();
 
     act(() => useSessionStore.getState().setAccess({ status: "active", user: activeUser() }));
-    expect(nav.replace).toHaveBeenCalledWith("/dashboard");
+    expect(nav.replace).toHaveBeenCalledWith("/inicio");
     expect(assign).not.toHaveBeenCalled();
   });
 

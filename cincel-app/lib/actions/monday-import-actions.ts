@@ -45,10 +45,7 @@
  * never in storage. It is never stored, logged or returned. Files excluded with Drive not configured is
  * allowed: apply ends the batch without Drive and the folders stay pending for the backfill.
  */
-import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
 import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
-import { revalidateProyectoFichaScreen, revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
-import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 import { z } from "zod";
 
 import { getSessionAccess } from "@/lib/auth/session";
@@ -401,7 +398,6 @@ export async function saveMondayStatusMapAction(
     const statusMap: MondayStatusMap = parse(MondayStatusMapSchema, entries, "statusMap");
     if (!(await statusMapStatusesExist(db, statusMap))) throw new WizardError("STATUS_NOT_FOUND");
     await saveStatusMap(db, statusMap);
-    revalidateAjustesScreen("importar-monday");
     return { statusMap };
   });
 }
@@ -436,9 +432,6 @@ export async function applyMondayRemapAction(
     checkProjectId(projectId);
     const remapInput = parse(RemapInputSchema, input, "input");
     const { updated } = await applyRemap(db, projectId, remapInput, admin.id);
-    revalidateProyectoFichaScreen(projectId, ["ficha"]);
-    revalidateTareasScreen(["actividadesLayout"]);
-    revalidateProyectosListScreen(["proyectos"]);
     revalidateInicioScreen();
     return { updated };
   });

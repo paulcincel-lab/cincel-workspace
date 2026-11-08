@@ -14,6 +14,8 @@ export type CalendarEvent = {
   time: string;
   title: string;
   project: string;
+  /** The task's project id (cache invalidation after a delete). */
+  projectId?: string;
   responsible: string;
   /** Tramo key (`workflows.key`), `"sin-tramo"`, or `"admin"` for admin tasks. */
   tramo: string;

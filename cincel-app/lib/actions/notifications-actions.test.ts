@@ -12,6 +12,8 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { unwrapActions } from "@/tests/helpers/action-result";
+
 const url = process.env.TEST_DATABASE_URL;
 
 // `lib/db/client` reads DATABASE_URL when it is first imported.
@@ -50,7 +52,7 @@ const KINDS = [
 ] as const;
 
 describe("notifications actions: input validation", async () => {
-  const actions = await import("@/lib/actions/notifications-actions");
+  const actions = unwrapActions(await import("@/lib/actions/notifications-actions"));
   const { IMPLEMENTED } = await import("@/lib/actions/notifications-actions.flags");
 
   it("flags every action as implemented", () => {
@@ -106,7 +108,7 @@ describe.skipIf(!url)("notifications actions (test DB)", async () => {
   const { eq, inArray, and, isNull } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const actions = await import("@/lib/actions/notifications-actions");
+  const actions = unwrapActions(await import("@/lib/actions/notifications-actions"));
   const { NOTIFICATION_DEFAULTS } = await import("@/lib/notifications/notify");
 
   const run = randomUUID().slice(0, 8);
@@ -273,7 +275,8 @@ describe.skipIf(!url)("notifications actions (test DB)", async () => {
 
       const result = await actions.markNotificationsReadAction([mine[0]!, ...theirs]);
       expect(result).toEqual({ unreadCount: 2 });
-      expect(cache.revalidatePath).toHaveBeenCalledWith("/mi-espacio");
+      // The client patches me.notifications and shell.badges from the result: no route revalidation.
+      expect(cache.revalidatePath).not.toHaveBeenCalled();
 
       const theirUnread = await db
         .select({ id: schema.notifications.id })
@@ -338,7 +341,8 @@ describe.skipIf(!url)("notifications actions (test DB)", async () => {
         ],
         quietHours: { from: "22:00", to: "07:30" },
       });
-      expect(cache.revalidatePath).toHaveBeenCalledWith("/ajustes/notificaciones");
+      // Ajustes › Notificaciones writes the result into its query; nothing re-renders the route.
+      expect(cache.revalidatePath).not.toHaveBeenCalledWith("/ajustes/notificaciones");
 
       const fetched = await actions.fetchNotificationPreferencesAction();
       expect(fetched).toEqual(saved);

@@ -129,6 +129,26 @@ export const getPortalUser = cache(async function getPortalUser(): Promise<Porta
   return record.user;
 });
 
+/**
+ * The signed-in portal user without the sliding write: for the portal page-data actions, whose query
+ * functions stay side-effect free (Query Migration Phase 11). The daily session extension happens on the
+ * next page load, where the layout calls `getPortalUser()`. Cached per request.
+ */
+export const getPortalViewer = cache(async function getPortalViewer(): Promise<PortalUser | null> {
+  const jar = await cookies();
+  const token = jar.get(PORTAL_SESSION_COOKIE)?.value;
+  if (!token) return null;
+  const record = await findActivePortalSession(hashPortalToken(token), new Date());
+  return record?.user ?? null;
+});
+
+/** Page-data actions: the portal user (read-only lookup), or the same sign-out redirect as the pages. */
+export async function requirePortalViewer(): Promise<PortalUser> {
+  const user = await getPortalViewer();
+  if (!user) redirect(portalSignOutPath());
+  return user;
+}
+
 /** Pages and layouts: the portal user, or a redirect that clears the cookie and lands on `/portal/login`. */
 export async function requirePortalUser(): Promise<PortalUser> {
   const user = await getPortalUser();

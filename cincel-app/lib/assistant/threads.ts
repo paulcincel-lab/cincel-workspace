@@ -87,12 +87,46 @@ export async function loadThreadMessages(db: OwnerDb, threadId: string): Promise
     }));
 }
 
+/** JSON with object keys sorted, so a stored `jsonb` value and the same in-memory value compare equal. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+    const entries = Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return Object.fromEntries(entries);
+  });
+}
+
+/** What is stored per message id (role and parts), to tell new and changed messages from unchanged ones. */
+export type ThreadSnapshot = ReadonlyMap<string, string>;
+
+export function threadSnapshot(messages: readonly UIMessage[]): ThreadSnapshot {
+  return new Map(messages.map((message) => [message.id, stableJson({ role: message.role, parts: message.parts })]));
+}
+
+/**
+ * The messages that are new or changed against `snapshot` (Query Migration
+ * Phase 10, #944): the chat route writes only these per turn instead of the
+ * whole history. Order is kept.
+ */
+export function changedMessages(messages: readonly UIMessage[], snapshot: ThreadSnapshot): UIMessage[] {
+  return messages.filter(
+    (message) => snapshot.get(message.id) !== stableJson({ role: message.role, parts: message.parts }),
+  );
+}
+
 /**
  * Upserts the messages by `(thread_id, id)` (new rows keep the list order,
  * existing rows get their parts replaced), sets the title from the first user
  * message while the thread still has the default one, and bumps `updated_at`.
+ * The chat route passes only the new or changed messages (`changedMessages`)
+ * and the whole conversation as `titleFrom`.
  */
-export async function saveThreadMessages(db: OwnerDb, threadId: string, messages: UIMessage[]): Promise<void> {
+export async function saveThreadMessages(
+  db: OwnerDb,
+  threadId: string,
+  messages: UIMessage[],
+  opts: { titleFrom?: readonly UIMessage[] } = {},
+): Promise<void> {
   const storable = messages.filter(
     (message) =>
       typeof message.id === "string" &&
@@ -119,7 +153,7 @@ export async function saveThreadMessages(db: OwnerDb, threadId: string, messages
   }
 
   await db.update(assistantThreads).set({ updatedAt: new Date() }).where(eq(assistantThreads.id, threadId));
-  const title = threadTitleFrom(messages);
+  const title = threadTitleFrom(opts.titleFrom ?? messages);
   if (title) {
     await db
       .update(assistantThreads)

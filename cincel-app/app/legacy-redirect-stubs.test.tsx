@@ -1,8 +1,14 @@
+// @vitest-environment node
 /**
- * Old route stubs (FE §2.2, §2.3): every old page is a plain server-side
- * redirect to its new route, the query preserved, for every user.
+ * Old routes (FE §2.2, §2.3): `proxy.ts` redirects every old staff URL to
+ * its new route before anything renders (no `(staff)` layout, no stub
+ * page), the query preserved. `/` keeps its own redirect page.
  */
+import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
+import { proxy } from "@/proxy";
 
 const navigation = vi.hoisted(() => ({
   redirect: vi.fn((url: string) => {
@@ -16,141 +22,96 @@ const navigation = vi.hoisted(() => ({
 vi.mock("next/navigation", () => navigation);
 
 import RootPage from "./page";
-import DashboardPage from "./(staff)/dashboard/page";
-import TableroPage from "./(staff)/tablero/page";
-import MisTareasPage from "./(staff)/mis-tareas/page";
-import CalendarioPage from "./(staff)/calendario/page";
-import ActividadesPage from "./(staff)/actividades/[tramo]/page";
-import EquipoPage from "./(staff)/equipo/page";
-import DirectorioPage from "./(staff)/directorio/page";
-import ClientesPage from "./(staff)/clientes/page";
-import ContratistasPage from "./(staff)/contratistas/page";
-import ColaboradoresPage from "./(staff)/proveedores/colaboradores/page";
-import ProveedoresContratistasPage from "./(staff)/proveedores/contratistas/page";
-import TiendasPage from "./(staff)/proveedores/tiendas/page";
-import RecursosPage from "./(staff)/recursos/page";
-import RecursosSeccionPage from "./(staff)/recursos/[seccion]/page";
-import RecursosEmpresaPage from "./(staff)/recursos/empresa/page";
-import EmpresaBookPage from "./(staff)/recursos/empresa/book/page";
-import EmpresaImagenPage from "./(staff)/recursos/empresa/imagen-de-la-empresa/page";
-import EmpresaManualPage from "./(staff)/recursos/empresa/manual-de-la-empresa/page";
-import EmpresaPoliticasPage from "./(staff)/recursos/empresa/politicas-de-la-empresa/page";
-import EmpresaRFCPage from "./(staff)/recursos/empresa/rfc/page";
-import ProfilePage from "./(staff)/profile/page";
-import ConfiguracionPage from "./(staff)/configuracion/page";
-import ConfiguracionAreasPage from "./(staff)/configuracion/areas/page";
-import ConfiguracionEstatusPage from "./(staff)/configuracion/estatus/page";
-import ConfiguracionGeneralPage from "./(staff)/configuracion/general/page";
-import ConfiguracionGooglePage from "./(staff)/configuracion/google/page";
-import GoogleSetupWizardPage from "./(staff)/configuracion/google/primeros-pasos/page";
-import ImportarMondayPage from "./(staff)/configuracion/importar-monday/page";
-import ConfiguracionPermisosPage from "./(staff)/configuracion/permisos/page";
-import ConfiguracionPuestosPage from "./(staff)/configuracion/puestos/page";
-import ConfiguracionTramosPage from "./(staff)/configuracion/tramos/page";
-import ConfiguracionWorkflowsPage from "./(staff)/configuracion/workflows/page";
 
-type Query = Record<string, string | string[] | undefined>;
-type Props = { searchParams: Promise<Query>; params?: Promise<Record<string, string>> };
-type Page = (props: never) => Promise<unknown>;
+type Query = Record<string, string>;
 
-type StubCase = {
+type LegacyCase = {
+  /** The old path. */
   name: string;
-  page: Page;
-  params?: Record<string, string>;
   query?: Query;
   /** Target (FE §2.2). */
   on: string;
 };
 
-const CASES: StubCase[] = [
-  { name: "/", page: RootPage, on: "/inicio" },
-  { name: "/dashboard", page: DashboardPage, query: { tab: "kpis" }, on: "/inicio?tab=kpis" },
-  { name: "/tablero", page: TableroPage, query: { proyecto: "p1" }, on: "/tareas?vista=tablero&proyecto=p1" },
-  { name: "/mis-tareas", page: MisTareasPage, on: "/tareas?vista=lista&responsable=yo" },
-  { name: "/calendario", page: CalendarioPage, query: { fecha: "2026-11-07" }, on: "/tareas?vista=calendario&fecha=2026-11-07" },
-  { name: "/actividades/general", page: ActividadesPage, params: { tramo: "general" }, on: "/tareas?vista=lista" },
+const CASES: LegacyCase[] = [
+  { name: "/dashboard", query: { tab: "kpis" }, on: "/inicio?tab=kpis" },
+  { name: "/tablero", query: { proyecto: "p1" }, on: "/tareas?vista=tablero&proyecto=p1" },
+  { name: "/mis-tareas", on: "/tareas?vista=lista&responsable=yo" },
+  { name: "/calendario", query: { fecha: "2026-11-07" }, on: "/tareas?vista=calendario&fecha=2026-11-07" },
+  { name: "/actividades/general", on: "/tareas?vista=lista" },
   {
     name: "/actividades/presale",
-    page: ActividadesPage,
-    params: { tramo: "presale" },
     on: "/tareas?vista=lista&tramo=presale",
   },
   {
     name: "/actividades/presale?project=X",
-    page: ActividadesPage,
-    params: { tramo: "presale" },
     query: { project: "X" },
     on: "/tareas?vista=lista&tramo=presale&project=X&iniciar=1",
   },
-  { name: "/equipo", page: EquipoPage, on: "/personas" },
-  { name: "/directorio", page: DirectorioPage, query: { q: "ana" }, on: "/personas/clientes?q=ana" },
-  { name: "/clientes", page: ClientesPage, on: "/personas/clientes" },
-  { name: "/contratistas", page: ContratistasPage, on: "/personas/contratistas" },
-  { name: "/proveedores/colaboradores", page: ColaboradoresPage, on: "/personas/proveedores" },
+  { name: "/equipo", on: "/personas" },
+  { name: "/directorio", query: { q: "ana" }, on: "/personas/clientes?q=ana" },
+  { name: "/clientes", on: "/personas/clientes" },
+  { name: "/contratistas", on: "/personas/contratistas" },
+  { name: "/proveedores/colaboradores", on: "/personas/proveedores" },
   {
     name: "/proveedores/contratistas",
-    page: ProveedoresContratistasPage,
     on: "/personas/proveedores",
   },
-  { name: "/proveedores/tiendas", page: TiendasPage, on: "/personas/proveedores" },
-  { name: "/recursos", page: RecursosPage, on: "/biblioteca" },
+  { name: "/proveedores/tiendas", on: "/personas/proveedores" },
+  { name: "/recursos", on: "/biblioteca" },
   {
     name: "/recursos/formacion",
-    page: RecursosSeccionPage,
-    params: { seccion: "formacion" },
     query: { carpeta: "c1" },
     on: "/biblioteca/formacion?carpeta=c1",
   },
   {
     name: "/recursos/mis-vacaciones",
-    page: RecursosSeccionPage,
-    params: { seccion: "mis-vacaciones" },
     on: "/biblioteca/vacaciones",
   },
-  { name: "/recursos/empresa", page: RecursosEmpresaPage, on: "/biblioteca" },
-  { name: "/recursos/empresa/book", page: EmpresaBookPage, on: "/biblioteca/empresa/book" },
+  { name: "/recursos/empresa", on: "/biblioteca" },
+  { name: "/recursos/empresa/book", on: "/biblioteca/empresa/book" },
   {
     name: "/recursos/empresa/imagen-de-la-empresa",
-    page: EmpresaImagenPage,
     on: "/biblioteca/empresa/imagen-de-la-empresa",
   },
   {
     name: "/recursos/empresa/manual-de-la-empresa",
-    page: EmpresaManualPage,
     on: "/biblioteca/empresa/manual-de-la-empresa",
   },
   {
     name: "/recursos/empresa/politicas-de-la-empresa",
-    page: EmpresaPoliticasPage,
     on: "/biblioteca/empresa/politicas-de-la-empresa",
   },
-  { name: "/recursos/empresa/rfc", page: EmpresaRFCPage, on: "/biblioteca/empresa/rfc" },
-  { name: "/profile", page: ProfilePage, on: "/ajustes/perfil" },
-  { name: "/configuracion", page: ConfiguracionPage, on: "/ajustes/apariencia" },
-  { name: "/configuracion/areas", page: ConfiguracionAreasPage, on: "/ajustes/puestos" },
-  { name: "/configuracion/estatus", page: ConfiguracionEstatusPage, on: "/ajustes/estatus" },
-  { name: "/configuracion/general", page: ConfiguracionGeneralPage, on: "/ajustes/general" },
-  { name: "/configuracion/google", page: ConfiguracionGooglePage, on: "/ajustes/google" },
+  { name: "/recursos/empresa/rfc", on: "/biblioteca/empresa/rfc" },
+  { name: "/profile", on: "/ajustes/perfil" },
+  { name: "/configuracion", on: "/ajustes/apariencia" },
+  { name: "/configuracion/areas", on: "/ajustes/puestos" },
+  { name: "/configuracion/estatus", on: "/ajustes/estatus" },
+  { name: "/configuracion/general", on: "/ajustes/general" },
+  { name: "/configuracion/google", on: "/ajustes/google" },
   {
     name: "/configuracion/google/primeros-pasos",
-    page: GoogleSetupWizardPage,
     on: "/ajustes/google/primeros-pasos",
   },
-  { name: "/configuracion/importar-monday", page: ImportarMondayPage, on: "/ajustes/monday" },
-  { name: "/configuracion/permisos", page: ConfiguracionPermisosPage, on: "/ajustes/permisos" },
-  { name: "/configuracion/puestos", page: ConfiguracionPuestosPage, on: "/ajustes/puestos" },
-  { name: "/configuracion/tramos", page: ConfiguracionTramosPage, on: "/ajustes/tramos" },
+  { name: "/configuracion/importar-monday", on: "/ajustes/monday" },
+  { name: "/configuracion/permisos", on: "/ajustes/permisos" },
+  { name: "/configuracion/puestos", on: "/ajustes/puestos" },
+  { name: "/configuracion/tramos", on: "/ajustes/tramos" },
   {
     name: "/configuracion/workflows",
-    page: ConfiguracionWorkflowsPage,
     on: "/ajustes/tramos",
   },
 ];
 
-function run(stub: StubCase): Promise<unknown> {
-  const props: Props = { searchParams: Promise.resolve(stub.query ?? {}) };
-  if (stub.params) props.params = Promise.resolve(stub.params);
-  return (stub.page as unknown as (p: Props) => Promise<unknown>)(props);
+function location(path: string, query: Query = {}): string | null {
+  const url = new URL(path, "http://localhost:3000");
+  for (const [key, value] of Object.entries(query)) url.searchParams.append(key, value);
+  const headers = new Headers({ cookie: `${SESSION_COOKIE}=token` });
+  const response = proxy(new NextRequest(url, { headers }));
+  const target = response.headers.get("location");
+  if (!target) return null;
+  const parsed = new URL(target);
+  return `${parsed.pathname}${parsed.search}`;
 }
 
 beforeEach(() => {
@@ -158,10 +119,34 @@ beforeEach(() => {
   navigation.notFound.mockClear();
 });
 
-describe("old route stubs", () => {
-  it.each(CASES.map((stub) => [stub.name, stub] as const))("%s redirects to its new route", async (_name, stub) => {
-    await expect(run(stub)).rejects.toThrow(`NEXT_REDIRECT:${stub.on}`);
-    expect(navigation.redirect).toHaveBeenCalledTimes(1);
-    expect(navigation.redirect).toHaveBeenCalledWith(stub.on);
+describe("old routes redirect in the proxy", () => {
+  it.each(CASES.map((legacy) => [legacy.name, legacy] as const))("%s redirects to its new route", (_name, legacy) => {
+    const path = legacy.name.split("?")[0];
+    expect(location(path, legacy.query)).toBe(legacy.on);
+  });
+
+  it("keeps the trailing-slash form and leaves new routes alone", () => {
+    expect(location("/dashboard/")).toBe("/inicio");
+    expect(location("/inicio")).toBeNull();
+    expect(location("/tareas", { vista: "tablero" })).toBeNull();
+    expect(location("/ajustes/apariencia")).toBeNull();
+  });
+
+  it("does not redirect deeper paths the table does not know", () => {
+    expect(location("/configuracion/google/otra")).toBeNull();
+    expect(location("/recursos/formacion/uno")).toBeNull();
+  });
+
+  it("sends a guest to /login first", () => {
+    const response = proxy(new NextRequest("http://localhost:3000/dashboard"));
+    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/login");
+  });
+});
+
+describe("/ keeps its page", () => {
+  it("the proxy lets / through and the page redirects to /inicio", async () => {
+    expect(location("/")).toBeNull();
+    await expect(RootPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT:/inicio");
+    expect(navigation.redirect).toHaveBeenCalledWith("/inicio");
   });
 });

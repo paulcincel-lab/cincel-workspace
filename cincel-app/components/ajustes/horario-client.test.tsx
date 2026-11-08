@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const actions = vi.hoisted(() => ({
@@ -30,8 +31,12 @@ const flags = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/time-tracking-actions.flags", () => flags);
 
+/** The page-data action a week change or an invalidation calls. */
+const pageData = vi.hoisted(() => ({ getAjustesHorarioPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
+
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, useSearchParams: () => new URLSearchParams() }));
 
 const sonner = vi.hoisted(() => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("sonner", () => sonner);
@@ -45,9 +50,13 @@ import { horarioExportHref } from "./HorarioSections";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { actionErrorText } from "@/lib/errors";
 import { clockInPromptCopy, minRequiredFrom } from "@/lib/time-tracking/horario-copy";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { localDate } from "@/lib/time-tracking/local-time";
 import type { PresentationStyle, TimeTrackingSettings } from "@/lib/types/redesign";
 import { SETTINGS, TEAM_ROWS, WEEK } from "@/tests/unit/fixtures/horario";
+
+let client: QueryClient;
 
 const INVALID_COPY = "Faltan datos o no son válidos. Revisa el formulario e intenta de nuevo.";
 
@@ -57,17 +66,25 @@ function renderClient({
   settings = SETTINGS,
   style = "visual",
 }: { canManage?: boolean; canViewReport?: boolean; settings?: TimeTrackingSettings; style?: PresentationStyle } = {}) {
-  return render(
+  // The page hydrates this week's page data; later weeks come from the page-data action.
+  client = createTestQueryClient();
+  client.setQueryData(qk.ajustes.page("horario", { weekStart: WEEK }), {
+    settings,
+    rows: TEAM_ROWS,
+    canManage,
+    canViewReport,
+  });
+  pageData.getAjustesHorarioPageData.mockImplementation(async ({ weekStart }: { weekStart: string }) => ({
+    settings,
+    rows: weekStart === WEEK ? TEAM_ROWS : [],
+    canManage,
+    canViewReport,
+  }));
+  return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
-      <HorarioClient
-        settings={settings}
-        canManage={canManage}
-        canViewReport={canViewReport}
-        weekStart={WEEK}
-        rows={TEAM_ROWS}
-        viewerName="Ana"
-      />
+      <HorarioClient weekStart={WEEK} viewerName="Ana" />
     </StyleProvider>,
+    { client },
   );
 }
 
@@ -77,6 +94,7 @@ function section(name: string | RegExp) {
 
 beforeEach(() => {
   for (const fn of Object.values(actions)) fn.mockReset();
+  pageData.getAjustesHorarioPageData.mockReset();
   router.refresh.mockReset();
   sonner.toast.success.mockReset();
   for (const key of Object.keys(flags.IMPLEMENTED)) flags.IMPLEMENTED[key] = true;
@@ -121,7 +139,37 @@ describe("HorarioClient (Administrador)", () => {
     await waitFor(() => expect(actions.saveTimeTrackingSettingsAction).toHaveBeenCalledTimes(1));
     expect(actions.saveTimeTrackingSettingsAction).toHaveBeenCalledWith(saved);
     await waitFor(() => expect(sonner.toast.success).toHaveBeenCalledWith("Cambios guardados"));
-    expect(router.refresh).toHaveBeenCalled();
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("saving invalidates every week of ajustes.page('horario') and me.today, with no router.refresh", async () => {
+    renderClient();
+    // The server stores the input: the refetch after the invalidation returns it.
+    actions.saveTimeTrackingSettingsAction.mockImplementation(async (input: TimeTrackingSettings) => {
+      pageData.getAjustesHorarioPageData.mockImplementation(async () => ({
+        settings: input,
+        rows: TEAM_ROWS,
+        canManage: true,
+        canViewReport: true,
+      }));
+      return input;
+    });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+
+    fireEvent.change(screen.getByLabelText("Horas esperadas por día"), { target: { value: "7" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.ajustes.page("horario") }));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.me.today() });
+    expect(
+      client.getQueryData<{ settings: TimeTrackingSettings }>(qk.ajustes.page("horario", { weekStart: WEEK }))?.settings
+        .hoursPerDay,
+    ).toBe(7);
+    // Saved: the draft equals the saved settings again.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Guardar cambios" }).hasAttribute("disabled")).toBe(true),
+    );
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 
   it("sends a new requiredFrom", async () => {
@@ -200,6 +248,43 @@ describe("HorarioClient (Administrador)", () => {
     const report = section("Horas del equipo · semana del 2 nov");
     expect(within(report).getByRole("table").getAttribute("data-style")).toBe("analitico");
     expect(within(report).getByText("% cumplimiento")).toBeTruthy();
+  });
+});
+
+describe("HorarioClient week navigation", () => {
+  it("makes no page-data call on mount: the week is hydrated", () => {
+    renderClient();
+    expect(section("Horas del equipo · semana del 2 nov")).toBeTruthy();
+    expect(pageData.getAjustesHorarioPageData).not.toHaveBeenCalled();
+    expect(actions.fetchTeamHoursAction).not.toHaveBeenCalled();
+    expect(actions.fetchTimeTrackingSettingsAction).not.toHaveBeenCalled();
+  });
+
+  it("the previous week changes the key: one page-data call, the export follows, no refresh", async () => {
+    renderClient();
+    fireEvent.click(screen.getByRole("button", { name: "Semana anterior" }));
+
+    expect(await screen.findByRole("region", { name: "Horas del equipo · semana del 26 oct" })).toBeTruthy();
+    await waitFor(() => expect(pageData.getAjustesHorarioPageData).toHaveBeenCalledTimes(1));
+    expect(pageData.getAjustesHorarioPageData).toHaveBeenCalledWith({ weekStart: "2026-10-26" });
+    expect(client.getQueryData(qk.ajustes.page("horario", { weekStart: "2026-10-26" }))).toBeTruthy();
+    expect((screen.getByRole("link", { name: "Exportar CSV" }) as HTMLAnchorElement).getAttribute("href")).toBe(
+      horarioExportHref("2026-10-26"),
+    );
+
+    // Back to the hydrated week: cached, no second call.
+    fireEvent.click(screen.getByRole("button", { name: "Semana siguiente" }));
+    expect(await screen.findByRole("region", { name: "Horas del equipo · semana del 2 nov" })).toBeTruthy();
+    expect(pageData.getAjustesHorarioPageData).toHaveBeenCalledTimes(1);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps the draft while the week changes", async () => {
+    renderClient();
+    fireEvent.change(screen.getByLabelText("Horas esperadas por día"), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Semana anterior" }));
+    expect(await screen.findByRole("region", { name: "Horas del equipo · semana del 26 oct" })).toBeTruthy();
+    expect((screen.getByLabelText("Horas esperadas por día") as HTMLInputElement).value).toBe("6");
   });
 });
 

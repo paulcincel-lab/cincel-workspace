@@ -1,22 +1,31 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
+import type { ReactElement } from "react";
 import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   usePathname: () => "/proyectos/p1/cronograma",
 }));
 
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
+  getProyectoCronogramaData: vi.fn(),
+}));
 
 vi.mock("@/lib/actions/schedule-actions", () => ({
-  fetchScheduleAction: vi.fn(),
   setTaskStatusAction: vi.fn(),
   toggleTaskFlagAction: vi.fn(),
+  addImprevistoAction: vi.fn(),
+  deleteImprevistoAction: vi.fn(),
+  previewImportScheduleAction: vi.fn(),
+  commitImportScheduleAction: vi.fn(),
+  importLegacyStateAction: vi.fn(),
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import md22Tasks from "@/lib/cronograma/__fixtures__/md22-schedule-tasks.json";
 import rawPagos from "@/scripts/data/md22-pagos-calendar.json";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
@@ -43,7 +52,14 @@ const data: CronogramaData = {
   imprevistos: [{ id: "i1", fecha: "2026-07-28", texto: "Trabajo imprevisto de ejemplo" }],
   adicionales: [],
 };
-const initialView = { data, today: "2026-09-18" };
+const cachedView = { data, today: "2026-09-18" };
+
+/** Renders over a cache that already holds the schedule, as after the page's prefetch. */
+function render(ui: ReactElement) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.proyectos.cronograma("p1"), cachedView);
+  return renderWithQueryClient(ui, { client });
+}
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
@@ -86,7 +102,7 @@ describe("Proyecto · Cronograma accessibility", () => {
           applyTheme(theme, mode);
           const { container } = render(
             <StyleProvider style={style} scope="staff">
-              <CronogramaView projectId="p1" initialView={initialView} contractEnd="2026-10-15" />
+              <CronogramaView projectId="p1" contractEnd="2026-10-15" />
             </StyleProvider>,
           );
           expect(await seriousViolations(container)).toEqual([]);
@@ -95,7 +111,7 @@ describe("Proyecto · Cronograma accessibility", () => {
 
       it(`report sheet, ${theme} ${mode}: no serious or critical axe violations`, async () => {
         applyTheme(theme, mode);
-        const { container } = render(<CronogramaReport data={data} asOf={new Date("2026-09-18T00:00:00")} />);
+        const { container } = render(<CronogramaReport projectId="p1" asOf="2026-09-18" />);
         expect(await seriousViolations(container)).toEqual([]);
       });
 

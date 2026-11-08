@@ -7,6 +7,10 @@ import { useStyle } from "@/components/shell/StyleProvider";
 const state = vi.hoisted(() => ({
   session: undefined as string | undefined,
   style: "visual" as string,
+  fixedByOrg: false,
+  /** Render the real PortalStyleSwitch (with a stub EstiloSwitch) instead of the placeholder. */
+  realSwitch: false,
+  search: "",
 }));
 const getPortalUser = vi.hoisted(() => vi.fn());
 
@@ -29,11 +33,20 @@ vi.mock("@/lib/portal/appearance", () => ({
   }),
 }));
 vi.mock("@/lib/portal/style-server", () => ({
-  getPortalPresentation: async () => ({ style: state.style, fixedByOrg: false }),
+  getPortalPresentation: async () => ({ style: state.style, fixedByOrg: state.fixedByOrg }),
 }));
-vi.mock("@/components/portal/PortalStyleSwitch", () => ({
-  default: () => <div data-testid="estilo-switch" />,
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/portal/proyectos/p1",
+  useSearchParams: () => new URLSearchParams(state.search),
 }));
+vi.mock("@/components/shell/EstiloSwitch", () => ({
+  EstiloSwitch: () => <div data-testid="estilo-switch" />,
+}));
+vi.mock("@/components/portal/PortalStyleSwitch", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/components/portal/PortalStyleSwitch")>();
+  const RealSwitch = real.default;
+  return { default: () => (state.realSwitch ? <RealSwitch /> : <div data-testid="estilo-switch" />) };
+});
 
 import PortalLayout from "./layout";
 
@@ -46,6 +59,9 @@ describe("portal layout: presentation style (FE §3.11)", () => {
   beforeEach(() => {
     state.session = "token";
     state.style = "visual";
+    state.fixedByOrg = false;
+    state.realSwitch = false;
+    state.search = "";
     getPortalUser.mockReset();
     getPortalUser.mockResolvedValue({ id: "u1", name: "Ana López", email: "ana@example.com" });
   });
@@ -80,5 +96,54 @@ describe("portal layout: presentation style (FE §3.11)", () => {
 
     expect(screen.queryByRole("button", { name: /tema|modo|oscuro|claro/i })).toBeNull();
     expect(screen.queryByRole("radiogroup", { name: /tema|modo/i })).toBeNull();
+  });
+});
+
+describe("portal layout: style fixed by the organization (portal half of #951)", () => {
+  beforeEach(() => {
+    state.session = "token";
+    state.style = "visual";
+    state.fixedByOrg = false;
+    state.realSwitch = true;
+    state.search = "";
+    getPortalUser.mockReset();
+    getPortalUser.mockResolvedValue({ id: "u1", name: "Ana López", email: "ana@example.com" });
+  });
+  afterEach(cleanup);
+
+  function FixedProbe() {
+    const { isFixed } = useStyle();
+    return <p data-testid="fixed">{String(isFixed)}</p>;
+  }
+
+  it("passes fixedByOrg to StyleProvider: the store reports the style as fixed", async () => {
+    state.fixedByOrg = true;
+    render(await PortalLayout({ children: <FixedProbe /> }));
+
+    expect(screen.getByTestId("fixed").textContent).toBe("true");
+  });
+
+  it("shows no style switch when the organization fixed the style", async () => {
+    state.fixedByOrg = true;
+    render(await PortalLayout({ children: <StyleProbe /> }));
+
+    expect(screen.queryByTestId("estilo-switch")).toBeNull();
+  });
+
+  it("ignores ?estilo= when the style is fixed: the org style stays", async () => {
+    state.fixedByOrg = true;
+    state.style = "visual";
+    state.search = "estilo=esencial";
+    render(await PortalLayout({ children: <StyleProbe /> }));
+
+    expect(screen.getByTestId("probe").textContent).toBe("visual");
+    expect(screen.queryByTestId("estilo-switch")).toBeNull();
+  });
+
+  it("still shows the switch on Resumen when the client may choose", async () => {
+    render(await PortalLayout({ children: <FixedProbe /> }));
+
+    expect(screen.getByTestId("fixed").textContent).toBe("false");
+    expect(screen.getByTestId("estilo-switch")).toBeTruthy();
   });
 });

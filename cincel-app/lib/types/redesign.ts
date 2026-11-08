@@ -209,6 +209,23 @@ export type DayHours = { date: string; hours: number };
 
 export type WeekHours = { days: DayHours[]; total: number; target: number };
 
+/**
+ * Ajustes › Perfil page data (`qk.ajustes.page('perfil')`): the caller's own
+ * profile only. The photo is not here: it comes from `qk.me.profile()`.
+ */
+export type PerfilData = {
+  staffId: string;
+  name: string;
+  phone: string;
+  /** Read-only: from Google. */
+  email: string;
+  /** Read-only: the person's puestos in Equipo ("" = none). */
+  puesto: string;
+  emailSignature: string;
+  /** null = time tracking off for this person (only shown when tracking is enabled for them). */
+  week: WeekHours | null;
+};
+
 export type TeamHoursRow = {
   staffId: string;
   name: string;
@@ -365,7 +382,7 @@ export type PortfolioRow = {
 // FE §4.5–§4.6 and §4.10.1 name these without defining them; they are the
 // return shapes of the existing actions the pages already load.
 
-/** `fetchBoardAction` result: tasks per base status. */
+/** A board grouped by base status (`TaskBoardWidget`; built from `tareas.board(f)` columns). */
 export type TaskBoard = Record<TaskStatus, TaskListItem[]>;
 
 /** `fetchCalendarAction` result for the selected range. */

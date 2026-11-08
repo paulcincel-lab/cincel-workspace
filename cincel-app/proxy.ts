@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { isPortalPath, isPublicPath, isPublicPortalPath, LOGIN_ROUTE, PORTAL_LOGIN_ROUTE } from "@/lib/auth/public-routes";
 import { PORTAL_SESSION_COOKIE, PORTAL_SESSION_MAX_AGE_S, SESSION_COOKIE } from "@/lib/auth/session-cookie";
+import { legacyRedirectTarget } from "@/lib/ui/legacy-redirects";
 
 /**
  * Enforces authentication before any protected page renders.
@@ -24,6 +25,10 @@ import { PORTAL_SESSION_COOKIE, PORTAL_SESSION_MAX_AGE_S, SESSION_COOKIE } from 
  * With the portal cookie on a protected portal page, the cookie is set again with a fresh 30-day expiry so the
  * browser side of the sliding session keeps up with `portal_sessions` (pages are Server Components, which can't
  * write cookies). An expired or revoked DB session still fails in `requirePortalUser()`.
+ *
+ * Old staff routes (FE §2.2: `/dashboard`, `/tablero`, `/equipo`, `/configuracion/...` and the rest of
+ * `legacyRedirectTarget`'s table) redirect here, query string preserved, so a hit never renders the
+ * `(staff)` layout first. `/` keeps its own page.
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -63,6 +68,9 @@ export function proxy(request: NextRequest) {
     loginUrl.pathname = LOGIN_ROUTE;
     return NextResponse.redirect(loginUrl);
   }
+
+  const legacyTarget = pathname === "/" ? null : legacyRedirectTarget(pathname, request.nextUrl.searchParams);
+  if (legacyTarget) return NextResponse.redirect(new URL(legacyTarget, request.nextUrl.origin));
 
   return NextResponse.next();
 }

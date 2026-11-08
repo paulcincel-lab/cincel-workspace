@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
@@ -40,6 +40,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/lib/actions/monday-import-actions", () => mondayActions);
 vi.mock("@/lib/actions/onboarding-actions", () => ({ completeOnboardingAction: vi.fn(async () => ({ ok: true })) }));
 vi.mock("@/lib/actions/task-statuses-actions", () => ({ createTaskStatusAction: vi.fn() }));
+vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({ getAjustesGooglePageData: vi.fn() }));
 vi.mock("@/lib/actions/workspace-access-actions", () => ({
   createGroupMappingAction: vi.fn(),
   updateGroupMappingAction: vi.fn(),
@@ -50,6 +51,8 @@ import { GoogleSetupWizard } from "./GoogleSetupWizard";
 import { MondayImportWizard } from "./monday-import/MondayImportWizard";
 import { WIZARD_STEPPER_CONTRAST_PAIRS } from "./WizardStepper";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { THEME_IDS, THEME_PRESETS, TOKEN_NAMES } from "@/lib/ui/themes";
 import type { MondayImportRunState } from "@/lib/types/monday-import";
 import type { GoogleHealth } from "@/lib/types/workspace-access";
@@ -125,19 +128,22 @@ const exportingRun: MondayImportRunState = {
   batchStatus: null,
 };
 
+/** The wizard with `ajustes.page('google')` hydrated, as the primeros-pasos page leaves it. */
 function renderGoogle() {
-  return render(<GoogleSetupWizard health={health} mappings={[]} positions={[]} />);
+  const client = createTestQueryClient();
+  client.setQueryData(qk.ajustes.page("google"), { health, mappings: [], positions: [] });
+  return renderWithQueryClient(<GoogleSetupWizard />, { client });
 }
 
-function renderMonday() {
-  return render(
-    <MondayImportWizard
-      initialRun={exportingRun}
-      initialChoices={null}
-      hasServerToken={false}
-      loadError={null}
-    />,
+/** The page reads the run; "Continuar importación" opens it and shows the stepper. */
+async function renderMonday() {
+  mondayActions.openMondayImportRunAction.mockResolvedValueOnce({ ok: true, run: exportingRun } as never);
+  const result = renderWithQueryClient(
+    <MondayImportWizard latestRun={exportingRun} hasServerToken={false} loadError={null} />,
   );
+  fireEvent.click(screen.getByRole("button", { name: "Continuar importación" }));
+  await screen.findByRole("list", { name: "Pasos" });
+  return result;
 }
 
 function stepItems() {
@@ -165,7 +171,7 @@ describe("first-login wizards: stepper", () => {
 
       it(`Importar de monday has no serious axe violations (${theme}, ${mode})`, async () => {
         applyTheme(theme, mode);
-        const { container } = renderMonday();
+        const { container } = await renderMonday();
         const items = stepItems();
         expect(items).toHaveLength(7);
         expect(items.map((item) => item.dataset.state)).toEqual([

@@ -1,22 +1,27 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup } from "@testing-library/react";
 import axe from "axe-core";
 import type { UIMessage } from "ai";
 
 import { THEME_IDS } from "@/lib/ui/themes";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/lib/actions/assistant-actions", () => ({
   fetchAssistantThreadsAction: vi.fn(async () => []),
-  fetchAssistantThreadAction: vi.fn(async () => {
-    throw new Error("NOT_FOUND");
-  }),
-  deleteAssistantThreadAction: vi.fn(async () => undefined),
+  deleteAssistantThreadAction: vi.fn(async () => ({ ok: true, data: undefined })),
   importLegacyAssistantThreadAction: vi.fn(async () => ({ id: "t-legacy" })),
   fetchAssistantActionsAction: vi.fn(async () => []),
+}));
+vi.mock("@/lib/actions/page-data/asistente-actions", () => ({
+  fetchAssistantThreadAction: vi.fn(async () => null),
+  lookupAssistantContextAction: vi.fn(async () => null),
+  getAsistentePageData: vi.fn(),
 }));
 vi.mock("@ai-sdk/react", () => ({
   useChat: (opts: { messages?: UIMessage[] }) => {
@@ -27,13 +32,23 @@ vi.mock("@ai-sdk/react", () => ({
 }));
 
 import { AsistentePageClient } from "@/components/asistente/AsistentePageClient";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { AssistantThreadSummary } from "@/lib/types/redesign";
 
 const now = Date.now();
-const THREADS = [
+const THREADS: AssistantThreadSummary[] = [
   { id: "t1", title: "Avance de Local Espinopapa", updatedAt: new Date(now - 60_000).toISOString() },
   { id: "t2", title: "Cuantificar porcelanato 60×60", updatedAt: new Date(now - 3 * 86_400_000).toISOString() },
   { id: "t3", title: "Cronograma remodelación Ensenada", updatedAt: new Date(now - 40 * 86_400_000).toISOString() },
 ];
+
+function seeded(threads: AssistantThreadSummary[], thread?: { id: string }) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.asistente.threads(), threads);
+  if (thread) client.setQueryData(qk.asistente.thread(thread.id), thread);
+  return client;
+}
 
 const THREAD = {
   id: "t1",
@@ -76,7 +91,10 @@ describe("/asistente accessibility", () => {
     for (const mode of ["light", "dark"] as const) {
       it(`has no serious or critical axe violations (${theme}, ${mode})`, async () => {
         applyTheme(theme, mode);
-        const { container } = render(<AsistentePageClient threads={THREADS} initialThread={THREAD} />);
+        const { container } = renderWithQueryClient(<AsistentePageClient threadId={THREAD.id} />, {
+          client: seeded(THREADS, THREAD),
+        });
+        await act(async () => {});
         expect(await seriousViolations(container)).toEqual([]);
       });
     }
@@ -84,7 +102,10 @@ describe("/asistente accessibility", () => {
 
   it("has no serious or critical axe violations with an empty history and a missing thread", async () => {
     applyTheme("azul", "light");
-    const { container } = render(<AsistentePageClient threads={[]} initialThread={null} missingThread />);
+    const { container } = renderWithQueryClient(<AsistentePageClient threadId={null} missingThread />, {
+      client: seeded([]),
+    });
+    await act(async () => {});
     expect(await seriousViolations(container)).toEqual([]);
   });
 });

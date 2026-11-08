@@ -1,8 +1,7 @@
 "use client";
 
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 
 import { formatDay, VACATION_KIND_LABEL } from "@/components/biblioteca/vacation-format";
 import { FormDialog } from "@/components/patterns/FormDialog";
@@ -13,15 +12,18 @@ import { Textarea } from "@/components/ui/shadcn/textarea";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { decideVacationAction } from "@/lib/actions/vacations-actions";
 import { IMPLEMENTED } from "@/lib/actions/vacations-actions.flags";
-import { actionErrorCode, actionErrorText } from "@/lib/errors";
-import type { PendingVacationRequest } from "@/lib/types/redesign";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { VACATIONS_ABSENCES_PREFIX, pendingVacationsOptions } from "@/lib/query/options/biblioteca";
+import type { PendingVacationRequest, VacationRequest } from "@/lib/types/redesign";
 import type { RecordTableData } from "@/lib/types/widgets";
 
 /** A pending request; `createdAt` ("Solicitada") is shown when the server sends it. */
 export type TeamRequestRow = PendingVacationRequest & { createdAt?: string };
 
 export type TeamRequestsProps = {
-  requests: TeamRequestRow[];
+  /** "YYYY-MM" of the page (the strip month its refetch reads). */
+  month: string;
   /** The viewer's staff id: their own requests are never listed here. */
   viewerStaffId: string;
   /** `canDecideVacations`; without it the section is not rendered at all. */
@@ -38,7 +40,24 @@ const DECISION_COPY: Record<Decision, { title: string; submit: string; done: str
 };
 
 /** Codes after which the list on screen is stale and is reloaded from the server. */
-const STALE_CODES = new Set(["INVALID", "NOT_FOUND"]);
+const STALE_CODES = ["INVALID", "NOT_FOUND"] as const;
+
+const NO_REQUESTS: TeamRequestRow[] = [];
+
+type DecideVars = { request: TeamRequestRow; decision: Decision; note?: string };
+
+/** The decide mutation's input as `decideVacationAction` takes it. */
+function decide({ request, decision, note }: DecideVars) {
+  return decideVacationAction(request.id, decision, note);
+}
+
+/**
+ * The keys a decision changes besides the pending list: everyone's absences,
+ * Personas (the team list and the requester's detail) and Inicio.
+ */
+export function decisionInvalidations(vars: DecideVars) {
+  return [VACATIONS_ABSENCES_PREFIX, qk.personas.equipo(), qk.personas.detail(vars.request.staffId), qk.inicio()] as const;
+}
 
 function requestedOn(value: string | undefined): string {
   if (!value) return "—";
@@ -76,26 +95,50 @@ export function teamRequestsTable(requests: TeamRequestRow[], options: { withAct
  * "Solicitudes del equipo" of Mis vacaciones (redesign FE §3.7): the pending
  * requests of the team with "Aprobar" / "Rechazar" (a `FormDialog` with an
  * optional note → `decideVacationAction`). Only for `canDecideVacations`;
- * the viewer's own requests are never listed.
+ * the viewer's own requests are never listed. Reads `vacations.pending`; a
+ * decision removes the row at once (rolled back on error), then refreshes the
+ * absences, Personas and Inicio queries; a stale-list error refetches the
+ * pending list.
  */
 export function TeamRequests({ canDecide, ...props }: TeamRequestsProps) {
   if (!canDecide) return null;
   return <TeamRequestsSection {...props} />;
 }
 
-function TeamRequestsSection({ requests, viewerStaffId }: Omit<TeamRequestsProps, "canDecide">) {
-  const router = useRouter();
+function TeamRequestsSection({ month, viewerStaffId }: Omit<TeamRequestsProps, "canDecide">) {
   const headingId = useId();
   const noteId = useId();
-  const [decided, setDecided] = useState<ReadonlySet<string>>(() => new Set());
+  const client = useQueryClient();
+  const requests = useQuery(pendingVacationsOptions(month)).data ?? NO_REQUESTS;
   const [target, setTarget] = useState<{ request: TeamRequestRow; decision: Decision } | null>(null);
   const [note, setNote] = useState("");
-  const [pending, setPending] = useState(false);
+
+  const decision = useActionMutation<DecideVars, VacationRequest, { previous: PendingVacationRequest[] | null | undefined }>(decide, {
+    optimistic: {
+      onMutate: async (client, { request }) => {
+        await client.cancelQueries({ queryKey: qk.vacations.pending() });
+        const previous = client.getQueryData<PendingVacationRequest[] | null>(qk.vacations.pending());
+        client.setQueryData<PendingVacationRequest[] | null>(qk.vacations.pending(), (current) =>
+          current ? current.filter((row) => row.id !== request.id) : current,
+        );
+        return { previous };
+      },
+      rollback: (client, { previous }) => {
+        if (previous !== undefined) client.setQueryData(qk.vacations.pending(), previous);
+      },
+    },
+    invalidate: (vars) => decisionInvalidations(vars),
+    successToast: (decided) => DECISION_COPY[decided.status === "rechazada" ? "rechazada" : "aprobada"].done,
+    staleCodes: STALE_CODES,
+    // The list no longer matches the server: read it again.
+    onStaleError: () => void client.invalidateQueries({ queryKey: qk.vacations.pending() }),
+  });
+  const pending = decision.isPending;
 
   const canWrite = IMPLEMENTED.decideVacationAction;
   const rows = useMemo(
-    () => requests.filter((request) => request.staffId !== viewerStaffId && !decided.has(request.id)),
-    [requests, viewerStaffId, decided],
+    () => requests.filter((request) => request.staffId !== viewerStaffId),
+    [requests, viewerStaffId],
   );
   const byId = useMemo(() => new Map(rows.map((request) => [request.id, request])), [rows]);
   const data = useMemo(() => teamRequestsTable(rows, { withActions: canWrite }), [rows, canWrite]);
@@ -111,21 +154,13 @@ function TeamRequestsSection({ requests, viewerStaffId }: Omit<TeamRequestsProps
 
   async function submit() {
     if (!target) return;
-    const { request, decision } = target;
     const trimmed = note.trim();
-    setPending(true);
     try {
-      await decideVacationAction(request.id, decision, trimmed ? trimmed : undefined);
-      setDecided((prev) => new Set(prev).add(request.id));
-      setTarget(null);
-      toast.success(DECISION_COPY[decision].done);
-      router.refresh();
-    } catch (err) {
-      setTarget(null);
-      toast.error(actionErrorText(err));
-      if (STALE_CODES.has(actionErrorCode(err))) router.refresh();
+      await decision.mutateAsync({ request: target.request, decision: target.decision, ...(trimmed ? { note: trimmed } : {}) });
+    } catch {
+      // The error toast is shown by the mutation.
     } finally {
-      setPending(false);
+      setTarget(null);
     }
   }
 

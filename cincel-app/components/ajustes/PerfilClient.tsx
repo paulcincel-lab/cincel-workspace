@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { createContext, useContext, useId, useRef, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { SettingsRow } from "@/components/patterns/SettingsRow";
@@ -18,8 +18,21 @@ import { updateStaffAction, upsertStaffProfileAction } from "@/lib/actions/staff
 import { changePasswordAction } from "@/lib/auth/auth-actions";
 import { actionErrorText } from "@/lib/errors";
 import { reencodePhoto, uploadMyPhoto } from "@/lib/profile-photo/reencode";
-import type { WeekHours } from "@/lib/types/redesign";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { meProfileOptions } from "@/lib/query/options/me";
+import { ajustesPerfilOptions, type AjustesPerfilPageData } from "@/lib/query/options/ajustes";
+import {
+  PerfilFormStoreProvider,
+  perfilDraftOf,
+  usePerfilForm,
+  usePerfilFormApi,
+  type PerfilDraft,
+} from "@/lib/stores/ajustes/perfil-form-store";
+import type { PerfilData, WeekHours } from "@/lib/types/redesign";
 import { isGoogleManagedRefusal } from "@/lib/types/workspace-access";
+
+export type { PerfilData } from "@/lib/types/redesign";
 
 // ── Copy (redesign FE §3.8, §9, §13) ────────────────────────────────────────
 
@@ -48,51 +61,26 @@ export function initialsOf(name: string): string {
 
 // ── Page state ──────────────────────────────────────────────────────────────
 
-export type PerfilData = {
-  staffId: string;
-  name: string;
-  phone: string;
-  /** Read-only: from Google. */
-  email: string;
-  /** Read-only: the person's puestos in Equipo ("" = none). */
-  puesto: string;
-  emailSignature: string;
-  photoUrl: string | null;
-  /** null = time tracking off for this person (only shown when `TodayStatus.enabled`). */
-  week: WeekHours | null;
-};
-
-type PerfilContextValue = {
-  data: PerfilData;
-  setPhotoUrl(url: string | null): void;
-  setSaved(patch: Partial<Pick<PerfilData, "name" | "phone" | "emailSignature">>): void;
-};
-
-const PerfilContext = createContext<PerfilContextValue | null>(null);
-
-function usePerfil(): PerfilContextValue {
-  const value = useContext(PerfilContext);
-  if (!value) throw new Error("Perfil sections render inside PerfilClient.");
-  return value;
+/** The hydrated `qk.ajustes.page('perfil')`: the caller's own profile. */
+function usePerfilData(): PerfilData {
+  return useSuspenseQuery(ajustesPerfilOptions()).data.profile;
 }
 
-export type PerfilClientProps = { initial: PerfilData; children: ReactNode };
+export type PerfilClientProps = { children: ReactNode };
 
 /**
- * Ajustes › Perfil (redesign FE §3.8): holds the page data for the sections
- * registered in `lib/shell/settings-sections/perfil/*`.
+ * Ajustes › Perfil (redesign FE §3.8): the sections registered in
+ * `lib/shell/settings-sections/perfil/*` read the hydrated
+ * `qk.ajustes.page('perfil')` (and the photo from `qk.me.profile()`); the
+ * datos form draft lives in a page-scoped store, reset when the page
+ * unmounts.
  */
-export function PerfilClient({ initial, children }: PerfilClientProps) {
-  const [data, setData] = useState<PerfilData>(initial);
-  const value: PerfilContextValue = {
-    data,
-    setPhotoUrl: (photoUrl) => setData((current) => ({ ...current, photoUrl })),
-    setSaved: (patch) => setData((current) => ({ ...current, ...patch })),
-  };
+export function PerfilClient({ children }: PerfilClientProps) {
+  const profile = usePerfilData();
   return (
-    <PerfilContext.Provider value={value}>
+    <PerfilFormStoreProvider initial={perfilDraftOf(profile)}>
       <div className="flex flex-col gap-4">{children}</div>
-    </PerfilContext.Provider>
+    </PerfilFormStoreProvider>
   );
 }
 
@@ -105,57 +93,46 @@ async function uploadPerfilPhoto(file: File): Promise<string> {
 
 /**
  * Photo: re-encoded on the client, uploaded to the photo route; "Quitar"
- * removes it. Both write `qk.me.profile()`, so the shell avatar follows.
+ * removes it. Both write `qk.me.profile()` (`setQueryData`), so the shell
+ * avatar, Inicio and this card follow without a refresh.
  */
 export function PerfilFoto() {
-  const { data, setPhotoUrl } = usePerfil();
-  const router = useRouter();
+  const { name } = usePerfilData();
+  const photoUrl = useQuery(meProfileOptions()).data?.photoUrl ?? null;
   const inputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
   const hintId = useId();
-  const [pending, setPending] = useState<"upload" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const uploadPhoto = usePhotoUploadMutation(uploadPerfilPhoto);
   const removePhoto = useRemovePhotoMutation();
+  const pending = uploadPhoto.isPending ? "upload" : removePhoto.isPending ? "remove" : null;
 
-  const onFile = async (file: File | undefined) => {
+  const onFile = (file: File | undefined) => {
     if (!file) return;
     setError(null);
-    setPending("upload");
-    try {
-      const url = await uploadPhoto.mutateAsync(file);
-      setPhotoUrl(url);
-      toast.success("Foto actualizada");
-      router.refresh();
-    } catch (err) {
-      setError(actionErrorText(err, "photo"));
-    } finally {
-      setPending(null);
-      if (inputRef.current) inputRef.current.value = "";
-    }
+    uploadPhoto.mutate(file, {
+      onSuccess: () => toast.success("Foto actualizada"),
+      onError: (err) => setError(actionErrorText(err, "photo")),
+      onSettled: () => {
+        if (inputRef.current) inputRef.current.value = "";
+      },
+    });
   };
 
-  const onRemove = async () => {
+  const onRemove = () => {
     setError(null);
-    setPending("remove");
-    try {
-      await removePhoto.mutateAsync();
-      setPhotoUrl(null);
-      toast.success("Foto quitada");
-      router.refresh();
-    } catch (err) {
-      setError(actionErrorText(err, "photo"));
-    } finally {
-      setPending(null);
-    }
+    removePhoto.mutate(undefined, {
+      onSuccess: () => toast.success("Foto quitada"),
+      onError: (err) => setError(actionErrorText(err, "photo")),
+    });
   };
 
   return (
     <SettingsSection title="Foto de perfil">
       <div className="flex flex-wrap items-center gap-4">
         <Avatar size="lg">
-          {data.photoUrl ? <AvatarImage src={data.photoUrl} alt="Tu foto de perfil" /> : null}
-          <AvatarFallback>{initialsOf(data.name)}</AvatarFallback>
+          {photoUrl ? <AvatarImage src={photoUrl} alt="Tu foto de perfil" /> : null}
+          <AvatarFallback>{initialsOf(name)}</AvatarFallback>
         </Avatar>
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
@@ -168,13 +145,13 @@ export function PerfilFoto() {
               aria-label="Elegir una foto"
               aria-describedby={hintId}
               tabIndex={-1}
-              onChange={(event) => void onFile(event.target.files?.[0])}
+              onChange={(event) => onFile(event.target.files?.[0])}
             />
             <Button type="button" disabled={pending !== null} onClick={() => inputRef.current?.click()} aria-describedby={hintId}>
               {pending === "upload" ? "Subiendo…" : "Cambiar foto"}
             </Button>
-            {data.photoUrl && PHOTO_IMPLEMENTED.removeMyPhotoAction ? (
-              <Button type="button" variant="destructive" disabled={pending !== null} onClick={() => void onRemove()}>
+            {photoUrl && PHOTO_IMPLEMENTED.removeMyPhotoAction ? (
+              <Button type="button" variant="destructive" disabled={pending !== null} onClick={onRemove}>
                 {pending === "remove" ? "Quitando…" : "Quitar"}
               </Button>
             ) : null}
@@ -197,16 +174,42 @@ export function PerfilFoto() {
 
 // ── Datos personales, firma, idioma y región ────────────────────────────────
 
+type PerfilSaveVars = { staffId: string; staff: { name: string; phone: string | null } | null; emailSignature: string | null | undefined };
+
+/** The saved fields after a profile save (only the parts that were sent). */
+type PerfilSaveResult = Partial<PerfilDraft>;
+
+/**
+ * One profile save: `updateStaffAction` when nombre or teléfono changed,
+ * `upsertStaffProfileAction` when the firma changed (two POSTs at most).
+ * Throws the action's error code; a Google-managed refusal is `FORBIDDEN`.
+ */
+async function savePerfil(vars: PerfilSaveVars): Promise<PerfilSaveResult> {
+  const saved: PerfilSaveResult = {};
+  if (vars.staff) {
+    const updated = await updateStaffAction(vars.staffId, vars.staff);
+    if (isGoogleManagedRefusal(updated)) throw new Error("FORBIDDEN");
+    const row = unwrapActionResult(updated);
+    saved.name = row.name;
+    saved.phone = row.phone ?? "";
+  }
+  if (vars.emailSignature !== undefined) {
+    const profile = unwrapActionResult(await upsertStaffProfileAction(vars.staffId, { emailSignature: vars.emailSignature }));
+    saved.emailSignature = profile.emailSignature ?? "";
+  }
+  return saved;
+}
+
 /** Editable nombre, teléfono and firma; read-only puesto, correo, idioma and zona horaria. */
 export function PerfilDatos() {
-  const { data, setSaved } = usePerfil();
-  const router = useRouter();
-  const [name, setName] = useState(data.name);
-  const [phone, setPhone] = useState(data.phone);
-  const [signature, setSignature] = useState(data.emailSignature);
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const data = usePerfilData();
+  const form = usePerfilFormApi();
+  const name = usePerfilForm((s) => s.draft.name);
+  const phone = usePerfilForm((s) => s.draft.phone);
+  const signature = usePerfilForm((s) => s.draft.emailSignature);
+  const nameError = usePerfilForm((s) => s.errors.name ?? null);
+  const error = usePerfilForm((s) => s.formError);
+  const setField = usePerfilForm((s) => s.setField);
   const ids = {
     name: useId(),
     nameError: useId(),
@@ -218,50 +221,51 @@ export function PerfilDatos() {
     timeZone: useId(),
   };
 
+  const save = useActionMutation(savePerfil, {
+    setData: (qc, saved) =>
+      qc.setQueryData<AjustesPerfilPageData>(qk.ajustes.page("perfil"), (current) =>
+        current ? { profile: { ...current.profile, ...saved } } : current,
+      ),
+    // The name and phone show in the shell, Equipo and pickers; the firma only on the person's detail.
+    invalidate: (vars) =>
+      vars.staff
+        ? [qk.me.profile(), qk.personas.equipo(), qk.personas.detail(vars.staffId), qk.catalog.staff()]
+        : [qk.personas.detail(vars.staffId)],
+    successToast: "Perfil guardado",
+    onFormError: (text) => form.getState().setFormError(text),
+  });
+  const isPending = save.isPending;
+
   const staffChanged = name.trim() !== data.name || phone.trim() !== data.phone;
   const signatureChanged = signature.trim() !== data.emailSignature.trim();
   const dirty = staffChanged || signatureChanged;
 
-  const onCancel = () => {
-    setName(data.name);
-    setPhone(data.phone);
-    setSignature(data.emailSignature);
-    setNameError(null);
-    setError(null);
-  };
+  const onCancel = () => form.getState().reset();
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(null);
+    const state = form.getState();
+    state.setFormError(null);
     if (!name.trim()) {
-      setNameError(NAME_REQUIRED_COPY);
+      state.setFieldError("name", NAME_REQUIRED_COPY);
       return;
     }
-    setNameError(null);
-    startTransition(async () => {
-      try {
-        if (staffChanged) {
-          const updated = await updateStaffAction(data.staffId, { name: name.trim(), phone: phone.trim() || null });
-          if (isGoogleManagedRefusal(updated)) throw new Error("FORBIDDEN");
-          const result = unwrapActionResult(updated);
-          setSaved({ name: result.name, phone: result.phone ?? "" });
-          setName(result.name);
-          setPhone(result.phone ?? "");
-        }
-        if (signatureChanged) {
-          const profile = unwrapActionResult(
-            await upsertStaffProfileAction(data.staffId, { emailSignature: signature.trim() || null }),
-          );
-          const saved = profile.emailSignature ?? "";
-          setSaved({ emailSignature: saved });
-          setSignature(saved);
-        }
-        toast.success("Perfil guardado");
-        router.refresh();
-      } catch (err) {
-        setError(actionErrorText(err));
-      }
-    });
+    state.setFieldError("name", null);
+    save.mutate(
+      {
+        staffId: data.staffId,
+        staff: staffChanged ? { name: name.trim(), phone: phone.trim() || null } : null,
+        emailSignature: signatureChanged ? signature.trim() || null : undefined,
+      },
+      {
+        onSuccess: (saved) =>
+          form.getState().commit({
+            name: saved.name ?? data.name,
+            phone: saved.phone ?? data.phone,
+            emailSignature: saved.emailSignature ?? data.emailSignature,
+          }),
+      },
+    );
   };
 
   return (
@@ -275,7 +279,7 @@ export function PerfilDatos() {
               <Input
                 id={ids.name}
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => setField("name", event.target.value)}
                 autoComplete="name"
                 maxLength={120}
                 required
@@ -310,7 +314,7 @@ export function PerfilDatos() {
               id={ids.phone}
               type="tel"
               value={phone}
-              onChange={(event) => setPhone(event.target.value)}
+              onChange={(event) => setField("phone", event.target.value)}
               autoComplete="tel"
               maxLength={40}
             />
@@ -327,7 +331,7 @@ export function PerfilDatos() {
               id={ids.signature}
               rows={4}
               value={signature}
-              onChange={(event) => setSignature(event.target.value)}
+              onChange={(event) => setField("emailSignature", event.target.value)}
               maxLength={2000}
             />
           }
@@ -369,11 +373,11 @@ export function PerfilDatos() {
 
 /** One line with this week's hours; absent unless time tracking is enabled. */
 export function PerfilHorasSemana() {
-  const { data } = usePerfil();
-  if (!data.week) return null;
+  const { week } = usePerfilData();
+  if (!week) return null;
   return (
     <SettingsSection title="Mis horas esta semana">
-      <p className="text-sm text-foreground">{formatWeekHoursLine(data.week)}</p>
+      <p className="text-sm text-foreground">{formatWeekHoursLine(week)}</p>
     </SettingsSection>
   );
 }
@@ -403,11 +407,18 @@ export function passwordChangeErrorText(reason: string): string {
 }
 
 /** The existing password change (`changePasswordAction`), in the settings layout. */
+/** `changePasswordAction` with one object argument, for the mutation. */
+function changePassword(draft: PasswordDraft) {
+  return changePasswordAction(draft.currentPassword, draft.nextPassword, draft.confirmPassword);
+}
+
 export function PerfilContrasena() {
   const [draft, setDraft] = useState<PasswordDraft>(EMPTY_PASSWORD_DRAFT);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [isPending, startTransition] = useTransition();
+  // No cache effect: the password is not shown anywhere.
+  const change = useActionMutation(changePassword, { onFormError: (text) => setError(text) });
+  const isPending = change.isPending;
   const ids = {
     current: useId(),
     currentHelp: useId(),
@@ -421,14 +432,15 @@ export function PerfilContrasena() {
     event.preventDefault();
     setError("");
     setSuccess("");
-    startTransition(async () => {
-      const result = await changePasswordAction(draft.currentPassword, draft.nextPassword, draft.confirmPassword);
-      if (!result.ok) {
-        setError(passwordChangeErrorText(result.reason));
-        return;
-      }
-      setSuccess("Contraseña actualizada correctamente.");
-      setDraft(EMPTY_PASSWORD_DRAFT);
+    change.mutate(draft, {
+      onSuccess: (result) => {
+        if (!result.ok) {
+          setError(passwordChangeErrorText(result.reason));
+          return;
+        }
+        setSuccess("Contraseña actualizada correctamente.");
+        setDraft(EMPTY_PASSWORD_DRAFT);
+      },
     });
   };
 

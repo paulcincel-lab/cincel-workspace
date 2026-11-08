@@ -1,143 +1,107 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 
-import type { ProjectsPortfolioProps } from "@/components/proyectos/ProjectsPortfolio";
-import type { ResolvedAppearance } from "@/lib/types/redesign";
+import type { ProyectosPageData } from "@/lib/loaders/proyectos";
 
 const state = vi.hoisted(() => ({
-  style: "visual" as "visual" | "esencial" | "analitico",
   access: "Colaborador" as string,
   canViewProjects: true,
-  canCreateProject: true,
 }));
 const notFound = vi.hoisted(() =>
   vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
 );
-const fetchProjectsAction = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
-const fetchProjectsPortfolioAction = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
-const fetchContactsAction = vi.hoisted(() =>
-  vi.fn(async () => [
-    { id: "c1", name: "Familia Gómez", type: "cliente" },
-    { id: "c2", name: "Taller Norte", type: "proveedor" },
-  ]),
-);
-const fetchStaffAction = vi.hoisted(() =>
-  vi.fn(async () => [
-    { id: "s1", name: "Ana", lastName: "López", active: true },
-    { id: "s2", name: "Luis", lastName: null, active: false },
-  ]),
-);
 
-vi.mock("next/navigation", () => ({ notFound }));
-vi.mock("@/lib/ui/preferences-server", () => ({
-  getResolvedAppearance: async () =>
-    ({
-      theme: "azul",
-      mode: "light",
-      style: state.style,
-      density: "comoda",
-      textSize: 14,
-      cssVars: { light: {}, dark: {} },
-      version: 1,
-    }) as unknown as ResolvedAppearance,
-}));
+/** What `loadProyectosPage` returns for the viewer: admin flags only for admins. */
+function pageData(user: { access?: string }): ProyectosPageData {
+  return {
+    projects: [],
+    portfolio: [],
+    tramos: [
+      { id: "w1", key: "presale", name: "Presale", sortOrder: 1 },
+      { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
+    ],
+    presaleAutoStart: true,
+    canSeeAdminData: user.access === "Administrador",
+    canCreateProject: true,
+  };
+}
+const loaders = vi.hoisted(() => ({ loadProyectosPage: vi.fn() }));
+// The client query function: the first render must never need it.
+const pageDataActions = vi.hoisted(() => ({ getProyectosPageData: vi.fn() }));
+
+vi.mock("next/navigation", () => ({ notFound, useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: async () => ({ member: { id: "s1", name: "Ana" }, access: state.access }),
 }));
 vi.mock("@/lib/auth/permissions", () => ({
-  resolveProjectsCapabilities: () => ({
-    canViewProjects: state.canViewProjects,
-    canCreateProject: state.canCreateProject,
-  }),
+  resolveProjectsCapabilities: () => ({ canViewProjects: state.canViewProjects, canCreateProject: true }),
 }));
-vi.mock("@/lib/tramos/compat", () => ({
-  canSeeAdminData: (user: { access?: string } | null) => user?.access === "Administrador",
-  listTramos: async () => [
-    { id: "w1", key: "presale", name: "Presale", sortOrder: 1 },
-    { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
-  ],
-}));
-vi.mock("@/lib/actions/projects-actions", () => ({ fetchProjectsAction, fetchProjectsPortfolioAction }));
-vi.mock("@/lib/actions/projects-actions.flags", () => ({ IMPLEMENTED: { fetchProjectsPortfolioAction: true } }));
-vi.mock("@/lib/actions/workflows-actions", () => ({
-  fetchWorkflowsAction: async () => [{ id: "w1", key: "presale", name: "Presale", sortOrder: 1, active: true, autoStart: "on_create" }],
-}));
-vi.mock("@/lib/actions/contacts-actions", () => ({ fetchContactsAction }));
-vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffAction }));
+vi.mock("@/lib/loaders/proyectos", () => loaders);
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => pageDataActions);
 
-const portfolioProps = vi.hoisted(() => ({ current: null as ProjectsPortfolioProps | null }));
+const seen = vi.hoisted(() => ({ data: undefined as ProyectosPageData | undefined }));
 vi.mock("@/components/proyectos/ProjectsPortfolio", async () => {
-  const { useStyle } = await import("@/components/shell/StyleProvider");
+  const { useQueryClient } = await import("@tanstack/react-query");
+  const { qk } = await import("@/lib/query/keys");
   return {
-    ProjectsPortfolio: (props: ProjectsPortfolioProps) => {
-      portfolioProps.current = props;
-      const { style, isOverridden } = useStyle();
-      return <div data-testid="portfolio">{`${style}${isOverridden ? " (url)" : ""}`}</div>;
+    ProjectsPortfolio: () => {
+      // The hydrated cache, as the real component's `useSuspenseQuery` reads it.
+      seen.data = useQueryClient().getQueryData<ProyectosPageData>(qk.proyectos.list());
+      return <div data-testid="portfolio">{seen.data ? "hydrated" : "empty"}</div>;
     },
   };
 });
 
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+
 import ProyectosPage from "./page";
 
-async function renderPage(searchParams: Record<string, string> = {}) {
-  render(await ProyectosPage({ searchParams: Promise.resolve(searchParams) }));
+async function renderPage() {
+  return renderWithQueryClient(await ProyectosPage());
 }
 
 beforeEach(() => {
-  state.style = "visual";
   state.access = "Colaborador";
   state.canViewProjects = true;
-  state.canCreateProject = true;
-  portfolioProps.current = null;
+  seen.data = undefined;
   vi.clearAllMocks();
+  loaders.loadProyectosPage.mockImplementation(async (user: { access?: string }) => pageData(user));
 });
 
 afterEach(() => cleanup());
 
 describe("/proyectos page", () => {
-  it("renders the portfolio in the viewer's style", async () => {
-    state.style = "esencial";
+  it("prefetches one page-data read through the loader and hydrates it (no client action call)", async () => {
     await renderPage();
-    expect(screen.getByTestId("portfolio").textContent).toBe("esencial");
-    expect(fetchProjectsPortfolioAction).toHaveBeenCalledTimes(1);
-    expect(portfolioProps.current?.tramos?.map((t) => t.key)).toEqual(["presale", "diseno"]);
-    expect(portfolioProps.current?.presaleAutoStart).toBe(true);
+    expect(screen.getByTestId("portfolio").textContent).toBe("hydrated");
+    expect(loaders.loadProyectosPage).toHaveBeenCalledTimes(1);
+    expect(loaders.loadProyectosPage).toHaveBeenCalledWith(expect.objectContaining({ access: "Colaborador" }));
+    expect(seen.data?.tramos.map((t) => t.key)).toEqual(["presale", "diseno"]);
+    expect(seen.data?.presaleAutoStart).toBe(true);
+    expect(pageDataActions.getProyectosPageData).not.toHaveBeenCalled();
   });
 
-  it("?estilo= overrides the style for this render", async () => {
-    await renderPage({ estilo: "analitico" });
-    expect(screen.getByTestId("portfolio").textContent).toBe("analitico (url)");
-  });
-
-  it("non-admins get no admin data and no client/staff lookups", async () => {
+  it("non-admins get no admin data; the payload never carries clients or staff", async () => {
     await renderPage();
-    expect(portfolioProps.current?.canSeeAdminData).toBe(false);
-    expect(portfolioProps.current?.adminOptions).toBeNull();
-    expect(fetchContactsAction).not.toHaveBeenCalled();
-    expect(fetchStaffAction).not.toHaveBeenCalled();
+    expect(seen.data?.canSeeAdminData).toBe(false);
+    expect(Object.keys(seen.data ?? {}).sort()).toEqual(
+      ["canCreateProject", "canSeeAdminData", "portfolio", "presaleAutoStart", "projects", "tramos"].sort(),
+    );
   });
 
-  it("admins get the clients and active staff for the dialog", async () => {
+  it("admins get canSeeAdminData, still without client or staff lists in the payload", async () => {
     state.access = "Administrador";
     await renderPage();
-    expect(portfolioProps.current?.canSeeAdminData).toBe(true);
-    expect(portfolioProps.current?.adminOptions).toEqual({
-      clients: [{ id: "c1", name: "Familia Gómez" }],
-      staff: [{ id: "s1", name: "Ana López" }],
-    });
+    expect(seen.data?.canSeeAdminData).toBe(true);
+    expect(seen.data).not.toHaveProperty("adminOptions");
   });
 
-  it("passes canCreateProject through", async () => {
-    state.canCreateProject = false;
-    await renderPage();
-    expect(portfolioProps.current?.canCreateProject).toBe(false);
-  });
-
-  it("404 without projects.canViewProjects", async () => {
+  it("404 without projects.canViewProjects, before any read", async () => {
     state.canViewProjects = false;
-    await expect(ProyectosPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(ProyectosPage()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(loaders.loadProyectosPage).not.toHaveBeenCalled();
   });
 });

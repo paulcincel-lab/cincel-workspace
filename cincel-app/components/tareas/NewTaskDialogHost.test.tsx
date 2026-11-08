@@ -39,7 +39,6 @@ vi.mock("./NewTaskDialog", () => ({
 }));
 
 import { NewTaskDialogHost } from "./NewTaskDialogHost";
-import { useNewTaskParam } from "./use-new-task-param";
 
 let replaceState: ReturnType<typeof vi.spyOn>;
 
@@ -121,34 +120,5 @@ describe("NewTaskDialogHost", () => {
     render(<NewTaskDialogHost />);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(replaceState).not.toHaveBeenCalled();
-  });
-});
-
-describe("useNewTaskParam (transitional, until 4a)", () => {
-  function Opener() {
-    const { open, setOpen } = useNewTaskParam();
-    return (
-      <button type="button" data-open={String(open)} onClick={() => setOpen(true)}>
-        Nueva tarea
-      </button>
-    );
-  }
-
-  it("opens the host with the view's filters instead of writing ?nueva=1", () => {
-    nav.search = "vista=tablero&proyecto=p-norte&tramo=presale";
-    render(
-      <>
-        <Opener />
-        <NewTaskDialogHost />
-      </>,
-    );
-    const button = screen.getByRole("button", { name: "Nueva tarea" });
-    expect(button.getAttribute("data-open")).toBe("false");
-    fireEvent.click(button);
-
-    expect(dialogDefaults()).toEqual({ projectId: "p-norte", tramoKey: "presale" });
-    expect(useNewTaskUi.getState().source).toBe("tareas");
-    expect(nav.router.replace).not.toHaveBeenCalled();
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 });

@@ -141,6 +141,35 @@ export async function writeAppearanceCookieForStaff(staffId: string): Promise<vo
 }
 
 /**
+ * The session caller's preferences row (per-request cache): `{ row }` (row
+ * null = no row yet), or null for a guest. `getResolvedAppearance` and
+ * `getMyPreferences` share it, so the root layout reads it once.
+ */
+const getMyPreferencesRow = cache(async (): Promise<{ row: UserPreferencesRow | null } | null> => {
+  const session = await getSession();
+  if (!session) return null;
+  return { row: await findUserPreferences(db, session.user.id) };
+});
+
+/**
+ * The caller's raw preferences (null theme/style = the organization's), for
+ * the `useAppearance` seed (Ajustes › Apariencia reads them from the store).
+ * Null for a guest or on a DB error (the store then derives them from the
+ * resolved appearance).
+ */
+export const getMyPreferences = cache(async (): Promise<UserPreferences | null> => {
+  try {
+    const mine = await getMyPreferencesRow();
+    return mine ? rowToUserPreferences(mine.row) : null;
+  } catch (error) {
+    // Let Next.js control-flow errors (dynamic rendering, redirect, notFound) through.
+    unstable_rethrow(error);
+    console.error("[appearance] could not read the preferences", error);
+    return null;
+  }
+});
+
+/**
  * The caller's resolved appearance (redesign BE §8.1): reads
  * `appearance.theme` (per-request cache) and the caller's preferences row.
  * The DB is the source of truth; the cookie (`readAppearanceCookie`) is a
@@ -150,10 +179,9 @@ export async function writeAppearanceCookieForStaff(staffId: string): Promise<vo
 export const getResolvedAppearance = cache(async (): Promise<ResolvedAppearance> => {
   const org = await getStoredOrgAppearance();
   try {
-    const session = await getSession();
-    if (!session) return resolveAppearance(org, null);
-    const row = await findUserPreferences(db, session.user.id);
-    return resolveAppearance(org, rowToResolverInput(row));
+    const mine = await getMyPreferencesRow();
+    if (!mine) return resolveAppearance(org, null);
+    return resolveAppearance(org, rowToResolverInput(mine.row));
   } catch (error) {
     // Let Next.js control-flow errors (dynamic rendering, redirect, notFound) through.
     unstable_rethrow(error);

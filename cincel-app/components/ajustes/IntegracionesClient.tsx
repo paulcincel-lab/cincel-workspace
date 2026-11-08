@@ -1,8 +1,8 @@
 "use client";
 
+import { useSuspenseQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { createContext, useContext, useState, type ReactNode } from "react";
-import { toast } from "sonner";
+import type { ReactNode } from "react";
 
 import { GoogleCalendarSyncSection } from "@/components/calendario/CalendarFeedDialog";
 import { FormDialog } from "@/components/patterns/FormDialog";
@@ -10,9 +10,14 @@ import { SettingsSection } from "@/components/patterns/SettingsSection";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
-import { disconnectGmailAction, fetchGmailStatusAction, syncGmailAction } from "@/lib/actions/gmail-actions";
+import { disconnectGmailAction, syncGmailAction } from "@/lib/actions/gmail-actions";
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
-import { actionErrorCode, actionErrorText } from "@/lib/errors";
+import { actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { ajustesIntegracionesOptions, type AjustesIntegracionesPageData } from "@/lib/query/options/ajustes";
+import { IntegracionesUiStoreProvider, useIntegracionesUi } from "@/lib/stores/ajustes/integraciones-ui-store";
+import { useSessionStore } from "@/lib/stores/session-store";
 import type { GmailStatus } from "@/lib/types/redesign";
 
 // ── Copy and links (redesign FE §3.8) ───────────────────────────────────────
@@ -75,62 +80,43 @@ export function gmailCardState(status: GmailStatus): GmailCardState {
 
 // ── Page state ──────────────────────────────────────────────────────────────
 
-export type DriveIntegrationStatus = { configured: boolean; hasDriveGrant: boolean };
+export type DriveIntegrationStatus = AjustesIntegracionesPageData["drive"];
 
 export type IntegracionesClientProps = {
-  gmail: GmailStatus;
-  /** The signed-in Google account (the session email). */
-  accountEmail?: string | null;
-  /** Existing Drive picker status (`getPickerDriveStatus`). */
-  drive?: DriveIntegrationStatus;
-  /** Google sign-in and the staff OAuth client are configured (Calendar and Drive need it). */
-  googleConfigured?: boolean;
   /** The visible cards of the page, in order. */
   children?: ReactNode;
 };
 
-type IntegracionesContextValue = {
-  gmail: GmailStatus;
-  setGmail(status: GmailStatus): void;
-  accountEmail: string | null;
-  drive: DriveIntegrationStatus;
-  googleConfigured: boolean;
-};
+/** The hydrated `qk.ajustes.page('integraciones')`: Gmail status and the DB-only Drive grant. */
+function useIntegracionesData(): AjustesIntegracionesPageData {
+  return useSuspenseQuery(ajustesIntegracionesOptions()).data;
+}
 
-const IntegracionesContext = createContext<IntegracionesContextValue | null>(null);
-
-function useIntegraciones(): IntegracionesContextValue {
-  const value = useContext(IntegracionesContext);
-  if (!value) throw new Error("Integraciones cards render inside IntegracionesClient.");
-  return value;
+/** The signed-in Google account (the session email). */
+function useAccountEmail(): string | null {
+  return useSessionStore((s) => s.access.user?.email ?? null);
 }
 
 /**
- * Ajustes › Integraciones (redesign FE §3.8): holds the Gmail status and the
- * Google statuses the cards read. The page passes the visible cards (the
- * settings sections of `lib/shell/settings-sections/integraciones/*` plus the
- * Cutto link card) as children. Settings ignore the presentation style.
+ * After a Gmail sync or disconnect: the Gmail caches (Mi espacio) and this
+ * page's statuses. The Google Calendar sync and the calendar feed dialog
+ * invalidate `qk.ajustes.page('integraciones')` too.
  */
-export function IntegracionesClient({
-  gmail,
-  accountEmail = null,
-  drive = { configured: false, hasDriveGrant: false },
-  googleConfigured,
-  children,
-}: IntegracionesClientProps) {
-  const [status, setStatus] = useState<GmailStatus>(gmail);
+const GMAIL_INVALIDATE = [qk.me.gmail.all, qk.ajustes.page("integraciones")] as const;
+
+/**
+ * Ajustes › Integraciones (redesign FE §3.8): the cards read the hydrated
+ * `qk.ajustes.page('integraciones')`; the dialog and inline errors live in a
+ * page-scoped store, reset when the page unmounts. The page passes the
+ * visible cards (the settings sections of
+ * `lib/shell/settings-sections/integraciones/*` plus the Cutto link card) as
+ * children. Settings ignore the presentation style.
+ */
+export function IntegracionesClient({ children }: IntegracionesClientProps) {
   return (
-    <IntegracionesContext.Provider
-      value={{
-        gmail: status,
-        setGmail: setStatus,
-        accountEmail,
-        drive,
-        googleConfigured: googleConfigured ?? drive.configured,
-      }}
-    >
+    <IntegracionesUiStoreProvider>
       <div className="flex flex-col gap-4">{children}</div>
-    </IntegracionesContext.Provider>
+    </IntegracionesUiStoreProvider>
   );
 }
 
@@ -157,65 +143,55 @@ function AccountLine({ email, extra }: { email: string | null; extra?: string | 
 
 /** Gmail card: status, account, Conectar, Sincronizar ahora, Desconectar. */
 export function IntegracionesGmail() {
-  const { gmail, setGmail, accountEmail } = useIntegraciones();
-  const [syncing, setSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const { gmail } = useIntegracionesData();
+  const accountEmail = useAccountEmail();
+  const syncError = useIntegracionesUi((s) => s.syncError);
+  const setSyncError = useIntegracionesUi((s) => s.setSyncError);
+  const dialogOpen = useIntegracionesUi((s) => s.disconnectOpen);
+  const setDialogOpen = useIntegracionesUi((s) => s.setDisconnectOpen);
+  const disconnectError = useIntegracionesUi((s) => s.disconnectError);
+  const setDisconnectError = useIntegracionesUi((s) => s.setDisconnectError);
+
+  // Both refresh the status through the query (no hand-written refetch).
+  const syncMutation = useActionMutation(syncGmailAction, {
+    invalidate: GMAIL_INVALIDATE,
+    errorContext: "gmail",
+    successToast: "Gmail sincronizado.",
+    onFormError: setSyncError,
+  });
+  const disconnectMutation = useActionMutation(disconnectGmailAction, {
+    invalidate: GMAIL_INVALIDATE,
+    errorContext: "gmail",
+    successToast: "Gmail desconectado.",
+    onFormError: setDisconnectError,
+  });
+  const syncing = syncMutation.isPending;
+  const disconnecting = disconnectMutation.isPending;
 
   const state = gmailCardState(gmail);
   const canSync = GMAIL_IMPLEMENTED.syncGmailAction && gmail.connected && gmail.scopeOk;
   const canDisconnect = GMAIL_IMPLEMENTED.disconnectGmailAction && gmail.connected;
   const showConnect = state !== "connected";
 
-  async function refreshStatus(fallback: GmailStatus) {
-    if (!GMAIL_IMPLEMENTED.fetchGmailStatusAction) {
-      setGmail(fallback);
-      return;
-    }
-    try {
-      setGmail(await fetchGmailStatusAction());
-    } catch {
-      setGmail(fallback);
-    }
-  }
-
-  async function sync() {
+  function sync() {
     setSyncError(null);
     if (isWithinSyncCooldown(gmail.lastSyncedAt)) {
       setSyncError(actionErrorText(new Error("RATE_LIMITED"), "gmail"));
       return;
     }
-    setSyncing(true);
-    try {
-      await syncGmailAction();
-      await refreshStatus({ ...gmail, lastSyncedAt: new Date().toISOString(), lastError: null });
-      toast.success("Gmail sincronizado.");
-    } catch (err) {
-      setSyncError(actionErrorText(err, "gmail"));
-      const code = actionErrorCode(err);
-      if (code === "NOT_CONNECTED") setGmail(DISCONNECTED_GMAIL);
-      else if (code === "SCOPE_MISSING") setGmail({ ...gmail, scopeOk: false });
-    } finally {
-      setSyncing(false);
-    }
+    syncMutation.mutate(undefined);
   }
 
   async function disconnect() {
-    setDisconnecting(true);
     setDisconnectError(null);
     try {
-      await disconnectGmailAction();
-      setGmail(DISCONNECTED_GMAIL);
-      setSyncError(null);
-      setDialogOpen(false);
-      toast.success("Gmail desconectado.");
-    } catch (err) {
-      setDisconnectError(actionErrorText(err, "gmail"));
-    } finally {
-      setDisconnecting(false);
+      await disconnectMutation.mutateAsync(undefined);
+    } catch {
+      // The error copy is already in the dialog (`onFormError`).
+      return;
     }
+    setSyncError(null);
+    setDialogOpen(false);
   }
 
   const lastSync = gmail.lastSyncedAt
@@ -237,7 +213,7 @@ export function IntegracionesGmail() {
             </a>
           ) : null}
           {canSync ? (
-            <Button variant="outline" disabled={syncing} onClick={() => void sync()}>
+            <Button variant="outline" disabled={syncing} onClick={sync}>
               {syncing ? "Sincronizando…" : "Sincronizar ahora"}
             </Button>
           ) : null}
@@ -317,7 +293,7 @@ export function IntegracionesGmail() {
 
 /** Google Calendar card: the existing direct-sync controls of Calendario, unchanged. */
 export function IntegracionesGoogleCalendar() {
-  const { googleConfigured } = useIntegraciones();
+  const googleConfigured = useIntegracionesData().drive.configured;
   return (
     <SettingsSection title="Google Calendar" description="Eventos en Calendario y en Mi día.">
       {googleConfigured ? (
@@ -331,9 +307,10 @@ export function IntegracionesGoogleCalendar() {
 
 // ── Google Drive (existing status) ──────────────────────────────────────────
 
-/** Google Drive card: the existing per-person Drive grant status (`getPickerDriveStatus`). */
+/** Google Drive card: the person's own Drive grant, read from the DB only (`getPickerDriveGrant`). */
 export function IntegracionesGoogleDrive() {
-  const { drive, accountEmail } = useIntegraciones();
+  const { drive } = useIntegracionesData();
+  const accountEmail = useAccountEmail();
   const connected = drive.configured && drive.hasDriveGrant;
   return (
     <SettingsSection

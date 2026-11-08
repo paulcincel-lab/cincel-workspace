@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { useState } from "react";
 
 vi.mock("@/components/configuracion/monday-import/ChoiceSelect", async () => ({
@@ -66,7 +68,7 @@ afterEach(() => {
 
 describe("EquivalenciasStep · Grupos y tramo", () => {
   it("has one Tramo del tablero select and no department, workflow or task área controls", () => {
-    render(<Harness initial={draft()} source={boardSource([{ id: "g1", title: "Extras" }])} />);
+    renderWithQueryClient(<Harness initial={draft()} source={boardSource([{ id: "g1", title: "Extras" }])} />);
     expect(screen.getByRole("heading", { name: "Grupos y tramo" })).toBeTruthy();
     const tramo = screen.getByRole("combobox", { name: "Tramo del tablero" }) as HTMLSelectElement;
     expect(within(tramo).getAllByRole("option").map((option) => option.textContent)).toEqual([
@@ -84,7 +86,7 @@ describe("EquivalenciasStep · Grupos y tramo", () => {
   });
 
   it("requires the tramo when no group targets a tramo or fase", () => {
-    render(
+    renderWithQueryClient(
       <Harness
         initial={draft({ strategy: "group_as_project", workflowId: null })}
         source={boardSource([{ id: "g1", title: "Familia Pérez" }])}
@@ -96,7 +98,7 @@ describe("EquivalenciasStep · Grupos y tramo", () => {
   });
 
   it("doesn't require it when a group already targets a tramo", () => {
-    render(
+    renderWithQueryClient(
       <Harness
         initial={draft({ workflowId: null })}
         source={boardSource([
@@ -122,7 +124,7 @@ describe("EquivalenciasStep · Tareas de plantilla", () => {
   ];
 
   it("shows each item's Tramo · Fase and flags the ones without a fase", () => {
-    render(
+    renderWithQueryClient(
       <Harness
         initial={draft({ templateMatches: { i1: PLANOS_TEMPLATE } })}
         source={boardSource(groups, items)}
@@ -147,7 +149,7 @@ describe("EquivalenciasStep · Tareas de plantilla", () => {
   });
 
   it("keeps the template select for overrides", () => {
-    render(<Harness initial={draft()} source={boardSource(groups, items)} />);
+    renderWithQueryClient(<Harness initial={draft()} source={boardSource(groups, items)} />);
     const row = rowOf("Fachadas");
     expect(within(row).getByText("Sin fase · revisar")).toBeTruthy();
     fireEvent.change(within(row).getByRole("combobox", { name: "Plantilla para Fachadas" }), {
@@ -173,7 +175,7 @@ describe("EquivalenciasStep · Cliente (opcional)", () => {
   } as unknown as MappingInput;
 
   it("doesn't block a board without a client", () => {
-    render(
+    renderWithQueryClient(
       <EquivalenciasStep
         mapping={mapping}
         source={source}

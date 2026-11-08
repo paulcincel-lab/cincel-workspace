@@ -2,7 +2,7 @@
  * Espacios: an optional, ordered per-project list (project flow BE §8.3).
  * Hard-deleted (a filter, not history); task history keeps the old spaceId.
  */
-import { and, asc, count, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { projectSpaces, projects, tasks } from "@/lib/db/schema";
@@ -80,6 +80,19 @@ export async function listSpaces(projectId: string): Promise<ProjectSpace[]> {
     rows.map((r) => r.id)
   );
   return rows.map((r) => toSpace(r, counts.get(r.id) ?? 0));
+}
+
+/** `listSpaces` in one statement: the live task count is a correlated `count(*)`. */
+export async function listSpacesWithCounts(projectId: string): Promise<ProjectSpace[]> {
+  const rows = await db
+    .select({
+      space: projectSpaces,
+      taskCount: sql<number>`(select count(*)::int from ${tasks} where ${tasks.spaceId} = ${projectSpaces.id} and ${tasks.deletedAt} is null)`,
+    })
+    .from(projectSpaces)
+    .where(eq(projectSpaces.projectId, projectId))
+    .orderBy(asc(projectSpaces.sortOrder), asc(projectSpaces.name));
+  return rows.map((r) => toSpace(r.space, Number(r.taskCount)));
 }
 
 /** Appended last. NAME_TAKEN via 23505 + nameKey pre-check; EMPTY; NOT_FOUND (project). */
