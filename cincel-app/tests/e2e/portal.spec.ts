@@ -7,12 +7,17 @@
  * the emailed link never leaves the server, so the spec stores its own single-use link (sha256 of the
  * token, like `issuePortalLoginLink`) and opens `/portal/acceder?token=…` the way the email would.
  *
+ * The staff side (Query Migration 5d, #962): inviting a portal client from the project's Clientes tab updates the
+ * list and the tab count with no route refresh (no `_rsc` request).
+ *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { createHash, randomBytes } from "node:crypto";
 
 import { test, expect } from "@playwright/test";
 import postgres from "postgres";
+
+import { loginAsAdmin, seedAuth } from "./helpers/seed-auth";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${process.env.E2E_PORT ?? "3000"}`;
 const RUN_ID = Date.now();
@@ -102,5 +107,68 @@ test.describe("Portal — acceso y proyecto", () => {
     await page.goto(`${BASE_URL}/portal/acceder?token=${TOKEN}`, { waitUntil: "load" });
     await page.getByRole("button", { name: "Entrar al portal" }).click();
     await expect(page).toHaveURL(/\/portal\/login\?error=link/, { timeout: 30_000 });
+  });
+});
+
+// ── Staff side: Clientes tab (Query Migration 5d, #962) ──────────────────────
+
+const INVITE_PROJECT = `Proyecto clientes E2E ${RUN_ID}`;
+const INVITE_CLIENT = `Cliente invitado E2E ${RUN_ID}`;
+const INVITE_EMAIL = `invitado-e2e-${RUN_ID}@example.com`;
+let inviteProjectId = "";
+
+test.describe("Proyecto · Clientes (staff)", () => {
+  test.beforeAll(async () => {
+    await withSql(async (sql) => {
+      const [client] = await sql`
+        insert into core.contacts (type, kind, name, email)
+        values ('cliente', 'particular', ${INVITE_CLIENT}, ${INVITE_EMAIL}) returning id`;
+      const [project] = await sql`
+        insert into core.projects (name, client_id, status)
+        values (${INVITE_PROJECT}, ${client.id}, 'activo') returning id`;
+      inviteProjectId = project.id as string;
+    });
+  });
+
+  test.afterAll(async () => {
+    await withSql(async (sql) => {
+      await sql`delete from core.portal_users where email = ${INVITE_EMAIL}`;
+      await sql`delete from core.projects where name = ${INVITE_PROJECT}`;
+      await sql`delete from core.contacts where name = ${INVITE_CLIENT}`;
+    });
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await seedAuth(page);
+    await loginAsAdmin(page, BASE_URL);
+  });
+
+  test("inviting a client updates the list and the tab count without a refresh", async ({ page }) => {
+    await page.goto(`${BASE_URL}/proyectos/${inviteProjectId}/clientes`, { waitUntil: "domcontentloaded" });
+    const tabs = page.getByRole("navigation", { name: "Secciones del proyecto" });
+    await expect(tabs.getByRole("tab", { name: /^Clientes\s*0$/ })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Aún no hay clientes invitados a este proyecto.")).toBeVisible();
+
+    // From here on, any RSC request would mean the route refreshed.
+    const rscRequests: string[] = [];
+    page.on("request", (request) => {
+      const url = request.url();
+      if (url.includes("_rsc=") || request.headers()["rsc"] === "1") rscRequests.push(url);
+    });
+
+    await page.getByRole("button", { name: "Invitar cliente" }).click();
+    await page.getByRole("button", { name: "Contacto" }).click();
+    await page.getByRole("option", { name: new RegExp(INVITE_CLIENT) }).click();
+    await expect(page.getByLabel("Correo")).toHaveValue(INVITE_EMAIL);
+    await page.getByRole("button", { name: "Enviar invitación" }).click();
+    // The email may not go out locally; access is granted either way.
+    await expect(page.getByText(/Invitación enviada|Se dio acceso pero el correo no salió/)).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await expect(page.getByRole("cell", { name: INVITE_EMAIL })).toBeVisible({ timeout: 15_000 });
+    await expect(tabs.getByRole("tab", { name: /^Clientes\s*1$/ })).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(new RegExp(`/proyectos/${inviteProjectId}/clientes$`));
+    expect(rscRequests).toEqual([]);
   });
 });

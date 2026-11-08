@@ -365,7 +365,7 @@ export type PortfolioRow = {
 // FE §4.5–§4.6 and §4.10.1 name these without defining them; they are the
 // return shapes of the existing actions the pages already load.
 
-/** `fetchBoardAction` result: tasks per base status. */
+/** A board grouped by base status (`TaskBoardWidget`; built from `tareas.board(f)` columns). */
 export type TaskBoard = Record<TaskStatus, TaskListItem[]>;
 
 /** `fetchCalendarAction` result for the selected range. */

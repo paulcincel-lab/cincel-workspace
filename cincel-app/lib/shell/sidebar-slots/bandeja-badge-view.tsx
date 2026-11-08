@@ -1,9 +1,10 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/shadcn/badge";
-import { useBandejaUnread } from "@/lib/my-space/bandeja-unread";
+import { shellBadgesOptions } from "@/lib/query/options/shell";
 
 /** "99+" above 99. */
 export function formatUnreadBadge(count: number): string {
@@ -45,13 +46,14 @@ export function useDueReminderCount(dueAt: readonly string[] | undefined, render
 
 /**
  * The Mi espacio badge (redesign FE §3.1, frame `Sidebar`): unread Bandeja
- * items (the server count, kept fresh by the Bandeja poll) plus the reminders
- * still due today. Mono, primary tint; hidden at zero.
+ * items plus the reminders still due today, from `useQuery(qk.shell.badges())`
+ * (hydrated by the `(staff)` layout, polled every 60 s, patched by the
+ * Bandeja). No server reads of its own. Mono, primary tint; hidden at zero.
  */
-export function BandejaBadge({ data }: { data: BandejaBadgeData }) {
-  const unread = useBandejaUnread(data.unreadCount);
-  const reminders = useDueReminderCount(data.dueReminders, data.renderedAt);
-  const count = unread + reminders;
+export function BandejaBadge() {
+  const { data } = useQuery(shellBadgesOptions());
+  const reminders = useDueReminderCount(data?.bandeja.dueReminders, data?.bandeja.renderedAt);
+  const count = (data?.bandeja.unreadCount ?? 0) + reminders;
   if (count <= 0) return null;
   return (
     <Badge variant="count" data-slot="bandeja-badge">

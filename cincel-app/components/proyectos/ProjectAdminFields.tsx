@@ -27,8 +27,12 @@ export interface ProjectAdminFieldsProps {
 
 /**
  * Admin-only ficha fields (FE §3.5, §4.4): optional Cliente, Origen and
- * "Quién trajo el proyecto". The ficha renders it for administrators only and
- * saves the values through `updateProjectAction(id, { clientId, origin, originStaffId })`.
+ * "Quién trajo el proyecto". A controlled form part: the ficha renders it for
+ * administrators only and saves `projectAdminPatch(value)` through the shared
+ * `updateProject` mutation (`useUpdateProjectMutation` in
+ * `lib/proyectos/ficha-mutations.ts`), which updates the ficha's cache and
+ * invalidates only the keys a project edit changes. `clients` and `staff` are
+ * the `{id,name}` catalog rows (`catalog.contacts()`, `catalog.staff()`).
  */
 export function ProjectAdminFields({ value, onChange, clients, staff, projectHasClient }: ProjectAdminFieldsProps) {
   return (
@@ -102,7 +106,7 @@ export function ProjectAdminFields({ value, onChange, clients, staff, projectHas
   );
 }
 
-/** Trimmed patch for `updateProjectAction`: an empty origin is saved as null. */
+/** Trimmed patch for the `updateProject` mutation: an empty origin is saved as null. */
 export function projectAdminPatch(value: ProjectAdminValue): ProjectAdminValue {
   const origin = value.origin?.trim() ?? "";
   return { clientId: value.clientId, origin: origin === "" ? null : origin, originStaffId: value.originStaffId };

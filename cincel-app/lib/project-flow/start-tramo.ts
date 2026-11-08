@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 
+import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
 import {
   historyEvents,
   projectStages,
@@ -49,12 +50,7 @@ type LiveWorkflow = WorkflowRef & { autoStart: "on_create" | "on_ready" | "manua
 
 /** Today (YYYY-MM-DD) in the firm's time zone. */
 export function flowToday(now: Date = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: FLOW_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
+  return zonedIsoDate(now, FLOW_TIME_ZONE);
 }
 
 /** `base` (YYYY-MM-DD) + `days`; null when the template has no offset. */
@@ -433,8 +429,18 @@ export async function startTramo(tx: FlowTx, params: StartTramoParams): Promise<
 
 /** True when any task of the batch was edited, deleted, commented, or got related rows (BE §9.7). */
 export async function isBatchTouched(db: FlowExecutor, batchId: string): Promise<boolean> {
+  const rows = await db.execute<{ touched: boolean }>(sql`select ${batchTouchedSql(batchId)} as touched`);
+  return Boolean(rows[0]?.touched);
+}
+
+/**
+ * `isBatchTouched` as a SQL boolean, for a batch id value or a column of an
+ * outer query (the tramo board checks every started project's batch in its
+ * one query).
+ */
+export function batchTouchedSql(batchId: string | SQL): SQL {
   const ids = sql`(select ${tasks.id} from ${tasks} where ${tasks.startBatchId} = ${batchId})`;
-  const rows = await db.execute<{ touched: boolean }>(sql`select (
+  return sql`(
     exists (select 1 from ${tasks} where ${tasks.startBatchId} = ${batchId}
       and (${tasks.updatedAt} <> ${tasks.createdAt} or ${tasks.deletedAt} is not null))
     or exists (select 1 from ${historyEvents} where ${historyEvents.entity} = 'task' and ${historyEvents.entityId} in ${ids})
@@ -445,8 +451,7 @@ export async function isBatchTouched(db: FlowExecutor, batchId: string): Promise
     or exists (select 1 from ${tasks} where ${tasks.parentTaskId} in ${ids})
     or exists (select 1 from ${taskDependencies} where ${taskDependencies.taskId} in ${ids}
       or ${taskDependencies.dependsOnTaskId} in ${ids})
-  ) as touched`);
-  return Boolean(rows[0]?.touched);
+  )`;
 }
 
 /**

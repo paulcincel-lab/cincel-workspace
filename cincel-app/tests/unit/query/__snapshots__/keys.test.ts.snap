@@ -270,6 +270,11 @@ exports[`qk > builds every key shape 1`] = `
     "proyectos",
     "list",
   ],
+  "proyectos.remap": [
+    "proyectos",
+    "p1",
+    "remap",
+  ],
   "proyectos.resumen": [
     "proyectos",
     "p1",
@@ -464,6 +469,7 @@ exports[`qk > covers every key of the factory 1`] = `
   "proyectos.cronograma",
   "proyectos.history",
   "proyectos.clientesActivity",
+  "proyectos.remap",
   "personas.equipo",
   "personas.counts",
   "personas.contacts",

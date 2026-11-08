@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/actions/projects-actions", () => ({ retryProjectFolderAction: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import type { PresentationStyle } from "@/lib/types/redesign";
@@ -75,7 +76,8 @@ function applyAppearance(themeId: string, mode: "light" | "dark") {
 }
 
 function renderTab(style: PresentationStyle, result: StaffFilesResult = OK) {
-  return render(
+  // The folder states' Reintentar carpeta is a query mutation (5d, #962).
+  return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
       <main>
         <ProjectFiles projectId="p1" result={result} canRetry />

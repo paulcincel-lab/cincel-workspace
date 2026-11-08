@@ -1,14 +1,19 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { THEME_IDS } from "@/lib/ui/themes";
 import type { TodayStatus } from "@/lib/types/redesign";
 
 const mocks = vi.hoisted(() => ({
   clockInAction: vi.fn(),
   fetchMyTodayAction: vi.fn(),
+  pauseWorkAction: vi.fn(),
+  resumeWorkAction: vi.fn(),
+  clockOutAction: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -20,6 +25,13 @@ vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({
 import { ClockInPrompt } from "./ClockInPrompt";
 
 const NOW = new Date("2026-11-09T15:00:00Z");
+
+/** Renders the prompt with `me.today` holding `s`, as the staff layout hydrates it. */
+function renderPrompt(s: TodayStatus, name = "Ana López") {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.me.today(), s);
+  return renderWithQueryClient(<ClockInPrompt now={NOW} name={name} />, { client });
+}
 
 function status(overrides: Partial<TodayStatus> = {}): TodayStatus {
   return {
@@ -73,7 +85,7 @@ describe("ClockInPrompt accessibility", () => {
       for (const [label, s] of VARIANTS) {
         it(`has no serious axe violations (${label}, ${themeId}, ${mode})`, async () => {
           setTheme(themeId, mode);
-          render(<ClockInPrompt status={s} requiredFrom={s.requiredFrom} now={NOW} name="Ana López" />);
+          renderPrompt(s);
           await screen.findByRole("dialog");
           expect(await seriousViolations(document.body)).toEqual([]);
         });
@@ -84,7 +96,7 @@ describe("ClockInPrompt accessibility", () => {
         mocks.clockInAction.mockRejectedValue(new Error("DISABLED"));
         mocks.fetchMyTodayAction.mockResolvedValue(status({ enabled: false, promptAtLogin: false }));
         const s = VARIANTS[1][1];
-        render(<ClockInPrompt status={s} requiredFrom={s.requiredFrom} now={NOW} name="Ana López" />);
+        renderPrompt(s);
         await screen.findByRole("dialog");
         fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
         await screen.findByRole("button", { name: "Cerrar" });
@@ -94,7 +106,7 @@ describe("ClockInPrompt accessibility", () => {
   }
 
   it("is labelled by its title and described by its copy", async () => {
-    render(<ClockInPrompt status={status()} requiredFrom="2026-11-16" now={NOW} name="Ana López" />);
+    renderPrompt(status());
     const dialog = await screen.findByRole("dialog", { name: "Buenos días, Ana" });
     const describedBy = dialog.getAttribute("aria-describedby");
     expect(describedBy).toBeTruthy();
@@ -104,7 +116,7 @@ describe("ClockInPrompt accessibility", () => {
   });
 
   it("moves focus into the dialog and keeps it there", async () => {
-    render(<ClockInPrompt status={status({ required: true })} requiredFrom="2026-11-02" now={NOW} name="Ana" />);
+    renderPrompt(status({ required: true, requiredFrom: "2026-11-02" }), "Ana");
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     expect(dialog.getAttribute("aria-modal")).not.toBe("false");
@@ -116,7 +128,7 @@ describe("ClockInPrompt accessibility", () => {
     document.body.appendChild(trigger);
     trigger.focus();
 
-    render(<ClockInPrompt status={status()} requiredFrom="2026-11-16" now={NOW} name="Ana" />);
+    renderPrompt(status(), "Ana");
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     fireEvent.click(screen.getByRole("button", { name: "Ahora no" }));
@@ -128,14 +140,14 @@ describe("ClockInPrompt accessibility", () => {
   it("announces errors through an alert", async () => {
     mocks.clockInAction.mockRejectedValue(new Error("DISABLED"));
     mocks.fetchMyTodayAction.mockResolvedValue(status({ enabled: false, promptAtLogin: false }));
-    render(<ClockInPrompt status={status({ required: true })} requiredFrom="2026-11-02" now={NOW} name="Ana" />);
+    renderPrompt(status({ required: true, requiredFrom: "2026-11-02" }), "Ana");
     await screen.findByRole("dialog");
     fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
     expect((await screen.findByRole("alert")).textContent).toContain("Esta función está desactivada.");
   });
 
   it("uses no font weight above 600", async () => {
-    render(<ClockInPrompt status={status()} requiredFrom="2026-11-16" now={NOW} name="Ana" />);
+    renderPrompt(status(), "Ana");
     const dialog = await screen.findByRole("dialog");
     expect(dialog.innerHTML).not.toMatch(/font-(bold|extrabold|black)\b/);
   });

@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -29,18 +30,19 @@ import {
   PopoverTrigger,
 } from "@/components/ui/shadcn/popover";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
-import { unwrapActionResult } from "@/lib/actions/action-result";
+import * as tasksActions from "@/lib/actions/tasks-actions";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
 import {
-  addTaskDependencyAction,
-  fetchTasksAction,
-  listTaskDependenciesAction,
-  removeTaskDependencyAction,
-} from "@/lib/actions/tasks-actions";
+  projectTaskOptions,
+  taskDependenciesOptions,
+  taskDependencyInvalidations,
+} from "@/lib/query/options/tareas";
 import {
   BASE_STATUS_COLOR,
   BASE_STATUS_LABEL,
 } from "@/lib/tasks/status-options";
-import type { TaskListItem, TaskRef } from "@/lib/types/core";
+import type { TaskDetail, TaskRef } from "@/lib/types/core";
 import { formatDateDMY } from "@/lib/utils/date";
 
 const DEPENDENCY_ERROR_COPY: Record<string, string> = {
@@ -65,16 +67,31 @@ export function dependencyErrorMessage(
   return DEPENDENCY_ERROR_COPY[code] ?? fallback;
 }
 
-type Dependencies = { dependsOn: TaskRef[]; blocks: TaskRef[] };
-
 type Props = {
   taskId: string;
   projectId: string;
   /** Opens a linked task in the same drawer. */
   onOpenTask: (task: TaskRef) => void;
-  /** Called after a dependency is added or removed, so the caller can refresh "En espera". */
-  onChange?: () => void;
 };
+
+/** How long the picker waits after the last keystroke before it searches. */
+const SEARCH_DEBOUNCE_MS = 250;
+
+/** `value`, once it has stopped changing for `delay` ms (UI timer only, no fetch). */
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
+/** "En espera" on the open task's detail: one more (or less) open dependency, without refetching it. */
+function shiftWaitingOn(task: TaskDetail | null | undefined, dependency: TaskRef, delta: 1 | -1) {
+  if (!task || dependency.status === "completado") return task;
+  return { ...task, waitingOn: Math.max(0, task.waitingOn + delta) };
+}
 
 function TaskRefRow({
   task,
@@ -106,62 +123,61 @@ function TaskRefRow({
   );
 }
 
-/** The task sheet's Dependencias section: "Depende de" (editable) and "Bloquea a" (read-only). */
-export default function TaskDependencies({
-  taskId,
-  projectId,
-  onOpenTask,
-  onChange,
-}: Props) {
-  const [deps, setDeps] = useState<Dependencies | null>(null);
-  const [loadError, setLoadError] = useState("");
+/**
+ * The task sheet's Dependencias section: "Depende de" (editable) and
+ * "Bloquea a" (read-only), from `qk.tasks.dependencies(id)`. The picker
+ * searches the project's tasks on the server (`searchProjectTasksAction`,
+ * 20 rows) as the user types.
+ */
+export default function TaskDependencies({ taskId, projectId, onOpenTask }: Props) {
+  const depsQuery = useQuery(taskDependenciesOptions(taskId));
+  const deps = depsQuery.data ?? null;
+  const loadError = depsQuery.isError ? "No se pudieron cargar las dependencias." : "";
   const [error, setError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [candidates, setCandidates] = useState<TaskListItem[] | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
   const [pendingRemove, setPendingRemove] = useState<TaskRef | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    listTaskDependenciesAction(taskId)
-      .then((rows) => {
-        if (!cancelled) setDeps(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError("No se pudieron cargar las dependencias.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [taskId]);
+  const q = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
+  const candidatesQuery = useQuery({ ...projectTaskOptions(projectId, q), enabled: pickerOpen });
+  const candidates = candidatesQuery.data ?? null;
+
+  const add = useActionMutation<TaskRef, void>(
+    (dependency) => tasksActions.addTaskDependencyAction(taskId, dependency.id),
+    {
+      setData: (qc, _result, dependency) => {
+        qc.setQueryData<TaskDetail | null>(qk.tasks.detail(taskId), (task) => shiftWaitingOn(task, dependency, 1));
+      },
+      invalidate: (dependency) => taskDependencyInvalidations(taskId, dependency.id),
+      onFormError: () => undefined,
+    },
+  );
+  const remove = useActionMutation<TaskRef, void>(
+    (dependency) => tasksActions.removeTaskDependencyAction(taskId, dependency.id),
+    {
+      setData: (qc, _result, dependency) => {
+        qc.setQueryData<TaskDetail | null>(qk.tasks.detail(taskId), (task) => shiftWaitingOn(task, dependency, -1));
+      },
+      invalidate: (dependency) => taskDependencyInvalidations(taskId, dependency.id),
+      onFormError: () => undefined,
+    },
+  );
+  const saving = add.isPending || remove.isPending;
 
   const openPicker = (next: boolean) => {
     setPickerOpen(next);
-    if (!next || candidates !== null) return;
-    fetchTasksAction({ projectId })
-      .then(setCandidates)
-      .catch(() => setCandidates([]));
+    if (!next) setSearch("");
   };
 
-  const reload = async () => {
-    setDeps(await listTaskDependenciesAction(taskId));
-    onChange?.();
-  };
-
-  const handleAdd = async (dependsOnTaskId: string) => {
+  const handleAdd = async (dependency: TaskRef) => {
     if (saving) return;
     setPickerOpen(false);
-    setSaving(true);
+    setSearch("");
     setError("");
     try {
-      unwrapActionResult(await addTaskDependencyAction(taskId, dependsOnTaskId));
-      await reload();
+      await add.mutateAsync(dependency);
     } catch (err) {
-      setError(
-        dependencyErrorMessage(err, "No se pudo agregar la dependencia."),
-      );
-    } finally {
-      setSaving(false);
+      setError(dependencyErrorMessage(err, "No se pudo agregar la dependencia."));
     }
   };
 
@@ -169,24 +185,16 @@ export default function TaskDependencies({
     const target = pendingRemove;
     setPendingRemove(null);
     if (!target || saving) return;
-    setSaving(true);
     setError("");
     try {
-      unwrapActionResult(await removeTaskDependencyAction(taskId, target.id));
-      await reload();
+      await remove.mutateAsync(target);
     } catch (err) {
-      setError(
-        dependencyErrorMessage(err, "No se pudo quitar la dependencia."),
-      );
-    } finally {
-      setSaving(false);
+      setError(dependencyErrorMessage(err, "No se pudo quitar la dependencia."));
     }
   };
 
   const linkedIds = new Set(deps?.dependsOn.map((t) => t.id) ?? []);
-  const options = (candidates ?? []).filter(
-    (t) => t.projectId === projectId && t.id !== taskId && !linkedIds.has(t.id),
-  );
+  const options = (candidates ?? []).filter((t) => t.id !== taskId && !linkedIds.has(t.id));
 
   return (
     <section>
@@ -236,8 +244,12 @@ export default function TaskDependencies({
                   Agregar dependencia
                 </PopoverTrigger>
                 <PopoverContent className="w-80 p-0">
-                  <Command>
-                    <CommandInput placeholder="Buscar tarea del proyecto..." />
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Buscar tarea del proyecto..."
+                      value={search}
+                      onValueChange={setSearch}
+                    />
                     <CommandList>
                       {candidates === null ? (
                         <p className="py-6 text-center text-sm text-muted-foreground">
@@ -253,7 +265,7 @@ export default function TaskDependencies({
                               <CommandItem
                                 key={option.id}
                                 value={`${option.title} ${option.id}`}
-                                onSelect={() => void handleAdd(option.id)}
+                                onSelect={() => void handleAdd(option)}
                               >
                                 <span className="truncate">{option.title}</span>
                               </CommandItem>

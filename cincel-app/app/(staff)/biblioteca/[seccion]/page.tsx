@@ -1,9 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { BibliotecaSection } from "@/components/biblioteca/BibliotecaSection";
-import { StyleProvider } from "@/components/shell/StyleProvider";
 import { canViewResourceSection } from "@/lib/auth/permissions";
-import { isBibliotecaSection, parseEstilo, parseTipo, parseTramo } from "@/lib/biblioteca/catalog";
+import { isBibliotecaSection, parseTipo, parseTramo } from "@/lib/biblioteca/catalog";
 import { loadBibliotecaData } from "@/lib/biblioteca/load";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -30,7 +29,7 @@ export default async function BibliotecaSeccionPage({
   const { links, capabilities, viewerId, driveEnabled } = await loadBibliotecaData();
   if (!canViewResourceSection({ capabilities, section: seccion })) notFound();
 
-  const view = (
+  return (
     <BibliotecaSection
       section={seccion}
       links={links}
@@ -40,13 +39,5 @@ export default async function BibliotecaSeccionPage({
       tipo={parseTipo(sp.tipo)}
       tramo={parseTramo(sp.tramo)}
     />
-  );
-  const estilo = parseEstilo(sp.estilo);
-  return estilo ? (
-    <StyleProvider style={estilo} scope="staff" isOverridden>
-      {view}
-    </StyleProvider>
-  ) : (
-    view
   );
 }

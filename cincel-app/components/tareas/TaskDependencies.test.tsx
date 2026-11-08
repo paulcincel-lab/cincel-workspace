@@ -11,11 +11,11 @@ import {
 import {
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
 } from "@testing-library/react";
 
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TaskDetail, TaskListItem, TaskRef } from "@/lib/types/core";
 
 const actions = vi.hoisted(() => ({
@@ -24,10 +24,18 @@ const actions = vi.hoisted(() => ({
   listTaskDependenciesAction: vi.fn(),
   addTaskDependencyAction: vi.fn(),
   removeTaskDependencyAction: vi.fn(),
-  fetchTasksAction: vi.fn(),
+}));
+const pageData = vi.hoisted(() => ({
+  getTaskSheetData: vi.fn(),
+  searchProjectTasksAction: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/tasks-actions", () => actions);
+vi.mock("@/lib/actions/page-data/tareas-actions", () => pageData);
+vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowAction: vi.fn(async () => null) }));
+vi.mock("@/lib/actions/tramo-start-actions", () => ({ previewStartTramoAction: vi.fn() }));
+
+import { qk } from "@/lib/query/keys";
 
 import TaskDependencies, { dependencyErrorMessage } from "./TaskDependencies";
 
@@ -114,11 +122,16 @@ const task = makeTask();
 function renderDependencies(
   shown: TaskDetail,
   onOpenTask: (task: TaskRef) => void = vi.fn(),
-  onChange?: () => void,
+  client = createTestQueryClient(),
 ) {
-  return render(
-    <TaskDependencies taskId={shown.id} projectId={shown.projectId} onOpenTask={onOpenTask} onChange={onChange} />,
+  return renderWithQueryClient(
+    <TaskDependencies taskId={shown.id} projectId={shown.projectId} onOpenTask={onOpenTask} />,
+    { client },
   );
+}
+
+function ref(id: string, title: string, status: TaskRef["status"] = "pendiente"): TaskRef {
+  return { id, title, status, managerName: null, commitmentDate: null };
 }
 
 async function pickCandidate(title: string) {
@@ -143,13 +156,13 @@ describe("TaskDependencies", () => {
       dependsOn: [depRef],
       blocks: [blockedRef],
     });
-    actions.fetchTasksAction.mockResolvedValue([
-      makeItem({ id: TASK_ID, title: "Planos arquitectónicos" }),
-      makeItem({ id: DEP_ID, title: "Levantamiento topográfico" }),
-      makeItem({ id: OTHER_ID, title: "Estudio de mecánica de suelos" }),
+    pageData.searchProjectTasksAction.mockResolvedValue([
+      ref(TASK_ID, "Planos arquitectónicos"),
+      ref(DEP_ID, "Levantamiento topográfico", "en_proceso"),
+      ref(OTHER_ID, "Estudio de mecánica de suelos"),
     ]);
-    actions.addTaskDependencyAction.mockResolvedValue(undefined);
-    actions.removeTaskDependencyAction.mockResolvedValue(undefined);
+    actions.addTaskDependencyAction.mockResolvedValue({ ok: true, data: undefined });
+    actions.removeTaskDependencyAction.mockResolvedValue({ ok: true, data: undefined });
   });
 
   afterEach(() => {
@@ -157,8 +170,9 @@ describe("TaskDependencies", () => {
     vi.clearAllMocks();
   });
 
-  it("lists Depende de and Bloquea a", async () => {
-    renderDependencies(task);
+  it("lists Depende de and Bloquea a from qk.tasks.dependencies", async () => {
+    const client = createTestQueryClient();
+    renderDependencies(task, vi.fn(), client);
 
     expect(await screen.findByText("Levantamiento topográfico")).toBeTruthy();
     expect(screen.getByText("Licencia de construcción")).toBeTruthy();
@@ -167,10 +181,19 @@ describe("TaskDependencies", () => {
     expect(screen.getByText("LP")).toBeTruthy();
     expect(screen.getByText("05-11-2026")).toBeTruthy();
     expect(actions.listTaskDependenciesAction).toHaveBeenCalledWith(TASK_ID);
+    expect(client.getQueryData(qk.tasks.dependencies(TASK_ID))).toEqual({ dependsOn: [depRef], blocks: [blockedRef] });
     // Bloquea a is read-only: only the Depende de row has a remove button.
     expect(
       screen.getAllByRole("button", { name: /Quitar dependencia/ }),
     ).toHaveLength(1);
+  });
+
+  it("reads a seeded dependencies key without a request", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.tasks.dependencies(TASK_ID), { dependsOn: [depRef], blocks: [] });
+    renderDependencies(task, vi.fn(), client);
+    expect(await screen.findByText("Levantamiento topográfico")).toBeTruthy();
+    expect(actions.listTaskDependenciesAction).not.toHaveBeenCalled();
   });
 
   it("shows empty states", async () => {
@@ -190,35 +213,50 @@ describe("TaskDependencies", () => {
     expect(onOpenTask).toHaveBeenCalledWith(expect.objectContaining({ id: BLOCKED_ID }));
   });
 
-  it("searches only the task's project, without itself or existing dependencies", async () => {
-    actions.fetchTasksAction.mockResolvedValue([
-      makeItem({ id: TASK_ID, title: "Planos arquitectónicos" }),
-      makeItem({ id: DEP_ID, title: "Levantamiento topográfico" }),
-      makeItem({ id: OTHER_ID, title: "Estudio de mecánica de suelos" }),
-      makeItem({
-        id: "00000000-0000-4000-8000-0000000000e1",
-        title: "Tarea de otro proyecto",
-        projectId: "00000000-0000-4000-8000-000000000002",
-      }),
-    ]);
+  it("searches the project with searchProjectTasksAction (20 rows), without itself or existing dependencies", async () => {
     renderDependencies(task);
     await screen.findByText("Levantamiento topográfico");
+    // Nothing is searched until the picker opens.
+    expect(pageData.searchProjectTasksAction).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByText("Agregar dependencia"));
 
     expect(
       await screen.findByText("Estudio de mecánica de suelos"),
     ).toBeTruthy();
-    expect(actions.fetchTasksAction).toHaveBeenCalledWith({
+    expect(pageData.searchProjectTasksAction).toHaveBeenCalledWith({
       projectId: PROJECT_ID,
+      q: "",
+      limit: 20,
     });
     const options = screen.getAllByRole("option").map((o) => o.textContent);
     expect(options).toEqual(["Estudio de mecánica de suelos"]);
   });
 
-  it("adds a dependency, reloads and notifies the caller", async () => {
-    const onChange = vi.fn();
-    renderDependencies(task, vi.fn(), onChange);
+  it("typing searches the server under tasks.options(projectId, q)", async () => {
+    const client = createTestQueryClient();
+    renderDependencies(task, vi.fn(), client);
+    await screen.findByText("Levantamiento topográfico");
+    fireEvent.click(screen.getByText("Agregar dependencia"));
+    await screen.findByText("Estudio de mecánica de suelos");
+
+    pageData.searchProjectTasksAction.mockResolvedValue([ref(OTHER_ID, "Estudio de mecánica de suelos")]);
+    fireEvent.change(screen.getByPlaceholderText("Buscar tarea del proyecto..."), { target: { value: "  suelos " } });
+    await waitFor(() =>
+      expect(pageData.searchProjectTasksAction).toHaveBeenCalledWith({ projectId: PROJECT_ID, q: "suelos", limit: 20 }),
+    );
+    await waitFor(() =>
+      expect(client.getQueryData(qk.tasks.options(PROJECT_ID, "suelos"))).toEqual([
+        ref(OTHER_ID, "Estudio de mecánica de suelos"),
+      ]),
+    );
+  });
+
+  it("adds a dependency and refreshes both dependency lists and the En espera views", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.tasks.detail(TASK_ID), task);
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    renderDependencies(task, vi.fn(), client);
     await screen.findByText("Levantamiento topográfico");
 
     await pickCandidate("Estudio de mecánica de suelos");
@@ -229,16 +267,25 @@ describe("TaskDependencies", () => {
         OTHER_ID,
       ),
     );
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
-    expect(actions.listTaskDependenciesAction).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(actions.listTaskDependenciesAction).toHaveBeenCalledTimes(2));
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        qk.tasks.dependencies(TASK_ID),
+        qk.tasks.dependencies(OTHER_ID),
+        ["tareas", "list"],
+      ]),
+    );
+    // The open pending dependency counts toward "En espera" right away.
+    expect(client.getQueryData<TaskDetail>(qk.tasks.detail(TASK_ID))?.waitingOn).toBe(1);
   });
 
   it("shows the cycle error copy inline", async () => {
-    actions.addTaskDependencyAction.mockRejectedValue(
-      new Error("CYCLE: dependency would close a cycle"),
-    );
-    const onChange = vi.fn();
-    renderDependencies(task, vi.fn(), onChange);
+    actions.addTaskDependencyAction.mockResolvedValue({
+      ok: false,
+      error: "CYCLE: dependency would close a cycle",
+    });
+    renderDependencies(task);
     await screen.findByText("Levantamiento topográfico");
 
     await pickCandidate("Estudio de mecánica de suelos");
@@ -248,12 +295,12 @@ describe("TaskDependencies", () => {
         "No se puede agregar: la tarea elegida ya depende de esta, y se formaría un ciclo.",
       ),
     ).toBeTruthy();
-    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("removes a dependency after confirming", async () => {
-    const onChange = vi.fn();
-    renderDependencies(task, vi.fn(), onChange);
+    const client = createTestQueryClient();
+    client.setQueryData(qk.tasks.detail(TASK_ID), makeTask({ waitingOn: 1 }));
+    renderDependencies(task, vi.fn(), client);
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Quitar dependencia Levantamiento topográfico",
@@ -270,7 +317,7 @@ describe("TaskDependencies", () => {
         DEP_ID,
       ),
     );
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(client.getQueryData<TaskDetail>(qk.tasks.detail(TASK_ID))?.waitingOn).toBe(0));
   });
 
   it("keeps the dependency when the removal is cancelled", async () => {

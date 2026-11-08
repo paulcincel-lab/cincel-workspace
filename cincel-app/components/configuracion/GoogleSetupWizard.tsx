@@ -234,7 +234,7 @@ export function GoogleSetupWizard({ health, mappings, positions }: GoogleSetupWi
           <Button
             variant="ghost"
             disabled={isPending}
-            onClick={() => complete(() => router.replace("/dashboard"))}
+            onClick={() => complete(() => router.replace("/inicio"))}
           >
             Omitir por ahora
           </Button>

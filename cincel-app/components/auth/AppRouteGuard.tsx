@@ -109,7 +109,7 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
     // `router.refresh()` forces that server data to be re-fetched for the
     // destination route, so every redirect this guard issues is always
     // re-checked against the current session/DB state.
-    router.refresh();
+    router.refresh(); // data-patterns: auth
 
     if (resolution.status === "pending_first_access") {
       router.replace(PUBLIC_FIRST_ACCESS_ROUTE);
@@ -118,11 +118,11 @@ export default function AppRouteGuard({ children }: { children: React.ReactNode 
 
     if (resolution.status === "active") {
       if (isConfigurationRoute && resolution.user?.access !== "Administrador") {
-        router.replace("/dashboard");
+        router.replace("/inicio");
         return;
       }
 
-      router.replace("/dashboard");
+      router.replace("/inicio");
       return;
     }
 

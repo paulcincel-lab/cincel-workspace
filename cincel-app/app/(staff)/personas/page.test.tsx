@@ -25,15 +25,13 @@ vi.mock("@/lib/tramos/compat", () => ({
   ]),
 }));
 vi.mock("@/components/personas/EquipoView", () => ({ EquipoView: () => null }));
-vi.mock("@/components/shell/StyleProvider", () => ({ StyleProvider: () => null }));
 
 import { EquipoView, type EquipoViewProps } from "@/components/personas/EquipoView";
 import { EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_STAFF } from "@/components/personas/fixtures/equipo";
-import { StyleProvider } from "@/components/shell/StyleProvider";
 
 import PersonasEquipoPage from "./page";
 
-const run = (sp: Record<string, string> = {}) => PersonasEquipoPage({ searchParams: Promise.resolve(sp) });
+const run = () => PersonasEquipoPage();
 
 beforeEach(() => {
   m.notFound.mockClear();
@@ -74,14 +72,8 @@ describe("/personas", () => {
     expect(element.props.people.every((p) => p.open === 0 && p.weekHours === null)).toBe(true);
   });
 
-  it("wraps the view in a StyleProvider override for ?estilo=", async () => {
-    const element = (await run({ estilo: "analitico" })) as ReactElement<{ style: string; isOverridden: boolean }>;
-    expect(element.type).toBe(StyleProvider);
-    expect(element.props).toMatchObject({ style: "analitico", isOverridden: true });
-  });
-
-  it("ignores an unknown ?estilo= value", async () => {
-    const element = (await run({ estilo: "otro" })) as ReactElement;
+  it("renders the view with no style wrapper (useStyle reads ?estilo= from the URL)", async () => {
+    const element = (await run()) as ReactElement;
     expect(element.type).toBe(EquipoView);
   });
 });

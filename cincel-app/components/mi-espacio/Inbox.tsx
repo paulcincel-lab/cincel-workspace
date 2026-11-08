@@ -12,6 +12,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -37,7 +38,6 @@ import { fetchNotificationsAction, markNotificationsReadAction } from "@/lib/act
 import { IMPLEMENTED as NOTIFICATIONS_IMPLEMENTED } from "@/lib/actions/notifications-actions.flags";
 import { fetchProjectsAction } from "@/lib/actions/projects-actions";
 import { actionErrorText } from "@/lib/errors";
-import { publishBandejaUnread } from "@/lib/my-space/bandeja-unread";
 import {
   INBOX_TABS,
   appendUnique,
@@ -55,6 +55,7 @@ import {
   type InboxRow,
   type InboxTab,
 } from "@/lib/my-space/inbox";
+import { setShellBadgesUnread } from "@/lib/query/options/shell";
 import type { GmailStatus, GmailThreadSummary, NotificationItem, NotificationKind } from "@/lib/types/redesign";
 import type { RecordTableData } from "@/lib/types/widgets";
 
@@ -132,6 +133,7 @@ export function Inbox(props: InboxProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { onOpenThread } = props;
 
   const [tab, setTab] = useState<InboxTab>(props.tab);
@@ -176,10 +178,14 @@ export function Inbox(props: InboxProps) {
   const gmailConnected = GMAIL_ON && status !== null && status.connected && status.scopeOk;
   const visibleThreads = useMemo(() => (gmailConnected ? threads : []), [gmailConnected, threads]);
 
-  const setUnread = useCallback((count: number) => {
-    setUnreadCount(count);
-    publishBandejaUnread(count);
-  }, []);
+  // The Mi espacio badge reads `shell.badges`: the Bandeja's own count patches it at once.
+  const setUnread = useCallback(
+    (count: number) => {
+      setUnreadCount(count);
+      setShellBadgesUnread(queryClient, count);
+    },
+    [queryClient],
+  );
 
   // 60 s poll, only while the document is visible (FE §6).
   useEffect(() => {
@@ -263,7 +269,7 @@ export function Inbox(props: InboxProps) {
       setItems((current) => current.map((n) => (n.id === item.id ? { ...n, readAt } : n)));
       setUnreadCount((count) => {
         const next = Math.max(0, count - 1);
-        publishBandejaUnread(next);
+        setShellBadgesUnread(queryClient, next);
         return next;
       });
       markNotificationsReadAction([item.id])
@@ -272,13 +278,13 @@ export function Inbox(props: InboxProps) {
           setItems((current) => current.map((n) => (n.id === item.id ? { ...n, readAt: null } : n)));
           setUnreadCount((count) => {
             const next = count + 1;
-            publishBandejaUnread(next);
+            setShellBadgesUnread(queryClient, next);
             return next;
           });
           toast.error(actionErrorText(err));
         });
     },
-    [setUnread],
+    [queryClient, setUnread],
   );
 
   const openThread = useCallback(

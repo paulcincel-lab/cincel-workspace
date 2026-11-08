@@ -1,14 +1,21 @@
 "use client";
 
-import { type ReactNode, useMemo, useState } from "react";
+import { type MouseEvent, type ReactNode, useMemo, useState } from "react";
 import { ExternalLink, X } from "lucide-react";
 
 import { ListPage } from "@/components/patterns/ListPage";
-import { driveFolderUrl, FolderBreadcrumbs, ProjectFilesBrowser } from "@/components/proyectos/ProjectFilesBrowser";
+import {
+  driveFolderUrl,
+  FolderBreadcrumbs,
+  isPlainLeftClick,
+  openArchivosFolder,
+  ProjectFilesBrowser,
+} from "@/components/proyectos/ProjectFilesBrowser";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { DistributionWidget } from "@/components/widgets/DistributionWidget";
 import {
+  archivosFolderFromHref,
   fileTypeLabel,
   folderContext,
   formatFileDate,
@@ -37,7 +44,8 @@ export type ProjectFilesProps = {
  * `ProjectFilesBrowser` behavior: folder states (creating, failed, connect
  * Drive, no access) render through it unchanged; a readable folder renders as
  * a `ListPage` cards spec (Visual cards, Esencial list, Analítico table) plus
- * storage by type, from the same listing.
+ * storage by type, from the same listing. Folder links open on the client
+ * (`?folder=` via `history.pushState`, no server render; 5d, #962).
  */
 export function ProjectFiles({ projectId, result, canRetry }: ProjectFilesProps) {
   if (result.status !== "ok") {
@@ -71,6 +79,18 @@ function FolderView({ projectId, result }: { projectId: string; result: OkFilesR
   const items = result.items as ProjectFileSource[];
   const selected = selectedId ? (items.find((i) => i.id === selectedId && i.kind === "file") ?? null) : null;
   const uploadHref = driveFolderUrl(current.id);
+
+  // Folder cards and table rows are real links (the widgets render them); a
+  // plain click on one opens the folder here instead of a server render.
+  function onFolderLinkClick(event: MouseEvent<HTMLDivElement>) {
+    if (!isPlainLeftClick(event)) return;
+    const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+    if (!link || link.getAttribute("target") === "_blank") return;
+    const folderId = archivosFolderFromHref(projectId, link.getAttribute("href"));
+    if (folderId === undefined) return;
+    event.preventDefault();
+    openArchivosFolder(projectId, folderId);
+  }
 
   const actions = (
     <>
@@ -106,7 +126,7 @@ function FolderView({ projectId, result }: { projectId: string; result: OkFilesR
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-4" onClickCapture={onFolderLinkClick}>
         <ListPage
           header={{ title: "Archivos", description: atRoot ? undefined : current.name, actions }}
           filters={<FolderBreadcrumbs projectId={projectId} breadcrumbs={result.breadcrumbs} rootId={root.id} />}

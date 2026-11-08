@@ -7,7 +7,10 @@ import type { UIMessage } from "ai";
 
 import { THEME_IDS } from "@/lib/ui/themes";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/lib/actions/assistant-actions", () => ({
   fetchAssistantThreadsAction: vi.fn(async () => []),

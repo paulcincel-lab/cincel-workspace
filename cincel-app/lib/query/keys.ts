@@ -88,6 +88,8 @@ export const qk = {
     cronograma: (id: string) => ["proyectos", id, "cronograma"] as const,
     history: (id: string) => ["proyectos", id, "history"] as const,
     clientesActivity: (id: string) => ["proyectos", id, "clientes", "activity"] as const,
+    /** The ficha's "Reacomodar importación" state (5b), under `detail(id)`. */
+    remap: (id: string) => ["proyectos", id, "remap"] as const,
   },
   personas: {
     equipo: () => ["personas", "equipo"] as const,

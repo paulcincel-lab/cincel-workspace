@@ -1,8 +1,6 @@
 "use client";
 
-import { Fragment, type ReactNode, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Fragment, type MouseEvent, type ReactNode, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ExternalLink, FileText, Folder, FolderOpen, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 
@@ -17,7 +15,9 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/shadcn/breadcrumb";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
-import { retryProjectFolderAction } from "@/lib/actions/projects-actions";
+import { retryProjectFolderAction, type RetryProjectFolderResult } from "@/lib/actions/projects-actions";
+import { useActionMutation } from "@/lib/query/mutation";
+import { retryFolderKeys } from "@/lib/query/options/proyectos-archivos-clientes";
 import type { StaffFileItem, StaffFilesResult } from "@/lib/types/workspace-access";
 
 /** One-line hints for the project folder's three subfolders (FE §2.3), keyed by folder name. */
@@ -31,6 +31,8 @@ const RETRY_ERRORS: Record<"forbidden" | "not_found", string> = {
   forbidden: "No tienes permiso para crear la carpeta.",
   not_found: "El proyecto ya no existe.",
 };
+
+const RETRY_FAILED = "No se pudo reintentar. Intenta de nuevo.";
 
 const dateTime = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
 
@@ -56,6 +58,30 @@ export function formatSize(bytes: number | null): string {
 export function archivosHref(projectId: string, folderId?: string | null): string {
   const base = `/proyectos/${encodeURIComponent(projectId)}/archivos`;
   return folderId ? `${base}?folder=${encodeURIComponent(folderId)}` : base;
+}
+
+/**
+ * Opens a folder of the Archivos tab on the client (Query Migration 5d,
+ * #962): `?folder=` is written with `history.pushState`, which Next syncs
+ * into `useSearchParams` with no server render, and the tab reads
+ * `proyectos.archivos(id, folder)`. Back and forward restore the folder.
+ */
+export function openArchivosFolder(projectId: string, folderId: string | null): void {
+  window.history.pushState(null, "", archivosHref(projectId, folderId));
+}
+
+/** A plain left click the tab may take over; middle, modified and new-tab clicks keep the real link. */
+export function isPlainLeftClick(event: MouseEvent<HTMLElement>): boolean {
+  return !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
+
+/** `onClick` for a folder link: client navigation on a plain click, the `href` otherwise. */
+export function folderLinkClick(projectId: string, folderId: string | null) {
+  return (event: MouseEvent<HTMLElement>) => {
+    if (!isPlainLeftClick(event)) return;
+    event.preventDefault();
+    openArchivosFolder(projectId, folderId);
+  };
 }
 
 export function connectDriveHref(projectId: string): string {
@@ -129,23 +155,20 @@ function FolderState({
   canRetry: boolean;
   children: ReactNode;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const mutation = useActionMutation<string, Extract<RetryProjectFolderResult, { ok: true }>>(retryProjectFolderAction, {
+    // Only after a retry that ran: a refused one changes nothing.
+    invalidate: (id, data) => (data ? retryFolderKeys(id) : []),
+    // The error shows inline below the button, not as a toast.
+    onFormError: () => undefined,
+  });
+  const pending = mutation.isPending;
 
   function retry() {
     setError(null);
-    startTransition(async () => {
-      try {
-        const res = await retryProjectFolderAction(projectId);
-        if (!res.ok) {
-          setError(RETRY_ERRORS[res.error]);
-          return;
-        }
-        router.refresh();
-      } catch {
-        setError("No se pudo reintentar. Intenta de nuevo.");
-      }
+    mutation.mutate(projectId, {
+      onError: (err) =>
+        setError(Object.hasOwn(RETRY_ERRORS, err.message) ? RETRY_ERRORS[err.message as keyof typeof RETRY_ERRORS] : RETRY_FAILED),
     });
   }
 
@@ -248,7 +271,12 @@ export function FolderBreadcrumbs({
                   <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
                 ) : (
                   <BreadcrumbLink
-                    render={<Link href={archivosHref(projectId, crumb.id === rootId ? null : crumb.id)} />}
+                    render={
+                      <a
+                        href={archivosHref(projectId, crumb.id === rootId ? null : crumb.id)}
+                        onClick={folderLinkClick(projectId, crumb.id === rootId ? null : crumb.id)}
+                      />
+                    }
                   >
                     {crumb.name}
                   </BreadcrumbLink>
@@ -268,10 +296,14 @@ function FileName({ projectId, item, hint }: { projectId: string; item: StaffFil
 
   const label =
     item.kind === "folder" ? (
-      <Link href={archivosHref(projectId, item.id)} className="inline-flex items-center gap-2 font-medium hover:underline">
+      <a
+        href={archivosHref(projectId, item.id)}
+        onClick={folderLinkClick(projectId, item.id)}
+        className="inline-flex items-center gap-2 font-medium hover:underline"
+      >
         <Folder aria-hidden className="size-4" />
         {item.name}
-      </Link>
+      </a>
     ) : item.webViewLink ? (
       <a
         href={item.webViewLink}

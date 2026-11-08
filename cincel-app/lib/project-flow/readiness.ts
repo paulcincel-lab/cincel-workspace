@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import type { TramoBoard, TramoCandidateProject, ViewerScope, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
@@ -8,7 +8,7 @@ import { projects, projectStages, taskStatuses, tasks, tramoStartBatches, workfl
 import { READINESS } from "./catalog";
 import type { FlowExecutor } from "./db";
 import { flowError } from "./errors";
-import { isBatchTouched } from "./start-tramo";
+import { batchTouchedSql } from "./start-tramo";
 
 /** Live tasks of the gate fase on one project, counted (BE §9.1). */
 export type GateCounts = {
@@ -179,45 +179,38 @@ export async function tramoBoard(db: FlowExecutor, workflowId: string, viewer: V
   upcoming.sort(byName);
 
   // ── Started: projects with a stage row for T, with their latest live batch ─
-  const startedRows = await db
-    .select({ projectId: projects.id })
-    .from(projectStages)
-    .innerJoin(projects, eq(projects.id, projectStages.projectId))
-    .where(and(eq(projectStages.workflowId, workflowId), isNull(projects.deletedAt)))
-    .orderBy(asc(projects.name));
+  // One query: the batch comes from a lateral join and "touched" is the same
+  // check `isBatchTouched` runs, so the board costs no query per batch.
+  const latestBatch = sql`(
+    select ${tramoStartBatches.id} as id, ${tramoStartBatches.createdCount} as created_count
+    from ${tramoStartBatches}
+    where ${tramoStartBatches.projectId} = ${projects.id}
+      and ${tramoStartBatches.workflowId} = ${workflowId}
+      and ${tramoStartBatches.undoneAt} is null
+    order by ${tramoStartBatches.createdAt} desc, ${tramoStartBatches.id} desc
+    limit 1
+  )`;
+  const startedRows = await db.execute<{
+    project_id: string;
+    batch_id: string | null;
+    created_count: number | null;
+    touched: boolean | null;
+  }>(sql`
+    select ${projects.id} as project_id, b.id as batch_id, b.created_count as created_count,
+      case when b.id is null then false else ${batchTouchedSql(sql`b.id`)} end as touched
+    from ${projectStages}
+    inner join ${projects} on ${projects.id} = ${projectStages.projectId}
+    left join lateral ${latestBatch} b on true
+    where ${projectStages.workflowId} = ${workflowId} and ${projects.deletedAt} is null
+    order by ${projects.name} asc
+  `);
 
-  const batches = startedRows.length
-    ? await db
-        .selectDistinctOn([tramoStartBatches.projectId], {
-          id: tramoStartBatches.id,
-          projectId: tramoStartBatches.projectId,
-          createdCount: tramoStartBatches.createdCount,
-        })
-        .from(tramoStartBatches)
-        .where(
-          and(
-            eq(tramoStartBatches.workflowId, workflowId),
-            isNull(tramoStartBatches.undoneAt),
-            inArray(
-              tramoStartBatches.projectId,
-              startedRows.map((r) => r.projectId)
-            )
-          )
-        )
-        .orderBy(tramoStartBatches.projectId, desc(tramoStartBatches.createdAt), desc(tramoStartBatches.id))
-    : [];
-  const batchByProject = new Map(batches.map((b) => [b.projectId, b]));
-  const touched = new Map(await Promise.all(batches.map(async (b) => [b.id, await isBatchTouched(db, b.id)] as const)));
-
-  const started: TramoBoard["started"] = startedRows.map((r) => {
-    const batch = batchByProject.get(r.projectId) ?? null;
-    return {
-      projectId: r.projectId,
-      batchId: batch?.id ?? null,
-      createdCount: batch?.createdCount ?? 0,
-      canUndo: batch != null && touched.get(batch.id) === false,
-    };
-  });
+  const started: TramoBoard["started"] = [...startedRows].map((r) => ({
+    projectId: r.project_id,
+    batchId: r.batch_id ?? null,
+    createdCount: r.batch_id ? Number(r.created_count ?? 0) : 0,
+    canUndo: r.batch_id != null && r.touched === false,
+  }));
 
   return { workflow, ready, upcoming, started };
 }

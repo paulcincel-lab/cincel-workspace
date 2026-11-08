@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { ListPageProps } from "@/components/patterns/ListPage";
@@ -22,6 +22,21 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/actions/projects-actions", () => ({ submitProjectCreateAction, updateProjectAction }));
+// The page prefetches `qk.proyectos.list()`; a client call here would be a bug.
+const pageData = vi.hoisted(() => ({ getProyectosPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => pageData);
+const catalog = vi.hoisted(() => ({
+  fetchCatalogContacts: vi.fn(async () => [{ id: "c1", name: "Familia Gómez", type: "cliente" }]),
+  fetchCatalogStaff: vi.fn(async () => [{ id: "s1", name: "Ana López" }]),
+}));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  ...catalog,
+  fetchCatalogAssignableStaff: vi.fn(),
+  fetchCatalogProjectOptions: vi.fn(),
+  fetchCatalogProjectSpaces: vi.fn(),
+  fetchCatalogTaskStatuses: vi.fn(),
+  fetchCatalogWorkflows: vi.fn(),
+}));
 vi.mock("@/lib/tramos/compat", () => ({
   tramoColorVar: (key: string) => `var(--chart-${key === "presale" ? 1 : key === "diseno" ? 2 : 3})`,
 }));
@@ -77,10 +92,15 @@ vi.mock("./NewProjectDialog", () => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import type { ProyectosPageData } from "@/lib/loaders/proyectos";
+import { qk } from "@/lib/query/keys";
+import { proyectosPageOptions } from "@/lib/query/options/proyectos";
+import { prefetch } from "@/lib/query/server";
+import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
-import { ProjectsPortfolio, type ProjectsPortfolioProps } from "./ProjectsPortfolio";
-import { PORTFOLIO, PORTFOLIO_NON_ADMIN, PROJECTS, TRAMOS } from "./projects-portfolio.fixtures";
+import { ProjectsPortfolio, SEARCH_DEBOUNCE_MS } from "./ProjectsPortfolio";
+import { PORTFOLIO, PROJECTS, TRAMOS, portfolioPageData } from "./projects-portfolio.fixtures";
 import {
   BUDGET_COLUMN_LABEL,
   buildTramoSegments,
@@ -90,17 +110,15 @@ import {
   tramoSteps,
 } from "./projects-portfolio-data";
 
-function renderPortfolio(patch: Partial<ProjectsPortfolioProps> = {}, style: PresentationStyle = "visual") {
-  return render(
+/** Renders the portfolio over a seeded `qk.proyectos.list()`, as the page's hydration leaves it. */
+function renderPortfolio(patch: Partial<ProyectosPageData> = {}, style: PresentationStyle = "visual") {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.proyectos.list(), portfolioPageData(patch));
+  return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
-      <ProjectsPortfolio
-        projects={PROJECTS}
-        portfolio={PORTFOLIO_NON_ADMIN}
-        tramos={TRAMOS}
-        canCreateProject
-        {...patch}
-      />
+      <ProjectsPortfolio />
     </StyleProvider>,
+    { client },
   );
 }
 
@@ -110,17 +128,31 @@ function cardsSpec() {
   return spec;
 }
 
+/** The URL of the last `history.replaceState` call. */
+function lastReplacedUrl(spy: { mock: { calls: unknown[][] } }): string | undefined {
+  const call = spy.mock.calls.at(-1);
+  return call ? String(call[2]) : undefined;
+}
+
 beforeEach(() => {
   nav.params = new URLSearchParams();
   nav.push.mockReset();
   nav.replace.mockReset();
   submitProjectCreateAction.mockReset();
   updateProjectAction.mockClear();
+  pageData.getProyectosPageData.mockReset();
+  catalog.fetchCatalogContacts.mockClear();
+  catalog.fetchCatalogStaff.mockClear();
   captured.list = null;
   captured.dialog = null;
+  window.history.replaceState(null, "", "/proyectos");
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("ProjectsPortfolio", () => {
   it("lists active and paused projects with the header copy", () => {
@@ -129,6 +161,18 @@ describe("ProjectsPortfolio", () => {
     expect(screen.getByTestId("description").textContent).toBe("3 activos · avance, fase y entregas de cada obra.");
     expect(cardsSpec().items.map((i) => i.title)).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
     expect(screen.queryByText("Casa Antigua")).toBeNull();
+  });
+
+  it("renders from the hydrated query with 0 client action calls", async () => {
+    const { client, state } = await hydrationRoundtrip((server) =>
+      prefetch(server, proyectosPageOptions(), async () => portfolioPageData()),
+    );
+    renderWithQueryClient(<ProjectsPortfolio />, { client, hydrate: state });
+    expect(cardsSpec().items.map((i) => i.title)).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
+    expect(pageData.getProyectosPageData).not.toHaveBeenCalled();
+    expect(submitProjectCreateAction).not.toHaveBeenCalled();
+    expect(catalog.fetchCatalogContacts).not.toHaveBeenCalled();
+    expect(catalog.fetchCatalogStaff).not.toHaveBeenCalled();
   });
 
   it("hands the same data to every style (the widgets decide the look)", () => {
@@ -144,7 +188,7 @@ describe("ProjectsPortfolio", () => {
   });
 
   it("leaves the Presup. ejercido column out for non-admins", () => {
-    renderPortfolio({ canSeeAdminData: false, portfolio: PORTFOLIO_NON_ADMIN });
+    renderPortfolio({ canSeeAdminData: false });
     const { table } = cardsSpec();
     expect(table.columns.map((c) => c.label)).not.toContain(BUDGET_COLUMN_LABEL);
     for (const row of table.rows) expect(row).not.toHaveProperty("presupuesto");
@@ -198,9 +242,34 @@ describe("ProjectsPortfolio", () => {
     expect(items.find((i) => i.id === "p-pausado")?.badges).toContainEqual({ label: "Pausado", tone: "warn" });
   });
 
-  it("filters by the search box", () => {
+  it("filters by the search box right away", () => {
     renderPortfolio();
     fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "zapopan" } });
+    expect(cardsSpec().items.map((i) => i.title)).toEqual(["Depto Andares"]);
+  });
+
+  it("writes the search to ?q= with history.replaceState after the debounce, never router.push", () => {
+    vi.useFakeTimers();
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    renderPortfolio();
+    fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "zapo" } });
+    fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "zapopan" } });
+    expect(replaceState).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS));
+    expect(replaceState).toHaveBeenCalledTimes(1);
+    expect(lastReplacedUrl(replaceState)).toBe("/proyectos?q=zapopan");
+    // Clearing the box drops the param.
+    fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "" } });
+    act(() => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS));
+    expect(lastReplacedUrl(replaceState)).toBe("/proyectos");
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("restores the search from ?q= (back from a project)", () => {
+    nav.params = new URLSearchParams("q=zapopan");
+    renderPortfolio();
+    expect((screen.getByLabelText("Buscar proyecto o lugar") as HTMLInputElement).value).toBe("zapopan");
     expect(cardsSpec().items.map((i) => i.title)).toEqual(["Depto Andares"]);
   });
 
@@ -220,40 +289,85 @@ describe("ProjectsPortfolio", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("opens NewProjectDialog with ?nuevo=1 and drops the param on close", () => {
+  it("opens NewProjectDialog with ?nuevo=1 and drops the param with history.replaceState on close", () => {
     nav.params = new URLSearchParams("nuevo=1&estilo=esencial");
+    window.history.replaceState(null, "", "/proyectos?nuevo=1&estilo=esencial");
+    const replaceState = vi.spyOn(window.history, "replaceState");
     renderPortfolio();
     expect(screen.getByRole("dialog", { name: "Nuevo proyecto" })).toBeTruthy();
     act(() => captured.dialog?.onOpenChange(false));
-    expect(nav.replace).toHaveBeenCalledWith("/proyectos?estilo=esencial", { scroll: false });
+    expect(lastReplacedUrl(replaceState)).toBe("/proyectos?estilo=esencial");
+    // No navigation: closing never renders the route on the server.
+    expect(nav.replace).not.toHaveBeenCalled();
+    expect(nav.push).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("passes the admin fields only to admins", () => {
-    const adminOptions = { clients: [{ id: "c1", name: "Familia Gómez" }], staff: [] };
-    renderPortfolio({ canSeeAdminData: false, adminOptions });
+  it("never loads the admin options for non-admins", async () => {
+    nav.params = new URLSearchParams("nuevo=1");
+    renderPortfolio({ canSeeAdminData: false });
     expect(captured.dialog?.adminOptions).toBeNull();
-    cleanup();
-    renderPortfolio({ canSeeAdminData: true, adminOptions });
-    expect(captured.dialog?.adminOptions).toEqual(adminOptions);
+    await act(async () => undefined);
+    expect(catalog.fetchCatalogContacts).not.toHaveBeenCalled();
+    expect(catalog.fetchCatalogStaff).not.toHaveBeenCalled();
   });
 
-  it("creates the project and opens it", async () => {
+  it("loads the admin options lazily, only once the dialog opens, as {id, name}", async () => {
+    renderPortfolio({ canSeeAdminData: true });
+    await act(async () => undefined);
+    expect(catalog.fetchCatalogContacts).not.toHaveBeenCalled();
+    expect(catalog.fetchCatalogStaff).not.toHaveBeenCalled();
+
+    fireEvent.click(within(screen.getByTestId("actions")).getByRole("button", { name: "Nuevo proyecto" }));
+    await waitFor(() =>
+      expect(captured.dialog?.adminOptions).toEqual({
+        clients: [{ id: "c1", name: "Familia Gómez" }],
+        staff: [{ id: "s1", name: "Ana López" }],
+      }),
+    );
+    expect(catalog.fetchCatalogContacts).toHaveBeenCalledWith({ type: "cliente" });
+    expect(catalog.fetchCatalogStaff).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates the project through useActionMutation, invalidates the list and the project options, and opens it", async () => {
     submitProjectCreateAction.mockResolvedValue({ ok: true, project: { id: "p-new" } });
-    renderPortfolio();
+    const { client } = renderPortfolio();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
     await act(() => captured.dialog!.onConfirm({ name: "Casa Nueva" }));
     expect(submitProjectCreateAction).toHaveBeenCalledWith({ name: "Casa Nueva" });
     expect(updateProjectAction).not.toHaveBeenCalled();
     expect(nav.push).toHaveBeenCalledWith("/proyectos/p-new");
+    await waitFor(() => {
+      const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+      expect(keys).toContainEqual(qk.proyectos.list());
+      expect(keys).toContainEqual(qk.catalog.projectOptions());
+      expect(keys).toContainEqual(qk.inicio());
+    });
   });
 
-  it("saves the admin client and origin right after the create", async () => {
+  it("saves the admin client and origin right after the create and invalidates the project", async () => {
     submitProjectCreateAction.mockResolvedValue({ ok: true, project: { id: "p-new" } });
-    renderPortfolio({ canSeeAdminData: true, adminOptions: { clients: [], staff: [] } });
+    updateProjectAction.mockResolvedValue({ ok: true, data: { id: "p-new" } } as never);
+    const { client } = renderPortfolio({ canSeeAdminData: true });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
     const admin = { clientId: "c1", origin: "Recomendación", originStaffId: null };
     await act(() => captured.dialog!.onConfirm({ name: "Casa Nueva" }, admin));
     expect(updateProjectAction).toHaveBeenCalledWith("p-new", admin);
     expect(nav.push).toHaveBeenCalledWith("/proyectos/p-new");
+    await waitFor(() => {
+      const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+      expect(keys).toContainEqual(qk.proyectos.detail("p-new"));
+      expect(keys).toContainEqual(qk.proyectos.tab("p-new", "clientes"));
+    });
+  });
+
+  it("opens the ficha when the admin fields fail to save (an ActionResult error)", async () => {
+    submitProjectCreateAction.mockResolvedValue({ ok: true, project: { id: "p-new" } });
+    updateProjectAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" } as never);
+    renderPortfolio({ canSeeAdminData: true });
+    const admin = { clientId: "c1", origin: null, originStaffId: null };
+    await act(() => captured.dialog!.onConfirm({ name: "Casa Nueva" }, admin));
+    expect(nav.push).toHaveBeenCalledWith("/proyectos/p-new/ficha");
   });
 
   it("rethrows the create code so the dialog shows its copy", async () => {
@@ -261,6 +375,13 @@ describe("ProjectsPortfolio", () => {
     renderPortfolio();
     await expect(captured.dialog!.onConfirm({ name: "Casa Lomas" })).rejects.toThrow("NAME_TAKEN");
     expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("turns a production-stripped error into the generic copy (empty code)", async () => {
+    const stripped = Object.assign(new Error("An error occurred in the Server Components render."), { digest: "123" });
+    submitProjectCreateAction.mockRejectedValue(stripped);
+    renderPortfolio();
+    await expect(captured.dialog!.onConfirm({ name: "Casa Lomas" })).rejects.toThrow(/^$/);
   });
 });
 

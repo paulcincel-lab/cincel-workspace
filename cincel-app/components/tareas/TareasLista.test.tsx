@@ -1,14 +1,13 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import type { ListPageProps } from "@/components/patterns/ListPage";
-import type { TramoBoard } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
-import { DISENO, LISTA_TASKS, LISTA_TRAMOS } from "./fixtures/lista-tasks";
+import { LISTA_TASKS, LISTA_TRAMOS } from "./fixtures/lista-tasks";
 
 const nav = vi.hoisted(() => ({
   search: "vista=lista",
@@ -21,57 +20,60 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(nav.search),
 }));
 vi.mock("next/link", () => ({
-  default: ({ href, children, scroll, ...rest }: { href: string; children: ReactNode; scroll?: boolean }) => {
+  default: ({
+    href,
+    children,
+    scroll,
+    onNavigate,
+    ...rest
+  }: {
+    href: string;
+    children: ReactNode;
+    scroll?: boolean;
+    onNavigate?: (e: { preventDefault(): void }) => void;
+  }) => {
     void scroll;
     return (
-      <a href={href} {...rest}>
+      <a
+        href={href}
+        {...rest}
+        onClick={(e) => {
+          onNavigate?.({ preventDefault: () => e.preventDefault() });
+        }}
+      >
         {children}
       </a>
     );
   },
 }));
 
-const BOARD: TramoBoard = {
-  workflow: DISENO,
-  ready: [{ project: { id: "p7", name: "Casa Valle" }, currentTramo: null, readySince: "2026-11-02T10:00:00.000Z", pending: null }],
-  upcoming: [
-    {
-      project: { id: "p8", name: "Loft Centro" },
-      currentTramo: null,
-      readySince: null,
-      pending: {
-        tramo: { id: "w-presale", key: "presale", name: "Presale", sortOrder: 1 },
-        phase: { id: "f-cobro", name: "Cobro", sortOrder: 3 },
-        open: 1,
-        total: 2,
-      },
-    },
-  ],
-  started: [],
-};
-
-const compat = vi.hoisted(() => ({
-  present: true,
-  fetchBoard: vi.fn(),
-  fetchCandidates: vi.fn(),
-}));
-vi.mock("@/lib/tramos/compat", () => ({
-  get tramoStart() {
-    return compat.present ? { fetchBoard: compat.fetchBoard, fetchCandidates: compat.fetchCandidates } : null;
-  },
-  canSeeAdminData: () => true,
-}));
-
-const auth = vi.hoisted(() => ({ canStart: true }));
 vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => ({ member: { id: "s1" }, email: "ana@cincel.mx", access: "Administrador" }),
 }));
-vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
-  resolveActivitiesCapabilities: () => ({ canCreateActivity: auth.canStart }),
-}));
 
-vi.mock("@/components/tareas/start-tramo-toast", () => ({ notifyTramoStarted: vi.fn() }));
+vi.mock("@/lib/actions/tramo-start-actions", () => ({
+  previewStartTramoAction: vi.fn(),
+  startTramoAction: vi.fn(),
+  undoStartTramoAction: vi.fn(),
+}));
+const pageData = vi.hoisted(() => ({
+  getTareasStartSlotData: vi.fn(),
+  getTareasPageData: vi.fn(),
+  getTareasListPage: vi.fn(),
+  getTareasFacets: vi.fn(),
+  getTareasBoard: vi.fn(),
+  getTareasBoardColumn: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => pageData);
+
+// The slot's own behaviour (its query, the deep link, the sheet) is covered by
+// `TareasStartSlot.test.tsx`; here it only shows which tramo it was mounted for.
+vi.mock("@/components/tareas/TareasStartSlot", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./TareasStartSlot")>()),
+  TareasStartSlot: ({ workflow }: { workflow: { id: string } }) => (
+    <div data-testid="tareas-start-slot" data-workflow={workflow.id} />
+  ),
+}));
 vi.mock("@/components/widgets/TramoBadge", () => ({
   TramoBadge: ({ tramo }: { tramo: { name: string } }) => <span data-testid="tramo-badge">{tramo.name}</span>,
 }));
@@ -114,26 +116,59 @@ vi.mock("@/components/patterns/ListPage", () => ({
 
 import { TareasLista } from "./TareasLista";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { qk } from "@/lib/query/keys";
+import { tareasListFiltersOf, tareasPageKeyInputOf, type TareasListPages } from "@/lib/query/options/tareas";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { TareasPageData } from "@/lib/tareas/page-data";
+import { DEFAULT_TAREAS_QUERY, type TareasQuery } from "@/lib/tareas/query";
+import type { TaskListRow } from "@/lib/types/core";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 
 // The components read the signed-in user from the session store; seed it with the mocked user.
 beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
-function renderLista({ tramo = null, style = "visual" }: { tramo?: string | null; style?: PresentationStyle } = {}) {
-  return render(
+const LISTA_ROWS = LISTA_TASKS.map(
+  (t) =>
+    ({
+      ...t,
+      subtaskDone: t.subtaskDoneCount,
+      commentCount: 0,
+      attachmentCount: 0,
+      checklistTotal: t.checklist.total,
+      checklistDone: t.checklist.completed,
+    }) as TaskListRow,
+);
+
+/** The cache `/tareas?vista=lista` hydrates: the page bundle and the first list page it seeded. */
+function seededClient(query: TareasQuery, nextCursor: string | null = null) {
+  const client = createTestQueryClient();
+  const page: TareasPageData = { facets: { total: 5, byTramo: {}, projects: [] }, tramos: LISTA_TRAMOS, staff: [] };
+  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query)), page);
+  client.setQueryData<TareasListPages>(qk.tareas.list(tareasListFiltersOf(query)), {
+    pages: [{ rows: LISTA_ROWS, nextCursor, total: nextCursor ? 60 : LISTA_ROWS.length }],
+    pageParams: [null],
+  });
+  return client;
+}
+
+function renderLista({
+  tramo = null,
+  style = "visual",
+  nextCursor = null,
+}: { tramo?: string | null; style?: PresentationStyle; nextCursor?: string | null } = {}) {
+  const query: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "lista", tramo };
+  return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
-      <TareasLista tasks={LISTA_TASKS} header={{ title: "Tareas" }} tramo={tramo} tramos={LISTA_TRAMOS} />
+      <TareasLista query={query} header={{ title: "Tareas" }} />
     </StyleProvider>,
+    { client: seededClient(query, nextCursor) },
   );
 }
 
 beforeEach(() => {
   nav.search = "vista=lista";
-  compat.present = true;
-  compat.fetchBoard.mockResolvedValue(BOARD);
-  compat.fetchCandidates.mockResolvedValue([]);
-  auth.canStart = true;
   listPageProps.length = 0;
+  for (const fn of Object.values(pageData)) fn.mockReset();
 });
 
 afterEach(() => {
@@ -180,90 +215,67 @@ describe("TareasLista", () => {
     renderLista();
     expect(listPageProps[listPageProps.length - 1].empty).toEqual({ title: "No hay tareas con estos filtros" });
   });
+
+  it("opens a task's sheet shallowly (history.pushState, no navigation)", () => {
+    const pushState = vi.spyOn(window.history, "pushState");
+    renderLista();
+    screen.getByRole("link", { name: "Levantamiento" }).click();
+    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?vista=lista&tarea=t1");
+    pushState.mockRestore();
+  });
+
+  it("reads the seeded first page: no request on mount", () => {
+    renderLista();
+    expect(pageData.getTareasListPage).not.toHaveBeenCalled();
+    expect(pageData.getTareasPageData).not.toHaveBeenCalled();
+  });
+
+  it("loads the next page from the cursor with “Cargar más” (useInfiniteQuery)", async () => {
+    const extra = { ...LISTA_ROWS[0], id: "t-next", title: "Siguiente página" } as TaskListRow;
+    pageData.getTareasListPage.mockResolvedValue({ rows: [extra], nextCursor: null, total: 60 });
+    renderLista({ nextCursor: "cur-1" });
+
+    const spec = listPageProps[listPageProps.length - 1].spec;
+    if (spec.kind !== "table") throw new Error("table spec");
+    expect(spec.pagination?.hasMore).toBe(true);
+    await act(async () => spec.pagination?.onEndReached?.());
+
+    expect(pageData.getTareasListPage).toHaveBeenCalledWith({
+      filters: tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, vista: "lista" }),
+      cursor: "cur-1",
+    });
+    await waitFor(() => expect(screen.getByRole("link", { name: "Siguiente página" })).toBeTruthy());
+    const last = listPageProps[listPageProps.length - 1].spec;
+    expect(last.kind === "table" ? last.pagination?.hasMore : undefined).toBe(false);
+  });
 });
 
 describe("TareasLista start slot", () => {
-  it("renders Listos para iniciar and Próximos for one tramo with Project Flow present", async () => {
+  it("mounts the start slot for exactly one known tramo", () => {
     nav.search = "vista=lista&tramo=diseno";
     renderLista({ tramo: "diseno" });
-    expect(await screen.findByText("Listos para iniciar (1)")).toBeTruthy();
-    expect(screen.getByText("Próximos (1)")).toBeTruthy();
-    expect(compat.fetchBoard).toHaveBeenCalledWith("w-diseno");
-    expect(compat.fetchCandidates).toHaveBeenCalledWith("w-diseno");
-    expect(screen.getByTestId("start-tramo-sheet").getAttribute("data-open")).toBe("false");
-  });
-
-  it("opens the sheet from the Iniciar button", async () => {
-    nav.search = "vista=lista&tramo=diseno";
-    renderLista({ tramo: "diseno" });
-    fireEvent.click(await screen.findByRole("button", { name: "Iniciar Diseño en Casa Valle" }));
-    const sheet = screen.getByTestId("start-tramo-sheet");
-    expect(sheet.getAttribute("data-open")).toBe("true");
-    expect(sheet.getAttribute("data-project")).toBe("p7");
-  });
-
-  it("opens the sheet for project X from ?project=X&iniciar=1 and drops both params on close", async () => {
-    nav.search = "vista=lista&tramo=diseno&project=p9&iniciar=1";
-    renderLista({ tramo: "diseno" });
-    await waitFor(() => expect(screen.getByTestId("start-tramo-sheet").getAttribute("data-open")).toBe("true"));
-    expect(screen.getByTestId("start-tramo-sheet").getAttribute("data-project")).toBe("p9");
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Cerrar hoja" }));
-    });
-    expect(screen.getByTestId("start-tramo-sheet").getAttribute("data-open")).toBe("false");
-    expect(nav.replace).toHaveBeenCalledWith("/tareas?vista=lista&tramo=diseno", { scroll: false });
-  });
-
-  it("does not open the sheet for ?project=X without iniciar=1", async () => {
-    nav.search = "vista=lista&tramo=diseno&project=p9";
-    renderLista({ tramo: "diseno" });
-    await screen.findByText("Listos para iniciar (1)");
-    expect(screen.getByTestId("start-tramo-sheet").getAttribute("data-open")).toBe("false");
-  });
-
-  it("does not open the sheet from iniciar without canCreateActivity", async () => {
-    auth.canStart = false;
-    nav.search = "vista=lista&tramo=diseno&project=p9&iniciar=1";
-    renderLista({ tramo: "diseno" });
-    expect(await screen.findByTestId("ready-to-start-count")).toBeTruthy();
-    expect(screen.getByTestId("start-tramo-sheet").getAttribute("data-open")).toBe("false");
-  });
-
-  it("renders nothing in the slot and ignores iniciar without Project Flow", async () => {
-    compat.present = false;
-    nav.search = "vista=lista&tramo=diseno&project=p9&iniciar=1";
-    renderLista({ tramo: "diseno" });
-    await act(async () => {});
-    expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
-    expect(screen.queryByTestId("start-tramo-sheet")).toBeNull();
-    expect(compat.fetchBoard).not.toHaveBeenCalled();
-    expect(nav.replace).not.toHaveBeenCalled();
+    expect(screen.getByTestId("tareas-start-slot").getAttribute("data-workflow")).toBe("w-diseno");
     expect(screen.getByTestId("lista-table")).toBeTruthy();
   });
 
-  it("renders nothing in the slot and ignores iniciar with several tramos selected", async () => {
+  it("renders no slot with several tramos selected", () => {
     nav.search = "vista=lista&tramo=presale,diseno&project=p9&iniciar=1";
     renderLista({ tramo: "presale,diseno" });
-    await act(async () => {});
     expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
-    expect(screen.queryByTestId("start-tramo-sheet")).toBeNull();
-    expect(compat.fetchBoard).not.toHaveBeenCalled();
   });
 
-  it("renders nothing in the slot for Todas or an unknown tramo", async () => {
+  it("renders no slot for Todas or an unknown tramo", () => {
     renderLista({ tramo: null });
+    expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
     cleanup();
     renderLista({ tramo: "otro" });
-    await act(async () => {});
     expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
-    expect(compat.fetchBoard).not.toHaveBeenCalled();
   });
 
-  it("shows the mapped error when the tramo board can't load", async () => {
-    compat.fetchBoard.mockRejectedValue(new Error("FORBIDDEN"));
+  it("never reloads the route", () => {
     nav.search = "vista=lista&tramo=diseno";
     renderLista({ tramo: "diseno" });
-    expect(await screen.findByText("No tienes permiso para realizar esta acción.")).toBeTruthy();
+    expect(nav.refresh).not.toHaveBeenCalled();
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 });

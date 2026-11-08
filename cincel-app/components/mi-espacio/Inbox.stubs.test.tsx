@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import type { MouseEvent, ReactNode } from "react";
 
 import type { EmptyStateProps } from "@/components/shell/EmptyState";
@@ -86,6 +86,7 @@ vi.mock("@/components/widgets/RecordTable", () => ({
 }));
 
 import { Inbox, INBOX_POLL_MS } from "@/components/mi-espacio/Inbox";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 const ITEM: NotificationItem = {
   id: "n1",
@@ -118,7 +119,8 @@ afterEach(() => {
 describe("Inbox while the actions are stubs", () => {
   it("hides the Gmail tab, chip, footer and row actions, and never polls or marks read", async () => {
     vi.useFakeTimers();
-    render(
+    // The Bandeja patches `shell.badges` in the query cache.
+    renderWithQueryClient(
       <Inbox
         tab="gmail"
         notifications={{ items: [ITEM], nextCursor: "c1", unreadCount: 1 }}

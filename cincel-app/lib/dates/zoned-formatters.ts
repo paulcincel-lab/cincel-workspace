@@ -46,3 +46,20 @@ export function zonedIsoMinute(at: Date, timeZone: string): string {
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
   return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
+
+const localeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * One cached `Intl.DateTimeFormat` per locale and options (no `timeZone`
+ * needed: the runtime's own zone). For labels formatted per call, such as
+ * calendar titles and event dates.
+ */
+export function cachedDateTimeFormat(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let formatter = localeFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, options);
+    localeFormatters.set(key, formatter);
+  }
+  return formatter;
+}

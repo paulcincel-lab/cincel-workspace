@@ -52,8 +52,9 @@ export type AppearanceState = {
   /** The organization fixes the presentation style (`allowUserOverride` false). */
   fixedByOrg: boolean;
   /**
-   * True when `appearance.style` came from a page `?estilo=` override seeded
-   * by a nested `StyleProvider` (transitional until Phase 2 reads the URL).
+   * True when `appearance.style` was seeded as an override by a
+   * `StyleProvider` subtree (portal, fixed-style previews, tests). A staff
+   * page's `?estilo=` is read from the URL by `useStyle`, never stored here.
    */
   isStyleOverridden: boolean;
   /** Where the style is persisted: user preferences (staff) or the portal cookie. */

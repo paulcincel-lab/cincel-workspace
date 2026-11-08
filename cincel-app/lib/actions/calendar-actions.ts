@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 
+import { toActionResult } from "@/lib/actions/action-result";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import { isGoogleAuthEnabled } from "@/lib/auth/auth-flags";
@@ -15,6 +16,7 @@ import { hasGrantedScope, staffOauthConfig } from "@/lib/google/staff-oauth";
 import * as feedRepository from "@/lib/repositories/calendar-feed-repository";
 import * as syncRepository from "@/lib/repositories/google-calendar-sync-repository";
 import { getStaffTokenAccount } from "@/lib/repositories/google-oauth-repository";
+import type { ActionResult } from "@/lib/types/schedule";
 
 async function requireCalendarUser() {
   const user = await requireCapabilityUser();
@@ -34,14 +36,18 @@ export async function fetchCalendarFeedStatusAction(): Promise<{ enabled: boolea
  * working). Returns only the secret token; the client builds the URL from its
  * own origin. It can't be read back later — only its hash is stored.
  */
-export async function generateCalendarFeedAction(): Promise<{ token: string }> {
-  const user = await requireCalendarUser();
-  return { token: await feedRepository.createCalendarFeedToken(user.member.id) };
+export async function generateCalendarFeedAction(): Promise<ActionResult<{ token: string }>> {
+  return toActionResult(async () => {
+    const user = await requireCalendarUser();
+    return { token: await feedRepository.createCalendarFeedToken(user.member.id) };
+  });
 }
 
-export async function disableCalendarFeedAction(): Promise<void> {
-  const user = await requireCalendarUser();
-  await feedRepository.deleteCalendarFeedToken(user.member.id);
+export async function disableCalendarFeedAction(): Promise<ActionResult<void>> {
+  return toActionResult(async () => {
+    const user = await requireCalendarUser();
+    await feedRepository.deleteCalendarFeedToken(user.member.id);
+  });
 }
 
 // ── Direct Google Calendar sync (#434) ─────────────────────────────────────
@@ -92,7 +98,8 @@ export type GoogleCalendarSyncOutcome = { ok: true; result: CalendarSyncResult }
 
 /**
  * Failures come back as a value: production builds strip thrown server
- * action messages, and the user needs to read this one.
+ * action messages (confirmed, plan §1 finding 4), and the user needs to read
+ * this one. The same goes for the calendar permission check below.
  */
 async function runSync(staffId: string): Promise<GoogleCalendarSyncOutcome> {
   try {
@@ -104,17 +111,20 @@ async function runSync(staffId: string): Promise<GoogleCalendarSyncOutcome> {
 
 /** Turns sync on (creating the "Cincel" calendar in Google if needed) and runs a first sync. */
 export async function enableGoogleCalendarSyncAction(): Promise<GoogleCalendarSyncOutcome> {
-  const user = await requireCalendarUser();
-  await syncRepository.upsertCalendarSync(user.member.id, { enabled: true });
-  return runSync(user.member.id);
+  const access = await toActionResult(requireCalendarUser);
+  if (!access.ok) return access;
+  await syncRepository.upsertCalendarSync(access.data.member.id, { enabled: true });
+  return runSync(access.data.member.id);
 }
 
 /**
  * Syncs now. With `auto`, skips (returns null) when sync is off or ran
- * recently — that's the call Calendario makes on every visit.
+ * recently — Calendario makes that call once per browser session.
  */
 export async function syncGoogleCalendarAction(options: { auto?: boolean } = {}): Promise<GoogleCalendarSyncOutcome | null> {
-  const user = await requireCalendarUser();
+  const access = await toActionResult(requireCalendarUser);
+  if (!access.ok) return access;
+  const user = access.data;
   const sync = await syncRepository.getCalendarSync(user.member.id);
   if (!sync?.enabled) return null;
   if (options.auto && sync.lastSyncedAt && Date.now() - sync.lastSyncedAt.getTime() < AUTO_SYNC_INTERVAL_MS) {
@@ -124,8 +134,14 @@ export async function syncGoogleCalendarAction(options: { auto?: boolean } = {})
   return runSync(user.member.id);
 }
 
-/** Stops syncing. The "Cincel" calendar stays in Google; the user can delete it there. */
-export async function disableGoogleCalendarSyncAction(): Promise<void> {
-  const user = await requireCalendarUser();
-  await syncRepository.upsertCalendarSync(user.member.id, { enabled: false });
+/**
+ * Stops syncing. The "Cincel" calendar stays in Google; the user can delete it
+ * there. A failure comes back as `{ ok: false, error }`; success is void.
+ */
+export async function disableGoogleCalendarSyncAction(): Promise<{ ok: false; error: string } | void> {
+  const result = await toActionResult(async () => {
+    const user = await requireCalendarUser();
+    await syncRepository.upsertCalendarSync(user.member.id, { enabled: false });
+  });
+  if (!result.ok) return result;
 }

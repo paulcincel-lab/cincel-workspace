@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleAlertIcon, LoaderCircleIcon } from "lucide-react";
 
@@ -14,12 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/shadcn/dialog";
-import { unwrapActionResult } from "@/lib/actions/action-result";
-import { clockInAction, fetchMyTodayAction } from "@/lib/actions/time-tracking-actions";
 import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
-import { actionErrorCode, actionErrorText } from "@/lib/errors";
-import { publishTodayStatus } from "@/lib/time-tracking/today-events";
+import { cachedDateTimeFormat, zonedIsoDate } from "@/lib/dates/zoned-formatters";
+import { actionErrorCode } from "@/lib/errors";
+import { mutationErrorText } from "@/lib/query/mutation";
+import { meTodayOptions } from "@/lib/query/options/me";
 import type { TodayStatus } from "@/lib/types/redesign";
+
+import { useClockMutation } from "./use-clock-mutation";
 
 /**
  * First-login-of-the-day clock-in dialog (redesign FE §3.10, canvas
@@ -34,16 +36,17 @@ import type { TodayStatus } from "@/lib/types/redesign";
  *   `requiredFrom` on it cannot be dismissed, except after `clockInAction`
  *   fails with anything other than `ALREADY_ON`: then the error copy and
  *   "Cerrar" appear, so nobody is locked out.
- * - `ALREADY_ON` (or a re-sync showing the day already started, because
- *   production builds hide thrown Server Action messages) closes silently and
- *   publishes the fresh status to `TimeClock`.
+ * - `ALREADY_ON` (or a re-read showing the day already started, because
+ *   production builds hide thrown Server Action messages) closes silently.
+ * - The status is `useQuery(qk.me.today())` (hydrated by the `(staff)`
+ *   layout); the clock-in writes its result into that entry
+ *   (`useClockMutation`), so `TimeClock` updates at once, with no server
+ *   render.
  * - The same dialog shell as `FormDialog` (Base UI `Dialog`: focus trapped
  *   and returned, labelled by its title, described by its copy) with its own
  *   footer ("Ahora no" / "Cerrar"). Ignores the presentation style.
  */
 export type ClockInPromptProps = {
-  status: TodayStatus;
-  requiredFrom: string | null;
   now: Date;
   /** The viewer's name for the greeting; the first word is used. */
   name?: string;
@@ -57,12 +60,7 @@ export const CLOCK_IN_PROMPT_SEEN_KEY = "cincel.clockInPrompt.seen";
 
 /** The local (America/Mexico_City) calendar date of `now`, as YYYY-MM-DD. */
 export function localDateKey(now: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
+  return zonedIsoDate(now, TIME_ZONE);
 }
 
 /** True when clock-in is mandatory today: the server says so, or today is on or after `requiredFrom`. */
@@ -82,23 +80,27 @@ export function shouldPromptClockIn(status: TodayStatus): boolean {
   );
 }
 
+const PROMPT_DATE_OPTIONS: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", timeZone: "UTC" };
+
+const PROMPT_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: TIME_ZONE,
+};
+
 /** "16 de noviembre" (es-MX, lowercase) for a YYYY-MM-DD date. */
 export function formatPromptDate(isoDate: string): string {
   const [year, month, day] = isoDate.split("-").map(Number);
   if (!year || !month || !day) return isoDate;
-  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", timeZone: "UTC" })
+  return cachedDateTimeFormat("es-MX", PROMPT_DATE_OPTIONS)
     .format(new Date(Date.UTC(year, month - 1, day, 12)))
     .toLowerCase();
 }
 
 /** "9:02" in the org time zone. */
 export function formatPromptTime(now: Date): string {
-  return new Intl.DateTimeFormat("es-MX", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: TIME_ZONE,
-  }).format(now);
+  return cachedDateTimeFormat("es-MX", PROMPT_TIME_OPTIONS).format(now);
 }
 
 function readSeen(): string | null {
@@ -117,17 +119,10 @@ function writeSeen(date: string): void {
   }
 }
 
-/** The fresh status after a failed clock-in, or null when it can't be read. */
-async function resync(): Promise<TodayStatus | null> {
-  try {
-    return await fetchMyTodayAction();
-  } catch {
-    return null;
-  }
-}
-
-export function ClockInPrompt({ status, requiredFrom, now, name }: ClockInPromptProps) {
-  const router = useRouter();
+export function ClockInPrompt({ now, name }: ClockInPromptProps) {
+  const qc = useQueryClient();
+  const { data: status } = useQuery(meTodayOptions());
+  const clockIn = useClockMutation({ source: "login" });
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,20 +130,21 @@ export function ClockInPrompt({ status, requiredFrom, now, name }: ClockInPrompt
   const decided = useRef(false);
   const mounted = useRef(true);
 
-  const required = isClockInRequired(status, requiredFrom, clock);
+  const requiredFrom = status?.requiredFrom ?? null;
+  const required = status ? isClockInRequired(status, requiredFrom, clock) : false;
   // After a failure other than ALREADY_ON the dialog can always be closed.
   const dismissible = !required || error !== null;
 
   // Decide once, after hydration (storage is client-only), whether to open.
   useEffect(() => {
-    if (decided.current) return;
+    if (decided.current || !status) return;
     decided.current = true;
     if (!shouldPromptClockIn(status)) return;
-    if (!isClockInRequired(status, requiredFrom, now) && readSeen() === localDateKey(now)) return;
+    if (!isClockInRequired(status, status.requiredFrom, now) && readSeen() === localDateKey(now)) return;
     // Opening depends on localStorage, which only exists after hydration.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOpen(true);
-  }, [status, requiredFrom, now]);
+  }, [status, now]);
 
   useEffect(() => {
     mounted.current = true;
@@ -178,39 +174,36 @@ export function ClockInPrompt({ status, requiredFrom, now, name }: ClockInPrompt
     [close, dismissible, pending],
   );
 
-  const sync = useCallback(
-    (fresh: TodayStatus) => {
-      publishTodayStatus(fresh);
-      router.refresh();
-    },
-    [router],
-  );
-
   const handleClockIn = useCallback(async () => {
     if (pending) return;
     setPending(true);
     setError(null);
     try {
-      const next = unwrapActionResult(await clockInAction({ source: "login" }));
+      // The result lands in `me.today` (setQueryData), so every clock shows it.
+      await clockIn.mutateAsync("clockIn");
       if (!mounted.current) return;
-      sync(next);
       close();
     } catch (err) {
-      const fresh = await resync();
+      // Production strips thrown messages: the fresh day tells whether it already started.
+      let fresh: TodayStatus | null = null;
+      try {
+        fresh = await qc.fetchQuery(meTodayOptions());
+      } catch {
+        fresh = null;
+      }
       if (!mounted.current) return;
       let code = actionErrorCode(err);
       if (fresh && fresh.enabled && fresh.state !== "off") code = "ALREADY_ON";
       else if (!code && fresh && !fresh.enabled) code = "DISABLED";
       if (code === "ALREADY_ON") {
-        if (fresh) sync(fresh);
         close();
         return;
       }
-      setError(actionErrorText(code ? new Error(code) : err));
+      setError(mutationErrorText(code ? new Error(code) : err));
     } finally {
       if (mounted.current) setPending(false);
     }
-  }, [close, pending, sync]);
+  }, [clockIn, close, pending, qc]);
 
   const firstName = name?.trim().split(/\s+/)[0] ?? "";
   const greeting = firstName ? `Buenos días, ${firstName}` : "Buenos días";

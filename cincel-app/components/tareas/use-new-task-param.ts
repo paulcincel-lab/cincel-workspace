@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
@@ -49,26 +49,4 @@ export function useNewTaskUrlEntry(): void {
     useNewTaskUi.getState().openNewTask(newTaskDefaultsFromSearch(params), "url");
     window.history.replaceState(null, "", `${pathname}${newTaskSearch(params, false)}${window.location.hash}`);
   }, [requested, pathname, search]);
-}
-
-/**
- * @deprecated Transitional API of the Tareas screen's own `NewTaskDialog`
- * mount (`TareasClient`), removed in Phase 4a. `<NewTaskDialogHost/>` owns
- * the dialog now, so that mount stays closed (`open` is always false) and
- * `setOpen(true)` opens the host with the current URL's `proyecto`/`tramo`
- * defaults instead of writing `?nueva=1` (no server re-render).
- */
-export function useNewTaskParam(): { open: boolean; setOpen(open: boolean): void } {
-  const searchParams = useSearchParams();
-
-  const setOpen = useCallback(
-    (next: boolean) => {
-      const { openNewTask, closeNewTask } = useNewTaskUi.getState();
-      if (next) openNewTask(newTaskDefaultsFromSearch(new URLSearchParams(searchParams.toString())), "tareas");
-      else closeNewTask();
-    },
-    [searchParams],
-  );
-
-  return { open: false, setOpen };
 }

@@ -1,25 +1,20 @@
 import { notFound } from "next/navigation";
 
-import { ProjectTabs } from "@/components/proyectos/ProjectTabs";
-import { ProjectTasksByFase } from "@/components/proyectos/ProjectTasksByFase";
-import { ErrorState } from "@/components/shell/ErrorState";
-import { StyleProvider } from "@/components/shell/StyleProvider";
-import { fetchTasksAction } from "@/lib/actions/tasks-actions";
+import { ProjectShellTabs } from "@/components/proyectos/ProjectShellTabs";
+import { ProjectTareasTab } from "@/components/proyectos/ProjectTasksByFase";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { actionErrorText } from "@/lib/errors";
-import { loadProjectTabShell } from "@/lib/projects/project-tab-shell";
-import { parseProjectTasksQuery } from "@/lib/proyectos/project-tasks-by-fase";
-import { canSeeAdminData } from "@/lib/tramos/compat";
-import type { TaskKind } from "@/lib/types/core";
-import { getResolvedAppearance } from "@/lib/ui/preferences-server";
-import { PresentationStyleSchema } from "@/lib/validation/redesign";
+import { loadProyectoTareas } from "@/lib/loaders/proyectos";
+import { loadProyectoShell } from "@/lib/loaders/proyectos-shell";
+import { Hydrate } from "@/lib/query/hydrate";
+import { qk } from "@/lib/query/keys";
+import { proyectoTareasOptions } from "@/lib/query/options/proyectos";
+import { proyectoShellOptions } from "@/lib/query/options/proyectos-shell";
+import { getQueryClient, prefetch } from "@/lib/query/server";
+import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
+import { UuidSchema } from "@/lib/validation/project-flow";
 
 type CapabilityUser = Awaited<ReturnType<typeof requireCapabilityUser>>;
-type SearchParams = Record<string, string | string[] | undefined>;
-
-/** Admin tasks are asked for only by administrators; the repository drops them for anyone else (BE §8.6). */
-const ADMIN_TASK_KINDS: TaskKind[] = ["workflow", "usuario", "admin"];
 
 /** The signed-in staff member; null without a usable session. Redirects propagate. */
 async function loadUser(): Promise<CapabilityUser | null> {
@@ -34,58 +29,31 @@ async function loadUser(): Promise<CapabilityUser | null> {
 /**
  * `/proyectos/[id]/tareas` (redesign FE §2.1, §3.5): the project's tasks
  * grouped by fase, inside the project header + tabs; `AppShell` comes from
- * the staff layout.
+ * the staff layout. Two reads, prefetched through their loaders and
+ * hydrated: the shell (`qk.proyectos.shell(id)`) and the tab
+ * (`qk.proyectos.tab(id, 'tareas')`, one task read). The `estado`,
+ * `responsable` and `q` filters are client state over the loaded rows.
  */
-export default async function ProjectTareasPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<SearchParams>;
-}) {
-  const [{ id: projectId }, sp] = await Promise.all([params, searchParams]);
-
-  const appearance = await getResolvedAppearance();
+export default async function ProjectTareasPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: projectId } = await params;
 
   const user = await loadUser();
   if (!user || !resolveProjectsCapabilities(user).canViewProjects) notFound();
+  if (!UuidSchema.safeParse(projectId).success) notFound();
 
-  const includeAdmin = canSeeAdminData(user);
-  const [shell, tasksResult] = await Promise.all([
-    loadProjectTabShell(projectId, user),
-    fetchTasksAction({ projectId, ...(includeAdmin ? { kind: ADMIN_TASK_KINDS } : {}) }).then(
-      (rows) => ({ ok: true as const, rows }),
-      (error: unknown) => ({ ok: false as const, error }),
-    ),
+  const qc = getQueryClient();
+  await Promise.all([
+    prefetch(qc, proyectoShellOptions(projectId), () => loadProyectoShell(user, { id: projectId })),
+    prefetch(qc, proyectoTareasOptions(projectId), () => loadProyectoTareas(user, { id: projectId })),
   ]);
-  if (!shell) notFound();
-
-  const query = parseProjectTasksQuery(sp);
-  const rawEstilo = Array.isArray(sp.estilo) ? sp.estilo[0] : sp.estilo;
-  const estilo = PresentationStyleSchema.safeParse(rawEstilo);
-  const { detail } = shell;
+  if (!qc.getQueryData<ProjectTabShell | null>(qk.proyectos.shell(projectId))) notFound();
 
   return (
-    <StyleProvider style={estilo.success ? estilo.data : appearance.style} scope="staff" isOverridden={estilo.success}>
+    <Hydrate qc={qc}>
       <div className="flex flex-col gap-4">
-        <ProjectTabs
-          project={{
-            ...shell.project,
-            projectType: detail.projectType,
-            addressCity: detail.addressCity,
-            manager: detail.manager,
-          }}
-          active="tareas"
-          counts={shell.counts}
-          canManagePortal={shell.canManagePortal}
-          showEstilo
-        />
-        {tasksResult.ok ? (
-          <ProjectTasksByFase projectId={detail.id} tasks={tasksResult.rows} includeAdmin={includeAdmin} query={query} />
-        ) : (
-          <ErrorState title="No se pudieron cargar las tareas." description={actionErrorText(tasksResult.error)} />
-        )}
+        <ProjectShellTabs projectId={projectId} active="tareas" showEstilo />
+        <ProjectTareasTab projectId={projectId} />
       </div>
-    </StyleProvider>
+    </Hydrate>
   );
 }

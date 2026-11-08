@@ -1,6 +1,7 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
@@ -19,31 +20,125 @@ import {
 import { Button } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { Input } from "@/components/ui/shadcn/input";
-import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   createProjectSpaceAction,
   deleteProjectSpaceAction,
   renameProjectSpaceAction,
   reorderProjectSpacesAction,
 } from "@/lib/actions/projects-actions";
-import { fichaFlowErrorText } from "@/lib/proyectos/flow-error-text";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { catalogProjectSpacesOptions } from "@/lib/query/options/catalog";
 import type { ProjectSpace } from "@/lib/types/core";
 
 export interface ProjectSpacesCardProps {
   projectId: string;
-  initialSpaces: ProjectSpace[];
   canEdit: boolean;
 }
 
 const MAX_NAME = 120;
 
-export function ProjectSpacesCard({ projectId, initialSpaces, canEdit }: ProjectSpacesCardProps) {
-  const [spaces, setSpaces] = useState<ProjectSpace[]>(() => [...initialSpaces].sort((a, b) => a.sortOrder - b.sortOrder));
+type SpacesSnapshot = { previous: ProjectSpace[] | null | undefined };
+
+/** Rows by `sortOrder`, as the card lists them. */
+function bySortOrder(rows: readonly ProjectSpace[]): ProjectSpace[] {
+  return [...rows].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/**
+ * The ficha's Espacios card. Reads `catalog.projectSpaces(id)` (seeded by
+ * the ficha query) and changes it optimistically: create, rename, reorder
+ * and delete show at once and roll back with the error copy when the save
+ * fails. Every save then invalidates the ficha and Resumen; create and
+ * rename also the project picker, delete also Tareas (its tasks lose the
+ * espacio).
+ */
+export function ProjectSpacesCard({ projectId, canEdit }: ProjectSpacesCardProps) {
+  const spacesKey = qk.catalog.projectSpaces(projectId);
+  const { data } = useQuery(catalogProjectSpacesOptions(projectId));
+  const spaces = useMemo(() => bySortOrder(data ?? []), [data]);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
   const [toDelete, setToDelete] = useState<ProjectSpace | null>(null);
+
+  /** Patches the cached espacios and returns the rows to restore on error. */
+  function optimistic<V>(patch: (rows: ProjectSpace[], vars: V) => ProjectSpace[]) {
+    return {
+      onMutate: async (qc: QueryClient, vars: V): Promise<SpacesSnapshot> => {
+        await qc.cancelQueries({ queryKey: spacesKey });
+        const previous = qc.getQueryData<ProjectSpace[] | null>(spacesKey);
+        qc.setQueryData<ProjectSpace[] | null>(spacesKey, (rows) => (rows ? patch(rows, vars) : rows));
+        return { previous };
+      },
+      rollback: (qc: QueryClient, snap: SpacesSnapshot) => {
+        qc.setQueryData(spacesKey, snap.previous);
+      },
+    };
+  }
+
+  const baseInvalidate = [qk.proyectos.tab(projectId, "ficha"), qk.proyectos.resumen(projectId)];
+  const mutationOptions = { errorContext: { entity: "space" as const }, onFormError: setError };
+
+  const create = useActionMutation<{ name: string; tempId: string }, ProjectSpace, SpacesSnapshot>(
+    ({ name }) => createProjectSpaceAction(projectId, name),
+    {
+      ...mutationOptions,
+      optimistic: optimistic<{ name: string; tempId: string }>((rows, { name, tempId }) => [
+        ...rows,
+        {
+          id: tempId,
+          name,
+          projectId,
+          sortOrder: rows.reduce((max, r) => Math.max(max, r.sortOrder), -1) + 1,
+          taskCount: 0,
+        },
+      ]),
+      setData: (qc, created, { tempId }) => {
+        qc.setQueryData<ProjectSpace[] | null>(spacesKey, (rows) =>
+          rows ? rows.map((r) => (r.id === tempId ? created : r)) : rows,
+        );
+      },
+      invalidate: [...baseInvalidate, qk.catalog.projectOptions()],
+    },
+  );
+
+  const rename = useActionMutation<{ id: string; name: string }, ProjectSpace, SpacesSnapshot>(
+    ({ id, name }) => renameProjectSpaceAction(id, name),
+    {
+      ...mutationOptions,
+      optimistic: optimistic<{ id: string; name: string }>((rows, { id, name }) => rows.map((r) => (r.id === id ? { ...r, name } : r))),
+      setData: (qc, updated) => {
+        qc.setQueryData<ProjectSpace[] | null>(spacesKey, (rows) =>
+          rows ? rows.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)) : rows,
+        );
+      },
+      invalidate: [...baseInvalidate, qk.catalog.projectOptions()],
+    },
+  );
+
+  const reorder = useActionMutation<string[], void, SpacesSnapshot>(
+    (orderedIds) => reorderProjectSpacesAction(projectId, orderedIds),
+    {
+      ...mutationOptions,
+      optimistic: optimistic<string[]>((rows, orderedIds) => {
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        return orderedIds
+          .map((id, index) => {
+            const row = byId.get(id);
+            return row ? { ...row, sortOrder: index } : null;
+          })
+          .filter((row): row is ProjectSpace => row !== null);
+      }),
+      invalidate: baseInvalidate,
+    },
+  );
+
+  const remove = useActionMutation<string, void, SpacesSnapshot>((id) => deleteProjectSpaceAction(id), {
+    ...mutationOptions,
+    optimistic: optimistic<string>((rows, id) => rows.filter((r) => r.id !== id)),
+    invalidate: [...baseInvalidate, qk.tareas.all],
+  });
 
   function validName(raw: string): string | null {
     const name = raw.trim();
@@ -58,71 +153,45 @@ export function ProjectSpacesCard({ projectId, initialSpaces, canEdit }: Project
     return name;
   }
 
-  async function addSpace(event: FormEvent) {
+  function addSpace(event: FormEvent) {
     event.preventDefault();
     const name = validName(newName);
     if (!name) return;
-    setPending(true);
     setError(null);
-    try {
-      const created = unwrapActionResult(await createProjectSpaceAction(projectId, name));
-      setSpaces((rows) => [...rows, created]);
-      setNewName("");
-      setAdding(false);
-    } catch (err) {
-      setError(fichaFlowErrorText(err));
-    } finally {
-      setPending(false);
-    }
+    create.mutate(
+      { name, tempId: `nuevo-${Date.now()}` },
+      {
+        onSuccess: () => {
+          setNewName("");
+          setAdding(false);
+        },
+      },
+    );
   }
 
-  async function rename(space: ProjectSpace, raw: string) {
+  function renameSpace(space: ProjectSpace, raw: string) {
     const name = validName(raw);
     if (!name || name === space.name) return;
     setError(null);
-    try {
-      const updated = unwrapActionResult(await renameProjectSpaceAction(space.id, name));
-      setSpaces((rows) => rows.map((r) => (r.id === space.id ? { ...r, ...updated } : r)));
-    } catch (err) {
-      setError(fichaFlowErrorText(err));
-    }
+    rename.mutate({ id: space.id, name });
   }
 
-  async function reorder(orderedIds: string[]) {
-    const previous = spaces;
-    const byId = new Map(spaces.map((s) => [s.id, s]));
-    const next = orderedIds
-      .map((id, index) => {
-        const row = byId.get(id);
-        return row ? { ...row, sortOrder: index } : null;
-      })
-      .filter((row): row is ProjectSpace => row !== null);
-    setSpaces(next);
+  function reorderSpaces(orderedIds: string[]) {
     setError(null);
-    try {
-      unwrapActionResult(await reorderProjectSpacesAction(projectId, orderedIds));
-    } catch (err) {
-      setSpaces(previous);
-      setError(fichaFlowErrorText(err));
-    }
+    reorder.mutate(orderedIds);
   }
 
-  async function confirmDelete() {
+  function confirmDelete() {
     if (!toDelete) return;
-    const target = toDelete;
-    setPending(true);
     setError(null);
-    try {
-      unwrapActionResult(await deleteProjectSpaceAction(target.id));
-      setSpaces((rows) => rows.filter((r) => r.id !== target.id));
-      setToDelete(null);
-    } catch (err) {
-      setError(fichaFlowErrorText(err));
-      setToDelete(null);
-    } finally {
-      setPending(false);
-    }
+    remove.mutate(toDelete.id);
+    setToDelete(null);
   }
+
+  const pending = create.isPending || remove.isPending;
+
+  // The viewer can't see the project.
+  if (data === null) return null;
 
   const columns: ColumnDef<ProjectSpace, unknown>[] = [
     {
@@ -133,7 +202,7 @@ export function ProjectSpacesCard({ projectId, initialSpaces, canEdit }: Project
         canEdit ? (
           <InlineEditable
             value={row.original.name}
-            onCommit={(value) => void rename(row.original, value)}
+            onCommit={(value) => renameSpace(row.original, value)}
             editTriggerLabel={`Renombrar ${row.original.name}`}
             renderDisplay={(value) => <span>{value}</span>}
             renderEditor={({ value, onChange, onBlur, onKeyDown }) => (
@@ -196,13 +265,13 @@ export function ProjectSpacesCard({ projectId, initialSpaces, canEdit }: Project
             columns={columns}
             data={spaces}
             getRowId={(row) => row.id}
-            onReorderRows={canEdit ? (ids) => void reorder(ids) : undefined}
+            onReorderRows={canEdit ? reorderSpaces : undefined}
           />
         )}
 
         {canEdit ? (
           adding ? (
-            <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => void addSpace(e)}>
+            <form className="flex flex-wrap items-center gap-2" onSubmit={addSpace}>
               <Input
                 autoFocus
                 value={newName}
@@ -244,7 +313,7 @@ export function ProjectSpacesCard({ projectId, initialSpaces, canEdit }: Project
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" disabled={pending} onClick={() => void confirmDelete()}>
+            <AlertDialogAction variant="destructive" disabled={pending} onClick={confirmDelete}>
               Eliminar
             </AlertDialogAction>
           </AlertDialogFooter>

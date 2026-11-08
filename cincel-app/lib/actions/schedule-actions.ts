@@ -1,14 +1,12 @@
 "use server";
 
-import { revalidateProyectoCronogramaScreen } from "@/lib/cache/screens/proyectos";
 import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
-import { viewerScopeOf } from "@/lib/auth/viewer-scope";
 import { db } from "@/lib/db/client";
 import { projectSchedules, scheduleImprevistos, scheduleTaskEvents, scheduleTasks } from "@/lib/db/schema";
-import * as scheduleRepository from "@/lib/repositories/schedule-repository";
+import { loadProyectoCronograma } from "@/lib/loaders/proyectos";
 import { computeImportDiff } from "@/lib/cronograma/import/diff";
 import { parseScheduleExcel } from "@/lib/cronograma/import/parse-excel";
 import { parseLegacyState } from "@/lib/cronograma/import/parse-json";
@@ -32,22 +30,9 @@ function forbidden(): { ok: false; error: string } {
   return { ok: false, error: "No tienes permiso para editar este cronograma." };
 }
 
-function revalidateSchedule(projectId: string) {
-  revalidateProyectoCronogramaScreen(projectId);
-}
-
 function seccionOrderOf(seccion: string): number {
   const i = SECTION_ORDER.indexOf(seccion);
   return i === -1 ? SECTION_ORDER.length : i;
-}
-
-/** The project's timezone for "today" — every viewer gets the same date/week regardless of their own clock. */
-const SCHEDULE_TIMEZONE = "America/Mexico_City";
-
-function todayInTimezone(timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
-    new Date()
-  );
 }
 
 export interface ScheduleViewData {
@@ -56,19 +41,14 @@ export interface ScheduleViewData {
 }
 
 /**
- * The project's Cronograma for the caller (Cronograma, Reporte, Resumen, the
- * assistant). Null without `canViewProjects`, for a soft-deleted project or one
- * outside the caller's scope; schedule payments only reach admins
- * (`canSeeAdminData`), everyone else gets `payments: []`.
+ * The project's Cronograma for the caller (Resumen, the assistant). Null
+ * without `canViewProjects`, for a soft-deleted project or one outside the
+ * caller's scope; schedule payments only reach admins (`canSeeAdminData`),
+ * everyone else gets `payments: []`. The same source as
+ * `getProyectoCronogramaData` (Cronograma and Reporte): `loadProyectoCronograma`.
  */
 export async function fetchScheduleAction(projectId: string): Promise<ScheduleViewData | null> {
-  const user = await requireCapabilityUser();
-  if (!resolveProjectsCapabilities(user).canViewProjects) return null;
-
-  const data = await scheduleRepository.getScheduleForProject(projectId, viewerScopeOf(user));
-  if (!data) return null;
-
-  return { data, today: todayInTimezone(SCHEDULE_TIMEZONE) };
+  return loadProyectoCronograma(await requireCapabilityUser(), { id: projectId });
 }
 
 // ── Mutations ────────────────────────────────────────────────────────────
@@ -94,8 +74,6 @@ export async function setTaskStatusAction(
     return { ok: false, conflict: true, current: task.status };
   }
 
-  const schedule = await db.query.projectSchedules.findFirst({ where: eq(projectSchedules.id, task.scheduleId) });
-
   await db.transaction(async (tx) => {
     await tx
       .update(scheduleTasks)
@@ -110,7 +88,6 @@ export async function setTaskStatusAction(
     });
   });
 
-  if (schedule) revalidateSchedule(schedule.projectId);
   return { ok: true, status: next };
 }
 
@@ -121,11 +98,9 @@ export async function toggleTaskFlagAction(taskId: string): Promise<ActionResult
   const task = await db.query.scheduleTasks.findFirst({ where: eq(scheduleTasks.id, taskId) });
   if (!task) return { ok: false, error: "Tarea no encontrada." };
 
-  const schedule = await db.query.projectSchedules.findFirst({ where: eq(projectSchedules.id, task.scheduleId) });
   const next = !task.flagged;
   await db.update(scheduleTasks).set({ flagged: next }).where(eq(scheduleTasks.id, taskId));
 
-  if (schedule) revalidateSchedule(schedule.projectId);
   return { ok: true, data: { flagged: next } };
 }
 
@@ -148,7 +123,6 @@ export async function addImprevistoAction(
     .values({ scheduleId, fecha: input.fecha, texto, createdBy: user.member.id })
     .returning();
 
-  revalidateSchedule(schedule.projectId);
   return { ok: true, data: { id: row.id, fecha: row.fecha, texto: row.texto } };
 }
 
@@ -158,10 +132,8 @@ export async function deleteImprevistoAction(id: string): Promise<ActionResult<{
 
   const row = await db.query.scheduleImprevistos.findFirst({ where: eq(scheduleImprevistos.id, id) });
   if (!row) return { ok: false, error: "No encontrado." };
-  const schedule = await db.query.projectSchedules.findFirst({ where: eq(projectSchedules.id, row.scheduleId) });
 
   await db.delete(scheduleImprevistos).where(eq(scheduleImprevistos.id, id));
-  if (schedule) revalidateSchedule(schedule.projectId);
   return { ok: true, data: { id } };
 }
 
@@ -281,7 +253,6 @@ export async function commitImportScheduleAction(
     }
   });
 
-  revalidateSchedule(projectId);
   return { ok: true, data: diff };
 }
 
@@ -351,6 +322,5 @@ export async function importLegacyStateAction(
     }
   });
 
-  revalidateSchedule(schedule.projectId);
   return { ok: true, data: { matchedCount: matchedKeys.size, unmatchedKeys: [...unmatchedKeys] } };
 }

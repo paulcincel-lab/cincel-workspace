@@ -87,12 +87,13 @@ describe("createTemplateAction", () => {
     await expect(createTemplateAction(WORKFLOW, { phaseId: PHASE, title: "   " })).rejects.toThrow("EMPTY");
   });
 
-  it("creates with the parsed input and revalidates tramos and the Actividades layout", async () => {
+  it("creates with the parsed input and revalidates tramos, not the Actividades layout stub", async () => {
     caps.canManage = true;
     await createTemplateAction(WORKFLOW, { phaseId: PHASE, title: "  Planos  " });
     expect(repo.createTemplate).toHaveBeenCalledWith(WORKFLOW, { phaseId: PHASE, title: "Planos" }, ACTOR);
     expect(revalidatePath).toHaveBeenCalledWith("/configuracion/tramos");
-    expect(revalidatePath).toHaveBeenCalledWith("/actividades", "layout");
+    // Tareas reads `qk.tareas.*` (Phase 4): the Actividades layout stub is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith("/actividades", "layout");
   });
 
   it.each(["PHASE_MISMATCH", "NAME_TAKEN"])("passes %s through from the repository", async (code) => {

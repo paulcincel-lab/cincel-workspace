@@ -13,6 +13,9 @@ import { isDueDateLate, isTaskClosed, isTaskCompleted, taskStatusLabel } from "@
 import type { TaskListItem, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { RecordTableData } from "@/lib/types/widgets";
 
+/** A task of the tab: the slim `TaskListRow` (or a full `TaskListItem`); `notes` is never read. */
+export type ProjectTask = Omit<TaskListItem, "notes">;
+
 // ── Filters ──────────────────────────────────────────────────────────────────
 
 export type ProjectTaskEstado = "todas" | "abiertas" | "vencidas" | "completadas";
@@ -66,11 +69,11 @@ export function localDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-export function isTaskLate(task: TaskListItem, today: string): boolean {
+export function isTaskLate(task: ProjectTask, today: string): boolean {
   return isDueDateLate(task.commitmentDate, today, task);
 }
 
-export function matchesEstado(task: TaskListItem, estado: ProjectTaskEstado, today: string): boolean {
+export function matchesEstado(task: ProjectTask, estado: ProjectTaskEstado, today: string): boolean {
   switch (estado) {
     case "todas":
       return true;
@@ -88,7 +91,7 @@ function normalize(text: string): string {
 }
 
 /** Responsable and search filters (the estado chip is applied separately so chip counts stay stable). */
-export function filterByPersonAndSearch(tasks: TaskListItem[], query: Pick<ProjectTasksQuery, "responsable" | "q">): TaskListItem[] {
+export function filterByPersonAndSearch(tasks: ProjectTask[], query: Pick<ProjectTasksQuery, "responsable" | "q">): ProjectTask[] {
   const q = normalize(query.q.trim());
   return tasks.filter((task) => {
     if (query.responsable === UNASSIGNED_FILTER && task.managerId) return false;
@@ -99,7 +102,7 @@ export function filterByPersonAndSearch(tasks: TaskListItem[], query: Pick<Proje
 }
 
 /** Chip counts per estado over `tasks`. */
-export function estadoCounts(tasks: TaskListItem[], today: string): Record<ProjectTaskEstado, number> {
+export function estadoCounts(tasks: ProjectTask[], today: string): Record<ProjectTaskEstado, number> {
   const counts: Record<ProjectTaskEstado, number> = { todas: 0, abiertas: 0, vencidas: 0, completadas: 0 };
   for (const task of tasks) {
     for (const estado of PROJECT_TASK_ESTADOS) if (matchesEstado(task, estado, today)) counts[estado] += 1;
@@ -108,7 +111,7 @@ export function estadoCounts(tasks: TaskListItem[], today: string): Record<Proje
 }
 
 /** People who manage at least one of the tasks, by name. */
-export function responsableOptions(tasks: TaskListItem[]): { id: string; name: string }[] {
+export function responsableOptions(tasks: ProjectTask[]): { id: string; name: string }[] {
   const byId = new Map<string, string>();
   for (const task of tasks) if (task.manager) byId.set(task.manager.id, task.manager.name);
   return [...byId.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -124,7 +127,7 @@ export type ProjectTaskGroup = {
   kind: "fase" | "tramo" | "sin_tramo" | "admin";
   tramo: WorkflowRef | null;
   phase: WorkflowPhaseRef | null;
-  tasks: TaskListItem[];
+  tasks: ProjectTask[];
   total: number;
   completed: number;
   inProgress: number;
@@ -139,13 +142,13 @@ export type ProjectTaskGroup = {
  * only top-level tasks are listed; a subtarea whose parent is not in the list
  * (deleted, archived or filtered out by the server) is listed on its own.
  */
-export function topLevelTasks(tasks: TaskListItem[]): TaskListItem[] {
+export function topLevelTasks(tasks: ProjectTask[]): ProjectTask[] {
   const ids = new Set(tasks.map((task) => task.id));
   return tasks.filter((task) => !task.parentTaskId || !ids.has(task.parentTaskId));
 }
 
 /** True when any non-admin task carries a fase: the tab then groups by fase, else by tramo. */
-export function hasPhaseData(tasks: TaskListItem[]): boolean {
+export function hasPhaseData(tasks: ProjectTask[]): boolean {
   return tasks.some((task) => task.kind !== "admin" && task.phase !== null);
 }
 
@@ -187,7 +190,7 @@ function summarize(
  * leaves them out for everyone else.
  */
 export function groupProjectTasks(
-  tasks: TaskListItem[],
+  tasks: ProjectTask[],
   options: { includeAdmin: boolean; today: string },
 ): { mode: ProjectTaskGroupMode; groups: ProjectTaskGroup[] } {
   const rows = topLevelTasks(tasks);
@@ -284,7 +287,7 @@ function dayDiff(from: string, to: string): number {
 }
 
 /** Analítico "Días": "38 d tarde", "en 6 d", "hoy"; "—" when closed or undated. */
-export function dueDaysText(task: TaskListItem, today: string): string {
+export function dueDaysText(task: ProjectTask, today: string): string {
   if (!task.commitmentDate || isTaskClosed(task)) return "—";
   const diff = dayDiff(today, task.commitmentDate.slice(0, 10));
   if (diff === 0) return "hoy";
@@ -292,12 +295,12 @@ export function dueDaysText(task: TaskListItem, today: string): string {
 }
 
 /** "2/4"; "—" without subtareas. */
-export function subtasksText(task: TaskListItem): string {
+export function subtasksText(task: ProjectTask): string {
   return task.subtaskCount > 0 ? `${task.subtaskDoneCount}/${task.subtaskCount}` : "—";
 }
 
 /** Task progress: 100 when completed, else the share of done subtareas. */
-export function taskProgressPct(task: TaskListItem): number {
+export function taskProgressPct(task: ProjectTask): number {
   if (isTaskCompleted(task)) return 100;
   return task.subtaskCount > 0 ? Math.round((task.subtaskDoneCount / task.subtaskCount) * 100) : 0;
 }
@@ -307,7 +310,7 @@ export const UNASSIGNED_LABEL = "Sin asignar";
 export const TASK_GROUP_KEY = "grupo";
 
 /** Row of the grouped tasks table; `task` feeds `renderCell` (status chip, link, late date). */
-export type ProjectTaskRow = Record<string, unknown> & { id: string; task: TaskListItem; groupId: string };
+export type ProjectTaskRow = Record<string, unknown> & { id: string; task: ProjectTask; groupId: string };
 
 /**
  * The grouped tasks table: Estatus, Tarea, Responsable, Vence, Subtareas

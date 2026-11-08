@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 import type {
   MondayBoardSource,
@@ -39,6 +39,9 @@ vi.mock("@/components/configuracion/monday-import/GroupTargetsTable", () => ({
     </button>
   ),
 }));
+
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 
 import {
   canRemapImport,
@@ -100,8 +103,14 @@ const preview: MondayRemapPreview = {
 };
 
 function renderSheet(onApplied = vi.fn(), onOpenChange = vi.fn()) {
-  render(<RemapImportSheet projectId={PROJECT_ID} open onOpenChange={onOpenChange} onApplied={onApplied} />);
-  return { onApplied, onOpenChange };
+  const client = createTestQueryClient();
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  renderWithQueryClient(
+    <RemapImportSheet projectId={PROJECT_ID} open onOpenChange={onOpenChange} onApplied={onApplied} />,
+    { client },
+  );
+  const invalidated = () => invalidate.mock.calls.map((call) => (call[0] as { queryKey: unknown }).queryKey);
+  return { onApplied, onOpenChange, client, invalidated };
 }
 
 function button(name: string): HTMLButtonElement {
@@ -245,5 +254,39 @@ describe("RemapImportSheet", () => {
     actions.getMondayRemapAction.mockResolvedValue({ ok: true, remap: state([{ id: "b1", name: "Madrid 22" }]) });
     fireEvent.click(button("Reintentar"));
     expect(await screen.findByText("Cambiar grupo de Madrid 22")).toBeTruthy();
+  });
+
+  it("reads the remap state under proyectos.detail(id), only while open", async () => {
+    const { client } = renderSheet();
+    await screen.findByText("Cambiar grupo de Madrid 22");
+    expect(qk.proyectos.remap(PROJECT_ID).slice(0, 2)).toEqual(qk.proyectos.detail(PROJECT_ID));
+    expect(client.getQueryData(qk.proyectos.remap(PROJECT_ID))).toMatchObject({ ok: true });
+
+    cleanup();
+    actions.getMondayRemapAction.mockClear();
+    renderWithQueryClient(
+      <RemapImportSheet projectId={PROJECT_ID} open={false} onOpenChange={vi.fn()} onApplied={vi.fn()} />,
+    );
+    expect(actions.getMondayRemapAction).not.toHaveBeenCalled();
+  });
+
+  it("previews without invalidating anything", async () => {
+    const { invalidated } = renderSheet();
+    await screen.findByText("Cambiar grupo de Madrid 22");
+    fireEvent.click(button("Vista previa"));
+    await screen.findByText(/40 tareas cambian de tramo/);
+    expect(invalidated()).toEqual([]);
+  });
+
+  it("applies and invalidates the project (proyectos.detail prefix) and the list", async () => {
+    const { onApplied, invalidated } = renderSheet();
+    await screen.findByText("Cambiar grupo de Madrid 22");
+    fireEvent.click(button("Vista previa"));
+    await screen.findByText(/40 tareas cambian de tramo/);
+    fireEvent.click(button("Aplicar"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reacomodar" }));
+
+    await waitFor(() => expect(onApplied).toHaveBeenCalledWith(60));
+    await waitFor(() => expect(invalidated()).toEqual([qk.proyectos.detail(PROJECT_ID), qk.proyectos.list()]));
   });
 });

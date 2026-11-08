@@ -21,7 +21,7 @@ vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({
     fetchMyWeekHoursAction: true,
   },
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/horario"));
 vi.mock("@/components/patterns/SettingsRow", () => import("@/tests/unit/fixtures/horario"));

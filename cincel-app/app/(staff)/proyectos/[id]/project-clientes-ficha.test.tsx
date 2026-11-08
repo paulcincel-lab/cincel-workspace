@@ -10,15 +10,22 @@ const state = vi.hoisted(() => ({
   admin: false,
   signedIn: true,
   shell: true,
+  editor: true,
 }));
 
-const portal = vi.hoisted(() => ({
-  listProjectPortalAccessAction: vi.fn(),
-  listInvitablePortalContactsAction: vi.fn(),
-}));
-const loadProjectTabShell = vi.hoisted(() => vi.fn());
 const tabsSeen = vi.hoisted(() => [] as ProjectTabsProps[]);
-const fichaSeen = vi.hoisted(() => [] as { tabs: ReactNode }[]);
+const fichaSeen = vi.hoisted(() => [] as { tabs: ReactNode; projectId: string }[]);
+/** The ficha page's loaders (5b, #960): the shell, the ficha, its Bitácora and the editor catalogs. */
+const loaders = vi.hoisted(() => ({
+  loadProyectoShell: vi.fn(),
+  loadProyectoFicha: vi.fn(),
+  loadProyectoHistory: vi.fn(),
+  loadCatalogStaff: vi.fn(),
+  loadCatalogContacts: vi.fn(),
+  loadCatalogWorkflows: vi.fn(),
+}));
+/** The Drive-counting shell of the server-rendered tabs: the ficha no longer uses it. */
+const loadProjectTabShell = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: async () => {
@@ -28,34 +35,36 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 vi.mock("@/lib/auth/permissions", () => ({
   canSeeAdminData: () => state.admin,
-  resolvePortalCapabilities: () => ({ manageAccess: state.manageAccess, disableUsers: false }),
-}));
-vi.mock("@/lib/actions/portal-actions", () => ({ listProjectPortalAccessAction: portal.listProjectPortalAccessAction }));
-vi.mock("@/lib/actions/portal-contacts-actions", () => ({
-  listInvitablePortalContactsAction: portal.listInvitablePortalContactsAction,
+  resolveProjectsCapabilities: () => ({ canEditProjectGeneral: state.editor, canChangeProjectStage: state.editor }),
 }));
 vi.mock("@/lib/projects/project-tab-shell", () => ({ loadProjectTabShell }));
+vi.mock("@/lib/loaders/proyectos-shell", () => ({ loadProyectoShell: loaders.loadProyectoShell }));
+vi.mock("@/lib/loaders/proyectos", () => ({
+  loadProyectoFicha: loaders.loadProyectoFicha,
+  loadProyectoHistory: loaders.loadProyectoHistory,
+}));
+vi.mock("@/lib/loaders/catalog", () => ({
+  loadCatalogStaff: loaders.loadCatalogStaff,
+  loadCatalogContacts: loaders.loadCatalogContacts,
+  loadCatalogWorkflows: loaders.loadCatalogWorkflows,
+}));
 vi.mock("@/components/proyectos/ProjectTabs", () => ({
   ProjectTabs: (props: ProjectTabsProps) => {
     tabsSeen.push(props);
     return <nav aria-label="Secciones del proyecto" data-testid={`tabs-${props.active}`} />;
   },
 }));
-vi.mock("@/components/proyectos/PortalAccessPanel", () => ({
-  PortalAccessPanel: (props: { rows: unknown[]; hasClient: boolean; canAssignClient: boolean }) => (
-    <div data-testid="portal-panel">
-      {`${props.rows.length} accesos · cliente ${props.hasClient ? "sí" : "no"} · asignar ${props.canAssignClient ? "sí" : "no"}`}
-    </div>
-  ),
-}));
 vi.mock("./ficha/ProjectFichaClient", () => ({
-  ProjectFichaClient: (props: { tabs: ReactNode }) => {
+  ProjectFichaClient: (props: { tabs: ReactNode; projectId: string }) => {
     fichaSeen.push(props);
     return <div data-testid="ficha-client">{props.tabs}</div>;
   },
 }));
 
-import ProjectClientesPage from "./clientes/page";
+import { qk } from "@/lib/query/keys";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+
+// The Clientes tab has its own test next to its page (`clientes/page.test.tsx`, 5d #962).
 import ProjectFichaPage from "./ficha/page";
 
 const PARAMS = { params: Promise.resolve({ id: "p1" }) };
@@ -63,68 +72,73 @@ const PARAMS = { params: Promise.resolve({ id: "p1" }) };
 const DETAIL = { id: "p1", name: "Casa Lomas", client: null, currentWorkflow: null };
 
 beforeEach(() => {
-  Object.assign(state, { manageAccess: true, admin: false, signedIn: true, shell: true });
+  Object.assign(state, { manageAccess: true, admin: false, signedIn: true, shell: true, editor: true });
   tabsSeen.length = 0;
   fichaSeen.length = 0;
   vi.clearAllMocks();
-  portal.listProjectPortalAccessAction.mockResolvedValue([{ id: "a1" }, { id: "a2" }]);
-  portal.listInvitablePortalContactsAction.mockResolvedValue([{ id: "c1", isProjectClient: true }]);
-  loadProjectTabShell.mockImplementation(async (_id: string, _user: unknown, opts: { clientes?: number } = {}) =>
+  loaders.loadProyectoShell.mockImplementation(async () =>
     state.shell
       ? {
           detail: DETAIL,
           project: { id: "p1", name: "Casa Lomas", tramo: null },
-          counts: { tareas: 7, archivos: 3, clientes: opts.clientes ?? 0 },
+          counts: { tareas: 7, archivos: 0, clientes: 2 },
           canManagePortal: state.manageAccess,
         }
       : null,
   );
+  loaders.loadProyectoFicha.mockResolvedValue({ project: DETAIL, tasks: [], spaces: [], importData: null });
+  loaders.loadProyectoHistory.mockResolvedValue({ events: [], nextCursor: null });
+  loaders.loadCatalogStaff.mockResolvedValue([]);
+  loaders.loadCatalogContacts.mockResolvedValue([]);
+  loaders.loadCatalogWorkflows.mockResolvedValue([]);
 });
 afterEach(cleanup);
 
-describe("Clientes tab", () => {
-  it("is guarded by portal.manageAccess", async () => {
-    state.manageAccess = false;
-    render(await ProjectClientesPage(PARAMS));
-    expect(screen.getByRole("heading", { name: "Sin permiso" })).toBeTruthy();
-    expect(screen.queryByTestId("portal-panel")).toBeNull();
-    expect(tabsSeen).toHaveLength(0);
-    expect(portal.listProjectPortalAccessAction).not.toHaveBeenCalled();
-  });
-
-  it("renders the portal panel under ProjectTabs", async () => {
-    render(await ProjectClientesPage(PARAMS));
-    expect(screen.getByTestId("tabs-clientes")).toBeTruthy();
-    expect(screen.getByTestId("portal-panel").textContent).toBe("2 accesos · cliente sí · asignar no");
-    expect(tabsSeen.at(-1)).toMatchObject({ active: "clientes", canManagePortal: true, counts: { clientes: 2 } });
-  });
-
-  it("reads the client from the project only for admins", async () => {
-    state.admin = true;
-    render(await ProjectClientesPage(PARAMS));
-    // The admin sees the project's own client field (null here), not the contacts' flag.
-    expect(screen.getByTestId("portal-panel").textContent).toBe("2 accesos · cliente no · asignar sí");
-  });
-
-  it("shows not found when the project can't be read", async () => {
-    state.shell = false;
-    render(await ProjectClientesPage(PARAMS));
-    expect(screen.getByRole("heading", { name: "Proyecto no encontrado" })).toBeTruthy();
-    expect(tabsSeen).toHaveLength(0);
-  });
-});
-
 describe("Ficha tab", () => {
-  it("renders the ficha form under ProjectTabs", async () => {
-    render(await ProjectFichaPage(PARAMS));
+  it("prefetches the shell and the ficha and renders ProjectTabs from the shell query", async () => {
+    const { client } = renderWithQueryClient(await ProjectFichaPage(PARAMS));
     expect(screen.getByTestId("tabs-ficha")).toBeTruthy();
-    expect(tabsSeen.at(-1)).toMatchObject({ active: "ficha", counts: { tareas: 7, archivos: 3 } });
+    expect(tabsSeen.at(-1)).toMatchObject({ active: "ficha", counts: { tareas: 7, clientes: 2 } });
+    expect(fichaSeen.at(-1)?.projectId).toBe("p1");
+    expect(loaders.loadProyectoShell).toHaveBeenCalledWith(expect.anything(), { id: "p1" });
+    expect(loaders.loadProyectoFicha).toHaveBeenCalledWith(expect.anything(), { id: "p1" });
+    expect(loaders.loadProyectoHistory).toHaveBeenCalledWith(expect.anything(), { id: "p1", cursor: null });
+    // Hydrated: the ficha payload also seeds the espacios and import data keys.
+    expect(client.getQueryData(qk.proyectos.tab("p1", "ficha"))).toMatchObject({ project: { id: "p1" } });
+    expect(client.getQueryData(qk.catalog.projectSpaces("p1"))).toEqual([]);
+    expect(client.getQueryData(qk.importData("project", "p1"))).toBeNull();
+    expect(client.getQueryData(qk.proyectos.history("p1"))).toMatchObject({ pages: [{ events: [] }] });
+    // The Drive-counting tab shell is not used.
+    expect(loadProjectTabShell).not.toHaveBeenCalled();
+  });
+
+  it("prefetches the editor catalogs only for editors", async () => {
+    renderWithQueryClient(await ProjectFichaPage(PARAMS));
+    expect(loaders.loadCatalogStaff).toHaveBeenCalled();
+    expect(loaders.loadCatalogContacts).toHaveBeenCalledWith(expect.anything(), {});
+    expect(loaders.loadCatalogWorkflows).toHaveBeenCalled();
+    cleanup();
+    vi.clearAllMocks();
+
+    state.editor = false;
+    renderWithQueryClient(await ProjectFichaPage(PARAMS));
+    expect(loaders.loadCatalogStaff).not.toHaveBeenCalled();
+    expect(loaders.loadCatalogContacts).not.toHaveBeenCalled();
+    expect(loaders.loadCatalogWorkflows).not.toHaveBeenCalled();
   });
 
   it("passes canManagePortal false without portal.manageAccess", async () => {
     state.manageAccess = false;
-    render(await ProjectFichaPage(PARAMS));
+    renderWithQueryClient(await ProjectFichaPage(PARAMS));
     expect(tabsSeen.at(-1)).toMatchObject({ active: "ficha", canManagePortal: false });
+  });
+
+  it("shows not found when the project can't be read", async () => {
+    state.shell = false;
+    renderWithQueryClient(await ProjectFichaPage(PARAMS));
+    expect(screen.getByRole("heading", { name: "Proyecto no encontrado" })).toBeTruthy();
+    expect(fichaSeen).toHaveLength(0);
+    expect(loaders.loadProyectoFicha).not.toHaveBeenCalled();
   });
 
   it("asks to sign in without a session", async () => {

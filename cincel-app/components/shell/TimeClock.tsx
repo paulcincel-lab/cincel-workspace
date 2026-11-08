@@ -1,22 +1,17 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Clock } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
-import { unwrapActionResult } from "@/lib/actions/action-result";
-import {
-  clockInAction,
-  clockOutAction,
-  fetchMyTodayAction,
-  pauseWorkAction,
-  resumeWorkAction,
-} from "@/lib/actions/time-tracking-actions";
 import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
-import { actionErrorCode, actionErrorText } from "@/lib/errors";
+import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
+import { actionErrorCode } from "@/lib/errors";
+import { meTodayOptions, ME_TODAY_REFETCH_MS } from "@/lib/query/options/me";
+import { mutationErrorText } from "@/lib/query/mutation";
 import { formatDayMonthYear } from "@/lib/time-tracking/horario-copy";
 import { localDate, TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/local-time";
-import { subscribeTodayStatus } from "@/lib/time-tracking/today-events";
 import type { TodayStatus } from "@/lib/types/redesign";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
@@ -24,13 +19,21 @@ import { Card, CardContent } from "@/components/ui/shadcn/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
 import { Progress } from "@/components/ui/shadcn/progress";
 
+import { useClockMutation, workedSecondsAt, type ClockAction } from "./use-clock-mutation";
+
+export { workedSecondsAt } from "./use-clock-mutation";
+
 /**
  * Sidebar time clock (redesign FE §3.13, §16): state pill, live time, progress
  * and the buttons per state, all from one `TodayStatus`. The `compact` variant
  * is the mobile top-bar pill that opens a popover with the same controls.
+ *
+ * The status is `useQuery(qk.me.today())` (hydrated by the `(staff)` layout,
+ * refetched every 5 min and on window focus by the query itself), so the
+ * sidebar card and the mobile pill share one cache entry and one poll. The
+ * clock buttons write the result into that entry (`useClockMutation`).
  */
-/** `requiredFrom` and `hoursPerDay` are on `TodayStatus`. */
-export type TimeClockProps = { initial: TodayStatus; variant?: "card" | "compact" };
+export type TimeClockProps = { variant?: "card" | "compact" };
 
 /** Every action the clock calls; the clock stays hidden until all of them are real. */
 export function timeClockReady(): boolean {
@@ -43,8 +46,8 @@ export function timeClockReady(): boolean {
   );
 }
 
-/** How often the clock re-reads `TodayStatus` while mounted (FE §6). */
-export const TIME_CLOCK_RESYNC_MS = 5 * 60 * 1000;
+/** How often `me.today` re-reads `TodayStatus` while mounted (FE §6). */
+export const TIME_CLOCK_RESYNC_MS = ME_TODAY_REFETCH_MS;
 
 type ClockState = TodayStatus["state"];
 type BadgeVariant = "success" | "warning" | "secondary" | "default";
@@ -64,10 +67,6 @@ const STATE_BADGE: Record<ClockState, BadgeVariant> = {
   done: "default",
 };
 
-type Snapshot = { status: TodayStatus; syncedAt: number };
-
-type ClockAction = "clockIn" | "pause" | "resume" | "clockOut";
-
 /** `HH:MM:SS` for a number of seconds. */
 export function formatClockTime(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -77,14 +76,16 @@ export function formatClockTime(totalSeconds: number): string {
   return [hh, mm, ss].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
+const ENTRY_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  hour: "numeric",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: TIME_TRACKING_TIME_ZONE,
+};
+
 /** "9:02" in the org time zone. */
 export function formatEntryTime(iso: string): string {
-  const parts = new Intl.DateTimeFormat("es-MX", {
-    hour: "numeric",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: TIME_TRACKING_TIME_ZONE,
-  }).formatToParts(new Date(iso));
+  const parts = cachedDateTimeFormat("es-MX", ENTRY_TIME_OPTIONS).formatToParts(new Date(iso));
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "0";
   // Some ICU builds pad h23 hours to two digits; the spec shows "9:02".
   return `${Number(part("hour"))}:${part("minute").padStart(2, "0")}`;
@@ -100,20 +101,10 @@ export function formatRequiredFrom(date: string): string {
   return formatDayMonthYear(date);
 }
 
-/**
- * Seconds worked as of `now`: the synced `workedSeconds` plus, while the day is
- * running, the stretch since the later of the sync and `startedAt`.
- */
-export function workedSecondsAt(snapshot: Snapshot, now: number): number {
-  const { status, syncedAt } = snapshot;
-  if (status.state !== "on") return status.workedSeconds;
-  const started = status.startedAt ? Date.parse(status.startedAt) : Number.NaN;
-  const anchor = Number.isFinite(started) ? Math.max(syncedAt, started) : syncedAt;
-  return status.workedSeconds + Math.max(0, Math.floor((now - anchor) / 1000));
-}
+const HOURS_FORMAT = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
 
 function formatHours(hours: number): string {
-  return new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 }).format(hours);
+  return HOURS_FORMAT.format(hours);
 }
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
@@ -134,20 +125,20 @@ function useReducedMotion(): boolean {
   return useSyncExternalStore(subscribeReducedMotion, readReducedMotion, () => false);
 }
 
-export function TimeClock({ initial, variant = "card" }: TimeClockProps) {
+export function TimeClock({ variant = "card" }: TimeClockProps) {
   const ready = timeClockReady();
-  const [snapshot, setSnapshot] = useState<Snapshot>(() => ({ status: initial, syncedAt: Date.now() }));
-  const [now, setNow] = useState(() => Date.now());
-  const [pending, setPending] = useState(false);
+  const { data: status, dataUpdatedAt } = useQuery({ ...meTodayOptions(), enabled: ready });
+  // Null until the first tick: the first render counts from the sync instant, as the server did.
+  const [tickedAt, setNow] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const pendingRef = useRef(false);
   const reducedMotion = useReducedMotion();
-
-  const { status } = snapshot;
+  const clock = useClockMutation({ source: "sidebar", optimistic: true });
+  const pending = clock.isPending;
+  const state = status?.state;
 
   // Tick every second while the day is running (client-side, no server calls).
   useEffect(() => {
-    if (status.state !== "on") return;
+    if (state !== "on") return;
     const tick = () => setNow(Date.now());
     const first = window.setTimeout(tick, 0);
     const id = window.setInterval(tick, 1000);
@@ -155,75 +146,13 @@ export function TimeClock({ initial, variant = "card" }: TimeClockProps) {
       window.clearTimeout(first);
       window.clearInterval(id);
     };
-  }, [status.state]);
+  }, [state]);
 
-  const resync = useCallback(async () => {
-    if (pendingRef.current) return;
-    try {
-      const fresh = await fetchMyTodayAction();
-      if (pendingRef.current) return;
-      const at = Date.now();
-      setSnapshot({ status: fresh, syncedAt: at });
-      setNow(at);
-    } catch {
-      // A failed background re-sync keeps the last known status.
-    }
-  }, []);
-
-  // A clock action elsewhere in the shell (login prompt) publishes its result.
-  useEffect(
-    () =>
-      subscribeTodayStatus((fresh) => {
-        if (pendingRef.current) return;
-        const at = Date.now();
-        setSnapshot({ status: fresh, syncedAt: at });
-        setNow(at);
-      }),
-    [],
-  );
-
-  // Re-sync on window focus and every 5 minutes.
-  useEffect(() => {
-    if (!ready) return;
-    const onFocus = () => void resync();
-    window.addEventListener("focus", onFocus);
-    const id = window.setInterval(() => void resync(), TIME_CLOCK_RESYNC_MS);
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      window.clearInterval(id);
-    };
-  }, [ready, resync]);
-
-  const run = useCallback(
-    async (action: ClockAction) => {
-      if (pendingRef.current) return;
-      const previous = snapshot;
-      const at = Date.now();
-      const worked = workedSecondsAt(previous, at);
-      const optimistic: TodayStatus =
-        action === "clockIn"
-          ? { ...previous.status, state: "on", startedAt: new Date(at).toISOString(), workedSeconds: worked }
-          : action === "pause"
-            ? { ...previous.status, state: "pausa", workedSeconds: worked }
-            : action === "resume"
-              ? { ...previous.status, state: "on", workedSeconds: worked }
-              : { ...previous.status, state: "done", workedSeconds: worked };
-
-      pendingRef.current = true;
-      setPending(true);
-      setSnapshot({ status: optimistic, syncedAt: at });
-      setNow(at);
-      try {
-        const result =
-          action === "clockIn"
-            ? unwrapActionResult(await clockInAction({ source: "sidebar" }))
-            : action === "pause"
-              ? unwrapActionResult(await pauseWorkAction())
-              : action === "resume"
-                ? unwrapActionResult(await resumeWorkAction())
-                : unwrapActionResult(await clockOutAction());
+  function run(action: ClockAction) {
+    if (pending) return;
+    clock.mutate(action, {
+      onSuccess: (result) => {
         const done = Date.now();
-        setSnapshot({ status: result, syncedAt: done });
         setNow(done);
         const time = formatEntryTime(new Date(done).toISOString());
         if (action === "clockIn") {
@@ -237,22 +166,21 @@ export function TimeClock({ initial, variant = "card" }: TimeClockProps) {
         } else {
           setAnnouncement(`Salida registrada a las ${time}`);
         }
-        pendingRef.current = false;
-        setPending(false);
-      } catch (err) {
-        setSnapshot(previous);
+      },
+      onError: (err) => {
         setNow(Date.now());
-        pendingRef.current = false;
-        setPending(false);
-        // ALREADY_ON means the server is ahead of this tab: re-sync quietly, no toast.
-        if (actionErrorCode(err) !== "ALREADY_ON") toast.error(actionErrorText(err));
-        await resync();
-      }
-    },
-    [snapshot, resync],
-  );
+        // ALREADY_ON means the server is ahead of this tab: `me.today` refetches quietly, no toast.
+        if (actionErrorCode(err) !== "ALREADY_ON") toast.error(mutationErrorText(err));
+      },
+    });
+  }
 
-  if (!ready || !status.enabled) return null;
+  if (!ready || !status || !status.enabled) return null;
+
+  // Set whenever `status` is (hydration and `setQueryData` both stamp it).
+  const syncedAt = dataUpdatedAt;
+  const now = tickedAt ?? syncedAt;
+  const snapshot = { status, syncedAt };
 
   const worked = workedSecondsAt(snapshot, now);
   const target = Math.max(1, status.hoursPerDay * 3600);
@@ -295,17 +223,17 @@ export function TimeClock({ initial, variant = "card" }: TimeClockProps) {
       </div>
       <div className="flex gap-1.5">
         {idle ? (
-          <Button className="flex-1" disabled={pending} onClick={() => void run("clockIn")}>
+          <Button className="flex-1" disabled={pending} onClick={() => run("clockIn")}>
             Registrar entrada
           </Button>
         ) : (
           <>
             {status.state === "on" ? (
-              <Button variant="outline" className="flex-1" disabled={pending} onClick={() => void run("pause")}>
+              <Button variant="outline" className="flex-1" disabled={pending} onClick={() => run("pause")}>
                 Pausa
               </Button>
             ) : (
-              <Button className="flex-1" disabled={pending} onClick={() => void run("resume")}>
+              <Button className="flex-1" disabled={pending} onClick={() => run("resume")}>
                 Reanudar
               </Button>
             )}
@@ -313,7 +241,7 @@ export function TimeClock({ initial, variant = "card" }: TimeClockProps) {
               variant={status.state === "on" ? "default" : "outline"}
               className="flex-1"
               disabled={pending}
-              onClick={() => void run("clockOut")}
+              onClick={() => run("clockOut")}
             >
               Salida
             </Button>

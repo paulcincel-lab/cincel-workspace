@@ -4,21 +4,29 @@ export const NO_PHASE_LABEL = "Sin fase · revisar";
 export const NO_TRAMO_LABEL = "Sin tramo";
 export const ADMIN_GROUP_LABEL = "Administración";
 
-export type FichaPhaseGroup = { id: string; name: string; phase: WorkflowPhaseRef | null; tasks: TaskListItem[] };
-export type FichaTramoGroup = {
+/** What grouping reads of a task: `TaskListItem` or the slim `TaskListRow`. */
+export type FichaGroupTask = Pick<TaskListItem, "kind" | "workflow" | "phase">;
+
+export type FichaPhaseGroup<T extends FichaGroupTask = TaskListItem> = {
+  id: string;
+  name: string;
+  phase: WorkflowPhaseRef | null;
+  tasks: T[];
+};
+export type FichaTramoGroup<T extends FichaGroupTask = TaskListItem> = {
   id: string;
   name: string;
   /** Null for "Sin tramo" and "Administración". */
   tramo: WorkflowRef | null;
   kind: "tramo" | "sin_tramo" | "admin";
-  phases: FichaPhaseGroup[];
+  phases: FichaPhaseGroup<T>[];
   count: number;
 };
 
 const NO_PHASE_ID = "__sin_fase__";
 
-function groupByPhase(tasks: TaskListItem[]): FichaPhaseGroup[] {
-  const groups = new Map<string, FichaPhaseGroup>();
+function groupByPhase<T extends FichaGroupTask>(tasks: T[]): FichaPhaseGroup<T>[] {
+  const groups = new Map<string, FichaPhaseGroup<T>>();
   for (const task of tasks) {
     const phase = task.phase;
     const id = phase?.id ?? NO_PHASE_ID;
@@ -39,10 +47,13 @@ function groupByPhase(tasks: TaskListItem[]): FichaPhaseGroup[] {
  * no tramo go under "Sin tramo"; admin tasks under "Administración" (only
  * when `includeAdmin`, i.e. the viewer is an administrator).
  */
-export function groupFichaTasks(tasks: TaskListItem[], options: { includeAdmin?: boolean } = {}): FichaTramoGroup[] {
-  const tramos = new Map<string, { tramo: WorkflowRef; tasks: TaskListItem[] }>();
-  const noTramo: TaskListItem[] = [];
-  const admin: TaskListItem[] = [];
+export function groupFichaTasks<T extends FichaGroupTask = TaskListItem>(
+  tasks: T[],
+  options: { includeAdmin?: boolean } = {}
+): FichaTramoGroup<T>[] {
+  const tramos = new Map<string, { tramo: WorkflowRef; tasks: T[] }>();
+  const noTramo: T[] = [];
+  const admin: T[] = [];
 
   for (const task of tasks) {
     if (task.kind === "admin") {
@@ -56,7 +67,7 @@ export function groupFichaTasks(tasks: TaskListItem[], options: { includeAdmin?:
     }
   }
 
-  const groups: FichaTramoGroup[] = [...tramos.values()]
+  const groups: FichaTramoGroup<T>[] = [...tramos.values()]
     .sort((a, b) => a.tramo.sortOrder - b.tramo.sortOrder || a.tramo.name.localeCompare(b.tramo.name, "es"))
     .map(({ tramo, tasks: rows }) => ({
       id: tramo.id,
@@ -93,6 +104,6 @@ export function groupFichaTasks(tasks: TaskListItem[], options: { includeAdmin?:
 }
 
 /** True when the project has non-admin tasks without a tramo (drives "Asignar tramo"). */
-export function hasTasksWithoutTramo(tasks: TaskListItem[]): boolean {
+export function hasTasksWithoutTramo(tasks: FichaGroupTask[]): boolean {
   return tasks.some((t) => t.kind !== "admin" && !t.workflow);
 }

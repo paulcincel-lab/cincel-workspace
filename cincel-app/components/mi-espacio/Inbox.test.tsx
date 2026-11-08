@@ -116,7 +116,10 @@ vi.mock("@/components/widgets/RecordTable", () => ({
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { Inbox, INBOX_POLL_MS, type InboxProps } from "@/components/mi-espacio/Inbox";
-import { readBandejaUnread, resetBandejaUnread } from "@/lib/my-space/bandeja-unread";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient } from "@/lib/query/test-utils";
+import type { ShellBadges } from "@/lib/types/shell";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 
@@ -179,12 +182,26 @@ function baseProps(over: Partial<InboxProps> = {}): InboxProps {
   };
 }
 
+/** The cache the shell hydrates; the Inbox patches its `shell.badges` unread count. */
+let client: QueryClient = createTestQueryClient();
+
+/** The Mi espacio badge's unread count, as the sidebar reads it. */
+function readBandejaUnread(): number | undefined {
+  return client.getQueryData<ShellBadges>(qk.shell.badges())?.bandeja.unreadCount;
+}
+
+function withClient(ui: ReactNode) {
+  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+}
+
 function renderInbox(over: Partial<InboxProps> = {}, style: PresentationStyle = "visual") {
   mocks.style.current = style;
   return render(
-    <StyleProvider style={style} scope="staff">
-      <Inbox {...baseProps(over)} />
-    </StyleProvider>,
+    withClient(
+      <StyleProvider style={style} scope="staff">
+        <Inbox {...baseProps(over)} />
+      </StyleProvider>,
+    ),
   );
 }
 
@@ -201,13 +218,15 @@ beforeEach(() => {
   mocks.fetchNotifications.mockResolvedValue({ items: [], nextCursor: null, unreadCount: 2 });
   mocks.markRead.mockResolvedValue({ unreadCount: 1 });
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+  client = createTestQueryClient();
+  client.setQueryData<ShellBadges>(qk.shell.badges(), { tareasOpen: 0, bandeja: { unreadCount: 2, dueReminders: [] } });
 });
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.clearAllMocks();
-  resetBandejaUnread();
+  client.clear();
 });
 
 describe("Inbox tabs and counts", () => {
@@ -395,9 +414,11 @@ describe("Inbox Gmail rows", () => {
     const onOpenThread = vi.fn();
     mocks.style.current = "visual";
     render(
-      <StyleProvider style="visual" scope="staff">
-        <Inbox {...baseProps()} onOpenThread={onOpenThread} />
-      </StyleProvider>,
+      withClient(
+        <StyleProvider style="visual" scope="staff">
+          <Inbox {...baseProps()} onOpenThread={onOpenThread} />
+        </StyleProvider>,
+      ),
     );
     fireEvent.click(screen.getByRole("button", { name: /Cotización Casa Lomas/ }));
     expect(onOpenThread).toHaveBeenCalledWith("t1");

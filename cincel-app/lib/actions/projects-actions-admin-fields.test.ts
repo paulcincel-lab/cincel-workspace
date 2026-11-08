@@ -54,12 +54,18 @@ describe("createProjectAction (name only)", () => {
     expect(repo.createProject).toHaveBeenCalledWith({ name: "Casa Valle" }, ACTOR);
   });
 
-  it("revalidates Proyectos, the ficha, Actividades, Dashboard and Tablero", async () => {
+  it("revalidates no Proyectos, ficha, Tareas or Inicio route", async () => {
     await createProjectAction({ name: "Casa Valle" });
     const paths = cache.revalidatePath.mock.calls.map((c) => c[0]);
-    expect(paths).toEqual(
-      expect.arrayContaining(["/proyectos", `/proyectos/${PROJECT}/ficha`, "/actividades", "/dashboard", "/tablero"])
-    );
+    // Tareas reads `qk.tareas.*` (Phase 4): the Actividades and Tablero stubs are not revalidated.
+    expect(paths).not.toContain("/actividades");
+    expect(paths).not.toContain("/tablero");
+    // Inicio reads `qk.inicio()` (#937): the `/dashboard` stub is not revalidated.
+    expect(paths).not.toContain("/dashboard");
+    // `/proyectos` reads `qk.proyectos.list()` (5a, #959), invalidated by the caller.
+    expect(paths).not.toContain("/proyectos");
+    // The ficha reads its own query (5b, #960).
+    expect(paths).not.toContain(`/proyectos/${PROJECT}/ficha`);
   });
 
   it("surfaces the repository's NAME_TAKEN", async () => {

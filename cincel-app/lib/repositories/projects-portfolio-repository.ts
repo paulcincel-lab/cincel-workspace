@@ -7,17 +7,18 @@
  * `canSeeAdminData`): without it, admin tasks are not counted and the budget
  * is null. The next delivery never names an admin task, for anyone.
  */
-import { and, asc, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
 
+import { currentWeekEndIso } from "@/lib/cronograma/week";
 import { TASK_TREND_TIME_ZONE, localIsoDate } from "@/lib/dashboard/task-trend";
 import { db } from "@/lib/db/client";
 import { projectSchedules, projects, schedulePaymentRows, scheduleTasks, tasks } from "@/lib/db/schema";
 import {
   daysBetweenIso,
   lastDaysIso,
-  portfolioProgress,
+  portfolioProgressFromCounts,
   seriesFor,
-  type PortfolioSchedule,
+  type PortfolioScheduleCounts,
 } from "@/lib/projects/portfolio-metrics";
 import type { PortfolioRow } from "@/lib/types/redesign";
 
@@ -28,64 +29,72 @@ export type PortfolioOptions = {
   includeAdminData: boolean;
   now: Date;
   timeZone?: string;
+  /** Only these projects (Resumen reads one row); omitted = every live project. */
+  projectIds?: readonly string[];
 };
 
-async function loadSchedules(projectIds: string[]): Promise<Map<string, PortfolioSchedule>> {
-  const out = new Map<string, PortfolioSchedule>();
-  if (projectIds.length === 0) return out;
-  const schedules = await db
-    .select({ id: projectSchedules.id, projectId: projectSchedules.projectId })
-    .from(projectSchedules)
-    .where(inArray(projectSchedules.projectId, projectIds));
-  if (schedules.length === 0) return out;
+/**
+ * A correlated subquery as a select field. The projects select has no join,
+ * so Drizzle renders a field's own column chunks unqualified, and an
+ * unqualified `"id"` inside the subquery would bind to the subquery's table.
+ * Nesting the subquery one level keeps every column qualified.
+ */
+function correlated<T>(subquery: SQL): SQL<T> {
+  return sql<T>`${subquery}`;
+}
 
-  const scheduleIds = schedules.map((s) => s.id);
-  const [taskRows, paymentRows] = await Promise.all([
-    db
-      .select({
-        scheduleId: scheduleTasks.scheduleId,
-        id: scheduleTasks.id,
-        stableKey: scheduleTasks.stableKey,
-        legacyId: scheduleTasks.legacyId,
-        planta: scheduleTasks.planta,
-        seccion: scheduleTasks.seccion,
-        responsable: scheduleTasks.responsable,
-        inicio: scheduleTasks.inicio,
-        fin: scheduleTasks.fin,
-        tarea: scheduleTasks.tarea,
-        status: scheduleTasks.status,
-        flagged: scheduleTasks.flagged,
-      })
-      .from(scheduleTasks)
-      .where(inArray(scheduleTasks.scheduleId, scheduleIds))
-      .orderBy(asc(scheduleTasks.sortOrder)),
-    db
-      .select({
-        scheduleId: schedulePaymentRows.scheduleId,
-        fecha: schedulePaymentRows.fecha,
-        pagadoPct: schedulePaymentRows.pagadoPct,
-        avancePct: schedulePaymentRows.avancePct,
-      })
-      .from(schedulePaymentRows)
-      .where(inArray(schedulePaymentRows.scheduleId, scheduleIds))
-      .orderBy(asc(schedulePaymentRows.fecha)),
-  ]);
+/**
+ * The schedule aggregates `portfolioProgressFromCounts` needs, as one JSON
+ * column per project: task counts (total, done, in progress, due by the end
+ * of the current week). Projects without a schedule get zeros; no schedule
+ * row ever reaches Node.
+ */
+function scheduleCountsColumn(weekEndIso: string) {
+  return correlated<Omit<PortfolioScheduleCounts, "paidPct">>(sql`(
+    select json_build_object(
+      'total', count(*)::int,
+      'done', (count(*) filter (where ${scheduleTasks.status} = 'done'))::int,
+      'progress', (count(*) filter (where ${scheduleTasks.status} = 'progress'))::int,
+      'planned', (count(*) filter (where ${scheduleTasks.fin} <= ${weekEndIso}::date))::int
+    )
+    from ${scheduleTasks}
+    join ${projectSchedules} on ${projectSchedules.id} = ${scheduleTasks.scheduleId}
+    where ${projectSchedules.projectId} = ${projects.id}
+  )`);
+}
 
-  const bySchedule = new Map<string, PortfolioSchedule>();
-  for (const s of schedules) {
-    const entry: PortfolioSchedule = { tasks: [], payments: [] };
-    bySchedule.set(s.id, entry);
-    out.set(s.projectId, entry);
-  }
-  for (const { scheduleId, ...t } of taskRows) bySchedule.get(scheduleId)?.tasks.push(t);
-  for (const p of paymentRows) {
-    bySchedule.get(p.scheduleId)?.payments.push({
-      fecha: p.fecha,
-      pagadoPct: Number(p.pagadoPct),
-      avancePct: Number(p.avancePct),
-    });
-  }
-  return out;
+/**
+ * Paid % of the payment row in effect at the week's end (`pagosRowForDate`:
+ * the last row on or before it, else the first row), or null without rows.
+ * Admin data: for everyone else the column is a constant null and the
+ * payment rows are never read.
+ */
+function paidPctColumn(weekEndIso: string, includeAdminData: boolean): SQL<string | null> {
+  if (!includeAdminData) return sql<string | null>`null::numeric`;
+  const paymentRow = (where: SQL, order: SQL) => sql`(
+    select ${schedulePaymentRows.pagadoPct}
+    from ${schedulePaymentRows}
+    join ${projectSchedules} on ${projectSchedules.id} = ${schedulePaymentRows.scheduleId}
+    where ${projectSchedules.projectId} = ${projects.id}${where}
+    order by ${order}
+    limit 1
+  )`;
+  return correlated<string | null>(sql`coalesce(
+    ${paymentRow(sql` and ${schedulePaymentRows.fecha} <= ${weekEndIso}::date`, sql`${schedulePaymentRows.fecha} desc`)},
+    ${paymentRow(sql``, sql`${schedulePaymentRows.fecha} asc`)}
+  )`);
+}
+
+/** Open (live, unarchived, not completed) task count of the row's project; admin tasks only when asked. */
+function openTasksColumn(includeAdminTasks: boolean, extra?: SQL) {
+  const kindFilter = includeAdminTasks ? sql`` : sql` and ${tasks.kind} <> 'admin'`;
+  return correlated<number>(sql`(
+    select count(*)::int from ${tasks}
+    where ${tasks.projectId} = ${projects.id}
+      and ${tasks.deletedAt} is null
+      and ${tasks.archived} = false
+      and ${tasks.status} <> 'completado'${kindFilter}${extra ?? sql``}
+  )`);
 }
 
 /** Open = live, unarchived and not completed (same rule as the Proyectos list counts). */
@@ -97,23 +106,6 @@ function openTaskConditions(projectIds: string[], includeAdminTasks: boolean) {
     ne(tasks.status, "completado"),
     includeAdminTasks ? undefined : ne(tasks.kind, "admin"),
   );
-}
-
-async function loadOpenCounts(
-  projectIds: string[],
-  todayIso: string,
-  includeAdminTasks: boolean,
-): Promise<Map<string, { open: number; overdue: number }>> {
-  const rows = await db
-    .select({
-      projectId: tasks.projectId,
-      open: sql<number>`count(*)::int`,
-      overdue: sql<number>`(count(*) filter (where ${tasks.commitmentDate} < ${todayIso}::date))::int`,
-    })
-    .from(tasks)
-    .where(openTaskConditions(projectIds, includeAdminTasks))
-    .groupBy(tasks.projectId);
-  return new Map(rows.map((r) => [r.projectId, { open: Number(r.open), overdue: Number(r.overdue) }]));
 }
 
 /** Next open task by commitment date (today or later). Admin tasks are never named. */
@@ -178,38 +170,58 @@ async function loadOpenSeries(
   return out;
 }
 
-/** One `PortfolioRow` per live project (the scope of `listProjects` with no filters), by name. */
+/**
+ * One `PortfolioRow` per live project (the scope of `listProjects` with no
+ * filters), by name; with `projectIds`, only those (deleted ones left out).
+ * Three statements: the projects with their open counts and schedule
+ * aggregates (progress is computed in SQL, so no schedule task or payment
+ * row is loaded), the next deliveries and the 7-day series.
+ */
 export async function listPortfolioRows(opts: PortfolioOptions): Promise<PortfolioRow[]> {
+  if (opts.projectIds && opts.projectIds.length === 0) return [];
   const timeZone = opts.timeZone ?? TASK_TREND_TIME_ZONE;
   const todayIso = localIsoDate(opts.now, timeZone);
+  const weekEndIso = currentWeekEndIso(opts.now);
   const dates = lastDaysIso(todayIso, PORTFOLIO_SERIES_DAYS);
 
   const projectRows = await db
-    .select({ id: projects.id, progress: projects.progress, endDate: projects.endDate })
+    .select({
+      id: projects.id,
+      progress: projects.progress,
+      endDate: projects.endDate,
+      open: openTasksColumn(opts.includeAdminData),
+      overdue: openTasksColumn(opts.includeAdminData, sql` and ${tasks.commitmentDate} < ${todayIso}::date`),
+      schedule: scheduleCountsColumn(weekEndIso),
+      paidPct: paidPctColumn(weekEndIso, opts.includeAdminData),
+    })
     .from(projects)
-    .where(isNull(projects.deletedAt))
+    .where(and(isNull(projects.deletedAt), opts.projectIds ? inArray(projects.id, [...opts.projectIds]) : undefined))
     .orderBy(asc(projects.name));
   if (projectRows.length === 0) return [];
   const ids = projectRows.map((p) => p.id);
 
-  const [schedules, counts, deliveries, series] = await Promise.all([
-    loadSchedules(ids),
-    loadOpenCounts(ids, todayIso, opts.includeAdminData),
+  const [deliveries, series] = await Promise.all([
     loadNextDeliveries(ids, todayIso),
     loadOpenSeries(ids, dates[0]!, dates[dates.length - 1]!, timeZone, opts.includeAdminData),
   ]);
 
   return projectRows.map((p) => {
-    const progress = portfolioProgress({ progress: p.progress, schedule: schedules.get(p.id) ?? null }, opts.now);
-    const count = counts.get(p.id);
+    const counts: PortfolioScheduleCounts = {
+      total: Number(p.schedule?.total ?? 0),
+      done: Number(p.schedule?.done ?? 0),
+      progress: Number(p.schedule?.progress ?? 0),
+      planned: Number(p.schedule?.planned ?? 0),
+      paidPct: opts.includeAdminData && p.paidPct !== null ? Number(p.paidPct) : null,
+    };
+    const progress = portfolioProgressFromCounts({ progress: p.progress, schedule: counts });
     return {
       projectId: p.id,
       real: progress.real,
       plan: progress.plan,
       deviation: progress.deviation,
       budgetSpentPct: opts.includeAdminData ? progress.budgetSpentPct : null,
-      open: count?.open ?? 0,
-      overdue: count?.overdue ?? 0,
+      open: Number(p.open ?? 0),
+      overdue: Number(p.overdue ?? 0),
       daysToDelivery: p.endDate ? daysBetweenIso(todayIso, p.endDate) : null,
       nextDelivery: deliveries.get(p.id) ?? null,
       series7: seriesFor(dates, series.get(p.id)),

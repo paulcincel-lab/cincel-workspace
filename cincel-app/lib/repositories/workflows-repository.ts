@@ -438,6 +438,27 @@ export async function listTramosNav(): Promise<WorkflowRef[]> {
 }
 
 /**
+ * Whether Presale starts on its own when a project is created: a live,
+ * active `presale` tramo set to `on_create` (the create dialog's copy). One
+ * statement instead of the full `listWorkflows` the page used to read.
+ */
+export async function presaleAutoStart(): Promise<boolean> {
+  const [row] = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(
+      and(
+        eq(workflows.key, "presale"),
+        eq(workflows.active, true),
+        eq(workflows.autoStart, "on_create"),
+        isNull(workflows.deletedAt)
+      )
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
  * The UI switch (BE §7.1): `true` stores `on_create` for the first active
  * tramo and `on_ready` for the others; `false` stores `manual`. NOT_FOUND.
  */

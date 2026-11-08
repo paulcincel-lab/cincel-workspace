@@ -1,21 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import AppAvatar from "@/components/ui/AppAvatar";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
-import { unwrapActionResult } from "@/lib/actions/action-result";
-import {
-  createSubtaskAction,
-  listSubtasksAction,
-} from "@/lib/actions/tasks-actions";
+import * as tasksActions from "@/lib/actions/tasks-actions";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { subtaskCreateInvalidations, taskSubtasksOptions } from "@/lib/query/options/tareas";
 import {
   BASE_STATUS_COLOR,
   BASE_STATUS_LABEL,
 } from "@/lib/tasks/status-options";
-import type { TaskRef } from "@/lib/types/core";
+import type { SubtaskInput, TaskDetail, TaskRef } from "@/lib/types/core";
 import { formatDateDMY } from "@/lib/utils/date";
 
 const SUBTASK_ERROR_COPY: Record<string, string> = {
@@ -32,45 +32,46 @@ export function subtaskErrorMessage(error: unknown): string {
 
 type Props = {
   parentId: string;
+  /** The parent's project (its Tareas tab refreshes after a create). */
+  projectId: string;
   /** Opens a child task in the same drawer. */
   onOpenSubtask: (subtask: TaskRef) => void;
 };
 
-/** The task sheet's Subtareas section: child tasks plus "Agregar subtarea". */
-export default function TaskSubtasks({ parentId, onOpenSubtask }: Props) {
-  const [subtasks, setSubtasks] = useState<TaskRef[] | null>(null);
-  const [loadError, setLoadError] = useState("");
+/**
+ * The task sheet's Subtareas section: child tasks (`qk.tasks.subtasks(id)`)
+ * plus "Agregar subtarea" (`createSubtaskAction`, which refreshes the list,
+ * the parent's detail and the Tareas views).
+ */
+export default function TaskSubtasks({ parentId, projectId, onOpenSubtask }: Props) {
+  const query = useQuery(taskSubtasksOptions(parentId));
+  const subtasks = query.data ?? null;
+  const loadError = query.isError ? "No se pudieron cargar las subtareas." : "";
   const [newTitle, setNewTitle] = useState("");
-  const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-    listSubtasksAction(parentId)
-      .then((rows) => {
-        if (!cancelled) setSubtasks(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError("No se pudieron cargar las subtareas.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [parentId]);
+  const create = useActionMutation<SubtaskInput, TaskDetail>(
+    (input) => tasksActions.createSubtaskAction(parentId, input),
+    {
+      setData: (qc) => {
+        // The parent's counts; `exact` leaves its dependencies alone.
+        void qc.invalidateQueries({ queryKey: qk.tasks.detail(parentId), exact: true });
+      },
+      invalidate: () => subtaskCreateInvalidations(parentId, projectId),
+      onFormError: () => undefined,
+    },
+  );
+  const adding = create.isPending;
 
   const handleAdd = async () => {
     const title = newTitle.trim();
     if (!title || adding) return;
-    setAdding(true);
     setAddError("");
     try {
-      unwrapActionResult(await createSubtaskAction(parentId, { title }));
+      await create.mutateAsync({ title });
       setNewTitle("");
-      setSubtasks(await listSubtasksAction(parentId));
     } catch (error) {
       setAddError(subtaskErrorMessage(error));
-    } finally {
-      setAdding(false);
     }
   };
 

@@ -1,10 +1,18 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { CalendarItem } from "@/lib/types/redesign";
 
-const router = vi.hoisted(() => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }));
+/** The popover never touches the router: a call to it fails the test. */
+const router = vi.hoisted(() => ({
+  refresh: vi.fn(() => {
+    throw new Error("router.refresh called");
+  }),
+}));
 const actions = vi.hoisted(() => ({ deleteTaskAction: vi.fn() }));
 const sonner = vi.hoisted(() => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -44,19 +52,20 @@ function makeEvent(overrides: Partial<CalendarItem> = {}): CalendarItem {
   };
 }
 
-function renderPopover(event: CalendarItem, onClose = vi.fn()) {
+function renderPopover(event: CalendarItem, onClose = vi.fn(), client: QueryClient = createTestQueryClient()) {
   const anchor = document.createElement("button");
   anchor.textContent = event.title;
   document.body.appendChild(anchor);
   anchor.focus();
-  const utils = render(<EventDetailPopover event={event} anchor={anchor} onClose={onClose} />);
+  const utils = renderWithQueryClient(<EventDetailPopover event={event} anchor={anchor} onClose={onClose} />, { client });
   return { ...utils, anchor, onClose };
 }
 
 beforeEach(() => {
   actions.deleteTaskAction.mockReset();
-  router.refresh.mockReset();
+  router.refresh.mockClear();
   sonner.toast.success.mockReset();
+  sonner.toast.error.mockReset();
 });
 
 afterEach(() => {
@@ -147,9 +156,23 @@ describe("EventDetailPopover", () => {
     expect(document.activeElement).toBe(anchor);
   });
 
-  it("'Eliminar' asks to confirm, then deletes the task with the existing action", async () => {
-    actions.deleteTaskAction.mockResolvedValue(undefined);
-    const { onClose } = renderPopover(makeEvent());
+  it("'Eliminar' asks to confirm, then deletes the task as a mutation, without the router", async () => {
+    actions.deleteTaskAction.mockResolvedValue({ ok: true, data: undefined });
+    const client = createTestQueryClient();
+    const filters = { tramo: null, proyecto: null, responsable: null, estado: null, q: null };
+    client.setQueryData(qk.tasks.detail("t1"), { id: "t1" });
+    client.setQueryData(qk.tasks.subtasks("t1"), []);
+    client.setQueryData(qk.tasks.detail("t2"), { id: "t2" });
+    client.setQueryData(qk.tareas.calendar(filters, "2026-10-26", "2026-12-06"), []);
+    client.setQueryData(qk.tareas.list(filters), []);
+    client.setQueryData(qk.tareas.board(filters), {});
+    client.setQueryData(qk.tareas.facets(filters), {});
+    client.setQueryData(qk.proyectos.tab("p1", "tareas"), []);
+    client.setQueryData(qk.proyectos.tab("p2", "tareas"), []);
+    client.setQueryData(qk.inicio(), {});
+    client.setQueryData(qk.shell.badges(), {});
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const { onClose } = renderPopover(makeEvent({ projectId: "p1" }), vi.fn(), client);
 
     fireEvent.click(await screen.findByRole("button", { name: /Eliminar/ }));
     expect(screen.getByText("¿Eliminar esta tarea?")).toBeTruthy();
@@ -160,8 +183,37 @@ describe("EventDetailPopover", () => {
     });
     await waitFor(() => expect(actions.deleteTaskAction).toHaveBeenCalledWith("t1"));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(router.refresh).toHaveBeenCalled();
+    expect(router.refresh).not.toHaveBeenCalled();
     expect(sonner.toast.success).toHaveBeenCalledWith("Tarea eliminada");
+
+    // The task's detail keys leave the cache; another task's stay.
+    expect(client.getQueryData(qk.tasks.detail("t1"))).toBeUndefined();
+    expect(client.getQueryData(qk.tasks.subtasks("t1"))).toBeUndefined();
+    expect(client.getQueryData(qk.tasks.detail("t2"))).toEqual({ id: "t2" });
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalled());
+    const invalid = (key: readonly unknown[]) => client.getQueryState(key)?.isInvalidated;
+    expect(invalid(qk.tareas.calendar(filters, "2026-10-26", "2026-12-06"))).toBe(true);
+    expect(invalid(qk.tareas.list(filters))).toBe(true);
+    expect(invalid(qk.tareas.board(filters))).toBe(true);
+    expect(invalid(qk.tareas.facets(filters))).toBe(true);
+    expect(invalid(qk.proyectos.tab("p1", "tareas"))).toBe(true);
+    expect(invalid(qk.proyectos.tab("p2", "tareas"))).toBe(false);
+    expect(invalid(qk.inicio())).toBe(true);
+    expect(invalid(qk.shell.badges())).toBe(true);
+  });
+
+  it("returns a failed result as the inline error and stays open", async () => {
+    actions.deleteTaskAction.mockResolvedValue({ ok: false, error: "FORBIDDEN: task delete" });
+    const { onClose } = renderPopover(makeEvent());
+
+    fireEvent.click(await screen.findByRole("button", { name: /Eliminar/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+    });
+    expect(await screen.findByText("No tienes permiso para realizar esta acción.")).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(sonner.toast.error).not.toHaveBeenCalled();
   });
 
   it("'Cancelar' backs out of the delete confirmation", async () => {

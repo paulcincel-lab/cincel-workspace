@@ -250,6 +250,51 @@ describe.skipIf(!url)("fetchProjectsPortfolioAction (test DB)", async () => {
     expect((await rowsFor(admin)).plain?.budgetSpentPct).toBeNull();
   });
 
+  it("keeps budgetSpentPct null for non-admins with a projectIds filter too (Resumen, 5a)", async () => {
+    const { listPortfolioRows } = await import("@/lib/repositories/projects-portfolio-repository");
+    const [asColaborador] = await listPortfolioRows({ includeAdminData: false, now, projectIds: [scheduledProjectId] });
+    const [asAdmin] = await listPortfolioRows({ includeAdminData: true, now, projectIds: [scheduledProjectId] });
+    expect(asColaborador?.budgetSpentPct).toBeNull();
+    expect(asAdmin?.budgetSpentPct).toBe(30);
+  });
+
+  it("the row for one project (projectIds) equals the old full-portfolio .find", async () => {
+    const { listPortfolioRows } = await import("@/lib/repositories/projects-portfolio-repository");
+    for (const [actor, includeAdminData] of [
+      [colaborador, false],
+      [admin, true],
+    ] as const) {
+      const full = await rowsFor(actor);
+      for (const id of [plainProjectId, scheduledProjectId]) {
+        const one = await listPortfolioRows({ includeAdminData, now, projectIds: [id] });
+        expect(one).toHaveLength(1);
+        expect(one[0]).toEqual(full.all.find((row) => row.projectId === id));
+      }
+    }
+  });
+
+  it("projectIds leaves deleted projects out and an empty list reads nothing", async () => {
+    const { listPortfolioRows } = await import("@/lib/repositories/projects-portfolio-repository");
+    expect(await listPortfolioRows({ includeAdminData: true, now, projectIds: [deletedProjectId] })).toEqual([]);
+    const { countQueries } = await import("@/tests/helpers/count-queries");
+    const { result, count } = await countQueries(() => listPortfolioRows({ includeAdminData: true, now, projectIds: [] }));
+    expect(result).toEqual([]);
+    expect(count).toBe(0);
+  });
+
+  it("reads the portfolio in at most 3 statements, with no schedule task or payment row loaded", async () => {
+    const { listPortfolioRows } = await import("@/lib/repositories/projects-portfolio-repository");
+    const { countQueries } = await import("@/tests/helpers/count-queries");
+    const { count, statements } = await countQueries(() => listPortfolioRows({ includeAdminData: true, now }));
+    expect(count).toBeLessThanOrEqual(3);
+    // Schedules are aggregated in SQL: no statement selects schedule rows from the top level.
+    for (const { sql } of statements) {
+      // `[^()]*`: a FROM inside a subquery of the select list doesn't count.
+      expect(sql.trim().toLowerCase()).not.toMatch(/^select [^()]* from (?:"core"\.)?"schedule_tasks"/);
+      expect(sql.trim().toLowerCase()).not.toMatch(/^select [^()]* from (?:"core"\.)?"schedule_payment_rows"/);
+    }
+  });
+
   it("uses the Cronograma for real and plan when a schedule exists, else projects.progress", async () => {
     const { plain, scheduled } = await rowsFor(colaborador);
     expect(scheduled).toMatchObject({ real: 50, plan: 50, deviation: 0 });

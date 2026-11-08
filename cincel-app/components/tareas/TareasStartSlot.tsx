@@ -1,18 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { ReadyToStartCard } from "@/components/tareas/ReadyToStartCard";
 import { StartTramoSheet } from "@/components/tareas/StartTramoSheet";
 import { UpcomingProjects } from "@/components/tareas/UpcomingProjects";
-import { notifyTramoStarted } from "@/components/tareas/start-tramo-toast";
+import { notifyTramoStarted, useUndoStartTramo } from "@/components/tareas/start-tramo-toast";
+import { mutationErrorText } from "@/lib/query/mutation";
+import { tareasStartSlotOptions } from "@/lib/query/options/tareas";
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
-import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
-import { actionErrorText } from "@/lib/errors";
-import type { TramoStartContract } from "@/lib/tramos/compat";
-import type { Staff, StartTramoResult, TramoBoard, WorkflowRef } from "@/lib/types/core";
+import type { StartTramoResult, WorkflowRef } from "@/lib/types/core";
 
 /**
  * The single tramo the start slot is for: `tramo` names exactly one known
@@ -31,106 +31,74 @@ export function startSlotTramo(tramo: string | null, tramos: WorkflowRef[]): Wor
 
 export type TareasStartSlotProps = {
   workflow: WorkflowRef;
-  /** Project Flow's start contract, read through `lib/tramos/compat.ts`. */
-  contract: TramoStartContract;
 };
 
 /**
  * Project Flow's start slot inside Tareas · Lista (FE §3.4, §21.2):
  * "Listos para iniciar" and "Próximos" above the table, and the Iniciar tramo
- * sheet. `?project=X&iniciar=1` (the `/actividades/[tramo]?project=X`
- * redirect) opens the sheet for project X once; closing it drops both params.
+ * sheet. The board, the sheet's candidates and `canStart` are one query
+ * (`qk.tareas.startSlot(tramoId)`, 30 s stale); a start or an undo
+ * invalidates it, so nothing here reloads by hand. `?project=X&iniciar=1`
+ * (the `/actividades/[tramo]?project=X` redirect) opens the sheet for project
+ * X once; closing it drops both params with `history.replaceState`, so no
+ * server render follows.
  */
-export function TareasStartSlot({ workflow, contract }: TareasStartSlotProps) {
-  const router = useRouter();
+export function TareasStartSlot({ workflow }: TareasStartSlotProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const deepLinkProject = searchParams.get("iniciar") === "1" ? searchParams.get("project") || null : null;
 
   const user = useSessionStore(selectCurrentUser);
-  const canStart = useMemo(() => resolveActivitiesCapabilities(user).canCreateActivity, [user]);
   const isAdmin = user?.access === "Administrador";
   const viewerId = user?.member.id ?? "";
 
-  const [board, setBoard] = useState<TramoBoard | null>(null);
-  const [staff, setStaff] = useState<Array<Staff & { suggested: boolean }>>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [startProjectId, setStartProjectId] = useState<string | null>(null);
+  const slot = useQuery(tareasStartSlotOptions(workflow.id));
+  const data = slot.data ?? null;
+  const canStart = data?.canStart ?? false;
+  const undo = useUndoStartTramo(workflow.name);
 
-  const loadBoard = useCallback(async () => {
-    try {
-      setBoard(await contract.fetchBoard(workflow.id));
-      setLoadError(null);
-    } catch (err) {
-      setLoadError(actionErrorText(err, { tramoName: workflow.name }));
-    }
-  }, [contract, workflow.id, workflow.name]);
+  const [pickedProjectId, setPickedProjectId] = useState<string | null>(null);
+  // `?project=X&iniciar=1`: the sheet opens for X once (ready or not), as soon as `canStart` is known.
+  const [deepLinkDone, setDeepLinkDone] = useState(false);
+  const deepLinkTarget = !deepLinkDone && canStart ? deepLinkProject : null;
+  const startProjectId = pickedProjectId ?? deepLinkTarget;
 
-  useEffect(() => {
-    // Load the tramo board on mount; `loadBoard` is also the post-start refresh.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadBoard();
-  }, [loadBoard]);
-
-  useEffect(() => {
-    let cancelled = false;
-    contract
-      .fetchCandidates(workflow.id)
-      .then((rows) => {
-        if (!cancelled) setStaff(rows);
-      })
-      .catch(() => {
-        // The sheet still works without candidates ("Sin asignar").
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [contract, workflow.id]);
-
-  // `?project=X&iniciar=1`: open the sheet for X once, ready or not.
-  const deepLinkHandled = useRef(false);
-  useEffect(() => {
-    if (deepLinkHandled.current || !deepLinkProject || !canStart) return;
-    deepLinkHandled.current = true;
-    setStartProjectId(deepLinkProject);
-  }, [deepLinkProject, canStart]);
-
-  const clearDeepLink = useCallback(() => {
+  function clearDeepLink() {
     if (!searchParams.has("iniciar") && !searchParams.has("project")) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete("iniciar");
     params.delete("project");
     const search = params.toString();
-    router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
-  }, [pathname, router, searchParams]);
+    window.history.replaceState(null, "", search ? `${pathname}?${search}` : pathname);
+  }
 
-  const closeSheet = useCallback(() => {
-    setStartProjectId(null);
+  function closeSheet() {
+    setPickedProjectId(null);
+    if (deepLinkTarget) setDeepLinkDone(true);
     clearDeepLink();
-  }, [clearDeepLink]);
+  }
 
-  const refreshAfterStart = useCallback(async () => {
-    await loadBoard();
-    router.refresh();
-  }, [loadBoard, router]);
+  function openSheet(projectId: string) {
+    setDeepLinkDone(true);
+    setPickedProjectId(projectId);
+  }
 
+  // The sheet closes itself (`onClose`) right after this.
   function handleStarted(result: StartTramoResult) {
-    closeSheet();
-    notifyTramoStarted(result, { refresh: refreshAfterStart });
-    void refreshAfterStart();
+    notifyTramoStarted(result, { undo: (vars) => undo.mutate(vars) });
   }
 
   return (
     <section aria-label={`Iniciar ${workflow.name}`} className="flex flex-col gap-4" data-testid="tareas-start-slot">
-      {loadError ? (
+      {slot.error ? (
         <Alert variant="destructive">
-          <AlertDescription>{loadError}</AlertDescription>
+          <AlertDescription>{mutationErrorText(slot.error, { tramoName: workflow.name })}</AlertDescription>
         </Alert>
       ) : null}
-      {board ? (
+      {data ? (
         <>
-          <ReadyToStartCard workflow={workflow} ready={board.ready} canStart={canStart} onStart={setStartProjectId} />
-          <UpcomingProjects upcoming={board.upcoming} />
+          <ReadyToStartCard workflow={workflow} ready={data.board.ready} canStart={canStart} onStart={openSheet} />
+          <UpcomingProjects upcoming={data.board.upcoming} />
         </>
       ) : null}
       <StartTramoSheet
@@ -139,7 +107,7 @@ export function TareasStartSlot({ workflow, contract }: TareasStartSlotProps) {
         workflow={workflow}
         viewerId={viewerId}
         isAdmin={isAdmin}
-        staff={staff}
+        staff={data?.candidates ?? []}
         onClose={closeSheet}
         onStarted={handleStarted}
       />

@@ -1,18 +1,18 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 
 import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
+const nav = vi.hoisted(() => ({ search: "vista=calendario" }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }),
   usePathname: () => "/tareas",
-  useSearchParams: () => new URLSearchParams("vista=calendario"),
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
-vi.mock("@/lib/actions/tasks-actions", () => ({ fetchCalendarAction: vi.fn(async () => []) }));
-vi.mock("@/lib/actions/calendar-actions", () => ({ syncGoogleCalendarAction: vi.fn(async () => undefined) }));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({ getTareasCalendarData: vi.fn(async () => []) }));
+vi.mock("@/lib/actions/calendar-actions", () => ({ syncGoogleCalendarAction: vi.fn(async () => null) }));
 vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => ({ member: { id: "s1", name: "Ana Ruiz" } }),
 }));
@@ -24,6 +24,9 @@ vi.mock("@/lib/google/use-google-connect-result", () => ({ useGoogleConnectResul
 vi.mock("@/components/calendario/CalendarFeedDialog", () => ({ default: () => null }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { calendarFetchRange } from "@/lib/calendar/calendar-agenda";
+import { qk, type TareasListFilters } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { CONTRAST_PAIRS } from "@/lib/ui/contrast";
 import { THEME_IDS } from "@/lib/ui/themes";
 import { TareasCalendario } from "./TareasCalendario";
@@ -86,6 +89,8 @@ const TASKS = [
   },
 ] as unknown as TaskListItem[];
 
+const NO_FILTERS: TareasListFilters = { tramo: null, proyecto: null, responsable: null, estado: null, q: null };
+
 function applyTheme(themeId: string, mode: (typeof MODES)[number]) {
   const root = document.documentElement;
   root.setAttribute("data-theme-id", themeId);
@@ -128,16 +133,16 @@ describe("TareasCalendario accessibility", () => {
           { cal: "dia", style: "visual" },
         ];
         for (const view of views) {
-          const { container, unmount } = render(
+          nav.search = `vista=calendario&cal=${view.cal}`;
+          // The range's rows are already cached, as after the page prefetch.
+          const client = createTestQueryClient();
+          const range = calendarFetchRange(view.cal, today);
+          client.setQueryData(qk.tareas.calendar(NO_FILTERS, range.from, range.to), TASKS);
+          const { container, unmount } = renderWithQueryClient(
             <StyleProvider style={view.style} scope="staff">
-              <TareasCalendario
-                cal={view.cal}
-                tasks={TASKS}
-                tramos={TRAMOS}
-                today={today}
-                initialRange={{ from: "2026-09-01", to: "2027-01-31" }}
-              />
-            </StyleProvider>
+              <TareasCalendario tramos={TRAMOS} today={today} />
+            </StyleProvider>,
+            { client }
           );
           expect(await seriousViolations(container), `${view.cal} ${view.style}`).toEqual([]);
           unmount();

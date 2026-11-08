@@ -34,7 +34,7 @@ const DEFAULT_DRAFT: LoginDraft = {
 /**
  * Email + password sign-in state shared by the legacy and the redesigned login
  * forms: one submit path to `loginAction`, the same error copy and the same
- * redirect (`/change-password` when the password must change, else `/dashboard`).
+ * redirect (`/change-password` when the password must change, else `/inicio`).
  */
 export function useCredentialsLogin() {
   const router = useRouter();
@@ -76,8 +76,8 @@ export function useCredentialsLogin() {
         return;
       }
 
-      router.replace(result.mustChangePassword ? "/change-password" : "/dashboard");
-      router.refresh();
+      router.replace(result.mustChangePassword ? "/change-password" : "/inicio");
+      router.refresh(); // data-patterns: auth
     });
   };
 

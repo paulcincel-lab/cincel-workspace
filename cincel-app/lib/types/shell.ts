@@ -6,7 +6,7 @@ import type { BandejaBadgeData } from "@/lib/shell/sidebar-slots/bandeja-badge-v
 
 /**
  * `qk.shell.badges()` data: the sidebar counters. Frozen in 1b; Phase 2 builds
- * `getShellBadgesAction`, the GET route and the poll.
+ * the loader (`lib/shell/badges.ts`), the GET route and the poll.
  */
 export type ShellBadges = { tareasOpen: number; bandeja: BandejaBadgeData };
 

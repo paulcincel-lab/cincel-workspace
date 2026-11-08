@@ -120,12 +120,7 @@ import {
 } from "./positions-actions";
 import * as projectsActionsModule from "./projects-actions";
 import * as staffActionsModule from "./staff-actions";
-import {
-  fetchTramoBoardAction,
-  previewStartTramoAction,
-  startTramoAction,
-  undoStartTramoAction,
-} from "./tramo-start-actions";
+import * as tramoStartActionsModule from "./tramo-start-actions";
 import {
   createWorkflowPhaseAction,
   fetchTramosNavAction,
@@ -143,6 +138,8 @@ const {
   reorderProjectSpacesAction,
 } = unwrapActions(projectsActionsModule);
 const { setStaffPositionsAction } = unwrapActions(staffActionsModule);
+const { fetchTramoBoardAction, previewStartTramoAction, startTramoAction, undoStartTramoAction } =
+  unwrapActions(tramoStartActionsModule);
 
 const W = "11111111-1111-4111-8111-111111111111";
 const P = "22222222-2222-4222-8222-222222222222";
@@ -182,13 +179,14 @@ describe("workflows-actions (§7.1)", () => {
     await expect(fetchTramosNavAction()).resolves.toHaveLength(1);
   });
 
-  it("creates a fase with a trimmed name and revalidates tramos, puestos and the layout", async () => {
+  it("creates a fase with a trimmed name and revalidates tramos and puestos, not the Actividades layout stub", async () => {
     phasesRepo.createPhase.mockResolvedValue({ id: F1 });
     await createWorkflowPhaseAction(W, { name: "  Cobro " });
     expect(phasesRepo.createPhase).toHaveBeenCalledWith(W, { name: "Cobro" }, "actor-1");
     expect(revalidatePath).toHaveBeenCalledWith("/configuracion/tramos");
     expect(revalidatePath).toHaveBeenCalledWith("/configuracion/puestos");
-    expect(revalidatePath).toHaveBeenCalledWith("/actividades", "layout");
+    // Tareas reads `qk.tareas.*` (Phase 4): the Actividades layout stub is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith("/actividades", "layout");
   });
 
   it("rejects blank, long and malformed fase input", async () => {
@@ -217,11 +215,12 @@ describe("workflows-actions (§7.1)", () => {
     expect(workflowsRepo.setWorkflowAutoStart).not.toHaveBeenCalled();
   });
 
-  it("stores the auto-start switch and revalidates /proyectos", async () => {
+  it("stores the auto-start switch and no longer revalidates /proyectos", async () => {
     workflowsRepo.setWorkflowAutoStart.mockResolvedValue({ id: W, autoStart: "on_ready" });
     await setWorkflowAutoStartAction(W, true);
     expect(workflowsRepo.setWorkflowAutoStart).toHaveBeenCalledWith(W, true, "actor-1");
-    expect(revalidatePath).toHaveBeenCalledWith("/proyectos");
+    // `/proyectos` reads `qk.proyectos.list()` (5a, #959).
+    expect(revalidatePath).not.toHaveBeenCalledWith("/proyectos");
     await expect(setWorkflowAutoStartAction(W, "yes" as unknown as boolean)).rejects.toThrow("INVALID");
   });
 });
@@ -335,7 +334,8 @@ describe("espacios actions (§7.3)", () => {
     await createProjectSpaceAction(P, " Cocina ");
     expect(spacesRepo.createSpace).toHaveBeenCalledWith(P, "Cocina");
     await renameProjectSpaceAction(S1, "Baño");
-    expect(revalidatePath).toHaveBeenCalledWith(`/proyectos/${P}/ficha`);
+    // The ficha reads its own query (5b, #960): it is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith(`/proyectos/${P}/ficha`);
     await deleteProjectSpaceAction(S1);
     expect(spacesRepo.deleteSpace).toHaveBeenCalledWith(S1, "actor-1");
   });
@@ -400,6 +400,26 @@ describe("tramo-start-actions (§7.4)", () => {
     await expect(previewStartTramoAction(P, W)).rejects.toThrow("FORBIDDEN");
   });
 
+  it("the preview needs canViewProjects and writes nothing", async () => {
+    caps.canViewProjects = false;
+    await expect(previewStartTramoAction(P, W)).rejects.toThrow("FORBIDDEN");
+    expect(flow.previewStartTramo).not.toHaveBeenCalled();
+    caps.canViewProjects = true;
+    await previewStartTramoAction(P, W);
+    expect(flow.previewStartTramo).toHaveBeenCalledWith(expect.anything(), P, W);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("start and undo return an ActionResult", async () => {
+    await expect(tramoStartActionsModule.startTramoAction(input)).resolves.toEqual({
+      ok: true,
+      data: { batchId: B, createdCount: 2 },
+    });
+    caps.canCreateActivity = false;
+    await expect(tramoStartActionsModule.startTramoAction(input)).resolves.toEqual({ ok: false, error: "FORBIDDEN" });
+    await expect(tramoStartActionsModule.undoStartTramoAction(B)).resolves.toEqual({ ok: false, error: "FORBIDDEN" });
+  });
+
   it("passes the viewer scope to the board", async () => {
     caps.admin = false;
     await fetchTramoBoardAction(W);
@@ -449,9 +469,13 @@ describe("tramo-start-actions (§7.4)", () => {
       trigger: "manual",
       autoStart: true,
     });
-    expect(revalidatePath).toHaveBeenCalledWith("/actividades", "layout");
-    expect(revalidatePath).toHaveBeenCalledWith(`/proyectos/${P}/ficha`);
-    expect(revalidatePath).toHaveBeenCalledWith("/mis-tareas");
+    // The ficha reads its own query (5b, #960): it is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith(`/proyectos/${P}/ficha`);
+    // Tareas is invalidated on the client (Query Migration 4d): no Tareas route is revalidated.
+    for (const path of ["/tareas", "/tablero", "/calendario", "/mis-tareas", "/actividades"]) {
+      expect(revalidatePath).not.toHaveBeenCalledWith(path);
+      expect(revalidatePath).not.toHaveBeenCalledWith(path, "layout");
+    }
   });
 
   it("undoes a batch in a transaction", async () => {

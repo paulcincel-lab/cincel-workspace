@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { focusManager } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient, type RenderWithQueryClientResult } from "@/lib/query/test-utils";
 import type { TodayStatus } from "@/lib/types/redesign";
 
 const actions = vi.hoisted(() => ({
@@ -38,7 +42,7 @@ const sonner = vi.hoisted(() => ({
 vi.mock("sonner", () => sonner);
 
 import { formatClockTime, TIME_CLOCK_RESYNC_MS, TimeClock } from "./TimeClock";
-import { loadTimeClock } from "@/lib/shell/sidebar-slots/time-clock";
+import { CLOCK_INVALIDATIONS } from "./use-clock-mutation";
 
 const NOW = new Date("2026-11-07T17:00:00.000Z"); // 11:00 in Mexico City
 
@@ -56,7 +60,15 @@ function status(patch: Partial<TodayStatus> = {}): TodayStatus {
   };
 }
 
-const session = { staffId: "s-1", name: "Ana", role: "Diseño", isAdmin: false, photoUrl: null };
+/**
+ * Renders under a client whose `me.today` holds `today`, as the `(staff)`
+ * layout hydrates it. `age` (ms) backdates the entry so a focus refetches.
+ */
+function renderClock(ui: ReactElement, today: TodayStatus, age = 0): RenderWithQueryClientResult {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.me.today(), today, { updatedAt: Date.now() - age });
+  return renderWithQueryClient(ui, { client });
+}
 
 beforeEach(() => {
   for (const fn of Object.values(actions)) fn.mockReset();
@@ -69,11 +81,12 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  focusManager.setFocused(undefined);
 });
 
 describe("TimeClock states", () => {
   it("off: Sin iniciar pill and only Registrar entrada", () => {
-    render(<TimeClock initial={status()} />);
+    renderClock(<TimeClock />, status());
     expect(screen.getByText("Jornada")).toBeTruthy();
     expect(screen.getByText("Sin iniciar")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Registrar entrada" })).toBeTruthy();
@@ -83,9 +96,7 @@ describe("TimeClock states", () => {
   });
 
   it("on: En curso pill with Pausa and Salida, and the entry sub-line", () => {
-    render(
-      <TimeClock initial={status({ state: "on", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 600 })} />,
-    );
+    renderClock(<TimeClock />, status({ state: "on", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 600 }));
     expect(screen.getByText("En curso")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Pausa" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Salida" })).toBeTruthy();
@@ -94,7 +105,7 @@ describe("TimeClock states", () => {
   });
 
   it("pausa: En pausa pill with Reanudar and Salida", () => {
-    render(<TimeClock initial={status({ state: "pausa", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 600 })} />);
+    renderClock(<TimeClock />, status({ state: "pausa", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 600 }));
     expect(screen.getByText("En pausa")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reanudar" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Salida" })).toBeTruthy();
@@ -102,20 +113,20 @@ describe("TimeClock states", () => {
   });
 
   it("done: Cerrada pill and Registrar entrada again", () => {
-    render(<TimeClock initial={status({ state: "done", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 28800 })} />);
+    renderClock(<TimeClock />, status({ state: "done", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 28800 }));
     expect(screen.getByText("Cerrada")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Registrar entrada" })).toBeTruthy();
     expect(screen.getByRole("timer").textContent).toBe("08:00:00");
   });
 
   it("renders nothing when time tracking is disabled or exempt", () => {
-    const { container } = render(<TimeClock initial={status({ enabled: false })} />);
+    const { container } = renderClock(<TimeClock />, status({ enabled: false }));
     expect(container.innerHTML).toBe("");
   });
 
   it("renders nothing while a clock action is still a stub", () => {
     flags.IMPLEMENTED.pauseWorkAction = false;
-    const { container } = render(<TimeClock initial={status()} />);
+    const { container } = renderClock(<TimeClock />, status());
     expect(container.innerHTML).toBe("");
   });
 });
@@ -124,19 +135,19 @@ describe("TimeClock footnote", () => {
   it('shows "Opcional hasta el {fecha}" before requiredFrom', () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
-    render(<TimeClock initial={status({ requiredFrom: "2026-12-01" })} />);
+    renderClock(<TimeClock />, status({ requiredFrom: "2026-12-01" }));
     expect(screen.getByText("Opcional hasta el 1 dic 2026")).toBeTruthy();
   });
 
   it("shows nothing from requiredFrom on", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
-    render(<TimeClock initial={status({ requiredFrom: "2026-11-07" })} />);
+    renderClock(<TimeClock />, status({ requiredFrom: "2026-11-07" }));
     expect(screen.queryByText(/Opcional hasta/)).toBeNull();
   });
 
   it("shows nothing when requiredFrom is not set", () => {
-    render(<TimeClock initial={status()} />);
+    renderClock(<TimeClock />, status());
     expect(screen.queryByText(/Opcional hasta/)).toBeNull();
   });
 });
@@ -145,10 +156,9 @@ describe("TimeClock ticking", () => {
   it("ticks every second while on, from workedSeconds", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    render(
-      <TimeClock
-        initial={status({ state: "on", startedAt: new Date(NOW.getTime() - 3600_000).toISOString(), workedSeconds: 3600 })}
-      />,
+    renderClock(
+      <TimeClock />,
+      status({ state: "on", startedAt: new Date(NOW.getTime() - 3600_000).toISOString(), workedSeconds: 3600 }),
     );
     expect(screen.getByRole("timer").textContent).toBe("01:00:00");
     act(() => {
@@ -160,9 +170,7 @@ describe("TimeClock ticking", () => {
   it("counts from startedAt when it is later than the sync", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    render(
-      <TimeClock initial={status({ state: "on", startedAt: new Date(NOW.getTime() + 2000).toISOString(), workedSeconds: 0 })} />,
-    );
+    renderClock(<TimeClock />, status({ state: "on", startedAt: new Date(NOW.getTime() + 2000).toISOString(), workedSeconds: 0 }));
     act(() => {
       vi.advanceTimersByTime(5000);
     });
@@ -172,31 +180,51 @@ describe("TimeClock ticking", () => {
   it("does not tick while paused", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    render(<TimeClock initial={status({ state: "pausa", workedSeconds: 125 })} />);
+    renderClock(<TimeClock />, status({ state: "pausa", workedSeconds: 125 }));
     act(() => {
       vi.advanceTimersByTime(10_000);
     });
     expect(screen.getByRole("timer").textContent).toBe("00:02:05");
   });
 
-  it("re-syncs every 5 minutes", async () => {
+  it("re-reads me.today every 5 minutes through the query (no timer of its own)", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     actions.fetchMyTodayAction.mockResolvedValue(status({ state: "pausa", workedSeconds: 900 }));
-    render(<TimeClock initial={status({ state: "on", workedSeconds: 0 })} />);
+    renderClock(<TimeClock />, status({ state: "on", workedSeconds: 0 }));
     await act(async () => {
-      vi.advanceTimersByTime(TIME_CLOCK_RESYNC_MS);
+      await vi.advanceTimersByTimeAsync(TIME_CLOCK_RESYNC_MS);
     });
     expect(actions.fetchMyTodayAction).toHaveBeenCalledTimes(1);
     expect(screen.getByText("En pausa")).toBeTruthy();
   });
 
-  it("re-syncs on window focus", async () => {
+  it("refetches a stale day on window focus", async () => {
     actions.fetchMyTodayAction.mockResolvedValue(status({ state: "done", workedSeconds: 28800 }));
-    render(<TimeClock initial={status()} />);
-    fireEvent(window, new Event("focus"));
+    renderClock(<TimeClock />, status(), 2 * 60_000);
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
     await waitFor(() => expect(screen.getByText("Cerrada")).toBeTruthy());
     expect(actions.fetchMyTodayAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refetch a fresh day on focus", async () => {
+    renderClock(<TimeClock />, status());
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    await act(async () => {});
+    expect(actions.fetchMyTodayAction).not.toHaveBeenCalled();
+  });
+
+  it("listens to no window focus event of its own", () => {
+    const add = vi.spyOn(window, "addEventListener");
+    renderClock(<TimeClock />, status());
+    expect(add.mock.calls.map(([type]) => type)).not.toContain("focus");
+    add.mockRestore();
   });
 
   it("formats HH:MM:SS", () => {
@@ -210,9 +238,10 @@ describe("TimeClock actions", () => {
     actions.clockInAction.mockResolvedValue(
       status({ state: "on", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 0 }),
     );
-    render(<TimeClock initial={status()} />);
+    renderClock(<TimeClock />, status());
     fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
-    expect(actions.clockInAction).toHaveBeenCalledWith({ source: "sidebar" });
+    // The mutation calls the action on the next tick.
+    await waitFor(() => expect(actions.clockInAction).toHaveBeenCalledWith({ source: "sidebar" }));
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Entrada registrada a las 9:02"));
     expect(sonner.toast.success).toHaveBeenCalledWith("Entrada registrada 9:02");
     expect(screen.getByText("En curso")).toBeTruthy();
@@ -222,7 +251,7 @@ describe("TimeClock actions", () => {
     actions.pauseWorkAction.mockResolvedValue(status({ state: "pausa", workedSeconds: 60 }));
     actions.resumeWorkAction.mockResolvedValue(status({ state: "on", workedSeconds: 60 }));
     actions.clockOutAction.mockResolvedValue(status({ state: "done", workedSeconds: 70 }));
-    render(<TimeClock initial={status({ state: "on", workedSeconds: 50 })} />);
+    renderClock(<TimeClock />, status({ state: "on", workedSeconds: 50 }));
 
     fireEvent.click(screen.getByRole("button", { name: "Pausa" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Reanudar" })).toBeTruthy());
@@ -239,7 +268,7 @@ describe("TimeClock actions", () => {
     let resolveFetch: (value: TodayStatus) => void = () => {};
     actions.fetchMyTodayAction.mockReturnValue(new Promise<TodayStatus>((r) => (resolveFetch = r)));
     actions.pauseWorkAction.mockRejectedValue(new Error("NOT_ON"));
-    render(<TimeClock initial={status({ state: "on", workedSeconds: 100 })} />);
+    renderClock(<TimeClock />, status({ state: "on", workedSeconds: 100 }));
 
     fireEvent.click(screen.getByRole("button", { name: "Pausa" }));
     await waitFor(() => expect(sonner.toast.error).toHaveBeenCalledWith("Tu jornada no está en curso."));
@@ -248,7 +277,8 @@ describe("TimeClock actions", () => {
     expect(actions.fetchMyTodayAction).toHaveBeenCalledTimes(1);
 
     await act(async () => resolveFetch(status({ state: "done", workedSeconds: 200 })));
-    expect(screen.getByText("Cerrada")).toBeTruthy();
+    // Query observers are notified on the next tick.
+    expect(await screen.findByText("Cerrada")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Registrar entrada" })).toBeTruthy();
   });
 
@@ -257,7 +287,7 @@ describe("TimeClock actions", () => {
     actions.fetchMyTodayAction.mockResolvedValue(
       status({ state: "on", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 30 }),
     );
-    render(<TimeClock initial={status()} />);
+    renderClock(<TimeClock />, status());
     fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
     await waitFor(() => expect(screen.getByText("En curso")).toBeTruthy());
     expect(sonner.toast.error).not.toHaveBeenCalled();
@@ -268,7 +298,7 @@ describe("TimeClock actions", () => {
   it("hides itself when a re-sync after DISABLED reports disabled", async () => {
     actions.clockInAction.mockRejectedValue(new Error("DISABLED"));
     actions.fetchMyTodayAction.mockResolvedValue(status({ enabled: false }));
-    const { container } = render(<TimeClock initial={status()} />);
+    const { container } = renderClock(<TimeClock />, status());
     fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
     await waitFor(() => expect(container.innerHTML).toBe(""));
     expect(sonner.toast.error).toHaveBeenCalledWith("Esta función está desactivada.");
@@ -277,7 +307,7 @@ describe("TimeClock actions", () => {
 
 describe("TimeClock compact", () => {
   it("opens a popover with the same controls", async () => {
-    render(<TimeClock initial={status({ state: "on", workedSeconds: 0 })} variant="compact" />);
+    renderClock(<TimeClock variant="compact" />, status({ state: "on", workedSeconds: 0 }));
     expect(screen.queryByRole("button", { name: "Pausa" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Jornada: En curso" }));
     expect(await screen.findByRole("button", { name: "Pausa" })).toBeTruthy();
@@ -286,21 +316,47 @@ describe("TimeClock compact", () => {
   });
 });
 
-describe("time-clock sidebar slot loader", () => {
-  it("returns the status when enabled", async () => {
-    const today = status({ state: "on" });
-    actions.fetchMyTodayAction.mockResolvedValue(today);
-    await expect(loadTimeClock(session)).resolves.toEqual(today);
+describe("TimeClock instances share me.today", () => {
+  it("the sidebar card and the mobile pill read one query: one request on focus", async () => {
+    actions.fetchMyTodayAction.mockResolvedValue(status({ state: "pausa", workedSeconds: 900 }));
+    renderClock(
+      <>
+        <TimeClock />
+        <TimeClock variant="compact" />
+      </>,
+      status({ state: "on", workedSeconds: 0 }),
+      2 * 60_000,
+    );
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    await waitFor(() => expect(screen.getByText("En pausa")).toBeTruthy());
+    expect(actions.fetchMyTodayAction).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Jornada: En pausa" })).toBeTruthy();
   });
 
-  it("returns null when disabled or exempt", async () => {
-    actions.fetchMyTodayAction.mockResolvedValue(status({ enabled: false }));
-    await expect(loadTimeClock(session)).resolves.toBeNull();
-  });
-
-  it("returns null without calling the action while the flags are off", async () => {
-    flags.IMPLEMENTED.clockInAction = false;
-    await expect(loadTimeClock(session)).resolves.toBeNull();
+  it("a clock action in one instance updates the other through setQueryData, with no refetch", async () => {
+    actions.pauseWorkAction.mockResolvedValue(status({ state: "pausa", workedSeconds: 60 }));
+    const { client } = renderClock(
+      <>
+        <TimeClock />
+        <TimeClock variant="compact" />
+      </>,
+      status({ state: "on", workedSeconds: 50 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Pausa" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Jornada: En pausa" })).toBeTruthy());
+    expect(client.getQueryData<TodayStatus>(qk.me.today())?.state).toBe("pausa");
     expect(actions.fetchMyTodayAction).not.toHaveBeenCalled();
+  });
+
+  it("invalidates the hours views after a clock write", async () => {
+    actions.clockInAction.mockResolvedValue(status({ state: "on", startedAt: "2026-11-07T15:02:00.000Z" }));
+    const { client } = renderClock(<TimeClock />, status());
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(CLOCK_INVALIDATIONS.length));
+    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([...CLOCK_INVALIDATIONS]);
   });
 });

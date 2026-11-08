@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 
 const state = vi.hoisted(() => ({
   flags: { searchWorkspaceAction: false },
@@ -12,14 +12,31 @@ vi.mock("@/lib/actions/search-actions.flags", () => ({
   },
 }));
 
-vi.mock("@/components/shell/CommandPalette", () => ({
-  CommandPalette: ({ open }: { open: boolean }) => (open ? <div data-testid="command-palette">palette</div> : null),
+// The real palette (it owns ⌘K / Ctrl+K and reads `useShellUi.searchOpen`); its server actions are stubbed.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
+vi.mock("@/lib/actions/search-actions", () => ({ searchWorkspaceAction: vi.fn(async () => []) }));
+vi.mock("@/lib/actions/time-tracking-actions", () => ({
+  fetchMyTodayAction: vi.fn(),
+  clockInAction: vi.fn(),
+  pauseWorkAction: vi.fn(),
+  resumeWorkAction: vi.fn(),
+  clockOutAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({
+  IMPLEMENTED: { clockInAction: false, fetchMyTodayAction: false },
+}));
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 import NotFound from "./not-found";
 
 function renderNotFound() {
-  return render(<NotFound />);
+  return renderWithQueryClient(<NotFound />);
+}
+
+/** The open palette's dialog ("Buscar" is its sr-only title). */
+function palette() {
+  return screen.queryByRole("dialog", { name: "Buscar" });
 }
 
 beforeEach(() => {
@@ -48,16 +65,17 @@ describe("app/not-found", () => {
   it("opens the palette from 'Buscar' when its flag is on", () => {
     state.flags = { searchWorkspaceAction: true };
     renderNotFound();
-    expect(screen.queryByTestId("command-palette")).toBeNull();
+    expect(palette()).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Buscar/ }));
-    expect(screen.getByTestId("command-palette")).toBeTruthy();
+    expect(palette()).toBeTruthy();
   });
 
   it("opens the palette with Ctrl+K when its flag is on", () => {
     state.flags = { searchWorkspaceAction: true };
     renderNotFound();
+    expect(palette()).toBeNull();
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    expect(screen.getByTestId("command-palette")).toBeTruthy();
+    expect(palette()).toBeTruthy();
   });
 
   it("keeps the illustration out of the accessibility tree", () => {

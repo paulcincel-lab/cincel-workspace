@@ -1,6 +1,7 @@
 "use client";
 
-import { useOptimistic, useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
+import { useSuspenseQuery } from "@tanstack/react-query";
 
 import {
   AlertDialog,
@@ -17,9 +18,11 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { Input } from "@/components/ui/shadcn/input";
 import { Textarea } from "@/components/ui/shadcn/textarea";
-import { addImprevistoAction, deleteImprevistoAction } from "@/lib/actions/schedule-actions";
 import { isoDate } from "@/lib/cronograma/week";
+import { proyectoCronogramaOptions } from "@/lib/query/options/proyectos";
 import type { Imprevisto } from "@/lib/types/schedule";
+
+import { useImprevistoMutations } from "./schedule-mutations";
 
 function fmtLarga(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -28,57 +31,49 @@ function fmtLarga(iso: string): string {
 }
 
 interface ImprevistosPanelProps {
-  scheduleId: string;
-  imprevistos: Imprevisto[];
+  projectId: string;
   readOnly?: boolean;
 }
 
-type OptimisticAction = { type: "add"; item: Imprevisto } | { type: "remove"; id: string };
+const NO_IMPREVISTOS: Imprevisto[] = [];
+/** An added row not saved yet: it can't be deleted until the server answers. */
+const TEMP_ID_PREFIX = "optimistic-";
 
-export function ImprevistosPanel({ scheduleId, imprevistos, readOnly = false }: ImprevistosPanelProps) {
-  const [items, setItems] = useState(imprevistos);
-  const [optimisticItems, applyOptimistic] = useOptimistic(items, (state, action: OptimisticAction) => {
-    if (action.type === "add") return [action.item, ...state];
-    return state.filter((i) => i.id !== action.id);
-  });
-  const [isPending, startTransition] = useTransition();
+/**
+ * "Trabajos realizados imprevistos": the list is the cached schedule's
+ * (`qk.proyectos.cronograma(projectId)`); add and delete patch it
+ * optimistically, one POST each.
+ */
+export function ImprevistosPanel({ projectId, readOnly = false }: ImprevistosPanelProps) {
+  const { data: view } = useSuspenseQuery(proyectoCronogramaOptions(projectId));
   const [error, setError] = useState("");
   const [fecha, setFecha] = useState(isoDate(new Date()));
   const [texto, setTexto] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+  const { add, remove } = useImprevistoMutations(projectId, setError);
 
-  const sorted = [...optimisticItems].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const scheduleId = view?.data.schedule.id ?? null;
+  const items = view?.data.imprevistos ?? NO_IMPREVISTOS;
+  const sorted = [...items].sort((a, b) => b.fecha.localeCompare(a.fecha));
 
   function handleAdd() {
     const trimmed = texto.trim();
-    if (!trimmed || !fecha) return;
+    if (!trimmed || !fecha || !scheduleId) return;
     setError("");
-    const tempId = `optimistic-${Date.now()}`;
-
-    startTransition(async () => {
-      applyOptimistic({ type: "add", item: { id: tempId, fecha, texto: trimmed } });
-      const result = await addImprevistoAction(scheduleId, { fecha, texto: trimmed });
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setItems((current) => [result.data, ...current]);
-      setTexto("");
-      formRef.current?.reset();
-    });
+    add.mutate(
+      { scheduleId, fecha, texto: trimmed, tempId: `${TEMP_ID_PREFIX}${Date.now()}` },
+      {
+        onSuccess: () => {
+          setTexto("");
+          formRef.current?.reset();
+        },
+      },
+    );
   }
 
-  function handleDelete(id: string) {
+  function handleDelete(item: Imprevisto) {
     setError("");
-    startTransition(async () => {
-      applyOptimistic({ type: "remove", id });
-      const result = await deleteImprevistoAction(id);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setItems((current) => current.filter((i) => i.id !== id));
-    });
+    remove.mutate({ item });
   }
 
   return (
@@ -103,7 +98,7 @@ export function ImprevistosPanel({ scheduleId, imprevistos, readOnly = false }: 
                   <p className="text-sm leading-snug text-foreground">{item.texto}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{fmtLarga(item.fecha)}</p>
                 </div>
-                {readOnly ? null : (
+                {readOnly || item.id.startsWith(TEMP_ID_PREFIX) ? null : (
                   <AlertDialog>
                     <AlertDialogTrigger
                       render={
@@ -124,7 +119,7 @@ export function ImprevistosPanel({ scheduleId, imprevistos, readOnly = false }: 
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleDelete(item.id)}>Eliminar</AlertDialogAction>
+                        <AlertDialogAction onClick={() => handleDelete(item)}>Eliminar</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
@@ -151,7 +146,7 @@ export function ImprevistosPanel({ scheduleId, imprevistos, readOnly = false }: 
             />
             <div className="flex items-center gap-2">
               <Input type="date" aria-label="Fecha del imprevisto" value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-auto" />
-              <Button type="submit" size="sm" disabled={isPending || !texto.trim()}>
+              <Button type="submit" size="sm" disabled={add.isPending || !texto.trim()}>
                 Agregar
               </Button>
             </div>

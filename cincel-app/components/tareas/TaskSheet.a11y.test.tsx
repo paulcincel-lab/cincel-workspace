@@ -1,12 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
-// The sheet loads its "Datos de monday" through a query, so it renders under a QueryClientProvider.
-import { renderWithQueryClient as render } from "@/lib/query/test-utils";
+// The sheet reads the task, its catalogs and "Datos de monday" through queries.
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
   usePathname: () => "/tareas",
   useSearchParams: () => new URLSearchParams("vista=tablero&tarea=t-1"),
 }));
@@ -16,45 +15,42 @@ vi.mock("@/components/patterns/FormSheet", async () => {
   return { FormSheet: FormSheetDouble };
 });
 
-vi.mock("@/lib/actions/tasks-actions", async () => {
-  const { makeTask } = await import("./task-sheet.fixtures");
-  return {
-    fetchTaskAction: vi.fn(async (id: string) => (id === "t-admin" ? null : makeTask())),
-    updateTaskAction: vi.fn(),
-    setTaskStatusAction: vi.fn(),
-    setTaskCustomStatusAction: vi.fn(),
-    assignTaskAction: vi.fn(),
-    addTaskCommentAction: vi.fn(),
-    addTaskAttachmentAction: vi.fn(),
-    addChecklistItemAction: vi.fn(),
-    updateChecklistItemAction: vi.fn(),
-    removeChecklistItemAction: vi.fn(),
-    reorderChecklistAction: vi.fn(),
-    createSubtaskAction: vi.fn(),
-    listSubtasksAction: vi.fn(async () => []),
-    listTaskDependenciesAction: vi.fn(async () => ({ dependsOn: [], blocks: [] })),
-    addTaskDependencyAction: vi.fn(),
-    removeTaskDependencyAction: vi.fn(),
-    fetchTasksAction: vi.fn(async () => []),
-  };
-});
-vi.mock("@/lib/actions/task-statuses-actions", () => ({ fetchTaskStatusesAction: vi.fn(async () => []) }));
-vi.mock("@/lib/actions/workflows-actions", async () => {
-  const { makeWorkflow } = await import("./task-sheet.fixtures");
-  return { fetchWorkflowsAction: vi.fn(async () => [makeWorkflow()]) };
-});
-vi.mock("@/lib/actions/staff-actions", async () => {
-  const { STAFF } = await import("./task-sheet.fixtures");
-  return { fetchAssignableStaffAction: vi.fn(async () => STAFF) };
-});
-vi.mock("@/lib/actions/projects-actions", async () => {
-  const { SPACES } = await import("./task-sheet.fixtures");
-  return { fetchProjectSpacesAction: vi.fn(async () => SPACES) };
-});
-vi.mock("@/lib/actions/import-actions", () => ({ getImportDataAction: vi.fn().mockResolvedValue(null) }));
-vi.mock("@/lib/auth/auth-service", () => ({
-  getCurrentAuthenticatedUser: () => ({ member: { id: "s-1", name: "Ana López" } }),
+// The sheet reads the seeded query cache; `t-admin` loads as null (not visible to the viewer).
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
+  getTaskSheetData: vi.fn(async () => null),
+  searchProjectTasksAction: vi.fn(async () => []),
+  getTareasCalendarData: vi.fn(),
+  getTareasStartSlotData: vi.fn(),
 }));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogProjectOptions: vi.fn(async () => []),
+  fetchCatalogWorkflows: vi.fn(async () => []),
+  fetchCatalogTaskStatuses: vi.fn(async () => []),
+  fetchCatalogStaff: vi.fn(async () => []),
+  fetchCatalogAssignableStaff: vi.fn(async () => []),
+  fetchCatalogProjectSpaces: vi.fn(async () => []),
+  fetchCatalogContacts: vi.fn(async () => []),
+}));
+vi.mock("@/lib/actions/tasks-actions", () => ({
+  updateTaskAction: vi.fn(),
+  setTaskStatusAction: vi.fn(),
+  setTaskCustomStatusAction: vi.fn(),
+  assignTaskAction: vi.fn(),
+  addTaskCommentAction: vi.fn(),
+  addTaskAttachmentAction: vi.fn(),
+  addChecklistItemAction: vi.fn(),
+  updateChecklistItemAction: vi.fn(),
+  removeChecklistItemAction: vi.fn(),
+  reorderChecklistAction: vi.fn(),
+  createSubtaskAction: vi.fn(),
+  listSubtasksAction: vi.fn(async () => []),
+  listTaskDependenciesAction: vi.fn(async () => ({ dependsOn: [], blocks: [] })),
+  addTaskDependencyAction: vi.fn(),
+  removeTaskDependencyAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowAction: vi.fn(async () => null) }));
+vi.mock("@/lib/actions/tramo-start-actions", () => ({ previewStartTramoAction: vi.fn() }));
+vi.mock("@/lib/actions/import-actions", () => ({ getImportDataAction: vi.fn().mockResolvedValue(null) }));
 vi.mock("@/lib/auth/permissions", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/permissions")>();
   return {
@@ -71,16 +67,29 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => {
   };
 });
 
+import { qk } from "@/lib/query/keys";
+import { seedTaskSheet } from "@/lib/query/options/tareas";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import type { ThemeId } from "@/lib/types/redesign";
 
 import { TaskSheet } from "./TaskSheet";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
+import { SPACES, makeSheetData } from "./task-sheet.fixtures";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 
-// The components read the signed-in user from the session store; seed it with the mocked user.
-beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
+// The components read the signed-in user from the session store.
+beforeEach(() => seedSessionUser({ member: { id: "s-1", name: "Ana López" } }));
+
+/** The sheet's one call already answered: the task, its catalogs (with espacios), no subtareas or dependencies. */
+function render(ui: React.ReactElement) {
+  const client = createTestQueryClient();
+  const data = makeSheetData(undefined, { spaces: SPACES });
+  seedTaskSheet(client, data);
+  client.setQueryData(qk.tasks.detail(data.task.id), data.task);
+  client.setQueryData(qk.tasks.subtasks(data.task.id), []);
+  client.setQueryData(qk.tasks.dependencies(data.task.id), { dependsOn: [], blocks: [] });
+  return renderWithQueryClient(ui, { client });
+}
 
 const MODES = ["light", "dark"] as const;
 type Mode = (typeof MODES)[number];
@@ -122,7 +131,9 @@ async function seriousViolations() {
     {
       include: [document.body],
       // Base UI's focus guards are aria-hidden on purpose: they only bounce Tab back into the trapped sheet.
-      exclude: [["[data-base-ui-focus-guard]"]],
+      // A focused Select mounts its closed list inside a `hidden` positioner; happy-dom has no UA
+      // `[hidden] { display: none }` rule, so axe would audit what the browser never shows.
+      exclude: [["[data-base-ui-focus-guard]"], ["[hidden]"]],
     },
     // Color contrast needs real layout/rendering, which happy-dom doesn't provide; the token pairs are checked below.
     { rules: { "color-contrast": { enabled: false } } },

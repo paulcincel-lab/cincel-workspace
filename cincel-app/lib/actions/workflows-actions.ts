@@ -1,8 +1,6 @@
 "use server";
 
 import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
-import { revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
-import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 import { z } from "zod";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -39,13 +37,11 @@ async function requireWorkflowsManager() {
   return user;
 }
 
-/** The tramos admin page (old and new route) and the Actividades layout (tabs, sidebar). */
+/** The tramos admin pages. */
 function revalidateTramos(options: { positions?: boolean; projects?: boolean } = {}) {
   revalidateAjustesScreen("tramos");
   revalidateAjustesScreen("workflows");
   if (options.positions) revalidateAjustesScreen("puestos");
-  if (options.projects) revalidateProyectosListScreen(["proyectos"]);
-  revalidateTareasScreen(["actividadesLayout"]);
 }
 
 /**
@@ -101,9 +97,8 @@ export async function deleteWorkflowAction(id: string): Promise<void> {
   revalidateAjustesScreen("workflows");
 }
 
-function revalidateTemplates(layout: boolean) {
+function revalidateTemplates() {
   revalidateAjustesScreen("tramos");
-  if (layout) revalidateTareasScreen(["actividadesLayout"]);
 }
 
 /** `phaseId` is required. Errors: FORBIDDEN, NOT_FOUND, EMPTY, INVALID, PHASE_MISMATCH, NAME_TAKEN. */
@@ -118,7 +113,7 @@ export async function createTemplateAction(
   const id = parseInput(UuidSchema, workflowId);
   const parsed = parseInput(WorkflowTaskTemplateInputSchema, input);
   const row = await workflowsRepository.createTemplate(id, parsed, user.member.id);
-  revalidateTemplates(true);
+  revalidateTemplates();
   return row;
 }
 
@@ -137,7 +132,7 @@ export async function updateTemplateAction(
   const templateId = parseInput(UuidSchema, id);
   const parsed = parseInput(WorkflowTaskTemplateInputSchema.partial(), patch);
   const row = await workflowsRepository.updateTemplate(templateId, parsed, user.member.id);
-  revalidateTemplates(true);
+  revalidateTemplates();
   return row;
 }
 
@@ -147,7 +142,7 @@ export async function deactivateTemplateAction(id: string): Promise<WorkflowTask
     throw new Error("FORBIDDEN: template deactivate");
   }
   const row = await workflowsRepository.deactivateTemplate(id, user.member.id);
-  revalidateTemplates(false);
+  revalidateTemplates();
   return row;
 }
 
@@ -157,7 +152,7 @@ export async function reorderTemplatesAction(workflowId: string, orderedIds: str
     throw new Error("FORBIDDEN: template reorder");
   }
   await workflowsRepository.reorderTemplates(workflowId, orderedIds);
-  revalidateTemplates(false);
+  revalidateTemplates();
 }
 
 // ── Tramos y fases (project flow BE §7.1) ───────────────────────────────────

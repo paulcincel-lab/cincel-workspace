@@ -136,7 +136,8 @@ describe("addProjectCommentAction", () => {
       "Cliente confirmó medidas",
       ACTOR,
     );
-    expect(revalidatePath).toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
+    // The ficha reads its own query (5b, #960): it is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
   });
 
   it("throws EMPTY on blank text", async () => {

@@ -1,17 +1,20 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
-import type { Staff, StartTramoPreview, StartTramoResult } from "@/lib/types/core";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import type { StartTramoPreview, StartTramoResult } from "@/lib/types/core";
+import type { StartSlotCandidate } from "@/lib/types/tareas-start-slot";
 
 const actions = vi.hoisted(() => ({
   previewStartTramoAction: vi.fn(),
   startTramoAction: vi.fn(),
   undoStartTramoAction: vi.fn(),
-  fetchTramoBoardAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/tramo-start-actions", () => actions);
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({ getTareasStartSlotData: vi.fn() }));
 
 import { candidatesText, sampleTasksText, StartTramoSheet } from "./StartTramoSheet";
 
@@ -23,29 +26,11 @@ function pressOption(option: HTMLElement) {
 
 const workflow = { id: "w-diseno", key: "diseno", name: "Diseño", sortOrder: 2 };
 
-function member(id: string, name: string, lastName: string | null = null): Staff & { suggested: boolean } {
-  return {
-    id,
-    kind: "empleado",
-    name,
-    lastName,
-    phone: null,
-    email: null,
-    role: null,
-    capacity: 0,
-    availability: null,
-    active: true,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-    googleManaged: false,
-    lastLoginAt: null,
-    accessRevokedAt: null,
-    accessRevokedReason: null,
-    suggested: false,
-  } as Staff & { suggested: boolean };
-}
-
-const staff = [member("s-ana", "Ana", "López"), member("s-luis", "Luis", "Pérez"), member("s-eva", "Eva", "Ruiz")];
+const staff: StartSlotCandidate[] = [
+  { id: "s-ana", name: "Ana López", suggested: true },
+  { id: "s-luis", name: "Luis Pérez", suggested: true },
+  { id: "s-eva", name: "Eva Ruiz", suggested: false },
+];
 
 function preview(overrides: Partial<StartTramoPreview> = {}): StartTramoPreview {
   return {
@@ -98,10 +83,12 @@ const result: StartTramoResult = {
   workflow,
 };
 
-function renderSheet(overrides: Partial<ComponentProps<typeof StartTramoSheet>> = {}) {
+type SheetProps = ComponentProps<typeof StartTramoSheet>;
+
+function renderSheet(overrides: Partial<SheetProps> = {}, client = createTestQueryClient()) {
   const onStarted = vi.fn();
   const onClose = vi.fn();
-  render(
+  const element = (props: Partial<SheetProps>) => (
     <StartTramoSheet
       open
       projectId="p-1"
@@ -111,10 +98,11 @@ function renderSheet(overrides: Partial<ComponentProps<typeof StartTramoSheet>> 
       staff={staff}
       onClose={onClose}
       onStarted={onStarted}
-      {...overrides}
-    />,
+      {...props}
+    />
   );
-  return { onStarted, onClose };
+  const view = renderWithQueryClient(element(overrides), { client });
+  return { onStarted, onClose, client, rerender: (props: Partial<SheetProps>) => view.rerender(element(props)) };
 }
 
 function createButton(): HTMLButtonElement {
@@ -335,5 +323,73 @@ describe("StartTramoSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Iniciar Diseño · Casa Roble")).toBeTruthy();
     expect(actions.previewStartTramoAction).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the error copy of a failed ActionResult inline and invalidates nothing", async () => {
+    actions.previewStartTramoAction.mockResolvedValue(preview());
+    actions.startTramoAction.mockResolvedValue({ ok: false, error: "NO_PHASES" });
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const { onStarted } = renderSheet({}, client);
+
+    await screen.findByText("Iniciar Diseño · Casa Roble");
+    fireEvent.click(createButton());
+    await waitFor(() => expect(actions.startTramoAction).toHaveBeenCalled());
+    await waitFor(() => expect(createButton().textContent).toBe("Crear 7 tareas"));
+    expect(onStarted).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe("StartTramoSheet queries", () => {
+  it("reads the preview only while the sheet is open", async () => {
+    actions.previewStartTramoAction.mockResolvedValue(preview());
+    const { rerender } = renderSheet({ open: false, projectId: null });
+    await Promise.resolve();
+    expect(actions.previewStartTramoAction).not.toHaveBeenCalled();
+
+    rerender({ open: false, projectId: "p-1" });
+    await Promise.resolve();
+    expect(actions.previewStartTramoAction).not.toHaveBeenCalled();
+
+    rerender({ open: true, projectId: "p-1" });
+    expect(await screen.findByText("Iniciar Diseño · Casa Roble")).toBeTruthy();
+    expect(actions.previewStartTramoAction).toHaveBeenCalledTimes(1);
+    expect(actions.previewStartTramoAction).toHaveBeenCalledWith("p-1", "w-diseno");
+  });
+
+  it("reads a fresh preview every time the sheet opens (staleTime 0) under qk.tareas.startPreview", async () => {
+    actions.previewStartTramoAction.mockResolvedValue(preview());
+    const { rerender, client } = renderSheet();
+    await screen.findByText("Iniciar Diseño · Casa Roble");
+    expect(client.getQueryData(qk.tareas.startPreview("p-1", "w-diseno"))).toEqual(preview());
+
+    rerender({ open: false });
+    rerender({ open: true });
+    await waitFor(() => expect(actions.previewStartTramoAction).toHaveBeenCalledTimes(2));
+  });
+
+  it("the start mutation invalidates the start slot, Tareas, the project, the options, Inicio and the badges", async () => {
+    actions.previewStartTramoAction.mockResolvedValue(preview());
+    actions.startTramoAction.mockResolvedValue({ ok: true, data: result });
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const { onStarted, onClose } = renderSheet({}, client);
+
+    await screen.findByText("Iniciar Diseño · Casa Roble");
+    fireEvent.click(createButton());
+    await waitFor(() => expect(onStarted).toHaveBeenCalledWith(result));
+    expect(onClose).toHaveBeenCalled();
+
+    const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+    expect(keys).toEqual([
+      qk.tareas.startSlot("w-diseno"),
+      qk.tareas.all,
+      qk.proyectos.list(),
+      qk.proyectos.detail("p-1"),
+      qk.catalog.projectOptions(),
+      qk.inicio(),
+      qk.shell.badges(),
+    ]);
   });
 });

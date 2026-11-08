@@ -147,12 +147,12 @@ describe("/change-password", () => {
       expect(router.replace).not.toHaveBeenCalled();
     });
 
-    it("submits both fields and redirects to /dashboard on success", async () => {
+    it("submits both fields and redirects to /inicio on success", async () => {
       completeFirstAccessAction.mockResolvedValue({ ok: true });
       await fillAndSubmit("Ensenada2026", "Ensenada2026");
       expect(completeFirstAccessAction).toHaveBeenCalledWith("Ensenada2026", "Ensenada2026");
       expect(screen.getByRole("status").textContent).toContain("Contraseña actualizada.");
-      expect(router.replace).toHaveBeenCalledWith("/dashboard");
+      expect(router.replace).toHaveBeenCalledWith("/inicio");
       expect(router.refresh).toHaveBeenCalled();
     });
   });

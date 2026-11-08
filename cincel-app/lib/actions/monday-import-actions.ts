@@ -47,8 +47,6 @@
  */
 import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
 import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
-import { revalidateProyectoFichaScreen, revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
-import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 import { z } from "zod";
 
 import { getSessionAccess } from "@/lib/auth/session";
@@ -436,9 +434,6 @@ export async function applyMondayRemapAction(
     checkProjectId(projectId);
     const remapInput = parse(RemapInputSchema, input, "input");
     const { updated } = await applyRemap(db, projectId, remapInput, admin.id);
-    revalidateProyectoFichaScreen(projectId, ["ficha"]);
-    revalidateTareasScreen(["actividadesLayout"]);
-    revalidateProyectosListScreen(["proyectos"]);
     revalidateInicioScreen();
     return { updated };
   });

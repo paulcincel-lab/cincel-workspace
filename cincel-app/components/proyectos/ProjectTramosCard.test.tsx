@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import type * as ReactTypes from "react";
 
 import type { ProjectDetail, ProjectTramo, WorkflowRef } from "@/lib/types/core";
@@ -50,7 +50,15 @@ vi.mock("@/components/ui/shadcn/select", async () => {
   return { Select, SelectTrigger: Empty, SelectValue: Empty, SelectContent: Empty, SelectItem: Empty };
 });
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+
 import { ProjectTramosCard, startTramoHref } from "./ProjectTramosCard";
+
+/** The query keys the client invalidated, in order. */
+function invalidatedKeys(spy: { mock: { calls: unknown[][] } }) {
+  return spy.mock.calls.map((call) => (call[0] as { queryKey: unknown }).queryKey);
+}
 
 const PRESALE: WorkflowRef = { id: "w1", key: "presale", name: "Presale", sortOrder: 1 };
 const DISENO: WorkflowRef = { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 };
@@ -80,7 +88,7 @@ describe("ProjectTramosCard", () => {
   afterEach(cleanup);
 
   it("lists the started tramos with their dates and marks the current one", () => {
-    render(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo={false} onChanged={vi.fn()} />);
+    renderWithQueryClient(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo={false} />);
 
     const list = screen.getByRole("list", { name: "Tramos iniciados" });
     expect(list.textContent).toContain("Presale");
@@ -93,9 +101,10 @@ describe("ProjectTramosCard", () => {
 
   it("changes the current tramo among the started ones", async () => {
     const updated = project({ currentWorkflowId: PRESALE.id, currentWorkflow: PRESALE });
-    actions.setProjectCurrentTramoAction.mockResolvedValue(updated);
-    const onChanged = vi.fn();
-    render(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo onChanged={onChanged} />);
+    actions.setProjectCurrentTramoAction.mockResolvedValue({ ok: true, data: updated });
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    renderWithQueryClient(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo />, { client });
 
     const select = screen.getByRole("combobox", { name: "Tramo actual" }) as HTMLSelectElement;
     expect(select.value).toBe(DISENO.id);
@@ -103,13 +112,17 @@ describe("ProjectTramosCard", () => {
 
     fireEvent.change(select, { target: { value: PRESALE.id } });
 
-    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(updated));
-    expect(actions.setProjectCurrentTramoAction).toHaveBeenCalledWith("p1", PRESALE.id);
+    // The mutation calls the action on the next tick.
+    await waitFor(() => expect(actions.setProjectCurrentTramoAction).toHaveBeenCalledWith("p1", PRESALE.id));
+    // No reload: the project, the list and Tareas are invalidated.
+    await waitFor(() =>
+      expect(invalidatedKeys(invalidate)).toEqual([qk.proyectos.detail("p1"), qk.proyectos.list(), qk.tareas.all]),
+    );
   });
 
   it("shows the action error as Spanish copy", async () => {
-    actions.setProjectCurrentTramoAction.mockRejectedValue(new Error("NOT_STARTED"));
-    render(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo onChanged={vi.fn()} />);
+    actions.setProjectCurrentTramoAction.mockResolvedValue({ ok: false, error: "NOT_STARTED" });
+    renderWithQueryClient(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo />);
 
     fireEvent.change(screen.getByRole("combobox", { name: "Tramo actual" }), { target: { value: PRESALE.id } });
 
@@ -117,7 +130,7 @@ describe("ProjectTramosCard", () => {
   });
 
   it("links each tramo not started yet to its Actividades page with ?project=", () => {
-    render(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo onChanged={vi.fn()} />);
+    renderWithQueryClient(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo />);
 
     const link = screen.getByRole("link", { name: "Iniciar Construcción" });
     expect(link.getAttribute("href")).toBe("/actividades/construccion?project=p1");
@@ -126,7 +139,7 @@ describe("ProjectTramosCard", () => {
   });
 
   it("hides the tramo controls without canChangeTramo", () => {
-    render(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo={false} onChanged={vi.fn()} />);
+    renderWithQueryClient(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo={false} />);
 
     expect(screen.queryByRole("combobox", { name: "Tramo actual" })).toBeNull();
     expect(screen.queryByRole("link", { name: /^Iniciar / })).toBeNull();
@@ -136,28 +149,28 @@ describe("ProjectTramosCard", () => {
     const noTramo = () => project({ currentWorkflowId: null, currentWorkflow: null, tramos: [], needsTramo: true });
 
     it("is shown to admins when the project has no current tramo", () => {
-      render(<ProjectTramosCard project={noTramo()} workflows={WORKFLOWS} canChangeTramo isAdmin onChanged={vi.fn()} />);
+      renderWithQueryClient(<ProjectTramosCard project={noTramo()} workflows={WORKFLOWS} canChangeTramo isAdmin />);
       expect(screen.getByRole("combobox", { name: "Asignar tramo" })).toBeTruthy();
     });
 
     it("is shown to admins when the project has tasks without a tramo", () => {
-      render(
-        <ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo isAdmin hasTasksWithoutTramo onChanged={vi.fn()} />
+      renderWithQueryClient(
+        <ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo isAdmin hasTasksWithoutTramo />
       );
       expect(screen.getByRole("combobox", { name: "Asignar tramo" })).toBeTruthy();
     });
 
     it("is hidden from non-admins and when nothing needs a tramo", () => {
-      render(<ProjectTramosCard project={noTramo()} workflows={WORKFLOWS} canChangeTramo onChanged={vi.fn()} />);
+      renderWithQueryClient(<ProjectTramosCard project={noTramo()} workflows={WORKFLOWS} canChangeTramo />);
       expect(screen.queryByRole("combobox", { name: "Asignar tramo" })).toBeNull();
       cleanup();
 
-      render(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo isAdmin onChanged={vi.fn()} />);
+      renderWithQueryClient(<ProjectTramosCard project={project()} workflows={WORKFLOWS} canChangeTramo isAdmin />);
       expect(screen.queryByRole("combobox", { name: "Asignar tramo" })).toBeNull();
     });
 
     it("sends a tramo not started yet through the Iniciar tramo deep link", () => {
-      render(<ProjectTramosCard project={noTramo()} workflows={WORKFLOWS} canChangeTramo isAdmin onChanged={vi.fn()} />);
+      renderWithQueryClient(<ProjectTramosCard project={noTramo()} workflows={WORKFLOWS} canChangeTramo isAdmin />);
 
       fireEvent.change(screen.getByRole("combobox", { name: "Asignar tramo" }), { target: { value: DISENO.id } });
 
@@ -168,14 +181,15 @@ describe("ProjectTramosCard", () => {
     it("sets a started tramo as current", async () => {
       const p = project({ currentWorkflowId: null, currentWorkflow: null, needsTramo: true, tramos: [tramo(PRESALE)] });
       const updated = project({ currentWorkflowId: PRESALE.id, currentWorkflow: PRESALE });
-      actions.setProjectCurrentTramoAction.mockResolvedValue(updated);
-      const onChanged = vi.fn();
-      render(<ProjectTramosCard project={p} workflows={WORKFLOWS} canChangeTramo isAdmin onChanged={onChanged} />);
+      actions.setProjectCurrentTramoAction.mockResolvedValue({ ok: true, data: updated });
+      const client = createTestQueryClient();
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+      renderWithQueryClient(<ProjectTramosCard project={p} workflows={WORKFLOWS} canChangeTramo isAdmin />, { client });
 
       fireEvent.change(screen.getByRole("combobox", { name: "Asignar tramo" }), { target: { value: PRESALE.id } });
       fireEvent.click(screen.getByRole("button", { name: "Iniciar" }));
 
-      await waitFor(() => expect(onChanged).toHaveBeenCalledWith(updated));
+      await waitFor(() => expect(invalidatedKeys(invalidate)).toContainEqual(qk.proyectos.detail("p1")));
       expect(actions.setProjectCurrentTramoAction).toHaveBeenCalledWith("p1", PRESALE.id);
     });
   });

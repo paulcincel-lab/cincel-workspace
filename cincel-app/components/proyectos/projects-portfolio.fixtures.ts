@@ -3,6 +3,7 @@
  * projects in different tramos, one paused without a tramo, one archived
  * (not listed), and their portfolio rows.
  */
+import type { ProyectosPageData } from "@/lib/loaders/proyectos";
 import type { ProjectListItem, WorkflowRef } from "@/lib/types/core";
 import type { PortfolioRow } from "@/lib/types/redesign";
 
@@ -106,3 +107,20 @@ export const PORTFOLIO: PortfolioRow[] = [
 
 /** Same rows as a non-admin receives them: the server nulls the budget (BE §7.12). */
 export const PORTFOLIO_NON_ADMIN: PortfolioRow[] = PORTFOLIO.map((row) => ({ ...row, budgetSpentPct: null }));
+
+/**
+ * `qk.proyectos.list()` data for a component test (seed it with
+ * `client.setQueryData(qk.proyectos.list(), portfolioPageData(...))`): a
+ * non-admin who can create projects, by default.
+ */
+export function portfolioPageData(patch: Partial<ProyectosPageData> = {}): ProyectosPageData {
+  return {
+    projects: PROJECTS,
+    portfolio: PORTFOLIO_NON_ADMIN,
+    tramos: TRAMOS,
+    presaleAutoStart: false,
+    canSeeAdminData: false,
+    canCreateProject: true,
+    ...patch,
+  };
+}

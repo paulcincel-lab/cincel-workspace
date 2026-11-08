@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { THEME_IDS } from "@/lib/ui/themes";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TodayStatus } from "@/lib/types/redesign";
 
 const actions = vi.hoisted(() => ({
@@ -36,6 +39,13 @@ vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 
 import { TimeClock } from "./TimeClock";
+
+/** Renders with `me.today` holding `today`, as the staff layout hydrates it. */
+function renderClock(ui: ReactElement, today: TodayStatus) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.me.today(), today);
+  return renderWithQueryClient(ui, { client });
+}
 
 function status(patch: Partial<TodayStatus> = {}): TodayStatus {
   return {
@@ -105,7 +115,7 @@ describe("TimeClock accessibility", () => {
       it(`card has no serious axe violations in every state (${themeId}, ${mode})`, async () => {
         setTheme(themeId, mode);
         for (const initial of STATES) {
-          const { container, unmount } = render(<TimeClock initial={initial} />);
+          const { container, unmount } = renderClock(<TimeClock />, initial);
           expect(await seriousViolations(container)).toEqual([]);
           unmount();
         }
@@ -113,7 +123,7 @@ describe("TimeClock accessibility", () => {
 
       it(`compact popover has no serious axe violations (${themeId}, ${mode})`, async () => {
         setTheme(themeId, mode);
-        render(<TimeClock initial={STATES[1]} variant="compact" />);
+        renderClock(<TimeClock variant="compact" />, STATES[1]);
         expect(await seriousViolations(document.body)).toEqual([]);
         fireEvent.click(screen.getByRole("button", { name: "Jornada: En curso" }));
         await screen.findByRole("button", { name: "Pausa" });
@@ -123,25 +133,25 @@ describe("TimeClock accessibility", () => {
   }
 
   it("the time is a timer that does not announce every tick", () => {
-    render(<TimeClock initial={STATES[1]} />);
+    renderClock(<TimeClock />, STATES[1]);
     const timer = screen.getByRole("timer");
     expect(timer.getAttribute("aria-live")).toBe("off");
     expect(timer.getAttribute("aria-label")).toBe("Tiempo trabajado hoy");
   });
 
   it("state changes go through a polite live region", () => {
-    render(<TimeClock initial={STATES[0]} />);
+    renderClock(<TimeClock />, STATES[0]);
     expect(screen.getByRole("status").getAttribute("aria-live")).toBe("polite");
   });
 
   it("the progress bar is labelled", () => {
-    render(<TimeClock initial={STATES[1]} />);
+    renderClock(<TimeClock />, STATES[1]);
     expect(screen.getByRole("progressbar", { name: "Avance de la jornada" })).toBeTruthy();
   });
 
   it("respects prefers-reduced-motion (no progress animation, time still shown)", () => {
     mockReducedMotion(true);
-    const { container } = render(<TimeClock initial={STATES[1]} />);
+    const { container } = renderClock(<TimeClock />, STATES[1]);
     const indicator = container.querySelector('[data-slot="progress-indicator"]');
     expect(indicator?.className).toContain("transition-none");
     expect(screen.getByRole("timer").textContent).toBe("00:10:00");

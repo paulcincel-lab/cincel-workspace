@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql, type SQLWrapper } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
@@ -413,14 +413,30 @@ function withoutNotes<T extends { notes: unknown }>(value: T): Omit<T, "notes"> 
 }
 
 /**
- * The task list statement shared by `listTasks` and `listTaskRows`. `slim`
- * leaves `notes` out and adds the comment and attachment counts.
+ * Extra parts of a paged task list statement (`listTasksPage`,
+ * `listBoardColumns`): a condition (keyset, board column), the order, a row
+ * limit, the whole-result count, and the ranked board subquery to join.
  */
-async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: boolean) {
+type TaskListPageQuery = {
+  where?: SQL;
+  orderBy?: SQL[];
+  limit?: number;
+  /** Adds `count(*) over ()`: the rows matching before the limit. */
+  withTotal?: boolean;
+  /** Joins the board ranking and keeps the first `perColumn` rows of each column. */
+  ranked?: { subquery: ReturnType<typeof rankedBoardSubquery>; perColumn: number };
+};
+
+/**
+ * The task list statement shared by `listTasks`, `listTaskRows` and the paged
+ * reads. `slim` leaves `notes` out and adds the comment and attachment counts.
+ */
+async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: boolean, page: TaskListPageQuery = {}) {
   const agg = taskAggregates();
   const parent = alias(tasks, "parent_task");
   const taskColumns = withoutNotes(getTableColumns(tasks));
-  const rows = await db
+  const ranked = page.ranked?.subquery;
+  const query = db
     .select({
       task: taskColumns,
       notes: slim ? sql<string | null>`null` : tasks.notes,
@@ -447,6 +463,9 @@ async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: b
       support: agg.support.people,
       commentCount: countOf(agg.comments.total),
       attachmentCount: countOf(agg.attachments.total),
+      pageTotal: page.withTotal ? sql<number>`(count(*) over ())::int` : sql<number>`0`,
+      columnKey: ranked ? sql<string | null>`${ranked.columnKey}` : sql<string | null>`null`,
+      columnTotal: ranked ? sql<number>`${ranked.columnTotal}` : sql<number>`0`,
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -465,15 +484,28 @@ async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: b
     // `listTasks` has no use for these two: a false join condition skips them.
     .leftJoin(agg.comments, slim ? eq(agg.comments.taskId, tasks.id) : sql`false`)
     .leftJoin(agg.attachments, slim ? eq(agg.attachments.taskId, tasks.id) : sql`false`)
-    .where(whereFilters(filters, viewer))
+    .$dynamic();
+  if (ranked) query.innerJoin(ranked, eq(ranked.id, tasks.id));
+  query
+    .where(
+      and(
+        whereFilters(filters, viewer),
+        page.where,
+        page.ranked ? lte(page.ranked.subquery.rowNumber, page.ranked.perColumn) : undefined
+      )
+    )
     // Tramo, then fase, then manual order (BE §8.6); tasks without one go last.
     .orderBy(
-      sql`${workflows.sortOrder} asc nulls last`,
-      sql`${workflowPhases.sortOrder} asc nulls last`,
-      sql`${tasks.sortOrder} asc nulls last`,
-      asc(tasks.commitmentDate),
-      asc(tasks.title)
+      ...(page.orderBy ?? [
+        sql`${workflows.sortOrder} asc nulls last`,
+        sql`${workflowPhases.sortOrder} asc nulls last`,
+        sql`${tasks.sortOrder} asc nulls last`,
+        asc(tasks.commitmentDate),
+        asc(tasks.title),
+      ])
     );
+  if (page.limit !== undefined) query.limit(page.limit);
+  const rows = await query;
 
   return rows.map((r) => {
     const people = typeof r.support === "string" ? (JSON.parse(r.support) as StaffRef[]) : r.support;
@@ -503,7 +535,22 @@ async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: b
       subtaskDoneCount: r.subtaskDoneCount,
       waitingOn: r.waitingOn,
     }, viewer);
-    return { item, commentCount: r.commentCount, attachmentCount: r.attachmentCount };
+    const sortKey: TaskPageSortKey = [
+      r.workflowSortOrder ?? SORT_LAST,
+      r.phaseSortOrder ?? SORT_LAST,
+      r.task.sortOrder ?? SORT_LAST,
+      r.task.commitmentDate ?? DATE_LAST,
+      r.task.id,
+    ];
+    return {
+      item,
+      commentCount: r.commentCount,
+      attachmentCount: r.attachmentCount,
+      sortKey,
+      pageTotal: Number(r.pageTotal),
+      columnKey: r.columnKey,
+      columnTotal: Number(r.columnTotal),
+    };
   });
 }
 
@@ -517,14 +564,270 @@ export async function listTasks(filters: TaskFilters, viewer: ViewerScope): Prom
  * `notes`, plus flat counts, in one statement (aggregate joins).
  */
 export async function listTaskRows(filters: TaskFilters, viewer: ViewerScope): Promise<TaskListRow[]> {
-  return (await selectTaskList(filters, viewer, true)).map(({ item, commentCount, attachmentCount }) => ({
+  return (await selectTaskList(filters, viewer, true)).map(toTaskListRow);
+}
+
+/** A slim statement row → `TaskListRow`. */
+function toTaskListRow({
+  item,
+  commentCount,
+  attachmentCount,
+}: {
+  item: TaskListItem;
+  commentCount: number;
+  attachmentCount: number;
+}): TaskListRow {
+  return {
     ...withoutNotes(item),
     subtaskDone: item.subtaskDoneCount,
     commentCount,
     attachmentCount,
     checklistTotal: item.checklist.total,
     checklistDone: item.checklist.completed,
-  }));
+  };
+}
+
+// ── Paged reads (Query Migration 4a, #955) ──────────────────────────────────
+
+/** Sorts after every real `sort_order` (nulls last). */
+const SORT_LAST = 2147483647;
+/** Sorts after every real date (nulls last). */
+const DATE_LAST = "9999-12-31";
+
+/** Keyset of the paged order: tramo, fase and manual order, commitment date, id. */
+type TaskPageSortKey = [number, number, number, string, string];
+
+/** The paged order's keys as SQL: the `selectTaskList` order with nulls last and `id` as the tie-break. */
+function pageSortExpressions(): SQL[] {
+  return [
+    sql`coalesce(${workflows.sortOrder}, ${sql.raw(String(SORT_LAST))})`,
+    sql`coalesce(${workflowPhases.sortOrder}, ${sql.raw(String(SORT_LAST))})`,
+    sql`coalesce(${tasks.sortOrder}, ${sql.raw(String(SORT_LAST))})`,
+    sql`coalesce(${tasks.commitmentDate}, ${sql.raw(`'${DATE_LAST}'::date`)})`,
+    sql`${tasks.id}`,
+  ];
+}
+
+const pageOrderBy = (): SQL[] => pageSortExpressions().map((e) => sql`${e} asc`);
+
+/** Rows strictly after the cursor in the paged order. */
+function afterCursor(key: TaskPageSortKey): SQL {
+  const [w, p, s, d, id] = key;
+  return sql`(${sql.join(pageSortExpressions(), sql`, `)}) > (${w}::int, ${p}::int, ${s}::int, ${d}::date, ${id}::uuid)`;
+}
+
+/** Opaque page cursor: the last row's sort key, base64url JSON. */
+export function encodeTaskCursor(key: TaskPageSortKey): string {
+  return Buffer.from(JSON.stringify(key), "utf8").toString("base64url");
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A cursor from `encodeTaskCursor`; anything else is INVALID. */
+export function decodeTaskCursor(cursor: string): TaskPageSortKey {
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+  } catch {
+    throw new Error("INVALID: cursor");
+  }
+  const ok =
+    Array.isArray(value) &&
+    value.length === 5 &&
+    value.slice(0, 3).every((n) => Number.isInteger(n)) &&
+    typeof value[3] === "string" &&
+    ISO_DATE_RE.test(value[3]) &&
+    typeof value[4] === "string" &&
+    UUID_RE.test(value[4]);
+  if (!ok) throw new Error("INVALID: cursor");
+  return value as TaskPageSortKey;
+}
+
+/**
+ * The board column a task sits in: `custom:<id>` for a live custom status,
+ * else its base status (`statusSelectValue` on the client). Needs the
+ * `task_statuses` join of the list statement.
+ */
+function boardColumnKey(): SQL<string> {
+  return sql<string>`(case when ${taskStatuses.id} is not null then 'custom:' || ${taskStatuses.id}::text else ${tasks.status}::text end)`;
+}
+
+/**
+ * Every matching task with its board column, its rank inside the column (in
+ * the paged order) and the column's total, as a derived table. One window
+ * pass: `row_number()` and `count(*)` over `PARTITION BY` the column.
+ */
+function rankedBoardSubquery(filters: TaskFilters, viewer: ViewerScope) {
+  const column = boardColumnKey();
+  return db
+    .select({
+      id: tasks.id,
+      columnKey: sql<string>`${column}`.as("board_column"),
+      rowNumber: sql<number>`(row_number() over (partition by ${column} order by ${sql.join(pageOrderBy(), sql`, `)}))::int`.as(
+        "board_rank"
+      ),
+      columnTotal: sql<number>`(count(*) over (partition by ${column}))::int`.as("board_total"),
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
+    .where(whereFilters(filters, viewer))
+    .as("board_ranked");
+}
+
+export type TaskRowsPage = { rows: TaskListRow[]; nextCursor: string | null; total: number };
+
+/**
+ * One page of slim rows (`TaskListRow`) in a stable keyset order (tramo,
+ * fase, manual order, commitment date, id; nulls last), with the total that
+ * match the filters. `cursor` is the previous page's `nextCursor`; null when
+ * there is no further page. Aggregates come from the same statement, so only
+ * the page's tasks are read. `orderBy` has one value today: the board/list order.
+ */
+export async function listTasksPage(
+  filters: TaskFilters,
+  viewer: ViewerScope,
+  opts: { cursor: string | null; limit: number; orderBy?: "tramo"; columnKey?: string }
+): Promise<TaskRowsPage> {
+  const limit = Math.max(1, Math.floor(opts.limit));
+  const rows = await selectTaskList(filters, viewer, true, {
+    where: and(
+      opts.cursor ? afterCursor(decodeTaskCursor(opts.cursor)) : undefined,
+      opts.columnKey ? sql`${boardColumnKey()} = ${opts.columnKey}` : undefined
+    ),
+    orderBy: pageOrderBy(),
+    limit: limit + 1,
+    withTotal: true,
+  });
+  const pageRows = rows.slice(0, limit);
+  const last = pageRows.at(-1);
+  // With a cursor, `count(*) over ()` counts only the rows after it: the total is the rows before plus those.
+  let total = rows[0]?.pageTotal ?? 0;
+  if (opts.cursor) total = await countTasksMatching(filters, viewer, opts.columnKey);
+  return {
+    rows: pageRows.map(toTaskListRow),
+    nextCursor: rows.length > limit && last ? encodeTaskCursor(last.sortKey) : null,
+    total,
+  };
+}
+
+/** COUNT(*) of the tasks matching the filters (and the board column). */
+async function countTasksMatching(filters: TaskFilters, viewer: ViewerScope, columnKey?: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
+    .where(and(whereFilters(filters, viewer), columnKey ? sql`${boardColumnKey()} = ${columnKey}` : undefined));
+  return Number(row?.n ?? 0);
+}
+
+export type BoardColumnPage = { rows: TaskListRow[]; total: number; nextCursor: string | null };
+
+/**
+ * The board (#919): the first `perColumn` rows of every column with its
+ * total, in one statement (`ROW_NUMBER() OVER (PARTITION BY column)`).
+ * `columnKeys` are every column of the status catalog (the base statuses and
+ * `custom:<id>` per configured custom status): each is present, with
+ * `total: 0` and no rows when nothing matches. A column the catalog doesn't
+ * list but a task sits in is added too. Open and closed tasks alike; archived
+ * ones never (the default `archived: false`).
+ */
+export async function listBoardColumns(
+  filters: TaskFilters,
+  viewer: ViewerScope,
+  perColumn: number,
+  columnKeys: readonly string[] = ["pendiente", "en_proceso", "completado", "bloqueado"]
+): Promise<Record<string, BoardColumnPage>> {
+  const limit = Math.max(1, Math.floor(perColumn));
+  const rows = await selectTaskList({ ...filters, archived: false }, viewer, true, {
+    ranked: { subquery: rankedBoardSubquery({ ...filters, archived: false }, viewer), perColumn: limit + 1 },
+    orderBy: pageOrderBy(),
+  });
+  const out: Record<string, BoardColumnPage> = {};
+  for (const key of columnKeys) out[key] = { rows: [], total: 0, nextCursor: null };
+  const byColumn = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const key = r.columnKey ?? r.item.status;
+    const list = byColumn.get(key) ?? [];
+    list.push(r);
+    byColumn.set(key, list);
+  }
+  for (const [key, list] of byColumn) {
+    const page = list.slice(0, limit);
+    const last = page.at(-1);
+    out[key] = {
+      rows: page.map(toTaskListRow),
+      total: list[0]?.columnTotal ?? 0,
+      nextCursor: list.length > limit && last ? encodeTaskCursor(last.sortKey) : null,
+    };
+  }
+  return out;
+}
+
+export type TaskFacets = {
+  total: number;
+  byTramo: Record<string, number>;
+  projects: { id: string; name: string; count: number }[];
+};
+
+/**
+ * The Tareas chip counts and Proyecto options in one `GROUP BY workflow_id,
+ * project_id`, from `filters` without their tramo and proyecto (so picking a
+ * chip or a project never hides the other choices), exactly as the client
+ * computed them from every task:
+ * - `total` ("Todas") and `byTramo` (per tramo key): the tasks in the selected
+ *   project (`scope.projectId`), any tramo;
+ * - `projects`: the projects with tasks in the selected tramo
+ *   (`scope.workflowKey`), any project, by name; the selected project is kept
+ *   even when the tramo leaves it with no task.
+ */
+export async function taskFacets(
+  filters: TaskFilters,
+  viewer: ViewerScope,
+  scope: { workflowKey: string | null; projectId: string | null } = { workflowKey: null, projectId: null }
+): Promise<TaskFacets> {
+  const base: TaskFilters = { ...filters, workflowId: undefined, projectId: undefined };
+  const groups = await db
+    .select({
+      workflowKey: workflows.key,
+      projectId: tasks.projectId,
+      projectName: projects.name,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .where(whereFilters(base, viewer))
+    .groupBy(tasks.workflowId, workflows.key, tasks.projectId, projects.name);
+
+  let total = 0;
+  const byTramo: Record<string, number> = {};
+  const projectCounts = new Map<string, { id: string; name: string; count: number }>();
+  for (const g of groups) {
+    const count = Number(g.count);
+    if (scope.projectId === null || g.projectId === scope.projectId) {
+      total += count;
+      if (g.workflowKey) byTramo[g.workflowKey] = (byTramo[g.workflowKey] ?? 0) + count;
+    }
+    const inTramo = scope.workflowKey === null || g.workflowKey === scope.workflowKey;
+    if (inTramo || g.projectId === scope.projectId) {
+      const entry = projectCounts.get(g.projectId) ?? { id: g.projectId, name: g.projectName, count: 0 };
+      if (inTramo) entry.count += count;
+      projectCounts.set(g.projectId, entry);
+    }
+  }
+  const projectsOut = [...projectCounts.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  return { total, byTramo, projects: projectsOut };
 }
 
 /**
@@ -1335,22 +1638,6 @@ export async function addTaskComment(taskId: string, comment: string, actorId: s
 
 export async function listTaskHistory(taskId: string): Promise<HistoryEvent[]> {
   return listHistory("task", taskId);
-}
-
-/** Open tasks grouped for the board: by status, ordered by commitment date. */
-export async function listBoard(
-  filters: TaskFilters,
-  viewer: ViewerScope
-): Promise<Record<TaskStatus, TaskListItem[]>> {
-  const all = await listTasks({ ...filters, archived: false }, viewer);
-  const board: Record<TaskStatus, TaskListItem[]> = {
-    pendiente: [],
-    en_proceso: [],
-    completado: [],
-    bloqueado: [],
-  };
-  for (const t of all) board[t.status].push(t);
-  return board;
 }
 
 /** Tasks with any date inside the range, for the calendar. */

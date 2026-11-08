@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Info } from "lucide-react";
+import { useQueryClient, type UseMutationResult } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { InvitePortalClientSheet, PORTAL_ERROR_MESSAGES } from "@/components/proyectos/InvitePortalClientSheet";
+import { InvitePortalClientSheet, portalErrorText } from "@/components/proyectos/InvitePortalClientSheet";
 import { PortalActivityCard } from "@/components/proyectos/PortalActivityCard";
 import { PortalClientFolderHint } from "@/components/proyectos/PortalClientFolderHint";
 import { DataTable } from "@/components/ui/DataTable";
@@ -31,8 +31,11 @@ import {
   revokePortalAccessAction,
 } from "@/lib/actions/portal-actions";
 import type { PortalCapabilities } from "@/lib/auth/permissions";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { clientesAccessKeys, isClientesQuery } from "@/lib/query/options/proyectos-archivos-clientes";
 import type { PortalInvitableContact } from "@/lib/repositories/portal-contacts-repository";
-import type { PortalAccessRow, PortalAccessStatus } from "@/lib/types/portal";
+import type { PortalAccessRow, PortalAccessStatus, PortalMutationResult, ResendPortalInviteResult } from "@/lib/types/portal";
 
 const STATUS_LABEL: Record<PortalAccessStatus, string> = {
   invited: "Invitado",
@@ -59,6 +62,13 @@ function formatDateTime(value: string | null): string {
 type Confirm = { kind: "revoke" | "disable"; row: PortalAccessRow };
 
 type Notice = { kind: "ok" | "error"; message: string };
+
+const ACTION_FAILED = "No se pudo completar la acción.";
+
+/** The panel shows every error inline (its notice), never as a toast. */
+const INLINE_ERRORS = { onFormError: () => undefined } as const;
+
+type Ok<R> = Extract<R, { ok: true }>;
 
 /** Row actions by status and capability (FE §2.4). Revoked rows have none; invite again from the sheet. */
 export function portalRowActions(
@@ -119,7 +129,13 @@ export function PortalNoClientAlert({ projectId, canAssignClient }: { projectId:
   );
 }
 
-/** Clientes tab body (FE §2.4): Drive hint, access table with row actions, Invitar cliente and the Actividad card. */
+/**
+ * Clientes tab body (FE §2.4): Drive hint, access table with row actions,
+ * Invitar cliente and the Actividad card. Every action is a
+ * `useActionMutation` (Query Migration 5d, #962): an error shows its copy and
+ * keeps the panel as it is (no refetch); a success invalidates only the keys
+ * it changed. Resend touches nothing but the activity.
+ */
 export function PortalAccessPanel({
   projectId,
   projectName,
@@ -129,61 +145,71 @@ export function PortalAccessPanel({
   hasClient = true,
   canAssignClient = false,
 }: PortalAccessPanelProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const qc = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
-  function run(task: () => Promise<Notice | null>) {
+  // Each invalidation runs only after a success (`data` is undefined after an error).
+  const resendMutation = useActionMutation<PortalAccessRow, Ok<ResendPortalInviteResult>>(
+    (row) => resendPortalInviteAction(row.portalUserId, projectId),
+    { ...INLINE_ERRORS, invalidate: (_row, data) => (data ? [qk.proyectos.clientesActivity(projectId)] : []) },
+  );
+  const revokeMutation = useActionMutation<PortalAccessRow, Ok<PortalMutationResult>>(
+    (row) => revokePortalAccessAction(row.accessId),
+    { ...INLINE_ERRORS, invalidate: (_row, data) => (data ? clientesAccessKeys(projectId) : []) },
+  );
+  // Disable and enable act on the portal user, so every project's Clientes keys go stale
+  // (a predicate, so it runs in `setData`, the hook's success-only cache step).
+  const allClientes = () => void qc.invalidateQueries({ predicate: isClientesQuery });
+  const disableMutation = useActionMutation<PortalAccessRow, Ok<PortalMutationResult>>(
+    (row) => disablePortalUserAction(row.portalUserId),
+    { ...INLINE_ERRORS, setData: allClientes },
+  );
+  const enableMutation = useActionMutation<PortalAccessRow, Ok<PortalMutationResult>>(
+    (row) => enablePortalUserAction(row.portalUserId),
+    { ...INLINE_ERRORS, setData: allClientes },
+  );
+  const isPending =
+    resendMutation.isPending || revokeMutation.isPending || disableMutation.isPending || enableMutation.isPending;
+
+  /** Runs one row action: the notice says how it went; an error leaves rows and dialogs as they are. */
+  function run<R>(
+    mutation: UseMutationResult<R, Error, PortalAccessRow, unknown>,
+    row: PortalAccessRow,
+    done: (data: R) => Notice,
+  ) {
     setNotice(null);
-    startTransition(async () => {
-      try {
-        const next = await task();
-        setNotice(next);
-      } catch {
-        setNotice({ kind: "error", message: "No se pudo completar la acción." });
-      }
-      router.refresh();
+    mutation.mutate(row, {
+      onSuccess: (data) => setNotice(done(data)),
+      onError: (err) => setNotice({ kind: "error", message: portalErrorText(err, ACTION_FAILED) }),
     });
   }
 
   function resend(row: PortalAccessRow) {
-    run(async () => {
-      const result = await resendPortalInviteAction(row.portalUserId, projectId);
-      if (!result.ok) return { kind: "error", message: PORTAL_ERROR_MESSAGES[result.error] };
-      return result.emailSent
+    run(resendMutation, row, (result) =>
+      result.emailSent
         ? { kind: "ok", message: `Invitación reenviada a ${row.email}.` }
-        : { kind: "error", message: "No se pudo enviar el correo. Intenta de nuevo más tarde." };
-    });
+        : { kind: "error", message: "No se pudo enviar el correo. Intenta de nuevo más tarde." },
+    );
   }
 
   function enable(row: PortalAccessRow) {
-    run(async () => {
-      const result = await enablePortalUserAction(row.portalUserId);
-      if (!result.ok) return { kind: "error", message: PORTAL_ERROR_MESSAGES[result.error] };
-      return { kind: "ok", message: `${row.name} está habilitado de nuevo.` };
-    });
+    run(enableMutation, row, () => ({ kind: "ok", message: `${row.name} está habilitado de nuevo.` }));
   }
 
   function confirmAction() {
     const target = confirm;
     if (!target) return;
     setConfirm(null);
-    run(async () => {
-      const result =
-        target.kind === "revoke"
-          ? await revokePortalAccessAction(target.row.accessId)
-          : await disablePortalUserAction(target.row.portalUserId);
-      if (!result.ok) return { kind: "error", message: PORTAL_ERROR_MESSAGES[result.error] };
-      return {
+    if (target.kind === "revoke") {
+      run(revokeMutation, target.row, () => ({
         kind: "ok",
-        message:
-          target.kind === "revoke"
-            ? `${target.row.name} ya no tiene acceso a este proyecto.`
-            : `${target.row.name} está deshabilitado.`,
-      };
-    });
+        message: `${target.row.name} ya no tiene acceso a este proyecto.`,
+      }));
+    } else {
+      run(disableMutation, target.row, () => ({ kind: "ok", message: `${target.row.name} está deshabilitado.` }));
+    }
   }
 
   const columns = useMemo<ColumnDef<PortalAccessRow, unknown>[]>(
@@ -257,7 +283,6 @@ export function PortalAccessPanel({
           contacts={contacts}
           open={inviteOpen}
           onOpenChange={setInviteOpen}
-          onInvited={() => router.refresh()}
         />
       ) : null}
 

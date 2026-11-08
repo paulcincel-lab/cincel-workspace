@@ -7,6 +7,7 @@
  * Pure and client-safe.
  */
 import { addDays, groupEventsByDate, startOfWeek } from "@/lib/calendar/calendar-service";
+import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
 import type { CalendarEvent } from "@/lib/types/calendar";
 import type { WorkflowRef } from "@/lib/types/core";
 import type { AgendaItem, DistributionSegment, RecordTableData } from "@/lib/types/widgets";
@@ -63,6 +64,23 @@ export function visibleRange(mode: CalendarMode, cursor: Date): { from: string; 
   return { from: dayKey(day), to: dayKey(day) };
 }
 
+/**
+ * Days the Calendario view loads for a mode (inclusive): the visible range
+ * plus the month grid of `cursor`, which the aside's "Entregas por semana"
+ * reads in every mode. At most 49 days (a six-week grid plus the previous
+ * week of Semana). Moving the Día cursor inside one month keeps the range.
+ */
+export function calendarFetchRange(mode: CalendarMode, cursor: Date): { from: string; to: string } {
+  const visible = visibleRange(mode, cursor);
+  const grid = monthGridRange(cursor);
+  const gridFrom = dayKey(grid.from);
+  const gridTo = dayKey(grid.to);
+  return {
+    from: visible.from < gridFrom ? visible.from : gridFrom,
+    to: visible.to > gridTo ? visible.to : gridTo,
+  };
+}
+
 /** The cursor one step back (`-1`) or forward (`1`) in the mode's unit. */
 export function shiftCursor(mode: CalendarMode, cursor: Date, direction: -1 | 1): Date {
   if (mode === "mes") return new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1);
@@ -78,7 +96,7 @@ export function navLabels(mode: CalendarMode): { prev: string; next: string } {
 }
 
 function fmt(date: Date, options: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat("es-MX", options).format(date).toLowerCase();
+  return cachedDateTimeFormat("es-MX", options).format(date).toLowerCase();
 }
 
 /** "noviembre de 2026" · "2 – 8 de noviembre de 2026" · "viernes, 6 de noviembre de 2026" (lowercase es-MX). */

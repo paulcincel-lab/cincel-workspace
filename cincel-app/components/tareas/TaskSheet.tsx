@@ -1,8 +1,9 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useCallback, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { FormSheet } from "@/components/patterns/FormSheet";
 import TaskDependencies from "@/components/tareas/TaskDependencies";
@@ -15,7 +16,19 @@ import {
   TaskTramoSelect,
   sortTaskHistory,
   taskAttachmentError,
+  useTaskSheetCatalogs,
 } from "@/components/tareas/task-detail-fields";
+import {
+  useAddChecklistItemMutation,
+  useAddTaskAttachmentMutation,
+  useAddTaskCommentMutation,
+  useAssignTaskMutation,
+  useRemoveChecklistItemMutation,
+  useReorderChecklistMutation,
+  useTaskStatusMutation,
+  useToggleChecklistItemMutation,
+  useUpdateTaskMutation,
+} from "@/components/tareas/task-sheet-mutations";
 import TaskSubtasks from "@/components/tareas/TaskSubtasks";
 import { WaitingBadge } from "@/components/tareas/TaskRowMeta";
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
@@ -28,41 +41,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { StatusChip } from "@/components/widgets/StatusChip";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
-import { unwrapActionResult } from "@/lib/actions/action-result";
-import { fetchProjectSpacesAction } from "@/lib/actions/projects-actions";
-import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
-import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
-import {
-  addChecklistItemAction,
-  addTaskAttachmentAction,
-  addTaskCommentAction,
-  assignTaskAction,
-  fetchTaskAction,
-  removeChecklistItemAction,
-  reorderChecklistAction,
-  setTaskCustomStatusAction,
-  setTaskStatusAction,
-  updateChecklistItemAction,
-  updateTaskAction,
-} from "@/lib/actions/tasks-actions";
-import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
 import { actionErrorText } from "@/lib/errors";
+import { mutationErrorText } from "@/lib/query/mutation";
+import { taskSheetOptions } from "@/lib/query/options/tareas";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { isDueDateLate, parseStatusValue, statusSelectItems, statusSelectValue } from "@/lib/tasks/status-options";
-import type {
-  ProjectSpaceRef,
-  StaffRef,
-  TaskChecklistItem,
-  TaskDetail,
-  TaskPatch,
-  TaskPriority,
-  TaskRef,
-  TaskStatusOption,
-  WorkflowDetail,
-  WorkflowPhaseRef,
-} from "@/lib/types/core";
-import type { ActionResult } from "@/lib/types/schedule";
+import type { StaffRef, TaskChecklistItem, TaskPatch, TaskPriority, TaskRef } from "@/lib/types/core";
 
 export type TaskSheetProps = { taskId: string; onClose(): void };
 
@@ -90,20 +76,31 @@ export function taskSheetHref(pathname: string, search: string | URLSearchParams
 }
 
 /**
+ * Shallow URL change (`history.pushState` / `replaceState`): Next keeps
+ * `useSearchParams` in sync without a server render, so the view under the
+ * sheet is not re-rendered or refetched.
+ */
+function shallowNavigate(mode: "push" | "replace", href: string): void {
+  const url = `${href}${window.location.hash}`;
+  if (mode === "push") window.history.pushState(null, "", url);
+  else window.history.replaceState(null, "", url);
+}
+
+/**
  * Mounts `TaskSheet` from the URL: open while `?tarea=<id>` is present, closed
  * otherwise. Render it next to the view (never around it) so the view stays
- * mounted. Closing removes `tarea` with `router.replace`; browser back pops the
- * entry that added it, which closes the sheet too.
+ * mounted. Closing removes `tarea` with `history.replaceState` (no server
+ * render); browser back pops the entry that added it, which closes the sheet
+ * too.
  */
 export function TaskSheetRoute() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const taskId = searchParams.get(TASK_SHEET_PARAM);
 
   const close = useCallback(() => {
-    router.replace(`${pathname}${taskSheetSearch(searchParams, null)}`, { scroll: false });
-  }, [router, pathname, searchParams]);
+    shallowNavigate("replace", `${pathname}${taskSheetSearch(searchParams, null)}`);
+  }, [pathname, searchParams]);
 
   if (!taskId) return null;
   return <TaskSheet taskId={taskId} onClose={close} />;
@@ -198,7 +195,7 @@ function CommentComposer({ staff, onSubmit }: CommentComposerProps) {
       setText("");
       setMention(null);
     } catch (err) {
-      setError(actionErrorText(err));
+      setError(mutationErrorText(err));
     } finally {
       setPending(false);
     }
@@ -299,27 +296,19 @@ function CommentComposer({ staff, onSubmit }: CommentComposerProps) {
 
 // ── Data ────────────────────────────────────────────────────────────────────
 
-type LoadState =
-  | { kind: "loading"; taskId: string }
-  | { kind: "ready"; taskId: string; task: TaskDetail }
-  | { kind: "missing"; taskId: string }
-  | { kind: "error"; taskId: string; message: string };
-
-/** Active fases of a tramo in catalog order. */
-function activePhases(workflow: WorkflowDetail | undefined): WorkflowPhaseRef[] {
-  if (!workflow) return [];
-  return workflow.phases
-    .filter((p) => p.active)
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map(({ id, name, sortOrder }) => ({ id, name, sortOrder }));
-}
+/** "29 sep 2026" before the dots and case are cleaned; one formatter for the module. */
+const SHORT_DATE_FORMAT = cachedDateTimeFormat("es-MX", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 /** Lower-case es-MX date ("29 sep 2026") for a YYYY-MM-DD value. */
 export function formatShortDate(value: string): string {
   const [y, m, d] = value.split("-").map(Number);
   if (!y || !m || !d) return value;
-  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
-    .format(new Date(Date.UTC(y, m - 1, d)))
+  return SHORT_DATE_FORMAT.format(new Date(Date.UTC(y, m - 1, d)))
     .replace(/\./g, "")
     .toLowerCase();
 }
@@ -334,24 +323,23 @@ function todayIso(): string {
 
 /**
  * Task sheet (redesign FE §3.4, frame `TareaDetalle`): opens from
- * `/tareas?tarea=<id>` over the mounted view, on the `FormSheet` shell: property edits save
- * right away through the existing task actions; title and descripción save
- * with "Guardar cambios". Fase and Espacio render only when that data exists.
- * An admin task loads as missing for a viewer who can't see it (the server
- * returns null), so nothing of it reaches the page.
+ * `/tareas?tarea=<id>` over the mounted view, on the `FormSheet` shell.
+ * Loads with one `getTaskSheetData` call (`taskSheetOptions`, which seeds the
+ * catalog keys the selects read); every edit is a targeted mutation that
+ * writes the detail from its result or patches it optimistically. Property
+ * edits save right away; title and descripción save with "Guardar cambios".
+ * Fase and Espacio render only when that data exists. A task the viewer
+ * can't see loads as missing (the server returns null), so nothing of it
+ * reaches the page.
  */
 export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [state, setState] = useState<LoadState>({ kind: "loading", taskId });
-  const [statuses, setStatuses] = useState<TaskStatusOption[]>([]);
-  const [workflows, setWorkflows] = useState<WorkflowDetail[]>([]);
-  const [staff, setStaff] = useState<StaffRef[]>([]);
-  const [spaces, setSpaces] = useState<ProjectSpaceRef[]>([]);
+  const query = useQuery(taskSheetOptions(taskId));
+  const task = query.data ?? null;
+
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [attachmentError, setAttachmentError] = useState("");
   const [draft, setDraft] = useState<{ taskId: string; title: string; notes: string } | null>(null);
 
@@ -359,124 +347,47 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const capabilities = useMemo(() => resolveActivitiesCapabilities(user), [user]);
   const viewerId = user?.member.id ?? "";
 
-  const current: LoadState = state.taskId === taskId ? state : { kind: "loading", taskId };
-  const task = current.kind === "ready" ? current.task : null;
   const importData = useImportData("task", task?.id);
+  const catalogs = useTaskSheetCatalogs(task);
+  const { statuses, tramos, staff, phases } = catalogs;
 
-  // The task (again whenever the id changes: a subtask or dependency opened in place).
-  useEffect(() => {
-    let cancelled = false;
-    fetchTaskAction(taskId)
-      .then((detail) => {
-        if (cancelled) return;
-        setState(detail ? { kind: "ready", taskId, task: detail } : { kind: "missing", taskId });
-      })
-      .catch((err) => {
-        if (!cancelled) setState({ kind: "error", taskId, message: actionErrorText(err) });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [taskId]);
+  // Hooks run before the task loads; the mutations only fire once it has.
+  const target = useMemo(() => ({ id: taskId, projectId: task?.projectId ?? "" }), [taskId, task?.projectId]);
+  const mutationOptions = useMemo(() => ({ onError: setError }), []);
+  const update = useUpdateTaskMutation(target, mutationOptions);
+  const status = useTaskStatusMutation(target, statuses, mutationOptions);
+  const assign = useAssignTaskMutation(target, mutationOptions);
+  const addItem = useAddChecklistItemMutation(target, mutationOptions);
+  const toggleItem = useToggleChecklistItemMutation(target, mutationOptions);
+  const removeItem = useRemoveChecklistItemMutation(target, mutationOptions);
+  const reorderItems = useReorderChecklistMutation(target, mutationOptions);
+  const attach = useAddTaskAttachmentMutation(target, mutationOptions);
+  // The composer shows its own error.
+  const comment = useAddTaskCommentMutation(target, { onError: () => undefined });
 
-  // Catalogs: custom statuses and tramos (with their fases), once.
-  useEffect(() => {
-    let cancelled = false;
-    fetchTaskStatusesAction()
-      .then((rows) => {
-        if (!cancelled) setStatuses(rows);
-      })
-      .catch(() => undefined);
-    fetchWorkflowsAction()
-      .then((rows) => {
-        if (!cancelled) setWorkflows(rows.filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder));
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const loaded = task !== null;
-  const workflowId = task?.workflowId ?? null;
-  const projectId = task?.projectId ?? null;
-  const isAdminTask = task?.kind === "admin";
-
-  // Assignable staff (Responsable and "@" mentions), suggested for the task's tramo.
-  useEffect(() => {
-    if (!loaded) return;
-    let cancelled = false;
-    fetchAssignableStaffAction(workflowId)
-      .then((rows) => {
-        if (!cancelled) setStaff(rows.filter((s) => s.active).map((s) => ({ id: s.id, name: s.name })));
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [loaded, workflowId]);
-
-  // The project's espacios (Espacio renders only when there are some).
-  useEffect(() => {
-    if (!projectId || isAdminTask) return;
-    let cancelled = false;
-    fetchProjectSpacesAction(projectId)
-      .then((rows) => {
-        if (!cancelled) setSpaces(rows.map((sp) => ({ id: sp.id, name: sp.name })));
-      })
-      .catch(() => {
-        if (!cancelled) setSpaces([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, isAdminTask]);
+  const busy = update.isPending || status.isPending || assign.isPending || attach.isPending;
 
   // A fresh draft of title and descripción for each task opened.
   if (task && draft?.taskId !== task.id) {
     setDraft({ taskId: task.id, title: task.title, notes: task.notes ?? "" });
   }
 
-  const refetch = useCallback(async () => {
-    const detail = await fetchTaskAction(taskId);
-    setState(detail ? { kind: "ready", taskId, task: detail } : { kind: "missing", taskId });
-  }, [taskId]);
-
-  /** Runs a task action, refetches the task and shows any error as Spanish copy (FE §9). */
-  const run = useCallback(
-    async (fn: () => Promise<ActionResult<unknown>>) => {
-      setBusy(true);
-      setError(null);
-      try {
-        unwrapActionResult(await fn());
-        await refetch();
-      } catch (err) {
-        setError(actionErrorText(err));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [refetch],
-  );
-
-  /** Opens another task in this sheet; a new history entry, so browser back returns here. */
+  /** Opens another task in this sheet; a new history entry (shallow), so browser back returns here. */
   const openTask = useCallback(
     (ref: Pick<TaskRef, "id">) => {
-      router.push(taskSheetHref(pathname, searchParams, ref.id), { scroll: false });
+      shallowNavigate("push", taskSheetHref(pathname, searchParams, ref.id));
     },
-    [router, pathname, searchParams],
+    [pathname, searchParams],
   );
 
   const sortedHistory = useMemo(() => (task ? sortTaskHistory(task.history) : []), [task]);
   const statusItems = useMemo(() => statusSelectItems(statuses), [statuses]);
-  const workflow = workflows.find((w) => w.id === workflowId);
-  const phases = useMemo(() => activePhases(workflow), [workflow]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) onClose();
   };
 
-  if (current.kind === "missing" || current.kind === "error") {
+  if (query.isError || (query.isSuccess && task === null)) {
     return (
       <FormSheet
         title="Tarea no disponible"
@@ -486,7 +397,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
         submitLabel="Volver a la lista"
       >
         <p role="status" className="text-sm text-muted-foreground">
-          {current.kind === "missing" ? NOT_FOUND_COPY : current.message}
+          {query.isError ? actionErrorText(query.error) : NOT_FOUND_COPY}
         </p>
       </FormSheet>
     );
@@ -514,9 +425,10 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const canChangeStatus = canChangeActivityStatus({ capabilities, task, viewerId });
   const canReassign = capabilities.canChangeResponsible;
 
-  const showTramoSelect = !isAdminTask && !task.workflowId && workflows.length > 0;
+  const isAdminTask = task.kind === "admin";
+  const showTramoSelect = !isAdminTask && !task.workflowId && tramos.length > 0;
   const showPhase = !isAdminTask && Boolean(task.workflowId) && (phases.length > 0 || task.phase !== null);
-  const spaceOptions = spaces.length > 0 ? spaces : task.space ? [task.space] : [];
+  const spaceOptions = catalogs.spaces.length > 0 ? catalogs.spaces : task.space ? [task.space] : [];
   const showSpace = !isAdminTask && spaceOptions.length > 0;
   const isSubtask = Boolean(task.parentTaskId && task.parentTitle !== null);
   const lateCommitment = isDueDateLate(task.commitmentDate, todayIso(), task);
@@ -525,14 +437,15 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const checklistPct = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0;
   const managerMissing = task.manager !== null && !staff.some((s) => s.id === task.manager?.id);
 
-  const patch = (next: TaskPatch) => run(() => updateTaskAction(task.id, next));
+  const patch = (next: TaskPatch) => {
+    setError(null);
+    update.mutate(next);
+  };
 
   const changeStatus = (value: string) => {
     if (value === statusSelectValue(task)) return;
-    const parsed = parseStatusValue(value);
-    void run(() =>
-      parsed.kind === "custom" ? setTaskCustomStatusAction(task.id, parsed.id) : setTaskStatusAction(task.id, parsed.status),
-    );
+    setError(null);
+    status.mutate(parseStatusValue(value));
   };
 
   /** "Guardar cambios": title and descripción; FormSheet shows a thrown error through `actionErrorText`. */
@@ -545,15 +458,12 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
     if (notes !== (task.notes ?? null)) next.notes = notes;
     if (Object.keys(next).length === 0) return;
     setError(null);
-    unwrapActionResult(await updateTaskAction(task.id, next));
-    await refetch();
+    await update.mutateAsync(next);
   };
 
   const addAttachment = (file: File, checklistItemId?: string) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    if (checklistItemId) formData.append("checklistItemId", checklistItemId);
-    void run(() => addTaskAttachmentAction(task.id, formData));
+    setError(null);
+    attach.mutate({ file, checklistItemId });
   };
 
   const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -664,7 +574,9 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
                 disabled={busy}
                 onValueChange={(v) => {
                   const next = v && v !== NO_MANAGER ? (v as string) : null;
-                  if (next !== task.managerId) void run(() => assignTaskAction(task.id, next));
+                  if (next === task.managerId) return;
+                  setError(null);
+                  assign.mutate(next);
                 }}
               >
                 <SelectTrigger aria-label="Responsable" className="w-full">
@@ -700,7 +612,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
               <TramoBadge tramo={task.workflow} variant="chip" />
             ) : showTramoSelect ? (
               <TaskTramoSelect
-                tramos={workflows}
+                tramos={tramos}
                 disabled={!canEdit || busy}
                 triggerClassName="w-full"
                 onChange={(id) => void patch({ workflowId: id })}
@@ -827,26 +739,37 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
           <div className="space-y-2">
             <TaskChecklistEditor
               task={task}
-              onAdd={(title) => void run(() => addChecklistItemAction(task.id, title))}
-              onToggle={(item: TaskChecklistItem) =>
-                void run(() => updateChecklistItemAction(item.id, { completed: !item.completed }))
-              }
-              onRemove={(item: TaskChecklistItem) => void run(() => removeChecklistItemAction(item.id))}
-              onReorder={(orderedIds) => void run(() => reorderChecklistAction(task.id, orderedIds))}
+              onAdd={(title) => {
+                setError(null);
+                addItem.mutate(title);
+              }}
+              onToggle={(item: TaskChecklistItem) => {
+                setError(null);
+                toggleItem.mutate(item);
+              }}
+              onRemove={(item: TaskChecklistItem) => {
+                setError(null);
+                removeItem.mutate(item);
+              }}
+              onReorder={(orderedIds) => {
+                setError(null);
+                reorderItems.mutate(orderedIds);
+              }}
               onAddPhoto={(item, file) => addAttachment(file, item.id)}
               onPhotoError={setAttachmentError}
             />
           </div>
         </section>
 
-        {!isSubtask ? <TaskSubtasks key={task.id} parentId={task.id} onOpenSubtask={openTask} /> : null}
+        {!isSubtask ? (
+          <TaskSubtasks key={task.id} parentId={task.id} projectId={task.projectId} onOpenSubtask={openTask} />
+        ) : null}
 
         <TaskDependencies
           key={`deps-${task.id}`}
           taskId={task.id}
           projectId={task.projectId}
           onOpenTask={openTask}
-          onChange={() => void refetch()}
         />
 
         <section aria-labelledby={ids.files} className="space-y-3">
@@ -881,8 +804,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
             key={task.id}
             staff={staff}
             onSubmit={async (text) => {
-              unwrapActionResult(await addTaskCommentAction(task.id, text));
-              await refetch();
+              await comment.mutateAsync(text);
             }}
           />
         </section>

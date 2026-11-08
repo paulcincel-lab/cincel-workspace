@@ -33,6 +33,7 @@ vi.mock("next/navigation", () => ({
   },
   redirect: mocks.redirect,
   useRouter: () => ({ replace: mocks.replace, push: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/lib/auth/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/lib/actions/assistant-actions.flags", () => ({ IMPLEMENTED: mocks.flags }));

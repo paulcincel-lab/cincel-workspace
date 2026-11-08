@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calendarFetchRange,
   calendarTitle,
   eventHref,
   eventIdFromHref,
@@ -104,5 +105,31 @@ describe("weekDailySummary", () => {
     expect(friday).toMatchObject({ eventos: 2, entregas: 1, delta: 1, carga: 67 });
     expect(table.rows[0]).toMatchObject({ eventos: 1, delta: 1, carga: 33 });
     expect(table.totals).toBe("auto");
+  });
+});
+
+describe("calendarFetchRange", () => {
+  it("is the month grid for Mes and for every Día of the month", () => {
+    const grid = { from: "2026-10-26", to: "2026-12-06" };
+    expect(calendarFetchRange("mes", new Date(2026, 10, 6))).toEqual(grid);
+    expect(calendarFetchRange("dia", new Date(2026, 10, 1))).toEqual(grid);
+    expect(calendarFetchRange("dia", new Date(2026, 10, 30))).toEqual(grid);
+  });
+
+  it("adds Semana's previous week when it starts before the grid", () => {
+    // Week of Nov 2: the previous week (Oct 26) is the grid's first week.
+    expect(calendarFetchRange("semana", new Date(2026, 10, 2))).toEqual({ from: "2026-10-26", to: "2026-12-06" });
+    // Week of Dec 1 (Monday Nov 30) in December's grid (Nov 30 – Jan 3): the previous week starts Nov 23.
+    expect(calendarFetchRange("semana", new Date(2026, 11, 1))).toEqual({ from: "2026-11-23", to: "2027-01-03" });
+  });
+
+  it("never exceeds 62 days", () => {
+    const span = ({ from, to }: { from: string; to: string }) =>
+      Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+    for (let m = 0; m < 24; m += 1) {
+      for (const mode of ["mes", "semana", "dia"] as const) {
+        expect(span(calendarFetchRange(mode, new Date(2026, m, 1)))).toBeLessThanOrEqual(62);
+      }
+    }
   });
 });

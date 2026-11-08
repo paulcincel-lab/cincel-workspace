@@ -20,7 +20,7 @@ vi.mock("@/lib/db/client", () => ({
 }));
 
 import {
-  listBoard,
+  listBoardColumns,
   listMyTasks,
   listTasks,
 } from "@/lib/repositories/tasks-repository";
@@ -234,9 +234,9 @@ describe.skipIf(!url)(
         const rows = await listTasks({ projectId: ctx.projectId }, VIEWER);
         expect(rows).toHaveLength(3);
 
-        const board = await listBoard({ projectId: ctx.projectId }, VIEWER);
-        expect(board.pendiente).toHaveLength(2);
-        expect(board.completado).toHaveLength(1);
+        const board = await listBoardColumns({ projectId: ctx.projectId }, VIEWER, 20);
+        expect(board.pendiente.rows).toHaveLength(2);
+        expect(board.completado.rows).toHaveLength(1);
       });
     });
   },

@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
-import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveTaskStatusesCapabilities } from "@/lib/auth/permissions";
@@ -10,7 +9,6 @@ import type { TaskStatusInput, TaskStatusOption } from "@/lib/types/core";
 
 function revalidateStatuses() {
   revalidateAjustesScreen("estatus");
-  revalidateTareasScreen(["actividadesLayout"]);
 }
 
 export async function fetchTaskStatusesAction(): Promise<TaskStatusOption[]> {

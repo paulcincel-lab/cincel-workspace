@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
@@ -25,8 +25,10 @@ import {
   SheetTitle,
 } from "@/components/ui/shadcn/sheet";
 import { invitePortalClientAction } from "@/lib/actions/portal-actions";
+import { useActionMutation } from "@/lib/query/mutation";
+import { clientesAccessKeys } from "@/lib/query/options/proyectos-archivos-clientes";
 import type { PortalInvitableContact } from "@/lib/repositories/portal-contacts-repository";
-import type { PortalActionError } from "@/lib/types/portal";
+import type { InvitePortalClientInput, InvitePortalClientResult, PortalActionError } from "@/lib/types/portal";
 
 /** Server error codes → copy (FE §2.4). `socio_unconfirmed` shows the socio checkbox instead. */
 export const PORTAL_ERROR_MESSAGES: Record<PortalActionError, string> = {
@@ -44,6 +46,13 @@ export const PORTAL_ERROR_MESSAGES: Record<PortalActionError, string> = {
 
 export const INVITE_SENT_MESSAGE = "Invitación enviada";
 export const INVITE_EMAIL_FAILED_MESSAGE = "Se dio acceso pero el correo no salió. Usa Reenviar invitación.";
+const INVITE_FAILED_MESSAGE = "No se pudo enviar la invitación.";
+
+/** The copy for a portal action error code; the generic copy for anything else (a stripped server error). */
+export function portalErrorText(err: unknown, fallback = "No se pudo completar la acción."): string {
+  const code = err instanceof Error ? err.message : "";
+  return Object.hasOwn(PORTAL_ERROR_MESSAGES, code) ? PORTAL_ERROR_MESSAGES[code as PortalActionError] : fallback;
+}
 
 /** How long the inline success stays before the sheet closes. */
 const CLOSE_AFTER_MS = 1500;
@@ -59,7 +68,11 @@ export type InvitePortalClientSheetProps = {
   onInvited?: () => void;
 };
 
-/** **Invitar cliente** drawer of the Clientes tab (FE §2.4). */
+/**
+ * **Invitar cliente** drawer of the Clientes tab (FE §2.4). The invite is a
+ * `useActionMutation` (Query Migration 5d, #962): success invalidates the
+ * Clientes tab and the shell count; an error keeps the form and shows its copy.
+ */
 export function InvitePortalClientSheet({
   projectId,
   contacts,
@@ -67,7 +80,16 @@ export function InvitePortalClientSheet({
   onOpenChange,
   onInvited,
 }: InvitePortalClientSheetProps) {
-  const [isPending, startTransition] = useTransition();
+  const invite = useActionMutation<InvitePortalClientInput, Extract<InvitePortalClientResult, { ok: true }>>(
+    invitePortalClientAction,
+    {
+      // Nothing changed after a refused invite: no refetch.
+      invalidate: (vars, data) => (data ? clientesAccessKeys(vars.projectId) : []),
+      // The sheet shows the error inline.
+      onFormError: () => undefined,
+    },
+  );
+  const isPending = invite.isPending;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [contactId, setContactId] = useState("");
   const [email, setEmail] = useState("");
@@ -112,30 +134,29 @@ export function InvitePortalClientSheet({
   function submit() {
     if (!contact) return;
     setError("");
-    startTransition(async () => {
-      try {
-        const result = await invitePortalClientAction({
-          projectId,
-          contactId: contact.id,
-          email: email.trim(),
-          name: name.trim(),
-          ...(isSocio ? { confirmSocio } : {}),
-        });
-        if (!result.ok) {
-          if (result.error === "socio_unconfirmed") {
+    invite.mutate(
+      {
+        projectId,
+        contactId: contact.id,
+        email: email.trim(),
+        name: name.trim(),
+        ...(isSocio ? { confirmSocio } : {}),
+      },
+      {
+        onSuccess: (result) => {
+          setSuccess(result.emailSent ? INVITE_SENT_MESSAGE : INVITE_EMAIL_FAILED_MESSAGE);
+          onInvited?.();
+          closeTimer.current = setTimeout(() => onOpenChange(false), CLOSE_AFTER_MS);
+        },
+        onError: (err) => {
+          if (err.message === "socio_unconfirmed") {
             setAskSocio(true);
             setConfirmSocio(false);
           }
-          setError(PORTAL_ERROR_MESSAGES[result.error]);
-          return;
-        }
-        setSuccess(result.emailSent ? INVITE_SENT_MESSAGE : INVITE_EMAIL_FAILED_MESSAGE);
-        onInvited?.();
-        closeTimer.current = setTimeout(() => onOpenChange(false), CLOSE_AFTER_MS);
-      } catch {
-        setError("No se pudo enviar la invitación.");
-      }
-    });
+          setError(portalErrorText(err, INVITE_FAILED_MESSAGE));
+        },
+      },
+    );
   }
 
   return (

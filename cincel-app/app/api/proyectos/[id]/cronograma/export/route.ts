@@ -3,15 +3,8 @@ import { NextResponse } from "next/server";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { viewerScopeOf } from "@/lib/auth/viewer-scope";
+import { scheduleToday } from "@/lib/cronograma/today";
 import * as scheduleRepository from "@/lib/repositories/schedule-repository";
-
-const SCHEDULE_TIMEZONE = "America/Mexico_City";
-
-function todayInTimezone(timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
-    new Date()
-  );
-}
 
 /**
  * GET /api/proyectos/[id]/cronograma/export — same shape the reference
@@ -52,6 +45,6 @@ export async function GET(
     flags,
     imprevistos: data.imprevistos,
     offset: 0,
-    today: todayInTimezone(SCHEDULE_TIMEZONE),
+    today: scheduleToday(),
   });
 }

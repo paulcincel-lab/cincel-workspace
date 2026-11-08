@@ -1,14 +1,20 @@
 import Link from "next/link";
 
+import { ProjectShellTabs } from "@/components/proyectos/ProjectShellTabs";
 import { ProjectSummary } from "@/components/proyectos/ProjectSummary";
-import { ProjectTabs } from "@/components/proyectos/ProjectTabs";
-import { StyleProvider } from "@/components/shell/StyleProvider";
 import { buttonVariants } from "@/components/ui/shadcn/button";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { loadProjectResumen } from "@/lib/proyectos/project-resumen";
-import { getResolvedAppearance } from "@/lib/ui/preferences-server";
-import { readEstiloOverride } from "@/lib/ui/style-override";
+import { loadProyectoResumen } from "@/lib/loaders/proyectos";
+import { loadProyectoShell } from "@/lib/loaders/proyectos-shell";
+import { Hydrate } from "@/lib/query/hydrate";
+import { qk } from "@/lib/query/keys";
+import { proyectoResumenOptions, seedResumenArchivosCount } from "@/lib/query/options/proyectos";
+import { proyectoShellOptions } from "@/lib/query/options/proyectos-shell";
+import { getQueryClient, prefetch } from "@/lib/query/server";
+import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
+import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
+import { UuidSchema } from "@/lib/validation/project-flow";
 
 /** The signed-in staff member; null without a usable session. Redirects propagate. */
 async function loadUser(): Promise<AuthenticatedUser | null> {
@@ -34,33 +40,39 @@ function StateCard({ title, message }: { title: string; message: string }) {
   );
 }
 
+const NOT_FOUND = { title: "Proyecto no encontrado", message: "El proyecto no existe o ya no tienes acceso." };
+
 /**
  * `/proyectos/<id>` (redesign FE §3.5): the project header + tabs and the
- * Resumen tab, inside the `AppShell` the staff layout mounts.
+ * Resumen tab, inside the `AppShell` the staff layout mounts. Two reads,
+ * prefetched here through their loaders and hydrated: the shell
+ * (`qk.proyectos.shell(id)`, shared with every project tab) and the Resumen
+ * (`qk.proyectos.resumen(id)`), whose root Drive listing also fills the
+ * shell's Archivos count.
  */
-export default async function ProjectPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ estilo?: string | string[] }>;
-}) {
-  const [{ id }, query, appearance] = await Promise.all([params, searchParams, getResolvedAppearance()]);
+export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
 
   const user = await loadUser();
   if (!user) return <StateCard title="Sin permiso" message="Inicia sesión para ver el proyecto." />;
+  if (!UuidSchema.safeParse(id).success) return <StateCard {...NOT_FOUND} />;
 
-  const resumen = await loadProjectResumen(id, user);
-  if (!resumen) return <StateCard title="Proyecto no encontrado" message="El proyecto no existe o ya no tienes acceso." />;
+  const qc = getQueryClient();
+  await Promise.all([
+    prefetch(qc, proyectoShellOptions(id), () => loadProyectoShell(user, { id })),
+    prefetch(qc, proyectoResumenOptions(id), () => loadProyectoResumen(user, { id })),
+  ]);
+  const shell = qc.getQueryData<ProjectTabShell | null>(qk.proyectos.shell(id));
+  const resumen = qc.getQueryData<ProjectSummaryInput | null>(qk.proyectos.resumen(id));
+  if (!shell || !resumen) return <StateCard {...NOT_FOUND} />;
+  seedResumenArchivosCount(qc, id, resumen);
 
-  // `?estilo=visual|esencial|analitico` overrides the style for this render only (FE §4.2).
-  const estilo = readEstiloOverride(query);
   return (
-    <StyleProvider style={estilo ?? appearance.style} isOverridden={estilo !== null} scope="staff">
+    <Hydrate qc={qc}>
       <div className="flex flex-col gap-4">
-        <ProjectTabs {...resumen.tabs} active="resumen" showEstilo />
-        <ProjectSummary {...resumen.summary} />
+        <ProjectShellTabs projectId={id} active="resumen" showEstilo />
+        <ProjectSummary projectId={id} />
       </div>
-    </StyleProvider>
+    </Hydrate>
   );
 }

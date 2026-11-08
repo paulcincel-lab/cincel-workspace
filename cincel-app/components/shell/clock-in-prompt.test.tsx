@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TodayStatus } from "@/lib/types/redesign";
 
 const mocks = vi.hoisted(() => ({
@@ -15,10 +18,11 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }
 vi.mock("@/lib/actions/time-tracking-actions", () => ({
   clockInAction: mocks.clockInAction,
   fetchMyTodayAction: mocks.fetchMyTodayAction,
+  pauseWorkAction: vi.fn(),
+  resumeWorkAction: vi.fn(),
+  clockOutAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/time-tracking-actions.flags", () => mocks.flags);
-
-import { TODAY_STATUS_EVENT } from "@/lib/time-tracking/today-events";
 
 import {
   CLOCK_IN_PROMPT_SEEN_KEY,
@@ -50,8 +54,13 @@ function status(overrides: Partial<TodayStatus> = {}): TodayStatus {
 const REQUIRED = status({ required: true, requiredFrom: REQUIRED_SINCE });
 const ON: TodayStatus = { ...status(), state: "on", startedAt: NOW.toISOString(), promptAtLogin: false };
 
-function renderPrompt(s: TodayStatus, requiredFrom: string | null = s.requiredFrom) {
-  return render(<ClockInPrompt status={s} requiredFrom={requiredFrom} now={NOW} name="Ana López" />);
+let client: QueryClient = createTestQueryClient();
+
+/** Renders with `me.today` holding `s`, as the `(staff)` layout hydrates it. */
+function renderPrompt(s: TodayStatus) {
+  client = createTestQueryClient();
+  client.setQueryData(qk.me.today(), s);
+  return renderWithQueryClient(<ClockInPrompt now={NOW} name="Ana López" />, { client });
 }
 
 async function findDialog() {
@@ -187,39 +196,31 @@ describe("ClockInPrompt after requiredFrom", () => {
 });
 
 describe("ClockInPrompt clock-in", () => {
-  it("calls clockInAction with source login, closes and updates the clock", async () => {
+  it("calls clockInAction with source login, closes and writes me.today (no router refresh)", async () => {
     mocks.clockInAction.mockResolvedValue(ON);
-    const published: TodayStatus[] = [];
-    const listener = (e: Event) => published.push((e as CustomEvent<TodayStatus>).detail);
-    window.addEventListener(TODAY_STATUS_EVENT, listener);
-
     renderPrompt(REQUIRED);
     await findDialog();
     fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
     await expectClosed();
 
-    window.removeEventListener(TODAY_STATUS_EVENT, listener);
     expect(mocks.clockInAction).toHaveBeenCalledTimes(1);
     expect(mocks.clockInAction).toHaveBeenCalledWith({ source: "login" });
-    expect(published).toEqual([ON]);
-    expect(mocks.refresh).toHaveBeenCalled();
+    expect(client.getQueryData(qk.me.today())).toEqual(ON);
+    expect(mocks.fetchMyTodayAction).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it("closes silently on ALREADY_ON and syncs the fresh status", async () => {
+  it("closes silently on ALREADY_ON with the fresh status in me.today (one re-read)", async () => {
     mocks.clockInAction.mockRejectedValue(new Error("ALREADY_ON"));
     mocks.fetchMyTodayAction.mockResolvedValue(ON);
-    const published: TodayStatus[] = [];
-    const listener = (e: Event) => published.push((e as CustomEvent<TodayStatus>).detail);
-    window.addEventListener(TODAY_STATUS_EVENT, listener);
-
     renderPrompt(REQUIRED);
     await findDialog();
     fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
     await expectClosed();
 
-    window.removeEventListener(TODAY_STATUS_EVENT, listener);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(published).toEqual([ON]);
+    expect(client.getQueryData(qk.me.today())).toEqual(ON);
+    expect(mocks.fetchMyTodayAction).toHaveBeenCalledTimes(1);
   });
 
   it("treats a hidden error as ALREADY_ON when the day already started", async () => {

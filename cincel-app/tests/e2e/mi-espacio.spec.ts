@@ -106,5 +106,40 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
     await page.reload({ waitUntil: "load" });
     await expect(page.getByText("Bandeja").first()).toBeVisible();
     await expect(page.getByText(reminderText).first()).toBeVisible({ timeout: 15_000 });
+
+    // The sidebar badge reads qk.shell.badges: mark-read on Mi espacio lowers it at once, and
+    // navigating to Tareas shows the same count (no server render, no reload).
+    const badge = page.locator("[data-slot=bandeja-badge]").first();
+    await expect(badge).toBeVisible({ timeout: 15_000 });
+    const count = async () => {
+      if ((await page.locator("[data-slot=bandeja-badge]").count()) === 0) return 0;
+      const text = await page.locator("[data-slot=bandeja-badge]").first().innerText();
+      return Number(text.replace(/[^0-9]/g, "")) || 0;
+    };
+    const before = await count();
+    expect(before).toBeGreaterThan(0);
+
+    const unread = page.getByRole("link", { name: new RegExp(reminderText) }).first();
+    await unread.click();
+    await expect.poll(count, { timeout: 15_000 }).toBe(before - 1);
+
+    await page.getByRole("navigation", { name: "Principal" }).getByRole("link", { name: /^Tareas/ }).click();
+    await expect(page).toHaveURL(/\/tareas/);
+    await expect.poll(count, { timeout: 15_000 }).toBe(before - 1);
+  });
+
+  test("the badges come from one private GET route, polled every 60 s", async ({ page }) => {
+    test.setTimeout(120_000);
+    const badgeGets: { url: string; cacheControl: string | undefined }[] = [];
+    page.on("response", (response) => {
+      if (response.request().method() === "GET" && new URL(response.url()).pathname === "/api/shell/badges") {
+        badgeGets.push({ url: response.url(), cacheControl: response.headers()["cache-control"] });
+      }
+    });
+    await page.goto(`${BASE_URL}/tareas`, { waitUntil: "load" });
+    // Hydrated by the layout: no GET on load.
+    expect(badgeGets).toEqual([]);
+    await expect.poll(() => badgeGets.length, { timeout: 75_000, intervals: [5_000] }).toBeGreaterThanOrEqual(1);
+    expect(badgeGets[0].cacheControl).toBe("private, no-store");
   });
 });

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +15,16 @@ vi.mock("@/lib/actions/projects-actions", () => ({
   submitProjectCreateAction: vi.fn(),
   updateProjectAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectosPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogContacts: vi.fn(async () => [{ id: "c1", name: "Familia Gómez", type: "cliente" }]),
+  fetchCatalogStaff: vi.fn(async () => [{ id: "s1", name: "Ana López" }]),
+  fetchCatalogAssignableStaff: vi.fn(),
+  fetchCatalogProjectOptions: vi.fn(),
+  fetchCatalogProjectSpaces: vi.fn(),
+  fetchCatalogTaskStatuses: vi.fn(),
+  fetchCatalogWorkflows: vi.fn(),
+}));
 vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn(async () => ({})) }));
 vi.mock("@/lib/tramos/compat", () => {
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
@@ -29,12 +39,26 @@ vi.mock("@/lib/tramos/compat", () => {
   };
 });
 
+import type { ReactElement } from "react";
+
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import type { ProyectosPageData } from "@/lib/loaders/proyectos";
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 import { ProjectsPortfolio } from "./ProjectsPortfolio";
-import { PORTFOLIO, PROJECTS, TRAMOS } from "./projects-portfolio.fixtures";
+import { PORTFOLIO, portfolioPageData } from "./projects-portfolio.fixtures";
+
+/** Renders `ui` over a seeded `qk.proyectos.list()` (and admin catalogs), as the page's hydration leaves it. */
+function renderSeeded(ui: ReactElement, patch: Partial<ProyectosPageData> = {}) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.proyectos.list(), portfolioPageData({ portfolio: PORTFOLIO, ...patch }));
+  client.setQueryData(qk.catalog.contacts("cliente"), [{ id: "c1", name: "Familia Gómez", type: "cliente" }]);
+  client.setQueryData(qk.catalog.staff(), [{ id: "s1", name: "Ana López" }]);
+  return renderWithQueryClient(ui, { client });
+}
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
@@ -77,9 +101,9 @@ describe("Proyectos list accessibility", () => {
       it(`has no serious axe violations in ${theme} / ${mode} for the three styles`, async () => {
         setTheme(theme, mode);
         for (const style of STYLES) {
-          const { container, unmount } = render(
+          const { container, unmount } = renderSeeded(
             <StyleProvider style={style} scope="staff">
-              <ProjectsPortfolio projects={PROJECTS} portfolio={PORTFOLIO} tramos={TRAMOS} canCreateProject />
+              <ProjectsPortfolio />
             </StyleProvider>,
           );
           expect(await seriousViolations(container)).toEqual([]);
@@ -90,10 +114,11 @@ describe("Proyectos list accessibility", () => {
 
     it(`has no serious axe violations in ${theme} for the empty state`, async () => {
       setTheme(theme, "light");
-      const { container } = render(
+      const { container } = renderSeeded(
         <StyleProvider style="visual" scope="staff">
-          <ProjectsPortfolio projects={[]} portfolio={[]} canCreateProject />
+          <ProjectsPortfolio />
         </StyleProvider>,
+        { projects: [], portfolio: [] },
       );
       expect(await seriousViolations(container)).toEqual([]);
     });
@@ -103,16 +128,7 @@ describe("Proyectos list accessibility", () => {
     it(`NewProjectDialog (?nuevo=1) has no serious axe violations in ${mode}, admin fields included`, async () => {
       setTheme("azul", mode);
       nav.params = new URLSearchParams("nuevo=1");
-      render(
-        <ProjectsPortfolio
-          projects={PROJECTS}
-          portfolio={PORTFOLIO}
-          tramos={TRAMOS}
-          canCreateProject
-          canSeeAdminData
-          adminOptions={{ clients: [{ id: "c1", name: "Familia Gómez" }], staff: [{ id: "s1", name: "Ana López" }] }}
-        />,
-      );
+      renderSeeded(<ProjectsPortfolio />, { canSeeAdminData: true });
       expect(await seriousViolations(document.body)).toEqual([]);
     });
   }

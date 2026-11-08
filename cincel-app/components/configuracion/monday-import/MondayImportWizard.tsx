@@ -456,7 +456,7 @@ export function MondayImportWizard({
           setError("No tienes permiso.");
           return;
         }
-        router.replace("/dashboard");
+        router.replace("/inicio");
       } catch {
         setError("No se pudo guardar. Intenta de nuevo.");
       }

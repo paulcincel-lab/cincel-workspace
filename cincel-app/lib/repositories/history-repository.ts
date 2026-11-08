@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, not, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { historyEvents, staff } from "@/lib/db/schema";
@@ -137,4 +137,66 @@ export async function listHistory(
     comment: r.comment,
     eventAt: r.eventAt.toISOString(),
   }));
+}
+
+/** One page of a bitácora (`listHistoryPage`); `nextCursor` is the id of the last event, null on the last page. */
+export type HistoryPage = { events: HistoryEvent[]; nextCursor: string | null };
+
+/**
+ * A bitácora newest first, `limit` events at a time (keyset on event time,
+ * then id). `cursor` is the `nextCursor` of the previous page. `hideFields`
+ * leaves out `cambio` events of those fields in SQL, so every page is full.
+ * One statement.
+ */
+export async function listHistoryPage(
+  entity: HistoryEntity,
+  entityId: string,
+  opts: { cursor?: string | null; limit: number; hideFields?: readonly string[] }
+): Promise<HistoryPage> {
+  const hide = opts.hideFields ?? [];
+  const rows = await db
+    .select({
+      id: historyEvents.id,
+      entity: historyEvents.entity,
+      entityId: historyEvents.entityId,
+      kind: historyEvents.kind,
+      actorId: staff.id,
+      actorName: staff.name,
+      field: historyEvents.field,
+      beforeValue: historyEvents.beforeValue,
+      afterValue: historyEvents.afterValue,
+      comment: historyEvents.comment,
+      eventAt: historyEvents.eventAt,
+    })
+    .from(historyEvents)
+    .leftJoin(staff, eq(staff.id, historyEvents.actorId))
+    .where(
+      and(
+        eq(historyEvents.entity, entity),
+        eq(historyEvents.entityId, entityId),
+        hide.length > 0 ? or(isNull(historyEvents.field), not(inArray(historyEvents.field, [...hide]))) : undefined,
+        opts.cursor
+          ? sql`(${historyEvents.eventAt}, ${historyEvents.id}) < (select c.event_at, c.id from core.history_events c where c.id = ${opts.cursor})`
+          : undefined
+      )
+    )
+    .orderBy(desc(historyEvents.eventAt), desc(historyEvents.id))
+    .limit(opts.limit + 1);
+
+  const page = rows.slice(0, opts.limit);
+  return {
+    events: page.map((r) => ({
+      id: r.id,
+      entity: r.entity,
+      entityId: r.entityId,
+      kind: r.kind,
+      actor: r.actorId ? { id: r.actorId, name: r.actorName! } : null,
+      field: r.field,
+      beforeValue: r.beforeValue,
+      afterValue: r.afterValue,
+      comment: r.comment,
+      eventAt: r.eventAt.toISOString(),
+    })),
+    nextCursor: rows.length > opts.limit ? (page.at(-1)?.id ?? null) : null,
+  };
 }

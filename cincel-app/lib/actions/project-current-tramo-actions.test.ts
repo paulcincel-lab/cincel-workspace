@@ -61,16 +61,19 @@ describe("setProjectCurrentTramoAction", () => {
     await expect(setProjectCurrentTramoAction(PROJECT, "nope")).rejects.toThrow("NOT_FOUND");
   });
 
-  it("sets a started tramo as current and revalidates the project flow pages", async () => {
+  it("sets a started tramo as current, with no project flow route revalidated", async () => {
     const row = await setProjectCurrentTramoAction(PROJECT, TRAMO);
     expect(row).toBe(DETAIL);
     expect(repo.setProjectCurrentTramo).toHaveBeenCalledWith(PROJECT, TRAMO, ACTOR);
     expect(repo.assignProjectTramo).not.toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith("/proyectos");
-    expect(revalidatePath).toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
-    expect(revalidatePath).toHaveBeenCalledWith("/actividades", "layout");
-    expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
-    expect(revalidatePath).toHaveBeenCalledWith("/tablero");
+    // `/proyectos` reads `qk.proyectos.list()` (5a, #959).
+    expect(revalidatePath).not.toHaveBeenCalledWith("/proyectos");
+    // The ficha reads its own query (5b, #960): it is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
+    // Tareas reads `qk.tareas.*` (Phase 4) and Inicio `qk.inicio()` (#937): their stubs are not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith("/actividades", "layout");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/dashboard");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/tablero");
   });
 
   it("returns NOT_STARTED for a non-admin on a tramo that wasn't started", async () => {
@@ -112,10 +115,11 @@ describe("createProjectAction", () => {
     await expect(createProjectAction({ name: "Casa Valle", clientId: null })).rejects.toThrow("NAME_TAKEN");
   });
 
-  it("revalidates Actividades, Dashboard and Tablero, where the auto-started tramo shows", async () => {
+  it("revalidates no Tareas or Inicio stub (they read their own queries)", async () => {
     await createProjectAction({ name: "Casa Valle", clientId: null });
-    expect(revalidatePath).toHaveBeenCalledWith("/actividades", "layout");
-    expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
-    expect(revalidatePath).toHaveBeenCalledWith("/tablero");
+    // Tareas reads `qk.tareas.*` (Phase 4) and Inicio `qk.inicio()` (#937): their stubs are not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith("/actividades", "layout");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/dashboard");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/tablero");
   });
 });

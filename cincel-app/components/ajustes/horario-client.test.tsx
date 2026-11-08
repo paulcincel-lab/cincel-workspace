@@ -31,7 +31,7 @@ const flags = vi.hoisted(() => ({
 vi.mock("@/lib/actions/time-tracking-actions.flags", () => flags);
 
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, useSearchParams: () => new URLSearchParams() }));
 
 const sonner = vi.hoisted(() => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("sonner", () => sonner);

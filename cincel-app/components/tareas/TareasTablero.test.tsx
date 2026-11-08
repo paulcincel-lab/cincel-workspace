@@ -1,17 +1,18 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import type { TaskListItem } from "@/lib/types/core";
-import type { PresentationStyle, TaskBoard } from "@/lib/types/redesign";
+import type { TaskListRow } from "@/lib/types/core";
+import type { PresentationStyle } from "@/lib/types/redesign";
 import type { DistributionSegment, RecordTableData } from "@/lib/types/widgets";
 
-const refresh = vi.fn();
+const nav = vi.hoisted(() => ({ search: "vista=tablero", refresh: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh, replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ refresh: nav.refresh, replace: nav.replace, push: vi.fn() }),
   usePathname: () => "/tareas",
-  useSearchParams: () => new URLSearchParams("vista=tablero"),
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 const actions = vi.hoisted(() => ({
@@ -19,6 +20,17 @@ const actions = vi.hoisted(() => ({
   setTaskCustomStatusAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/tasks-actions", () => actions);
+
+// Reads never reach the server here: the cache is seeded as the page would.
+const pageData = vi.hoisted(() => ({
+  getTareasPageData: vi.fn(),
+  getTareasBoard: vi.fn(),
+  getTareasFacets: vi.fn(),
+  getTareasListPage: vi.fn(),
+  getTareasBoardColumn: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => pageData);
+
 
 const toastError = vi.fn();
 vi.mock("sonner", () => ({ toast: { error: (msg: string) => toastError(msg), success: vi.fn() } }));
@@ -63,22 +75,22 @@ vi.mock("@/components/widgets/RecordTable", () => ({
   ),
 }));
 
-// The dialog has its own tests; here it only shows which estatus it opened in.
-vi.mock("./NewTaskDialog", () => ({
-  NewTaskDialog: (p: { open: boolean; onOpenChange(open: boolean): void; defaults?: { status?: string } }) =>
-    p.open ? (
-      <div role="dialog" aria-label="Nueva tarea" data-status={p.defaults?.status}>
-        <button type="button" onClick={() => p.onOpenChange(false)}>
-          Cancelar
-        </button>
-      </div>
-    ) : null,
-}));
-
 import { StyleProvider } from "@/components/shell/StyleProvider";
-import { TABLERO_DESCRIPTION, TareasTablero, moveTaskToColumn } from "@/components/tareas/TareasTablero";
+import {
+  TABLERO_DESCRIPTION,
+  TareasTablero,
+  findBoardRow,
+  moveTaskToColumnAction,
+} from "@/components/tareas/TareasTablero";
+import { qk } from "@/lib/query/keys";
+import { tareasListFiltersOf, tareasPageKeyInputOf } from "@/lib/query/options/tareas";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
+import { emptyBoardColumns, type TareasBoardData, type TareasPageData } from "@/lib/tareas/page-data";
+import { DEFAULT_TAREAS_QUERY, type TareasQuery } from "@/lib/tareas/query";
+import { seedSessionUser } from "@/tests/helpers/session-user";
 
-function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
+function makeRow(overrides: Partial<TaskListRow> = {}): TaskListRow {
   return {
     id: "t1",
     projectId: "p1",
@@ -89,7 +101,6 @@ function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
     spaceId: null,
     closedAt: null,
     title: "Tarea",
-    notes: null,
     createdById: "s1",
     managerId: "s1",
     status: "pendiente",
@@ -115,26 +126,51 @@ function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
     subtaskCount: 0,
     subtaskDoneCount: 0,
     waitingOn: 0,
+    subtaskDone: 0,
+    commentCount: 0,
+    attachmentCount: 0,
+    checklistTotal: 0,
+    checklistDone: 0,
     ...overrides,
-  } as TaskListItem;
+  } as TaskListRow;
 }
 
-const BOARD: TaskBoard = {
-  pendiente: [
-    makeTask({ id: "t1", title: "Levantamiento", commitmentDate: "2026-01-15", subtaskCount: 3, subtaskDoneCount: 1 }),
-    makeTask({ id: "t2", title: "Planos ejecutivos", commitmentDate: "2030-06-15" }),
-  ],
-  en_proceso: [makeTask({ id: "t3", title: "Render sala", status: "en_proceso" })],
-  completado: [makeTask({ id: "t4", title: "Contrato firmado", status: "completado", closedAt: "2026-01-02" })],
-  bloqueado: [],
+const QA = { id: "cs-qa", name: "QA en revisión", closes: false, countsAsCompleted: false, sortOrder: 1 };
+
+const ROWS = {
+  t1: makeRow({ id: "t1", title: "Levantamiento", commitmentDate: "2026-01-15", subtaskCount: 3, subtaskDoneCount: 1 }),
+  t2: makeRow({ id: "t2", title: "Planos ejecutivos", commitmentDate: "2030-06-15" }),
+  t3: makeRow({ id: "t3", title: "Render sala", status: "en_proceso" }),
+  t4: makeRow({ id: "t4", title: "Contrato firmado", status: "completado", closedAt: "2026-01-02" }),
 };
+
+function boardData(statuses: TareasBoardData["statuses"] = []): TareasBoardData {
+  const columns = emptyBoardColumns(statuses);
+  columns.pendiente = { rows: [ROWS.t1, ROWS.t2], total: 2, nextCursor: null };
+  columns.en_proceso = { rows: [ROWS.t3], total: 1, nextCursor: null };
+  columns.completado = { rows: [ROWS.t4], total: 1, nextCursor: null };
+  return { columns, statuses };
+}
 const TOTAL = 4;
 
-function renderTablero(style: PresentationStyle, board: TaskBoard = BOARD) {
-  return render(
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "tablero" };
+const F = tareasListFiltersOf(QUERY);
+const PAGE: TareasPageData = { facets: { total: TOTAL, byTramo: {}, projects: [] }, tramos: [], staff: [] };
+
+/** A client seeded as `/tareas` hydrates it: the page bundle and the board it seeded. */
+function seededClient(board: TareasBoardData = boardData()): QueryClient {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY)), PAGE);
+  client.setQueryData(qk.tareas.board(F), board);
+  return client;
+}
+
+function renderTablero(style: PresentationStyle, client: QueryClient = seededClient()) {
+  return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
-      <TareasTablero board={board} header={{ title: "Tareas" }} />
+      <TareasTablero query={QUERY} header={{ title: "Tareas" }} />
     </StyleProvider>,
+    { client },
   );
 }
 
@@ -146,31 +182,39 @@ function card(container: HTMLElement, taskId: string): HTMLElement {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  let reject!: (err: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
+  const promise = new Promise<T>((res) => {
     resolve = res;
-    reject = rej;
   });
-  return { promise, resolve, reject };
+  return { promise, resolve };
 }
 
+const okDetail = (id: string, status: string) => ({ ok: true as const, data: { id, projectId: "p1", status } });
+
 beforeEach(() => {
-  refresh.mockReset();
+  nav.search = "vista=tablero";
+  nav.refresh.mockReset();
+  nav.replace.mockReset();
   toastError.mockReset();
-  actions.setTaskStatusAction.mockReset().mockResolvedValue({});
-  actions.setTaskCustomStatusAction.mockReset().mockResolvedValue({});
+  for (const fn of Object.values(pageData)) fn.mockReset();
+  actions.setTaskStatusAction.mockReset().mockImplementation(async (id: string, status: string) => okDetail(id, status));
+  actions.setTaskCustomStatusAction.mockReset().mockImplementation(async (id: string) => okDetail(id, "en_proceso"));
+  seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
 });
 
 afterEach(() => cleanup());
 
-describe("TareasTablero · three styles from the same board", () => {
-  it("renders the header with the Tablero description", () => {
+describe("TareasTablero · three styles from tareas.board(f)", () => {
+  it("renders the header with the Tablero description and fetches nothing on mount", () => {
     renderTablero("visual");
     expect(screen.getByRole("heading", { name: "Tareas" })).toBeTruthy();
     expect(screen.getByText(TABLERO_DESCRIPTION)).toBeTruthy();
+    // Seeded by the page: nothing is fetched on mount.
+    expect(pageData.getTareasBoard).not.toHaveBeenCalled();
+    expect(pageData.getTareasPageData).not.toHaveBeenCalled();
   });
 
-  it("Visual: one column per estatus, empty column collapsed, card links to the task sheet", () => {
+  it("Visual: one column per estatus, empty column collapsed, card links keep the view and filters", () => {
+    nav.search = "vista=tablero&tramo=diseno&estado=pendiente";
     const { container } = renderTablero("visual");
 
     expect(container.querySelectorAll("[data-task-id]").length).toBe(TOTAL);
@@ -178,7 +222,17 @@ describe("TareasTablero · three styles from the same board", () => {
     expect(screen.getByRole("group", { name: "En proceso · 1" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Completado · 1" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Bloqueado · 0" }).getAttribute("data-collapsed")).toBe("true");
-    expect(screen.getByRole("link", { name: "Planos ejecutivos" }).getAttribute("href")).toBe("/tareas?tarea=t2");
+    expect(screen.getByRole("link", { name: "Planos ejecutivos" }).getAttribute("href")).toBe(
+      "/tareas?vista=tablero&tramo=diseno&estado=pendiente&tarea=t2",
+    );
+  });
+
+  it("Visual: the column count is the column's total, not the loaded cards", () => {
+    const board = boardData();
+    board.columns.pendiente = { ...board.columns.pendiente, total: 57, nextCursor: "c-1" };
+    renderTablero("visual", seededClient(board));
+    const column = screen.getByRole("group", { name: "Pendiente · 57" });
+    expect(within(column).getByRole("button", { name: "Cargar más en Pendiente" })).toBeTruthy();
   });
 
   it("Esencial: groups by estatus with the same counts and Completado collapsed", () => {
@@ -205,8 +259,8 @@ describe("TareasTablero · three styles from the same board", () => {
     expect(table.getAttribute("data-columns")?.split(",")).toHaveLength(10);
   });
 
-  it("Visual: with no task matching the filters every column still shows with 0", () => {
-    renderTablero("visual", { pendiente: [], en_proceso: [], completado: [], bloqueado: [] });
+  it("Visual: with no task matching the filters every column still shows with 0 (#919)", () => {
+    renderTablero("visual", seededClient({ columns: emptyBoardColumns([]), statuses: [] }));
 
     expect(screen.queryByTestId("empty-state")).toBeNull();
     for (const label of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
@@ -216,69 +270,98 @@ describe("TareasTablero · three styles from the same board", () => {
   });
 
   it("Visual: shows a column for every configured custom status, even when empty", () => {
-    render(
-      <StyleProvider style="visual" scope="staff">
-        <TareasTablero
-          board={{ pendiente: [], en_proceso: [], completado: [], bloqueado: [] }}
-          customStatuses={[{ id: "cs-qa", name: "QA en revisión" }]}
-          header={{ title: "Tareas" }}
-        />
-      </StyleProvider>,
-    );
+    renderTablero("visual", seededClient({ columns: emptyBoardColumns([QA]), statuses: [QA] }));
     expect(screen.getByRole("group", { name: "QA en revisión · 0" })).toBeTruthy();
   });
 
   it.each<PresentationStyle>(["esencial", "analitico"])("shows the filters empty state in %s", (style) => {
-    renderTablero(style, { pendiente: [], en_proceso: [], completado: [], bloqueado: [] });
+    renderTablero(style, seededClient({ columns: emptyBoardColumns([]), statuses: [] }));
     expect(screen.getByTestId("empty-state").textContent).toBe("No hay tareas con estos filtros");
+  });
+
+  it("waits for the page bundle before reading the board on its own (one request per filter change)", () => {
+    pageData.getTareasPageData.mockReturnValue(new Promise(() => {}));
+    renderTablero("visual", createTestQueryClient());
+    expect(pageData.getTareasPageData).toHaveBeenCalledTimes(1);
+    expect(pageData.getTareasBoard).not.toHaveBeenCalled();
   });
 });
 
-describe("TareasTablero · moves", () => {
-  it("drags optimistically through setTaskStatusAction and refreshes on success", async () => {
+describe("TareasTablero · drag (optimistic on tareas.board(f))", () => {
+  it("moves the card in the cache at once, adjusts both totals and invalidates the dependent keys, not the board", async () => {
     const pending = deferred<unknown>();
     actions.setTaskStatusAction.mockReturnValue(pending.promise);
-    const { container } = renderTablero("visual");
+    const client = seededClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const { container } = renderTablero("visual", client);
 
     fireEvent.dragStart(card(container, "t2"));
     const target = screen.getByRole("group", { name: "En proceso · 1" });
     fireEvent.dragOver(target);
     fireEvent.drop(target);
 
-    expect(actions.setTaskStatusAction).toHaveBeenCalledWith("t2", "en_proceso");
+    await waitFor(() => expect(actions.setTaskStatusAction).toHaveBeenCalledWith("t2", "en_proceso"));
     // Moved before the server answers.
     expect(screen.getByRole("group", { name: "En proceso · 2" }).contains(card(container, "t2"))).toBe(true);
-    expect(refresh).not.toHaveBeenCalled();
+    const board = client.getQueryData<TareasBoardData>(qk.tareas.board(F))!;
+    expect(board.columns.pendiente.total).toBe(1);
+    expect(board.columns.en_proceso.total).toBe(2);
 
     await act(async () => {
-      pending.resolve({});
+      pending.resolve(okDetail("t2", "en_proceso"));
       await pending.promise;
     });
 
-    expect(refresh).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(invalidate).toHaveBeenCalled());
+    const keys = invalidate.mock.calls.map(([filters]) => JSON.stringify(filters?.queryKey));
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        JSON.stringify(["tareas", "facets"]),
+        JSON.stringify(["tareas", "list"]),
+        JSON.stringify(qk.proyectos.tab("p1", "tareas")),
+        JSON.stringify(qk.proyectos.cronograma("p1")),
+        JSON.stringify(qk.inicio()),
+        JSON.stringify(qk.shell.badges()),
+      ]),
+    );
+    expect(keys.some((k) => k.startsWith('["tareas","board"'))).toBe(false);
     expect(toastError).not.toHaveBeenCalled();
+    expect(nav.refresh).not.toHaveBeenCalled();
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 
   it("rolls the card back and shows the mapped Spanish error when the action fails", async () => {
-    const pending = deferred<unknown>();
-    actions.setTaskStatusAction.mockReturnValue(pending.promise);
-    const { container } = renderTablero("visual");
+    actions.setTaskStatusAction.mockResolvedValue({ ok: false, error: "FORBIDDEN: task status change" });
+    const client = seededClient();
+    const { container } = renderTablero("visual", client);
 
     fireEvent.dragStart(card(container, "t1"));
     const strip = screen.getByRole("group", { name: "Bloqueado · 0" });
     fireEvent.dragOver(strip);
     fireEvent.drop(strip);
-    expect(screen.getByRole("group", { name: "Bloqueado · 1" }).contains(card(container, "t1"))).toBe(true);
 
-    await act(async () => {
-      pending.reject(new Error("FORBIDDEN: task status change"));
-      await pending.promise.catch(() => {});
-    });
-
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción."));
     expect(screen.getByRole("group", { name: "Pendiente · 2" }).contains(card(container, "t1"))).toBe(true);
     expect(screen.getByRole("group", { name: "Bloqueado · 0" }).getAttribute("data-collapsed")).toBe("true");
-    expect(toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción.");
-    expect(refresh).not.toHaveBeenCalled();
+    expect(client.getQueryData<TareasBoardData>(qk.tareas.board(F))).toEqual(boardData());
+    expect(nav.refresh).not.toHaveBeenCalled();
+  });
+
+  it("patches a cached task detail with the move and rolls it back on error", async () => {
+    actions.setTaskStatusAction.mockResolvedValue({ ok: false, error: "NOT_FOUND" });
+    const client = seededClient();
+    const detail = { ...ROWS.t3, notes: null };
+    client.setQueryData(qk.tasks.detail("t3"), detail);
+    renderTablero("visual", client);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mover a… Render sala" }));
+    const option = await screen.findByRole("menuitem", { name: "Bloqueado" });
+    await act(async () => {
+      fireEvent.click(option);
+    });
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(client.getQueryData(qk.tasks.detail("t3"))).toEqual(detail);
   });
 
   it("moves a card from the keyboard through “Mover a…”", async () => {
@@ -295,18 +378,14 @@ describe("TareasTablero · moves", () => {
     });
 
     expect(actions.setTaskStatusAction).toHaveBeenCalledWith("t3", "completado");
-    expect(screen.getByRole("group", { name: "Completado · 2" }).contains(card(container, "t3"))).toBe(true);
-    expect(refresh).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("TareasTablero · drop into an empty custom column", () => {
-  it("moves the card through setTaskCustomStatusAction", async () => {
-    const { container } = render(
-      <StyleProvider style="visual" scope="staff">
-        <TareasTablero board={BOARD} customStatuses={[{ id: "cs-qa", name: "QA en revisión" }]} header={{ title: "Tareas" }} />
-      </StyleProvider>,
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: "Completado · 2" }).contains(card(container, "t3"))).toBe(true),
     );
+  });
+
+  it("drops into an empty custom column through setTaskCustomStatusAction", async () => {
+    const client = seededClient(boardData([QA]));
+    const { container } = renderTablero("visual", client);
 
     fireEvent.dragStart(card(container, "t2"));
     const strip = screen.getByRole("group", { name: "QA en revisión · 0" });
@@ -316,27 +395,26 @@ describe("TareasTablero · drop into an empty custom column", () => {
     });
 
     expect(actions.setTaskCustomStatusAction).toHaveBeenCalledWith("t2", "cs-qa");
-    expect(screen.getByRole("group", { name: "QA en revisión · 1" }).contains(card(container, "t2"))).toBe(true);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: "QA en revisión · 1" }).contains(card(container, "t2"))).toBe(true),
+    );
+    const moved = findBoardRow(client, F, "t2");
+    expect(moved?.customStatus?.id).toBe("cs-qa");
+    expect(moved?.status).toBe("en_proceso");
   });
 });
 
-describe("moveTaskToColumn", () => {
+describe("moveTaskToColumnAction", () => {
   it("sends base columns to setTaskStatusAction", async () => {
-    await moveTaskToColumn("t1", "bloqueado");
+    await moveTaskToColumnAction({ taskId: "t1", columnKey: "bloqueado", projectId: "p1" });
     expect(actions.setTaskStatusAction).toHaveBeenCalledWith("t1", "bloqueado");
     expect(actions.setTaskCustomStatusAction).not.toHaveBeenCalled();
   });
 
   it("sends custom:<id> columns to setTaskCustomStatusAction", async () => {
-    await moveTaskToColumn("t1", "custom:cs-rev");
+    await moveTaskToColumnAction({ taskId: "t1", columnKey: "custom:cs-rev", projectId: "p1" });
     expect(actions.setTaskCustomStatusAction).toHaveBeenCalledWith("t1", "cs-rev");
     expect(actions.setTaskStatusAction).not.toHaveBeenCalled();
-  });
-
-  it("rejects with the action error so the board rolls back", async () => {
-    actions.setTaskStatusAction.mockRejectedValue(new Error("NOT_FOUND"));
-    await expect(moveTaskToColumn("t1", "completado")).rejects.toThrow("NOT_FOUND");
   });
 });
 
@@ -349,25 +427,46 @@ describe("TareasTablero · quick-add", () => {
     }
   });
 
-  it("opens NewTaskDialog with that column's estatus and closes it", () => {
+  it("opens the shell's dialog with that column's estatus (no dialog of its own)", () => {
     renderTablero("visual");
-    expect(screen.queryByRole("dialog", { name: "Nueva tarea" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Agregar tarea en En proceso" }));
-    expect(screen.getByRole("dialog", { name: "Nueva tarea" }).getAttribute("data-status")).toBe("en_proceso");
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    expect(screen.queryByRole("dialog", { name: "Nueva tarea" })).toBeNull();
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Agregar tarea en En proceso" })));
+    expect(useNewTaskUi.getState()).toMatchObject({
+      open: true,
+      defaults: { status: "en_proceso" },
+      source: "tablero-quick-add",
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("passes custom:<id> for a custom status column", () => {
-    const qa = { id: "cs-qa", name: "QA en revisión", closes: false, countsAsCompleted: false };
-    const board: TaskBoard = {
-      ...BOARD,
-      en_proceso: [...BOARD.en_proceso, makeTask({ id: "t5", title: "Revisión QA", status: "en_proceso", customStatus: qa })],
+    const board = boardData([QA]);
+    board.columns["custom:cs-qa"] = {
+      rows: [makeRow({ id: "t5", title: "Revisión QA", status: "en_proceso", customStatus: QA })],
+      total: 1,
+      nextCursor: null,
     };
-    renderTablero("visual", board);
-    fireEvent.click(screen.getByRole("button", { name: "Agregar tarea en QA en revisión" }));
-    expect(screen.getByRole("dialog", { name: "Nueva tarea" }).getAttribute("data-status")).toBe("custom:cs-qa");
+    renderTablero("visual", seededClient(board));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Agregar tarea en QA en revisión" })));
+    expect(useNewTaskUi.getState().defaults).toEqual({ status: "custom:cs-qa" });
+  });
+
+  it("lands the created task in its column once the dialog invalidates tareas (no reload)", async () => {
+    const client = seededClient();
+    const created = makeRow({ id: "t9", title: "Nueva en proceso", status: "en_proceso" });
+    const next = boardData();
+    next.columns.en_proceso = { rows: [created, ROWS.t3], total: 2, nextCursor: null };
+    pageData.getTareasBoard.mockResolvedValue(next);
+    pageData.getTareasPageData.mockResolvedValue({ ...PAGE, board: next });
+    const { container } = renderTablero("visual", client);
+
+    // What the host dialog's `useActionMutation` does once the task is created.
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: qk.tareas.all });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: "En proceso · 2" }).contains(card(container, "t9"))).toBe(true),
+    );
+    expect(nav.refresh).not.toHaveBeenCalled();
   });
 });

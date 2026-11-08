@@ -558,12 +558,14 @@ async function runScheduleFromTemplate(ctx: ToolRunContext, input: z.output<type
 
   // startTramo dates template tasks from the project's start date (or today); shift them to `startDate`.
   const base = detail.value.startDate ?? flowToday();
-  const result = await startTramoAction({
-    projectId: project.id,
-    workflowId: workflow.value.id,
-    phaseIds,
-    assignment: { mode: "none" },
-  });
+  const result = unwrapActionResult(
+    await startTramoAction({
+      projectId: project.id,
+      workflowId: workflow.value.id,
+      phaseIds,
+      assignment: { mode: "none" },
+    }),
+  );
 
   const created = result.batchId
     ? await db

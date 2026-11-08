@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, screen } from "@testing-library/react";
 import axe from "axe-core";
 import type { ReactNode } from "react";
 
@@ -18,8 +18,20 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ href, children, scroll, ...rest }: { href: string; children: ReactNode; scroll?: boolean }) => {
+  default: ({
+    href,
+    children,
+    scroll,
+    onNavigate,
+    ...rest
+  }: {
+    href: string;
+    children: ReactNode;
+    scroll?: boolean;
+    onNavigate?: unknown;
+  }) => {
     void scroll;
+    void onNavigate;
     return (
       <a href={href} {...rest}>
         {children}
@@ -35,12 +47,15 @@ const BOARD: TramoBoard = {
   started: [],
 };
 
-vi.mock("@/lib/tramos/compat", () => ({
-  tramoStart: { fetchBoard: async () => BOARD, fetchCandidates: async () => [] },
-  canSeeAdminData: () => true,
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
+  getTareasStartSlotData: vi.fn(async () => ({ board: BOARD, candidates: [], canStart: true })),
+  getTareasPageData: vi.fn(),
+  getTareasListPage: vi.fn(),
+  getTareasFacets: vi.fn(),
+  getTareasBoard: vi.fn(),
+  getTareasBoardColumn: vi.fn(),
 }));
 vi.mock("@/lib/actions/tramo-start-actions", () => ({
-  fetchTramoBoardAction: vi.fn(),
   previewStartTramoAction: vi.fn(),
   startTramoAction: vi.fn(),
   undoStartTramoAction: vi.fn(),
@@ -72,11 +87,44 @@ vi.mock("@/components/patterns/ListPage", async () => {
 });
 
 import { TareasLista } from "./TareasLista";
+import { qk } from "@/lib/query/keys";
+import { tareasListFiltersOf, tareasPageKeyInputOf, type TareasListPages } from "@/lib/query/options/tareas";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { DEFAULT_TAREAS_QUERY, type TareasQuery } from "@/lib/tareas/query";
+import type { TaskListRow } from "@/lib/types/core";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 
 // The components read the signed-in user from the session store; seed it with the mocked user.
 beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
+
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "lista", tramo: "diseno" };
+
+/** The cache `/tareas?vista=lista&tramo=diseno` hydrates. */
+function seededClient() {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY)), {
+    facets: { total: LISTA_TASKS.length, byTramo: {}, projects: [] },
+    tramos: LISTA_TRAMOS,
+    staff: [],
+  });
+  const rows = LISTA_TASKS.map(
+    (t) =>
+      ({
+        ...t,
+        subtaskDone: t.subtaskDoneCount,
+        commentCount: 0,
+        attachmentCount: 0,
+        checklistTotal: t.checklist.total,
+        checklistDone: t.checklist.completed,
+      }) as TaskListRow,
+  );
+  client.setQueryData<TareasListPages>(qk.tareas.list(tareasListFiltersOf(QUERY)), {
+    pages: [{ rows, nextCursor: null, total: rows.length }],
+    pageParams: [null],
+  });
+  return client;
+}
 
 async function seriousViolations(container: HTMLElement) {
   // Color contrast needs real layout/rendering, which happy-dom doesn't provide.
@@ -103,10 +151,11 @@ describe("TareasLista accessibility", () => {
         document.documentElement.setAttribute("data-theme", mode);
         for (const style of STYLES) {
           document.documentElement.setAttribute("data-style", style);
-          const { container, unmount } = render(
+          const { container, unmount } = renderWithQueryClient(
             <StyleProvider style={style} scope="staff">
-              <TareasLista tasks={LISTA_TASKS} header={{ title: "Tareas" }} tramo="diseno" tramos={LISTA_TRAMOS} />
+              <TareasLista query={QUERY} header={{ title: "Tareas" }} />
             </StyleProvider>,
+            { client: seededClient() },
           );
           expect(await screen.findByText("Listos para iniciar (1)")).toBeTruthy();
           await act(async () => {});

@@ -17,13 +17,7 @@ import { revalidateBibliotecaScreen, revalidateVacacionesScreen } from "@/lib/ca
 import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
 import { revalidateMiEspacioScreen } from "@/lib/cache/screens/mi-espacio";
 import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
-import {
-  revalidateProyectoClientesScreen,
-  revalidateProyectoCronogramaScreen,
-  revalidateProyectoFichaScreen,
-  revalidateProyectosListScreen,
-} from "@/lib/cache/screens/proyectos";
-import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
+import { revalidateProyectoFichaScreen } from "@/lib/cache/screens/proyectos";
 
 const calls = () => revalidatePath.mock.calls;
 
@@ -31,20 +25,10 @@ beforeEach(() => revalidatePath.mockReset());
 
 describe("screen revalidation helpers: the full screen", () => {
   it.each([
-    [
-      "revalidateTareasScreen()",
-      () => revalidateTareasScreen(),
-      [["/tareas"], ["/tablero"], ["/calendario"], ["/mis-tareas"], ["/actividades", "layout"]],
-    ],
-    ["revalidateInicioScreen()", () => revalidateInicioScreen(), [["/dashboard"]]],
-    ["revalidateProyectosListScreen()", () => revalidateProyectosListScreen(), [["/proyectos"], ["/proyectos", "layout"]]],
-    [
-      "revalidateProyectoFichaScreen(id)",
-      () => revalidateProyectoFichaScreen("p1"),
-      [["/proyectos/p1/ficha"], ["/proyectos/p1", "layout"]],
-    ],
-    ["revalidateProyectoCronogramaScreen(id)", () => revalidateProyectoCronogramaScreen("p1"), [["/proyectos/p1/cronograma"]]],
-    ["revalidateProyectoClientesScreen()", () => revalidateProyectoClientesScreen(), [["/proyectos/[id]/clientes", "page"]]],
+    // Emptied in Phase 3: Inicio is the `qk.inicio()` query, invalidated by the mutations.
+    ["revalidateInicioScreen()", () => revalidateInicioScreen(), []],
+    // The ficha target went in 5b (#960): the ficha is the `qk.proyectos.tab(id,'ficha')` query.
+    ["revalidateProyectoFichaScreen(id)", () => revalidateProyectoFichaScreen("p1"), [["/proyectos/p1", "layout"]]],
     ["revalidateMiEspacioScreen()", () => revalidateMiEspacioScreen(), [["/mi-espacio"], ["/mi-espacio", "layout"]]],
     ["revalidatePersonasScreen()", () => revalidatePersonasScreen(), [["/personas"], ["/equipo"], ["/directorio"]]],
     ["revalidateVacacionesScreen()", () => revalidateVacacionesScreen(), [["/biblioteca/vacaciones"]]],
@@ -73,47 +57,20 @@ describe("screen revalidation helpers: the full screen", () => {
 });
 
 describe("screen revalidation helpers: the targets an action names, in its order", () => {
-  it("tasks-actions revalidateTareas: /tareas, /tablero, /calendario, then the ficha", () => {
-    revalidateTareasScreen(["tareas", "tablero", "calendario"]);
-    revalidateProyectoFichaScreen("p1", ["ficha"]);
-    expect(calls()).toEqual([["/tareas"], ["/tablero"], ["/calendario"], ["/proyectos/p1/ficha"]]);
-  });
-
-  it("tramo-start-actions revalidateTramoStart(projectId): the eight targets in the old order", () => {
-    revalidateTareasScreen(["actividadesLayout"]);
-    revalidateProyectosListScreen(["proyectos"]);
-    revalidateProyectoFichaScreen("p1", ["ficha"]);
-    revalidateInicioScreen();
-    revalidateTareasScreen(["tablero", "misTareas", "calendario"]);
-    expect(calls()).toEqual([
-      ["/actividades", "layout"],
-      ["/proyectos"],
-      ["/proyectos/p1/ficha"],
-      ["/dashboard"],
-      ["/tablero"],
-      ["/mis-tareas"],
-      ["/calendario"],
-    ]);
-  });
-
   it("single targets", () => {
-    revalidateProyectosListScreen(["proyectosLayout"]);
     revalidateProyectoFichaScreen("p2", ["projectLayout"]);
     revalidateMiEspacioScreen(["miEspacioLayout"]);
     revalidateMiEspacioScreen(["miEspacio"]);
     revalidatePersonasScreen(["equipo"]);
     revalidatePersonasScreen(["directorio"]);
     revalidatePersonasScreen(["personas"]);
-    revalidateTareasScreen(["tareas"]);
     expect(calls()).toEqual([
-      ["/proyectos", "layout"],
       ["/proyectos/p2", "layout"],
       ["/mi-espacio", "layout"],
       ["/mi-espacio"],
       ["/equipo"],
       ["/directorio"],
       ["/personas"],
-      ["/tareas"],
     ]);
   });
 });

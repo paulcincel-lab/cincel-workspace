@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { NewTaskDialog, type NewTaskDialogProps } from "@/components/tareas/NewTaskDialog";
 import { FiltersBar, type FiltersBarProps } from "@/components/patterns/FiltersBar";
+import { ErrorState } from "@/components/shell/ErrorState";
 import { Button } from "@/components/ui/shadcn/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { RecordTable } from "@/components/widgets/RecordTable";
@@ -25,29 +26,54 @@ import {
   isTaskLate,
   localDateKey,
   matchesEstado,
+  parseProjectTasksQuery,
   projectTasksHref,
   responsableOptions,
   topLevelTasks,
   type ProjectGroupRow,
+  type ProjectTask,
   type ProjectTaskGroup,
   type ProjectTaskRow,
   type ProjectTasksQuery,
 } from "@/lib/proyectos/project-tasks-by-fase";
-import type { TaskListItem } from "@/lib/types/core";
+import { proyectoTareasOptions } from "@/lib/query/options/proyectos";
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
 
 export type ProjectTasksByFaseProps = {
   projectId: string;
-  tasks: TaskListItem[];
+  tasks: ProjectTask[];
   /** `canSeeAdminData(viewer)`: shows the "Administración" group. The server already leaves admin tasks out for others. */
   includeAdmin?: boolean;
-  /** The tab's URL filters (`parseProjectTasksQuery`). */
-  query?: ProjectTasksQuery;
   /** `YYYY-MM-DD`; defaults to the viewer's local day. */
   today?: string;
 };
 
 const DEFAULT_QUERY: ProjectTasksQuery = { estado: "todas", responsable: null, q: "" };
 const ALL_PEOPLE = "__todos__";
+/** How long typing waits before the search reaches the URL. */
+export const PROJECT_TASKS_SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * Writes the tab's filters to the URL with `history.replaceState`: the App
+ * Router mirrors it into `useSearchParams`, the rows are already loaded, so
+ * no server render and no action call.
+ */
+function replaceFilters(projectId: string, query: ProjectTasksQuery): void {
+  if (typeof window === "undefined") return;
+  window.history.replaceState(window.history.state, "", projectTasksHref(projectId, query));
+}
+
+/**
+ * The project Tareas tab: reads `qk.proyectos.tab(id, 'tareas')` (prefetched
+ * by the page) and renders `ProjectTasksByFase` over it.
+ */
+export function ProjectTareasTab({ projectId }: { projectId: string }) {
+  const { data } = useSuspenseQuery(proyectoTareasOptions(projectId));
+  if (!data) {
+    return <ErrorState title="No se pudieron cargar las tareas." description="El proyecto no existe o ya no tienes acceso." />;
+  }
+  return <ProjectTasksByFase projectId={projectId} tasks={data.tasks} includeAdmin={data.includeAdmin} />;
+}
 
 /**
  * Proyecto · Tareas (redesign FE §3.5, §4.6): the project's tasks grouped by
@@ -55,28 +81,53 @@ const ALL_PEOPLE = "__todos__";
  * the estado / responsable / search filters and "+ Agregar tarea" per group.
  * A composition of library widgets: the per-group summary and the grouped
  * task list are `RecordTable`s, which render Visual, Esencial and Analítico.
+ *
+ * The filters live in the URL (`estado`, `responsable`, `q`) and change it
+ * with `history.replaceState` only: they filter the loaded rows, so they
+ * cause no server render. "Agregar tarea" opens the shell's one
+ * new-task dialog (`useNewTaskUi`); its host invalidates this tab's query.
  */
-export function ProjectTasksByFase({
-  projectId,
-  tasks,
-  includeAdmin = false,
-  query = DEFAULT_QUERY,
-  today: todayProp,
-}: ProjectTasksByFaseProps) {
-  const router = useRouter();
+export function ProjectTasksByFase({ projectId, tasks, includeAdmin = false, today: todayProp }: ProjectTasksByFaseProps) {
+  const searchParams = useSearchParams();
   const summaryHeadingId = useId();
   const tasksHeadingId = useId();
   const today = useMemo(() => todayProp ?? localDateKey(new Date()), [todayProp]);
-  const [search, setSearch] = useState(query.q);
-  const [dialogDefaults, setDialogDefaults] = useState<NewTaskDialogProps["defaults"] | null>(null);
+
+  const search = searchParams?.toString() ?? "";
+  const query = useMemo(() => parseProjectTasksQuery(Object.fromEntries(new URLSearchParams(search))), [search]);
+  // The local draft filters right away; the URL follows after the debounce.
+  const [draft, setDraft] = useState(() => query.q);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    },
+    [],
+  );
+
+  const currentQuery: ProjectTasksQuery = { ...query, q: draft };
+
+  function setFilter(patch: Partial<ProjectTasksQuery>) {
+    replaceFilters(projectId, { ...currentQuery, ...patch });
+  }
+
+  function handleSearch(value: string) {
+    setDraft(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      searchTimer.current = null;
+      replaceFilters(projectId, { ...query, q: value.trim() });
+    }, PROJECT_TASKS_SEARCH_DEBOUNCE_MS);
+  }
 
   const rows = useMemo(
     () => topLevelTasks(includeAdmin ? tasks : tasks.filter((task) => task.kind !== "admin")),
     [tasks, includeAdmin],
   );
   const byPerson = useMemo(
-    () => filterByPersonAndSearch(rows, { responsable: query.responsable, q: search }),
-    [rows, query.responsable, search],
+    () => filterByPersonAndSearch(rows, { responsable: query.responsable, q: draft }),
+    [rows, query.responsable, draft],
   );
   const counts = useMemo(() => estadoCounts(byPerson, today), [byPerson, today]);
   const shown = useMemo(
@@ -98,7 +149,6 @@ export function ProjectTasksByFase({
   const people = useMemo(() => responsableOptions(rows), [rows]);
   const hasUnassigned = rows.some((task) => !task.managerId);
 
-  const currentQuery: ProjectTasksQuery = { ...query, q: search };
   const chips: NonNullable<FiltersBarProps["chips"]> = PROJECT_TASK_ESTADOS.map((estado) => ({
     key: estado,
     label: PROJECT_TASK_ESTADO_LABEL[estado],
@@ -106,15 +156,19 @@ export function ProjectTasksByFase({
     colorVar: estado === "vencidas" ? "var(--destructive)" : undefined,
     pressed: query.estado === estado,
     href: projectTasksHref(projectId, currentQuery, { estado }),
+    onSelect: () => setFilter({ estado }),
   }));
 
   const openCreate = (group: ProjectTaskGroup | null) =>
-    setDialogDefaults({ projectId, ...(group?.tramo ? { tramoKey: group.tramo.key } : {}) });
+    useNewTaskUi
+      .getState()
+      .openNewTask({ projectId, ...(group?.tramo ? { tramoKey: group.tramo.key } : {}) }, "proyecto");
 
-  const onDialogOpenChange = (open: boolean) => {
-    if (open) return;
-    setDialogDefaults(null);
-    router.refresh();
+  const clearFilters = () => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = null;
+    setDraft("");
+    replaceFilters(projectId, DEFAULT_QUERY);
   };
 
   const responsableSelect = (
@@ -122,7 +176,7 @@ export function ProjectTasksByFase({
       key="responsable"
       value={query.responsable ?? ALL_PEOPLE}
       onValueChange={(value) =>
-        router.push(projectTasksHref(projectId, currentQuery, { responsable: value === ALL_PEOPLE || typeof value !== "string" ? null : value }))
+        setFilter({ responsable: value === ALL_PEOPLE || typeof value !== "string" ? null : value })
       }
     >
       <SelectTrigger aria-label="Responsable">
@@ -187,7 +241,7 @@ export function ProjectTasksByFase({
       <FiltersBar
         chips={chips}
         selects={[responsableSelect]}
-        search={{ value: search, placeholder: `Buscar en ${rows.length} tareas`, onChange: setSearch }}
+        search={{ value: draft, placeholder: `Buscar en ${rows.length} tareas`, onChange: handleSearch }}
       />
 
       <section aria-labelledby={summaryHeadingId} className="flex flex-col gap-3">
@@ -218,17 +272,11 @@ export function ProjectTasksByFase({
             renderCell={renderTaskCell}
             emptyState={{
               title: "No hay tareas con estos filtros",
-              action: { label: "Ver todas", href: projectTasksHref(projectId, DEFAULT_QUERY) },
+              action: { label: "Ver todas", onClick: clearFilters },
             }}
           />
         </section>
       ) : null}
-
-      <NewTaskDialog
-        open={dialogDefaults !== null}
-        onOpenChange={onDialogOpenChange}
-        defaults={dialogDefaults ?? undefined}
-      />
     </div>
   );
 }

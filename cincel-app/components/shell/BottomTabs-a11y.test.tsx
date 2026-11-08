@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CSSProperties } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { CSSProperties, ReactElement } from "react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 import { BookOpen, Folder, House, Inbox, SlidersHorizontal, Sparkles, SquareCheck, Users } from "lucide-react";
 
@@ -20,6 +20,8 @@ vi.mock("./AvatarMenu", () => ({
   ),
 }));
 
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { splitBottomTabs } from "@/lib/ui/mobile-nav";
 import type { NavModel } from "@/lib/ui/nav";
@@ -85,6 +87,13 @@ function mockPhoneViewport() {
     dispatchEvent: () => true,
   }));
   Object.defineProperty(window, "matchMedia", { configurable: true, writable: true, value: matchMedia });
+}
+
+/** Renders with the badges the `(staff)` layout hydrates (Mi espacio 5, Tareas 31). */
+function render(ui: ReactElement) {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.shell.badges(), { tareasOpen: 31, bandeja: { unreadCount: 5, dueReminders: [] } });
+  return renderWithQueryClient(ui, { client });
 }
 
 function MobileChrome() {

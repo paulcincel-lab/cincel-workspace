@@ -38,8 +38,8 @@ export const CHANGE_PASSWORD_SUCCESS = "Contraseña actualizada. Redirigiendo al
 
 /**
  * First-access password change: draft, submit through
- * `completeFirstAccessAction`, error / success copy and the redirect to the
- * dashboard. Shared by the legacy and the redesigned form so both submit the
+ * `completeFirstAccessAction`, error / success copy and the redirect to
+ * /inicio. Shared by the legacy and the redesigned form so both submit the
  * same way.
  */
 export function useChangePassword() {
@@ -65,8 +65,8 @@ export function useChangePassword() {
       }
 
       setSuccess(CHANGE_PASSWORD_SUCCESS);
-      router.replace("/dashboard");
-      router.refresh();
+      router.replace("/inicio");
+      router.refresh(); // data-patterns: auth
     });
   };
 

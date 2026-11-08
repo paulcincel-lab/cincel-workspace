@@ -16,6 +16,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/shadcn/sheet";
+import { useNavBadges, withNavBadges } from "@/lib/shell/nav-badges";
 import { badgeLabel } from "@/lib/ui/mobile-nav";
 import type { NavItem, NavItemKey } from "@/lib/ui/nav";
 import { cn } from "@/lib/utils";
@@ -26,7 +27,8 @@ import { useMobileShell } from "./use-mobile-shell";
  * Mobile tabs under 768 px (redesign FE §3.1, §4.1; frames `Movil*`):
  * Inicio, Tareas, Mi espacio, Proyectos and "Más", a bottom `Sheet` with the
  * remaining nav items. Items come from the nav model, so an entry whose
- * `IMPLEMENTED` flag is false never reaches this component.
+ * `IMPLEMENTED` flag is false never reaches this component. The badges come
+ * from `useQuery(qk.shell.badges())`, the same entry the Sidebar reads.
  */
 export type BottomTabsProps = {
   activeKey: NavItemKey | null;
@@ -76,9 +78,12 @@ function TabLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function BottomTabs({ activeKey, items, more }: BottomTabsProps) {
+export function BottomTabs({ activeKey, items: navItems, more: navMore }: BottomTabsProps) {
   const mobile = useMobileShell();
   const [moreOpen, setMoreOpen] = useState(false);
+  const badges = useNavBadges();
+  const items = withNavBadges(navItems, badges);
+  const more = withNavBadges(navMore, badges);
 
   if (!mobile || (items.length === 0 && more.length === 0)) return null;
 

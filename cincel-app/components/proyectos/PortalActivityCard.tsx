@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
-import { listProjectPortalActivityAction } from "@/lib/actions/portal-actions";
+import { proyectoClientesActivityOptions } from "@/lib/query/options/proyectos";
 import type { PortalActivityRow } from "@/lib/types/portal";
 
 export const PORTAL_ACTIVITY_ACTION_LABEL: Record<PortalActivityRow["action"], string> = {
@@ -20,28 +20,18 @@ const EMPTY = "Todavía no hay actividad de clientes en este proyecto.";
 
 const dateFormatter = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
 
-/** Clientes tab Actividad card (FE §2.4): the last 50 portal file events, newest first. */
-export function PortalActivityCard({ projectId }: { projectId: string }) {
-  const [rows, setRows] = useState<PortalActivityRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+const NO_ROWS: PortalActivityRow[] = [];
 
-  useEffect(() => {
-    let cancelled = false;
-    listProjectPortalActivityAction(projectId)
-      .then((next) => {
-        if (!cancelled) setRows(next);
-      })
-      .catch(() => {
-        if (!cancelled) setError(LOAD_ERROR);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
+/**
+ * Clientes tab Actividad card (FE §2.4): the last 50 portal file events,
+ * newest first, from `proyectos.clientesActivity(id)` (prefetched by the
+ * page; Query Migration 5d, #962).
+ */
+export function PortalActivityCard({ projectId }: { projectId: string }) {
+  const activity = useQuery(proyectoClientesActivityOptions(projectId));
+  const loading = activity.isPending;
+  const error = activity.isError ? LOAD_ERROR : "";
+  const rows = activity.data ?? NO_ROWS;
 
   return (
     <Card>

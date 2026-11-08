@@ -1,6 +1,7 @@
 "use client";
 
 import { LineSeriesWidget, type LineSeries } from "@/components/widgets/LineSeriesWidget";
+import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
 import type { InicioData } from "@/lib/types/redesign";
 import type { RecordTableData } from "@/lib/types/widgets";
 
@@ -15,7 +16,7 @@ const SERIES: LineSeries[] = [
 export function weekLabel(weekStart: string): string {
   const date = new Date(`${weekStart.slice(0, 10)}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return weekStart;
-  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" }).format(date);
+  return cachedDateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" }).format(date);
 }
 
 /** Analítico "Ritmo semanal" table: Semana, Creadas, Completadas, Neto. */

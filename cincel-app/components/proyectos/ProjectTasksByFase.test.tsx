@@ -3,31 +3,27 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 const refresh = vi.fn();
 const push = vi.fn();
+const nav = vi.hoisted(() => ({ params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh, push, replace: vi.fn() }),
   usePathname: () => "/proyectos/p1/tareas",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => nav.params,
 }));
 
-const dialogCalls: Array<{ open: boolean; defaults?: unknown }> = [];
-vi.mock("@/components/tareas/NewTaskDialog", () => ({
-  NewTaskDialog: (props: { open: boolean; defaults?: unknown; onOpenChange(open: boolean): void }) => {
-    dialogCalls.push({ open: props.open, defaults: props.defaults });
-    return props.open ? (
-      <div role="dialog" aria-label="Nueva tarea">
-        <button type="button" onClick={() => props.onOpenChange(false)}>
-          Cerrar
-        </button>
-      </div>
-    ) : null;
-  },
-}));
+// The page prefetches `qk.proyectos.tab(id, 'tareas')`; a client call here would be a bug.
+const actions = vi.hoisted(() => ({ getProyectoTareasData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => actions);
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { qk } from "@/lib/query/keys";
+import { proyectoTareasOptions } from "@/lib/query/options/proyectos";
+import { prefetch } from "@/lib/query/server";
+import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
+import { resetNewTaskUi, useNewTaskUi } from "@/lib/stores/new-task-store";
 import {
   buildGroupsTable,
   buildTasksTable,
@@ -40,10 +36,10 @@ import {
   projectTasksHref,
   topLevelTasks,
 } from "@/lib/proyectos/project-tasks-by-fase";
-import type { TaskListItem, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
+import type { TaskListItem, TaskListRow, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
-import { ProjectTasksByFase } from "./ProjectTasksByFase";
+import { PROJECT_TASKS_SEARCH_DEBOUNCE_MS, ProjectTareasTab, ProjectTasksByFase } from "./ProjectTasksByFase";
 
 const TODAY = "2026-11-06";
 const PRESALE: WorkflowRef = { id: "w1", key: "presale", name: "Presale", sortOrder: 1 };
@@ -109,8 +105,26 @@ afterEach(() => {
   cleanup();
   refresh.mockReset();
   push.mockReset();
-  dialogCalls.length = 0;
+  actions.getProyectoTareasData.mockReset();
+  nav.params = new URLSearchParams();
+  resetNewTaskUi();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  window.history.replaceState(null, "", "/");
 });
+
+/** The estado chip with `label` in the filters bar. */
+function estadoChip(label: string): HTMLElement {
+  const chip = within(screen.getByRole("group", { name: "Filtros" })).getByText(label).closest("a");
+  if (!chip) throw new Error(`no chip ${label}`);
+  return chip;
+}
+
+/** The URL of the last `history.replaceState` call. */
+function lastReplacedUrl(spy: { mock: { calls: unknown[][] } }): string | undefined {
+  const call = spy.mock.calls.at(-1);
+  return call ? String(call[2]) : undefined;
+}
 
 describe("groupProjectTasks", () => {
   it("groups by fase in catalog order with progress per group", () => {
@@ -271,19 +285,106 @@ describe("ProjectTasksByFase", () => {
   });
 
   it("applies the estado filter from the URL", () => {
-    renderTab("visual", { query: { estado: "vencidas", responsable: null, q: "" } });
+    nav.params = new URLSearchParams("estado=vencidas");
+    renderTab("visual");
     expect(screen.getByRole("link", { name: "Cambiar tapas a WC" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Retiro de cascajo" })).toBeNull();
     expect(screen.getByText(/1 de 5 mostradas/)).toBeTruthy();
   });
 
-  it("opens the existing create flow with the group's project and tramo, and refreshes on close", () => {
+  it("opens the shell's new-task dialog through the store with the group's project and tramo", () => {
+    const openNewTask = vi.spyOn(useNewTaskUi.getState(), "openNewTask");
     renderTab("visual");
     fireEvent.click(screen.getByRole("button", { name: "Agregar tarea a Instalaciones" }));
-    expect(dialogCalls.at(-1)).toEqual({ open: true, defaults: { projectId: "p1", tramoKey: "construccion" } });
-    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
-    expect(refresh).toHaveBeenCalledTimes(1);
-    expect(dialogCalls.at(-1)?.open).toBe(false);
+    expect(openNewTask).toHaveBeenCalledWith({ projectId: "p1", tramoKey: "construccion" }, "proyecto");
+    expect(useNewTaskUi.getState()).toMatchObject({
+      open: true,
+      source: "proyecto",
+      defaults: { projectId: "p1", tramoKey: "construccion" },
+    });
+    // No dialog of its own, and closing it never refreshes the route.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    act(() => useNewTaskUi.getState().closeNewTask());
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("opens the dialog with the project only from the empty state", () => {
+    renderTab("visual", { tasks: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Agregar tarea" }));
+    expect(useNewTaskUi.getState()).toMatchObject({ open: true, source: "proyecto", defaults: { projectId: "p1" } });
+  });
+
+  it("writes the estado chip to the URL with history.replaceState, without router.push", () => {
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    renderTab("visual");
+    fireEvent.click(estadoChip("Vencidas"));
+    expect(lastReplacedUrl(replaceState)).toBe("/proyectos/p1/tareas?estado=vencidas");
+    expect(push).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("debounces the search into ?q= with history.replaceState, keeping the other filters", () => {
+    vi.useFakeTimers();
+    nav.params = new URLSearchParams("estado=abiertas");
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    renderTab("visual");
+    fireEvent.change(screen.getByLabelText("Buscar en 5 tareas"), { target: { value: "presion" } });
+    // The rows filter right away; the URL follows after the debounce.
+    expect(screen.getByRole("link", { name: "Pruebas de presión hidráulica" })).toBeTruthy();
+    expect(replaceState).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(PROJECT_TASKS_SEARCH_DEBOUNCE_MS));
+    expect(lastReplacedUrl(replaceState)).toBe("/proyectos/p1/tareas?estado=abiertas&q=presion");
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
+/** The slim tab row of a fixture task (the shape `loadProyectoTareas` returns). */
+function rowOf(task: TaskListItem): TaskListRow {
+  const item: Partial<TaskListItem> & Omit<TaskListItem, "notes"> = { ...task };
+  delete item.notes;
+  return {
+    ...item,
+    subtaskCount: item.subtaskCount ?? 0,
+    subtaskDone: item.subtaskDoneCount ?? 0,
+    commentCount: 0,
+    attachmentCount: 0,
+    checklistTotal: 0,
+    checklistDone: 0,
+    waitingOn: 0,
+  };
+}
+
+describe("ProjectTareasTab", () => {
+  it("renders from the hydrated tab query with 0 client action calls", async () => {
+    const { client, state } = await hydrationRoundtrip((server) =>
+      prefetch(server, proyectoTareasOptions("p1"), async () => ({ tasks: FASE_TASKS.map(rowOf), includeAdmin: false })),
+    );
+    renderWithQueryClient(<ProjectTareasTab projectId="p1" />, { client, hydrate: state });
+    expect(screen.getByRole("link", { name: "Pruebas de presión hidráulica" })).toBeTruthy();
+    expect(actions.getProyectoTareasData).not.toHaveBeenCalled();
+  });
+
+  it("changing filters makes no action call when the rows are loaded", () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.proyectos.tab("p1", "tareas"), { tasks: FASE_TASKS, includeAdmin: false });
+    renderWithQueryClient(<ProjectTareasTab projectId="p1" />, { client });
+    fireEvent.click(estadoChip("Completadas"));
+    expect(actions.getProyectoTareasData).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("shows an error state when the project is gone (null data)", () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.proyectos.tab("p1", "tareas"), null);
+    renderWithQueryClient(<ProjectTareasTab projectId="p1" />, { client });
+    expect(screen.getByText("No se pudieron cargar las tareas.")).toBeTruthy();
+  });
+
+
+  it("mounts no NewTaskDialog and calls no router.refresh (the shell's host owns the dialog)", () => {
+    const source = readFileSync(join(__dirname, "ProjectTasksByFase.tsx"), "utf8");
+    expect(source).not.toMatch(/NewTaskDialog/);
+    expect(source).not.toMatch(/router\.(refresh|push)/);
   });
 
   it("keeps style differences inside the widget library (FE §18 item 15)", () => {

@@ -17,7 +17,6 @@ const ROOT = join(__dirname, "../..");
 
 /** file → owner phase. */
 const ALLOW_LIST: Record<string, string> = {
-  "lib/time-tracking/today-events.ts": "2 #936 (today status → qk.me.today)",
   "components/biblioteca/use-recent-documents.ts": "8 #942 (notifyRecentDocumentsChanged → useRecentDocs)",
 };
 

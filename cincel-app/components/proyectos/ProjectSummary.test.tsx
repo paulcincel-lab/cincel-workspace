@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 // The widgets own the per-style markup; here they print the data they get, so
@@ -60,18 +60,37 @@ vi.mock("@/components/widgets/RecordTable", () => ({
   ),
 }));
 
+// The page prefetches `qk.proyectos.resumen(id)`; a client call here would be a bug.
+const actions = vi.hoisted(() => ({ getProyectoResumenData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => actions);
+const summaryLib = vi.hoisted(() => ({ builds: 0 }));
+vi.mock("@/lib/proyectos/project-summary", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/proyectos/project-summary")>();
+  return {
+    ...actual,
+    buildProjectSummary: (input: Parameters<typeof actual.buildProjectSummary>[0]) => {
+      summaryLib.builds += 1;
+      return actual.buildProjectSummary(input);
+    },
+  };
+});
+
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { qk } from "@/lib/query/keys";
+import { proyectoResumenOptions } from "@/lib/query/options/proyectos";
+import { prefetch } from "@/lib/query/server";
+import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import { fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
 
-import { ProjectSummary } from "./ProjectSummary";
+import { ProjectSummary, ProjectSummaryContent, RESUMEN_NOT_FOUND_TITLE } from "./ProjectSummary";
 
 afterEach(cleanup);
 
 function renderSummary(overrides: Parameters<typeof fixtureSummaryInput>[0] = {}, style: PresentationStyle = "visual") {
   return render(
     <StyleProvider style={style} scope="staff">
-      <ProjectSummary {...fixtureSummaryInput(overrides)} />
+      <ProjectSummaryContent data={fixtureSummaryInput(overrides)} />
     </StyleProvider>
   );
 }
@@ -154,5 +173,54 @@ describe("ProjectSummary · styles", () => {
     expect(avance).toContain('"variant":"rings"');
     expect(avance).toContain('"real":82');
     expect(avance).toContain("32 de 39 tareas");
+  });
+});
+
+describe("ProjectSummary · query", () => {
+  it("renders from the hydrated Resumen with 0 client action calls", async () => {
+    const input = fixtureSummaryInput();
+    const { client, state } = await hydrationRoundtrip((server) =>
+      prefetch(server, proyectoResumenOptions("p1"), async () => input),
+    );
+    renderWithQueryClient(
+      <StyleProvider style="visual" scope="staff">
+        <ProjectSummary projectId="p1" />
+      </StyleProvider>,
+      { client, hydrate: state },
+    );
+    expect(screen.getByRole("region", { name: "Ficha" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Cliente y contactos" })).toBeTruthy();
+    expect(actions.getProyectoResumenData).not.toHaveBeenCalled();
+  });
+
+  it("shows the not-found state when the Resumen is null", () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.proyectos.resumen("p1"), null);
+    renderWithQueryClient(<ProjectSummary projectId="p1" />, { client });
+    expect(screen.getByText(RESUMEN_NOT_FOUND_TITLE)).toBeTruthy();
+    expect(actions.getProyectoResumenData).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProjectSummary · memo", () => {
+  it("builds the summary once per query data, not once per render", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.proyectos.resumen("p1"), fixtureSummaryInput());
+    summaryLib.builds = 0;
+    const ui = (
+      <StyleProvider style="visual" scope="staff">
+        <ProjectSummary projectId="p1" />
+      </StyleProvider>
+    );
+    const { rerender } = renderWithQueryClient(ui, { client });
+    expect(summaryLib.builds).toBe(1);
+    // A parent re-render with the same cached data reuses the build.
+    rerender(ui);
+    rerender(ui);
+    expect(summaryLib.builds).toBe(1);
+    // New data (a refetch or an invalidation) builds again.
+    act(() => client.setQueryData(qk.proyectos.resumen("p1"), fixtureSummaryInput({ showBudget: false })));
+    // Query observers are notified on the next tick.
+    await waitFor(() => expect(summaryLib.builds).toBe(2));
   });
 });

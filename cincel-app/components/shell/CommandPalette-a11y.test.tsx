@@ -1,18 +1,27 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import axe from "axe-core";
 
 import type { SearchResult } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 
 const search = vi.hoisted(() => ({ searchWorkspaceAction: vi.fn() }));
-const time = vi.hoisted(() => ({ fetchMyTodayAction: vi.fn(), clockInAction: vi.fn() }));
+const time = vi.hoisted(() => ({
+  fetchMyTodayAction: vi.fn(),
+  clockInAction: vi.fn(),
+  pauseWorkAction: vi.fn(),
+  resumeWorkAction: vi.fn(),
+  clockOutAction: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/actions/search-actions", () => search);
 vi.mock("@/lib/actions/time-tracking-actions", () => time);
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import { useShellUi } from "@/lib/stores/shell-ui-store";
 
 import { CommandPalette } from "./CommandPalette";
 
@@ -60,7 +69,8 @@ describe("CommandPalette accessibility", () => {
           requiredFrom: null,
           hoursPerDay: 8,
         });
-        render(<CommandPalette open onOpenChange={() => {}} />);
+        renderWithQueryClient(<CommandPalette />);
+        act(() => useShellUi.getState().openSearch());
 
         // Short-query state: hint + actions group.
         await screen.findByText("Escribe al menos 2 letras.");

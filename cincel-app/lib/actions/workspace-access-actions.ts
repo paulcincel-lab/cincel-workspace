@@ -2,7 +2,6 @@
 
 import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
 import { revalidatePersonasScreen } from "@/lib/cache/screens/personas";
-import { revalidateProyectosListScreen } from "@/lib/cache/screens/proyectos";
 
 import { recheckStaffAccess } from "@/lib/auth/access-recheck";
 import { recordDirectoryError } from "@/lib/auth/directory-error-log";
@@ -204,6 +203,5 @@ export async function ensureMissingProjectFoldersAction(): Promise<EnsureMissing
   if (!(await isAdministrator())) throw new Error("FORBIDDEN: ensure project folders");
   const counts = await ensureMissingProjectFolders();
   revalidateAjustesScreen("google");
-  revalidateProyectosListScreen(["proyectos"]);
   return counts;
 }

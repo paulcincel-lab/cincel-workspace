@@ -168,6 +168,8 @@ describe("AvatarMenu", () => {
     await waitFor(() => expect(state.logout).toHaveBeenCalled());
     await waitFor(() => expect(state.push).toHaveBeenCalledWith("/login"));
     expect(state.setAccess).toHaveBeenCalledWith({ status: "guest", user: null });
+    // Logout is the one auth refresh the menu keeps.
+    expect(state.refresh).toHaveBeenCalledTimes(1);
   });
 
   it("shows the photo after a successful upload", async () => {
@@ -179,7 +181,8 @@ describe("AvatarMenu", () => {
     await waitFor(() => expect(onPhotoChange).toHaveBeenCalledWith("/api/staff/s1/photo?v=2"));
     expect(fetchMock).toHaveBeenCalledWith("/api/staff/me/photo", expect.objectContaining({ method: "POST" }));
     expect(container.querySelector('[data-photo="photo"]')).not.toBeNull();
-    expect(state.refresh).toHaveBeenCalled();
+    // `me.profile` carries the new photo: no server render.
+    expect(state.refresh).not.toHaveBeenCalled();
     await openMenu();
     expect(itemLabels()).toContain("Quitar foto");
   });

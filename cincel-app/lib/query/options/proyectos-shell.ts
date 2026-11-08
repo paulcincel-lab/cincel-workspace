@@ -11,7 +11,11 @@ import type { StaffFilesResult } from "@/lib/types/workspace-access";
  */
 export function withCachedArchivosCount(client: QueryClient, shell: ProjectTabShell | null): ProjectTabShell | null {
   if (!shell) return shell;
-  const root = client.getQueryData<StaffFilesResult>(qk.proyectos.archivos(shell.project.id, null));
+  // The Archivos query (5d) caches `{ kind: 'ok', result }`; a bare listing is read as is.
+  const cached = client.getQueryData<StaffFilesResult | { kind: string; result?: StaffFilesResult }>(
+    qk.proyectos.archivos(shell.project.id, null),
+  );
+  const root = cached && "kind" in cached ? cached.result : cached;
   if (!root || root.status !== "ok") return shell;
   return { ...shell, counts: { ...shell.counts, archivos: root.items.length } };
 }

@@ -58,6 +58,35 @@ export function portfolioProgress(
   };
 }
 
+/**
+ * What `portfolioProgress` reads from a schedule, aggregated in SQL: task
+ * counts by status and by `fin <= weekEnd`, and the paid % of the payment row
+ * in effect at the week's end (`pagosRowForDate`). `paidPct` is null when
+ * the schedule has no payment rows or the caller did not read them.
+ */
+export type PortfolioScheduleCounts = {
+  total: number;
+  done: number;
+  progress: number;
+  /** Tasks whose `fin` is on or before the current week's end. */
+  planned: number;
+  paidPct: number | null;
+};
+
+/** `portfolioProgress` from SQL aggregates: the same numbers without loading the schedule rows. */
+export function portfolioProgressFromCounts(
+  input: { progress: number; schedule: PortfolioScheduleCounts | null },
+): PortfolioProgress {
+  const schedule = input.schedule;
+  const budgetSpentPct = schedule && schedule.paidPct !== null ? clampPct(schedule.paidPct) : null;
+  if (!schedule || schedule.total === 0) {
+    return { real: clampPct(input.progress), plan: null, deviation: null, budgetSpentPct };
+  }
+  const real = clampPct(Math.round(((schedule.done + schedule.progress * 0.5) / schedule.total) * 100));
+  const plan = clampPct(Math.round((schedule.planned / schedule.total) * 100));
+  return { real, plan, deviation: deviationOf(real, plan), budgetSpentPct };
+}
+
 function isoToUtcMs(iso: string): number {
   return Date.parse(`${iso.slice(0, 10)}T00:00:00Z`);
 }

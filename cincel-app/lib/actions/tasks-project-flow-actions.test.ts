@@ -78,7 +78,6 @@ vi.mock("@/lib/repositories/project-spaces-repository", async (importOriginal) =
 const repo = vi.hoisted(() => ({
   listTasks: vi.fn(),
   listMyTasks: vi.fn(),
-  listBoard: vi.fn(),
   listCalendar: vi.fn(),
   getTask: vi.fn(),
   createUserTask: vi.fn(),
@@ -104,7 +103,6 @@ const {
   createSubtaskAction,
   createUserTaskAction,
   fetchAdminTasksAction,
-  fetchBoardAction,
   fetchCalendarAction,
   fetchMyTasksAction,
   fetchTasksAction,
@@ -188,7 +186,6 @@ beforeEach(() => {
   const list = [detail(userTask)];
   repo.listTasks.mockResolvedValue(list);
   repo.listMyTasks.mockResolvedValue(list);
-  repo.listBoard.mockResolvedValue({ pendiente: list, en_proceso: [], completado: [], bloqueado: [] });
   repo.listCalendar.mockResolvedValue(list);
   repo.getTask.mockImplementation(async (id: string) => detail(rowFor(id)));
   repo.assertTaskVisible.mockImplementation(async (id: string, viewer: { isAdmin: boolean }) => {
@@ -261,21 +258,14 @@ describe("task reads: filters, viewer scope and order", () => {
     expect(kinds.includes("admin") ? viewer?.isAdmin : false).toBe(false);
   });
 
-  it("passes the viewer scope to my tasks, board and calendar", async () => {
+  it("passes the viewer scope to my tasks and calendar", async () => {
     await fetchMyTasksAction({ phaseId: PHASE });
-    await fetchBoardAction({ spaceId: SPACE });
     await fetchCalendarAction("2026-11-01", "2026-11-30", { phaseId: PHASE });
 
     expect(repo.listMyTasks.mock.calls[0]).toEqual(
       expect.arrayContaining([expect.objectContaining({ phaseId: PHASE })])
     );
     expect(JSON.stringify(repo.listMyTasks.mock.calls[0])).toContain(ACTOR);
-    expect(repo.listBoard.mock.calls[0]).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ spaceId: SPACE }),
-        expect.objectContaining({ staffId: ACTOR, isAdmin: false }),
-      ])
-    );
     expect(repo.listCalendar.mock.calls[0]).toEqual(
       expect.arrayContaining([
         "2026-11-01",

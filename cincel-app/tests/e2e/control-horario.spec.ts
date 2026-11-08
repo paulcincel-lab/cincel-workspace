@@ -118,6 +118,15 @@ test.describe("Control de horario", () => {
       await prompt(page).getByRole("button", { name: "Ahora no" }).click();
       await expect(prompt(page)).toHaveCount(0);
 
+      // Every clock write is one `next-action` POST and no RSC request: the result goes into qk.me.today.
+      const rscRequests: string[] = [];
+      const actionPosts: string[] = [];
+      page.on("request", (request) => {
+        const headers = request.headers();
+        if (headers["rsc"] === "1" || new URL(request.url()).searchParams.has("_rsc")) rscRequests.push(request.url());
+        if (request.method() === "POST" && headers["next-action"]) actionPosts.push(request.url());
+      });
+
       // Sidebar clock: Sin iniciar → En curso → En pausa → En curso → Cerrada.
       await expect(page.getByRole("timer").first()).toBeVisible();
       await expect(page.getByText("Sin iniciar").first()).toBeVisible();
@@ -133,6 +142,8 @@ test.describe("Control de horario", () => {
       await page.getByRole("button", { name: "Salida" }).first().click();
       await expect(page.getByText("Cerrada").first()).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole("button", { name: "Registrar entrada" }).first()).toBeVisible();
+      expect(rscRequests).toEqual([]);
+      expect(actionPosts).toHaveLength(4);
 
       await expect.poll(() => entriesOf(worker.staffId), { timeout: 15_000 }).toEqual([
         { source: "sidebar", ended: true, closedBy: "user", pauses: 1 },

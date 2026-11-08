@@ -478,14 +478,16 @@ export const onboard_client = tool({
     // only adds the templates still missing, so this is safe either way.
     const phaseIds = workflowResolved.value.phases.filter((p) => p.active).map((p) => p.id);
     if (phaseIds.length > 0) {
-      await startTramoAction({
-        projectId: project.id,
-        workflowId: workflowResolved.value.id,
-        phaseIds,
-        assignment: managerId
-          ? { mode: "by_phase", managers: Object.fromEntries(phaseIds.map((id) => [id, managerId])) }
-          : { mode: "none" },
-      });
+      unwrapActionResult(
+        await startTramoAction({
+          projectId: project.id,
+          workflowId: workflowResolved.value.id,
+          phaseIds,
+          assignment: managerId
+            ? { mode: "by_phase", managers: Object.fromEntries(phaseIds.map((id) => [id, managerId])) }
+            : { mode: "none" },
+        }),
+      );
     }
 
     for (const title of extraTasks ?? []) {

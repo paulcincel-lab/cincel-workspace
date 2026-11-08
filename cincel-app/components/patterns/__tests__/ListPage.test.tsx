@@ -156,6 +156,31 @@ describe("ListPage", () => {
     expect(widgetProps.calls.at(-1)?.props.onMove).toBe(onMove);
   });
 
+  it("forwards the board's column totals and has no quick-add prop (the widget opens the shell dialog)", () => {
+    const columnPages = {
+      filters: { tramo: null, proyecto: null, responsable: null, estado: null, q: null },
+      columns: { pendiente: { total: 40, nextCursor: "c1" } },
+    };
+    render(<ListPage header={{ title: "Tablero" }} spec={{ kind: "board", board, table, columnPages }} />);
+    const props = widgetProps.calls.at(-1)?.props;
+    expect(props?.columnPages).toBe(columnPages);
+    expect(props && "onQuickAdd" in props).toBe(false);
+  });
+
+  it("passes the table's opt-in pagination to RecordTable", () => {
+    const onEndReached = vi.fn();
+    render(
+      <ListPage
+        header={{ title: "Lista" }}
+        spec={{ kind: "table", data: table, pagination: { onEndReached, hasMore: true, loadingMore: false } }}
+      />,
+    );
+    const call = widgetProps.calls.at(-1);
+    expect(call?.props.onEndReached).toBe(onEndReached);
+    expect(call?.props.hasMore).toBe(true);
+    expect(call?.props.loadingMore).toBe(false);
+  });
+
   it("renders EmptyState instead of the widget when empty is given and there are no records", () => {
     render(
       <ListPage

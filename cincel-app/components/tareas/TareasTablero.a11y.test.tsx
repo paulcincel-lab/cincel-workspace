@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 
-import type { TaskListItem } from "@/lib/types/core";
-import type { PresentationStyle, TaskBoard } from "@/lib/types/redesign";
+import type { TaskListRow } from "@/lib/types/core";
+import type { PresentationStyle } from "@/lib/types/redesign";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }),
@@ -15,7 +15,13 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   setTaskStatusAction: vi.fn(() => Promise.resolve({})),
   setTaskCustomStatusAction: vi.fn(() => Promise.resolve({})),
 }));
-vi.mock("@/components/tareas/NewTaskDialog", () => ({ NewTaskDialog: () => null }));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
+  getTareasPageData: vi.fn(),
+  getTareasBoard: vi.fn(),
+  getTareasFacets: vi.fn(),
+  getTareasListPage: vi.fn(),
+  getTareasBoardColumn: vi.fn(),
+}));
 vi.mock("@/lib/actions/preferences-actions", () => ({
   updateMyPreferencesAction: vi.fn(() => Promise.resolve({})),
   fetchMyPreferencesAction: vi.fn(() => Promise.resolve(null)),
@@ -23,6 +29,11 @@ vi.mock("@/lib/actions/preferences-actions", () => ({
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { TareasTablero } from "@/components/tareas/TareasTablero";
+import { qk } from "@/lib/query/keys";
+import { tareasListFiltersOf, tareasPageKeyInputOf } from "@/lib/query/options/tareas";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { emptyBoardColumns, type TareasBoardData } from "@/lib/tareas/page-data";
+import { DEFAULT_TAREAS_QUERY, type TareasQuery } from "@/lib/tareas/query";
 import { CONTRAST_PAIRS } from "@/lib/ui/contrast";
 import { THEME_IDS } from "@/lib/ui/themes";
 
@@ -32,7 +43,7 @@ const MODES = ["light", "dark"] as const;
 /** Text / background pairs the view draws: cards on `card`, columns on `muted`, overdue dates in `destructive`. */
 const TABLERO_PAIRS = ["foreground/card", "muted-foreground/card", "destructive/card"];
 
-function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
+function makeTask(overrides: Partial<TaskListRow>): TaskListRow {
   return {
     id: "t1",
     projectId: "p1",
@@ -43,7 +54,6 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     spaceId: null,
     closedAt: null,
     title: "Tarea",
-    notes: null,
     createdById: "s1",
     managerId: "s1",
     status: "pendiente",
@@ -69,16 +79,40 @@ function makeTask(overrides: Partial<TaskListItem>): TaskListItem {
     subtaskCount: 2,
     subtaskDoneCount: 1,
     waitingOn: 0,
+    subtaskDone: 1,
+    commentCount: 0,
+    attachmentCount: 0,
+    checklistTotal: 0,
+    checklistDone: 0,
     ...overrides,
-  } as TaskListItem;
+  } as TaskListRow;
 }
 
-const BOARD: TaskBoard = {
-  pendiente: [makeTask({ id: "t1", title: "Levantamiento" }), makeTask({ id: "t2", title: "Planos", commitmentDate: "2030-01-01" })],
-  en_proceso: [makeTask({ id: "t3", title: "Render", status: "en_proceso" })],
-  completado: [makeTask({ id: "t4", title: "Contrato", status: "completado" })],
-  bloqueado: [],
-};
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "tablero" };
+
+function boardData(): TareasBoardData {
+  const columns = emptyBoardColumns([]);
+  columns.pendiente = {
+    rows: [makeTask({ id: "t1", title: "Levantamiento" }), makeTask({ id: "t2", title: "Planos", commitmentDate: "2030-01-01" })],
+    total: 2,
+    nextCursor: null,
+  };
+  columns.en_proceso = { rows: [makeTask({ id: "t3", title: "Render", status: "en_proceso" })], total: 1, nextCursor: null };
+  columns.completado = { rows: [makeTask({ id: "t4", title: "Contrato", status: "completado" })], total: 1, nextCursor: null };
+  return { columns, statuses: [] };
+}
+
+/** The cache `/tareas` hydrates for the Tablero. */
+function seededClient() {
+  const client = createTestQueryClient();
+  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY)), {
+    facets: { total: 4, byTramo: {}, projects: [] },
+    tramos: [],
+    staff: [],
+  });
+  client.setQueryData(qk.tareas.board(tareasListFiltersOf(QUERY)), boardData());
+  return client;
+}
 
 function applyTheme(themeId: string, mode: (typeof MODES)[number]) {
   const root = document.documentElement;
@@ -115,10 +149,11 @@ describe("Tareas · Tablero accessibility", () => {
       for (const style of STYLES) {
         it(`has no serious or critical axe violations · ${themeId} ${mode} ${style}`, async () => {
           applyTheme(themeId, mode);
-          const { container } = render(
+          const { container } = renderWithQueryClient(
             <StyleProvider style={style} scope="staff">
-              <TareasTablero board={BOARD} header={{ title: "Tareas" }} />
+              <TareasTablero query={QUERY} header={{ title: "Tareas" }} />
             </StyleProvider>,
+            { client: seededClient() },
           );
           expect(await seriousViolations(container)).toEqual([]);
         });

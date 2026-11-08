@@ -19,7 +19,23 @@ import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { StyleProvider, useStyle } from "@/components/shell/StyleProvider";
 import { StyleView } from "@/components/widgets/StyleView";
 import type { PresentationStyle } from "@/lib/types/redesign";
+import type { ResolvedAppearance, UserPreferences } from "@/lib/types/redesign";
+import { resolveAppearance } from "@/lib/ui/preferences";
 import { readEstiloOverride, resolvePageStyle } from "@/lib/ui/style-override";
+import { THEME_PRESETS } from "@/lib/ui/themes";
+
+/** What `updateMyPreferencesAction` answers for a saved style. */
+function saved(style: PresentationStyle): { preferences: UserPreferences; appearance: ResolvedAppearance } {
+  const preferences: UserPreferences = {
+    theme: null,
+    mode: "light",
+    style,
+    density: "comoda",
+    textSize: 14,
+    quietHours: null,
+  };
+  return { preferences, appearance: resolveAppearance({ ...THEME_PRESETS.azul, allowUserOverride: true, v: 1 }, preferences) };
+}
 
 const OVERRIDE_DISABLED_COPY = "La organización fijó el tema y el estilo. Pídele a un administrador que lo cambie.";
 
@@ -135,8 +151,15 @@ describe("EstiloSwitch", () => {
     expect(screen.getByText("vista esencial")).toBeTruthy();
   });
 
-  it("is disabled with the OVERRIDE_DISABLED copy when the organization fixed the style", () => {
+  it("is hidden in the staff shell when the organization fixed the style", () => {
     setup({ style: "esencial", fixedByOrg: true });
+    expect(screen.queryByRole("radiogroup", { name: "Estilo" })).toBeNull();
+    expect(screen.getByText("vista esencial")).toBeTruthy();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("is disabled with the OVERRIDE_DISABLED copy on the portal when the organization fixed the style", () => {
+    setup({ style: "esencial", fixedByOrg: true, scope: "portal" });
     const group = screen.getByRole("radiogroup", { name: "Estilo" });
     expect(group.getAttribute("aria-disabled")).toBe("true");
     expect(group.getAttribute("title")).toBe(OVERRIDE_DISABLED_COPY);
@@ -176,7 +199,7 @@ describe("EstiloSwitch", () => {
 
   it("persists the staff style through updateMyPreferencesAction once implemented", async () => {
     mocks.flags.updateMyPreferencesAction = true;
-    mocks.update.mockResolvedValue({});
+    mocks.update.mockResolvedValue(saved("esencial"));
     setup();
     fireEvent.click(radio("Esencial"));
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ style: "esencial" }));

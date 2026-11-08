@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import type { AgendaWidgetProps } from "@/components/widgets/AgendaWidget";
@@ -9,20 +10,39 @@ import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
 const mocks = vi.hoisted(() => ({
-  fetchCalendarAction: vi.fn(),
+  getTareasCalendarData: vi.fn(),
   syncGoogleCalendarAction: vi.fn(),
   capabilities: { canViewCalendar: true, canViewDailyAgenda: true, canViewTeamCalendar: true },
   agendaCalls: [] as AgendaWidgetProps[],
   distributionCalls: [] as DistributionWidgetProps[],
-  search: "vista=calendario&cal=mes",
+  /** `useSearchParams` subscribers, notified on `history.replaceState` (as Next does). */
+  listeners: new Set<() => void>(),
 }));
 
-vi.mock("next/navigation", () => ({
-  usePathname: () => "/tareas",
-  useSearchParams: () => new URLSearchParams(mocks.search),
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+// `useSearchParams` follows `window.location`, and `history.replaceState` re-renders its readers.
+vi.mock("next/navigation", async () => {
+  const React = await import("react");
+  return {
+    usePathname: () => "/tareas",
+    useSearchParams: () => {
+      const search = React.useSyncExternalStore(
+        (listener) => {
+          mocks.listeners.add(listener);
+          return () => mocks.listeners.delete(listener);
+        },
+        () => window.location.search
+      );
+      return React.useMemo(() => new URLSearchParams(search), [search]);
+    },
+    useRouter: () => {
+      throw new Error("the calendar never uses the router");
+    },
+  };
+});
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
+  getTareasCalendarData: mocks.getTareasCalendarData,
+  getTareasStartSlotData: vi.fn(),
 }));
-vi.mock("@/lib/actions/tasks-actions", () => ({ fetchCalendarAction: mocks.fetchCalendarAction }));
 vi.mock("@/lib/actions/calendar-actions", () => ({ syncGoogleCalendarAction: mocks.syncGoogleCalendarAction }));
 vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => ({ member: { id: "s1", name: "Ana Ruiz" } }),
@@ -72,6 +92,12 @@ vi.mock("@/components/widgets/DistributionWidget", () => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { calendarFetchRange } from "@/lib/calendar/calendar-agenda";
+import { qk, type TareasListFilters } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { selectSelectedDay, useTareasUi } from "@/lib/stores/tareas-ui-store";
+import { CALENDAR_AUTO_SYNC_KEY } from "@/lib/tareas/calendar-auto-sync";
+import { parseTareasQuery } from "@/lib/tareas/query";
 import { CALENDARIO_DESCRIPTION, TareasCalendario } from "./TareasCalendario";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { seedSessionUser } from "@/tests/helpers/session-user";
@@ -116,34 +142,56 @@ const TASKS: TaskListItem[] = [
   }),
 ];
 
+const NO_FILTERS: TareasListFilters = { tramo: null, proyecto: null, responsable: null, estado: null, q: null };
+
+const realReplaceState = window.history.replaceState.bind(window.history);
+
+/** Puts `/tareas?<search>` in the address bar without counting it as a calendar write. */
+function setUrl(search: string) {
+  realReplaceState(null, "", `/tareas?${search}`);
+  for (const listener of mocks.listeners) listener();
+}
+
+const replaceState = vi.spyOn(window.history, "replaceState").mockImplementation((...args) => {
+  realReplaceState(...args);
+  for (const listener of mocks.listeners) listener();
+});
+
+/** The `/tareas` query in the address bar. */
+const urlQuery = () => parseTareasQuery(new URLSearchParams(window.location.search));
+
+/**
+ * Renders the view for `cal` on the current URL (or `search`). The first range
+ * is already cached, as after the page prefetch; other ranges go through
+ * `getTareasCalendarData`.
+ */
 function renderCalendario(
   cal: "mes" | "semana" | "dia",
   style: PresentationStyle = "visual",
-  extra: Partial<Parameters<typeof TareasCalendario>[0]> = {}
+  extra: Partial<Parameters<typeof TareasCalendario>[0]> = {},
+  opts: { search?: string; client?: QueryClient } = {}
 ) {
-  mocks.search = `vista=calendario&cal=${cal}`;
+  setUrl(opts.search ?? `vista=calendario&cal=${cal}`);
+  const client = opts.client ?? createTestQueryClient();
+  const fecha = urlQuery().fecha;
+  const today = extra.today ?? TODAY;
+  const cursor = fecha ? new Date(`${fecha}T00:00:00`) : today;
+  const range = calendarFetchRange(cal, cursor);
+  if (!client.getQueryData(qk.tareas.calendar(NO_FILTERS, range.from, range.to))) {
+    client.setQueryData(qk.tareas.calendar(NO_FILTERS, range.from, range.to), TASKS);
+  }
   const wrap = (children: ReactNode) => (
     <StyleProvider style={style} scope="staff">
       {children}
     </StyleProvider>
   );
-  return render(
-    wrap(
-      <TareasCalendario
-        cal={cal}
-        tasks={TASKS}
-        tramos={TRAMOS}
-        today={TODAY}
-        initialRange={{ from: "2026-09-01", to: "2027-01-10" }}
-        {...extra}
-      />
-    )
-  );
+  replaceState.mockClear();
+  return renderWithQueryClient(wrap(<TareasCalendario tramos={TRAMOS} today={TODAY} {...extra} />), { client });
 }
 
 beforeEach(() => {
-  mocks.fetchCalendarAction.mockReset().mockResolvedValue(TASKS);
-  mocks.syncGoogleCalendarAction.mockReset().mockResolvedValue(undefined);
+  mocks.getTareasCalendarData.mockReset().mockResolvedValue(TASKS);
+  mocks.syncGoogleCalendarAction.mockReset().mockResolvedValue(null);
   mocks.capabilities = { canViewCalendar: true, canViewDailyAgenda: true, canViewTeamCalendar: true };
   mocks.agendaCalls.length = 0;
   mocks.distributionCalls.length = 0;
@@ -290,16 +338,29 @@ describe("TareasCalendario aside", () => {
 });
 
 describe("TareasCalendario data", () => {
-  it("does not fetch while the visible range is inside the loaded one and fetches beyond it", async () => {
+  it("reads one range per new month and none for a cached one, with no fetch on mount", async () => {
     renderCalendario("mes");
-    expect(mocks.fetchCalendarAction).not.toHaveBeenCalled();
-    // Diciembre's grid (Nov 30 – Jan 3) is still loaded; enero's (Dec 28 – Jan 31) is not.
+    expect(mocks.getTareasCalendarData).not.toHaveBeenCalled();
+
+    // Diciembre's grid (Nov 30 – Jan 3) is a new key.
     fireEvent.click(screen.getByRole("button", { name: "Mes siguiente" }));
-    expect(mocks.fetchCalendarAction).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Mes siguiente" }));
+    await waitFor(() => expect(mocks.getTareasCalendarData).toHaveBeenCalledTimes(1));
+    expect(mocks.getTareasCalendarData).toHaveBeenCalledWith({ filters: NO_FILTERS, from: "2026-11-30", to: "2027-01-03" });
+
+    // Back to noviembre: cached and fresh, no call.
+    fireEvent.click(screen.getByRole("button", { name: "Mes anterior" }));
     await act(async () => {});
-    expect(mocks.fetchCalendarAction).toHaveBeenCalledTimes(1);
-    expect(mocks.fetchCalendarAction).toHaveBeenCalledWith("2026-11-13", "2027-03-17", {});
+    expect(mocks.getTareasCalendarData).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts the URL filters in the key", async () => {
+    renderCalendario("mes", "visual", {}, { search: "vista=calendario&cal=mes&tramo=diseno&responsable=yo&q=planos" });
+    await waitFor(() => expect(mocks.getTareasCalendarData).toHaveBeenCalledTimes(1));
+    expect(mocks.getTareasCalendarData).toHaveBeenCalledWith({
+      filters: { ...NO_FILTERS, tramo: "diseno", responsable: "yo", q: "planos" },
+      from: "2026-10-26",
+      to: "2026-12-06",
+    });
   });
 
   it("shows only the viewer's events without the team calendar", () => {
@@ -310,10 +371,119 @@ describe("TareasCalendario data", () => {
     expect(main?.items).toHaveLength(2);
   });
 
-  it("renders the permission copy without calendar access", () => {
+  it("renders the permission copy without calendar access, and neither reads nor syncs", async () => {
     mocks.capabilities = { canViewCalendar: false, canViewDailyAgenda: false, canViewTeamCalendar: false };
-    renderCalendario("mes");
+    renderCalendario("mes", "visual", {}, { client: createTestQueryClient() });
     expect(screen.getByText("No tienes permiso para ver el calendario.")).toBeTruthy();
     expect(mocks.agendaCalls).toHaveLength(0);
+    await act(async () => {});
+    expect(mocks.syncGoogleCalendarAction).not.toHaveBeenCalled();
+  });
+
+  it("shows the error copy when a range fails to load", async () => {
+    mocks.getTareasCalendarData.mockRejectedValue(new Error("boom"));
+    renderCalendario("mes");
+    fireEvent.click(screen.getByRole("button", { name: "Mes siguiente" }));
+    expect(await screen.findByText(/No se pudo sincronizar el calendario con el servidor/)).toBeTruthy();
+  });
+});
+
+describe("TareasCalendario URL and selected day", () => {
+  it("writes the cursor to ?fecha with history.replaceState and reads it back after a reload", () => {
+    const { unmount } = renderCalendario("mes");
+    fireEvent.click(screen.getByRole("button", { name: "Mes siguiente" }));
+    expect(replaceState).toHaveBeenCalledTimes(1);
+    expect(urlQuery()).toMatchObject({ vista: "calendario", cal: "mes", fecha: "2026-12-01" });
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("diciembre de 2026");
+
+    // Reload: a fresh mount on the same URL opens on diciembre.
+    unmount();
+    renderCalendario("mes", "visual", {}, { search: window.location.search.slice(1) });
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("diciembre de 2026");
+
+    // Hoy drops ?fecha.
+    fireEvent.click(screen.getByRole("button", { name: "Hoy" }));
+    expect(urlQuery().fecha).toBeNull();
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("noviembre de 2026");
+  });
+
+  it("opens on the ?fecha day (back / forward restore the URL, the view follows it)", () => {
+    renderCalendario("semana", "visual", {}, { search: "vista=calendario&cal=semana&fecha=2026-11-18" });
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("16 – 22 de noviembre de 2026");
+    // A history move changes the URL under the mounted view.
+    act(() => setUrl("vista=calendario&cal=semana&fecha=2026-11-04"));
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("2 – 8 de noviembre de 2026");
+  });
+
+  it("changes the mode on the URL without a navigation, Día opening on the selected day", () => {
+    renderCalendario("mes");
+    const grid = screen.getByTestId("agenda-month");
+    fireEvent.click(within(grid).getByText(/Cotización inicial/, { selector: "a[href*='c-presale']" }));
+    const nav = screen.getByRole("navigation", { name: "Vista del calendario" });
+    fireEvent.click(within(nav).getByRole("link", { name: "Día" }));
+    expect(replaceState).toHaveBeenCalledTimes(1);
+    expect(urlQuery()).toMatchObject({ cal: "dia", fecha: "2026-11-03" });
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("martes, 3 de noviembre de 2026");
+  });
+
+  it("keeps the selected day in the store across a switch to Lista and back", () => {
+    const { unmount } = renderCalendario("mes");
+    const grid = screen.getByTestId("agenda-month");
+    fireEvent.click(within(grid).getByText(/Cotización inicial/, { selector: "a[href*='c-presale']" }));
+    expect(selectSelectedDay(useTareasUi.getState())).toBe("2026-11-03");
+
+    unmount(); // vista=lista
+    mocks.agendaCalls.length = 0;
+    renderCalendario("mes");
+    expect(mocks.agendaCalls.find((c) => c.mode === "day")?.title).toBe("martes 3");
+  });
+
+  it("clears the selected day when ?fecha moves the view past it", () => {
+    renderCalendario("mes");
+    const grid = screen.getByTestId("agenda-month");
+    fireEvent.click(within(grid).getByText(/Cotización inicial/, { selector: "a[href*='c-presale']" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mes siguiente" }));
+    expect(selectSelectedDay(useTareasUi.getState())).toBeNull();
+    // Without a stored day the aside shows the ?fecha day.
+    expect(mocks.agendaCalls.at(-1)?.title).toBe("martes 1");
+  });
+});
+
+describe("TareasCalendario Google auto-sync", () => {
+  it("runs once per browser session, as a mutation, however often the calendar mounts", async () => {
+    const first = renderCalendario("mes");
+    await waitFor(() => expect(mocks.syncGoogleCalendarAction).toHaveBeenCalledTimes(1));
+    expect(mocks.syncGoogleCalendarAction).toHaveBeenCalledWith({ auto: true });
+    expect(window.sessionStorage.getItem(CALENDAR_AUTO_SYNC_KEY)).toBe("1");
+
+    first.unmount();
+    renderCalendario("mes");
+    await act(async () => {});
+    expect(mocks.syncGoogleCalendarAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes the calendar after a sync that ran, not after a skipped one", async () => {
+    mocks.syncGoogleCalendarAction.mockResolvedValue({ ok: true, result: {} });
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    renderCalendario("mes", "visual", {}, { client });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ["tareas", "calendar"] }));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.ajustes.page("integraciones") });
+  });
+
+  it("does nothing more when the server skips the sync (null)", async () => {
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    renderCalendario("mes", "visual", {}, { client });
+    await waitFor(() => expect(mocks.syncGoogleCalendarAction).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it("skips a session that already synced (a reload in the same tab)", async () => {
+    window.sessionStorage.setItem(CALENDAR_AUTO_SYNC_KEY, "1");
+    renderCalendario("mes");
+    await act(async () => {});
+    expect(mocks.syncGoogleCalendarAction).not.toHaveBeenCalled();
   });
 });

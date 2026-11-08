@@ -1,12 +1,15 @@
+import { CronogramaProjectTabs } from "@/components/cronograma/cronograma-project-tabs";
 import CronogramaView from "@/components/cronograma/cronograma-view";
-import { ProjectTabs } from "@/components/proyectos/ProjectTabs";
 import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
-import { StyleProvider } from "@/components/shell/StyleProvider";
-import { fetchScheduleAction, type ScheduleViewData } from "@/lib/actions/schedule-actions";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { loadProjectTabShell } from "@/lib/projects/project-tab-shell";
-import { getResolvedAppearance } from "@/lib/ui/preferences-server";
-import { PresentationStyleSchema } from "@/lib/validation/redesign";
+import { loadProyectoCronograma } from "@/lib/loaders/proyectos";
+import { loadProyectoShell } from "@/lib/loaders/proyectos-shell";
+import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
+import { Hydrate } from "@/lib/query/hydrate";
+import { qk } from "@/lib/query/keys";
+import { proyectoCronogramaOptions } from "@/lib/query/options/proyectos";
+import { proyectoShellOptions } from "@/lib/query/options/proyectos-shell";
+import { getQueryClient, prefetch } from "@/lib/query/server";
 
 type CapabilityUser = Awaited<ReturnType<typeof requireCapabilityUser>>;
 
@@ -20,52 +23,39 @@ async function loadUser(): Promise<CapabilityUser | null> {
   }
 }
 
-export default async function CronogramaPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ estilo?: string | string[] }>;
-}) {
-  const { id: projectId } = await params;
+/**
+ * `/proyectos/[id]/cronograma` (Query Migration 5c, #961): the shell
+ * (`proyectos.shell(id)`, no Drive call) and the schedule
+ * (`proyectos.cronograma(id)`) are prefetched in one `Promise.all` by calling
+ * their loaders, then handed to the client through `<Hydrate>`. The client
+ * makes no call after hydration; `?week=` is client state.
+ */
+export default async function CronogramaPage({ params }: { params: Promise<{ id: string }> }) {
+  const [{ id: projectId }, user] = await Promise.all([params, loadUser()]);
 
-  let initialView: ScheduleViewData | null = null;
-  try {
-    initialView = await fetchScheduleAction(projectId);
-  } catch {
-    // Not authorized / no session — the client falls back to hydrating itself.
-  }
-
-  const appearance = await getResolvedAppearance();
+  const qc = getQueryClient();
+  await Promise.all([
+    prefetch(qc, proyectoShellOptions(projectId), () =>
+      user ? loadProyectoShell(user, { id: projectId }) : Promise.resolve(null)
+    ),
+    prefetch(qc, proyectoCronogramaOptions(projectId), () =>
+      user ? loadProyectoCronograma(user, { id: projectId }) : Promise.resolve(null)
+    ),
+  ]);
+  const shell = qc.getQueryData<ProjectTabShell | null>(qk.proyectos.shell(projectId)) ?? null;
 
   // Redesign FE §3.5: `AppShell` comes from the staff layout; the page renders
   // the project header + tabs and the Cronograma tab, whose three styles live
   // in `CronogramaWidget`.
-  const { estilo: rawEstilo } = await searchParams;
-  const estilo = PresentationStyleSchema.safeParse(Array.isArray(rawEstilo) ? rawEstilo[0] : rawEstilo);
-  const user = await loadUser();
-  const shell = user ? await loadProjectTabShell(projectId, user) : null;
-
   return (
-    <StyleProvider style={estilo.success ? estilo.data : appearance.style} scope="staff" isOverridden={estilo.success}>
+    <Hydrate qc={qc}>
       <div className="flex flex-col gap-4">
-        {shell ? (
-          <ProjectTabs
-            project={shell.project}
-            active="cronograma"
-            counts={shell.counts}
-            canManagePortal={shell.canManagePortal}
-          />
-        ) : null}
+        <CronogramaProjectTabs projectId={projectId} />
         <div className="flex justify-end">
           <EstiloSwitch />
         </div>
-        <CronogramaView
-          projectId={projectId}
-          initialView={initialView}
-          contractEnd={shell?.detail.endDate ?? null}
-        />
+        <CronogramaView projectId={projectId} contractEnd={shell?.detail.endDate ?? null} />
       </div>
-    </StyleProvider>
+    </Hydrate>
   );
 }

@@ -1,19 +1,19 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import axe from "axe-core";
 
 import type { CalendarItem } from "@/lib/types/redesign";
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }),
   usePathname: () => "/tareas",
   useSearchParams: () => new URLSearchParams("vista=calendario"),
 }));
-vi.mock("@/lib/actions/tasks-actions", () => ({ deleteTaskAction: vi.fn(() => Promise.resolve()) }));
+vi.mock("@/lib/actions/tasks-actions", () => ({ deleteTaskAction: vi.fn(async () => ({ ok: true, data: undefined })) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { EventDetailPopover } from "@/components/tareas/EventDetailPopover";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { CONTRAST_PAIRS } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 
@@ -95,7 +95,7 @@ describe("EventDetailPopover accessibility", () => {
         const anchor = document.createElement("button");
         anchor.textContent = EVENT.title;
         document.body.appendChild(anchor);
-        render(<EventDetailPopover event={EVENT} anchor={anchor} onClose={vi.fn()} />);
+        renderWithQueryClient(<EventDetailPopover event={EVENT} anchor={anchor} onClose={vi.fn()} />);
         await screen.findByRole("dialog", { name: EVENT.title });
         expect(await seriousViolations(document.body)).toEqual([]);
       });

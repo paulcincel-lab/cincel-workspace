@@ -2,7 +2,7 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 
 import type { ListPageProps } from "@/components/patterns/ListPage";
 import type { DistributionWidgetProps } from "@/components/widgets/DistributionWidget";
@@ -15,7 +15,8 @@ const seen = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/actions/projects-actions", () => ({ retryProjectFolderAction: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+const router = vi.hoisted(() => ({ refresh: vi.fn(), push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, useSearchParams: () => new URLSearchParams() }));
 
 // The pattern and the widget own the per-style rendering; the probe records
 // what the tab hands them and renders the cards' footers so the detail panel
@@ -39,7 +40,7 @@ vi.mock("@/components/patterns/ListPage", async () => {
             <ul>
               {spec.items.map((item) => (
                 <li key={item.id}>
-                  {item.title}
+                  {item.href ? <a href={item.href}>{item.title}</a> : item.title}
                   {spec.footer?.(item)}
                 </li>
               ))}
@@ -58,6 +59,7 @@ vi.mock("@/components/widgets/DistributionWidget", () => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 import { EMPTY_FOLDER, EMPTY_PROJECT_FILES, ProjectFiles } from "./ProjectFiles";
 
@@ -74,7 +76,7 @@ const OK: StaffFilesResult = {
 };
 
 function renderIn(style: PresentationStyle, result: StaffFilesResult = OK) {
-  return render(
+  return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
       <ProjectFiles projectId="p1" result={result} canRetry />
     </StyleProvider>,
@@ -167,6 +169,32 @@ describe("ProjectFiles empty and folder states", () => {
     renderIn("analitico", { status: "failed", error: "quota" });
     expect(screen.getByText("No se pudo crear la carpeta del proyecto en Drive.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reintentar carpeta" })).toBeTruthy();
+  });
+});
+
+describe("ProjectFiles folder navigation (5d)", () => {
+  beforeEach(() => window.history.replaceState(null, "", "/proyectos/p1/archivos"));
+
+  it("opens a folder card on the client with pushState and no router.push", () => {
+    const push = vi.spyOn(window.history, "pushState");
+    renderIn("visual");
+    const folder = screen.getByRole("link", { name: "02 Cliente" });
+    expect(folder.getAttribute("href")).toBe("/proyectos/p1/archivos?folder=f1");
+
+    fireEvent.click(folder);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith(null, "", "/proyectos/p1/archivos?folder=f1");
+    expect(router.push).not.toHaveBeenCalled();
+    push.mockRestore();
+  });
+
+  it("keeps the real link for modified clicks and leaves file links alone", () => {
+    const push = vi.spyOn(window.history, "pushState");
+    renderIn("visual");
+    fireEvent.click(screen.getByRole("link", { name: "02 Cliente" }), { metaKey: true });
+    fireEvent.click(screen.getByRole("link", { name: "Planta.pdf" }));
+    expect(push).not.toHaveBeenCalled();
+    push.mockRestore();
   });
 });
 

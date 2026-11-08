@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useParams } from "next/navigation";
+import { useMemo, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/shadcn/input";
 import { FormField } from "@/components/ui/shadcn/form-field";
 import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { DriveLinksEditor } from "@/components/ui/DriveLinksEditor";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import {
@@ -37,41 +38,26 @@ import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
-import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
-  fetchProjectAction,
-  updateProjectAction,
   setProjectMembersAction,
   setProjectContactsAction,
   addProjectLinkAction,
   removeProjectLinkAction,
-  fetchProjectSpacesAction,
 } from "@/lib/actions/projects-actions";
-import { fetchStaffAction } from "@/lib/actions/staff-actions";
-import { fetchContactsAction } from "@/lib/actions/contacts-actions";
-import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import { fetchAdminTasksAction, fetchTasksAction } from "@/lib/actions/tasks-actions";
-import { RepositoryError, reportRepositoryError } from "@/lib/errors";
-import type {
-  ContactListItem,
-  ProjectDetail,
-  ProjectSpace,
-  Staff,
-  TaskListItem,
-  Workflow,
-  WorkflowRef,
-  TaskLinkInput,
-} from "@/lib/types/core";
+import { actionErrorCode, actionErrorText } from "@/lib/errors";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { catalogContactsOptions, catalogStaffOptions, catalogTramosOptions } from "@/lib/query/options/catalog";
+import { proyectoFichaOptions } from "@/lib/query/options/proyectos";
+import { useUpdateProjectMutation } from "@/lib/proyectos/ficha-mutations";
+import type { ProjectDetail, ProjectLink, TaskLinkInput } from "@/lib/types/core";
 
 const NO_VALUE = "__none__";
 
-/** Spanish copy for a failed ficha save (FE §9). */
-function saveErrorText(err: unknown): string {
-  const code = err instanceof Error ? err.message.split(":")[0].trim() : "";
-  if (code === "FORBIDDEN") return "No tienes permiso para realizar esta acción.";
-  if (code === "NOT_FOUND") return "Ya no existe. Recarga la página.";
-  if (code === "NAME_TAKEN") return "Ya existe un proyecto con ese nombre.";
-  return "No se pudo completar la acción. Intenta de nuevo.";
+/** Spanish copy for a failed link add: the action's own copy, or the copy for its code. */
+function linkErrorText(err: unknown): string {
+  if (err instanceof Error && err.message && actionErrorCode(err) === "") return err.message;
+  return actionErrorText(err);
 }
 
 const PROJECT_STATUS_LABEL: Record<ProjectDetail["status"], string> = {
@@ -92,97 +78,86 @@ function Frame({ tabs, children }: { tabs: ReactNode; children: ReactNode }) {
 }
 
 export type ProjectFichaClientProps = {
+  projectId: string;
   /** `ProjectTabs` of the project shell (FE §3.5). */
   tabs: ReactNode;
 };
 
-/** `/proyectos/[id]/ficha`: the project's ficha form (no styles). */
-export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
-  const params = useParams<{ id: string }>();
-  const projectId = params.id;
+/**
+ * `/proyectos/[id]/ficha`: the project's ficha form. Reads
+ * `qk.proyectos.tab(id,'ficha')` (prefetched by the page) and the editor's
+ * catalogs (`catalog.staff`, `catalog.contacts()`, `catalog.tramos`), which
+ * the page prefetches for editors. Every save is a `useActionMutation` that
+ * updates only the keys it changes; edit drafts are local form state.
+ */
+export function ProjectFichaClient({ projectId, tabs }: ProjectFichaClientProps) {
   const googleConnectResult = useGoogleConnectResult();
   const importData = useImportData("project", projectId);
+  const authenticatedUser = useSessionStore(selectCurrentUser);
+  const caps = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
+  const isAdmin = canSeeAdminData(authenticatedUser);
 
-  const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [tasks, setTasks] = useState<TaskListItem[]>([]);
-  const [spaces, setSpaces] = useState<ProjectSpace[] | null>(null);
-  const [staff, setStaff] = useState<Staff[]>([]);
-  const [contacts, setContacts] = useState<ContactListItem[]>([]);
-  const [clients, setClients] = useState<ContactListItem[]>([]);
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const ficha = useQuery(proyectoFichaOptions(projectId));
+  const staffQuery = useQuery({ ...catalogStaffOptions(), enabled: caps.canEditProjectGeneral });
+  const contactsQuery = useQuery({ ...catalogContactsOptions(), enabled: caps.canEditProjectGeneral });
+  const tramosQuery = useQuery({ ...catalogTramosOptions(), enabled: caps.canChangeProjectStage || isAdmin });
+
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Partial<ProjectDetail>>({});
   const [adminDraft, setAdminDraft] = useState<ProjectAdminValue>({ clientId: null, origin: null, originStaffId: null });
   const [confirmClientChange, setConfirmClientChange] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const authenticatedUser = useSessionStore(selectCurrentUser);
-  const caps = useMemo(() => resolveProjectsCapabilities(authenticatedUser), [authenticatedUser]);
-  const isAdmin = canSeeAdminData(authenticatedUser);
-
-  // Tramo → Fase (FE §3.5); admins also get the project's admin tasks.
-  const taskGroups = useMemo(() => groupFichaTasks(tasks, { includeAdmin: isAdmin }), [tasks, isAdmin]);
-  const tramoOptions = useMemo<WorkflowRef[]>(
-    () =>
-      [...workflows]
-        .filter((w) => w.active)
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((w) => ({ id: w.id, key: w.key, name: w.name, sortOrder: w.sortOrder })),
-    [workflows]
-  );
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [remapOpen, setRemapOpen] = useState(false);
   const [remapNotice, setRemapNotice] = useState<string | null>(null);
 
-  async function reload() {
-    try {
-      const [row, taskRows, staffRows, contactRows, workflowRows, spaceRows, adminTaskRows] = await Promise.all([
-        fetchProjectAction(projectId),
-        fetchTasksAction({ projectId }),
-        fetchStaffAction(),
-        fetchContactsAction(),
-        fetchWorkflowsAction(),
-        fetchProjectSpacesAction(projectId).catch(() => [] as ProjectSpace[]),
-        isAdmin ? fetchAdminTasksAction({ projectId, includeClosed: true }).catch(() => [] as TaskListItem[]) : Promise.resolve([] as TaskListItem[]),
-      ]);
-      if (!row) {
-        setNotFound(true);
-        return;
-      }
-      setProject(row);
-      const taskIds = new Set(taskRows.map((t) => t.id));
-      setTasks([...taskRows, ...adminTaskRows.filter((t) => !taskIds.has(t.id))]);
-      setSpaces(spaceRows);
-      setStaff(staffRows);
-      setContacts(contactRows.filter((c) => c.type !== "cliente"));
-      setClients(contactRows.filter((c) => c.type === "cliente"));
-      setWorkflows(workflowRows);
-    } catch (err) {
-      if (err instanceof RepositoryError) reportRepositoryError(err);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const fichaKey = qk.proyectos.tab(projectId, "ficha");
+  // Edit mode closes as soon as the saved project is in the cache, not after the refetch.
+  const update = useUpdateProjectMutation(projectId, { onFormError: setSaveError, onSaved: () => setIsEditing(false) });
+  const setMembers = useActionMutation<Array<{ staffId: string; role?: string | null }>, void>(
+    (members) => setProjectMembersAction(projectId, members),
+    { invalidate: [fichaKey, qk.proyectos.resumen(projectId), qk.proyectos.list()] },
+  );
+  const setContacts = useActionMutation<Array<{ contactId: string; role?: string | null }>, void>(
+    (contacts) => setProjectContactsAction(projectId, contacts),
+    {
+      invalidate: [
+        fichaKey,
+        qk.proyectos.resumen(projectId),
+        qk.proyectos.list(),
+        qk.proyectos.tab(projectId, "clientes"),
+      ],
+    },
+  );
+  const addLinkMutation = useActionMutation<TaskLinkInput, ProjectLink>(
+    (input) => addProjectLinkAction(projectId, input),
+    { invalidate: [fichaKey], onFormError: setLinkError },
+  );
+  const removeLinkMutation = useActionMutation<string, void>((linkId) => removeProjectLinkAction(projectId, linkId), {
+    invalidate: [fichaKey],
+  });
 
-  useEffect(() => {
-    // Load the project on mount and whenever the route id changes — reload()
-    // is also reused by the save handlers, so it can't be inlined here
-    // without duplicating the fetch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  const tasks = useMemo(() => ficha.data?.tasks ?? [], [ficha.data]);
+  // Tramo → Fase (FE §3.5); admins also get the project's admin tasks.
+  const taskGroups = useMemo(() => groupFichaTasks(tasks, { includeAdmin: isAdmin }), [tasks, isAdmin]);
+  const staff = staffQuery.data ?? [];
+  const allContacts = contactsQuery.data ?? [];
+  const clients = allContacts.filter((c) => c.type === "cliente");
+  const contacts = allContacts.filter((c) => c.type !== "cliente");
 
-  if (loading) {
+  if (ficha.isPending) {
     return (
       <Frame tabs={tabs}>
-        <p className="text-sm text-muted-foreground">Cargando proyecto…</p>
+        <div className="space-y-3" aria-label="Ficha del proyecto">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-40 w-full" />
+        </div>
       </Frame>
     );
   }
 
-  if (notFound || !project) {
+  const project = ficha.data?.project ?? null;
+  if (!project) {
     return (
       <Frame tabs={tabs}>
         <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -190,7 +165,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
             Proyecto no encontrado
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">No existe un proyecto con este identificador.</p>
-          <Link href="/proyectos" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/80">
+          <Link href="/proyectos" className={`mt-4 ${buttonVariants()}`}>
             Volver a proyectos
           </Link>
         </div>
@@ -231,78 +206,48 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
       setConfirmClientChange(true);
       return;
     }
-    void saveEditing();
+    saveEditing();
   }
 
-  async function saveEditing() {
-    if (!project) return;
+  function saveEditing() {
     setConfirmClientChange(false);
     setSaveError(null);
-    setSaving(true);
-    try {
-      // Client and origin are admin-only: non-admins never send those keys (FORBIDDEN otherwise).
-      const patch = isAdmin ? { ...draft, ...projectAdminPatch(adminDraft) } : draft;
-      unwrapActionResult(await updateProjectAction(project.id, patch));
-      setIsEditing(false);
-      // Refetch the project and its admin tasks: the backend already closed
-      // "Asignar cliente y origen" when a client was set (RD-10).
-      await reload();
-    } catch (err) {
-      if (err instanceof RepositoryError) reportRepositoryError(err);
-      setSaveError(saveErrorText(err));
-    } finally {
-      setSaving(false);
-    }
+    // Client and origin are admin-only: non-admins never send those keys (FORBIDDEN otherwise).
+    const patch = isAdmin ? { ...draft, ...projectAdminPatch(adminDraft) } : draft;
+    // The backend closes "Asignar cliente y origen" when a client is set (RD-10): the
+    // invalidation refetches the ficha, admin tasks included.
+    update.mutate(patch);
   }
 
+  const saving = update.isPending;
   const draftClientName = adminDraft.clientId ? clients.find((c) => c.id === adminDraft.clientId)?.name ?? null : null;
 
-  async function toggleMember(staffId: string) {
+  function toggleMember(staffId: string) {
     if (!project) return;
     const already = project.members.some((m) => m.id === staffId);
     const next = already
       ? project.members.filter((m) => m.id !== staffId).map((m) => ({ staffId: m.id, role: m.role }))
       : [...project.members.map((m) => ({ staffId: m.id, role: m.role })), { staffId, role: null }];
-    try {
-      unwrapActionResult(await setProjectMembersAction(project.id, next));
-      await reload();
-    } catch (err) {
-      if (err instanceof RepositoryError) reportRepositoryError(err);
-    }
+    setMembers.mutate(next);
   }
 
-  async function toggleContact(contactId: string) {
+  function toggleContact(contactId: string) {
     if (!project) return;
     const already = project.contacts.some((c) => c.id === contactId);
     const next = already
       ? project.contacts.filter((c) => c.id !== contactId).map((c) => ({ contactId: c.id, role: c.role }))
       : [...project.contacts.map((c) => ({ contactId: c.id, role: c.role })), { contactId, role: null }];
-    try {
-      unwrapActionResult(await setProjectContactsAction(project.id, next));
-      await reload();
-    } catch (err) {
-      if (err instanceof RepositoryError) reportRepositoryError(err);
-    }
+    setContacts.mutate(next);
   }
 
-  async function addLink(input: TaskLinkInput) {
-    if (!project) return;
-    try {
-      unwrapActionResult(await addProjectLinkAction(project.id, input));
-      await reload();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "No se pudo agregar el enlace.");
-    }
+  function addLink(input: TaskLinkInput) {
+    setLinkError(null);
+    // The action words its own validation copy; show it instead of the generic one.
+    addLinkMutation.mutate(input, { onError: (err) => setLinkError(linkErrorText(err)) });
   }
 
-  async function removeLink(linkId: string) {
-    if (!project) return;
-    try {
-      unwrapActionResult(await removeProjectLinkAction(project.id, linkId));
-      await reload();
-    } catch (err) {
-      if (err instanceof RepositoryError) reportRepositoryError(err);
-    }
+  function removeLink(linkId: string) {
+    removeLinkMutation.mutate(linkId);
   }
 
   return (
@@ -460,16 +405,13 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
 
             <ProjectTramosCard
               project={project}
-              workflows={tramoOptions}
+              workflows={tramosQuery.data ?? []}
               canChangeTramo={caps.canChangeProjectStage}
               isAdmin={isAdmin}
               hasTasksWithoutTramo={hasTasksWithoutTramo(tasks)}
-              onChanged={() => void reload()}
             />
 
-            {spaces ? (
-              <ProjectSpacesCard projectId={project.id} initialSpaces={spaces} canEdit={caps.canEditProjectGeneral} />
-            ) : null}
+            <ProjectSpacesCard projectId={project.id} canEdit={caps.canEditProjectGeneral} />
 
             <section className="space-y-4">
               <h2 className="text-lg font-semibold text-foreground">Tareas ({tasks.length})</h2>
@@ -515,11 +457,16 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
 
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-foreground">Enlaces de Drive</h2>
+              {linkError ? (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertDescription>{linkError}</AlertDescription>
+                </Alert>
+              ) : null}
               <div className="mt-4">
                 <DriveLinksEditor
                   links={project.links}
-                  onAdd={caps.canEditProtectedProjectData ? (input) => void addLink(input) : undefined}
-                  onRemove={caps.canEditProtectedProjectData ? (id) => void removeLink(id) : undefined}
+                  onAdd={caps.canEditProtectedProjectData ? addLink : undefined}
+                  onRemove={caps.canEditProtectedProjectData ? removeLink : undefined}
                 />
               </div>
             </section>
@@ -537,42 +484,58 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-foreground">Equipo del proyecto</h2>
               <ul className="mt-4 space-y-2 text-sm">
-                {staff.map((s) => {
-                  const isMember = project.members.some((m) => m.id === s.id);
-                  return (
-                    <li key={s.id} className="flex items-center justify-between">
-                      <span>{s.name}</span>
-                      {caps.canEditProjectGeneral ? (
-                        <Button variant={isMember ? "destructive" : "outline"} size="sm" onClick={() => void toggleMember(s.id)}>
-                          {isMember ? "Quitar" : "Agregar"}
-                        </Button>
-                      ) : (
-                        isMember ? <Badge variant="secondary">En equipo</Badge> : null
-                      )}
-                    </li>
-                  );
-                })}
+                {caps.canEditProjectGeneral
+                  ? staff.map((s) => {
+                      const isMember = project.members.some((m) => m.id === s.id);
+                      return (
+                        <li key={s.id} className="flex items-center justify-between">
+                          <span>{s.name}</span>
+                          <Button
+                            variant={isMember ? "destructive" : "outline"}
+                            size="sm"
+                            disabled={setMembers.isPending}
+                            onClick={() => toggleMember(s.id)}
+                          >
+                            {isMember ? "Quitar" : "Agregar"}
+                          </Button>
+                        </li>
+                      );
+                    })
+                  : project.members.map((m) => (
+                      <li key={m.id} className="flex items-center justify-between">
+                        <span>{m.name}</span>
+                        <Badge variant="secondary">En equipo</Badge>
+                      </li>
+                    ))}
               </ul>
             </section>
 
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-foreground">Socios y proveedores</h2>
               <ul className="mt-4 space-y-2 text-sm">
-                {contacts.map((c) => {
-                  const isLinked = project.contacts.some((pc) => pc.id === c.id);
-                  return (
-                    <li key={c.id} className="flex items-center justify-between">
-                      <span>{c.name}</span>
-                      {caps.canEditProjectGeneral ? (
-                        <Button variant={isLinked ? "destructive" : "outline"} size="sm" onClick={() => void toggleContact(c.id)}>
-                          {isLinked ? "Quitar" : "Agregar"}
-                        </Button>
-                      ) : (
-                        isLinked ? <Badge variant="secondary">Vinculado</Badge> : null
-                      )}
-                    </li>
-                  );
-                })}
+                {caps.canEditProjectGeneral
+                  ? contacts.map((c) => {
+                      const isLinked = project.contacts.some((pc) => pc.id === c.id);
+                      return (
+                        <li key={c.id} className="flex items-center justify-between">
+                          <span>{c.name}</span>
+                          <Button
+                            variant={isLinked ? "destructive" : "outline"}
+                            size="sm"
+                            disabled={setContacts.isPending}
+                            onClick={() => toggleContact(c.id)}
+                          >
+                            {isLinked ? "Quitar" : "Agregar"}
+                          </Button>
+                        </li>
+                      );
+                    })
+                  : project.contacts.map((c) => (
+                      <li key={c.id} className="flex items-center justify-between">
+                        <span>{c.name}</span>
+                        <Badge variant="secondary">Vinculado</Badge>
+                      </li>
+                    ))}
               </ul>
             </section>
           </div>
@@ -589,7 +552,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction disabled={saving} onClick={() => void saveEditing()}>
+              <AlertDialogAction disabled={saving} onClick={saveEditing}>
                 Cambiar cliente
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -600,10 +563,7 @@ export function ProjectFichaClient({ tabs }: ProjectFichaClientProps) {
             projectId={project.id}
             open={remapOpen}
             onOpenChange={setRemapOpen}
-            onApplied={(updated) => {
-              setRemapNotice(`Se reacomodaron ${updated} tareas.`);
-              void reload();
-            }}
+            onApplied={(updated) => setRemapNotice(`Se reacomodaron ${updated} tareas.`)}
           />
         ) : null}
     </Frame>

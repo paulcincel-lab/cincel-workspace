@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import CalendarFeedDialog from "@/components/calendario/CalendarFeedDialog";
@@ -12,12 +13,11 @@ import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { AgendaWidget } from "@/components/widgets/AgendaWidget";
 import { CalendarSummaryWidget } from "@/components/widgets/CalendarSummaryWidget";
 import { DistributionWidget } from "@/components/widgets/DistributionWidget";
-import { syncGoogleCalendarAction } from "@/lib/actions/calendar-actions";
-import { fetchCalendarAction } from "@/lib/actions/tasks-actions";
-import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
+import { syncGoogleCalendarAction, type GoogleCalendarSyncOutcome } from "@/lib/actions/calendar-actions";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import {
   approxTime,
+  calendarFetchRange,
   calendarTitle,
   dayKey,
   eventCountLabel,
@@ -40,19 +40,24 @@ import {
   weeklyDeliveries,
   type CalendarMode,
 } from "@/lib/calendar/calendar-agenda";
-import { addDays, buildCalendarEvents } from "@/lib/calendar/calendar-service";
-import { RepositoryError, reportRepositoryError } from "@/lib/errors";
+import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
-import type { TaskFilters, WorkflowRef } from "@/lib/types/core";
-import type { CalendarData, CalendarItem } from "@/lib/types/redesign";
+import { useActionMutation } from "@/lib/query/mutation";
+import { CALENDAR_INTEGRATION_INVALIDATE } from "@/lib/query/options/calendar";
+import { tareasCalendarOptions, tareasListFiltersOf } from "@/lib/query/options/tareas";
+import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
+import { clearSelectedDayOutside, selectSelectedDay, useTareasUi } from "@/lib/stores/tareas-ui-store";
+import { claimCalendarAutoSync } from "@/lib/tareas/calendar-auto-sync";
+import { parseTareasQuery } from "@/lib/tareas/query";
+import type { TaskListRow, WorkflowRef } from "@/lib/types/core";
+import type { CalendarItem } from "@/lib/types/redesign";
 
 /** Header description of the Calendario view (FE §3.4). */
 export const CALENDARIO_DESCRIPTION = "Fechas de entrega y agenda del equipo. Las horas con ≈ son estimadas.";
 
 const FETCH_ERROR = "No se pudo sincronizar el calendario con el servidor. Los datos mostrados pueden estar desactualizados.";
 
-/** Extra days fetched around the visible range so navigation does not refetch on every step. */
-const RANGE_BUFFER_DAYS = 45;
+const NO_ROWS: TaskListRow[] = [];
 
 /** Día timeline hours (inclusive start, exclusive end). */
 const DAY_START_HOUR = 8;
@@ -68,15 +73,7 @@ const MODE_LINKS: { cal: CalendarMode; label: string }[] = [
 const WIDGET_MODE = { mes: "month", semana: "week", dia: "day" } as const;
 
 export type TareasCalendarioProps = {
-  /** `cal` of the `/tareas` query. */
-  cal: CalendarMode;
-  /** Tasks loaded by the RSC with `fetchCalendarAction` (same filters). */
-  tasks: CalendarData;
-  /** Range (inclusive `YYYY-MM-DD`) the RSC loaded `tasks` for; outside it the view fetches. */
-  initialRange?: { from: string; to: string };
   tramos: WorkflowRef[];
-  /** The `/tareas` filters the RSC loaded `tasks` with, applied when the view fetches another range. */
-  filters?: TaskFilters;
   /** "Today" (tests); defaults to the current date. */
   today?: Date;
 };
@@ -84,42 +81,77 @@ export type TareasCalendarioProps = {
 type Popover = { event: CalendarItem; anchor: HTMLElement };
 
 /**
- * Calendario view of `/tareas` (redesign FE §3.4): the `UnifiedCalendar` data
- * logic (`buildCalendarEvents`, `groupEventsByDate`, team scoping) presented
- * through `AgendaWidget` (mes / semana) and a single-style Día timeline, with
- * a toolbar, the tramo legend and an aside (selected day, "Entregas por
- * semana", Google Calendar feed).
+ * Writes the calendar mode and cursor to the URL with `history.replaceState`:
+ * Next syncs it with `useSearchParams`, so the view re-renders on the client
+ * with no server render, and the date survives reload and back/forward.
+ * `fecha: null` removes `?fecha` (today).
  */
-export function TareasCalendario({ cal, tasks, initialRange, tramos, filters, today: todayProp }: TareasCalendarioProps) {
+function replaceCalendarUrl(next: { cal?: CalendarMode; fecha?: string | null }): void {
+  const params = new URLSearchParams(window.location.search);
+  params.set("vista", "calendario");
+  if (next.cal) params.set("cal", next.cal);
+  if (next.fecha === null) params.delete("fecha");
+  else if (next.fecha) params.set("fecha", next.fecha);
+  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+}
+
+/** A plain left click (no new tab or window asked for). */
+function isPlainClick(e: MouseEvent<HTMLElement>): boolean {
+  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+}
+
+/**
+ * Calendario view of `/tareas` (redesign FE §3.4): the calendar data logic
+ * (`buildCalendarEvents`, team scoping) presented through `AgendaWidget`
+ * (mes / semana) and a single-style Día timeline, with a toolbar, the tramo
+ * legend and an aside (selected day, "Entregas por semana", Google Calendar
+ * feed).
+ *
+ * Data: `tareas.calendar(f, from, to)` for the range of `cal` + `?fecha`
+ * (`calendarFetchRange`), keeping the previous range on screen while the next
+ * one loads. Mode and cursor live on the URL (`replaceCalendarUrl`), the
+ * selected day in `useTareasUi`. The Google auto-sync is a mutation that runs
+ * once per browser session.
+ */
+export function TareasCalendario({ tramos, today: todayProp }: TareasCalendarioProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const search = searchParams?.toString() ?? "";
+  const query = useMemo(() => parseTareasQuery(new URLSearchParams(search)), [search]);
+  const cal: CalendarMode = query.cal;
   const today = useMemo(() => startOfDay(todayProp ?? new Date()), [todayProp]);
+  // `?fecha` anchors every mode; without it, today.
+  const cursor = useMemo(() => (query.fecha ? fromDayKey(query.fecha) : today), [query.fecha, today]);
 
-  const authenticatedUser = useSessionStore(selectCurrentUser);
+  const authenticatedUser = useSessionStore(selectAuthenticatedUser);
   const capabilities = useMemo(() => resolveCalendarCapabilities(authenticatedUser), [authenticatedUser]);
   const viewerName = authenticatedUser?.member.name?.trim() ?? "";
 
-  const [rows, setRows] = useState<CalendarData>(tasks);
-  const [loaded, setLoaded] = useState<{ from: string; to: string } | null>(initialRange ?? null);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [cursor, setCursor] = useState<Date>(today);
-  const [selectedKey, setSelectedKey] = useState<string>(() => dayKey(today));
+  const storedDay = useTareasUi(selectSelectedDay);
+  const selectCalendarDay = useTareasUi((s) => s.selectCalendarDay);
   const [feedOpen, setFeedOpen] = useState(false);
   const [popover, setPopover] = useState<Popover | null>(null);
   const connectResult = useGoogleConnectResult();
 
-  // The RSC reloads `tasks` when the filters change.
-  const initialFrom = initialRange?.from ?? null;
-  const initialTo = initialRange?.to ?? null;
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRows(tasks);
-    setLoaded(initialFrom && initialTo ? { from: initialFrom, to: initialTo } : null);
-  }, [tasks, initialFrom, initialTo]);
+  const range = useMemo(() => visibleRange(cal, cursor), [cal, cursor]);
+  const fetchRange = useMemo(() => calendarFetchRange(cal, cursor), [cal, cursor]);
+  // The stored day only while it is visible; otherwise the `?fecha` day (or today).
+  const storedVisible = storedDay !== null && storedDay >= range.from && storedDay <= range.to;
+  const selectedKey = storedVisible ? storedDay : dayKey(cursor);
 
-  // Stable across renders while the filter values stay the same.
-  const filtersKey = JSON.stringify(filters ?? {});
-  const stableFilters = useMemo(() => JSON.parse(filtersKey) as TaskFilters, [filtersKey]);
+  // `?fecha` moved the view away from the stored day: forget it.
+  useEffect(() => {
+    clearSelectedDayOutside(range);
+  }, [range]);
+
+  // The key hashes by value: a new filters object for the same values reuses the cached range.
+  const filters = useMemo(() => tareasListFiltersOf(query), [query]);
+  const calendarQuery = useQuery({
+    ...tareasCalendarOptions(filters, fetchRange.from, fetchRange.to),
+    enabled: capabilities.canViewCalendar,
+  });
+  const rows = calendarQuery.data ?? NO_ROWS;
+  const fetchError = calendarQuery.isError ? FETCH_ERROR : null;
 
   // Back from connecting Google Calendar: reopen the dialog to finish turning sync on.
   useEffect(() => {
@@ -127,40 +159,21 @@ export function TareasCalendario({ cal, tasks, initialRange, tramos, filters, to
     if (connectResult?.success) setFeedOpen(true);
   }, [connectResult]);
 
-  // Keeps the user's Google "Cincel" calendar current; the server skips it when sync is off or ran recently.
+  // Keeps the user's Google "Cincel" calendar current, once per browser session; the
+  // server also skips it when sync is off or ran recently (null). Failures stay silent here:
+  // the dialog shows the stored error.
+  const { mutate: autoSync } = useActionMutation<{ auto?: boolean }, GoogleCalendarSyncOutcome | null>(
+    syncGoogleCalendarAction,
+    {
+      invalidate: (_vars, data) => (data === null ? [] : CALENDAR_INTEGRATION_INVALIDATE),
+      onFormError: () => undefined,
+    }
+  );
   useEffect(() => {
-    void syncGoogleCalendarAction({ auto: true }).catch(() => undefined);
-  }, []);
+    if (capabilities.canViewCalendar && claimCalendarAutoSync()) autoSync({ auto: true });
+  }, [autoSync, capabilities.canViewCalendar]);
 
-  const selectedDate = useMemo(() => fromDayKey(selectedKey), [selectedKey]);
-  // Día follows the selected day; Mes and Semana follow the cursor.
-  const viewDate = cal === "dia" ? selectedDate : cursor;
-  const range = useMemo(() => visibleRange(cal, viewDate), [cal, viewDate]);
-
-  // Fetch a buffered range whenever the visible range leaves the loaded one.
-  useEffect(() => {
-    if (loaded && range.from >= loaded.from && range.to <= loaded.to) return;
-    const from = dayKey(addDays(fromDayKey(range.from), -RANGE_BUFFER_DAYS));
-    const to = dayKey(addDays(fromDayKey(range.to), RANGE_BUFFER_DAYS));
-    let cancelled = false;
-    fetchCalendarAction(from, to, stableFilters)
-      .then((next) => {
-        if (cancelled) return;
-        setFetchError(null);
-        setRows(next);
-        setLoaded({ from, to });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (err instanceof RepositoryError) reportRepositoryError(err);
-        setFetchError(FETCH_ERROR);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [stableFilters, loaded, range]);
-
-  // Same scoping as `UnifiedCalendar`: without the team calendar a viewer sees only their own events.
+  // Same scoping as the legacy calendar: without the team calendar a viewer sees only their own events.
   const events = useMemo(() => {
     const all = buildCalendarEvents(rows);
     if (capabilities.canViewTeamCalendar) return all;
@@ -168,6 +181,8 @@ export function TareasCalendario({ cal, tasks, initialRange, tramos, filters, to
     return all.filter((event) => event.responsible.toLowerCase() === viewer);
   }, [capabilities.canViewTeamCalendar, rows, viewerName]);
 
+  const selectedDate = useMemo(() => fromDayKey(selectedKey), [selectedKey]);
+  const viewDate = cursor;
   const eventsById = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
   const legend = useMemo(() => orderedTramos(tramos), [tramos]);
   const modeEvents = useMemo(() => eventsForMode(events, cal, viewDate), [cal, viewDate, events]);
@@ -179,29 +194,45 @@ export function TareasCalendario({ cal, tasks, initialRange, tramos, filters, to
   const title = calendarTitle(cal, viewDate);
   const labels = navLabels(cal);
 
-  const hrefFor = useCallback(
-    (next: CalendarMode) => {
-      const params = new URLSearchParams(searchParams?.toString() ?? "");
-      params.set("vista", "calendario");
-      params.set("cal", next);
-      return `${pathname ?? "/tareas"}?${params.toString()}`;
-    },
-    [pathname, searchParams]
+  // Día opens on the selected day; Mes and Semana keep the cursor.
+  const modeFecha = useCallback(
+    (next: CalendarMode): string | null => (next === "dia" ? selectedKey : (query.fecha ?? null)),
+    [query.fecha, selectedKey]
   );
 
+  const hrefFor = useCallback(
+    (next: CalendarMode) => {
+      const params = new URLSearchParams(search);
+      params.set("vista", "calendario");
+      params.set("cal", next);
+      const fecha = next === cal ? (query.fecha ?? null) : modeFecha(next);
+      if (fecha) params.set("fecha", fecha);
+      else params.delete("fecha");
+      return `${pathname ?? "/tareas"}?${params.toString()}`;
+    },
+    [cal, modeFecha, pathname, query.fecha, search]
+  );
+
+  const changeMode = (e: MouseEvent<HTMLAnchorElement>, next: CalendarMode) => {
+    if (!isPlainClick(e)) return;
+    e.preventDefault();
+    if (next === cal) return;
+    replaceCalendarUrl({ cal: next, fecha: modeFecha(next) });
+  };
+
   const move = (direction: -1 | 1) => {
-    const next = shiftCursor(cal, viewDate, direction);
-    setCursor(next);
-    if (cal === "dia") setSelectedKey(dayKey(next));
+    const next = dayKey(shiftCursor(cal, viewDate, direction));
+    replaceCalendarUrl({ fecha: next });
+    if (cal === "dia") selectCalendarDay(next);
   };
 
   const goToday = () => {
-    setCursor(today);
-    setSelectedKey(dayKey(today));
+    replaceCalendarUrl({ fecha: null });
+    selectCalendarDay(null);
   };
 
   const openEvent = (event: CalendarItem, anchor: HTMLElement) => {
-    setSelectedKey(event.date);
+    selectCalendarDay(event.date);
     setPopover({ event, anchor });
   };
 
@@ -258,7 +289,9 @@ export function TareasCalendario({ cal, tasks, initialRange, tramos, filters, to
               <Link
                 key={link.cal}
                 href={hrefFor(link.cal)}
+                prefetch={false}
                 scroll={false}
+                onClick={(e) => changeMode(e, link.cal)}
                 aria-current={link.cal === cal ? "page" : undefined}
                 className={buttonVariants({ size: "sm", variant: link.cal === cal ? "secondary" : "ghost" })}
               >

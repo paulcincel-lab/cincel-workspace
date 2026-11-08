@@ -65,10 +65,11 @@ beforeEach(() => {
 });
 
 describe("addTaskDependencyAction", () => {
-  it("adds the dependency and revalidates the project", async () => {
+  it("adds the dependency without revalidating the ficha", async () => {
     await expect(addTaskDependencyAction(TASK, OTHER)).resolves.toBeUndefined();
     expect(repo.addTaskDependency).toHaveBeenCalledWith(TASK, OTHER);
-    expect(revalidatePath).toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
+    // The ficha reads its own query (5b, #960): it is not revalidated.
+    expect(revalidatePath).not.toHaveBeenCalledWith(`/proyectos/${PROJECT}/ficha`);
   });
 
   it("is FORBIDDEN for whoever can't edit the task", async () => {
@@ -97,7 +98,8 @@ describe("removeTaskDependencyAction", () => {
       removeTaskDependencyAction(TASK, OTHER),
     ).resolves.toBeUndefined();
     expect(repo.removeTaskDependency).toHaveBeenCalledWith(TASK, OTHER);
-    expect(revalidatePath).toHaveBeenCalled();
+    // Tareas invalidates on the client and the ficha reads its own query (5b, #960).
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("is FORBIDDEN for whoever can't edit the task", async () => {

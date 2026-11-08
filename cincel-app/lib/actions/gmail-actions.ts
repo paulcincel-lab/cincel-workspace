@@ -4,7 +4,6 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { revalidateAjustesScreen } from "@/lib/cache/screens/ajustes";
 import { revalidateMiEspacioScreen } from "@/lib/cache/screens/mi-espacio";
 import { revalidateProyectoFichaScreen } from "@/lib/cache/screens/proyectos";
-import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveActivitiesCapabilities, resolveProjectsCapabilities } from "@/lib/auth/permissions";
@@ -391,7 +390,6 @@ export async function createTaskFromGmailThreadAction(
   const { previousProjectId } = await linkThread(user, thread.id, project.id);
 
   revalidateMiEspacio();
-  revalidateTareasScreen(["tareas"]);
   revalidateProject(project.id);
   if (previousProjectId && previousProjectId !== project.id) revalidateProject(previousProjectId);
   return { taskId: task.id };

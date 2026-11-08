@@ -20,8 +20,11 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/shadcn/sidebar";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
+import { useNavBadges, withNavBadges } from "@/lib/shell/nav-badges";
+import { useNavPrefetch, type NavPrefetchHandlers } from "@/lib/shell/nav-prefetch";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
 import { isSearchVisible, isTimeClockVisible } from "@/lib/shell/visibility";
+import { useShellUi } from "@/lib/stores/shell-ui-store";
 import type { TodayStatus } from "@/lib/types/redesign";
 import type { NavItem, NavItemKey, NavModel } from "@/lib/ui/nav";
 
@@ -35,14 +38,17 @@ import { AvatarMenu } from "./AvatarMenu";
  * the user block (avatar menu with the photo or initials, name and role).
  * Built on the shadcn `sidebar` primitives; the active item uses the
  * `sidebar-primary` tokens.
+ *
+ * The badges come from `useQuery(qk.shell.badges())` (hidden at 0); the
+ * search button opens the palette through `useShellUi`; hovering or focusing
+ * Inicio, Tareas or Mi espacio prefetches that page's data (debounced).
  */
 export type SidebarProps = {
   nav: NavModel;
   activeKey: NavItemKey | null;
   session: AppShellProps["session"];
   today: TodayStatus | null;
-  onOpenSearch(): void;
-  /** Server-rendered registry slots (`lib/shell/sidebar-slots/*`). */
+  /** Registry slots (`lib/shell/sidebar-slots/*`). */
   slots?: SidebarSlotNodes;
 };
 
@@ -50,7 +56,17 @@ function badgeText(count: number): string {
   return count > 99 ? "99+" : String(count);
 }
 
-function NavEntry({ item, active, badge }: { item: NavItem; active: boolean; badge?: ReactNode }) {
+function NavEntry({
+  item,
+  active,
+  badge,
+  prefetch,
+}: {
+  item: NavItem;
+  active: boolean;
+  badge?: ReactNode;
+  prefetch?: NavPrefetchHandlers;
+}) {
   const Icon = item.icon;
   const count = item.badge;
   return (
@@ -59,7 +75,7 @@ function NavEntry({ item, active, badge }: { item: NavItem; active: boolean; bad
         className="h-9"
         isActive={active}
         // Main pages are prefetched in full, so the click renders without waiting on the server.
-        render={<Link href={item.href} prefetch aria-current={active ? "page" : undefined} />}
+        render={<Link href={item.href} prefetch aria-current={active ? "page" : undefined} {...prefetch} />}
       >
         <Icon aria-hidden="true" strokeWidth={1.8} />
         <span>{item.label}</span>
@@ -76,12 +92,17 @@ function NavEntry({ item, active, badge }: { item: NavItem; active: boolean; bad
   );
 }
 
-export function Sidebar({ nav, activeKey, session, today, onOpenSearch, slots = {} }: SidebarProps) {
+export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarProps) {
   const generalSettings = useGeneralSettings();
+  const openSearch = useShellUi((s) => s.openSearch);
+  const badges = useNavBadges();
+  const prefetchFor = useNavPrefetch();
+  const items = withNavBadges(nav.items, badges);
+  const footer = withNavBadges(nav.footer, badges);
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
   const showSearch = isSearchVisible();
   const showClock = isTimeClockVisible(today) && slots["time-clock"] !== undefined;
-  const profileHref = nav.footer.some((item) => item.key === "ajustes") ? "/ajustes/perfil" : null;
+  const profileHref = footer.some((item) => item.key === "ajustes") ? "/ajustes/perfil" : null;
 
   return (
     <SidebarPrimitive collapsible="none" className="sticky top-0 hidden h-svh border-r border-sidebar-border md:flex">
@@ -99,7 +120,7 @@ export function Sidebar({ nav, activeKey, session, today, onOpenSearch, slots = 
           </span>
         </div>
         {showSearch ? (
-          <Button type="button" variant="outline" className="h-9 w-full justify-start gap-2" onClick={onOpenSearch}>
+          <Button type="button" variant="outline" className="h-9 w-full justify-start gap-2" onClick={openSearch}>
             <Search aria-hidden="true" />
             <span className="flex-1 text-left">Buscar</span>
             <kbd className="font-mono text-[11px]">⌘K</kbd>
@@ -110,16 +131,17 @@ export function Sidebar({ nav, activeKey, session, today, onOpenSearch, slots = 
 
       <SidebarContent className="px-1.5">
         <nav aria-label="Principal">
-          {nav.items.length > 0 ? (
+          {items.length > 0 ? (
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu className="gap-0.5">
-                  {nav.items.map((item) => (
+                  {items.map((item) => (
                     <NavEntry
                       key={item.key}
                       item={item}
                       active={item.key === activeKey}
                       badge={item.key === "mi-espacio" ? slots["bandeja-badge"] : undefined}
+                      prefetch={prefetchFor(item.key)}
                     />
                   ))}
                 </SidebarMenu>
@@ -152,10 +174,10 @@ export function Sidebar({ nav, activeKey, session, today, onOpenSearch, slots = 
       </SidebarContent>
 
       <SidebarFooter className="gap-1 border-t border-sidebar-border px-3.5 pt-3 pb-5">
-        {nav.footer.length > 0 ? (
+        {footer.length > 0 ? (
           <nav aria-label="Ajustes">
             <SidebarMenu className="gap-0.5">
-              {nav.footer.map((item) => (
+              {footer.map((item) => (
                 <NavEntry key={item.key} item={item} active={item.key === activeKey} />
               ))}
             </SidebarMenu>

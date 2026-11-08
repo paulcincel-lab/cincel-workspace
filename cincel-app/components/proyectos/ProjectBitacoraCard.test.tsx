@@ -1,21 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 import type { HistoryEvent } from "@/lib/types/core";
 
-const actions = vi.hoisted(() => ({
-  fetchProjectHistoryAction: vi.fn(),
-  addProjectCommentAction: vi.fn(),
-}));
+const actions = vi.hoisted(() => ({ addProjectCommentAction: vi.fn() }));
+const pageData = vi.hoisted(() => ({ getProyectoHistoryPage: vi.fn(), getProyectoFichaData: vi.fn() }));
 
 vi.mock("@/lib/actions/projects-actions", () => actions);
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => pageData);
+
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 
 import { ProjectBitacoraCard } from "./ProjectBitacoraCard";
 
@@ -55,97 +51,108 @@ const newer = event({
 const EMPTY_TEXT = "No hay comentarios ni cambios registrados.";
 const PLACEHOLDER = "Agregar un comentario...";
 
+const page = (events: HistoryEvent[], nextCursor: string | null = null) => ({ events, nextCursor });
+
+function renderCard() {
+  const client = createTestQueryClient();
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  renderWithQueryClient(<ProjectBitacoraCard projectId={PROJECT_ID} />, { client });
+  return { client, invalidated: () => invalidate.mock.calls.map((c) => (c[0] as { queryKey: unknown }).queryKey) };
+}
+
 beforeEach(() => {
-  actions.fetchProjectHistoryAction.mockReset();
+  pageData.getProyectoHistoryPage.mockReset();
   actions.addProjectCommentAction.mockReset();
 });
 afterEach(cleanup);
 
 describe("ProjectBitacoraCard", () => {
-  it("lists the project history newest first", async () => {
-    actions.fetchProjectHistoryAction.mockResolvedValue([older, newer]);
-    render(<ProjectBitacoraCard projectId={PROJECT_ID} />);
+  it("lists the project history newest first from qk.proyectos.history(id)", async () => {
+    pageData.getProyectoHistoryPage.mockResolvedValue(page([older, newer]));
+    renderCard();
 
     const change = await screen.findByText("Cambió estado: activo → pausado");
     const comment = screen.getByText("Primer comentario");
-    expect(
-      change.compareDocumentPosition(comment) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(change.compareDocumentPosition(comment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText("Sistema")).toBeTruthy();
     expect(screen.getByText("Ana López")).toBeTruthy();
-    expect(actions.fetchProjectHistoryAction).toHaveBeenCalledWith(PROJECT_ID);
+    expect(pageData.getProyectoHistoryPage).toHaveBeenCalledWith({ id: PROJECT_ID, cursor: null });
+  });
+
+  it("renders a hydrated history with no call", () => {
+    const client = createTestQueryClient();
+    client.setQueryData(qk.proyectos.history(PROJECT_ID), { pages: [page([older])], pageParams: [null] });
+    renderWithQueryClient(<ProjectBitacoraCard projectId={PROJECT_ID} />, { client });
+    expect(screen.getByText("Primer comentario")).toBeTruthy();
+    expect(pageData.getProyectoHistoryPage).not.toHaveBeenCalled();
+  });
+
+  it("is bounded: Ver más loads the next page after the cursor", async () => {
+    pageData.getProyectoHistoryPage
+      .mockResolvedValueOnce(page([newer], "e-new"))
+      .mockResolvedValueOnce(page([older]));
+    renderCard();
+
+    await screen.findByText("Cambió estado: activo → pausado");
+    expect(screen.queryByText("Primer comentario")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ver más" }));
+
+    expect(await screen.findByText("Primer comentario")).toBeTruthy();
+    expect(pageData.getProyectoHistoryPage).toHaveBeenLastCalledWith({ id: PROJECT_ID, cursor: "e-new" });
+    expect(screen.queryByRole("button", { name: "Ver más" })).toBeNull();
   });
 
   it("shows the empty state", async () => {
-    actions.fetchProjectHistoryAction.mockResolvedValue([]);
-    render(<ProjectBitacoraCard projectId={PROJECT_ID} />);
+    pageData.getProyectoHistoryPage.mockResolvedValue(page([]));
+    renderCard();
     expect(await screen.findByText(EMPTY_TEXT)).toBeTruthy();
   });
 
-  it("adds a trimmed comment, clears the input and reloads", async () => {
-    actions.fetchProjectHistoryAction
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([older]);
-    actions.addProjectCommentAction.mockResolvedValue(undefined);
-    render(<ProjectBitacoraCard projectId={PROJECT_ID} />);
+  it("adds a trimmed comment, clears the input and invalidates only the history", async () => {
+    pageData.getProyectoHistoryPage.mockResolvedValueOnce(page([])).mockResolvedValue(page([older]));
+    actions.addProjectCommentAction.mockResolvedValue({ ok: true, data: undefined });
+    const { invalidated } = renderCard();
     await screen.findByText(EMPTY_TEXT);
 
-    const input = screen.getByPlaceholderText(
-      PLACEHOLDER,
-    ) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "  Primer comentario  " } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar comentario" }));
 
     expect(await screen.findByText("Primer comentario")).toBeTruthy();
-    expect(actions.addProjectCommentAction).toHaveBeenCalledWith(
-      PROJECT_ID,
-      "Primer comentario",
-    );
+    expect(actions.addProjectCommentAction).toHaveBeenCalledWith(PROJECT_ID, "Primer comentario");
+    expect(invalidated()).toEqual([qk.proyectos.history(PROJECT_ID)]);
     await waitFor(() => expect(input.value).toBe(""));
   });
 
   it("does not send a blank comment and explains why", async () => {
-    actions.fetchProjectHistoryAction.mockResolvedValue([]);
-    render(<ProjectBitacoraCard projectId={PROJECT_ID} />);
+    pageData.getProyectoHistoryPage.mockResolvedValue(page([]));
+    renderCard();
     await screen.findByText(EMPTY_TEXT);
 
-    fireEvent.change(screen.getByPlaceholderText(PLACEHOLDER), {
-      target: { value: "   " },
-    });
+    fireEvent.change(screen.getByPlaceholderText(PLACEHOLDER), { target: { value: "   " } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar comentario" }));
 
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "Escribe un comentario antes de guardarlo.",
-    );
+    expect((await screen.findByRole("alert")).textContent).toBe("Escribe un comentario antes de guardarlo.");
     expect(actions.addProjectCommentAction).not.toHaveBeenCalled();
   });
 
-  it("maps a server EMPTY error and keeps the text on failure", async () => {
-    actions.fetchProjectHistoryAction.mockResolvedValue([]);
+  it("maps a server EMPTY result and keeps the text on failure", async () => {
+    pageData.getProyectoHistoryPage.mockResolvedValue(page([]));
     actions.addProjectCommentAction
-      .mockRejectedValueOnce(new Error("EMPTY"))
-      .mockRejectedValueOnce(new Error("FORBIDDEN"));
-    render(<ProjectBitacoraCard projectId={PROJECT_ID} />);
+      .mockResolvedValueOnce({ ok: false, error: "EMPTY" })
+      .mockResolvedValueOnce({ ok: false, error: "FORBIDDEN" });
+    renderCard();
     await screen.findByText(EMPTY_TEXT);
 
-    const input = screen.getByPlaceholderText(
-      PLACEHOLDER,
-    ) as HTMLTextAreaElement;
+    const input = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "Hola" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar comentario" }));
     await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toBe(
-        "Escribe un comentario antes de guardarlo.",
-      ),
+      expect(screen.getByRole("alert").textContent).toBe("Escribe un comentario antes de guardarlo."),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar comentario" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toBe(
-        "No se pudo guardar el comentario.",
-      ),
-    );
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("No se pudo guardar el comentario."));
     expect(input.value).toBe("Hola");
   });
 });

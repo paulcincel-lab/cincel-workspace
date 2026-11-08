@@ -1,9 +1,28 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 
-const actions = vi.hoisted(() => ({ getProjectClientFolderUrlAction: vi.fn() }));
-vi.mock("@/lib/actions/portal-actions", () => actions);
+import { qk } from "@/lib/query/keys";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+
+const actions = vi.hoisted(() => ({
+  getProyectoClientesData: vi.fn(),
+  getProyectoClientesActivity: vi.fn(),
+  getProyectoArchivosData: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => actions);
+
+/** The Clientes payload the tab caches; only `clientFolderUrl` matters here. */
+function clientes(clientFolderUrl: string | null) {
+  return {
+    rows: [],
+    contacts: [],
+    capabilities: { manageAccess: true, disableUsers: false },
+    hasClient: true,
+    canAssignClient: false,
+    clientFolderUrl,
+  };
+}
 
 import { PortalClientFolderHint } from "./PortalClientFolderHint";
 
@@ -20,20 +39,22 @@ afterEach(() => {
 
 describe("PortalClientFolderHint", () => {
   it("shows the hint and opens the client's Drive folder in a new tab", async () => {
-    actions.getProjectClientFolderUrlAction.mockResolvedValue(FOLDER_URL);
-    render(<PortalClientFolderHint projectId={PROJECT_ID} />);
+    const client = createTestQueryClient();
+    client.setQueryData(qk.proyectos.tab(PROJECT_ID, "clientes"), clientes(FOLDER_URL));
+    renderWithQueryClient(<PortalClientFolderHint projectId={PROJECT_ID} />, { client });
 
     expect(screen.getByText("Todo lo que pongas en 02 Cliente lo verán los clientes invitados a este proyecto.")).toBeTruthy();
     const link = await screen.findByRole("link", { name: "Abrir carpeta del cliente en Drive" });
     expect(link.getAttribute("href")).toBe(FOLDER_URL);
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toContain("noopener");
-    expect(actions.getProjectClientFolderUrlAction).toHaveBeenCalledWith(PROJECT_ID);
+    // Read from the cached Clientes data: no action call, no effect.
+    expect(actions.getProyectoClientesData).not.toHaveBeenCalled();
   });
 
   it("disables the button while the folder doesn't exist yet", async () => {
-    actions.getProjectClientFolderUrlAction.mockResolvedValue(null);
-    render(<PortalClientFolderHint projectId={PROJECT_ID} />);
+    actions.getProyectoClientesData.mockResolvedValue(clientes(null));
+    renderWithQueryClient(<PortalClientFolderHint projectId={PROJECT_ID} />);
 
     expect(await screen.findByText("La carpeta del cliente todavía no existe en Drive.")).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();

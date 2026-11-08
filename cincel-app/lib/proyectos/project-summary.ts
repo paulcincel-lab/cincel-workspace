@@ -27,7 +27,15 @@ export type ProjectTaskStats = {
   currentPhase: string | null;
 };
 
-export type ProjectStaffInfo = { email: string | null; puesto: string | null };
+/**
+ * A project team member as the Resumen sees them: only the project's own
+ * staff (responsable, coordinación, miembros). `email` (the Cutto chat link)
+ * is present only for administrators; `puesto` only with `team.canViewTeam`.
+ */
+export type ProjectStaffInfo = { id: string; name: string; email?: string; puesto?: string };
+
+/** The task fields the Resumen counts (`TaskListRow` and `TaskListItem` both have them). */
+export type ProjectStatsTask = Pick<TaskListItem, "archived" | "status" | "commitmentDate" | "workflowId" | "phase">;
 
 export type ProjectSummaryInput = {
   project: ProjectDetail;
@@ -39,7 +47,7 @@ export type ProjectSummaryInput = {
   /** Root items of the project's Drive folder; null when the folder can't be read. */
   files: StaffFileItem[] | null;
   spaces: ProjectSpaceRef[];
-  /** By staff id: email (for the Cutto chat link) and puesto. */
+  /** By staff id, only the project's team: name, plus email (admins only, for the Cutto chat link) and puesto. */
   staff: Record<string, ProjectStaffInfo>;
   /** `canSeeAdminData`: budget bar and budget tables. */
   showBudget: boolean;
@@ -70,27 +78,24 @@ function isoToDate(iso: string): Date {
   return new Date(`${iso.slice(0, 10)}T00:00:00Z`);
 }
 
+// One formatter per shape, built once: these run per Gantt bar and per file.
+const SHORT_DATE = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" });
+const MONTH_YEAR = new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric", timeZone: "UTC" });
+const SHORT_MONTH = new Intl.DateTimeFormat("es-MX", { month: "short", timeZone: "UTC" });
+const MXN = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+
 /** "3 nov" */
 export function shortDate(iso: string): string {
-  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" })
-    .format(isoToDate(iso))
-    .replace(".", "")
-    .toLowerCase();
+  return SHORT_DATE.format(isoToDate(iso)).replace(".", "").toLowerCase();
 }
 
 /** "abril 2026" */
 export function monthYear(iso: string): string {
-  return new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric", timeZone: "UTC" })
-    .format(isoToDate(iso))
-    .replace(" de ", " ")
-    .toLowerCase();
+  return MONTH_YEAR.format(isoToDate(iso)).replace(" de ", " ").toLowerCase();
 }
 
 function shortMonth(iso: string): string {
-  return new Intl.DateTimeFormat("es-MX", { month: "short", timeZone: "UTC" })
-    .format(isoToDate(iso))
-    .replace(".", "")
-    .toLowerCase();
+  return SHORT_MONTH.format(isoToDate(iso)).replace(".", "").toLowerCase();
 }
 
 /** "abr – may"; one month when start and end share it; null without a start. */
@@ -107,7 +112,7 @@ export function daysBetween(fromIso: string, toIso: string): number {
 }
 
 export function formatMxn(amount: number): string {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(amount);
+  return MXN.format(amount);
 }
 
 function contractAmount(project: ProjectDetail): number | null {
@@ -139,7 +144,7 @@ export function projectMetaLine(project: Pick<ProjectDetail, "projectType" | "ad
 // ── Tasks ───────────────────────────────────────────────────────────────────
 
 /** Counts for "Avance · n de m tareas" and the indicators; `tasks` already exclude admin tasks for non-admins. */
-export function projectTaskStats(tasks: TaskListItem[], today: string, currentWorkflowId: string | null): ProjectTaskStats {
+export function projectTaskStats(tasks: ProjectStatsTask[], today: string, currentWorkflowId: string | null): ProjectTaskStats {
   const live = tasks.filter((t) => !t.archived);
   const done = live.filter((t) => t.status === "completado").length;
   const openTasks = live.filter((t) => t.status !== "completado");

@@ -3,8 +3,6 @@
 import { toActionResult } from "@/lib/actions/action-result";
 import type { ActionResult } from "@/lib/types/schedule";
 import { revalidateInicioScreen } from "@/lib/cache/screens/inicio";
-import { revalidateProyectoFichaScreen } from "@/lib/cache/screens/proyectos";
-import { revalidateTareasScreen } from "@/lib/cache/screens/tareas";
 import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
@@ -55,11 +53,6 @@ async function checklistItemTask(itemId: string): Promise<string[]> {
   return taskId ? [taskId] : [];
 }
 
-function revalidateTareas(projectId?: string) {
-  revalidateTareasScreen(["tareas", "tablero", "calendario"]);
-  if (projectId) revalidateProyectoFichaScreen(projectId, ["ficha"]);
-}
-
 export async function fetchTasksAction(filters: TaskFilters = {}): Promise<TaskListItem[]> {
   const caps = await requireTasksCapabilities();
   if (!caps.canViewActivities) return [];
@@ -70,14 +63,6 @@ export async function fetchTasksAction(filters: TaskFilters = {}): Promise<TaskL
 export async function fetchMyTasksAction(filters: TaskFilters = {}): Promise<TaskListItem[]> {
   const user = await requireCapabilityUser();
   return tasksRepository.listMyTasks(user.member.id, filters, viewerScopeOf(user));
-}
-
-export async function fetchBoardAction(filters: TaskFilters = {}): Promise<Record<TaskStatus, TaskListItem[]>> {
-  const caps = await requireTasksCapabilities();
-  if (!caps.canViewActivities) {
-    return { pendiente: [], en_proceso: [], completado: [], bloqueado: [] };
-  }
-  return tasksRepository.listBoard(filters, caps.viewer);
 }
 
 export async function fetchCalendarAction(
@@ -114,7 +99,7 @@ async function createUserTaskActionImpl(input: UserTaskInput): Promise<TaskDetai
     throw new Error("FORBIDDEN: task create");
   }
   const row = await tasksRepository.createUserTask(input, user.member.id);
-  revalidateTareas(input.projectId);
+  // No revalidation: the new-task dialog invalidates the Tareas, project, Inicio and badge keys.
   // Request-scoped values (actor, trace id) are read here; `after()` gets plain values only (#932).
   const assigned = { task: row, managerId: row.managerId, actorId: user.member.id, traceId: await notifyTraceId() };
   after(() => notifyTaskAssigned(assigned));
@@ -142,7 +127,6 @@ async function createSubtaskActionImpl(parentId: string, input: SubtaskInput): P
   if (!resolveActivitiesCapabilities(user).canCreateActivity) throw new Error("FORBIDDEN");
   try {
     const row = await tasksRepository.createSubtask(parentId, input, user.member.id);
-    revalidateTareas(row.projectId);
     return scopeTaskDto(row, viewer);
   } catch (err) {
     const code = err instanceof Error ? SUBTASK_ERRORS[err.message] : undefined;
@@ -183,7 +167,6 @@ async function updateTaskActionImpl(id: string, patch: TaskPatch): Promise<TaskD
     throw new Error("FORBIDDEN: task edit");
   }
   const row = await tasksRepository.updateTask(id, patch, user.member.id);
-  revalidateTareas(row.projectId);
   if (patch.status !== undefined) await scheduleTaskClosingHook(row, user.member.id);
   return scopeTaskDto(row, viewer);
 }
@@ -200,7 +183,6 @@ async function setTaskStatusActionImpl(id: string, status: TaskStatus): Promise<
     throw new Error("FORBIDDEN: task status change");
   }
   const row = await tasksRepository.setTaskStatus(id, status, user.member.id);
-  revalidateTareas(row.projectId);
   await scheduleTaskClosingHook(row, user.member.id);
   return scopeTaskDto(row, viewer);
 }
@@ -217,7 +199,6 @@ async function assignTaskActionImpl(id: string, managerId: string | null): Promi
     throw new Error("FORBIDDEN: task reassign");
   }
   const row = await tasksRepository.assignTask(id, managerId, user.member.id);
-  revalidateTareas(row.projectId);
   // Request-scoped values (actor, trace id) are read here; `after()` gets plain values only (#932).
   const assigned = { task: row, managerId: row.managerId, actorId: user.member.id, traceId: await notifyTraceId() };
   after(() => notifyTaskAssigned(assigned));
@@ -230,7 +211,6 @@ export async function archiveTaskAction(id: string, archived: boolean): Promise<
     throw new Error("FORBIDDEN: task archive");
   }
   const row = await tasksRepository.setTaskArchived(id, archived, user.member.id);
-  revalidateTareas(row.projectId);
   return scopeTaskDto(row, viewer);
 }
 
@@ -245,8 +225,8 @@ async function deleteTaskActionImpl(id: string): Promise<void> {
   if (!resolveActivitiesCapabilities(user).canDeleteActivity) {
     throw new Error("FORBIDDEN: task delete");
   }
+  // No revalidation: the caller (`EventDetailPopover`) invalidates the Tareas, project and Inicio keys.
   await tasksRepository.softDeleteTask(id, user.member.id);
-  revalidateTareas();
 }
 
 /**
@@ -260,7 +240,6 @@ export async function mergeTasksAction(keepId: string, duplicateIds: string[]): 
     throw new Error("FORBIDDEN: task merge");
   }
   const row = await tasksRepository.mergeTasks(keepId, duplicateIds, user.member.id);
-  revalidateTareas();
   return scopeTaskDto(row, viewer);
 }
 
@@ -270,7 +249,6 @@ export async function setTaskSupportAction(taskId: string, staffIds: string[]) {
     throw new Error("FORBIDDEN: task support edit");
   }
   const support = await tasksRepository.setTaskSupport(taskId, staffIds, user.member.id);
-  revalidateTareas();
   return support;
 }
 
@@ -286,7 +264,6 @@ async function addChecklistItemActionImpl(taskId: string, title: string): Promis
     throw new Error("FORBIDDEN: checklist edit");
   }
   const row = await tasksRepository.addChecklistItem(taskId, title);
-  revalidateTareas();
   return row;
 }
 
@@ -302,7 +279,6 @@ async function updateChecklistItemActionImpl(
 ): Promise<TaskChecklistItem> {
   await requireTaskWriter(...(await checklistItemTask(id)));
   const row = await tasksRepository.updateChecklistItem(id, patch);
-  revalidateTareas();
   return row;
 }
 
@@ -318,7 +294,6 @@ async function removeChecklistItemActionImpl(id: string): Promise<void> {
     throw new Error("FORBIDDEN: checklist edit");
   }
   await tasksRepository.removeChecklistItem(id);
-  revalidateTareas();
 }
 
 export async function reorderChecklistAction(
@@ -330,7 +305,6 @@ export async function reorderChecklistAction(
 async function reorderChecklistActionImpl(taskId: string, orderedIds: string[]): Promise<void> {
   await requireTaskWriter(taskId);
   await tasksRepository.reorderChecklist(taskId, orderedIds);
-  revalidateTareas();
 }
 
 export async function reorderProjectTasksAction(projectId: string, orderedTaskIds: string[]): Promise<void> {
@@ -339,7 +313,6 @@ export async function reorderProjectTasksAction(projectId: string, orderedTaskId
     throw new Error("FORBIDDEN: tasks reorder");
   }
   await tasksRepository.reorderProjectTasks(projectId, orderedTaskIds);
-  revalidateTareas();
 }
 
 export async function reorderTasksAction(orderedTaskIds: string[]): Promise<void> {
@@ -348,7 +321,6 @@ export async function reorderTasksAction(orderedTaskIds: string[]): Promise<void
     throw new Error("FORBIDDEN: tasks reorder");
   }
   await tasksRepository.reorderTasks(orderedTaskIds);
-  revalidateTareas();
 }
 
 export async function addTaskCommentAction(
@@ -360,7 +332,6 @@ export async function addTaskCommentAction(
 async function addTaskCommentActionImpl(taskId: string, comment: string): Promise<HistoryEvent> {
   const { user } = await requireTaskWriter(taskId);
   const row = await tasksRepository.addTaskComment(taskId, comment, user.member.id);
-  revalidateTareas();
   // Request-scoped values (actor, trace id) are read here; `after()` gets plain values only (#932).
   const commented = {
     taskId,
@@ -409,7 +380,6 @@ async function addTaskAttachmentActionImpl(taskId: string, formData: FormData): 
       user.member.id,
       typeof checklistItemId === "string" && checklistItemId ? checklistItemId : null
     );
-    revalidateTareas();
     return row;
   } catch (err) {
     const message = err instanceof Error ? ATTACHMENT_ERROR_MESSAGES[err.message] : undefined;
@@ -429,7 +399,6 @@ async function setTaskCustomStatusActionImpl(id: string, customStatusId: string)
     throw new Error("FORBIDDEN: task status change");
   }
   const row = await tasksRepository.setTaskCustomStatus(id, customStatusId, user.member.id);
-  revalidateTareas(row.projectId);
   await scheduleTaskClosingHook(row, user.member.id);
   return scopeTaskDto(row, viewer);
 }
@@ -445,8 +414,7 @@ export async function addTaskLinkAction(taskId: string, input: TaskLinkInput): P
   const { user } = await requireTaskWriter(taskId);
   try {
     const row = await tasksRepository.addTaskLink(taskId, input, user.member.id);
-    revalidateTareas();
-    return row;
+      return row;
   } catch (err) {
     const message = err instanceof Error ? LINK_ERROR_MESSAGES[err.message] : undefined;
     throw new Error(message ?? "No se pudo agregar el enlace.");
@@ -457,7 +425,6 @@ export async function removeTaskLinkAction(id: string): Promise<void> {
   const linkTaskId = await tasksRepository.taskLinkTaskId(id);
   const { user } = await requireTaskWriter(...(linkTaskId ? [linkTaskId] : []));
   await tasksRepository.removeTaskLink(id, user.member.id);
-  revalidateTareas();
 }
 
 /**
@@ -477,7 +444,6 @@ async function addTaskDependencyActionImpl(taskId: string, dependsOnTaskId: stri
     throw new Error("FORBIDDEN: task dependency edit");
   }
   await taskDependenciesRepository.addTaskDependency(taskId, dependsOnTaskId);
-  revalidateTareas((await taskDependenciesRepository.getTaskProjectId(taskId)) ?? undefined);
 }
 
 /** Removes a dependency. Throws `FORBIDDEN`, `NOT_FOUND`. */
@@ -493,7 +459,6 @@ async function removeTaskDependencyActionImpl(taskId: string, dependsOnTaskId: s
     throw new Error("FORBIDDEN: task dependency edit");
   }
   await taskDependenciesRepository.removeTaskDependency(taskId, dependsOnTaskId);
-  revalidateTareas((await taskDependenciesRepository.getTaskProjectId(taskId)) ?? undefined);
 }
 
 /** Tasks this one waits on (`dependsOn`) and tasks that wait on it (`blocks`). */
@@ -526,8 +491,6 @@ export async function createAdminTaskAction(input: AdminTaskInput): Promise<Task
   if (!canSeeAdminData(user)) throw flowError("FORBIDDEN");
   const parsed = parseInput(AdminTaskInputSchema, input);
   const row = await tasksRepository.createAdminTask(parsed, user.member.id);
-  revalidateTareas(row.projectId);
-  revalidateTareasScreen(["actividadesLayout"]);
   revalidateInicioScreen();
   return row;
 }

@@ -56,6 +56,7 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
   ],
   "profile-photo-actions": ["removeMyPhotoAction"],
   "preferences-actions": ["updateMyPreferencesAction"],
+  "tramo-start-actions": ["startTramoAction", "undoStartTramoAction"],
 };
 
 const CONVERTED = new Set(Object.values(ACTION_RESULT_MUTATIONS).flat());

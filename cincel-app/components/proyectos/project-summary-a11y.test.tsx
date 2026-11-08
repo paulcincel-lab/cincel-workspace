@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectoResumenData: vi.fn() }));
 vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn(async () => ({})) }));
 // Custom permission overrides live in localStorage; stub it so the tests use the default matrix.
 vi.mock("@/lib/repositories/browser-state-repository", () => ({
@@ -35,7 +36,7 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 import { fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
 
-import { ProjectSummary } from "./ProjectSummary";
+import { ProjectSummaryContent } from "./ProjectSummary";
 import { ProjectTabs } from "./ProjectTabs";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
@@ -91,7 +92,7 @@ function Page({ style, restricted }: { style: PresentationStyle; restricted: boo
           canManagePortal={!restricted}
           showEstilo
         />
-        <ProjectSummary {...input} />
+        <ProjectSummaryContent data={input} />
       </main>
     </StyleProvider>
   );

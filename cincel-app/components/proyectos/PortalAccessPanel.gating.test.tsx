@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
+
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 
 vi.mock("@/lib/actions/portal-actions", () => ({}));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/proyectos/InvitePortalClientSheet", () => ({
-  PORTAL_ERROR_MESSAGES: {},
+  portalErrorText: () => "",
   InvitePortalClientSheet: () => <div data-testid="invite-sheet" />,
 }));
 vi.mock("@/components/proyectos/PortalClientFolderHint", () => ({
@@ -21,7 +22,7 @@ afterEach(cleanup);
 const capabilities = { manageAccess: true, disableUsers: false };
 
 function renderPanel(props: { hasClient: boolean; canAssignClient: boolean }) {
-  return render(
+  return renderWithQueryClient(
     <PortalAccessPanel
       projectId="p1"
       projectName="Casa Lomas"

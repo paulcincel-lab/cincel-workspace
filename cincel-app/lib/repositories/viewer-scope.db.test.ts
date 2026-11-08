@@ -130,8 +130,8 @@ describe.skipIf(!url)("viewer scope on task and project reads (test DB)", async 
   });
 
   it("board and calendar hide admin tasks from non-admins", async () => {
-    const board = await tasksRepo.listBoard({ projectId }, member);
-    expect(Object.values(board).flat().map((t) => t.id)).toEqual([userTaskId]);
+    const board = await tasksRepo.listBoardColumns({ projectId }, member, 20);
+    expect(Object.values(board).flatMap((c) => c.rows.map((t) => t.id))).toEqual([userTaskId]);
     const calendar = await tasksRepo.listCalendar("2030-03-01", "2030-03-31", { projectId }, member);
     expect(ids(calendar)).toEqual([userTaskId]);
   });
