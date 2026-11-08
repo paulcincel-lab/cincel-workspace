@@ -61,7 +61,7 @@ describe("no hard-coded admin password", () => {
       ".env.example",
       "README.md",
       "docs/deployment.md",
-      "../.github/workflows/cincel-app-build.yml",
+      "../.github/workflows/cincel-app-ci.yml",
     ]) {
       expect(read(rel), rel).not.toContain(old);
     }
