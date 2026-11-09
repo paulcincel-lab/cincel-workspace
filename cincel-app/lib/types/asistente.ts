@@ -23,3 +23,6 @@ export type AssistantContextIds = { projectId?: string; taskId?: string; personI
 
 /** The name-only confirmed context: never more than an id and a label. */
 export type AssistantContextLabel = { id: string; label: string };
+
+/** Timings and token usage of one assistant message (shape fixed by #979; filled by the Asistente issue). */
+export type AssistantMessageMeta = { toolMs?: number; responseMs?: number; usage?: { inputTokens: number; outputTokens: number } };

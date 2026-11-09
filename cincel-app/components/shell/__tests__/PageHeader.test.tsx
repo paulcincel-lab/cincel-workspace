@@ -3,15 +3,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 
 import { PageHeader } from "@/components/shell/PageHeader";
-import { PageHeader as V2PageHeader } from "@/components/v2/layout/PageHeader";
+import { PageHeader as WidgetPageHeader } from "@/components/widgets/PageHeader";
 
 afterEach(() => {
   document.documentElement.removeAttribute("data-style");
 });
 
 describe("PageHeader", () => {
-  it("is the v2 component re-exported from the shell", () => {
-    expect(PageHeader).toBe(V2PageHeader);
+  it("is the widget header (base header + Estilo switch) re-exported from the shell", () => {
+    expect(PageHeader).toBe(WidgetPageHeader);
   });
 
   it("renders today's header for the legacy props (title, description, actions) and no breadcrumb", () => {

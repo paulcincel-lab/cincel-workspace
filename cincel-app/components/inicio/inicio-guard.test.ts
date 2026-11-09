@@ -24,6 +24,15 @@ const ALLOWED_WIDGETS = new Set([
   "PeopleWidget",
   // The page column: Esencial's 980 px max content width (FE §15.2), decided inside the library.
   "StyleContent",
+  // Estilos kit (#979): the per-style page layout and its shared parts.
+  "PageStyleLayout",
+  "PageHeader",
+  "KpiStrip",
+  "FilterCard",
+  "GroupedTable",
+  "EsencialCard",
+  "EsencialItemRow",
+  "QuickAddRow",
 ]);
 
 function sourceFiles(dir: string): string[] {

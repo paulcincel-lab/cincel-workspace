@@ -77,6 +77,7 @@ export function BibliotecaIndex() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
+        estilo={false}
         title="Biblioteca"
         description="Recursos y documentos de la empresa en un solo lugar."
         actions={

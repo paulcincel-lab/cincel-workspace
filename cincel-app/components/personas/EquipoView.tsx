@@ -61,6 +61,7 @@ export function EquipoView({ people, emails, counts, canCreate }: EquipoViewProp
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
+        estilo={false}
         title={PERSONAS_TITLE}
         description={PERSONAS_DESCRIPTION}
         actions={
