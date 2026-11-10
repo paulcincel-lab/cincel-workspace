@@ -47,3 +47,47 @@ export const DELETE_LABEL = "Eliminar";
 export const OPEN_LABEL = "Abrir";
 export const DUPLICATE_LABEL = "Duplicar";
 export const CANCEL_LABEL = "Cancelar";
+
+// ── Selection (#1040): pure helpers both tables and `useTaskSelection` share.
+
+/** How many of `ids` are selected: every one, some or none (the header checkbox). */
+export type SelectionState = "all" | "some" | "none";
+
+export function selectionState(selected: ReadonlySet<string>, ids: readonly string[]): SelectionState {
+  if (ids.length === 0) return "none";
+  let count = 0;
+  for (const id of ids) if (selected.has(id)) count += 1;
+  return count === 0 ? "none" : count === ids.length ? "all" : "some";
+}
+
+/** `ids` selected (or unselected), the rest kept. */
+export function setRowsSelected(selected: ReadonlySet<string>, ids: readonly string[], on: boolean): Set<string> {
+  const next = new Set(selected);
+  for (const id of ids) {
+    if (on) next.add(id);
+    else next.delete(id);
+  }
+  return next;
+}
+
+/**
+ * The selection after a click on `id`'s checkbox. With `range` (shift-click)
+ * and an `anchor` (the last row clicked) in `order`, every row from the anchor
+ * to `id` takes the clicked row's new state; otherwise only `id` toggles.
+ */
+export function toggleRowSelection(
+  selected: ReadonlySet<string>,
+  id: string,
+  options: { order: readonly string[]; anchor?: string | null; range?: boolean },
+): Set<string> {
+  const on = !selected.has(id);
+  const { order, anchor, range } = options;
+  if (range && anchor && anchor !== id) {
+    const from = order.indexOf(anchor);
+    const to = order.indexOf(id);
+    if (from !== -1 && to !== -1) {
+      return setRowsSelected(selected, order.slice(Math.min(from, to), Math.max(from, to) + 1), on);
+    }
+  }
+  return setRowsSelected(selected, [id], on);
+}

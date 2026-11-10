@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+
+import { setRowsSelected, toggleRowSelection } from "@/components/widgets/table-rows";
 
 /**
  * Selected task ids of one task table (#1040), handed to the table as
@@ -31,19 +33,53 @@ export type TaskSelection = {
 
 const NONE: ReadonlySet<string> = new Set<string>();
 
-/** Contract stub: always empty, every call a no-op, until the selection lands. */
-export function useTaskSelection(options: UseTaskSelectionOptions): TaskSelection {
-  void options;
+type Stored = { key: string | undefined; ids: ReadonlySet<string> };
+
+export function useTaskSelection({ visibleIds, resetKey }: UseTaskSelectionOptions): TaskSelection {
+  const [stored, setStored] = useState<Stored>({ key: resetKey, ids: NONE });
+  const anchor = useRef<string | null>(null);
+
+  // A selection made under other filters reads as empty (no effect needed to clear it).
+  const raw = stored.key === resetKey ? stored.ids : NONE;
+  const visibleKey = visibleIds.join("\u0000");
+  const selectedIds = useMemo<ReadonlySet<string>>(() => {
+    if (raw.size === 0) return NONE;
+    const visible = new Set(visibleKey === "" ? [] : visibleKey.split("\u0000"));
+    const kept = [...raw].filter((id) => visible.has(id));
+    return kept.length === raw.size ? raw : new Set(kept);
+  }, [raw, visibleKey]);
+
+  const write = useCallback(
+    (next: ReadonlySet<string>) => setStored({ key: resetKey, ids: next.size === 0 ? NONE : next }),
+    [resetKey],
+  );
+
+  const toggle = useCallback(
+    (id: string, options?: { range?: boolean }) => {
+      write(toggleRowSelection(selectedIds, id, { order: visibleIds, anchor: anchor.current, range: options?.range }));
+      anchor.current = id;
+    },
+    [write, selectedIds, visibleIds],
+  );
+  const setMany = useCallback(
+    (ids: readonly string[], on: boolean) => write(setRowsSelected(selectedIds, ids, on)),
+    [write, selectedIds],
+  );
+  const clear = useCallback(() => {
+    anchor.current = null;
+    write(NONE);
+  }, [write]);
+
   return useMemo<TaskSelection>(
     () => ({
-      selectedIds: NONE,
-      count: 0,
-      isSelected: () => false,
-      toggle: () => undefined,
-      setMany: () => undefined,
-      clear: () => undefined,
-      onSelectionChange: () => undefined,
+      selectedIds,
+      count: selectedIds.size,
+      isSelected: (id) => selectedIds.has(id),
+      toggle,
+      setMany,
+      clear,
+      onSelectionChange: write,
     }),
-    [],
+    [selectedIds, toggle, setMany, clear, write],
   );
 }

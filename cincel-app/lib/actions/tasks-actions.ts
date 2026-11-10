@@ -279,8 +279,9 @@ export async function restoreTaskAction(
  * come back. Admins or the person who deleted it, within 30 days.
  */
 async function restoreTaskActionImpl(id: string): Promise<void> {
-  void id;
-  throw new Error("not implemented: restoreTaskAction");
+  const { viewer } = await requireTaskWriter(id);
+  // No revalidation, as for the delete: the caller invalidates `taskDeleteInvalidations`.
+  await tasksRepository.restoreTask(id, viewer);
 }
 
 export async function bulkUpdateTasksAction(
@@ -295,9 +296,78 @@ export async function bulkUpdateTasksAction(
  * can't change are skipped with the error code, the rest are updated.
  */
 async function bulkUpdateTasksActionImpl(ids: string[], patch: TaskBulkPatch): Promise<TaskBulkResult> {
-  void ids;
-  void patch;
-  throw new Error("not implemented: bulkUpdateTasksAction");
+  const user = await requireCapabilityUser();
+  const viewer = viewerScopeOf(user);
+  const caps = resolveActivitiesCapabilities(user);
+  const result: TaskBulkResult = { updated: [], skipped: [] };
+  const closing: TaskDetail[] = [];
+  const assigned: TaskDetail[] = [];
+  for (const id of [...new Set(ids)]) {
+    try {
+      await tasksRepository.assertTaskVisible(id, viewer);
+      const row = await bulkUpdateOne(id, patch, caps, user.member.id);
+      result.updated.push(id);
+      if (row && ("status" in patch || "customStatusId" in patch)) closing.push(row);
+      if (row && "managerId" in patch) assigned.push(row);
+    } catch (error) {
+      // Only the task's own refusals (plain `Error`s with a code) skip it; anything else fails the call.
+      if (!(error instanceof Error) || error.constructor !== Error) throw error;
+      result.skipped.push({ id, reason: bulkSkipReason(error.message) });
+    }
+  }
+  if (closing.length > 0) await scheduleTaskClosingHook(closing, user.member.id);
+  if (assigned.length > 0) {
+    const traceId = await notifyTraceId();
+    const notices = assigned.map((task) => ({ task, managerId: task.managerId, actorId: user.member.id, traceId }));
+    after(() => Promise.all(notices.map((notice) => notifyTaskAssigned(notice))));
+  }
+  return result;
+}
+
+/** "FORBIDDEN: task status change" → "FORBIDDEN". */
+function bulkSkipReason(message: string): string {
+  return message.split(":")[0].trim() || "FORBIDDEN";
+}
+
+/** One task of a bulk change, under the single-task action's checks for that field (null: nothing to follow up). */
+async function bulkUpdateOne(
+  id: string,
+  patch: TaskBulkPatch,
+  caps: ReturnType<typeof resolveActivitiesCapabilities>,
+  actorId: string
+): Promise<TaskDetail | null> {
+  if ("status" in patch || "customStatusId" in patch) {
+    if (caps.statusScope === "none") throw new Error("FORBIDDEN: task status change");
+    return "status" in patch
+      ? tasksRepository.setTaskStatus(id, patch.status, actorId)
+      : tasksRepository.setTaskCustomStatus(id, patch.customStatusId, actorId);
+  }
+  if ("managerId" in patch) {
+    if (!caps.canChangeResponsible) throw new Error("FORBIDDEN: task reassign");
+    return tasksRepository.assignTask(id, patch.managerId, actorId);
+  }
+  if ("supportIds" in patch) {
+    if (!caps.canChangeResponsible) throw new Error("FORBIDDEN: task support edit");
+    await tasksRepository.setTaskSupport(id, patch.supportIds, actorId);
+    return null;
+  }
+  if (!caps.canCreateActivity) throw new Error("FORBIDDEN: task edit");
+  const task = await tasksRepository.taskBulkFields(id);
+  if ("phaseId" in patch) {
+    // Same locks as the Fase cell: admin tasks have no fase, a subtask follows its parent's.
+    if (task.kind === "admin") throw new Error("ADMIN_TASK");
+    if (task.parentTaskId) throw new Error("SUBTASK_PHASE");
+    return tasksRepository.updateTask(id, { phaseId: patch.phaseId }, actorId);
+  }
+  // "Vence" writes the date it shows (the commitment date when set, else the delivery date),
+  // or the one named by Deshacer, which restores the date a clear removed.
+  const field =
+    patch.dueField === "commitmentDate" || patch.dueField === "deliveryDate"
+      ? patch.dueField
+      : task.commitmentDate
+        ? "commitmentDate"
+        : "deliveryDate";
+  return tasksRepository.updateTask(id, { [field]: patch.dueDate }, actorId);
 }
 
 export async function setTaskSupportAction(
@@ -306,9 +376,10 @@ export async function setTaskSupportAction(
   return toActionResult(() => setTaskSupportActionImpl(...args));
 }
 
+/** The task's equipo de apoyo (#1038): the same permission as changing its Responsable. */
 async function setTaskSupportActionImpl(taskId: string, staffIds: string[]) {
   const { user } = await requireTaskWriter(taskId);
-  if (!resolveActivitiesCapabilities(user).canCreateActivity) {
+  if (!resolveActivitiesCapabilities(user).canChangeResponsible) {
     throw new Error("FORBIDDEN: task support edit");
   }
   const support = await tasksRepository.setTaskSupport(taskId, staffIds, user.member.id);

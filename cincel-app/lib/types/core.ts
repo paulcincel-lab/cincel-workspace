@@ -620,7 +620,8 @@ export type TaskBulkPatch =
   | { managerId: string | null }
   | { supportIds: string[] }
   | { phaseId: string | null }
-  | { dueDate: string | null };
+  /** `dueField` names the date to write (Deshacer restores the one it cleared); default: the one "Vence" shows. */
+  | { dueDate: string | null; dueField?: "commitmentDate" | "deliveryDate" };
 
 /** What `bulkUpdateTasksAction` did: the ids changed and the ones skipped, with why (an error code). */
 export type TaskBulkResult = {
