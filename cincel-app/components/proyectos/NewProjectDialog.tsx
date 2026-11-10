@@ -1,7 +1,7 @@
 "use client";
 
 import { FormDialog } from "@/components/patterns/FormDialog";
-import { actionErrorText } from "@/lib/errors";
+import { actionErrorCode, actionErrorText } from "@/lib/errors";
 
 import {
   ProjectCreateFields,
@@ -15,21 +15,30 @@ export type NewProjectDialogProps = ProjectCreateFormProps & {
   onOpenChange(open: boolean): void;
 };
 
-/** Error copy of the create: the §9 codes, with the project wording for `NAME_TAKEN`. */
+/** Error copy of the create: the §9 codes, with the project wording for `NAME_TAKEN` and the starting tramo's fases. */
 export function newProjectErrorText(err: unknown): string {
+  if (actionErrorCode(err) === "PHASE_MISMATCH") return "Una de las fases ya no pertenece al tramo elegido. Vuelve a elegirlas.";
   return actionErrorText(err, { entity: "project" });
 }
 
 /**
  * "Nuevo proyecto" (redesign FE §3.5, frame `NuevoProyecto`): the create form
  * (`useProjectCreateForm`, `ProjectCreateFields`) on `FormDialog`.
- * Project Flow fields: the name only, plus Cliente, Origen and "Quién trajo
- * el proyecto" when `adminOptions` is given (admins only). Ignores the
+ * Project Flow fields: the name, "Tramo inicial" when `startOptions` is
+ * given (staff who can start tramos, #1034), plus Cliente, Origen and "Quién
+ * trajo el proyecto" when `adminOptions` is given (admins only). Ignores the
  * presentation style. Closes itself after a successful create; the caller's
  * `onConfirm` decides where to go next.
  */
-export function NewProjectDialog({ open, onOpenChange, onConfirm, presaleAutoStart, adminOptions }: NewProjectDialogProps) {
-  const form = useProjectCreateForm({ onConfirm, adminOptions, toErrorText: newProjectErrorText });
+export function NewProjectDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  presaleAutoStart,
+  adminOptions,
+  startOptions,
+}: NewProjectDialogProps) {
+  const form = useProjectCreateForm({ onConfirm, adminOptions, startOptions, toErrorText: newProjectErrorText });
 
   function handleOpenChange(next: boolean) {
     if (!next) form.reset();
@@ -54,7 +63,7 @@ export function NewProjectDialog({ open, onOpenChange, onConfirm, presaleAutoSta
       size={adminOptions ? "lg" : "md"}
     >
       <div className="flex flex-col gap-4">
-        <ProjectCreateFields form={form} adminOptions={adminOptions} />
+        <ProjectCreateFields form={form} adminOptions={adminOptions} startOptions={startOptions} />
       </div>
     </FormDialog>
   );

@@ -14,7 +14,7 @@ import { submitProjectCreateAction, updateProjectAction } from "@/lib/actions/pr
 import { isStrippedActionError, useActionMutation } from "@/lib/query/mutation";
 import { qk } from "@/lib/query/keys";
 import { catalogOptions } from "@/lib/query/options/catalog";
-import { proyectosPageOptions } from "@/lib/query/options/proyectos";
+import { projectCreateStartOptions, proyectosPageOptions } from "@/lib/query/options/proyectos";
 import type { ProjectCreateInput, ProjectInput } from "@/lib/types/core";
 
 import { NewProjectDialog } from "./NewProjectDialog";
@@ -56,6 +56,7 @@ type UpdateVars = { id: string; patch: Partial<ProjectInput> };
 export function ProjectsPortfolio() {
   const { data } = useSuspenseQuery(proyectosPageOptions());
   const { canSeeAdminData, canCreateProject, presaleAutoStart } = data;
+  const canPickStartTramo = data.canPickStartTramo ?? false;
 
   const router = useRouter();
   const pathname = usePathname() ?? "/proyectos";
@@ -89,9 +90,14 @@ export function ProjectsPortfolio() {
     [canSeeAdminData, clientsQuery.data, staffQuery.data],
   );
 
+  // "Tramo inicial" options (#1034): only for staff who can start tramos, only while the dialog is open.
+  const startQuery = useQuery({ ...projectCreateStartOptions(), enabled: open && canPickStartTramo });
+  const startOptions = canPickStartTramo ? (startQuery.data ?? null) : null;
+
   // The dialog shows create errors inline (its own copy), so the mutation shows no toast.
   const createProject = useActionMutation(submitProjectCreateAction, {
-    invalidate: [qk.proyectos.list(), qk.catalog.projectOptions(), qk.inicio()],
+    // The starting tramo's tasks show in Tareas.
+    invalidate: [qk.proyectos.list(), qk.catalog.projectOptions(), qk.inicio(), qk.tareas.all],
     onFormError: () => undefined,
   });
   const updateProject = useActionMutation(({ id, patch }: UpdateVars) => updateProjectAction(id, patch), {
@@ -158,6 +164,7 @@ export function ProjectsPortfolio() {
           onConfirm={handleCreate}
           presaleAutoStart={presaleAutoStart}
           adminOptions={adminOptions}
+          startOptions={startOptions}
         />
       ) : null}
     </>

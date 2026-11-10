@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Label } from "@/components/ui/shadcn/label";
+import { PhaseChecklist } from "@/components/tareas/PhaseChecklist";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import {
   Select,
@@ -366,35 +367,24 @@ function StartTramoForm({
           {phases.length === 0 ? (
             <p className="text-sm text-muted-foreground">Este tramo no tiene tareas de plantilla.</p>
           ) : null}
-          <ul className="space-y-3">
-            {phases.map((entry) => {
-              const checked = checkedPhaseIds.has(entry.phase.id);
-              const checkboxId = `start-tramo-phase-${entry.phase.id}`;
-              return (
-                <li key={entry.phase.id}>
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      id={checkboxId}
-                      aria-label={`${entry.phase.name} · ${entry.templates.length} tareas`}
-                      checked={checked}
-                      onCheckedChange={(next) => togglePhase(entry.phase.id, next === true)}
-                      className="mt-0.5"
-                    />
-                    <div className="min-w-0 space-y-0.5">
-                      <Label htmlFor={checkboxId}>
-                        {entry.phase.name} · {entry.templates.length} tareas
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        {sampleTasksText(entry.templates.map((t) => t.title))}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{candidatesText(entry.candidates)}</p>
-                    </div>
-                  </div>
-                  {mode === "by_phase" && checked ? managerSelect(entry) : null}
-                </li>
-              );
-            })}
-          </ul>
+          <PhaseChecklist
+            idPrefix="start-tramo-phase-"
+            checkedIds={checkedPhaseIds}
+            onToggle={togglePhase}
+            phases={phases.map((entry) => ({
+              id: entry.phase.id,
+              label: `${entry.phase.name} · ${entry.templates.length} tareas`,
+              details: (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    {sampleTasksText(entry.templates.map((t) => t.title))}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{candidatesText(entry.candidates)}</p>
+                </>
+              ),
+              extra: mode === "by_phase" && checkedPhaseIds.has(entry.phase.id) ? managerSelect(entry) : null,
+            }))}
+          />
           {complete.length > 0 ? (
             <p className="text-xs text-muted-foreground">
               Ya tienen sus tareas: {complete.map((p) => p.phase.name).join(", ")}.

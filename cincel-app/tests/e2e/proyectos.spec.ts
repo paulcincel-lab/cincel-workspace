@@ -4,7 +4,8 @@
  * Estilo (never "Etapa" / "Etapas"), the ficha's Tramos card, the
  * NAME_TAKEN copy, and the Presale → Diseño hand-off: once every
  * Presale·Cobro task is done the project shows in Diseño's
- * "Listos para iniciar".
+ * "Listos para iniciar". Also the create's "Tramo inicial" (#1034): Diseño
+ * with some fases, and "Ninguno".
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -58,13 +59,50 @@ async function submitNewProject(page: Page, name: string): Promise<void> {
   await dialog.getByRole("button", { name: "Crear proyecto" }).click();
 }
 
-/** Creates a project by name from the UI and returns its id from the URL it lands on. */
-async function createProjectFromUi(page: Page, name: string): Promise<string> {
-  await submitNewProject(page, name);
+/** Opens "Nuevo proyecto", fills the name and picks `tramo` in "Tramo inicial" (#1034); does not submit. */
+async function openNewProjectWithTramo(page: Page, name: string, tramo: string) {
+  await page.goto(`${BASE_URL}/proyectos?estilo=analitico`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { level: 1, name: "Proyectos" })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Nuevo proyecto" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Nombre del proyecto").fill(name);
+  const select = dialog.getByRole("combobox", { name: "Tramo inicial" });
+  // Defaults to Presale, the first tramo, while its auto-start is on.
+  await expect(select).toHaveText(/Presale/, { timeout: 15_000 });
+  await select.click();
+  await page.getByRole("option", { name: tramo, exact: true }).click();
+  await expect(select).toHaveText(new RegExp(tramo));
+  return dialog;
+}
+
+/** The project's stages and workflow tasks, by tramo key. */
+async function projectFlowRows(projectId: string) {
+  return withDb(async (sql) => {
+    const stages = await sql<{ key: string }[]>`
+      select w.key from core.project_stages ps join core.workflows w on w.id = ps.workflow_id
+      where ps.project_id = ${projectId}`;
+    const tasks = await sql<{ key: string; phase_id: string; manager_id: string | null }[]>`
+      select w.key, t.phase_id, t.manager_id from core.tasks t join core.workflows w on w.id = t.workflow_id
+      where t.project_id = ${projectId} and t.kind = 'workflow' and t.deleted_at is null`;
+    const [project] = await sql<{ current: string | null }[]>`
+      select w.key as current from core.projects p left join core.workflows w on w.id = p.current_workflow_id
+      where p.id = ${projectId}`;
+    return { stages: stages.map((r) => r.key), tasks, current: project?.current ?? null };
+  });
+}
+
+/** Lands on the new project's page and returns its id. */
+async function landedProjectId(page: Page): Promise<string> {
   await expect(page).toHaveURL(/\/proyectos\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   const match = /\/proyectos\/([0-9a-f-]{36})$/.exec(page.url());
   if (!match) throw new Error(`unexpected project URL: ${page.url()}`);
   return match[1];
+}
+
+/** Creates a project by name from the UI and returns its id from the URL it lands on. */
+async function createProjectFromUi(page: Page, name: string): Promise<string> {
+  await submitNewProject(page, name);
+  return landedProjectId(page);
 }
 
 test.beforeAll(async () => {
@@ -140,6 +178,54 @@ test.describe("Proyectos · tramos", () => {
     const started = page.getByRole("list", { name: "Tramos iniciados" });
     await expect(started.locator("li").filter({ hasText: "Presale" }).getByText("Tramo actual")).toBeVisible();
     await expect(started.getByText(/Iniciado el/).first()).toBeVisible();
+  });
+
+  test("picking Diseño as the starting tramo starts only Diseño with the checked fases, unassigned", async ({ page }) => {
+    const name = `Proyecto Diseño E2E ${RUN_ID}`;
+    const dialog = await openNewProjectWithTramo(page, name, "Diseño");
+
+    // Diseño's fases are listed, all checked; uncheck the last one.
+    const phases = dialog.getByRole("group", { name: "Fases" }).getByRole("checkbox");
+    const total = await phases.count();
+    expect(total).toBeGreaterThan(1);
+    for (let i = 0; i < total; i++) await expect(phases.nth(i)).toBeChecked();
+    await phases.nth(total - 1).click();
+    await expect(phases.nth(total - 1)).not.toBeChecked();
+
+    await dialog.getByRole("button", { name: "Crear proyecto" }).click();
+    const projectId = await landedProjectId(page);
+
+    const rows = await projectFlowRows(projectId);
+    expect(rows.stages).toEqual(["diseno"]);
+    expect(rows.current).toBe("diseno");
+    expect(rows.tasks.length).toBeGreaterThan(0);
+    expect(rows.tasks.every((t) => t.key === "diseno" && t.manager_id === null)).toBe(true);
+    // The unchecked (last) fase got no tasks.
+    const [lastPhase] = await withDb(
+      (sql) => sql<{ id: string }[]>`
+        select p.id from core.workflow_phases p join core.workflows w on w.id = p.workflow_id
+        where w.key = 'diseno' and p.active order by p.sort_order desc, p.name desc limit 1`,
+    );
+    expect(rows.tasks.some((t) => t.phase_id === lastPhase.id)).toBe(false);
+  });
+
+  test("«Ninguno» creates the project with no tramo; it shows under Sin tramo", async ({ page }) => {
+    const name = `Proyecto sin tramo E2E ${RUN_ID}`;
+    const dialog = await openNewProjectWithTramo(page, name, "Ninguno");
+    await expect(dialog.getByRole("group", { name: "Fases" })).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Crear proyecto" }).click();
+    const projectId = await landedProjectId(page);
+
+    const rows = await projectFlowRows(projectId);
+    expect(rows.stages).toEqual([]);
+    expect(rows.current).toBeNull();
+    expect(rows.tasks).toHaveLength(0);
+
+    // Visual: the portfolio board has the card in the "Sin tramo" column.
+    await page.goto(`${BASE_URL}/proyectos?estilo=visual`, { waitUntil: "domcontentloaded" });
+    await expect(
+      page.locator(`[data-slot="board-column"][data-column="sin-tramo"] [data-slot="board-card"][data-project="${projectId}"]`),
+    ).toBeVisible({ timeout: 30_000 });
   });
 
   test("a duplicate project name, in any casing, is refused with the NAME_TAKEN copy", async ({ page }) => {
