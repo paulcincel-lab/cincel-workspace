@@ -9,7 +9,7 @@ import { listSubtasksAction, listTaskDependenciesAction } from "@/lib/actions/ta
 import { previewStartTramoAction } from "@/lib/actions/tramo-start-actions";
 import { fetchWorkflowAction } from "@/lib/actions/workflows-actions";
 import { STALE, qk, type TareasListFilters } from "@/lib/query/keys";
-import { esencialResponsable, type TareasQuery } from "@/lib/tareas/query";
+import { effectiveMostrar, esencialResponsable, responsableFilter, type TareasQuery } from "@/lib/tareas/query";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type {
   StartTramoPreview,
@@ -92,15 +92,21 @@ export function tramoStartInvalidations(target: { projectId: string; workflowId:
 
 // ── Filters ──────────────────────────────────────────────────────────────────
 
-/** The filters of a `/tareas` query, as the Tareas keys carry them. */
+/**
+ * The filters of a `/tareas` query, as the Tareas keys carry them. "Ocultar
+ * completadas" with Mostrar "Todas" filters as "Abiertas" (`effectiveMostrar`).
+ */
 export function tareasListFiltersOf(query: TareasQuery): TareasListFilters {
+  const mostrar = effectiveMostrar(query);
   return {
     tramo: query.tramo,
     proyecto: query.proyecto,
     responsable: query.responsable,
     estado: (query.estado as TaskStatus | null) ?? null,
     q: query.q,
-    ...(query.mostrar && query.mostrar !== "todas" ? { mostrar: query.mostrar } : {}),
+    ...(mostrar !== "todas" ? { mostrar } : {}),
+    // Only a responsable filter reads it, so the other keys stay as they were.
+    ...(query.apoyo === false && responsableFilter(query.responsable) ? { apoyo: false as const } : {}),
   };
 }
 
@@ -300,7 +306,9 @@ export function taskDependencyInvalidations(taskId: string, otherId: string): Qu
  * `nueva`).
  */
 export function tareasPageKeyInputOf(query: TareasQuery, estilo: PresentationStyle = "visual"): TareasPageKeyInput {
-  return { estilo, ...tareasListFiltersOf(query) };
+  // Esencial lists open work with its own "N completadas" disclosure: the switch is not part of it.
+  const filters = estilo === "esencial" ? tareasListFiltersOf({ ...query, completadas: true }) : tareasListFiltersOf(query);
+  return { estilo, ...filters };
 }
 
 function filtersOfPageKey(q: TareasPageKeyInput): TareasListFilters {
@@ -311,6 +319,7 @@ function filtersOfPageKey(q: TareasPageKeyInput): TareasListFilters {
     estado: q.estado,
     q: q.q,
     ...(q.mostrar ? { mostrar: q.mostrar } : {}),
+    ...(q.apoyo === false ? { apoyo: false as const } : {}),
   };
 }
 

@@ -24,7 +24,9 @@ import {
   listSubtasks,
   listTasks,
   mergeTasks,
+  restoreTask,
   softDeleteTask,
+  TASK_RESTORE_WINDOW_MS,
 } from "@/lib/repositories/tasks-repository";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -187,15 +189,15 @@ describe.skipIf(!url)("subtasks and mergeTasks (test DB)", () => {
       });
     });
 
-    it("lets a child whose parent was soft-deleted act as top-level", async () => {
+    it("lets a child whose parent is gone act as top-level", async () => {
       await inTx(async (tx, ctx) => {
-        const parent = await addTask(tx, ctx, "Padre");
+        // A parent deleted before subtasks followed it (#1041): the child was left live.
+        const parent = await addTask(tx, ctx, "Padre", { deletedAt: new Date() });
         const child = await addTask(tx, ctx, "Hija", {
           parentTaskId: parent.id,
         });
-        await softDeleteTask(parent.id, ctx.staffId);
 
-        // The child stays live and keeps its row; it no longer reads as a subtask.
+        // The child keeps its row; it no longer reads as a subtask.
         const rows = await listTasks({ projectId: ctx.projectId }, VIEWER);
         expect(rows.map((r) => r.title)).toEqual(["Hija"]);
         expect(rows[0].parentTitle).toBeNull();
@@ -411,6 +413,76 @@ describe.skipIf(!url)("subtasks and mergeTasks (test DB)", () => {
             ),
           );
         expect(left).toHaveLength(0);
+      });
+    });
+  });
+
+  describe("softDeleteTask and restoreTask (#1041)", () => {
+    async function deletedAtOf(tx: Tx, ids: string[]) {
+      const rows = await tx
+        .select({ id: schema.tasks.id, deletedAt: schema.tasks.deletedAt })
+        .from(schema.tasks)
+        .where(inArray(schema.tasks.id, ids));
+      return new Map(rows.map((r) => [r.id, r.deletedAt]));
+    }
+
+    it("deletes the live subtasks with the parent and restores exactly those", async () => {
+      await inTx(async (tx, ctx) => {
+        const parent = await addTask(tx, ctx, "Padre");
+        const child = await addTask(tx, ctx, "Hija", { parentTaskId: parent.id });
+        const earlier = new Date(Date.now() - 60_000);
+        const gone = await addTask(tx, ctx, "Borrada antes", { parentTaskId: parent.id, deletedAt: earlier });
+        await addTask(tx, ctx, "Otra");
+
+        await softDeleteTask(parent.id, ctx.staffId);
+        const deleted = await deletedAtOf(tx, [parent.id, child.id, gone.id]);
+        expect(deleted.get(parent.id)).not.toBeNull();
+        expect(deleted.get(child.id)?.getTime()).toBe(deleted.get(parent.id)?.getTime());
+        expect(deleted.get(gone.id)?.getTime()).toBe(earlier.getTime());
+        expect((await listTasks({ projectId: ctx.projectId }, VIEWER)).map((r) => r.title)).toEqual(["Otra"]);
+
+        await restoreTask(parent.id, { staffId: ctx.staffId, isAdmin: false });
+        const restored = await deletedAtOf(tx, [parent.id, child.id, gone.id]);
+        expect(restored.get(parent.id)).toBeNull();
+        expect(restored.get(child.id)).toBeNull();
+        // Deleted on its own before: stays deleted.
+        expect(restored.get(gone.id)?.getTime()).toBe(earlier.getTime());
+
+        const events = await tx
+          .select({ entityId: schema.historyEvents.entityId, after: schema.historyEvents.afterValue })
+          .from(schema.historyEvents)
+          .where(
+            and(
+              inArray(schema.historyEvents.entityId, [parent.id, child.id]),
+              eq(schema.historyEvents.field, "deleted"),
+            ),
+          );
+        expect(events.filter((e) => e.entityId === parent.id).map((e) => e.after).sort()).toEqual(["false", "true"]);
+        expect(events.filter((e) => e.entityId === child.id).map((e) => e.after).sort()).toEqual(["false", "true"]);
+      });
+    });
+
+    it("lets only an admin or the person who deleted it restore", async () => {
+      await inTx(async (tx, ctx) => {
+        const [other] = await tx.insert(schema.staff).values({ name: "Otra Persona" }).returning();
+        const task = await addTask(tx, ctx, "Tarea");
+        await softDeleteTask(task.id, ctx.staffId);
+
+        await expect(restoreTask(task.id, { staffId: other.id, isAdmin: false })).rejects.toThrow(/^FORBIDDEN/);
+        await restoreTask(task.id, { staffId: other.id, isAdmin: true });
+        expect((await deletedAtOf(tx, [task.id])).get(task.id)).toBeNull();
+      });
+    });
+
+    it("refuses a live task and one deleted more than 30 days ago", async () => {
+      await inTx(async (tx, ctx) => {
+        const live = await addTask(tx, ctx, "Viva");
+        await expect(restoreTask(live.id, { staffId: ctx.staffId, isAdmin: true })).rejects.toThrow(/^NOT_FOUND/);
+
+        const old = await addTask(tx, ctx, "Vieja");
+        await softDeleteTask(old.id, ctx.staffId);
+        const later = new Date(Date.now() + TASK_RESTORE_WINDOW_MS + 60_000);
+        await expect(restoreTask(old.id, { staffId: ctx.staffId, isAdmin: true }, later)).rejects.toThrow(/^INVALID/);
       });
     });
   });

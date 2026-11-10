@@ -28,6 +28,8 @@ export type TareasListFilters = {
   q: string | null;
   /** Left out for "todas", so the keys of the other filters stay as they were. */
   mostrar?: TareasMostrar;
+  /** "Incluir apoyo" off (#1038): a responsable matches the Responsable only. Left out when on. */
+  apoyo?: false;
   /** `tareas.list` only: "retraso" for the Analítico tramo groups (overdue first); left out for the default order. */
   orderBy?: "retraso";
 };
