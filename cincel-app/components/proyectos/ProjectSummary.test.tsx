@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 // The widgets own the per-style markup; here they print the data they get, so
@@ -69,6 +69,15 @@ vi.mock("@/components/widgets/ResumenAnaliticoLayout", () => ({
   ),
 }));
 
+// Esencial has its own layout (#996); here it only marks that it rendered.
+vi.mock("@/components/widgets/ResumenEsencialLayout", () => ({
+  ResumenEsencialLayout: ({ data }: { data: { project: { name: string } } }) => (
+    <section aria-label="Resumen esencial" data-layout="esencial">
+      {data.project.name}
+    </section>
+  ),
+}));
+
 // Visual has its own layout (#995); here it prints what the Resumen passes it.
 vi.mock("@/components/widgets/ResumenVisualLayout", () => ({
   ResumenVisualLayout: (props: {
@@ -124,11 +133,21 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 import { fixtureSummaryInput, HISTORY_EVENTS, TASK_ROWS } from "@/tests/unit/fixtures/project-summary";
 
 import { ProjectSummary, ProjectSummaryContent, RESUMEN_NOT_FOUND_TITLE } from "./ProjectSummary";
+import { ProjectSummaryWidgets } from "./ProjectSummaryWidgets";
 
 afterEach(cleanup);
 
-// The shared widget composition (Esencial until its own layout lands); Visual and Analítico have layouts.
+// The shared widget composition (`ProjectSummaryWidgets`): every style of the tab has its own layout now.
 function renderSummary(overrides: Parameters<typeof fixtureSummaryInput>[0] = {}, style: PresentationStyle = "esencial") {
+  return render(
+    <StyleProvider style={style} scope="staff">
+      <ProjectSummaryWidgets data={fixtureSummaryInput(overrides)} />
+    </StyleProvider>
+  );
+}
+
+/** The Resumen tab content, which picks the layout of the style. */
+function renderContent(style: PresentationStyle, overrides: Parameters<typeof fixtureSummaryInput>[0] = {}) {
   return render(
     <StyleProvider style={style} scope="staff">
       <ProjectSummaryContent data={fixtureSummaryInput(overrides)} />
@@ -136,7 +155,7 @@ function renderSummary(overrides: Parameters<typeof fixtureSummaryInput>[0] = {}
   );
 }
 
-describe("ProjectSummary · visibility (B8)", () => {
+describe("ProjectSummaryWidgets · visibility (B8)", () => {
   it("shows «Cliente y contactos» with the client when allowed", () => {
     renderSummary();
     const card = screen.getByRole("region", { name: "Cliente y contactos" });
@@ -194,9 +213,10 @@ describe("ProjectSummary · visibility (B8)", () => {
 });
 
 describe("ProjectSummary · styles", () => {
-  it("renders the shared widgets in Esencial", () => {
-    const { container } = renderSummary({}, "esencial");
-    expect(container.querySelectorAll("[data-widget]").length).toBeGreaterThan(0);
+  it("renders the Esencial layout instead of the shared widgets in Esencial", () => {
+    const { container } = renderContent("esencial");
+    expect(screen.getByRole("region", { name: "Resumen esencial" }).textContent).toBe("Local Espinopapa");
+    expect(container.querySelector("[data-widget]")).toBeNull();
   });
 
   it("renders the Visual layout with the hydrated task list and history, 0 client action calls", async () => {
@@ -229,12 +249,12 @@ describe("ProjectSummary · styles", () => {
   });
 
   it("renders the Analítico layout instead of the shared widgets in Analítico", () => {
-    const { container } = renderSummary({}, "analitico");
+    const { container } = renderContent("analitico");
     expect(screen.getByRole("region", { name: "Resumen analítico" }).textContent).toBe("Local Espinopapa");
     expect(container.querySelector("[data-widget]")).toBeNull();
   });
 
-  it("passes the avance ring the portfolio numbers and the task caption", () => {
+  it("passes the shared avance ring the portfolio numbers and the task caption", () => {
     renderSummary();
     const avance = screen.getByRole("region", { name: "Avance" }).textContent ?? "";
     expect(avance).toContain('"variant":"rings"');
@@ -255,8 +275,7 @@ describe("ProjectSummary · query", () => {
       </StyleProvider>,
       { client, hydrate: state },
     );
-    expect(screen.getByRole("region", { name: "Ficha" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Cliente y contactos" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Resumen esencial" }).textContent).toBe("Local Espinopapa");
     expect(actions.getProyectoResumenData).not.toHaveBeenCalled();
   });
 
@@ -269,25 +288,23 @@ describe("ProjectSummary · query", () => {
   });
 });
 
-describe("ProjectSummary · memo", () => {
-  it("builds the summary once per query data, not once per render", async () => {
-    const client = createTestQueryClient();
-    client.setQueryData(qk.proyectos.resumen("p1"), fixtureSummaryInput());
+describe("ProjectSummaryWidgets · memo", () => {
+  it("builds the summary once per data object, not once per render", () => {
     summaryLib.builds = 0;
-    const ui = (
+    const input = fixtureSummaryInput();
+    const ui = (data: typeof input) => (
       <StyleProvider style="esencial" scope="staff">
-        <ProjectSummary projectId="p1" />
+        <ProjectSummaryWidgets data={data} />
       </StyleProvider>
     );
-    const { rerender } = renderWithQueryClient(ui, { client });
+    const { rerender } = render(ui(input));
     expect(summaryLib.builds).toBe(1);
     // A parent re-render with the same cached data reuses the build.
-    rerender(ui);
-    rerender(ui);
+    rerender(ui(input));
+    rerender(ui(input));
     expect(summaryLib.builds).toBe(1);
     // New data (a refetch or an invalidation) builds again.
-    act(() => client.setQueryData(qk.proyectos.resumen("p1"), fixtureSummaryInput({ showBudget: false })));
-    // Query observers are notified on the next tick.
-    await waitFor(() => expect(summaryLib.builds).toBe(2));
+    rerender(ui(fixtureSummaryInput({ showBudget: false })));
+    expect(summaryLib.builds).toBe(2);
   });
 });
