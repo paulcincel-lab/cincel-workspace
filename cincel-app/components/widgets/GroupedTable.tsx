@@ -2,13 +2,15 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
+import { ArrowUpRight, ChevronDown } from "lucide-react";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
 import { ErrorState } from "@/components/shell/ErrorState";
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
+import { EditableCell } from "@/components/widgets/EditableCell";
+import { OPEN_TASK_LABEL, cellEditState } from "@/components/widgets/editable-cell";
 import {
   HEAT_CELL_CLASS,
   columnAlign,
@@ -21,6 +23,14 @@ import {
   visibleColumns,
   type HeatLevel,
 } from "@/components/widgets/record-table-format";
+import {
+  CellGridContext,
+  GRID_CELL_CLASS,
+  GRID_GROUP_ATTR,
+  GRID_ROW_CLASS,
+  useCellGrid,
+  type UseCellGrid,
+} from "@/components/widgets/use-cell-grid";
 import type { RecordColumn } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +44,12 @@ import { cn } from "@/lib/utils";
  * `expanded` + `onExpandedChange`; `onGroupExpand` fires on each expand so
  * pages can lazy-load rows (a group whose `rows` is undefined shows skeleton
  * rows until they arrive). Rows come sorted by the caller.
+ *
+ * Columns with `edit` (#1024) make the tables one keyboard grid
+ * (`use-cell-grid`): their cells open `CellEditor` on click, Enter or F2, and
+ * a row whose group changes after a save moves there and flashes once. A
+ * first column with `edit` edits on click; its open icon and ⌘/Ctrl-click
+ * follow `rowHref`. Without editable columns nothing changes.
  */
 export type HeatRule = { key: string; warnAt: number; critAt: number; direction?: "above" | "below" };
 export type GroupMetric = {
@@ -230,6 +246,8 @@ function ChildMetrics({ metrics }: { metrics: GroupMetric[] }) {
 type Ctx<Row extends Record<string, unknown>> = {
   props: GroupedTableProps<Row>;
   columns: RecordColumn[];
+  /** The keyboard grid, when a column is editable. */
+  grid: UseCellGrid | null;
   isOpen(id: string): boolean;
   toggle(id: string): void;
 };
@@ -256,27 +274,40 @@ function cellClass(column: RecordColumn, first: boolean, heat: HeatLevel): strin
   );
 }
 
-function LeafRow<Row extends Record<string, unknown>>({ ctx, row, index }: { ctx: Ctx<Row>; row: Row; index: number }) {
-  const { props, columns } = ctx;
+function LeafRow<Row extends Record<string, unknown>>({
+  ctx,
+  row,
+  index,
+  groupId,
+}: {
+  ctx: Ctx<Row>;
+  row: Row;
+  index: number;
+  groupId: string;
+}) {
+  const { props, columns, grid } = ctx;
   const isNew = props.isRowNew?.(row) ?? false;
   const muted = props.isRowMuted?.(row) ?? false;
+  const id = props.getRowId?.(row, index) ?? rowId(row, index);
   return (
     <tr
       data-slot="leaf-row"
-      data-row-id={props.getRowId?.(row, index) ?? rowId(row, index)}
-      className={cn("group/row", isNew && "row-new")}
+      data-row-id={id}
+      {...(grid ? { [GRID_GROUP_ATTR]: groupId } : {})}
+      className={cn("group/row", isNew && "row-new", grid && GRID_ROW_CLASS)}
     >
       {columns.map((column, columnIndex) => {
         const first = columnIndex === 0;
         const custom = props.renderCell?.(column.key, row);
         let content: ReactNode = custom !== undefined ? custom : formatCell(column, row);
+        const href = first ? (props.rowHref?.(row) ?? null) : null;
         if (first) {
-          const href = props.rowHref?.(row) ?? null;
           content = (
             <span className="inline-flex max-w-full items-center gap-1.5">
               {href ? (
                 <Link
                   href={href}
+                  tabIndex={grid ? -1 : undefined}
                   className={cn(
                     "truncate underline decoration-border underline-offset-[3px]",
                     muted ? "text-muted-foreground" : "text-foreground",
@@ -296,12 +327,33 @@ function LeafRow<Row extends Record<string, unknown>>({ ctx, row, index }: { ctx
           );
         }
         const heat = heatLevel(props.heat, column.key, row[column.key]);
+        const edit = column.edit;
+        if (grid && edit) {
+          content = (
+            <EditableCell row={row} rowId={id} columnKey={column.key} edit={edit} canEdit={column.canEdit} label={column.label}>
+              {content}
+              {href ? (
+                <Link
+                  href={href}
+                  tabIndex={-1}
+                  data-cell-open=""
+                  aria-label={OPEN_TASK_LABEL}
+                  title={OPEN_TASK_LABEL}
+                  className="absolute top-1/2 right-1 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover/cell:opacity-100 group-focus-visible/cell:opacity-100 hover:bg-muted hover:text-foreground"
+                >
+                  <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                </Link>
+              ) : null}
+            </EditableCell>
+          );
+        }
         return (
           <td
             key={column.key}
             data-column={column.key}
             data-heat={heat ?? undefined}
-            className={cellClass(column, first, heat)}
+            {...(grid ? grid.cellProps(id, column.key, cellEditState(row, edit, column.canEdit).state) : {})}
+            className={cn(cellClass(column, first, heat), grid && GRID_CELL_CLASS)}
             style={column.width && columnAlign(column) !== "right" ? { maxWidth: column.width } : undefined}
           >
             {content}
@@ -318,7 +370,13 @@ function GroupRows<Row extends Record<string, unknown>>({ ctx, group }: { ctx: C
   return (
     <>
       {(group.rows ?? []).map((row, index) => (
-        <LeafRow key={ctx.props.getRowId?.(row, index) ?? rowId(row, index)} ctx={ctx} row={row} index={index} />
+        <LeafRow
+          key={ctx.props.getRowId?.(row, index) ?? rowId(row, index)}
+          ctx={ctx}
+          row={row}
+          index={index}
+          groupId={group.id}
+        />
       ))}
       {isPending(group) ? (
         <tr data-slot="group-loading">
@@ -454,6 +512,7 @@ function TopGroup<Row extends Record<string, unknown>>({
           <div className="overflow-x-auto border-t">
             <table
               aria-label={`${ctx.props.label} · ${group.label}`}
+              role={ctx.grid ? "grid" : undefined}
               className="w-full border-collapse text-[12.5px]"
               style={{ minWidth }}
             >
@@ -507,6 +566,8 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
   const groups = useMemo(() => visibleGroups(p.groups), [p.groups]);
   const columns = useMemo(() => visibleColumns(p.columns, "analitico"), [p.columns]);
   const ids = useMemo(() => allIds(groups), [groups]);
+  const editable = columns.some((column) => column.edit !== undefined);
+  const grid = useCellGrid(editable);
 
   // Uncontrolled: the ids whose state differs from `defaultExpanded`.
   const [toggled, setToggled] = useState<ReadonlySet<string>>(() => new Set());
@@ -588,10 +649,10 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
 
   const topIds = new Set(groups.map((group) => group.id));
   const anchors = (p.anchors ?? []).filter((anchor) => topIds.has(anchor.groupId));
-  const ctx: Ctx<Row> = { props: p, columns, isOpen, toggle };
+  const ctx: Ctx<Row> = { props: p, columns, grid: editable ? grid : null, isOpen, toggle };
 
-  return (
-    <div data-slot="grouped-table" className="flex min-w-0 flex-col gap-3">
+  const body = (
+    <div data-slot="grouped-table" className="flex min-w-0 flex-col gap-3" {...(editable ? grid.rootProps : {})}>
       {anchors.length > 0 || p.toggleAll !== false ? (
       <div className="flex flex-wrap items-center gap-2">
         {anchors.length > 0 ? (
@@ -653,4 +714,5 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
       ) : null}
     </div>
   );
+  return editable ? <CellGridContext.Provider value={grid.api}>{body}</CellGridContext.Provider> : body;
 }

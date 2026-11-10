@@ -50,6 +50,10 @@ import { StyleView } from "./StyleView";
  * With `selectable`, the selected rows can be exported (Excel / PDF).
  * With `onEndReached` (opt-in pagination), a "Cargar más" button under the
  * rows asks the page for the next rows while `hasMore`.
+ *
+ * Columns with `edit` (#1024) make the Visual and Analítico tables a keyboard
+ * grid with editable cells (through `DataTable`'s column meta); the Esencial
+ * list stays read-only.
  */
 export type RecordTableProps = {
   data: RecordTableData;
@@ -232,7 +236,13 @@ function TableView({
           </span>
         ),
         cell: RecordCell,
-        meta: { record: column, renderCell } satisfies RecordCellMeta as RecordCellMeta,
+        meta: {
+          record: column,
+          renderCell,
+          edit: column.edit,
+          canEdit: column.canEdit,
+          editLabel: column.label,
+        } satisfies RecordCellMeta as RecordCellMeta,
       }),
     ),
     ...(hasActions ? [createRowActionsColumn<Row>(() => rowActions ?? [])] : []),

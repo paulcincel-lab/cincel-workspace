@@ -96,3 +96,33 @@ export const LOCK_REASON = {
   project: "Solo un admin puede cambiar este proyecto.",
 } as const;
 export type LockReasonKey = keyof typeof LOCK_REASON;
+
+/** A local date as ISO `YYYY-MM-DD` (no timezone shift). */
+export function toIsoDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** The ISO date a quick pick stands for, counted from `today`; "none" clears (null). */
+export function quickPickDate(id: DateQuickPick, today: Date = new Date()): string | null {
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  switch (id) {
+    case "today":
+      break;
+    case "tomorrow":
+      d.setDate(d.getDate() + 1);
+      break;
+    case "next-monday":
+      // The next Monday after today (a Monday gives the one a week later).
+      d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+      break;
+    case "plus-week":
+      d.setDate(d.getDate() + 7);
+      break;
+    case "none":
+      return null;
+  }
+  return toIsoDate(d);
+}
